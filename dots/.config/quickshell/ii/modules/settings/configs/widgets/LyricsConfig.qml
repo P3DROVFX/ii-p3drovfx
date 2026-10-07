@@ -68,6 +68,18 @@ ContentPage {
         }
 
         ConfigSwitch {
+            buttonIcon: "subtitles"
+            text: Translation.tr("Enable BetterLyrics service (cached TTML)")
+            checked: Config.options.lyricsService.enableBetterlyrics
+            onCheckedChanged: {
+                Config.options.lyricsService.enableBetterlyrics = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Fetches syllable-synced TTML lyrics from BetterLyrics cache without needing an API key.")
+            }
+        }
+
+        ConfigSwitch {
             buttonIcon: "smart_display"
             text: Translation.tr("Enable YouTube Music lyrics")
             checked: Config.options.lyricsService.enableYtmusic
@@ -76,6 +88,46 @@ ContentPage {
             }
             StyledToolTip {
                 text: Translation.tr("Requires ytmusicapi installed in the venv (see ii-vynx setup). Fetches plain lyrics from YouTube Music.")
+            }
+        }
+    }
+
+    ContentSection {
+        title: Translation.tr("Lyrics Provider")
+        icon: "tune"
+
+        ConfigSelectionArray {
+            currentValue: Config.options.lyricsService.lyricsProvider ?? "auto"
+            options: [
+                {
+                    displayName: Translation.tr("Auto (BetterLyrics → LRCLib → YTMusic → Genius)"),
+                    icon: "auto_awesome",
+                    value: "auto"
+                },
+                {
+                    displayName: Translation.tr("BetterLyrics (cached TTML)"),
+                    icon: "subtitles",
+                    value: "betterlyrics"
+                },
+                {
+                    displayName: Translation.tr("LRCLib (synced/plain)"),
+                    icon: "timer",
+                    value: "lrclib"
+                },
+                {
+                    displayName: Translation.tr("YouTube Music"),
+                    icon: "smart_display",
+                    value: "ytmusic"
+                },
+                {
+                    displayName: Translation.tr("Genius (plain)"),
+                    icon: "music_note",
+                    value: "genius"
+                }
+            ]
+            onSelected: newValue => {
+                Config.options.lyricsService.lyricsProvider = newValue;
+                LyricsService.initiliazeLyrics();
             }
         }
     }

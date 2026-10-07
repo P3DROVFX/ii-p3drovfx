@@ -6674,9 +6674,10 @@ Singleton {
                 property bool enable: true
                 property bool enableGenius: true
                 property bool enableLrclib: true
+                property bool enableBetterlyrics: true
                 property bool enableYtmusic: true // requires ytmusicapi in venv
-                // "auto" | "lrclib" | "ytmusic" | "genius"
-                // auto = lrclib synced → lrclib plain → ytmusic → genius
+                // "auto" | "betterlyrics" | "lrclib" | "ytmusic" | "genius"
+                // auto = betterlyrics (if cached) → lrclib synced → lrclib plain → ytmusic → genius
                 property string lyricsProvider: "auto"
             }
 

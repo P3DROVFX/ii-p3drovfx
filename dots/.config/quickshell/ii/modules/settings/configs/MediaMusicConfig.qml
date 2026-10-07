@@ -88,7 +88,7 @@ Item {
                     Config.options.lyricsService.enable = checked;
                 }
                 StyledToolTip {
-                    text: Translation.tr("Toggle lyrics service. Click button text to configure Genius, LrcLib, and YouTube Music providers.")
+                    text: Translation.tr("Toggle lyrics service. Click button text to configure Genius, LrcLib, BetterLyrics, and YouTube Music providers.")
                 }
             }
         }

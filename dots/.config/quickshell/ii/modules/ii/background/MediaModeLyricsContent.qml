@@ -20,13 +20,15 @@ Item {
     property real fontScale: 1
 
     readonly property bool providerAllowsSynced: Config.options.lyricsService.lyricsProvider === "auto"
+                                                 || Config.options.lyricsService.lyricsProvider === "betterlyrics"
                                                  || Config.options.lyricsService.lyricsProvider === "lrclib"
     readonly property bool hasSyncedLines: LyricsService.syncedLines.length > 0 && !context.forcePlainLyrics
                                            && (LyricsService.usingLocalLyrics || providerAllowsSynced)
     readonly property bool geniusEnabled: Config.options.lyricsService.enableGenius
     readonly property bool lrclibEnabled: Config.options.lyricsService.enableLrclib
     readonly property bool ytmusicEnabled: Config.options.lyricsService.enableYtmusic
-    readonly property bool anyProviderEnabled: geniusEnabled || lrclibEnabled || ytmusicEnabled
+    readonly property bool betterlyricsEnabled: Config.options.lyricsService.enableBetterlyrics ?? true
+    readonly property bool anyProviderEnabled: geniusEnabled || lrclibEnabled || ytmusicEnabled || betterlyricsEnabled
 
     // Four mutually exclusive "no scrolling lyrics" answers, only the
     // last of which is actually a failure.
@@ -41,12 +43,16 @@ Item {
         if (hasSyncedLines)
             return LyricsService.usingCustomLyrics ? Translation.tr("Custom LRC") : (LyricsService.usingLocalLyrics
                                                                                      ? Translation.tr("Local LRC")
-                                                                                     : Translation.tr(
-                                                                                         "Synced LRC"));
+                                                                                     : (LyricsService.usingBetterlyrics
+                                                                                         ? Translation.tr("BetterLyrics")
+                                                                                         : Translation.tr(
+                                                                                             "Synced LRC")));
         if (LyricsService.usingLocalLyrics)
             return Translation.tr("Local text");
         if (LyricsService.plainLyrics && LyricsService.plainLyrics.trim().length > 0) {
             const p = Config.options.lyricsService.lyricsProvider;
+            if (p === "betterlyrics")
+                return Translation.tr("BetterLyrics Plain");
             if (p === "ytmusic")
                 return Translation.tr("YouTube Music");
             if (p === "genius")
@@ -65,7 +71,7 @@ Item {
     Component.onCompleted: {
         // Local sidecars use the same parser and state surface as
         // online lyrics, even if every remote provider is disabled.
-        if (context.localSource || geniusEnabled || lrclibEnabled || ytmusicEnabled)
+        if (context.localSource || geniusEnabled || lrclibEnabled || ytmusicEnabled || betterlyricsEnabled)
             LyricsService.initiliazeLyrics();
     }
 

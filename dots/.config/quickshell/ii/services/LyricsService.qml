@@ -21,6 +21,7 @@ Singleton {
     readonly property bool lyricsEnabled: Config.options.lyricsService.enable
     readonly property bool geniusEnabled: Config.options.lyricsService.enableGenius
     readonly property bool lrclibEnabled: Config.options.lyricsService.enableLrclib
+    readonly property bool betterlyricsEnabled: Config.options.lyricsService.enableBetterlyrics ?? true
     readonly property bool ytmusicEnabled: Config.options.lyricsService.enableYtmusic
     readonly property string lyricsProvider: Config.options.lyricsService.lyricsProvider ?? "auto"
     
@@ -47,6 +48,8 @@ Singleton {
     readonly property string effectiveOverrideLyrics: customLyricsText.length > 0
         ? customLyricsText : localLyricsText
 
+    readonly property bool effectiveBetterlyricsEnabled: lyricsEnabled && betterlyricsEnabled && isInitialized
+        && (root.activePlayer?.trackTitle?.length > 0) && !localLyricsLoading && !hasLocalLyricsFile
     readonly property bool effectiveLrclibEnabled: lyricsEnabled && lrclibEnabled && isInitialized
         && (root.activePlayer?.trackTitle?.length > 0) && !localLyricsLoading && !hasLocalLyricsFile
     readonly property bool effectiveGeniusEnabled: lyricsEnabled && geniusEnabled && isInitialized
@@ -54,10 +57,30 @@ Singleton {
     readonly property bool effectiveYtmusicEnabled: lyricsEnabled && ytmusicEnabled && isInitialized
         && (root.activePlayer?.trackTitle?.length > 0) && !localLyricsLoading && !hasLocalLyricsFile
 
-    readonly property alias syncedLines: lrclib.lines
-    readonly property alias currentIndex: lrclib.currentIndex
-    readonly property string statusText: lrclib.displayText
-    readonly property bool hasSyncedLines: lrclib.lines.length > 0
+    // Active synced provider resolution:
+    // Local / custom lyrics take ultimate precedence (via lrclib overrideLines).
+    // In "auto" mode, BetterLyrics is queried first (priority); if BetterLyrics has synced lines (cache hit),
+    // it wins. If it misses or is unavailable, LRCLib is used.
+    readonly property var activeSyncedProvider: {
+        if (root.usingLocalLyrics || root.usingCustomLyrics)
+            return lrclib;
+        if (root.lyricsProvider === "betterlyrics")
+            return betterlyrics;
+        if (root.lyricsProvider === "lrclib")
+            return lrclib;
+        if (root.lyricsProvider === "auto") {
+            if (betterlyrics.hasSyncedLines)
+                return betterlyrics;
+            return lrclib;
+        }
+        return null;
+    }
+
+    readonly property var syncedLines: activeSyncedProvider ? activeSyncedProvider.lines : []
+    readonly property int currentIndex: activeSyncedProvider ? activeSyncedProvider.currentIndex : -1
+    readonly property string statusText: activeSyncedProvider ? activeSyncedProvider.displayText : ""
+    readonly property bool hasSyncedLines: syncedLines && syncedLines.length > 0
+    readonly property bool usingBetterlyrics: activeSyncedProvider === betterlyrics && betterlyrics.hasSyncedLines
 
     // Single source of truth for "where the lyrics think we are": player
     // position corrected by the user's sync offset. Used by the sync itself and
@@ -68,7 +91,7 @@ Singleton {
 
     // LRCLib flags a track as instrumental. That is a real answer, not a
     // failure, and deserves its own UI state instead of "no lyrics found".
-    readonly property bool instrumental: !root.usingLocalLyrics && lrclib.instrumental && !root.hasSyncedLines
+    readonly property bool instrumental: !root.usingLocalLyrics && !root.usingBetterlyrics && lrclib.instrumental && !root.hasSyncedLines
     readonly property bool hasPlainLyrics: root.plainLyrics.trim().length > 0
     readonly property bool hasAnyLyrics: root.hasSyncedLines || root.hasPlainLyrics
     readonly property bool usingCustomLyrics: customLyricsText.length > 0 && lrclib.hasOverride
@@ -81,7 +104,7 @@ Singleton {
     readonly property bool searching: root.isInitialized
         && (root.activePlayer?.trackTitle?.length > 0)
         && !root.usingCustomLyrics && !root.usingLocalLyrics
-        && (root.localLyricsLoading || !root.searchGraceElapsed || lrclib.loading || genius.fetching || ytmusic.fetching)
+        && (root.localLyricsLoading || !root.searchGraceElapsed || betterlyrics.loading || lrclib.loading || genius.fetching || ytmusic.fetching)
 
     Binding {
         target: LocalLyrics
@@ -91,6 +114,14 @@ Singleton {
 
     // Per-provider outcome, for the "nothing found" state to show what was tried.
     readonly property var providerStates: [
+        {
+            key: "betterlyrics",
+            label: "BetterLyrics",
+            icon: "subtitles",
+            enabled: root.betterlyricsEnabled,
+            searching: betterlyrics.loading,
+            found: betterlyrics.lines.length > 0 || betterlyrics.plainLyricsText.length > 0
+        },
         {
             key: "lrclib",
             label: "LRCLib",
@@ -145,6 +176,7 @@ Singleton {
 
     function retrySearch() {
         root.beginSearchGrace();
+        betterlyrics.retryFetch();
         lrclib.retryFetch();
         root.initiliazeLyrics();
     }
@@ -176,10 +208,12 @@ Singleton {
             return raw;
         }
         const provider = root.lyricsProvider;
+        if (provider === "betterlyrics") return betterlyrics.plainLyricsText;
         if (provider === "lrclib") return lrclib.plainLyricsText;
         if (provider === "ytmusic") return ytmusic.lyricsString;
         if (provider === "genius")  return genius.lyricsString;
         // auto fallback chain
+        if (betterlyrics.plainLyricsText.length > 0) return betterlyrics.plainLyricsText;
         if (lrclib.plainLyricsText.length > 0)  return lrclib.plainLyricsText;
         if (ytmusic.lyricsString.length > 0)     return ytmusic.lyricsString;
         if (genius.lyricsString.length > 0)      return genius.lyricsString;
@@ -216,20 +250,21 @@ Singleton {
             .join("\n")
     }
 
-    function getLineDuration(index) { // for lrclib of to be used in syllable style
-        if (!lrclib.lines || index < 0 || index >= lrclib.lines.length) 
+    function getLineDuration(index) {
+        const provider = root.activeSyncedProvider;
+        if (!provider || !provider.lines || index < 0 || index >= provider.lines.length) 
             return 0;
         
-        if (index === lrclib.lines.length - 1) {
-            let total = lrclib.duration > 0 ? lrclib.duration : lrclib.lines[index].time + 5;
-            return Math.max(0, total - lrclib.lines[index].time);
+        if (index === provider.lines.length - 1) {
+            let total = (provider.duration && provider.duration > 0) ? provider.duration : provider.lines[index].time + 5;
+            return Math.max(0, total - provider.lines[index].time);
         }
         
-        return lrclib.lines[index + 1].time - lrclib.lines[index].time;
+        return provider.lines[index + 1].time - provider.lines[index].time;
     }
 
-    function changeDurationToIndex(index) { // for lrclib, called by LyricsSyllable
-        if (!hasSyncedLines) return;
+    function changeDurationToIndex(index) {
+        if (!hasSyncedLines || !root.activePlayer) return;
         root.activePlayer.position = root.syncedLines[index].time
     }
     
@@ -245,8 +280,11 @@ Singleton {
      * own clocks catch it.
      */
     readonly property int msToNextLine: {
-        const lines = lrclib.lines;
-        const next = lrclib.currentIndex + 1;
+        const provider = root.activeSyncedProvider;
+        if (!provider || !provider.lines)
+            return 1000;
+        const lines = provider.lines;
+        const next = provider.currentIndex + 1;
         if (next >= lines.length)
             return 1000;
         const rate = (root.activePlayer?.rate ?? 1) > 0 ? root.activePlayer.rate : 1;
@@ -279,6 +317,16 @@ Singleton {
                     ytmusic.fetchLyrics(root.activePlayer.trackArtist, root.activePlayer.trackTitle)
             }
         }
+    }
+
+    BetterLyrics {
+        id: betterlyrics
+        enabled: effectiveBetterlyricsEnabled
+        title: root.activePlayer?.trackTitle ?? ""
+        artist: root.activePlayer?.trackArtist ?? ""
+        album: root.activePlayer?.trackAlbum ?? ""
+        duration: root.activePlayer?.length ?? 0
+        position: root.syncPosition
     }
 
     LrclibLyrics {

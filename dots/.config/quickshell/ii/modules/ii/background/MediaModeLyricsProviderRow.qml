@@ -24,7 +24,12 @@ Row {
             {
                 key: "auto",
                 icon: "auto_awesome",
-                tip: Translation.tr("Auto (LRC → YTMusic → Genius)")
+                tip: Translation.tr("Auto (BetterLyrics → LRC → YTMusic → Genius)")
+            },
+            {
+                key: "betterlyrics",
+                icon: "subtitles",
+                tip: Translation.tr("BetterLyrics (cached TTML)")
             },
             {
                 key: "lrclib",

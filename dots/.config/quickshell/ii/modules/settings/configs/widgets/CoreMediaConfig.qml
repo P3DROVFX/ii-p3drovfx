@@ -125,5 +125,15 @@ ContentPage {
                 Config.options.lyricsService.enableLrclib = checked;
             }
         }
+
+        ConfigSwitch {
+            enabled: Config.options.lyricsService.enable
+            buttonIcon: "subtitles"
+            text: Translation.tr("Enable BetterLyrics service (cached TTML)")
+            checked: Config.options.lyricsService.enableBetterlyrics
+            onCheckedChanged: {
+                Config.options.lyricsService.enableBetterlyrics = checked;
+            }
+        }
     }
 }
