@@ -81,6 +81,10 @@ Item {
         "media_cd": component_media_cd,
         "nothing_ring_media": component_nothing_ring_media,
         "compact_media": component_compact_media,
+        "media_poster": component_media_poster,
+        "media_deck": component_media_deck,
+        "media_halo": component_media_halo,
+        "media_cover": component_media_cover,
         "weather_default": component_weather_default,
         "weather_expressive": component_weather_expressive,
         "weather_forecast": component_weather_forecast,
@@ -1177,6 +1181,58 @@ Item {
         id: component_notes_widget_2x1
 
         NotesWidget2x1 {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_media_poster
+
+        PosterMediaWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_media_deck
+
+        DeckMediaWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_media_halo
+
+        HaloMediaWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_media_cover
+
+        CoverMediaWidget {
             screenWidth: delegateRoot.screenWidth
             screenHeight: delegateRoot.screenHeight
             scaledScreenWidth: delegateRoot.screenWidth

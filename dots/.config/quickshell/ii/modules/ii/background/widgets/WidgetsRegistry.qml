@@ -687,6 +687,42 @@ Singleton {
             "configPage": "widgets/DesktopNotesWidgetConfig.qml"
         },
         {
+            "widgetId": "media_poster",
+            "name": Translation.tr("Poster Media (1x2)"),
+            "category": "Media",
+            "qmlPath": Qt.resolvedUrl("media/PosterMediaWidget.qml"),
+            "icon": "queue_music",
+            "description": Translation.tr("Tall 1x2 player: the cover cut to a Material shape, a big condensed title and a block of chunky transport controls."),
+            "configPage": "widgets/DesktopMediaPlayersConfig.qml"
+        },
+        {
+            "widgetId": "media_deck",
+            "name": Translation.tr("Deck Media (2x1)"),
+            "category": "Media",
+            "qmlPath": Qt.resolvedUrl("media/DeckMediaWidget.qml"),
+            "icon": "album",
+            "description": Translation.tr("Wide 2x1 player: a cover slab with the player tag, title and artist, an inline wavy seek line and a wide play key."),
+            "configPage": "widgets/DesktopMediaPlayersConfig.qml"
+        },
+        {
+            "widgetId": "media_halo",
+            "name": Translation.tr("Halo Media (1x1)"),
+            "category": "Media",
+            "qmlPath": Qt.resolvedUrl("media/HaloMediaWidget.qml"),
+            "icon": "motion_photos_on",
+            "description": Translation.tr("Square 1x1 player: the cover inside a wavy progress ring that morphs while music plays, with play and next keys."),
+            "configPage": "widgets/DesktopMediaPlayersConfig.qml"
+        },
+        {
+            "widgetId": "media_cover",
+            "name": Translation.tr("Cover Media (1x2)"),
+            "category": "Media",
+            "qmlPath": Qt.resolvedUrl("media/CoverMediaWidget.qml"),
+            "icon": "photo_album",
+            "description": Translation.tr("Tall 1x2 player covered by the album art: a wide expressive title on top and the controls on a blurred band at the bottom."),
+            "configPage": "widgets/DesktopMediaPlayersConfig.qml"
+        },
+        {
             "widgetId": "compact_media",
             "name": Translation.tr("Compact Media (2x1)"),
             "category": "Media",

@@ -4131,6 +4131,47 @@ Singleton {
                         property bool enableInnerShadow: false
                         property int widgetSize: 100
                     }
+                    property JsonObject media_poster: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                        property bool dynamicAlbumColors: false
+                        property string artShape: "Puffy"
+                        property bool accentTitle: true
+                        property bool showPlayLabel: true
+                    }
+                    property JsonObject media_deck: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                        property bool dynamicAlbumColors: false
+                        property bool showPlayerChip: true
+                        property bool showTimes: true
+                    }
+                    property JsonObject media_halo: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                        property bool dynamicAlbumColors: false
+                        property bool morphArt: true
+                        property bool wavyRing: true
+                    }
+                    property JsonObject media_cover: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                        property bool dynamicAlbumColors: false
+                        property int blurStrength: 70
+                        property bool artistChip: true
+                    }
                     property JsonObject compact_media: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free"
