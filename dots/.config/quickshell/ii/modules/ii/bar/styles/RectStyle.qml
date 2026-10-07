@@ -23,7 +23,8 @@ Item {
     property var  rightList
 
     property color actualColor: root.showBarBackground
-        ? (Config.options.bar.expressiveColors
+        ? (Config.options.bar.amoledBackground ? "#000000"
+            : Config.options.bar.expressiveColors
             ? root.activeTheme.barBackground
             : Appearance.colors.colLayer0)
         : "transparent"

@@ -87,7 +87,7 @@ Item {
         id: barThemes
     }
     property var activeTheme: barThemes.getTheme(Config.options.bar.expressiveColorTheme)
-    property color baseColor: showBarBackground ? (Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
+    property color baseColor: showBarBackground ? (Config.options.bar.amoledBackground ? "#000000" : Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
 
     Behavior on baseColor {
         animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(visualsRoot)

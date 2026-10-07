@@ -149,7 +149,7 @@ Item {
     }
 
     // Determine the actual background color of the bar reactively
-    property color actualColor: root.showBarBackground ? (Config.options.bar.expressiveColors ? root.activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
+    property color actualColor: root.showBarBackground ? (Config.options.bar.amoledBackground ? "#000000" : Config.options.bar.expressiveColors ? root.activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
 
     Behavior on actualColor {
         animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(root)

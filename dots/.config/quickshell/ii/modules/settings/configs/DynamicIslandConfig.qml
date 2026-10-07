@@ -727,7 +727,7 @@ Item {
             visible: dynamicIslandConfigRoot.islandOn
             icon: "palette"
             title: Translation.tr("Island appearance")
-            tooltip: Translation.tr("The body's shadow over the desktop.")
+            tooltip: Translation.tr("The body's shadow and background color.")
 
             ColumnLayout {
                 Layout.fillWidth: true
@@ -743,6 +743,19 @@ Item {
 
                     StyledToolTip {
                         text: Translation.tr("Shows a drop shadow underneath the floating island")
+                    }
+                }
+
+                ConfigSwitch {
+                    buttonIcon: "contrast"
+                    text: Translation.tr("AMOLED background")
+                    checked: Config.options.bar.amoledBackground
+                    onCheckedChanged: {
+                        Config.options.bar.amoledBackground = checked;
+                    }
+
+                    StyledToolTip {
+                        text: Translation.tr("Pure black, always opaque background for the dynamic island and the bar. Only recolors backgrounds that are visible")
                     }
                 }
             }

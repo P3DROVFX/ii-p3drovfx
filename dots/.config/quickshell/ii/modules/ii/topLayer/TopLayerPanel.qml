@@ -487,7 +487,7 @@ PanelWindow {
                                     leftMargin: topPanel.leftSidebarActiveOnMonitor ? GlobalStates.animatedLeftSidebarWidth : 0
                                 }
                                 implicitSize: Appearance.rounding.screenRounding
-                                color: hBarItem.showBarBackground ? (Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
+                                color: hBarItem.showBarBackground ? (Config.options.bar.amoledBackground ? "#000000" : Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
                                 corner: RoundCorner.CornerEnum.TopLeft
                                 states: State {
                                     name: "bottom"
@@ -507,7 +507,7 @@ PanelWindow {
                                     rightMargin: topPanel.rightSidebarActiveOnMonitor ? GlobalStates.animatedRightSidebarWidth : 0
                                 }
                                 implicitSize: Appearance.rounding.screenRounding
-                                color: hBarItem.showBarBackground ? (Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
+                                color: hBarItem.showBarBackground ? (Config.options.bar.amoledBackground ? "#000000" : Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
                                 corner: RoundCorner.CornerEnum.TopRight
                                 states: State {
                                     name: "bottom"
@@ -693,7 +693,7 @@ PanelWindow {
                                     top: parent.top
                                 }
                                 implicitSize: Appearance.rounding.screenRounding
-                                color: vBarItem.showBarBackground ? (Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
+                                color: vBarItem.showBarBackground ? (Config.options.bar.amoledBackground ? "#000000" : Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
                                 corner: RoundCorner.CornerEnum.TopLeft
                                 states: State {
                                     name: "bottom"
@@ -712,7 +712,7 @@ PanelWindow {
                                     right: topPanel.barBottom ? parent.right : undefined
                                 }
                                 implicitSize: Appearance.rounding.screenRounding
-                                color: vBarItem.showBarBackground ? (Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
+                                color: vBarItem.showBarBackground ? (Config.options.bar.amoledBackground ? "#000000" : Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
                                 corner: RoundCorner.CornerEnum.BottomLeft
                                 states: State {
                                     name: "bottom"

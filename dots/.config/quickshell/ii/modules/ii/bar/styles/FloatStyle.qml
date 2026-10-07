@@ -23,7 +23,8 @@ Item {
     property var  rightList
 
     property color actualColor: root.showBarBackground
-        ? (Config.options.bar.expressiveColors
+        ? (Config.options.bar.amoledBackground ? "#000000"
+            : Config.options.bar.expressiveColors
             ? root.activeTheme.barBackground
             : Appearance.colors.colLayer0)
         : "transparent"
@@ -58,7 +59,8 @@ Item {
     }
 
     // ── Islands (barBackgroundStyle === 3) ────────────────────────────────────
-    property color islandFillColor: Config.options.bar.expressiveColors
+    property color islandFillColor: Config.options.bar.amoledBackground ? "#000000"
+        : Config.options.bar.expressiveColors
         ? root.activeTheme.barBackground
         : Appearance.colors.colLayer0
 

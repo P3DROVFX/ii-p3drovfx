@@ -326,6 +326,18 @@ Item {
                 }
 
                 ConfigSwitch {
+                    buttonIcon: "contrast"
+                    text: Translation.tr("AMOLED background")
+                    checked: Config.options.bar.amoledBackground
+                    onCheckedChanged: {
+                        Config.options.bar.amoledBackground = checked;
+                    }
+                    StyledToolTip {
+                        text: Translation.tr("Pure black, always opaque background for the bar and the dynamic island. Only recolors backgrounds that are visible")
+                    }
+                }
+
+                ConfigSwitch {
                     buttonIcon: "filter_drama"
                     text: Translation.tr("Bar drop-shadow")
                     enabled: !ShellModePolicy.barDropShadowBlocked

@@ -5153,6 +5153,7 @@ Singleton {
                 property bool transparentGlow: true
                 property bool expressiveColors: false
                 property string expressiveColorTheme: "content"
+                property bool amoledBackground: false // Pure black, opaque bar and dynamic island background
                 property bool verbose: true
                 property bool vertical: true
                 property bool enableVolumeScroll: true

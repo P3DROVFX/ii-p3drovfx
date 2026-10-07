@@ -2302,7 +2302,8 @@ Scope {
                 topRadius: root.attachedToEdge ? 0 : root.bodyRadius
                 bottomRadius: root.bodyRadius
 
-                color: Config.options.bar.expressiveColors
+                color: Config.options.bar.amoledBackground ? "#000000"
+                    : Config.options.bar.expressiveColors
                     ? barThemes.getTheme(Config.options.bar.expressiveColorTheme).barBackground
                     : Appearance.colors.colLayer0
 

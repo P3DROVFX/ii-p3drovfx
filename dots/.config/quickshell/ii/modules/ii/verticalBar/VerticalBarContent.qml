@@ -84,7 +84,7 @@ Item { // Bar content region
     readonly property string barEdge: Config.options.bar.bottom ? "right" : "left"
     readonly property real frameThickness: Config.options.appearance.fakeScreenRounding === 3 ? Config.options.appearance.wrappedFrameThickness : 0
 
-    property color islandFillColor: Config.options.bar.expressiveColors ? root.activeTheme.barBackground : Appearance.colors.colLayer0
+    property color islandFillColor: Config.options.bar.amoledBackground ? "#000000" : Config.options.bar.expressiveColors ? root.activeTheme.barBackground : Appearance.colors.colLayer0
 
     // Background
     Rectangle {
@@ -101,7 +101,7 @@ Item { // Bar content region
             bottomMargin: (BarInteraction.cornerStyle === 1) ? Appearance.sizes.hyprlandGapsOut : 0
         }
 
-        property color actualColor: root.showBarBackground ? (Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
+        property color actualColor: root.showBarBackground ? (Config.options.bar.amoledBackground ? "#000000" : Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
         Behavior on actualColor {
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(barBackground)
         }

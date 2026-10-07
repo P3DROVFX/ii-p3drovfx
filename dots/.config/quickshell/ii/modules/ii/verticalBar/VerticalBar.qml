@@ -317,7 +317,7 @@ Scope {
                                     }
 
                                     implicitSize: Appearance.rounding.screenRounding
-                                    color: barRoot.showBarBackground ? (Config.options.bar.expressiveColors ? barRoot.activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
+                                    color: barRoot.showBarBackground ? (Config.options.bar.amoledBackground ? "#000000" : Config.options.bar.expressiveColors ? barRoot.activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
 
                                     corner: RoundCorner.CornerEnum.TopLeft
                                     states: State {
@@ -336,7 +336,7 @@ Scope {
                                         right: Config.options.bar.bottom ? parent.right : undefined
                                     }
                                     implicitSize: Appearance.rounding.screenRounding
-                                    color: barRoot.showBarBackground ? (Config.options.bar.expressiveColors ? barRoot.activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
+                                    color: barRoot.showBarBackground ? (Config.options.bar.amoledBackground ? "#000000" : Config.options.bar.expressiveColors ? barRoot.activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
 
                                     corner: RoundCorner.CornerEnum.BottomLeft
                                     states: State {
