@@ -195,9 +195,9 @@ Scope {
     RetainedLoader {
         id: cheatsheetLoader
         // Keep the window chrome and only the last selected tab.
-        // With caching disabled, closing releases the window immediately.
+        // With caching disabled, the closed window is kept for a minute, then released.
         requested: root.activeState || root.cachePrepared
-        retainFor: 0
+        retainFor: 60000
 
         sourceComponent: PanelWindow {
             id: cheatsheetRoot
@@ -740,7 +740,7 @@ Scope {
                                     // inserts children and adjusts its own index.
                                     readonly property bool isCurrent: cheatsheetRoot.selectedTab === index
                                     // Selection replaces the cache; closing preserves it.
-                                    active: isCurrent && (root.activeState || root.cachePrepared)
+                                    active: isCurrent && (root.activeState || root.cachePrepared || cheatsheetLoader.retained)
                                     visible: isCurrent && root.activeState
                                     enabled: isCurrent && root.activeState && GlobalStates.cheatsheetOpen
                                     asynchronous: true

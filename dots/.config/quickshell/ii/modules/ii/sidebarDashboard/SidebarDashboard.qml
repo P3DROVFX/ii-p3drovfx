@@ -13,9 +13,11 @@ Scope {
     property int sidebarWidth: Appearance.sizes.sidebarWidth
 
     // Keep the lightweight panel controller alive, but make the expensive dashboard
-    // tree obey the user's keep-alive preference.
+    // tree obey the user's keep-alive preference. It is wanted until the slide out has
+    // finished (a drag open asks for it too), then kept hidden for a minute.
     readonly property bool keepContentLoaded: Config.ready && Config.options.sidebar.keepRightSidebarLoaded
-    readonly property bool contentWanted: GlobalStates.sidebarRightOpen || root.keepContentLoaded
+    readonly property bool contentWanted: GlobalStates.sidebarRightOpen || GlobalStates.dashboardSlideProgress > 0
+        || root.keepContentLoaded
 
     readonly property bool isOnRight: {
         const pos = Config.options.sidebar.position;
@@ -117,10 +119,13 @@ Scope {
                 label: Translation.tr("Sidebar")
             }
 
-            Loader {
+            RetainedLoader {
                 id: sidebarContentLoader
 
-                active: root.contentWanted
+                requested: root.contentWanted
+                retainFor: 60000
+                // The slide in must find the content already built.
+                asynchronous: false
                 sourceComponent: SidebarDashboardContent {
                     keepWarm: root.keepContentLoaded
                 }

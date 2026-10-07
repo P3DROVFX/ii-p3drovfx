@@ -176,9 +176,10 @@ Item {
      * reaches 0 on the fade's last frame, so that hand-off cannot drop it either), and
      * while a page asked for from elsewhere is still looking for it (`pendingPage`).
      *
-     * `keepDashboardLoaded` buys the old behavior back explicitly: one resident grid
-     * and instant openings, traded for its RAM while idle (the tiles' CPU stays gated
-     * on being drawn either way).
+     * Once it is no longer wanted the loader keeps the grid hidden for a minute, so a
+     * quick reopen is instant, then destroys it. `keepDashboardLoaded` buys the old
+     * behavior back explicitly: one resident grid and instant openings, traded for its
+     * RAM while idle (the tiles' CPU stays gated on being drawn either way).
      */
     readonly property bool dashboardWanted: IslandPolicy.keepDashboardLoaded || content.isDashboard
         || content.dashboardReveal > 0 || content.pendingPage.pageId !== ""
@@ -1038,18 +1039,19 @@ Item {
     }
 
     // ── Dashboard ────────────────────────────────────────────────────────────
-    Loader {
+    RetainedLoader {
         id: dashboardLoader
         anchors.fill: parent
         /**
-         * Built while the dashboard can be seen and destroyed when it cannot; see
-         * `dashboardWanted`. Always asynchronous: building the grid takes a good part
+         * Built while the dashboard can be seen and destroyed a minute after it cannot;
+         * see `dashboardWanted`. Always asynchronous: building the grid takes a good part
          * of an expansion and must never run in the morph's way - it incubates off the
          * GUI thread on every open instead of freezing the shell. The morph does not
          * wait for it either: `DashboardMetrics` already gives the island its final
          * target.
          */
-        active: content.dashboardWanted
+        requested: content.dashboardWanted
+        retainFor: 60000
         asynchronous: true
         // The other half of the crossfade: it arrives soft and sharpens as the faces go.
         opacity: content.dashboardReveal
