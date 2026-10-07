@@ -70,6 +70,13 @@ class ImprovementTests(unittest.TestCase):
         # Buttons must not steal focus from the sheet.
         self.assertIn("focusPolicy: Qt.NoFocus", read("modules/common/draw/DrawToolButton.qml"))
 
+    def test_shortcuts_need_ctrl(self):
+        # A bare letter is typed into whatever text field has the keyboard.
+        window = read("modules/common/draw/LiveDrawWindow.qml")
+        handler = window.split("function handleKey(event)")[1].split("Item {")[0]
+        self.assertIn("if (!ctrl)\n            return false;", handler)
+        self.assertLess(handler.index("if (!ctrl)"), handler.index("Qt.Key_H"))
+
     def test_undo_redo_history(self):
         store = read("services/LiveDraw.qml")
         for name in ("function undo(key)", "function redo(key)", "function canUndo(key)", "function canRedo(key)"):

@@ -31,7 +31,7 @@ Rectangle {
 
     readonly property var opts: Config.options?.tablet?.liveDraw ?? null
 
-    implicitWidth: 760
+    implicitWidth: 790
     implicitHeight: column.implicitHeight + 32
     radius: Appearance.rounding.verylarge
     color: Appearance.m3colors.m3surfaceContainer
@@ -441,24 +441,24 @@ Rectangle {
                     model: [
                         { keys: ["Ctrl", "Z"], text: Translation.tr("Undo") },
                         { keys: ["Ctrl", "Shift", "Z"], text: Translation.tr("Redo") },
-                        { keys: ["P", "H", "L"], text: Translation.tr("Pen, highlighter, laser") },
-                        { keys: ["A", "R", "O", "I"], text: Translation.tr("Arrow, box, ellipse, line") },
+                        { keys: ["Ctrl", "P", "H", "L"], text: Translation.tr("Pen, highlighter, laser") },
+                        { keys: ["Ctrl", "A", "R", "O", "I"], text: Translation.tr("Arrow, box, ellipse, line") },
                         { keys: ["Shift"], text: Translation.tr("Snap a shape") },
-                        { keys: ["E"], text: Translation.tr("Eraser") },
-                        { keys: ["1", "–", "9"], text: Translation.tr("Ink") },
-                        { keys: ["[", "]"], text: Translation.tr("Thickness") },
-                        { keys: ["W", "K"], text: Translation.tr("Light or dark board") },
-                        { keys: ["F"], text: Translation.tr("Spotlight") },
-                        { keys: ["Z"], text: Translation.tr("Zoom") },
+                        { keys: ["Ctrl", "E"], text: Translation.tr("Eraser") },
+                        { keys: ["Ctrl", "1–9"], text: Translation.tr("Ink") },
+                        { keys: ["Ctrl", "[", "]"], text: Translation.tr("Thickness") },
+                        { keys: ["Ctrl", "W", "K"], text: Translation.tr("Light or dark board") },
+                        { keys: ["Ctrl", "F"], text: Translation.tr("Spotlight") },
+                        { keys: ["Ctrl", "M"], text: Translation.tr("Zoom") },
                         { keys: ["Ctrl", "C"], text: Translation.tr("Copy the drawing") },
                         { keys: ["Ctrl", "Shift", "C"], text: Translation.tr("Copy the screen with it") },
-                        { keys: ["Ctrl", "E"], text: Translation.tr("Save as PNG") },
-                        { keys: ["Ctrl", "Shift", "E"], text: Translation.tr("Save as SVG") },
+                        { keys: ["Ctrl", "Shift", "S"], text: Translation.tr("Save as PNG") },
+                        { keys: ["Ctrl", "Alt", "S"], text: Translation.tr("Save as SVG") },
                         { keys: ["Ctrl", "S"], text: Translation.tr("Save to Notes") },
-                        { keys: ["Del"], text: Translation.tr("Clear this screen") },
-                        { keys: ["Tab"], text: Translation.tr("Clicks go through") },
-                        { keys: ["T"], text: Translation.tr("Hide the toolbar") },
-                        { keys: ["C"], text: Translation.tr("Fold the toolbar") },
+                        { keys: ["Ctrl", "Del"], text: Translation.tr("Clear this screen") },
+                        { keys: ["Ctrl", "D"], text: Translation.tr("Clicks go through") },
+                        { keys: ["Ctrl", "T"], text: Translation.tr("Hide the toolbar") },
+                        { keys: ["Ctrl", "Shift", "T"], text: Translation.tr("Fold the toolbar") },
                         { keys: ["Esc"], text: Translation.tr("Close") }
                     ]
 
@@ -469,7 +469,7 @@ Rectangle {
                         spacing: 10
 
                         Item {
-                            implicitWidth: 96
+                            implicitWidth: 118
                             implicitHeight: hint.implicitHeight
                             KeyHint {
                                 id: hint

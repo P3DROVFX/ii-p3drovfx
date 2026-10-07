@@ -492,9 +492,16 @@ PanelWindow {
             root.flyout = "";
     }
 
+    /**
+     * Every shortcut is Ctrl+something (Esc aside). A bare letter is a letter typed into
+     * whatever text field has the keyboard — and with the keyboard on demand, that is
+     * often a window behind the drawing — so a tool on F or Z typed an F or a Z there
+     * instead. Shift is still the snap while a shape is dragged.
+     */
     function handleKey(event) {
         const ctrl = (event.modifiers & Qt.ControlModifier) !== 0;
         const shift = (event.modifiers & Qt.ShiftModifier) !== 0;
+        const alt = (event.modifiers & Qt.AltModifier) !== 0;
         const key = event.key;
 
         if (key === Qt.Key_Shift) {
@@ -504,7 +511,7 @@ PanelWindow {
 
         // The modes first: in a zoom or a spotlight only their own keys mean anything.
         if (root.presenting) {
-            if (key === Qt.Key_Escape || key === Qt.Key_F || key === Qt.Key_Z) {
+            if (key === Qt.Key_Escape || (ctrl && (key === Qt.Key_F || key === Qt.Key_M))) {
                 LiveDraw.setSpotlight(false);
                 LiveDraw.setZoom(false);
             } else if (key === Qt.Key_Plus || key === Qt.Key_Equal || key === Qt.Key_BracketRight) {
@@ -522,26 +529,29 @@ PanelWindow {
                 root.flyout = "";
             else
                 LiveDraw.close();
-        } else if (ctrl && key === Qt.Key_Z && !shift) {
+            return true;
+        }
+        if (!ctrl)
+            return false;
+
+        if (key === Qt.Key_Z && !shift) {
             if (!LiveDraw.undo(root.sheetKey))
                 root.statusFor(Translation.tr("Nothing to undo."));
-        } else if (ctrl && ((key === Qt.Key_Z && shift) || key === Qt.Key_Y)) {
+        } else if ((key === Qt.Key_Z && shift) || key === Qt.Key_Y) {
             if (!LiveDraw.redo(root.sheetKey))
                 root.statusFor(Translation.tr("Nothing to redo."));
-        } else if (ctrl && key === Qt.Key_S) {
-            root.renderInk("notes");
-        } else if (ctrl && key === Qt.Key_C) {
+        } else if (key === Qt.Key_S) {
+            if (alt)
+                root.exportSvg();
+            else if (shift)
+                root.renderInk("png");
+            else
+                root.renderInk("notes");
+        } else if (key === Qt.Key_C) {
             if (shift)
                 root.captureScreen("copy");
             else
                 root.renderInk("copy");
-        } else if (ctrl && key === Qt.Key_E) {
-            if (shift)
-                root.exportSvg();
-            else
-                root.renderInk("png");
-        } else if (ctrl) {
-            return false;
         } else if (key === Qt.Key_E) {
             LiveDraw.eraser = !LiveDraw.eraser;
         } else if (key === Qt.Key_P || key === Qt.Key_B) {
@@ -564,10 +574,16 @@ PanelWindow {
             LiveDraw.setBoard("dark");
         } else if (key === Qt.Key_F) {
             LiveDraw.setSpotlight(true);
-        } else if (key === Qt.Key_Z) {
+        } else if (key === Qt.Key_M) {
             LiveDraw.setZoom(true);
         } else if (key === Qt.Key_T) {
-            LiveDraw.trayHidden = !LiveDraw.trayHidden;
+            if (shift && root.trayMovable)
+                LiveDraw.trayCollapsed = !LiveDraw.trayCollapsed;
+            else if (!shift)
+                LiveDraw.trayHidden = !LiveDraw.trayHidden;
+        } else if (key === Qt.Key_D) {
+            if (!LiveDraw.boardOn)
+                LiveDraw.drawing = !LiveDraw.drawing;
         } else if ((key >= Qt.Key_1 && key <= Qt.Key_9) || root.digitRow(event) > 0) {
             // By the key's place as well as its symbol: on AZERTY the number row types
             // & é " ' without Shift, and those are still the keys labelled 1–9.
@@ -586,11 +602,6 @@ PanelWindow {
                 LiveDraw.clear(root.sheetKey);
                 root.statusFor(Translation.tr("Screen cleared — Ctrl+Z brings it back."));
             }
-        } else if (key === Qt.Key_Tab) {
-            if (!LiveDraw.boardOn)
-                LiveDraw.drawing = !LiveDraw.drawing;
-        } else if (key === Qt.Key_C && root.trayMovable) {
-            LiveDraw.trayCollapsed = !LiveDraw.trayCollapsed;
         } else {
             return false;
         }

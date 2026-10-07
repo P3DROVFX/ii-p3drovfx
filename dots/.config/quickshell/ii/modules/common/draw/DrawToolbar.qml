@@ -231,7 +231,7 @@ Rectangle {
             tooltipText: root.drawing
                 ? Translation.tr("Drawing — click to let clicks through to the apps")
                 : Translation.tr("Clicks go through — click to pick the pen back up")
-            shortcut: "Tab"
+            shortcut: "Ctrl+D"
             onTriggered: root.drawToggled()
         }
 
@@ -274,21 +274,21 @@ Rectangle {
                 symbol: "ink_pen"
                 active: !root.eraser && root.tool === "pen"
                 tooltipText: Translation.tr("Pen")
-                shortcut: "P"
+                shortcut: "Ctrl+P"
                 onTriggered: root.toolPicked("pen")
             }
             GroupButton {
                 symbol: "ink_highlighter"
                 active: !root.eraser && root.tool === "highlighter"
                 tooltipText: Translation.tr("Highlighter — under the ink, see-through")
-                shortcut: "H"
+                shortcut: "Ctrl+H"
                 onTriggered: root.toolPicked("highlighter")
             }
             GroupButton {
                 symbol: "stylus_laser_pointer"
                 active: !root.eraser && root.tool === "laser"
                 tooltipText: Translation.tr("Laser pointer — fades on its own")
-                shortcut: "L"
+                shortcut: "Ctrl+L"
                 onTriggered: root.toolPicked("laser")
             }
             GroupButton {
@@ -299,7 +299,7 @@ Rectangle {
                 tooltipText: picked
                     ? Translation.tr("%1 — click again for other shapes · Shift snaps").arg(root.toolNames[root.tool])
                     : Translation.tr("Shapes: %1").arg(root.toolNames[root.shapeTool])
-                shortcut: "A R O I"
+                shortcut: "Ctrl+A / R / O / I"
                 onTriggered: {
                     if (picked)
                         root.shapeMenuRequested(shapeButton);
@@ -311,7 +311,7 @@ Rectangle {
                 symbol: "ink_eraser"
                 active: root.eraser
                 tooltipText: root.eraser ? Translation.tr("Back to the pen") : Translation.tr("Eraser")
-                shortcut: "E"
+                shortcut: "Ctrl+E"
                 onTriggered: root.eraserToggled()
             }
         }
@@ -389,7 +389,7 @@ Rectangle {
                         StyledToolTip {
                             requireOverlay: false
                             extraVisibleCondition: swatchHover.hovered
-                            text: Translation.tr("Ink %1").arg(swatch.modelData.toUpperCase()) + (swatch.index < 9 ? `  ·  ${swatch.index + 1}` : "")
+                            text: Translation.tr("Ink %1").arg(swatch.modelData.toUpperCase()) + (swatch.index < 9 ? `  ·  Ctrl+${swatch.index + 1}` : "")
                         }
                     }
                 }
@@ -421,7 +421,7 @@ Rectangle {
 
             StyledToolTip {
                 requireOverlay: false
-                text: Translation.tr("Inks") + "  ·  1–9"
+                text: Translation.tr("Inks") + "  ·  Ctrl+1–9"
             }
         }
 
@@ -447,7 +447,7 @@ Rectangle {
                 size: root.target - 6
                 symbol: "add"
                 tooltipText: Translation.tr("Thicker")
-                shortcut: "]"
+                shortcut: "Ctrl+]"
                 onTriggered: root.widthPicked(Math.min(24, Math.round(root.strokeWidth) + 1))
             }
 
@@ -468,7 +468,7 @@ Rectangle {
                 StyledToolTip {
                     requireOverlay: false
                     extraVisibleCondition: widthSlider.hovered && !widthSlider.pressed
-                    text: Translation.tr("Thickness") + "  ·  [ ]"
+                    text: Translation.tr("Thickness") + "  ·  Ctrl+[ ]"
                 }
             }
 
@@ -523,7 +523,7 @@ Rectangle {
                 size: root.target - 6
                 symbol: "remove"
                 tooltipText: Translation.tr("Thinner")
-                shortcut: "["
+                shortcut: "Ctrl+["
                 onTriggered: root.widthPicked(Math.max(1, Math.round(root.strokeWidth) - 1))
             }
         }
@@ -537,7 +537,7 @@ Rectangle {
                 symbol: "ink_eraser"
                 active: root.eraser
                 tooltipText: root.eraser ? Translation.tr("Back to the pen") : Translation.tr("Eraser")
-                shortcut: "E"
+                shortcut: "Ctrl+E"
                 onTriggered: root.eraserToggled()
             }
             GroupButton {
@@ -560,7 +560,7 @@ Rectangle {
                 symbol: "delete_sweep"
                 enabled: root.canClear
                 tooltipText: Translation.tr("Clear this screen")
-                shortcut: "Del"
+                shortcut: "Ctrl+Del"
                 onTriggered: root.clearRequested()
             }
         }
@@ -588,21 +588,21 @@ Rectangle {
                 symbol: "developer_board"
                 active: root.boardOn
                 tooltipText: root.boardOn ? Translation.tr("Back to the screen") : Translation.tr("Board — a blank page over the screen")
-                shortcut: "W / K"
+                shortcut: "Ctrl+W / Ctrl+K"
                 onTriggered: root.boardToggled()
             }
             GroupButton {
                 symbol: "flashlight_on"
                 active: root.spotlightOn
                 tooltipText: Translation.tr("Spotlight — dim all but the pointer")
-                shortcut: "F"
+                shortcut: "Ctrl+F"
                 onTriggered: root.spotlightToggled()
             }
             GroupButton {
                 symbol: "zoom_in"
                 active: root.zoomOn
                 tooltipText: Translation.tr("Zoom — magnify around the pointer")
-                shortcut: "Z"
+                shortcut: "Ctrl+M"
                 onTriggered: root.zoomToggled()
             }
         }
@@ -646,7 +646,7 @@ Rectangle {
                 tooltipText: root.collapsed
                     ? Translation.tr("Show every tool")
                     : Translation.tr("Fold the toolbar down to the pen")
-                shortcut: "C"
+                shortcut: "Ctrl+Shift+T"
                 onTriggered: root.collapseToggled()
             }
             GroupButton {

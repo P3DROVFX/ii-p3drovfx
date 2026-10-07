@@ -49,8 +49,8 @@ Rectangle {
             model: root.kind === "share" ? [
                 { name: "copy", symbol: "content_copy", text: Translation.tr("Copy the drawing"), detail: Translation.tr("Transparent, cropped to the ink"), keys: ["Ctrl", "C"], needsInk: true },
                 { name: "copyScreen", symbol: "screenshot_monitor", text: Translation.tr("Copy the screen with it"), detail: Translation.tr("Everything you see, toolbar left out"), keys: ["Ctrl", "Shift", "C"], needsInk: false },
-                { name: "exportPng", symbol: "image", text: Translation.tr("Save as PNG"), detail: Translation.tr("Transparent, in Pictures/Drawings"), keys: ["Ctrl", "E"], needsInk: true },
-                { name: "exportSvg", symbol: "shapes", text: Translation.tr("Save as SVG"), detail: Translation.tr("Vector, sharp at any size"), keys: ["Ctrl", "Shift", "E"], needsInk: true },
+                { name: "exportPng", symbol: "image", text: Translation.tr("Save as PNG"), detail: Translation.tr("Transparent, in Pictures/Drawings"), keys: ["Ctrl", "Shift", "S"], needsInk: true },
+                { name: "exportSvg", symbol: "shapes", text: Translation.tr("Save as SVG"), detail: Translation.tr("Vector, sharp at any size"), keys: ["Ctrl", "Alt", "S"], needsInk: true },
                 { name: "save", symbol: "note_add", text: Translation.tr("Save to Notes"), detail: Translation.tr("As a sketch note, and clear the screen"), keys: ["Ctrl", "S"], needsInk: true },
                 { name: "screenshot", symbol: "photo_camera", text: Translation.tr("Screenshot"), detail: Translation.tr("Saved to Pictures/Screenshots too"), keys: [], needsInk: false }
             ] : []
@@ -127,10 +127,10 @@ Rectangle {
 
         Repeater {
             model: root.kind === "shape" ? [
-                { tool: "line", symbol: "horizontal_rule", text: Translation.tr("Line"), key: "I" },
-                { tool: "arrow", symbol: "arrow_outward", text: Translation.tr("Arrow"), key: "A" },
-                { tool: "rect", symbol: "rectangle", text: Translation.tr("Rectangle"), key: "R" },
-                { tool: "ellipse", symbol: "circle", text: Translation.tr("Ellipse"), key: "O" }
+                { tool: "line", symbol: "horizontal_rule", text: Translation.tr("Line"), key: "Ctrl+I" },
+                { tool: "arrow", symbol: "arrow_outward", text: Translation.tr("Arrow"), key: "Ctrl+A" },
+                { tool: "rect", symbol: "rectangle", text: Translation.tr("Rectangle"), key: "Ctrl+R" },
+                { tool: "ellipse", symbol: "circle", text: Translation.tr("Ellipse"), key: "Ctrl+O" }
             ] : []
 
             delegate: DrawToolButton {
@@ -193,7 +193,7 @@ Rectangle {
                 StyledToolTip {
                     requireOverlay: false
                     extraVisibleCondition: inkHover.hovered
-                    text: Translation.tr("Ink %1").arg(swatch.modelData.toUpperCase()) + (swatch.index < 9 ? `  ·  ${swatch.index + 1}` : "")
+                    text: Translation.tr("Ink %1").arg(swatch.modelData.toUpperCase()) + (swatch.index < 9 ? `  ·  Ctrl+${swatch.index + 1}` : "")
                 }
             }
         }
