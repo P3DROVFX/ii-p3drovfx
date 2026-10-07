@@ -624,6 +624,33 @@ Singleton {
             "configPage": "widgets/DesktopPhotoWidgetConfig.qml"
         },
         {
+            "widgetId": "photo_plain_1x1",
+            "name": Translation.tr("Plain Photo (1x1)"),
+            "category": "Photo",
+            "qmlPath": Qt.resolvedUrl("photo/PlainPhoto1x1Widget.qml"),
+            "icon": "image",
+            "description": Translation.tr("1x1 photo filling a rounded rectangle: no border, no text."),
+            "configPage": "widgets/DesktopPlainPhoto1x1Config.qml"
+        },
+        {
+            "widgetId": "photo_plain_2x1",
+            "name": Translation.tr("Plain Photo (2x1)"),
+            "category": "Photo",
+            "qmlPath": Qt.resolvedUrl("photo/PlainPhoto2x1Widget.qml"),
+            "icon": "image",
+            "description": Translation.tr("2x1 photo filling a rounded rectangle: no border, no text."),
+            "configPage": "widgets/DesktopPlainPhoto2x1Config.qml"
+        },
+        {
+            "widgetId": "photo_plain_1x2",
+            "name": Translation.tr("Plain Photo (1x2)"),
+            "category": "Photo",
+            "qmlPath": Qt.resolvedUrl("photo/PlainPhoto1x2Widget.qml"),
+            "icon": "image",
+            "description": Translation.tr("1x2 photo filling a rounded rectangle: no border, no text."),
+            "configPage": "widgets/DesktopPlainPhoto1x2Config.qml"
+        },
+        {
             "widgetId": "photo_1x1",
             "name": Translation.tr("Photo 1x1"),
             "category": "Photo",

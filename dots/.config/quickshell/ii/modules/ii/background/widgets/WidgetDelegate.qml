@@ -125,6 +125,9 @@ Item {
         "calendar_month_tall": component_calendar_month_tall,
         "photo": component_photo,
         "photo_1x1": component_photo_1x1,
+        "photo_plain_1x1": component_photo_plain_1x1,
+        "photo_plain_2x1": component_photo_plain_2x1,
+        "photo_plain_1x2": component_photo_plain_1x2,
         "photo_weather_2x1": component_photo_weather_2x1,
         "photo_pill_2x1": component_photo_pill_2x1,
         "photo_minimal_temp_2x1": component_photo_minimal_temp_2x1,
@@ -1078,6 +1081,45 @@ Item {
         id: component_photo
 
         PhotoWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_photo_plain_1x1
+
+        PlainPhoto1x1Widget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_photo_plain_2x1
+
+        PlainPhoto2x1Widget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_photo_plain_1x2
+
+        PlainPhoto1x2Widget {
             screenWidth: delegateRoot.screenWidth
             screenHeight: delegateRoot.screenHeight
             scaledScreenWidth: delegateRoot.screenWidth

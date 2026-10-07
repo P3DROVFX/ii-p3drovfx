@@ -28,3 +28,4 @@ TouchGestureStatusCard 1.0 TouchGestureStatusCard.qml
 TranslatorDefaultsPicker 1.0 TranslatorDefaultsPicker.qml
 WeatherLocationCard 1.0 WeatherLocationCard.qml
 WeekStartPicker 1.0 WeekStartPicker.qml
+PlainPhotoOptions 1.0 PlainPhotoOptions.qml

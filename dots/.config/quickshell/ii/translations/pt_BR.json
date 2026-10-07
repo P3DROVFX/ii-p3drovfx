@@ -14203,5 +14203,12 @@
     "Wavy minute ring": "Anel de minutos ondulado",
     "Draw the minutes' progress ring as a wave; off, it is a plain arc.": "Desenha o anel de progresso dos minutos como uma onda; desligado, é um arco simples.",
     "Hour numerals": "Numerais das horas",
-    "Mark 12, 3, 6 and 9 on the hour dial.": "Marca 12, 3, 6 e 9 no mostrador das horas."
+    "Mark 12, 3, 6 and 9 on the hour dial.": "Marca 12, 3, 6 e 9 no mostrador das horas.",
+    "Plain Photo (1x1)": "Foto simples (1x1)",
+    "Plain Photo (2x1)": "Foto simples (2x1)",
+    "Plain Photo (1x2)": "Foto simples (1x2)",
+    "1x1 photo filling a rounded rectangle: no border, no text.": "Foto 1x1 preenchendo um retângulo arredondado: sem borda, sem texto.",
+    "2x1 photo filling a rounded rectangle: no border, no text.": "Foto 2x1 preenchendo um retângulo arredondado: sem borda, sem texto.",
+    "1x2 photo filling a rounded rectangle: no border, no text.": "Foto 1x2 preenchendo um retângulo arredondado: sem borda, sem texto.",
+    "No image chosen: the wallpaper is shown.": "Nenhuma imagem escolhida: o papel de parede é exibido."
 }

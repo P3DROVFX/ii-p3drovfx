@@ -3671,6 +3671,30 @@ Singleton {
                         property bool useBlackBg: false
                         property bool enableGlassReflection: false
                     }
+                    property JsonObject photo_plain_1x1: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 100
+                        property int widgetSize: 100
+                        property string imagePath: ""
+                    }
+                    property JsonObject photo_plain_2x1: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 100
+                        property int widgetSize: 100
+                        property string imagePath: ""
+                    }
+                    property JsonObject photo_plain_1x2: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 100
+                        property int widgetSize: 100
+                        property string imagePath: ""
+                    }
                     property JsonObject photo_1x1: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free"
