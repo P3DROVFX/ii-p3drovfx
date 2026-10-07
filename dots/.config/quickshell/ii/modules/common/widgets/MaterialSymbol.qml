@@ -10,10 +10,24 @@ StyledText {
     // renderer after a parent scale transform.
     readonly property real truncatedFill: root.fill >= 0.5 ? 1 : 0
 
-    // QtRendering can omit contours from filled variable-font glyphs (notably
-    // `devices`) at small sizes. NativeRendering uses the font engine's glyph
-    // rasterizer and preserves the complete FILL outline.
-    renderType: Text.NativeRendering
+    // True while this symbol or any ancestor is scaled or rotated (popup scale
+    // multiplier, rotating shapes). The binding reads every ancestor's
+    // scale/rotation/parent, so it follows animations and reparenting.
+    readonly property bool transformed: {
+        for (let p = root; p; p = p.parent) {
+            if (Math.abs(p.scale - 1) > 0.001 || p.rotation % 360 !== 0)
+                return true;
+        }
+        return false;
+    }
+
+    // NativeRendering gives the crispest glyph at its real size, but rasterizes
+    // before transforms: a scale stretches that bitmap into jagged steps.
+    // CurveRendering evaluates the outline at the final on-screen size, so it is
+    // used only under a transform — untransformed its small-size antialiasing
+    // wobbles. QtRendering's distance field drops contours from filled glyphs
+    // (`devices`, `settings`), so it is never used here.
+    renderType: root.transformed ? Text.CurveRendering : Text.NativeRendering
     antialiasing: true
     smooth: true
     horizontalAlignment: Text.AlignHCenter

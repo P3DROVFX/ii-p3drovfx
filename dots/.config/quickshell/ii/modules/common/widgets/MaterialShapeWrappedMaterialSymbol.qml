@@ -56,15 +56,8 @@ MaterialShape {
             anchors.centerIn: parent
             color: root.colSymbol
             iconSize: root.iconSize
-
-            // Text.NativeRendering rasterises the glyph to device pixels *before*
-            // the transform is applied, so a glyph that merely cancels a rotating
-            // parent still gets re-snapped to the pixel grid at every new angle:
-            // the icon visibly walks around inside the shape. Qt rules
-            // NativeRendering out for rotated text, and this wrapper is the one
-            // place a MaterialSymbol is guaranteed to sit under a rotation.
-            // Unrotated callers — nearly all of them — keep the crisp native raster.
-            renderType: root.rotation === 0 ? Text.NativeRendering : Text.QtRendering
+            // Rotation is safe with MaterialSymbol's CurveRendering: the outline
+            // is re-evaluated at every angle instead of a pre-snapped raster.
         }
     }
 }
