@@ -10,7 +10,7 @@ without removing the regular Discord RPC backend.
 the "Install Companion" button in the Discord Voice overlay:
 
 - **Vesktop / Equibop**: builds the plugin into a source checkout, then points
-  the client at it via its `vencordLocation`/`equicordDir` settings key.
+  the client at it via the `vencordDir`/`equicordDir` key of its `state.json`.
 - **Official Discord with Vencord** (installed via the standalone Vencord
   Installer, not Vesktop): there is no equivalent settings key — the injected
   `patcher.js` hardcodes `~/.config/Vencord/dist` as the load path. The script
