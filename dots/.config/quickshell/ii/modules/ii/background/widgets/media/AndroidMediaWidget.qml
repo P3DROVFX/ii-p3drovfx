@@ -211,45 +211,52 @@ AbstractBackgroundWidget {
             radius: Appearance.rounding.windowRounding + 16
             clip: true
 
-            layer.enabled: true
-            layer.effect: OpacityMask {
-                maskSource: Rectangle {
-                    width: mainBg.width
-                    height: mainBg.height
-                    radius: mainBg.radius
+            // Only the artwork and its shading are rounded-clipped. A layer on mainBg
+            // would also rasterize the texts below, which come out soft.
+            Item {
+                id: artClip
+                anchors.fill: parent
+                layer.enabled: true
+                layer.effect: OpacityMask {
+                    maskSource: Rectangle {
+                        width: mainBg.width
+                        height: mainBg.height
+                        radius: mainBg.radius
+                    }
+                }
+
+                AndroidMediaArtwork {
+                    id: artwork
+                    anchors.fill: parent
+                    visible: root.hasTrack
+                    artSource: root.artUrl
+                    trackKey: JSON.stringify([root.player?.uniqueId ?? "", root.player?.trackTitle ?? "",
+                        root.player?.trackArtist ?? "", root.player?.trackAlbum ?? ""])
+                    hasPlayer: !!root.player
+                    playing: root.playing
+                    wide: 1
+                }
+
+                Item {
+                    anchors.fill: parent
+                    visible: root.hasTrack
+                    opacity: 0.3
+
+                    RadialGradient {
+                        anchors.fill: parent
+                        gradient: Gradient {
+                            GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0) }
+                            GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.9) }
+                        }
+                        horizontalRadius: width * 0.7
+                        verticalRadius: height * 0.7
+                    }
                 }
             }
 
-            AndroidMediaArtwork {
-                id: artwork
-                anchors.fill: parent
-                visible: root.hasTrack
-                artSource: root.artUrl
-                trackKey: JSON.stringify([root.player?.uniqueId ?? "", root.player?.trackTitle ?? "",
-                    root.player?.trackArtist ?? "", root.player?.trackAlbum ?? ""])
-                hasPlayer: !!root.player
-                playing: root.playing
-                wide: 1
-            }
             Connections {
                 target: root.player
                 function onPostTrackChanged(): void { artwork.requestArt(true); }
-            }
-
-            Item {
-                anchors.fill: parent
-                visible: root.hasTrack
-                opacity: 0.3
-
-                RadialGradient {
-                    anchors.fill: parent
-                    gradient: Gradient {
-                        GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0) }
-                        GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.9) }
-                    }
-                    horizontalRadius: width * 0.7
-                    verticalRadius: height * 0.7
-                }
             }
 
             ColumnLayout {

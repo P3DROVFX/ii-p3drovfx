@@ -30,26 +30,23 @@ Item {
                 }
             }
 
+            // The vignette is declared inline as the mask, never as a scene item:
+            // a visible maskSource paints its black centre under the 0.85 art.
             Item {
-                id: vignetteMask
-                anchors.fill: parent
-
-                RadialGradient {
-                    anchors.fill: parent
-                    gradient: Gradient {
-                        GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 1) }
-                        GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0) }
-                    }
-                    horizontalRadius: width * 0.65
-                    verticalRadius: height * 0.65
-                }
-            }
-
-            Item {
+                id: artHost
                 anchors.fill: parent
                 layer.enabled: true
                 layer.effect: OpacityMask {
-                    maskSource: vignetteMask
+                    maskSource: RadialGradient {
+                        width: artHost.width
+                        height: artHost.height
+                        gradient: Gradient {
+                            GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 1) }
+                            GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0) }
+                        }
+                        horizontalRadius: width * 0.65
+                        verticalRadius: height * 0.65
+                    }
                 }
 
                 Image {

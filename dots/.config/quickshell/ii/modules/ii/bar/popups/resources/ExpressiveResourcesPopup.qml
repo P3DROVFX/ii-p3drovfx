@@ -1241,30 +1241,35 @@ StyledPopup {
 
             color: ColorUtils.applyAlpha(_fillColor, 0.25)
 
-            layer.enabled: true
-            layer.samples: 4
-            layer.smooth: true
-            layer.effect: OpacityMask {
-                maskSource: Rectangle {
-                    width: ramCard.width
-                    height: ramCard.height
-                    radius: ramCard.radius
+            // Only the fill is layered: a layer on the card also rasterizes its
+            // texts, which come out soft when the layer lands on a fractional pixel.
+            Item {
+                anchors.fill: parent
+                layer.enabled: true
+                layer.samples: 4
+                layer.smooth: true
+                layer.effect: OpacityMask {
+                    maskSource: Rectangle {
+                        width: ramCard.width
+                        height: ramCard.height
+                        radius: ramCard.radius
+                    }
                 }
-            }
 
-            Rectangle {
-                id: ramFill
-                anchors.left: parent.left
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                radius: parent.radius
-                width: parent.width * parent._percent
-                color: parent._fillColor
+                Rectangle {
+                    id: ramFill
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    radius: ramCard.radius
+                    width: parent.width * ramCard._percent
+                    color: ramCard._fillColor
 
-                Behavior on width {
-                    NumberAnimation {
-                        duration: 400
-                        easing.type: Easing.OutCubic
+                    Behavior on width {
+                        NumberAnimation {
+                            duration: 400
+                            easing.type: Easing.OutCubic
+                        }
                     }
                 }
             }
@@ -1523,30 +1528,34 @@ StyledPopup {
 
             color: ColorUtils.applyAlpha(_fillColor, 0.25)
 
-            layer.enabled: true
-            layer.samples: 4
-            layer.smooth: true
-            layer.effect: OpacityMask {
-                maskSource: Rectangle {
-                    width: swapCard.width
-                    height: swapCard.height
-                    radius: swapCard.radius
+            // Only the fill is layered: see ramCard.
+            Item {
+                anchors.fill: parent
+                layer.enabled: true
+                layer.samples: 4
+                layer.smooth: true
+                layer.effect: OpacityMask {
+                    maskSource: Rectangle {
+                        width: swapCard.width
+                        height: swapCard.height
+                        radius: swapCard.radius
+                    }
                 }
-            }
 
-            Rectangle {
-                id: swapFill
-                anchors.left: parent.left
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                radius: parent.radius
-                width: parent.width * parent._percent
-                color: parent._fillColor
+                Rectangle {
+                    id: swapFill
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    radius: swapCard.radius
+                    width: parent.width * swapCard._percent
+                    color: swapCard._fillColor
 
-                Behavior on width {
-                    NumberAnimation {
-                        duration: 400
-                        easing.type: Easing.OutCubic
+                    Behavior on width {
+                        NumberAnimation {
+                            duration: 400
+                            easing.type: Easing.OutCubic
+                        }
                     }
                 }
             }
@@ -1804,30 +1813,34 @@ StyledPopup {
 
             color: ColorUtils.applyAlpha(_fillColor, 0.25)
 
-            layer.enabled: true
-            layer.samples: 4
-            layer.smooth: true
-            layer.effect: OpacityMask {
-                maskSource: Rectangle {
-                    width: diskCard.width
-                    height: diskCard.height
-                    radius: diskCard.radius
+            // Only the fill is layered: see ramCard.
+            Item {
+                anchors.fill: parent
+                layer.enabled: true
+                layer.samples: 4
+                layer.smooth: true
+                layer.effect: OpacityMask {
+                    maskSource: Rectangle {
+                        width: diskCard.width
+                        height: diskCard.height
+                        radius: diskCard.radius
+                    }
                 }
-            }
 
-            Rectangle {
-                id: diskFill
-                anchors.left: parent.left
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                radius: parent.radius
-                width: parent.width * parent._percent
-                color: parent._fillColor
+                Rectangle {
+                    id: diskFill
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    radius: diskCard.radius
+                    width: parent.width * diskCard._percent
+                    color: diskCard._fillColor
 
-                Behavior on width {
-                    NumberAnimation {
-                        duration: 400
-                        easing.type: Easing.OutCubic
+                    Behavior on width {
+                        NumberAnimation {
+                            duration: 400
+                            easing.type: Easing.OutCubic
+                        }
                     }
                 }
             }

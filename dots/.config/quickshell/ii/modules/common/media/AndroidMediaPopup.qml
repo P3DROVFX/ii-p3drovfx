@@ -177,24 +177,30 @@ Item {
         radius: Appearance.rounding.windowRounding
         clip: true
 
-        layer.enabled: true
-        layer.effect: OpacityMask {
-            maskSource: Rectangle {
-                width: mainBg.width
-                height: mainBg.height
-                radius: mainBg.radius
-            }
-        }
-
-        AndroidMediaArtwork {
-            id: artwork
+        // Only the artwork is rounded-clipped. A layer on mainBg would also
+        // rasterize the texts below, which come out soft at fractional offsets.
+        Item {
+            id: artClip
             anchors.fill: parent
-            artSource: root.artUrl
-            trackKey: JSON.stringify([root.player?.uniqueId ?? "", root.player?.trackTitle ?? "",
-                root.player?.trackArtist ?? "", root.player?.trackAlbum ?? ""])
-            hasPlayer: !!root.player
-            playing: root.playing
-            wide: 1
+            layer.enabled: true
+            layer.effect: OpacityMask {
+                maskSource: Rectangle {
+                    width: mainBg.width
+                    height: mainBg.height
+                    radius: mainBg.radius
+                }
+            }
+
+            AndroidMediaArtwork {
+                id: artwork
+                anchors.fill: parent
+                artSource: root.artUrl
+                trackKey: JSON.stringify([root.player?.uniqueId ?? "", root.player?.trackTitle ?? "",
+                    root.player?.trackArtist ?? "", root.player?.trackAlbum ?? ""])
+                hasPlayer: !!root.player
+                playing: root.playing
+                wide: 1
+            }
         }
         Connections {
             target: root.player

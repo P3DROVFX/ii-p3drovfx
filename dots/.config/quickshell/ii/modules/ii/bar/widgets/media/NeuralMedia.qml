@@ -288,49 +288,6 @@ Item {
             visible: false
         }
 
-        // Vignette mask (horizontal + vertical gradients combined)
-        Item {
-            id: contractedVignetteMask
-            anchors.fill: parent
-            visible: true
-
-            Rectangle {
-                id: contractedHMask
-                anchors.fill: parent
-                gradient: Gradient {
-                    orientation: Gradient.Horizontal
-                    GradientStop { position: 0.0; color: "transparent" }
-                    GradientStop { position: 0.08; color: "transparent" }
-                    GradientStop { position: 0.2; color: Qt.rgba(1, 1, 1, 0.3) }
-                    GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
-                    GradientStop { position: 0.45; color: "white" }
-                    GradientStop { position: 0.55; color: "white" }
-                    GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
-                    GradientStop { position: 0.8; color: Qt.rgba(1, 1, 1, 0.3) }
-                    GradientStop { position: 0.92; color: "transparent" }
-                    GradientStop { position: 1.0; color: "transparent" }
-                }
-            }
-
-            Rectangle {
-                anchors.fill: parent
-                gradient: Gradient {
-                    orientation: Gradient.Vertical
-                    GradientStop { position: 0.0; color: "transparent" }
-                    GradientStop { position: 0.15; color: Qt.rgba(1, 1, 1, 0.3) }
-                    GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
-                    GradientStop { position: 0.5; color: "white" }
-                    GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
-                    GradientStop { position: 0.85; color: Qt.rgba(1, 1, 1, 0.3) }
-                    GradientStop { position: 1.0; color: "transparent" }
-                }
-                layer.enabled: true
-                layer.effect: OpacityMask {
-                    maskSource: contractedHMask
-                }
-            }
-        }
-
         // Album art layers (background blurred + sharp foreground with vignette)
         Item {
             anchors.fill: parent
@@ -365,21 +322,61 @@ Item {
                 }
 
                 Item {
+                    id: contractedArtHost1
                     anchors.fill: parent
                     layer.enabled: true
                     layer.effect: OpacityMask {
-                        maskSource: contractedVignetteMask
+                        maskSource: Rectangle {
+                            width: contractedArtHost1.width
+                            height: contractedArtHost1.height
+                            color: "transparent"
+                            gradient: Gradient {
+                                orientation: Gradient.Horizontal
+                                GradientStop { position: 0.0; color: "transparent" }
+                                GradientStop { position: 0.08; color: "transparent" }
+                                GradientStop { position: 0.2; color: Qt.rgba(1, 1, 1, 0.3) }
+                                GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
+                                GradientStop { position: 0.45; color: "white" }
+                                GradientStop { position: 0.55; color: "white" }
+                                GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
+                                GradientStop { position: 0.8; color: Qt.rgba(1, 1, 1, 0.3) }
+                                GradientStop { position: 0.92; color: "transparent" }
+                                GradientStop { position: 1.0; color: "transparent" }
+                            }
+                        }
                     }
 
-                    Image {
+                    Item {
                         anchors.fill: parent
-                        source: root.artSource
-                        fillMode: Image.PreserveAspectCrop
-                        smooth: true
-                        asynchronous: true
-                        cache: false
-                        sourceSize.width: root.artSize * 2
-                        sourceSize.height: root.artSize * 2
+                        layer.enabled: true
+                        layer.effect: OpacityMask {
+                            maskSource: Rectangle {
+                                width: contractedArtHost1.width
+                                height: contractedArtHost1.height
+                                color: "transparent"
+                                gradient: Gradient {
+                                    orientation: Gradient.Vertical
+                                    GradientStop { position: 0.0; color: "transparent" }
+                                    GradientStop { position: 0.15; color: Qt.rgba(1, 1, 1, 0.3) }
+                                    GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
+                                    GradientStop { position: 0.5; color: "white" }
+                                    GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
+                                    GradientStop { position: 0.85; color: Qt.rgba(1, 1, 1, 0.3) }
+                                    GradientStop { position: 1.0; color: "transparent" }
+                                }
+                            }
+                        }
+
+                        Image {
+                            anchors.fill: parent
+                            source: root.artSource
+                            fillMode: Image.PreserveAspectCrop
+                            smooth: true
+                            asynchronous: true
+                            cache: false
+                            sourceSize.width: root.artSize * 2
+                            sourceSize.height: root.artSize * 2
+                        }
                     }
                 }
             }

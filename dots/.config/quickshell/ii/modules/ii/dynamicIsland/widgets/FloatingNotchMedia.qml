@@ -731,48 +731,6 @@ Item {
         }
 
         Item {
-            id: contractedVignetteMask
-            anchors.fill: parent
-            visible: true
-
-            Rectangle {
-                id: contractedHMask
-                anchors.fill: parent
-                gradient: Gradient {
-                    orientation: Gradient.Horizontal
-                    GradientStop { position: 0.0; color: "transparent" }
-                    GradientStop { position: 0.08; color: "transparent" }
-                    GradientStop { position: 0.2; color: Qt.rgba(1, 1, 1, 0.3) }
-                    GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
-                    GradientStop { position: 0.45; color: "white" }
-                    GradientStop { position: 0.55; color: "white" }
-                    GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
-                    GradientStop { position: 0.8; color: Qt.rgba(1, 1, 1, 0.3) }
-                    GradientStop { position: 0.92; color: "transparent" }
-                    GradientStop { position: 1.0; color: "transparent" }
-                }
-            }
-
-            Rectangle {
-                anchors.fill: parent
-                gradient: Gradient {
-                    orientation: Gradient.Vertical
-                    GradientStop { position: 0.0; color: "transparent" }
-                    GradientStop { position: 0.15; color: Qt.rgba(1, 1, 1, 0.3) }
-                    GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
-                    GradientStop { position: 0.5; color: "white" }
-                    GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
-                    GradientStop { position: 0.85; color: Qt.rgba(1, 1, 1, 0.3) }
-                    GradientStop { position: 1.0; color: "transparent" }
-                }
-                layer.enabled: true
-                layer.effect: OpacityMask {
-                    maskSource: contractedHMask
-                }
-            }
-        }
-
-        Item {
             anchors.fill: parent
 
             Item {
@@ -794,26 +752,66 @@ Item {
                 }
 
                 Item {
+                    id: contractedArtHost1
                     anchors.fill: parent
                     layer.enabled: true
                     layer.effect: OpacityMask {
-                        maskSource: contractedVignetteMask
+                        maskSource: Rectangle {
+                            width: contractedArtHost1.width
+                            height: contractedArtHost1.height
+                            color: "transparent"
+                            gradient: Gradient {
+                                orientation: Gradient.Horizontal
+                                GradientStop { position: 0.0; color: "transparent" }
+                                GradientStop { position: 0.08; color: "transparent" }
+                                GradientStop { position: 0.2; color: Qt.rgba(1, 1, 1, 0.3) }
+                                GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
+                                GradientStop { position: 0.45; color: "white" }
+                                GradientStop { position: 0.55; color: "white" }
+                                GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
+                                GradientStop { position: 0.8; color: Qt.rgba(1, 1, 1, 0.3) }
+                                GradientStop { position: 0.92; color: "transparent" }
+                                GradientStop { position: 1.0; color: "transparent" }
+                            }
+                        }
                     }
 
-                    Image {
-                        id: contractedArtOutgoing
-                        anchors.centerIn: parent
-                        width: parent.width * root.artOutgoingScale
-                        height: parent.height * root.artOutgoingScale
-                        source: root.previousArtSource
-                        fillMode: Image.PreserveAspectCrop
-                        smooth: true
-                        asynchronous: true
-                        layer.enabled: root.artOutgoingBlur > 0
-                        layer.effect: MultiEffect {
-                            blurEnabled: root.artOutgoingBlur > 0
-                            blurMax: 128
-                            blur: root.artOutgoingBlur / 128
+                    Item {
+                        anchors.fill: parent
+                        layer.enabled: true
+                        layer.effect: OpacityMask {
+                            maskSource: Rectangle {
+                                width: contractedArtHost1.width
+                                height: contractedArtHost1.height
+                                color: "transparent"
+                                gradient: Gradient {
+                                    orientation: Gradient.Vertical
+                                    GradientStop { position: 0.0; color: "transparent" }
+                                    GradientStop { position: 0.15; color: Qt.rgba(1, 1, 1, 0.3) }
+                                    GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
+                                    GradientStop { position: 0.5; color: "white" }
+                                    GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
+                                    GradientStop { position: 0.85; color: Qt.rgba(1, 1, 1, 0.3) }
+                                    GradientStop { position: 1.0; color: "transparent" }
+                                }
+                            }
+                        }
+
+                        Image {
+                            id: contractedArtOutgoing
+                            anchors.centerIn: parent
+                            width: parent.width * root.artOutgoingScale
+                            height: parent.height * root.artOutgoingScale
+                            source: root.previousArtSource
+                            fillMode: Image.PreserveAspectCrop
+                            smooth: true
+                            asynchronous: true
+                            layer.enabled: root.artOutgoingBlur > 0
+                            layer.effect: MultiEffect {
+                                blurEnabled: root.artOutgoingBlur > 0
+                                blurMax: 128
+                                blur: root.artOutgoingBlur / 128
+                            }
                         }
                     }
                 }
@@ -838,26 +836,66 @@ Item {
                 }
 
                 Item {
+                    id: contractedArtHost2
                     anchors.fill: parent
                     layer.enabled: true
                     layer.effect: OpacityMask {
-                        maskSource: contractedVignetteMask
+                        maskSource: Rectangle {
+                            width: contractedArtHost2.width
+                            height: contractedArtHost2.height
+                            color: "transparent"
+                            gradient: Gradient {
+                                orientation: Gradient.Horizontal
+                                GradientStop { position: 0.0; color: "transparent" }
+                                GradientStop { position: 0.08; color: "transparent" }
+                                GradientStop { position: 0.2; color: Qt.rgba(1, 1, 1, 0.3) }
+                                GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
+                                GradientStop { position: 0.45; color: "white" }
+                                GradientStop { position: 0.55; color: "white" }
+                                GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
+                                GradientStop { position: 0.8; color: Qt.rgba(1, 1, 1, 0.3) }
+                                GradientStop { position: 0.92; color: "transparent" }
+                                GradientStop { position: 1.0; color: "transparent" }
+                            }
+                        }
                     }
 
-                    Image {
-                        id: contractedArtIncoming
-                        anchors.centerIn: parent
-                        width: parent.width * root.artIncomingScale
-                        height: parent.height * root.artIncomingScale
-                        source: root.currentArtSource
-                        fillMode: Image.PreserveAspectCrop
-                        smooth: true
-                        asynchronous: true
-                        layer.enabled: root.artIncomingBlur > 0
-                        layer.effect: MultiEffect {
-                            blurEnabled: root.artIncomingBlur > 0
-                            blurMax: 128
-                            blur: root.artIncomingBlur / 128
+                    Item {
+                        anchors.fill: parent
+                        layer.enabled: true
+                        layer.effect: OpacityMask {
+                            maskSource: Rectangle {
+                                width: contractedArtHost2.width
+                                height: contractedArtHost2.height
+                                color: "transparent"
+                                gradient: Gradient {
+                                    orientation: Gradient.Vertical
+                                    GradientStop { position: 0.0; color: "transparent" }
+                                    GradientStop { position: 0.15; color: Qt.rgba(1, 1, 1, 0.3) }
+                                    GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
+                                    GradientStop { position: 0.5; color: "white" }
+                                    GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
+                                    GradientStop { position: 0.85; color: Qt.rgba(1, 1, 1, 0.3) }
+                                    GradientStop { position: 1.0; color: "transparent" }
+                                }
+                            }
+                        }
+
+                        Image {
+                            id: contractedArtIncoming
+                            anchors.centerIn: parent
+                            width: parent.width * root.artIncomingScale
+                            height: parent.height * root.artIncomingScale
+                            source: root.currentArtSource
+                            fillMode: Image.PreserveAspectCrop
+                            smooth: true
+                            asynchronous: true
+                            layer.enabled: root.artIncomingBlur > 0
+                            layer.effect: MultiEffect {
+                                blurEnabled: root.artIncomingBlur > 0
+                                blurMax: 128
+                                blur: root.artIncomingBlur / 128
+                            }
                         }
                     }
                 }
@@ -1069,48 +1107,6 @@ Item {
         }
 
         Item {
-            id: expandedVignetteMask
-            anchors.fill: parent
-            visible: true
-
-            Rectangle {
-                id: expandedHMask
-                anchors.fill: parent
-                gradient: Gradient {
-                    orientation: Gradient.Horizontal
-                    GradientStop { position: 0.0; color: "transparent" }
-                    GradientStop { position: 0.08; color: "transparent" }
-                    GradientStop { position: 0.2; color: Qt.rgba(1, 1, 1, 0.3) }
-                    GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
-                    GradientStop { position: 0.45; color: "white" }
-                    GradientStop { position: 0.55; color: "white" }
-                    GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
-                    GradientStop { position: 0.8; color: Qt.rgba(1, 1, 1, 0.3) }
-                    GradientStop { position: 0.92; color: "transparent" }
-                    GradientStop { position: 1.0; color: "transparent" }
-                }
-            }
-
-            Rectangle {
-                anchors.fill: parent
-                gradient: Gradient {
-                    orientation: Gradient.Vertical
-                    GradientStop { position: 0.0; color: "transparent" }
-                    GradientStop { position: 0.15; color: Qt.rgba(1, 1, 1, 0.3) }
-                    GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
-                    GradientStop { position: 0.5; color: "white" }
-                    GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
-                    GradientStop { position: 0.85; color: Qt.rgba(1, 1, 1, 0.3) }
-                    GradientStop { position: 1.0; color: "transparent" }
-                }
-                layer.enabled: true
-                layer.effect: OpacityMask {
-                    maskSource: expandedHMask
-                }
-            }
-        }
-
-        Item {
             anchors.fill: parent
 
             Item {
@@ -1133,27 +1129,67 @@ Item {
                 }
 
                 Item {
+                    id: expandedArtHost1
                     anchors.fill: parent
                     layer.enabled: true
                     layer.effect: OpacityMask {
-                        maskSource: expandedVignetteMask
+                        maskSource: Rectangle {
+                            width: expandedArtHost1.width
+                            height: expandedArtHost1.height
+                            color: "transparent"
+                            gradient: Gradient {
+                                orientation: Gradient.Horizontal
+                                GradientStop { position: 0.0; color: "transparent" }
+                                GradientStop { position: 0.08; color: "transparent" }
+                                GradientStop { position: 0.2; color: Qt.rgba(1, 1, 1, 0.3) }
+                                GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
+                                GradientStop { position: 0.45; color: "white" }
+                                GradientStop { position: 0.55; color: "white" }
+                                GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
+                                GradientStop { position: 0.8; color: Qt.rgba(1, 1, 1, 0.3) }
+                                GradientStop { position: 0.92; color: "transparent" }
+                                GradientStop { position: 1.0; color: "transparent" }
+                            }
+                        }
                     }
 
-                    Image {
-                        id: expandedArtOutgoing
-                        anchors.centerIn: parent
-                        width: parent.width * root.artOutgoingScale
-                        height: parent.height * root.artOutgoingScale
-                        source: root.previousArtSource
-                        fillMode: Image.PreserveAspectCrop
-                        opacity: 0.85
-                        smooth: true
-                        asynchronous: true
-                        layer.enabled: root.artOutgoingBlur > 0
-                        layer.effect: MultiEffect {
-                            blurEnabled: root.artOutgoingBlur > 0
-                            blurMax: 128
-                            blur: root.artOutgoingBlur / 128
+                    Item {
+                        anchors.fill: parent
+                        layer.enabled: true
+                        layer.effect: OpacityMask {
+                            maskSource: Rectangle {
+                                width: expandedArtHost1.width
+                                height: expandedArtHost1.height
+                                color: "transparent"
+                                gradient: Gradient {
+                                    orientation: Gradient.Vertical
+                                    GradientStop { position: 0.0; color: "transparent" }
+                                    GradientStop { position: 0.15; color: Qt.rgba(1, 1, 1, 0.3) }
+                                    GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
+                                    GradientStop { position: 0.5; color: "white" }
+                                    GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
+                                    GradientStop { position: 0.85; color: Qt.rgba(1, 1, 1, 0.3) }
+                                    GradientStop { position: 1.0; color: "transparent" }
+                                }
+                            }
+                        }
+
+                        Image {
+                            id: expandedArtOutgoing
+                            anchors.centerIn: parent
+                            width: parent.width * root.artOutgoingScale
+                            height: parent.height * root.artOutgoingScale
+                            source: root.previousArtSource
+                            fillMode: Image.PreserveAspectCrop
+                            opacity: 0.85
+                            smooth: true
+                            asynchronous: true
+                            layer.enabled: root.artOutgoingBlur > 0
+                            layer.effect: MultiEffect {
+                                blurEnabled: root.artOutgoingBlur > 0
+                                blurMax: 128
+                                blur: root.artOutgoingBlur / 128
+                            }
                         }
                     }
                 }
@@ -1179,27 +1215,67 @@ Item {
                 }
 
                 Item {
+                    id: expandedArtHost2
                     anchors.fill: parent
                     layer.enabled: true
                     layer.effect: OpacityMask {
-                        maskSource: expandedVignetteMask
+                        maskSource: Rectangle {
+                            width: expandedArtHost2.width
+                            height: expandedArtHost2.height
+                            color: "transparent"
+                            gradient: Gradient {
+                                orientation: Gradient.Horizontal
+                                GradientStop { position: 0.0; color: "transparent" }
+                                GradientStop { position: 0.08; color: "transparent" }
+                                GradientStop { position: 0.2; color: Qt.rgba(1, 1, 1, 0.3) }
+                                GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
+                                GradientStop { position: 0.45; color: "white" }
+                                GradientStop { position: 0.55; color: "white" }
+                                GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
+                                GradientStop { position: 0.8; color: Qt.rgba(1, 1, 1, 0.3) }
+                                GradientStop { position: 0.92; color: "transparent" }
+                                GradientStop { position: 1.0; color: "transparent" }
+                            }
+                        }
                     }
 
-                    Image {
-                        id: expandedArtIncoming
-                        anchors.centerIn: parent
-                        width: parent.width * root.artIncomingScale
-                        height: parent.height * root.artIncomingScale
-                        source: root.currentArtSource
-                        fillMode: Image.PreserveAspectCrop
-                        opacity: 0.85
-                        smooth: true
-                        asynchronous: true
-                        layer.enabled: root.artIncomingBlur > 0
-                        layer.effect: MultiEffect {
-                            blurEnabled: root.artIncomingBlur > 0
-                            blurMax: 128
-                            blur: root.artIncomingBlur / 128
+                    Item {
+                        anchors.fill: parent
+                        layer.enabled: true
+                        layer.effect: OpacityMask {
+                            maskSource: Rectangle {
+                                width: expandedArtHost2.width
+                                height: expandedArtHost2.height
+                                color: "transparent"
+                                gradient: Gradient {
+                                    orientation: Gradient.Vertical
+                                    GradientStop { position: 0.0; color: "transparent" }
+                                    GradientStop { position: 0.15; color: Qt.rgba(1, 1, 1, 0.3) }
+                                    GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
+                                    GradientStop { position: 0.5; color: "white" }
+                                    GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
+                                    GradientStop { position: 0.85; color: Qt.rgba(1, 1, 1, 0.3) }
+                                    GradientStop { position: 1.0; color: "transparent" }
+                                }
+                            }
+                        }
+
+                        Image {
+                            id: expandedArtIncoming
+                            anchors.centerIn: parent
+                            width: parent.width * root.artIncomingScale
+                            height: parent.height * root.artIncomingScale
+                            source: root.currentArtSource
+                            fillMode: Image.PreserveAspectCrop
+                            opacity: 0.85
+                            smooth: true
+                            asynchronous: true
+                            layer.enabled: root.artIncomingBlur > 0
+                            layer.effect: MultiEffect {
+                                blurEnabled: root.artIncomingBlur > 0
+                                blurMax: 128
+                                blur: root.artIncomingBlur / 128
+                            }
                         }
                     }
                 }
