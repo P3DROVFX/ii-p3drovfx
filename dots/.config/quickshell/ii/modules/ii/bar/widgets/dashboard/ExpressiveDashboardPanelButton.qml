@@ -397,6 +397,7 @@ Item {
                         running: iconDriver.countdownRunning
                         paused: iconDriver.countdownPaused
                         finished: iconDriver.countdownFinished
+                        progress: iconDriver.countdownProgress
                     }
                 }
             }

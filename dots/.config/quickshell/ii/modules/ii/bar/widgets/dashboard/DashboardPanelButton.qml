@@ -114,6 +114,7 @@ RippleButton { // Right sidebar button
                 running: iconDriver.countdownRunning
                 paused: iconDriver.countdownPaused
                 finished: iconDriver.countdownFinished
+                progress: iconDriver.countdownProgress
             }
         }
 

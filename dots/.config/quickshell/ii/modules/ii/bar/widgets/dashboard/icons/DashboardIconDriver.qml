@@ -350,6 +350,18 @@ Item {
     readonly property bool countdownRunning: root.countdownRunningCount > 0
     readonly property bool countdownPaused: !root.countdownRunning && root.countdownPausedCount > 0
     readonly property bool countdownFinished: !root.countdownRunning && !root.countdownPaused && root.countdownFinishedCount > 0
+    // Elapsed fraction of the unfinished countdown that ends first, in twelfths:
+    // the hourglass is a few pixels tall, so finer steps would only repaint the
+    // bar without moving the sand. Reads the service's 1 s tick, which stops
+    // while every countdown is paused or done.
+    readonly property real countdownProgress: {
+        TimerService.countdownTick;
+        const pending = root.countdownItems.filter(item => !item?.notified);
+        if (pending.length === 0)
+            return 0;
+        const next = pending.reduce((a, b) => TimerService.countdownSecondsLeft(b) < TimerService.countdownSecondsLeft(a) ? b : a);
+        return Math.floor(TimerService.countdownProgress(next) * 12) / 12;
+    }
 
     property int previousCountdownCount: 0
     property int previousCountdownRunningCount: 0
