@@ -62,7 +62,9 @@ class EngineTests(unittest.TestCase):
 class ImprovementTests(unittest.TestCase):
     def test_keyboard_only_while_drawing(self):
         window = read("modules/common/draw/LiveDrawWindow.qml")
-        self.assertIn("WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None", window)
+        # Grabbed for a moment, then on demand, so a window focused by keybind gets
+        # typing with the pen still down (B6).
+        self.assertIn("root.grabbingKeys ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.OnDemand", window)
         for key in ("Qt.Key_Z", "Qt.Key_Y", "Qt.Key_Escape", "Qt.Key_Delete", "Qt.Key_BracketLeft", "Qt.Key_S"):
             self.assertIn(key, window)
         # Buttons must not steal focus from the sheet.
@@ -83,10 +85,11 @@ class ImprovementTests(unittest.TestCase):
     def test_settings_live_in_the_drawing(self):
         window = read("modules/common/draw/LiveDrawWindow.qml")
         self.assertIn("LiveDrawSettings {", window)
-        self.assertIn("settingsRegion", window)
+        self.assertIn("flyoutRegion", window)
         self.assertIn("showPressure: false", window)
         popup = read("modules/common/draw/LiveDrawSettings.qml")
-        for key in ('"pressure"', '"smoothing"', '"workspaceParallax"', "mouseSmoothing"):
+        for key in ('"pressure"', '"smoothing"', '"workspaceParallax"', "mouseSmoothing", '"sheetMode"',
+                    '"boardPattern"', '"nativeCursor"'):
             self.assertIn(key, popup)
 
     def test_tooltips_show_without_an_overlay(self):
@@ -98,6 +101,62 @@ class ImprovementTests(unittest.TestCase):
         self.assertIn("LiveDraw.enabled", read("modules/ii/liveDraw/LiveDrawOverlay.qml"))
 
 
+class WhiteboardTests(unittest.TestCase):
+    def test_tools_and_geometry(self):
+        geometry = read("modules/common/draw/StrokeGeometry.js")
+        for name in ("function shapePolylines(", "function constrained(", "function documentSvg(", "function hitPoints("):
+            self.assertIn(name, geometry)
+        surface = read("modules/common/draw/DrawSurface.qml")
+        self.assertIn('property string tool: "pen"', surface)
+        self.assertIn("canvas.releaseLaser(finished)", surface)
+
+    def test_highlighter_is_under_the_ink(self):
+        canvas = read("modules/common/draw/DrawCanvas.qml")
+        self.assertLess(canvas.index("id: underLoader"), canvas.index("id: committed"))
+        self.assertLess(canvas.index("id: committed"), canvas.index("id: liveOver"))
+
+    def test_board_spotlight_zoom(self):
+        window = read("modules/common/draw/LiveDrawWindow.qml")
+        self.assertIn("fillMode: Image.Tile", window)
+        self.assertIn("ShapePath.OddEvenFill", window)
+        self.assertIn("ScreencopyView {", window)
+        # toDataURL into an Image source overflowed the JS stack on every window build.
+        self.assertNotIn("toDataURL", window)
+        for pattern in ("grid", "dots", "lines"):
+            for tone in ("light", "dark"):
+                self.assertTrue((ROOT / f"assets/images/liveDraw/{pattern}-{tone}.png").exists())
+
+    def test_slide_follows_the_compositor_style(self):
+        store = read("services/LiveDraw.qml")
+        self.assertIn("function applySlideStyle(style)", store)
+        self.assertIn('root.workspaceSlideAxis = kind.startsWith("slide")', store)
+
+    def test_no_close_on_teardown(self):
+        # A dying store wrote close() into the PersistentProperties the next one inherits.
+        store = read("services/LiveDraw.qml")
+        self.assertNotIn("onEnabledChanged", store)
+        self.assertNotIn("LiveDraw.close()", read("modules/ii/liveDraw/LiveDrawOverlay.qml").split("Component.onDestruction")[1])
+
+    def test_vertical_and_measured_compaction(self):
+        toolbar = read("modules/common/draw/DrawToolbar.qml")
+        self.assertIn("function widthAt(lvl)", toolbar)
+        self.assertIn("function heightAt(lvl)", toolbar)
+        window = read("modules/common/draw/LiveDrawWindow.qml")
+        self.assertIn("tray.widthAt(0) <= room", window)
+        self.assertIn("function settleTray(pointer)", window)
+
+    def test_ipc_covers_the_toolbar(self):
+        overlay = read("modules/ii/liveDraw/LiveDrawOverlay.qml")
+        for name in ("quick", "pen", "tool", "color", "width", "board", "spotlight", "zoom", "sheet",
+                     "toolbar", "undo", "redo", "clear", "clearAll", "copy", "copyScreen", "exportAs",
+                     "save", "screenshot", "status"):
+            self.assertRegex(overlay, rf"function {name}\(")
+
+    def test_native_cursor_costs_nothing(self):
+        surface = read("modules/common/draw/DrawSurface.qml")
+        self.assertIn("active: !root.nativeCursor && root.drawing && hover.hovered", surface)
+
+
 class OverlayTests(unittest.TestCase):
     def test_family_loads_the_overlay(self):
         family = read("panelFamilies/IllogicalImpulseFamily.qml")
@@ -107,7 +166,7 @@ class OverlayTests(unittest.TestCase):
 
     def test_surface_only_while_needed(self):
         overlay = read("modules/ii/liveDraw/LiveDrawOverlay.qml")
-        self.assertIn("(LiveDraw.trayOpen && focused) || LiveDraw.screenHasInk(screenScope.modelData.name)", overlay)
+        self.assertIn("((LiveDraw.trayOpen || LiveDraw.spotlight || LiveDraw.zoom) && focused)", overlay)
         self.assertIn('namespace: "quickshell:liveDraw"', overlay)
         self.assertIn('name: "liveDrawToggle"', overlay)
 
@@ -157,7 +216,8 @@ class LauncherTests(unittest.TestCase):
         files = self.LAUNCHERS + ["modules/ii/dock/utilities/LiveDrawPanel.qml",
                                   "modules/common/draw/LiveDrawWindow.qml",
                                   "modules/common/draw/DrawToolbar.qml",
-                                  "modules/common/draw/LiveDrawSettings.qml"]
+                                  "modules/common/draw/LiveDrawSettings.qml",
+                                  "modules/common/draw/LiveDrawMenus.qml"]
         for rel in files:
             for key in re.findall(r'Translation\.tr\("([^"]+)"\)', read(rel)):
                 self.assertIn(key, en, f"{rel}: {key}")

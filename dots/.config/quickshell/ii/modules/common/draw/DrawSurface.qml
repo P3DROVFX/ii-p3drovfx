@@ -41,6 +41,16 @@ Item {
      * precise already, and a string would just make it feel late.
      */
     property real mouseSmoothing: 0
+
+    /**
+     * What the pen makes: "pen", "highlighter", "laser", or a shape — "line", "arrow",
+     * "rect", "ellipse". A shape is a drag from one corner to the other; the laser is a
+     * trail that fades and is never kept. See StrokeGeometry for each.
+     */
+    property string tool: "pen"
+    /// Held Shift: shapes snap (lines to 15°, boxes to squares and circles).
+    property bool constrain: false
+    readonly property bool shapeTool: ["line", "arrow", "rect", "ellipse"].indexOf(root.tool) >= 0
     readonly property real stringLength: Math.max(0, Math.min(1, root.mouseSmoothing)) * 18
     readonly property real eraserRadius: Math.max(20, root.strokeWidth * 3)
 
@@ -81,16 +91,32 @@ Item {
 
     function beginStroke(x, y, pressure, steady) {
         const first = StrokeGeometry.point(x, y, pressure);
+        if (root.shapeTool) {
+            root.steadied = false;
+            root.livePoints = [first, first];
+            root.liveRecord = {
+                tool: root.tool,
+                points: root.livePoints,
+                color: root.color,
+                width: root.strokeWidth,
+                usePressure: false
+            };
+            canvas.liveStroke = root.liveRecord;
+            canvas.refreshLive();
+            return;
+        }
         root.steadied = steady === true && root.stringLength > 0.5;
         root.brush = first;
         root.lastRaw = first;
         root.smoothPoint = first;
         root.livePoints = [first];
         root.liveRecord = {
+            tool: root.tool,
             points: root.livePoints,
             color: root.color,
-            width: root.strokeWidth,
-            usePressure: root.usePressure
+            // The laser is meant to be seen across a room: never a hairline.
+            width: root.tool === "laser" ? Math.max(6, root.strokeWidth) : root.strokeWidth,
+            usePressure: root.tool === "pen" && root.usePressure
         };
         canvas.liveStroke = root.liveRecord;
         canvas.refreshLive();
@@ -112,6 +138,13 @@ Item {
         if (!root.liveRecord)
             return;
         const raw = StrokeGeometry.point(x, y, pressure);
+        if (StrokeGeometry.isShape(root.liveRecord)) {
+            const points = root.liveRecord.points;
+            points[1] = root.constrain ? StrokeGeometry.constrained(root.liveRecord.tool, points[0], raw) : raw;
+            root.lastRaw = raw;
+            canvas.refreshLive();
+            return;
+        }
         root.lastRaw = raw;
         let sample = raw;
         if (root.steadied) {
@@ -124,8 +157,38 @@ Item {
             canvas.refreshLive();
     }
 
+    /// Shift pressed or released mid-drag re-snaps the shape at once.
+    onConstrainChanged: {
+        if (root.liveRecord && StrokeGeometry.isShape(root.liveRecord) && root.lastRaw) {
+            const points = root.liveRecord.points;
+            points[1] = root.constrain ? StrokeGeometry.constrained(root.liveRecord.tool, points[0], root.lastRaw) : root.lastRaw;
+            canvas.refreshLive();
+        }
+    }
+
     function endStroke() {
         const finished = root.liveRecord;
+        if (finished && StrokeGeometry.isShape(finished)) {
+            root.liveRecord = null;
+            root.livePoints = [];
+            root.lastRaw = null;
+            // A click without a drag is not a shape anyone meant to draw.
+            if (StrokeGeometry.distance(finished.points[0], finished.points[1]) >= 3)
+                root.strokeFinished(finished);
+            canvas.liveStroke = null;
+            canvas.refreshLive();
+            return;
+        }
+        if (finished && finished.tool === "laser") {
+            root.liveRecord = null;
+            root.livePoints = [];
+            root.smoothPoint = null;
+            root.brush = null;
+            root.lastRaw = null;
+            canvas.liveStroke = null;
+            canvas.releaseLaser(finished);
+            return;
+        }
         // The string's slack is taken up on release: the line ends where the pointer let
         // go, which is the point of an arrow drawn at something.
         if (finished && root.steadied && root.lastRaw) {
@@ -211,50 +274,65 @@ Item {
      * of and shows how wide it will be, which is what every drawing application puts
      * under the pen for the same reason.
      */
+    /**
+     * The system's crosshair instead of the ring.
+     *
+     * The ring is drawn by this surface, so every pointer move — drawing or not — is a
+     * new frame of a screen-sized window (~15 % of a core while the pointer just moves
+     * around in drawing mode). The crosshair is the compositor's: moving it costs this
+     * surface nothing at all.
+     */
+    property bool nativeCursor: false
+
     HoverHandler {
         id: hover
         enabled: root.drawing
         // The system pointer would otherwise sit inside the ring, which is one pointer
         // too many.
-        cursorShape: Qt.BlankCursor
+        cursorShape: root.nativeCursor ? Qt.CrossCursor : Qt.BlankCursor
     }
 
-    Item {
-        id: brushCursor
-
-        readonly property real diameter: root.eraser
-            ? root.eraserRadius * 2
-            : Math.max(8, root.strokeWidth)
-
-        visible: root.drawing && hover.hovered
-        width: brushCursor.diameter
-        height: brushCursor.diameter
-        x: hover.point.position.x - brushCursor.diameter / 2
-        y: hover.point.position.y - brushCursor.diameter / 2
+    // Built only while it is wanted: an invisible ring still re-evaluates its position on
+    // every pointer move.
+    Loader {
+        active: !root.nativeCursor && root.drawing && hover.hovered
         z: 10
+        sourceComponent: Item {
+            id: brushCursor
 
-        /**
-         * Two filled discs rather than an outlined ring.
-         *
-         * An outline would be a `border`, which this shell does not draw anywhere — and
-         * the pair says more anyway: the wide translucent disc is exactly how wide the
-         * stroke will be, and the opaque dot at its centre is exactly where the ink will
-         * come out. Both carry the current colour, so the cursor also answers "what am I
-         * about to draw with" without a glance at the toolbar.
-         */
-        Rectangle {
-            anchors.fill: parent
-            radius: width / 2
-            color: root.eraser ? Appearance.colors.colSubtext : root.color
-            opacity: 0.28
-        }
+            readonly property real diameter: root.eraser
+                ? root.eraserRadius * 2
+                : Math.max(8, root.tool === "highlighter" ? Math.max(12, root.strokeWidth * 3) : root.strokeWidth)
 
-        Rectangle {
-            anchors.centerIn: parent
-            width: Math.min(4, brushCursor.diameter * 0.5)
-            height: width
-            radius: width / 2
-            color: root.eraser ? Appearance.colors.colSubtext : root.color
+            width: brushCursor.diameter
+            height: brushCursor.diameter
+            x: hover.point.position.x - brushCursor.diameter / 2
+            y: hover.point.position.y - brushCursor.diameter / 2
+            z: 10
+
+            /**
+             * Two filled discs rather than an outlined ring.
+             *
+             * An outline would be a `border`, which this shell does not draw anywhere — and
+             * the pair says more anyway: the wide translucent disc is exactly how wide the
+             * stroke will be, and the opaque dot at its centre is exactly where the ink will
+             * come out. Both carry the current colour, so the cursor also answers "what am I
+             * about to draw with" without a glance at the toolbar.
+             */
+            Rectangle {
+                anchors.fill: parent
+                radius: width / 2
+                color: root.eraser ? Appearance.colors.colSubtext : root.color
+                opacity: 0.28
+            }
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: Math.min(4, brushCursor.diameter * 0.5)
+                height: width
+                radius: width / 2
+                color: root.eraser ? Appearance.colors.colSubtext : root.color
+            }
         }
     }
 

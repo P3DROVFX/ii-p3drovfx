@@ -9,30 +9,28 @@ import qs.modules.common.widgets
 import qs.modules.common.functions
 
 /**
- * The pen tray: what the pen is doing, the ink, the thickness, the edits, and whatever
- * the host adds to the end.
+ * The pen tray: what the pen is doing, the tool, the ink, the thickness, the edits, the
+ * presenting modes, and whatever the host adds to the end.
  *
  * A Material 3 Expressive floating toolbar. The groups are told apart by what they are
  * made of rather than by lines between them: the mode is a word set in the title face
  * with its state in small capitals under it, the inks sit on a pill of their own, the
- * thickness is a number in tall condensed digits, and the edits are one connected
- * button group whose inner corners press flat. One row, wide targets, no menus —
- * everything here is reached mid-thought with a pen in the other hand.
+ * thickness is a number in tall condensed digits, and the tools, the edits and the modes
+ * are connected button groups whose inner corners press flat.
  *
- * The ink controls are shared; what happens to the drawing is not. A sheet floating over
- * a workspace can be saved, screenshotted or put away; a sketch inside a note is simply
- * finished or abandoned. So the host appends its own buttons (`trailingContent`).
+ * It runs either way: a row along the bottom, or a column when the host docks it to a
+ * screen edge (`vertical`). And it gives way on narrow screens by measuring itself, not
+ * by guessing: `widthAt(level)` is what each level of compaction would take, so the host
+ * picks the first that fits — the words and the digits go first (level 1), then the inks
+ * fold into one swatch that opens them (level 2).
+ *
+ * The ink controls are shared with the Notes sketch editor, which sets none of the
+ * `show*` flags and gets the plain pen tray it always had.
  */
 Rectangle {
     id: root
 
-    /**
-     * Host buttons, appended after the shared controls.
-     *
-     * A named property rather than the default one: a `default property alias` also
-     * captures the objects this file declares in its own body, which would put the
-     * toolbar's own layout inside the slot it is trying to fill.
-     */
+    /// Host buttons, appended after the shared controls.
     property alias trailingContent: trailing.data
     /// Host items before the shared controls — a grip, where the host lets the tray move.
     property alias leadingContent: leading.data
@@ -49,40 +47,40 @@ Rectangle {
     property bool canClear: root.canUndo
     property string statusText: ""
 
-    /**
-     * Whether the pen is down.
-     *
-     * The toolbar's own mode switch: without it the only way out of drawing was a button
-     * that also put the toolbar away. Hosts that are always drawing — a sketch inside a
-     * note has nothing else to be — leave `showDrawToggle` off.
-     */
+    /// Whether the pen is down. Hosts that are always drawing leave `showDrawToggle` off.
     property bool drawing: true
     property bool showDrawToggle: false
     property bool showPressure: true
 
-    /// The mode, said in words: a title ("Draw") over its state ("Pen up"). Empty hides it.
+    /// The mode, said in words: a title ("Draw") over its state. Empty hides it.
     property string title: ""
     property string subtitle: ""
 
-    /**
-     * Folded down to the pen, undo and the way back out.
-     *
-     * For drawing over something that is being recorded or shared: the full tray is as
-     * wide as a dock and sits in every frame of the video, while the folded one is a
-     * handful of buttons. Off unless the host offers it (`collapsible`).
-     */
+    // ── Tools and modes (live draw) ─────────────────────────────────────────
+    property bool showTools: false
+    /// pen, highlighter, laser, line, arrow, rect, ellipse
+    property string tool: "pen"
+    /// The shape the shape button stands for while another tool is picked.
+    property string shapeTool: "arrow"
+    property bool showPresent: false
+    property bool boardOn: false
+    property bool spotlightOn: false
+    property bool zoomOn: false
+    property bool showShare: false
+    property bool canShare: root.canClear
+
+    /// Folded down to the pen, undo and the way back out. See LiveDrawWindow.
     property bool collapsible: false
     property bool collapsed: false
 
-    /// The host's settings popup: a button that opens it, lit while it is open.
     property bool showSettings: false
     property bool settingsOpen: false
-
-    /// The way out, last in the row.
     property bool showClose: false
 
-    /// Narrow screens: the words and the thickness digits go first.
-    property bool dense: false
+    /// A column instead of a row: the host docked the tray to a screen edge.
+    property bool vertical: false
+    /// 0: everything. 1: no words, no digits. 2: the inks folded into one swatch.
+    property int level: 0
 
     signal colorPicked(string color)
     signal widthPicked(real width)
@@ -93,42 +91,140 @@ Rectangle {
     signal redoRequested()
     signal clearRequested()
     signal collapseToggled()
-    signal settingsToggled()
+    signal settingsToggled(Item anchor)
     signal closeRequested()
+    signal toolPicked(string tool)
+    signal shapeMenuRequested(Item anchor)
+    signal inkMenuRequested(Item anchor)
+    signal shareRequested(Item anchor)
+    signal boardToggled()
+    signal spotlightToggled()
+    signal zoomToggled()
 
     readonly property real padding: 8
-    readonly property real target: Appearance.sizes.minimumTouchTarget
+    /// Buttons are a step smaller standing up: a column of full-size targets is taller
+    /// than a 1080p screen.
+    readonly property real target: root.vertical ? Appearance.sizes.minimumTouchTarget - 8 : Appearance.sizes.minimumTouchTarget
     readonly property bool full: !root.collapsed
+    readonly property real chrome: root.padding * 2 + 6
+    readonly property real gap: 10
 
-    implicitWidth: layout.implicitWidth + root.padding * 2 + 6
+    readonly property var shapeSymbols: ({
+        "line": "horizontal_rule",
+        "arrow": "arrow_outward",
+        "rect": "rectangle",
+        "ellipse": "circle"
+    })
+    readonly property var toolNames: ({
+        "pen": Translation.tr("Pen"),
+        "highlighter": Translation.tr("Highlighter"),
+        "laser": Translation.tr("Laser pointer"),
+        "line": Translation.tr("Line"),
+        "arrow": Translation.tr("Arrow"),
+        "rect": Translation.tr("Rectangle"),
+        "ellipse": Translation.tr("Ellipse")
+    })
+
+    /**
+     * The width the row takes at a level of compaction. Summed from the groups'
+     * implicit widths, which do not change with the level (an invisible item keeps its
+     * implicit size), so the host can pick a level from this without a binding loop.
+     */
+    function widthAt(lvl) {
+        if (root.vertical || root.collapsed)
+            return 0;
+        const parts = [leading, modeButton, toolsGroup, editsGroup, presentGroup, shareButton, trailing, endGroup];
+        let total = 0;
+        let count = 0;
+        for (const part of parts) {
+            if (!part.wanted)
+                continue;
+            total += part.implicitWidth;
+            count++;
+        }
+        if (titleColumn.wanted && lvl < 1) {
+            total += titleColumn.implicitWidth;
+            count++;
+        }
+        if (inksPill.wanted) {
+            total += lvl < 2 ? inksPill.implicitWidth : inkButton.implicitWidth;
+            count++;
+        }
+        total += thickness.sliderWidth + (lvl < 1 ? thickness.digitsWidth + 6 : 0);
+        count++;
+        return total + root.gap * Math.max(0, count - 1) + root.chrome;
+    }
+
+    /// The same, for a column: its height at a level of compaction.
+    function heightAt(lvl) {
+        if (!root.vertical || root.collapsed)
+            return 0;
+        const parts = [leading, modeButton, toolsGroup, editsGroup, presentGroup, shareButton, trailing, endGroup, thickness];
+        let total = 0;
+        let count = 0;
+        for (const part of parts) {
+            if (!(part.wanted ?? part.visible))
+                continue;
+            total += part.implicitHeight;
+            count++;
+        }
+        if (inksPill.wanted) {
+            total += lvl < 2 ? inksPill.implicitHeight : inkButton.implicitHeight;
+            count++;
+        }
+        return total + root.gap * Math.max(0, count - 1) + root.padding * 2;
+    }
+
+    implicitWidth: layout.implicitWidth + root.chrome
     implicitHeight: layout.implicitHeight + root.padding * 2
-    radius: Appearance.rounding.full
+    radius: root.vertical ? Math.min(Appearance.rounding.verylarge, width / 2) : Appearance.rounding.full
     // Opaque tones, not the layer tokens: those are translucent under a transparency
     // theme and lean on the compositor blurring what is behind them, and this tray floats
     // over arbitrary applications on a layer nothing blurs.
     color: Appearance.m3colors.m3surfaceContainer
 
-    Behavior on implicitWidth {
-        animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+    /// A row or a column of a group, with its buttons' inner corners pressed flat.
+    component Group: GridLayout {
+        property bool wanted: true
+        visible: wanted
+        flow: root.vertical ? GridLayout.TopToBottom : GridLayout.LeftToRight
+        rows: root.vertical ? 32 : 1
+        columns: root.vertical ? 1 : 32
+        rowSpacing: 2
+        columnSpacing: 2
+        Layout.fillWidth: false
+        Layout.fillHeight: false
+        Layout.alignment: Qt.AlignCenter
     }
 
-    RowLayout {
+    component GroupButton: DrawToolButton {
+        size: root.target
+        useDynamicRadius: true
+        groupHorizontal: !root.vertical
+    }
+
+    GridLayout {
         id: layout
         anchors.centerIn: parent
-        spacing: 10
+        flow: root.vertical ? GridLayout.TopToBottom : GridLayout.LeftToRight
+        rows: root.vertical ? 32 : 1
+        columns: root.vertical ? 1 : 32
+        rowSpacing: root.gap
+        columnSpacing: root.gap
 
-        RowLayout {
+        Group {
             id: leading
-            Layout.fillWidth: false
-            spacing: 0
-            visible: leading.children.length > 0
+            wanted: leading.children.length > 0
         }
 
         // ── Mode ────────────────────────────────────────────────────────────
         // The pen as the largest control, round while up, a rounded square while down:
         // the shape is the state.
         DrawToolButton {
-            visible: root.showDrawToggle
+            id: modeButton
+            readonly property bool wanted: root.showDrawToggle
+            visible: wanted
+            Layout.alignment: Qt.AlignCenter
             size: root.target + 4
             symbol: root.drawing ? "stylus_note" : "arrow_selector_tool"
             active: root.drawing
@@ -140,13 +236,14 @@ Rectangle {
         }
 
         ColumnLayout {
-            visible: root.title.length > 0 && root.full && !root.dense
+            id: titleColumn
+            readonly property bool wanted: root.title.length > 0 && root.full
+            visible: wanted && root.level < 1 && !root.vertical
             Layout.fillWidth: false
-            Layout.preferredWidth: Math.max(titleText.implicitWidth, stateText.implicitWidth)
+            Layout.alignment: Qt.AlignVCenter
             spacing: -2
 
             StyledText {
-                id: titleText
                 text: root.title
                 color: Appearance.colors.colOnSurface
                 font.family: Appearance.font.family.title
@@ -155,7 +252,6 @@ Rectangle {
             }
 
             StyledText {
-                id: stateText
                 text: root.eraser ? Translation.tr("Eraser") : root.subtitle
                 color: root.drawing ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant
                 font.pixelSize: Appearance.font.pixelSize.smallest
@@ -169,23 +265,78 @@ Rectangle {
             }
         }
 
+        // ── Tools ───────────────────────────────────────────────────────────
+        Group {
+            id: toolsGroup
+            wanted: root.showTools && root.full
+
+            GroupButton {
+                symbol: "ink_pen"
+                active: !root.eraser && root.tool === "pen"
+                tooltipText: Translation.tr("Pen")
+                shortcut: "P"
+                onTriggered: root.toolPicked("pen")
+            }
+            GroupButton {
+                symbol: "ink_highlighter"
+                active: !root.eraser && root.tool === "highlighter"
+                tooltipText: Translation.tr("Highlighter — under the ink, see-through")
+                shortcut: "H"
+                onTriggered: root.toolPicked("highlighter")
+            }
+            GroupButton {
+                symbol: "stylus_laser_pointer"
+                active: !root.eraser && root.tool === "laser"
+                tooltipText: Translation.tr("Laser pointer — fades on its own")
+                shortcut: "L"
+                onTriggered: root.toolPicked("laser")
+            }
+            GroupButton {
+                id: shapeButton
+                readonly property bool picked: !root.eraser && (root.shapeSymbols[root.tool] !== undefined)
+                symbol: root.shapeSymbols[picked ? root.tool : root.shapeTool] ?? "arrow_outward"
+                active: picked
+                tooltipText: picked
+                    ? Translation.tr("%1 — click again for other shapes · Shift snaps").arg(root.toolNames[root.tool])
+                    : Translation.tr("Shapes: %1").arg(root.toolNames[root.shapeTool])
+                shortcut: "A R O I"
+                onTriggered: {
+                    if (picked)
+                        root.shapeMenuRequested(shapeButton);
+                    else
+                        root.toolPicked(root.shapeTool);
+                }
+            }
+            GroupButton {
+                symbol: "ink_eraser"
+                active: root.eraser
+                tooltipText: root.eraser ? Translation.tr("Back to the pen") : Translation.tr("Eraser")
+                shortcut: "E"
+                onTriggered: root.eraserToggled()
+            }
+        }
+
         // ── Ink ─────────────────────────────────────────────────────────────
         // On a pill of their own, one step up the surface ladder.
         Rectangle {
-            visible: root.full && root.palette.length > 0
+            id: inksPill
+            readonly property bool wanted: root.full && root.palette.length > 0
+            visible: wanted && root.level < 2
             Layout.fillWidth: false
+            Layout.alignment: Qt.AlignCenter
             implicitWidth: inks.implicitWidth + 8
-            implicitHeight: root.target
-            radius: Appearance.rounding.full
+            implicitHeight: inks.implicitHeight + 8
+            radius: root.vertical ? Appearance.rounding.large : Appearance.rounding.full
             color: Appearance.m3colors.m3surfaceContainerHigh
 
-            Row {
+            Grid {
                 id: inks
                 anchors.centerIn: parent
+                columns: root.vertical ? 2 : 32
                 spacing: 0
 
                 Repeater {
-                    model: root.full ? root.palette : []
+                    model: inksPill.wanted ? root.palette : []
 
                     delegate: Item {
                         id: swatch
@@ -228,7 +379,6 @@ Rectangle {
 
                         // A TapHandler rather than a MouseArea, and here it takes every
                         // device: a handler is the only thing that sees a tablet event.
-                        // See DrawToolButton.
                         TapHandler {
                             id: swatchTap
                             acceptedDevices: PointerDevice.AllDevices
@@ -246,16 +396,65 @@ Rectangle {
             }
         }
 
+        // Folded inks: the current one, which opens the rest.
+        RippleButton {
+            id: inkButton
+            visible: inksPill.wanted && root.level >= 2
+            Layout.alignment: Qt.AlignCenter
+            implicitWidth: root.target
+            implicitHeight: root.target
+            focusPolicy: Qt.NoFocus
+            buttonRadius: Appearance.rounding.full
+            colBackground: Appearance.m3colors.m3surfaceContainerHigh
+            colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
+            onClicked: root.inkMenuRequested(inkButton)
+
+            contentItem: Item {
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 26
+                    height: 26
+                    radius: Appearance.rounding.small
+                    color: root.currentColor.length > 0 ? root.currentColor : "transparent"
+                }
+            }
+
+            StyledToolTip {
+                requireOverlay: false
+                text: Translation.tr("Inks") + "  ·  1–9"
+            }
+        }
+
         // ── Thickness ───────────────────────────────────────────────────────
-        // The number in tall condensed digits, the slider beside it.
-        RowLayout {
+        // The number in tall condensed digits beside the slider; on a column, between
+        // a thicker and a thinner button.
+        GridLayout {
+            id: thickness
             visible: root.full
+            readonly property real sliderWidth: root.target * 2.4
+            readonly property real digitsWidth: widthValue.implicitWidth
+            flow: root.vertical ? GridLayout.TopToBottom : GridLayout.LeftToRight
+            rows: root.vertical ? 3 : 1
+            columns: root.vertical ? 1 : 3
+            rowSpacing: 2
+            columnSpacing: 6
             Layout.fillWidth: false
-            spacing: 6
+            Layout.alignment: Qt.AlignCenter
+
+            GroupButton {
+                visible: root.vertical
+                Layout.alignment: Qt.AlignHCenter
+                size: root.target - 6
+                symbol: "add"
+                tooltipText: Translation.tr("Thicker")
+                shortcut: "]"
+                onTriggered: root.widthPicked(Math.min(24, Math.round(root.strokeWidth) + 1))
+            }
 
             StyledSlider {
                 id: widthSlider
-                Layout.preferredWidth: root.target * 2.4
+                visible: !root.vertical
+                Layout.preferredWidth: thickness.sliderWidth
                 from: 1
                 to: 24
                 stepSize: 1
@@ -277,10 +476,10 @@ Rectangle {
             // descenders digits never have, so a box-centred number sat high.
             Item {
                 id: widthValue
-                visible: !root.dense
-                Layout.alignment: Qt.AlignVCenter
+                visible: root.level < 1 || root.vertical
+                Layout.alignment: Qt.AlignCenter
                 implicitWidth: digits.width + 2 + unit.implicitWidth
-                implicitHeight: root.target
+                implicitHeight: root.vertical ? Math.round(root.target * 0.8) : root.target
 
                 readonly property rect glyph: digitMetrics.tightBoundingRect("0")
 
@@ -317,47 +516,47 @@ Rectangle {
                     font.letterSpacing: 0.6
                 }
             }
+
+            GroupButton {
+                visible: root.vertical
+                Layout.alignment: Qt.AlignHCenter
+                size: root.target - 6
+                symbol: "remove"
+                tooltipText: Translation.tr("Thinner")
+                shortcut: "["
+                onTriggered: root.widthPicked(Math.max(1, Math.round(root.strokeWidth) - 1))
+            }
         }
 
         // ── Edits ───────────────────────────────────────────────────────────
-        // One connected group: outer corners round, inner corners pressed flat, the
-        // pressed button rounding out as it is pushed (RippleButton.useDynamicRadius).
-        RowLayout {
-            Layout.fillWidth: false
-            spacing: 2
+        Group {
+            id: editsGroup
 
-            DrawToolButton {
-                visible: root.full
-                useDynamicRadius: true
+            GroupButton {
+                visible: !root.showTools && root.full
                 symbol: "ink_eraser"
                 active: root.eraser
                 tooltipText: root.eraser ? Translation.tr("Back to the pen") : Translation.tr("Eraser")
                 shortcut: "E"
                 onTriggered: root.eraserToggled()
             }
-
-            DrawToolButton {
-                useDynamicRadius: true
+            GroupButton {
                 symbol: "undo"
                 enabled: root.canUndo
                 tooltipText: Translation.tr("Undo")
                 shortcut: "Ctrl+Z"
                 onTriggered: root.undoRequested()
             }
-
-            DrawToolButton {
+            GroupButton {
                 visible: root.showRedo && root.full
-                useDynamicRadius: true
                 symbol: "redo"
                 enabled: root.canRedo
                 tooltipText: Translation.tr("Redo")
                 shortcut: "Ctrl+Shift+Z"
                 onTriggered: root.redoRequested()
             }
-
-            DrawToolButton {
+            GroupButton {
                 visible: root.full
-                useDynamicRadius: true
                 symbol: "delete_sweep"
                 enabled: root.canClear
                 tooltipText: Translation.tr("Clear this screen")
@@ -368,6 +567,7 @@ Rectangle {
 
         DrawToolButton {
             visible: root.showPressure && root.full
+            Layout.alignment: Qt.AlignCenter
             symbol: "stylus"
             active: root.usePressure
             // Greyed rather than hidden without a pen: the switch says the feature is
@@ -379,32 +579,69 @@ Rectangle {
             onTriggered: root.pressureToggled()
         }
 
+        // ── Presenting ──────────────────────────────────────────────────────
+        Group {
+            id: presentGroup
+            wanted: root.showPresent && root.full
+
+            GroupButton {
+                symbol: "developer_board"
+                active: root.boardOn
+                tooltipText: root.boardOn ? Translation.tr("Back to the screen") : Translation.tr("Board — a blank page over the screen")
+                shortcut: "W / K"
+                onTriggered: root.boardToggled()
+            }
+            GroupButton {
+                symbol: "flashlight_on"
+                active: root.spotlightOn
+                tooltipText: Translation.tr("Spotlight — dim all but the pointer")
+                shortcut: "F"
+                onTriggered: root.spotlightToggled()
+            }
+            GroupButton {
+                symbol: "zoom_in"
+                active: root.zoomOn
+                tooltipText: Translation.tr("Zoom — magnify around the pointer")
+                shortcut: "Z"
+                onTriggered: root.zoomToggled()
+            }
+        }
+
         // ── What the host does with the drawing ─────────────────────────────
-        RowLayout {
+        DrawToolButton {
+            id: shareButton
+            size: root.target
+            readonly property bool wanted: root.showShare && root.full
+            visible: wanted
+            Layout.alignment: Qt.AlignCenter
+            symbol: "ios_share"
+            emphasised: true
+            enabled: root.canShare
+            tooltipText: Translation.tr("Copy, save or file the drawing")
+            shortcut: "Ctrl+C"
+            onTriggered: root.shareRequested(shareButton)
+        }
+
+        Group {
             id: trailing
-            Layout.fillWidth: false
-            visible: root.full && trailing.children.length > 0
-            spacing: 2
+            wanted: root.full && trailing.children.length > 0
         }
 
         // ── The tray itself ─────────────────────────────────────────────────
-        RowLayout {
-            Layout.fillWidth: false
-            spacing: 2
-            visible: root.showSettings || root.collapsible || root.showClose
+        Group {
+            id: endGroup
+            wanted: root.showSettings || root.collapsible || root.showClose
 
-            DrawToolButton {
+            GroupButton {
+                id: settingsButton
                 visible: root.showSettings && root.full
-                useDynamicRadius: true
                 symbol: "tune"
                 active: root.settingsOpen
                 tooltipText: Translation.tr("Drawing settings")
-                onTriggered: root.settingsToggled()
+                onTriggered: root.settingsToggled(settingsButton)
             }
-
-            DrawToolButton {
+            GroupButton {
                 visible: root.collapsible
-                useDynamicRadius: true
                 symbol: root.collapsed ? "expand_content" : "collapse_content"
                 tooltipText: root.collapsed
                     ? Translation.tr("Show every tool")
@@ -412,10 +649,8 @@ Rectangle {
                 shortcut: "C"
                 onTriggered: root.collapseToggled()
             }
-
-            DrawToolButton {
+            GroupButton {
                 visible: root.showClose
-                useDynamicRadius: true
                 symbol: "close"
                 tooltipText: Translation.tr("Put the toolbar away and leave the drawing")
                 shortcut: "Esc"
@@ -424,12 +659,11 @@ Rectangle {
         }
     }
 
-    // Confirmation of a save, and the reason a save failed. Sits under the tray rather
-    // than in it: a line that comes and goes inside the tray would move every control.
+    // Confirmation of a save, and the reason a save failed. Outside the tray: a line
+    // that comes and goes inside it would move every control.
     Rectangle {
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.top: parent.bottom
-        anchors.topMargin: 6
+        x: root.vertical ? (root.x > 200 ? -width - 8 : root.width + 8) : (root.width - width) / 2
+        y: root.vertical ? (root.height - height) / 2 : root.height + 6
         visible: root.statusText.length > 0
         implicitWidth: status.implicitWidth + 20
         implicitHeight: status.implicitHeight + 8

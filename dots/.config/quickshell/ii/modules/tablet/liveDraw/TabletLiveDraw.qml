@@ -80,11 +80,6 @@ Scope {
         }
     }
 
-    // Live draw is a tablet surface, and the family unloading has to take the pen with
-    // it — otherwise switching to the desktop shell leaves `drawing` set and the next
-    // switch back opens with a full-screen input grab nobody asked for.
-    Component.onDestruction: {
-        if (!PanelFamily.isTablet)
-            LiveDraw.close();
-    }
+    // Leaving the family closes live draw in the store (LiveDraw.family): this scope's
+    // destruction also runs on every reload, which must keep the pen where it was.
 }

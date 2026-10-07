@@ -165,8 +165,13 @@ Item {
                 description: Translation.tr("Annotate the screen over every app. Each drawing stays on the workspace it was drawn on")
                 checked: Config.options.liveDraw?.enable ?? true
                 onCheckedChanged: {
-                    if (Config.ready && Config.options.liveDraw && Config.options.liveDraw.enable !== checked)
+                    if (Config.ready && Config.options.liveDraw && Config.options.liveDraw.enable !== checked) {
+                        if (!checked) {
+                            LiveDraw.close();
+                            LiveDraw.clearAll();
+                        }
                         Config.options.liveDraw.enable = checked;
+                    }
                 }
             }
 

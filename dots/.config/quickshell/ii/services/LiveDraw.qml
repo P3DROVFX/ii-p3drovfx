@@ -56,6 +56,12 @@ Singleton {
         property real trayOffsetX: 0
         property real trayOffsetY: 0
         property bool trayCollapsed: false
+        property string trayDock: ""
+        property bool trayHidden: false
+        property string tool: "pen"
+        property string board: ""
+        property bool spotlight: false
+        property bool zoom: false
         onLoaded: root.revision++
     }
     /// Bumped on every change, because a nested mutation of `sheets` is invisible to a
@@ -89,14 +95,16 @@ Singleton {
     readonly property bool enabled: Config.ready && (PanelFamily.isTablet
         ? (Config.options?.tablet?.liveDraw?.enable ?? true)
         : (Config.options?.liveDraw?.enable ?? true))
-    onEnabledChanged: {
-        // Only an actual switch-off: `enabled` is also false for the moment before the
-        // config has loaded, and that must not rub out ink kept across a reload.
-        if (!root.enabled && Config.ready) {
-            root.close();
-            root.clearAll();
-        }
-    }
+    // No handler on `enabled` turning false: it also turns false while a reload tears
+    // this store down, and a close() from the dying instance was written into the
+    // PersistentProperties the next one inherits — the tray and the ink vanished on
+    // random reloads. Switching live draw off closes it from the switch itself.
+
+    /// Leaving a family takes the pen with it, or the next family opens with a
+    /// full-screen input grab nobody asked for. Watched here rather than in the
+    /// families' scopes, whose destruction a reload also runs.
+    readonly property string family: PanelFamily.current
+    onFamilyChanged: root.close()
 
     /// Enter live draw: tray up, pen down.
     function open() {
@@ -129,11 +137,112 @@ Singleton {
     /// a recording as possible.
     property alias trayCollapsed: keptSheets.trayCollapsed
 
-    /// Leave live draw entirely. The ink stays on its workspace until it is rubbed out.
+    /// Leave live draw entirely. The ink stays on its workspace until it is rubbed out;
+    /// the board, the spotlight and the zoom go, since they cover the screen.
     function close() {
         root.drawing = false;
         root.trayOpen = false;
+        root.trayHidden = false;
+        root.board = "";
+        root.spotlight = false;
+        root.zoom = false;
     }
+
+    /**
+     * Drawing with no toolbar on screen.
+     *
+     * For a personal script — a key held to draw and released to stop, say — and for
+     * recordings where even the folded tray is too much. Everything else works: the
+     * keyboard shortcuts, the tools, `stop()`.
+     */
+    function quick() {
+        root.open();
+        if (root.trayOpen)
+            root.trayHidden = true;
+    }
+
+    /// Docked to a screen edge, the tray stands upright: "left", "right" or "".
+    property alias trayDock: keptSheets.trayDock
+    /// The toolbar hidden while live draw stays on (see `quick()`).
+    property alias trayHidden: keptSheets.trayHidden
+
+    // ── Modes that cover the screen ─────────────────────────────────────────
+    /**
+     * The board behind the ink: "" (none — draw over the screen), "light" or "dark".
+     *
+     * An opaque sheet over the whole monitor, with a pattern from the config (blank,
+     * grid, dots, ruled lines). It has its own ink, kept apart from the annotations of
+     * the workspaces: turning the board off brings the annotated screen back, turning it
+     * on again brings the board's drawing back.
+     */
+    property alias board: keptSheets.board
+    readonly property bool boardOn: root.board.length > 0
+    readonly property string boardPattern: Config.options?.liveDraw?.boardPattern ?? "grid"
+    readonly property color boardColor: root.board === "dark"
+        ? (Config.options?.liveDraw?.boardDark ?? "#1f2124")
+        : (Config.options?.liveDraw?.boardLight ?? "#f7f6f2")
+
+    /// Turns the board to a tone ("light", "dark", "" for off). Asking for the tone that
+    /// is already up turns it off, unless `exact` says to just make sure it is up.
+    function setBoard(tone, exact) {
+        const next = tone === "light" || tone === "dark" ? tone : "";
+        if (next.length > 0 && !root.trayOpen)
+            root.open();
+        root.board = exact !== true && root.board === next ? "" : next;
+        if (root.boardOn) {
+            root.drawing = true;
+            root.ensureTools();
+            // White chalk on white paper draws nothing anyone can see: an ink that
+            // disappears on this board gives way to the palette's most contrasting one.
+            const paper = Qt.color(root.boardColor);
+            const contrast = ink => Math.abs(root.luminance(Qt.color(ink)) - root.luminance(paper));
+            if (contrast(root.color) < 0.35) {
+                const best = root.palette.slice().sort((a, b) => contrast(b) - contrast(a))[0];
+                if (best)
+                    root.color = best;
+            }
+        }
+    }
+
+    function luminance(c) {
+        return 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+    }
+
+    /// The spotlight: everything dimmed but a circle around the pointer.
+    property alias spotlight: keptSheets.spotlight
+    /// The zoom: a still of the screen, magnified around the pointer.
+    property alias zoom: keptSheets.zoom
+
+    function setSpotlight(on) {
+        if (on && !root.enabled)
+            return;
+        root.zoom = false;
+        root.spotlight = on;
+    }
+
+    function setZoom(on) {
+        if (on && !root.enabled)
+            return;
+        root.spotlight = false;
+        root.zoom = on;
+    }
+
+    /**
+     * An action for the surface of the focused screen: only that surface holds the
+     * canvas that can grab, copy or export what is drawn on it. IPC, the dock and the
+     * keyboard all go through here.
+     *
+     *   save, copy, copyScreen, exportPng, exportSvg, screenshot, undo, redo, clear
+     */
+    signal command(string action, var argument)
+
+    // ── Sheets: per workspace or fixed to the screen ───────────────────────
+    /// "workspace": every workspace its own sheet. "screen": one sheet per monitor that
+    /// stays whatever workspace is in front. From the config, changed in the tray's
+    /// settings popup.
+    readonly property string sheetMode: Config.options?.liveDraw?.sheetMode ?? "workspace"
+    /// The system crosshair instead of the drawn ring. See DrawSurface.nativeCursor.
+    readonly property bool nativeCursor: Config.options?.liveDraw?.nativeCursor ?? false
 
     function toggleDrawing() {
         if (!root.trayOpen) {
@@ -150,6 +259,22 @@ Singleton {
     property string color: ""
     property real width: 0
     property bool eraser: false
+    /// pen, highlighter, laser, line, arrow, rect, ellipse. See DrawSurface.tool.
+    property alias tool: keptSheets.tool
+    readonly property var tools: ["pen", "highlighter", "laser", "line", "arrow", "rect", "ellipse"]
+    readonly property var shapeTools: ["line", "arrow", "rect", "ellipse"]
+    /// The shape the shape button picks, the last one used.
+    property string lastShape: "arrow"
+
+    function setTool(name) {
+        if (root.tools.indexOf(name) < 0)
+            return false;
+        root.tool = name;
+        root.eraser = false;
+        if (root.shapeTools.indexOf(name) >= 0)
+            root.lastShape = name;
+        return true;
+    }
 
     readonly property var palette: {
         const configured = root.opts?.palette ?? [];
@@ -185,6 +310,13 @@ Singleton {
      */
     function keyFor(screenName) {
         const name = String(screenName ?? "");
+        void root.board;
+        void root.sheetMode;
+        // The board is a sheet of its own, and a screen-fixed sheet ignores workspaces.
+        if (root.boardOn)
+            return `${name}:board`;
+        if (root.sheetMode === "screen")
+            return `${name}:screen`;
         // A special workspace open over the monitor is what is in front, so it is the
         // sheet being drawn on — a scratchpad annotated and closed again should not
         // leave its ink on the workspace underneath.
@@ -357,6 +489,29 @@ Singleton {
     property var workspaceSlideCurve: [0.25, 0.1, 0.25, 1, 1, 1]
     /// False when the compositor animates workspaces instantly. Nothing to travel with.
     property bool workspaceSlideEnabled: true
+    /**
+     * Which way the windows go, from the animation's style: "x" for `slide` and
+     * `slidefade`, "y" for `slidevert` and `slidefadevert`, "none" for `fade` and
+     * `popin`. Following only the speed and the curve made the ink slide sideways while
+     * the windows slid up, for anyone with a vertical or a fading workspace animation.
+     */
+    property string workspaceSlideAxis: "x"
+    /// The `slidefade N%` distance, as a fraction of the screen. 1 for a plain slide.
+    property real workspaceSlideDistance: 1
+    /// Whether the sheets crossfade as they go (`fade`, `slidefade`, `slidefadevert`).
+    property bool workspaceSlideFade: false
+
+    /// Parses a Hyprland animation style ("slide", "slidevert", "slidefade 20%", …).
+    function applySlideStyle(style) {
+        const parts = String(style ?? "").trim().toLowerCase().split(/\s+/);
+        const kind = parts[0] || "slide";
+        const percent = parts.find(part => part.endsWith("%"));
+        root.workspaceSlideFade = kind.indexOf("fade") >= 0;
+        root.workspaceSlideAxis = kind.startsWith("slide") ? (kind.endsWith("vert") ? "y" : "x") : "none";
+        root.workspaceSlideDistance = kind.startsWith("slidefade") && percent
+            ? Math.max(0.05, Math.min(1, parseFloat(percent) / 100))
+            : 1;
+    }
 
     Process {
         id: animationProbe
@@ -369,11 +524,15 @@ Singleton {
                 const parsed = JSON.parse(animationOut.text);
                 const animations = parsed[0] ?? [];
                 const beziers = parsed[1] ?? [];
-                const workspaces = animations.find(entry => entry?.name === "workspaces");
+                // `workspacesIn` wins where it is set: it is the one the incoming
+                // workspace, and so the incoming sheet, moves by.
+                const incoming = animations.find(entry => entry?.name === "workspacesIn" && entry?.overridden);
+                const workspaces = incoming ?? animations.find(entry => entry?.name === "workspaces");
                 if (!workspaces)
                     return;
 
                 root.workspaceSlideEnabled = workspaces.enabled !== false;
+                root.applySlideStyle(workspaces.style);
                 // Hyprland's speed is in deciseconds. Zero means "inherit", which in
                 // practice is the built-in default rather than an instant switch.
                 const speed = Number(workspaces.speed ?? 0);

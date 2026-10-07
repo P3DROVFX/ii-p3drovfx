@@ -72,7 +72,13 @@ Button {
         }
     }
 
+    /// Which way a connected group runs, when the parent's type cannot say: a GridLayout
+    /// that flips between a row and a column. Left undefined, the parent decides.
+    property var groupHorizontal: undefined
+
     readonly property bool isHorizontalLayout: {
+        if (root.groupHorizontal !== undefined)
+            return root.groupHorizontal === true;
         var p = parent;
         if (!p)
             return false;

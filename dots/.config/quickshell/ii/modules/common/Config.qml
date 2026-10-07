@@ -6404,6 +6404,19 @@ Singleton {
                 /// the pointer on a short string, so the tremble of a hand on a mouse never
                 /// reaches the ink. A pen is never steadied this way: it is precise already.
                 property int mouseSmoothing: 60
+                /// "workspace": each workspace keeps its own drawing. "screen": one drawing
+                /// per monitor that stays put whatever workspace is in front.
+                property string sheetMode: "workspace"
+                /// The system crosshair instead of the drawn ring under the pointer: the
+                /// ring is a frame of a screen-sized surface on every pointer move.
+                property bool nativeCursor: false
+                /// The board's pattern: "none", "grid", "dots" or "lines".
+                property string boardPattern: "grid"
+                /// The board's two tones. Literal colours on purpose, like the palette:
+                /// a board is paper and chalkboard, and ink chosen against it must not
+                /// change colour when the wallpaper does.
+                property string boardLight: "#f7f6f2"
+                property string boardDark: "#1f2124"
             }
 
             /**
