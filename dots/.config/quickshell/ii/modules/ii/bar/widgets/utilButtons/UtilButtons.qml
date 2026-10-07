@@ -85,8 +85,8 @@ Item {
         }
 
         Loader {
-            active: Config.options.bar.utilButtons.showLiveDraw
-            visible: Config.options.bar.utilButtons.showLiveDraw
+            active: Config.options.bar.utilButtons.showLiveDraw && LiveDraw.enabled
+            visible: active
             sourceComponent: CircleUtilButton {
                 Layout.alignment: Qt.AlignVCenter
                 onClicked: LiveDraw.toggle()

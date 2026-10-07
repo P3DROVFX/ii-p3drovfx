@@ -31,6 +31,8 @@ UtilityTile {
     readonly property var tools: {
         const list = [];
         for (const id of tile.shownIds) {
+            if (id === "liveDraw" && !LiveDraw.enabled)
+                continue;
             list.push(tile.look(id));
             if (id === "screenRecord" && tile.recording)
                 list.push(tile.look("recordPause"));

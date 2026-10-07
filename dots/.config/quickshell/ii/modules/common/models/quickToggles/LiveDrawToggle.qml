@@ -9,6 +9,7 @@ QuickToggleModel {
         ? (LiveDraw.drawing ? Translation.tr("Drawing") : Translation.tr("Pen up"))
         : (LiveDraw.sheetCount > 0 ? Translation.tr("Ink on screen") : "")
     toggled: LiveDraw.trayOpen
+    available: LiveDraw.enabled
     icon: "draw"
 
     mainAction: () => {

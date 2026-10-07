@@ -59,6 +59,45 @@ class EngineTests(unittest.TestCase):
             self.assertNotRegex(read(rel), r"colLayer[01]\b", rel)
 
 
+class ImprovementTests(unittest.TestCase):
+    def test_keyboard_only_while_drawing(self):
+        window = read("modules/common/draw/LiveDrawWindow.qml")
+        self.assertIn("WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None", window)
+        for key in ("Qt.Key_Z", "Qt.Key_Y", "Qt.Key_Escape", "Qt.Key_Delete", "Qt.Key_BracketLeft", "Qt.Key_S"):
+            self.assertIn(key, window)
+        # Buttons must not steal focus from the sheet.
+        self.assertIn("focusPolicy: Qt.NoFocus", read("modules/common/draw/DrawToolButton.qml"))
+
+    def test_undo_redo_history(self):
+        store = read("services/LiveDraw.qml")
+        for name in ("function undo(key)", "function redo(key)", "function canUndo(key)", "function canRedo(key)"):
+            self.assertIn(name, store)
+        self.assertIn("root._remember(key);\n        root._setSheet(key, []);", store)
+
+    def test_mouse_is_steadied(self):
+        surface = read("modules/common/draw/DrawSurface.qml")
+        self.assertIn("StrokeGeometry.pulled(root.brush, raw, root.stringLength)", surface)
+        self.assertIn("function pulled(", read("modules/common/draw/StrokeGeometry.js"))
+        self.assertIn("property int mouseSmoothing: 60", read("modules/common/Config.qml"))
+
+    def test_settings_live_in_the_drawing(self):
+        window = read("modules/common/draw/LiveDrawWindow.qml")
+        self.assertIn("LiveDrawSettings {", window)
+        self.assertIn("settingsRegion", window)
+        self.assertIn("showPressure: false", window)
+        popup = read("modules/common/draw/LiveDrawSettings.qml")
+        for key in ('"pressure"', '"smoothing"', '"workspaceParallax"', "mouseSmoothing"):
+            self.assertIn(key, popup)
+
+    def test_tooltips_show_without_an_overlay(self):
+        self.assertIn("requireOverlay: false", read("modules/common/draw/DrawToolButton.qml"))
+
+    def test_can_be_switched_off(self):
+        self.assertIn("Config.options.liveDraw.enable = checked", read("modules/settings/configs/OverlaysConfig.qml"))
+        self.assertIn("readonly property bool enabled:", read("services/LiveDraw.qml"))
+        self.assertIn("LiveDraw.enabled", read("modules/ii/liveDraw/LiveDrawOverlay.qml"))
+
+
 class OverlayTests(unittest.TestCase):
     def test_family_loads_the_overlay(self):
         family = read("panelFamilies/IllogicalImpulseFamily.qml")
@@ -68,7 +107,7 @@ class OverlayTests(unittest.TestCase):
 
     def test_surface_only_while_needed(self):
         overlay = read("modules/ii/liveDraw/LiveDrawOverlay.qml")
-        self.assertIn("LiveDraw.trayOpen || LiveDraw.screenHasInk(screenScope.modelData.name)", overlay)
+        self.assertIn("(LiveDraw.trayOpen && focused) || LiveDraw.screenHasInk(screenScope.modelData.name)", overlay)
         self.assertIn('namespace: "quickshell:liveDraw"', overlay)
         self.assertIn('name: "liveDrawToggle"', overlay)
 
@@ -117,7 +156,8 @@ class LauncherTests(unittest.TestCase):
         pt = json.loads(read("translations/pt_BR.json"))
         files = self.LAUNCHERS + ["modules/ii/dock/utilities/LiveDrawPanel.qml",
                                   "modules/common/draw/LiveDrawWindow.qml",
-                                  "modules/common/draw/DrawToolbar.qml"]
+                                  "modules/common/draw/DrawToolbar.qml",
+                                  "modules/common/draw/LiveDrawSettings.qml"]
         for rel in files:
             for key in re.findall(r'Translation\.tr\("([^"]+)"\)', read(rel)):
                 self.assertIn(key, en, f"{rel}: {key}")

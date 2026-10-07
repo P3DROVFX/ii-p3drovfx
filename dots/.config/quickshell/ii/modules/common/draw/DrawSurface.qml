@@ -30,6 +30,18 @@ Item {
     /// 0..0.95. See StrokeGeometry.smoothed.
     property real smoothing: 0.55
     property bool eraser: false
+    /**
+     * How hard a mouse or finger stroke is steadied, 0..1 (0 = off).
+     *
+     * A hand on a mouse trembles in a way a hand on a pen does not, and the exponential
+     * filter alone only trades that tremble for lag. This is a "lazy brush": the ink
+     * hangs on a short string behind the pointer and only moves when the string goes
+     * taut, so small wobbles never reach the line while the stroke still goes exactly
+     * where it is pulled. The string is up to 18 px long. A pen is never steadied: it is
+     * precise already, and a string would just make it feel late.
+     */
+    property real mouseSmoothing: 0
+    readonly property real stringLength: Math.max(0, Math.min(1, root.mouseSmoothing)) * 18
     readonly property real eraserRadius: Math.max(20, root.strokeWidth * 3)
 
     /**
@@ -42,6 +54,8 @@ Item {
      * the point here is what lets the toolbar's own handlers see it.
      */
     property Item excludeItem: null
+    /// More of the same: everything else that floats over the sheet (a settings popup).
+    property list<Item> excludeItems: []
 
     /// True once a device has reported a pressure strictly between the ends, which is a
     /// device that is actually measuring rather than a mouse reporting 1.
@@ -59,8 +73,17 @@ Item {
     /// stroke quadratic in its own length.
     property var liveRecord: null
 
-    function beginStroke(x, y, pressure) {
+    /// Whether the stroke in progress is steadied (see `mouseSmoothing`), the string's
+    /// end the ink follows, and the last place the pointer actually was.
+    property bool steadied: false
+    property var brush: null
+    property var lastRaw: null
+
+    function beginStroke(x, y, pressure, steady) {
         const first = StrokeGeometry.point(x, y, pressure);
+        root.steadied = steady === true && root.stringLength > 0.5;
+        root.brush = first;
+        root.lastRaw = first;
         root.smoothPoint = first;
         root.livePoints = [first];
         root.liveRecord = {
@@ -73,25 +96,50 @@ Item {
         canvas.refreshLive();
     }
 
+    /// Feeds one point through the filter into the stroke.
+    function _append(sample) {
+        // Smoothed before the distance test, so the filter sees every sample and the
+        // thinning only decides what is worth keeping afterwards.
+        root.smoothPoint = StrokeGeometry.smoothed(root.smoothPoint, sample, root.smoothing);
+        const points = root.liveRecord.points;
+        if (!StrokeGeometry.shouldAppend(points[points.length - 1], root.smoothPoint))
+            return false;
+        points.push(root.smoothPoint);
+        return true;
+    }
+
     function extendStroke(x, y, pressure) {
         if (!root.liveRecord)
             return;
         const raw = StrokeGeometry.point(x, y, pressure);
-        // Smoothed before the distance test, so the filter sees every sample and the
-        // thinning only decides what is worth keeping afterwards.
-        root.smoothPoint = StrokeGeometry.smoothed(root.smoothPoint, raw, root.smoothing);
-        const points = root.liveRecord.points;
-        if (!StrokeGeometry.shouldAppend(points[points.length - 1], root.smoothPoint))
-            return;
-        points.push(root.smoothPoint);
-        canvas.refreshLive();
+        root.lastRaw = raw;
+        let sample = raw;
+        if (root.steadied) {
+            sample = StrokeGeometry.pulled(root.brush, raw, root.stringLength);
+            if (!sample)
+                return;
+            root.brush = sample;
+        }
+        if (root._append(sample))
+            canvas.refreshLive();
     }
 
     function endStroke() {
         const finished = root.liveRecord;
+        // The string's slack is taken up on release: the line ends where the pointer let
+        // go, which is the point of an arrow drawn at something.
+        if (finished && root.steadied && root.lastRaw) {
+            for (const step of [0.5, 1])
+                root._append(StrokeGeometry.point(
+                    root.brush.x + (root.lastRaw.x - root.brush.x) * step,
+                    root.brush.y + (root.lastRaw.y - root.brush.y) * step,
+                    root.lastRaw.p));
+        }
         root.liveRecord = null;
         root.livePoints = [];
         root.smoothPoint = null;
+        root.brush = null;
+        root.lastRaw = null;
         if (finished && finished.points.length > 0)
             root.strokeFinished(finished);
         canvas.liveStroke = null;
@@ -137,14 +185,21 @@ Item {
         function contains(point: point): bool {
             if (!root.drawing)
                 return false;
-            const exclude = root.excludeItem;
-            if (!exclude || !exclude.visible)
-                return true;
-            const local = exclude.mapFromItem(root, point.x, point.y);
-            const inside = local.x >= 0 && local.y >= 0
-                && local.x <= exclude.width && local.y <= exclude.height;
-            return !inside;
+            if (root._covers(root.excludeItem, point))
+                return false;
+            for (const item of root.excludeItems) {
+                if (root._covers(item, point))
+                    return false;
+            }
+            return true;
         }
+    }
+
+    function _covers(item, point) {
+        if (!item || !item.visible)
+            return false;
+        const local = item.mapFromItem(root, point.x, point.y);
+        return local.x >= 0 && local.y >= 0 && local.x <= item.width && local.y <= item.height;
     }
 
     /**
@@ -221,6 +276,10 @@ Item {
 
         readonly property bool eraserTip: pen.point.device?.pointerType === PointerDevice.Eraser
         readonly property bool erasing: pen.eraserTip || root.eraser
+        /// A stylus of any end. Everything else — a mouse, a touchpad, a finger — gets
+        /// the lazy brush.
+        readonly property bool isPen: pen.point.device?.pointerType === PointerDevice.Pen
+            || pen.point.device?.pointerType === PointerDevice.Eraser
 
         /// Measured from the values rather than asked of the device: a mouse and a finger
         /// both report exactly 1, and anything strictly between the ends is a device that
@@ -241,7 +300,8 @@ Item {
                 if (pen.erasing)
                     root.eraseRequested(pen.point.position.x, pen.point.position.y);
                 else
-                    root.beginStroke(pen.point.position.x, pen.point.position.y, pen.point.pressure);
+                    root.beginStroke(pen.point.position.x, pen.point.position.y, pen.point.pressure,
+                                     !pen.isPen);
             } else if (root.liveRecord) {
                 root.endStroke();
             }

@@ -116,6 +116,7 @@ Item {
         // same button puts them away again.
         RippleButton {
             id: drawButton
+            visible: LiveDraw.enabled
             readonly property bool drawingOut: LiveDraw.trayOpen
             Layout.alignment: Qt.AlignVCenter
             implicitWidth: 36

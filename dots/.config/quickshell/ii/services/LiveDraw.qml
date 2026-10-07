@@ -82,8 +82,26 @@ Singleton {
      */
     property alias trayOpen: keptSheets.trayOpen
 
+    /**
+     * Whether live draw exists at all in the running family. Off, every launcher hides
+     * and `toggle()` does nothing; the ink already on screen is rubbed out with it.
+     */
+    readonly property bool enabled: Config.ready && (PanelFamily.isTablet
+        ? (Config.options?.tablet?.liveDraw?.enable ?? true)
+        : (Config.options?.liveDraw?.enable ?? true))
+    onEnabledChanged: {
+        // Only an actual switch-off: `enabled` is also false for the moment before the
+        // config has loaded, and that must not rub out ink kept across a reload.
+        if (!root.enabled && Config.ready) {
+            root.close();
+            root.clearAll();
+        }
+    }
+
     /// Enter live draw: tray up, pen down.
     function open() {
+        if (!root.enabled)
+            return;
         root.ensureTools();
         root.refreshWorkspaceAnimation();
         root.trayOpen = true;
@@ -146,6 +164,8 @@ Singleton {
 
     readonly property bool usePressure: root.opts?.pressure ?? true
     readonly property real smoothing: Math.max(0, Math.min(0.95, (root.opts?.smoothing ?? 55) / 100))
+    /// 0..1. See Config `liveDraw.mouseSmoothing` and DrawSurface.mouseSmoothing.
+    readonly property real mouseSmoothing: Math.max(0, Math.min(1, (Config.options?.liveDraw?.mouseSmoothing ?? 60) / 100))
 
     function ensureTools() {
         if (root.color.length === 0)
@@ -216,23 +236,76 @@ Singleton {
     }
 
     // ── Editing ─────────────────────────────────────────────────────────────
-    function addStroke(key, stroke) {
-        if (!stroke || !stroke.points || stroke.points.length === 0)
-            return;
+    /**
+     * Undo and redo, per sheet, as snapshots of the sheet's stroke list.
+     *
+     * Snapshots rather than a log of operations because every edit already builds a new
+     * list out of the same stroke objects: keeping the previous list costs one array of
+     * references, and undoing a rubbed-out stroke or a cleared sheet is then the same
+     * operation as undoing a new one. Memory only and not kept across a reload — a
+     * history that outlived the shell would undo into drawings nobody remembers.
+     */
+    property var history: ({})
+    property var future: ({})
+    readonly property int historyLimit: 100
+
+    function _setSheet(key, strokes) {
         const next = Object.assign({}, root.sheets);
-        next[key] = (next[key] ?? []).concat([stroke]);
+        if (strokes.length > 0)
+            next[key] = strokes;
+        else
+            delete next[key];
         root.sheets = next;
         root.revision++;
     }
 
-    function undo(key) {
-        const existing = root.sheets[key] ?? [];
-        if (existing.length === 0)
+    /// Records the sheet as it is now before an edit, and drops whatever was undone.
+    function _remember(key) {
+        const past = (root.history[key] ?? []).concat([root.sheets[key] ?? []]);
+        root.history[key] = past.length > root.historyLimit ? past.slice(past.length - root.historyLimit) : past;
+        root.future[key] = [];
+        root.historyRevision++;
+    }
+
+    property int historyRevision: 0
+
+    function canUndo(key) {
+        void root.historyRevision;
+        return (root.history[key] ?? []).length > 0;
+    }
+
+    function canRedo(key) {
+        void root.historyRevision;
+        return (root.future[key] ?? []).length > 0;
+    }
+
+    function addStroke(key, stroke) {
+        if (!stroke || !stroke.points || stroke.points.length === 0)
             return;
-        const next = Object.assign({}, root.sheets);
-        next[key] = existing.slice(0, existing.length - 1);
-        root.sheets = next;
-        root.revision++;
+        root._remember(key);
+        root._setSheet(key, (root.sheets[key] ?? []).concat([stroke]));
+    }
+
+    function undo(key) {
+        const past = root.history[key] ?? [];
+        if (past.length === 0)
+            return false;
+        root.future[key] = (root.future[key] ?? []).concat([root.sheets[key] ?? []]);
+        root.history[key] = past.slice(0, past.length - 1);
+        root.historyRevision++;
+        root._setSheet(key, past[past.length - 1]);
+        return true;
+    }
+
+    function redo(key) {
+        const ahead = root.future[key] ?? [];
+        if (ahead.length === 0)
+            return false;
+        root.history[key] = (root.history[key] ?? []).concat([root.sheets[key] ?? []]);
+        root.future[key] = ahead.slice(0, ahead.length - 1);
+        root.historyRevision++;
+        root._setSheet(key, ahead[ahead.length - 1]);
+        return true;
     }
 
     /// Removes the strokes a rubbing gesture touched. Returns how many went.
@@ -243,24 +316,25 @@ Singleton {
         const kept = existing.filter(stroke => !StrokeGeometry.strokeHitBy(stroke, x, y, radius));
         if (kept.length === existing.length)
             return 0;
-        const next = Object.assign({}, root.sheets);
-        next[key] = kept;
-        root.sheets = next;
-        root.revision++;
+        root._remember(key);
+        root._setSheet(key, kept);
         return existing.length - kept.length;
     }
 
+    /// Rubs one sheet out. Undoable: the whole sheet comes back with one undo.
     function clear(key) {
         if ((root.sheets[key] ?? []).length === 0)
             return;
-        const next = Object.assign({}, root.sheets);
-        delete next[key];
-        root.sheets = next;
-        root.revision++;
+        root._remember(key);
+        root._setSheet(key, []);
     }
 
+    /// Every sheet, and every history with them: nothing left to undo into.
     function clearAll() {
         root.sheets = ({});
+        root.history = ({});
+        root.future = ({});
+        root.historyRevision++;
         root.revision++;
     }
 

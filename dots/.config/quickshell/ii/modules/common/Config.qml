@@ -6392,6 +6392,21 @@ Singleton {
             }
 
             /**
+             * Live draw on the desktop (Super+Alt+D). Only whether it exists and what the
+             * mouse does live out here; the pen's own preferences (pressure, smoothing,
+             * width, palette, workspace slide) are shared with the tablet family under
+             * `tablet.liveDraw`, and every one of them is edited from the drawing toolbar's
+             * settings popup.
+             */
+            property JsonObject liveDraw: JsonObject {
+                property bool enable: true
+                /// How hard a mouse or a finger stroke is steadied, 0–100. The brush trails
+                /// the pointer on a short string, so the tremble of a hand on a mouse never
+                /// reaches the ink. A pen is never steadied this way: it is precise already.
+                property int mouseSmoothing: 60
+            }
+
+            /**
              * The clock app. Only whether it exists lives out here; every clock option is
              * edited from the app's own settings page.
              */

@@ -298,3 +298,21 @@ function outlineSvg(polygon) {
     parts.push("Z");
     return parts.join("");
 }
+
+/**
+ * The lazy brush: where the ink goes when the pointer pulls a string of `length` from
+ * the brush. Null while the string is slack (the pointer is still within reach), so a
+ * hand trembling in place moves nothing; otherwise the brush is dragged along the line
+ * to the pointer until it is exactly `length` behind it. Pressure is the pointer's.
+ */
+function pulled(brush, pointer, length) {
+    if (!brush)
+        return pointer;
+    var dx = pointer.x - brush.x;
+    var dy = pointer.y - brush.y;
+    var d = Math.sqrt(dx * dx + dy * dy);
+    if (d <= length)
+        return null;
+    var k = (d - length) / d;
+    return point(brush.x + dx * k, brush.y + dy * k, pointer.p);
+}

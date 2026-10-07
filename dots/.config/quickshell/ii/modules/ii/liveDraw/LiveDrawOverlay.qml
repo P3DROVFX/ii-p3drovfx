@@ -89,7 +89,11 @@ Scope {
             required property ShellScreen modelData
 
             Loader {
-                active: LiveDraw.trayOpen || LiveDraw.screenHasInk(screenScope.modelData.name)
+                // The tray lives on the focused monitor only, so the other monitors need a
+                // surface only for ink of their own.
+                readonly property bool focused: String(Hyprland.focusedMonitor?.name ?? "") === screenScope.modelData.name
+                active: LiveDraw.enabled
+                    && ((LiveDraw.trayOpen && focused) || LiveDraw.screenHasInk(screenScope.modelData.name))
 
                 sourceComponent: LiveDrawWindow {
                     screen: screenScope.modelData
@@ -106,9 +110,12 @@ Scope {
                     trayMovable: true
                     // Just above the dock when it sits at the bottom, which is the dock's
                     // own published thickness at rest (the lens never moves the tray).
+                    // A bottom bar is cleared the same way.
                     trayBottomMargin: {
                         const inset = GlobalStates.dockInsets[screenScope.modelData.name];
-                        return (inset?.side === "bottom" ? inset.thickness : 0) + Appearance.sizes.elevationMargin * 2;
+                        return (inset?.side === "bottom" ? inset.thickness : 0)
+                            + (BarPlacement.bottom && !BarPlacement.vertical ? Appearance.sizes.barHeight : 0)
+                            + Appearance.sizes.elevationMargin * 2;
                     }
                     parallaxEnabled: Config.options?.tablet?.liveDraw?.workspaceParallax ?? true
                 }

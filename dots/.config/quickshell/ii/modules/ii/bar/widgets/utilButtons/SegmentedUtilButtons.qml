@@ -55,7 +55,7 @@ Item {
             list.push("record");
         if (options.showScreenRecord && Persistent.states.screenRecord.active)
             list.push("recordPause");
-        if (options.showLiveDraw)
+        if (options.showLiveDraw && LiveDraw.enabled)
             list.push("liveDraw");
         if (options.showKeyboardToggle)
             list.push("keyboard");

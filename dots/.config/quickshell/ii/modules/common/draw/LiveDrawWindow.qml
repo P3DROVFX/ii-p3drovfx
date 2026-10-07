@@ -305,9 +305,100 @@ PanelWindow {
     property string namespace: "quickshell:liveDraw"
     WlrLayershell.namespace: root.namespace
     WlrLayershell.layer: WlrLayer.Overlay
-    // Never takes the keyboard. The tray has no text in it, and a surface holding focus
-    // over every application is a surface that breaks typing everywhere.
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+    /**
+     * The keyboard, only while the pen is down.
+     *
+     * While drawing every click already lands here, so taking the keys too costs the
+     * applications nothing and is what makes Ctrl+Z, the inks on 1–9 and Esc work. The
+     * moment the pen goes up — clicks through, or the tray closed — the keyboard goes
+     * straight back to the window underneath, as if this surface were not there.
+     * Exclusive rather than on-demand so the shortcuts work from the first stroke,
+     * without a click to focus first; the compositor's own binds still run either way.
+     */
+    WlrLayershell.keyboardFocus: (root.drawing || root.settingsOpen) && root.visible
+        ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+
+    // ── Settings popup ──────────────────────────────────────────────────────
+    property bool settingsOpen: false
+    readonly property bool settingsShown: root.settingsOpen && root.trayShown && !LiveDraw.trayCollapsed
+    onTrayShownChanged: if (!root.trayShown) root.settingsOpen = false
+
+    // ── Keyboard ────────────────────────────────────────────────────────────
+    function nudgeWidth(delta) {
+        LiveDraw.ensureTools();
+        const next = Math.max(1, Math.min(24, Math.round(LiveDraw.width) + delta));
+        LiveDraw.width = next;
+        if (Config.ready)
+            Config.options.tablet.liveDraw.width = next;
+        root.statusFor(Translation.tr("Thickness %1 px").arg(next));
+    }
+
+    /// 1–9 for the number row's keys by position (evdev KEY_1..KEY_9 are X keycodes
+    /// 10..18), 0 for anything else.
+    function digitRow(event) {
+        const code = event.nativeScanCode;
+        return code >= 10 && code <= 18 ? code - 9 : 0;
+    }
+
+    function handleKey(event) {
+        const ctrl = (event.modifiers & Qt.ControlModifier) !== 0;
+        const shift = (event.modifiers & Qt.ShiftModifier) !== 0;
+        const key = event.key;
+
+        if (key === Qt.Key_Escape) {
+            if (root.settingsOpen)
+                root.settingsOpen = false;
+            else
+                LiveDraw.close();
+        } else if (ctrl && (key === Qt.Key_Z) && !shift) {
+            if (!LiveDraw.undo(root.sheetKey))
+                root.statusFor(Translation.tr("Nothing to undo."));
+        } else if (ctrl && ((key === Qt.Key_Z && shift) || key === Qt.Key_Y)) {
+            if (!LiveDraw.redo(root.sheetKey))
+                root.statusFor(Translation.tr("Nothing to redo."));
+        } else if (ctrl && key === Qt.Key_S) {
+            root.saveToNotes();
+        } else if (ctrl) {
+            return false;
+        } else if (key === Qt.Key_E) {
+            LiveDraw.eraser = !LiveDraw.eraser;
+        } else if (key === Qt.Key_P || key === Qt.Key_B) {
+            LiveDraw.eraser = false;
+        } else if ((key >= Qt.Key_1 && key <= Qt.Key_9) || root.digitRow(event) > 0) {
+            // By the key's place as well as its symbol: on AZERTY the number row types
+            // & é " ' without Shift, and those are still the keys labelled 1–9.
+            const index = (key >= Qt.Key_1 && key <= Qt.Key_9) ? key - Qt.Key_1 : root.digitRow(event) - 1;
+            const ink = LiveDraw.palette[index];
+            if (ink) {
+                LiveDraw.color = ink;
+                LiveDraw.eraser = false;
+            }
+        } else if (key === Qt.Key_BracketLeft || key === Qt.Key_Minus) {
+            root.nudgeWidth(-1);
+        } else if (key === Qt.Key_BracketRight || key === Qt.Key_Plus || key === Qt.Key_Equal) {
+            root.nudgeWidth(1);
+        } else if (key === Qt.Key_Delete || key === Qt.Key_Backspace) {
+            if (root.hasInk) {
+                LiveDraw.clear(root.sheetKey);
+                root.statusFor(Translation.tr("Screen cleared — Ctrl+Z brings it back."));
+            }
+        } else if (key === Qt.Key_Tab) {
+            LiveDraw.drawing = !LiveDraw.drawing;
+        } else if (key === Qt.Key_C && root.trayMovable) {
+            LiveDraw.trayCollapsed = !LiveDraw.trayCollapsed;
+        } else {
+            return false;
+        }
+        return true;
+    }
+
+    Item {
+        id: keyCatcher
+        focus: true
+        Keys.onPressed: event => event.accepted = root.handleKey(event)
+    }
+
+    onDrawingChanged: if (root.drawing) keyCatcher.forceActiveFocus()
 
     /**
      * What the layer accepts.
@@ -321,7 +412,13 @@ PanelWindow {
      * Subtracts leave an empty mask, which is the click-through state.
      */
     mask: Region {
-        regions: [fullRegion, trayRegion]
+        regions: [fullRegion, trayRegion, settingsRegion]
+    }
+
+    Region {
+        id: settingsRegion
+        item: settingsSheet
+        intersection: root.settingsShown ? Intersection.Combine : Intersection.Subtract
     }
 
     Region {
@@ -373,9 +470,47 @@ PanelWindow {
         // The tray floats over the sheet; without this the canvas swallowed every pen
         // tap on it. See DrawSurface.excludeItem.
         excludeItem: tray
+        excludeItems: [settingsSheet]
+        mouseSmoothing: LiveDraw.mouseSmoothing
 
         onStrokeFinished: stroke => LiveDraw.addStroke(root.sheetKey, stroke)
         onEraseRequested: (x, y) => LiveDraw.eraseAt(root.sheetKey, x, y, inkSurface.eraserRadius)
+    }
+
+    /**
+     * The drawing's own settings, next to the tray: above it while the tray sits in the
+     * lower half of the screen, below it otherwise, and never off the edge.
+     */
+    StyledRectangularShadow {
+        target: settingsSheet
+        visible: settingsSheet.visible && !Config.options.appearance.transparency.enable
+    }
+
+    LiveDrawSettings {
+        id: settingsSheet
+        readonly property real gap: 10
+        readonly property bool above: tray.y + tray.height / 2 > root.height / 2
+
+        visible: root.settingsShown || settingsSheet.opacity > 0
+        opacity: root.settingsShown ? 1 : 0
+        penSeen: inkSurface.penSeen
+        x: Math.round(Math.max(tray.edge, Math.min(root.width - settingsSheet.width - tray.edge,
+            tray.x + tray.width - settingsSheet.width)))
+        y: Math.round(settingsSheet.above
+            ? Math.max(tray.edge, tray.y - settingsSheet.height - settingsSheet.gap)
+            : Math.min(root.height - settingsSheet.height - tray.edge, tray.y + tray.height + settingsSheet.gap))
+        transform: Translate {
+            y: root.settingsShown ? 0 : (settingsSheet.above ? 16 : -16)
+            Behavior on y {
+                animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+            }
+        }
+
+        Behavior on opacity {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        }
+
+        onCloseRequested: root.settingsOpen = false
     }
 
     /**
@@ -459,14 +594,29 @@ PanelWindow {
         eraser: LiveDraw.eraser
         usePressure: LiveDraw.usePressure
         pressureAvailable: inkSurface.penSeen
-        canUndo: root.hasInk
+        canUndo: LiveDraw.canUndo(root.sheetKey)
+        canRedo: LiveDraw.canRedo(root.sheetKey)
+        canClear: root.hasInk
+        showRedo: true
         statusText: root.statusText
         drawing: LiveDraw.drawing
         showDrawToggle: true
+        title: Translation.tr("Draw")
+        subtitle: LiveDraw.drawing ? Translation.tr("On screen") : Translation.tr("Clicks go through")
+        showSettings: true
+        settingsOpen: root.settingsOpen
+        showClose: true
+        // The words and the thickness digits give way on screens narrower than the
+        // full tray (about 1280 px wide).
+        dense: root.width < 1440
+        onSettingsToggled: root.settingsOpen = !root.settingsOpen
+        onCloseRequested: LiveDraw.close()
+        onRedoRequested: LiveDraw.redo(root.sheetKey)
         // On a desktop most pointers are a mouse, and a pressure switch that can never be
         // used is a disabled button sitting in every frame of a recording. It appears the
         // first time a pen touches the sheet.
-        showPressure: !root.trayMovable || inkSurface.penSeen
+        // In the settings popup now, with the rest of the pen's preferences.
+        showPressure: false
         collapsible: root.trayMovable
         collapsed: root.trayMovable && LiveDraw.trayCollapsed
 
@@ -515,12 +665,8 @@ PanelWindow {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(tray)
         }
 
-        onDrawToggled: {
-            LiveDraw.drawing = !LiveDraw.drawing;
-            root.statusFor(LiveDraw.drawing
-                ? Translation.tr("Drawing.")
-                : Translation.tr("Not drawing — clicks go through to the apps."));
-        }
+        // The state is said in the tray itself, under the word "Draw".
+        onDrawToggled: LiveDraw.drawing = !LiveDraw.drawing
         onColorPicked: colorValue => {
             LiveDraw.color = colorValue;
             LiveDraw.eraser = false;
@@ -538,30 +684,26 @@ PanelWindow {
         onUndoRequested: LiveDraw.undo(root.sheetKey)
         onClearRequested: {
             LiveDraw.clear(root.sheetKey);
-            root.statusFor(Translation.tr("Sheet cleared."));
+            root.statusFor(Translation.tr("Screen cleared — Ctrl+Z brings it back."));
         }
 
         // ── What happens to the drawing ─────────────────────────────────────
         trailingContent: [
             DrawToolButton {
+                useDynamicRadius: true
                 symbol: "screenshot_monitor"
                 enabled: !root.hiddenForCapture
                 tooltipText: Translation.tr("Screenshot without the toolbar")
                 onTriggered: root.captureScreen()
             },
             DrawToolButton {
+                useDynamicRadius: true
                 symbol: "note_add"
                 enabled: root.hasInk
                 emphasised: true
                 tooltipText: Translation.tr("Save to Notes")
+                shortcut: "Ctrl+S"
                 onTriggered: root.saveToNotes()
-            },
-            DrawToolButton {
-                symbol: "close"
-                tooltipText: Translation.tr("Put the toolbar away and leave the drawing")
-                // Closes the tray *and* the pen, and keeps the ink. Losing work must
-                // never be a side effect of tidying up — rubbing out is its own button.
-                onTriggered: LiveDraw.close()
             }
         ]
     }

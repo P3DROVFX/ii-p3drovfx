@@ -457,6 +457,7 @@ Item {
                     // overlay draws over everything, the bar's popup included.
                     RippleButton {
                         id: drawBtn
+                        visible: LiveDraw.enabled
                         Layout.preferredWidth: 38
                         Layout.preferredHeight: 38
                         buttonRadius: Appearance.rounding.full

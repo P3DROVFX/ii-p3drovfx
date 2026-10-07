@@ -73,7 +73,7 @@ Item {
             }
 
             Loader {
-                active: Config.options.bar.utilButtons.showLiveDraw
+                active: Config.options.bar.utilButtons.showLiveDraw && LiveDraw.enabled
                 visible: active
                 sourceComponent: isMaterial ? liveDrawM3 : legacyLiveDraw
             }

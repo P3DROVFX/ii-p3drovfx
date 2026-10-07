@@ -46,7 +46,8 @@ UtilityTile {
         : tile.sheets > 1 ? Translation.tr("Drawings on %1 workspaces").arg(tile.sheets)
         : Translation.tr("Over every app")
 
-    tooltipText: tile.out ? Translation.tr("Put the drawing tools away") : Translation.tr("Draw on the screen")
+    tooltipText: !LiveDraw.enabled ? Translation.tr("Live draw is off — Settings › Overlays")
+        : tile.out ? Translation.tr("Put the drawing tools away") : Translation.tr("Draw on the screen")
     panelSubtitle: tile.stateText
     menuActions: [
         { id: "toggle", icon: "draw", text: tile.out ? Translation.tr("Put the drawing tools away") : Translation.tr("Draw on the screen") },

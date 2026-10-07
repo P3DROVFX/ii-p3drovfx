@@ -26,11 +26,17 @@ RippleButton {
     property bool active: false
     property bool emphasised: false
     property string tooltipText: ""
+    /// A keyboard shortcut shown after the tooltip, e.g. "Ctrl+Z".
+    property string shortcut: ""
+    property real size: Appearance.sizes.minimumTouchTarget
 
     signal triggered
 
-    implicitWidth: Appearance.sizes.minimumTouchTarget
-    implicitHeight: Appearance.sizes.minimumTouchTarget
+    implicitWidth: root.size
+    implicitHeight: root.size
+    // A click must not move keyboard focus off the drawing surface, or the next Space or
+    // Ctrl+Z lands on this button instead of the sheet.
+    focusPolicy: Qt.NoFocus
     // Round at rest, a rounded square while on: the shape is the state (Material 3
     // Expressive toggle buttons), so a lit tool reads as lit without a second cue.
     buttonRadius: root.active ? Appearance.rounding.normal : Appearance.rounding.full
@@ -81,7 +87,11 @@ RippleButton {
         opacity: root.enabled ? 1 : 0.4
     }
 
+    // Shown on hover over every surface this button lives on: the drawing layer has no
+    // sidebar or overlay open, and the tooltip's default waits for one.
     StyledToolTip {
-        text: root.tooltipText
+        requireOverlay: false
+        extraVisibleCondition: root.tooltipText.length > 0
+        text: root.shortcut.length > 0 ? `${root.tooltipText}  ·  ${root.shortcut}` : root.tooltipText
     }
 }

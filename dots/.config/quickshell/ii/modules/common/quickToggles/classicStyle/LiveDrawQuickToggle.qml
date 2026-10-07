@@ -8,6 +8,7 @@ QuickToggleButton {
     id: root
     buttonIcon: "draw"
     toggled: LiveDraw.trayOpen
+    enabled: LiveDraw.enabled
 
     onClicked: {
         if (!LiveDraw.trayOpen)
