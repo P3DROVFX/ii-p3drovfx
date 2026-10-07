@@ -6,6 +6,7 @@ import QtQuick.Layouts
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.common.functions
 
 /**
  * The pen tray: colour, thickness, eraser, and whatever the host adds to the end.
@@ -32,6 +33,19 @@ Rectangle {
      * of the toolbar, not incidental children.
      */
     property alias trailingContent: trailing.data
+    /// Host items before the shared controls — a grip, where the host lets the tray move.
+    property alias leadingContent: leading.data
+
+    /**
+     * Folded down to the pen, undo and the way back out.
+     *
+     * For drawing over something that is being recorded or shared: the full tray is as
+     * wide as a dock and sits in every frame of the video, while the folded one is three
+     * buttons. Off unless the host offers it (`collapsible`).
+     */
+    property bool collapsible: false
+    property bool collapsed: false
+    signal collapseToggled()
 
     property var palette: []
     property string currentColor: ""
@@ -65,12 +79,22 @@ Rectangle {
     implicitWidth: layout.implicitWidth + 28
     implicitHeight: layout.implicitHeight + 20
     radius: Appearance.rounding.full
-    color: Appearance.colors.colLayer0
+    // Opaque tones, not the layer tokens: those are translucent under a transparency
+    // theme and lean on the compositor blurring what is behind them, and this tray floats
+    // over arbitrary applications on a layer nothing blurs. Translucent, it was a ghost
+    // over a white page.
+    color: Appearance.m3colors.m3surfaceContainer
 
     RowLayout {
         id: layout
         anchors.centerIn: parent
         spacing: 10
+
+        RowLayout {
+            id: leading
+            spacing: 0
+            visible: leading.children.length > 0
+        }
 
         // ── Mode ────────────────────────────────────────────────────────────
         DrawToolButton {
@@ -84,46 +108,59 @@ Rectangle {
         }
 
         Rectangle {
-            visible: root.showDrawToggle
+            visible: root.showDrawToggle && !root.collapsed
             Layout.preferredWidth: 1
             Layout.preferredHeight: Appearance.sizes.minimumTouchTarget * 0.5
-            color: Appearance.colors.colOnLayer0
+            color: Appearance.colors.colOnSurface
             opacity: 0.15
         }
 
         // ── Ink ─────────────────────────────────────────────────────────────
         Repeater {
-            model: root.palette
+            model: root.collapsed ? [] : root.palette
 
-            delegate: Rectangle {
+            delegate: Item {
                 id: swatch
                 required property string modelData
                 readonly property bool current: !root.eraser && root.currentColor === swatch.modelData
 
                 Layout.preferredWidth: Appearance.sizes.minimumTouchTarget
                 Layout.preferredHeight: Appearance.sizes.minimumTouchTarget
-                radius: Appearance.rounding.full
-                // The selected swatch is the one carrying a ring of the surface colour
-                // rather than a border: this shell does not draw borders, and a gap
-                // reads as selection just as well.
-                color: Appearance.colors.colLayer1
 
+                // The chosen ink is the rounded square carrying a check; the rest are
+                // circles. The shape is the selection — no ring, no border.
                 Rectangle {
                     anchors.centerIn: parent
-                    width: parent.width * (swatch.current ? 0.62 : 0.78)
+                    width: parent.width * (swatch.current ? 0.8 : (swatchTap.pressed ? 0.62 : 0.7))
                     height: width
-                    radius: Appearance.rounding.full
+                    radius: swatch.current ? Appearance.rounding.small : width / 2
                     color: swatch.modelData
 
                     Behavior on width {
                         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                     }
+                    Behavior on radius {
+                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                    }
+
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        visible: swatch.current
+                        text: "check"
+                        iconSize: Appearance.font.pixelSize.large
+                        color: ColorUtils.getContrastingTextColor(swatch.modelData)
+                    }
+                }
+
+                HoverHandler {
+                    cursorShape: Qt.PointingHandCursor
                 }
 
                 // A TapHandler rather than a MouseArea, and here it takes every device:
                 // a swatch has no MouseArea to double with, and a handler is the only
                 // thing that sees a tablet event at all. See DrawToolButton.
                 TapHandler {
+                    id: swatchTap
                     acceptedDevices: PointerDevice.AllDevices
                     gesturePolicy: TapHandler.ReleaseWithinBounds
                     onTapped: root.colorPicked(swatch.modelData)
@@ -134,15 +171,21 @@ Rectangle {
         // ── Thickness ───────────────────────────────────────────────────────
         StyledSlider {
             id: widthSlider
+            visible: !root.collapsed
             Layout.preferredWidth: Appearance.sizes.minimumTouchTarget * 3
             from: 1
             to: 24
             value: root.strokeWidth
+            // The toolbar is the lowest surface; the default track colour sits on the
+            // same tone as it in some schemes and the unfilled part vanished.
+            trackColor: Appearance.m3colors.m3surfaceContainerHighest
+            usePercentTooltip: false
             onMoved: root.widthPicked(widthSlider.value)
         }
 
         Rectangle {
             // What the slider means, in the ink it will be drawn with.
+            visible: !root.collapsed
             Layout.preferredWidth: 28
             Layout.preferredHeight: 28
             radius: Appearance.rounding.full
@@ -159,6 +202,7 @@ Rectangle {
 
         // ── Tools ───────────────────────────────────────────────────────────
         DrawToolButton {
+            visible: !root.collapsed
             symbol: "ink_eraser"
             active: root.eraser
             tooltipText: Translation.tr("Eraser")
@@ -166,7 +210,7 @@ Rectangle {
         }
 
         DrawToolButton {
-            visible: root.showPressure
+            visible: root.showPressure && !root.collapsed
             symbol: "stylus"
             active: root.usePressure
             // Greyed rather than hidden without a pen: the switch says the feature is
@@ -187,6 +231,7 @@ Rectangle {
         }
 
         DrawToolButton {
+            visible: !root.collapsed
             symbol: "delete"
             enabled: root.canUndo
             tooltipText: Translation.tr("Rub the whole sheet out")
@@ -196,7 +241,17 @@ Rectangle {
         // ── What the host does with the drawing ─────────────────────────────
         RowLayout {
             id: trailing
+            visible: !root.collapsed
             spacing: 10
+        }
+
+        DrawToolButton {
+            visible: root.collapsible
+            symbol: root.collapsed ? "expand_content" : "collapse_content"
+            tooltipText: root.collapsed
+                ? Translation.tr("Show every tool")
+                : Translation.tr("Fold the toolbar down to the pen")
+            onTriggered: root.collapseToggled()
         }
     }
 
@@ -210,8 +265,8 @@ Rectangle {
         visible: root.statusText.length > 0
         text: root.statusText
         font.pixelSize: Appearance.font.pixelSize.smaller
-        color: Appearance.colors.colOnLayer0
+        color: Appearance.colors.colOnSurface
         style: Text.Outline
-        styleColor: Appearance.colors.colLayer0
+        styleColor: Appearance.m3colors.m3surfaceContainer
     }
 }

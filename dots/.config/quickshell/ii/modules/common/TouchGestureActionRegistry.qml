@@ -29,7 +29,7 @@ Singleton {
         // Marked prominent: the bubble draws it as the wide tile at the top of its sheet.
         // A pen comes out mid-thought and the control for it has to be the one you cannot
         // miss, not the fourth icon in a grid.
-        { id: "liveDraw", name: "Draw on Screen", icon: "draw", families: ["tablet"], prominent: true },
+        { id: "liveDraw", name: "Draw on Screen", icon: "draw", families: ["tablet", "ii"], prominent: true },
         // Pen mode only: it means something for as long as a barrel button is held, which
         // no gesture or bubble tile can express. Listed so the binding UI can offer it.
         { id: "dragWindow", name: "Drag Window (hold)", icon: "drag_pan", families: ["tablet"], penOnly: true },

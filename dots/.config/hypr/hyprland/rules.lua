@@ -267,6 +267,10 @@ hl.layer_rule({ match = { namespace = "quickshell:tabletAppDrawer" }, blur = fal
 -- long as a drawing is on the workspace.
 hl.layer_rule({ match = { namespace = "quickshell:tabletLiveDraw" }, blur = false})
 hl.layer_rule({ match = { namespace = "quickshell:tabletLiveDraw" }, no_anim = true})
+-- The desktop's live draw, same reasoning; and above every other overlay (lower order is
+-- drawn on top), since annotating the screen means annotating the island and the OSK too.
+hl.layer_rule({ match = { namespace = "quickshell:liveDraw" }, blur = false})
+hl.layer_rule({ match = { namespace = "quickshell:liveDraw" }, no_anim = true, order = -5})
 hl.layer_rule({ match = { namespace = "quickshell:verticalBar" }, animation = "slide", order = 5})
 hl.layer_rule({ match = { namespace = "quickshell:osk" }, order = -1})
 -- Quickshell: waffles

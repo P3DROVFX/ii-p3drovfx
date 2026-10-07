@@ -61,6 +61,7 @@ var TOGGLE_TYPES = {
     gameMode: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     screenSnip: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     screenRecord: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
+    liveDraw: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     colorPicker: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     videoEditor: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     onScreenKeyboard: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },

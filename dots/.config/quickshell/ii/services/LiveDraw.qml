@@ -9,10 +9,15 @@ import Quickshell.Io
 import qs
 import qs.services
 import qs.modules.common
-import "../../common/draw/StrokeGeometry.js" as StrokeGeometry
+import "../modules/common/draw/StrokeGeometry.js" as StrokeGeometry
 
 /**
- * The ink, and which home screen each sheet of it belongs to.
+ * Live draw: the ink, which workspace each sheet of it belongs to, and the pen.
+ *
+ * Shared by every family that draws on the screen — the tablet's pen tray and the
+ * desktop's annotation overlay are two surfaces over this one store, so whatever opens
+ * live draw (a keybind, a quick toggle, the dock, the bar, the recording controls) only
+ * has to call `toggle()` and read `trayOpen`.
  *
  * A drawing here is not a document — it is a note stuck to a workspace. You draw on top
  * of whatever is there, and it stays over that workspace until you rub it out or save
@@ -27,11 +32,32 @@ import "../../common/draw/StrokeGeometry.js" as StrokeGeometry
 Singleton {
     id: root
 
+    /// The pen preferences. They were the tablet's first and kept their place in the
+    /// config, but they are the pen's, not the tablet's: both families read them.
     readonly property var opts: Config.options?.tablet?.liveDraw ?? null
 
     /// A stroke: { points: [{x, y, p}], color, width, usePressure }.
     /// Sheets: { "<monitor>:<workspace>": [stroke, …] }.
-    property var sheets: ({})
+    ///
+    /// Held by a PersistentProperties, so a live reload of the shell — which rebuilds
+    /// every singleton, and on this machine happens whenever any QML file is saved —
+    /// does not rub out a drawing someone is in the middle of presenting. Still memory
+    /// only: a restart starts clean, as it should.
+    property alias sheets: keptSheets.sheets
+
+    PersistentProperties {
+        id: keptSheets
+        reloadableId: "liveDrawSheets"
+        property var sheets: ({})
+        // The pen and the tray too: a reload mid-annotation should leave the user
+        // where they were, not drop them out of drawing.
+        property bool drawing: false
+        property bool trayOpen: false
+        property real trayOffsetX: 0
+        property real trayOffsetY: 0
+        property bool trayCollapsed: false
+        onLoaded: root.revision++
+    }
     /// Bumped on every change, because a nested mutation of `sheets` is invisible to a
     /// binding. Everything that draws watches this rather than the object.
     property int revision: 0
@@ -45,7 +71,7 @@ Singleton {
      * sheet you had stopped drawing on could never be drawn on again, and the toolbar sat
      * there looking like it should still work.
      */
-    property bool drawing: false
+    property alias drawing: keptSheets.drawing
 
     /**
      * Whether the toolbar is on screen.
@@ -54,14 +80,36 @@ Singleton {
      * different requests and were previously the same button. Closing the tray leaves the
      * ink exactly where it is: losing work must never be a side effect of tidying up.
      */
-    property bool trayOpen: false
+    property alias trayOpen: keptSheets.trayOpen
 
     /// Enter live draw: tray up, pen down.
     function open() {
         root.ensureTools();
+        root.refreshWorkspaceAnimation();
         root.trayOpen = true;
         root.drawing = true;
     }
+
+    /// The whole feature on or off — what every launcher calls.
+    function toggle() {
+        if (root.trayOpen)
+            root.close();
+        else
+            root.open();
+    }
+
+    /**
+     * Where the user dragged the tray, as an offset from where it starts.
+     *
+     * Kept here rather than on the surface, which is unloaded whenever there is nothing
+     * to show: a tray moved out of the way of what is being recorded should still be out
+     * of the way the next time it opens.
+     */
+    property alias trayOffsetX: keptSheets.trayOffsetX
+    property alias trayOffsetY: keptSheets.trayOffsetY
+    /// The tray folded down to the pen and the way back out, so it covers as little of
+    /// a recording as possible.
+    property alias trayCollapsed: keptSheets.trayCollapsed
 
     /// Leave live draw entirely. The ink stays on its workspace until it is rubbed out.
     function close() {
@@ -117,11 +165,35 @@ Singleton {
      */
     function keyFor(screenName) {
         const name = String(screenName ?? "");
+        // A special workspace open over the monitor is what is in front, so it is the
+        // sheet being drawn on — a scratchpad annotated and closed again should not
+        // leave its ink on the workspace underneath.
+        const special = root.specialFor(name);
+        if (special.length > 0)
+            return `${name}:${special}`;
         for (const monitor of (Hyprland.monitors?.values ?? [])) {
             if (String(monitor?.name ?? "") === name)
                 return `${name}:${monitor?.activeWorkspace?.id ?? -1}`;
         }
         return `${name}:${Hyprland.focusedMonitor?.activeWorkspace?.id ?? -1}`;
+    }
+
+    /// The special workspace open on a monitor, or "".
+    function specialFor(screenName) {
+        const monitor = (HyprlandData.monitors ?? []).find(entry => entry?.name === screenName);
+        return String(monitor?.specialWorkspace?.name ?? "");
+    }
+
+    /// Whether any sheet on one monitor has ink. A screen with nothing drawn on any of its
+    /// workspaces needs no surface at all.
+    function screenHasInk(screenName) {
+        void root.revision;
+        const prefix = `${screenName}:`;
+        for (const key in root.sheets) {
+            if (key.startsWith(prefix) && (root.sheets[key] ?? []).length > 0)
+                return true;
+        }
+        return false;
     }
 
     function strokesFor(key) {
@@ -246,20 +318,25 @@ Singleton {
         }
     }
 
-    function refreshWorkspaceAnimation() {
-        if (animationProbe.running)
+    /// Read on the first open rather than at startup: the launchers reference this store
+    /// from the bar, the dock and the toggles, and a hyprctl call on every shell start
+    /// for a feature most sessions never open is a call for nothing.
+    property bool workspaceAnimationRead: false
+
+    function refreshWorkspaceAnimation(force) {
+        if (animationProbe.running || (root.workspaceAnimationRead && !force))
             return;
+        root.workspaceAnimationRead = true;
         animationProbe.running = true;
     }
-
-    Component.onCompleted: root.refreshWorkspaceAnimation()
 
     /// A reloaded Hyprland config can change both numbers under us.
     Connections {
         target: Hyprland
+        enabled: root.workspaceAnimationRead
         function onRawEvent(event) {
             if (event.name === "configreloaded")
-                root.refreshWorkspaceAnimation();
+                root.refreshWorkspaceAnimation(true);
         }
     }
 }

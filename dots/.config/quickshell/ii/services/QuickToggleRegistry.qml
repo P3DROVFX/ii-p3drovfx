@@ -60,6 +60,7 @@ Singleton {
         "gameMode": gameModeComp,
         "screenSnip": screenSnipComp,
         "screenRecord": screenRecordComp,
+        "liveDraw": liveDrawComp,
         "colorPicker": colorPickerComp,
         "videoEditor": videoEditorComp,
         "onScreenKeyboard": onScreenKeyboardComp,
@@ -99,6 +100,7 @@ Singleton {
         { id: "gameMode", keywords: ["game", "gaming", "jogo"], get model() { return root.getModel("gameMode"); } },
         { id: "screenSnip", keywords: ["screenshot", "snip", "captura"], get model() { return root.getModel("screenSnip"); } },
         { id: "screenRecord", keywords: ["record", "gravar", "screen"], get model() { return root.getModel("screenRecord"); } },
+        { id: "liveDraw", keywords: ["draw", "desenhar", "annotate", "anotar", "pen", "caneta"], get model() { return root.getModel("liveDraw"); } },
         { id: "colorPicker", keywords: ["color", "picker", "cor"], get model() { return root.getModel("colorPicker"); } },
         { id: "videoEditor", keywords: ["video", "editor", "editar"], get model() { return root.getModel("videoEditor"); } },
         { id: "onScreenKeyboard", keywords: ["keyboard", "teclado", "osk"], get model() { return root.getModel("onScreenKeyboard"); } },
@@ -143,6 +145,7 @@ Singleton {
     Component { id: gameModeComp; GameModeToggle {} }
     Component { id: screenSnipComp; ScreenSnipToggle {} }
     Component { id: screenRecordComp; ScreenRecordToggle {} }
+    Component { id: liveDrawComp; LiveDrawToggle {} }
     Component { id: colorPickerComp; ColorPickerToggle {} }
     Component { id: videoEditorComp; VideoEditorToggle {} }
     Component { id: onScreenKeyboardComp; OnScreenKeyboardToggle {} }

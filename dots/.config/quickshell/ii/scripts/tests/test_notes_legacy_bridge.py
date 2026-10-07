@@ -27,7 +27,7 @@ CONSUMERS = [
     ROOT / "modules/ii/overlay/notes/NotesSketchEditor.qml",
     ROOT / "modules/ii/background/widgets/utility/NotesWidget.qml",
     ROOT / "modules/ii/background/widgets/utility/NotesWidget2x1.qml",
-    ROOT / "modules/tablet/liveDraw/TabletLiveDrawWindow.qml",
+    ROOT / "modules/common/draw/LiveDrawWindow.qml",
     ROOT / "modules/ii/cheatsheet/timetable/EventSidebar.qml",
     ROOT / "services/ai/integrations/AiNotesIntegration.qml",
     ROOT / "services/ai/AiTools.qml",

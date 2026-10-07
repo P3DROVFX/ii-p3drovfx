@@ -6,6 +6,7 @@ import Quickshell.Io
 
 import qs
 import qs.modules.common
+import qs.services
 
 /**
  * Draw on the screen with a pen, and keep it or file it.
@@ -31,17 +32,17 @@ Scope {
         function draw(): string {
             if (!root.enabled)
                 return "Live draw is switched off in Settings.";
-            TabletLiveDrawStore.open();
+            LiveDraw.open();
             return "Drawing. The pencil puts the pen down; close puts the toolbar away.";
         }
 
         function stop(): string {
-            TabletLiveDrawStore.close();
+            LiveDraw.close();
             return "Toolbar closed. Anything drawn stays on its workspace.";
         }
 
         function toggle(): string {
-            return TabletLiveDrawStore.trayOpen ? stop() : draw();
+            return LiveDraw.trayOpen ? stop() : draw();
         }
 
         /// Files the focused screen's sheet into Notes, as the tray's button does.
@@ -55,8 +56,8 @@ Scope {
         }
 
         function clear(): string {
-            TabletLiveDrawStore.clearAll();
-            TabletLiveDrawStore.close();
+            LiveDraw.clearAll();
+            LiveDraw.close();
             return "Every sheet rubbed out.";
         }
     }
@@ -70,7 +71,7 @@ Scope {
 
             Loader {
                 active: root.enabled
-                    && (TabletLiveDrawStore.trayOpen || TabletLiveDrawStore.sheetCount > 0)
+                    && (LiveDraw.trayOpen || LiveDraw.screenHasInk(screenScope.modelData.name))
 
                 sourceComponent: TabletLiveDrawWindow {
                     screen: screenScope.modelData
@@ -82,5 +83,8 @@ Scope {
     // Live draw is a tablet surface, and the family unloading has to take the pen with
     // it — otherwise switching to the desktop shell leaves `drawing` set and the next
     // switch back opens with a full-screen input grab nobody asked for.
-    Component.onDestruction: TabletLiveDrawStore.close()
+    Component.onDestruction: {
+        if (!PanelFamily.isTablet)
+            LiveDraw.close();
+    }
 }

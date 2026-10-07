@@ -85,6 +85,22 @@ Item {
         }
 
         Loader {
+            active: Config.options.bar.utilButtons.showLiveDraw
+            visible: Config.options.bar.utilButtons.showLiveDraw
+            sourceComponent: CircleUtilButton {
+                Layout.alignment: Qt.AlignVCenter
+                onClicked: LiveDraw.toggle()
+                MaterialSymbol {
+                    horizontalAlignment: Qt.AlignHCenter
+                    fill: LiveDraw.trayOpen ? 1 : 0
+                    text: "draw"
+                    iconSize: Appearance.font.pixelSize.large
+                    color: Appearance.colors.colOnLayer2
+                }
+            }
+        }
+
+        Loader {
             active: Config.options.bar.utilButtons.showColorPicker
             visible: Config.options.bar.utilButtons.showColorPicker
             sourceComponent: CircleUtilButton {

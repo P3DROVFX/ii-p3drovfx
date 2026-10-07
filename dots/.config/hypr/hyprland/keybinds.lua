@@ -142,6 +142,9 @@ hl.bind("SUPER + SHIFT + C",
 --# Display modes (extend, duplicate, single screen)
 hl.bind("SUPER + ALT + P", hl.dsp.global("quickshell:displayModesToggle"),
     { description = "Utilities: Display modes (extend, duplicate, single screen)" })
+--# Live draw (annotate the screen over every app)
+hl.bind("SUPER + ALT + D", hl.dsp.global("quickshell:liveDrawToggle"),
+    { description = "Utilities: Draw on screen" })
 --##! Screenshot & recording
 --# Recording stuff
 hl.bind("SUPER + SHIFT + R", hl.dsp.global("quickshell:regionRecord"),

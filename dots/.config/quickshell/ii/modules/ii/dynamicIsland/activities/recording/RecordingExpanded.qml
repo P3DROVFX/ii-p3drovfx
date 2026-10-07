@@ -112,6 +112,46 @@ Item {
         }
 
         // ── The actions ──────────────────────────────────────────────────────
+        // Draw over what is being recorded. Lit while the drawing tools are out, so the
+        // same button puts them away again.
+        RippleButton {
+            id: drawButton
+            readonly property bool drawingOut: LiveDraw.trayOpen
+            Layout.alignment: Qt.AlignVCenter
+            implicitWidth: 36
+            implicitHeight: 36
+            buttonRadius: drawButton.drawingOut ? Appearance.rounding.small : Appearance.rounding.full
+            colBackground: drawButton.drawingOut ? Appearance.colors.colPrimary
+                : (drawHover.hovered ? root.pauseSurfaceHover : root.pauseSurface)
+            colBackgroundHover: drawButton.drawingOut ? Appearance.colors.colPrimaryHover : root.pauseSurfaceHover
+            colBackgroundActive: drawButton.drawingOut ? Appearance.colors.colPrimaryActive : root.pauseSurfaceActive
+            colRipple: drawButton.drawingOut ? Appearance.colors.colPrimaryActive : root.pauseSurfaceActive
+            onClicked: LiveDraw.toggle()
+
+            Behavior on buttonRadius {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+
+            HoverHandler {
+                id: drawHover
+            }
+
+            contentItem: MaterialSymbol {
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                text: "draw"
+                fill: drawButton.drawingOut ? 1 : 0
+                iconSize: 20
+                color: drawButton.drawingOut ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+            }
+
+            StyledToolTip {
+                text: drawButton.drawingOut
+                    ? Translation.tr("Put the drawing tools away")
+                    : Translation.tr("Draw on the screen")
+            }
+        }
+
         RippleButton {
             id: pauseButton
             Layout.alignment: Qt.AlignVCenter

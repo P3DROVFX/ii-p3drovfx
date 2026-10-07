@@ -253,9 +253,9 @@ Singleton {
             preferredSide: "left",
             canDetach: true,
             settleMs: 1500,
-            compact: { width: 140, height: -1 },
+            compact: { width: 172, height: -1 },
             orb: { size: -1 },
-            expanded: { width: 340, height: 68 },
+            expanded: { width: 388, height: 68 },
             content: {
                 expanded: "activities/recording/RecordingExpanded.qml"
             }

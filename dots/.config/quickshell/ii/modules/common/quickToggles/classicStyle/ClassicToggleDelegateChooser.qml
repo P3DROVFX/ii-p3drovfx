@@ -110,6 +110,16 @@ DelegateChooser {
         }
     }
     DelegateChoice {
+        roleValue: "liveDraw"
+        LiveDrawQuickToggle {
+            editMode: root.editMode
+            isUnused: root.isUnused
+            toggleType: "liveDraw"
+            draggable: root.draggable
+            onEditClicked: root.editRequested("liveDraw")
+        }
+    }
+    DelegateChoice {
         roleValue: "keypressDisplay"
         KeystrokeDisplay {
             editMode: root.editMode

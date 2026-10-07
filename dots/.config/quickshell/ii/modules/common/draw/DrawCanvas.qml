@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Shapes
 
 import qs.modules.common
 import "StrokeGeometry.js" as StrokeGeometry
@@ -8,18 +9,30 @@ import "StrokeGeometry.js" as StrokeGeometry
 /**
  * The ink itself: committed strokes, plus the one currently under the pen.
  *
- * Two canvases rather than one. Redrawing every stroke on every sample is fine for the
- * first page and visibly not fine by the fiftieth, so the finished strokes live on a
- * canvas that only repaints when the sheet changes, and the live stroke has a canvas of
- * its own that is cleared and redrawn each frame. What the live canvas repaints is one
- * stroke; what the committed canvas repaints is everything, and it does so rarely.
+ * Two renderers, each doing only what it is cheap at.
+ *
+ * The finished strokes live on a canvas, and the canvas is painted *incrementally*: a
+ * stroke that was just added is drawn on top of what is already there, and only an undo,
+ * an erase or a new sheet clears and repaints the lot. Repainting every stroke whenever
+ * one was added made each new stroke cost as much as the whole drawing.
+ *
+ * The stroke under the pen is a vector `Shape`, not a second canvas. A canvas is a
+ * screen-sized image: every sample used to clear it, repaint the whole stroke into it
+ * and upload all of its pixels to the GPU again — megabytes per pointer event, for a
+ * line a few pixels wide. The shape is a handful of vertices that the GPU strokes and
+ * antialiases itself, and it is rebuilt at most once per frame however fast the device
+ * reports.
+ *
+ * Both draw the same flattened geometry (StrokeGeometry.flattened), so a stroke does not
+ * move when it is handed from one to the other.
  */
 Item {
     id: root
 
     /// [{ points: [{x,y,p}], color, width, usePressure }]
     property var strokes: []
-    /// The stroke being drawn right now, or null.
+    /// The stroke being drawn right now, or null. Its `points` array may grow in place;
+    /// call `refreshLive()` after appending to it.
     property var liveStroke: null
 
     /// Paint in the GUI thread and into an image rather than an FBO. Only the offscreen
@@ -55,69 +68,135 @@ Item {
             root.saved(false, target);
     }
 
-    onStrokesChanged: committed.requestPaint()
-    onWidthChanged: committed.requestPaint()
-    onHeightChanged: committed.requestPaint()
+    // ── What the committed canvas still has to paint ────────────────────────
+    /// The list the canvas last painted, and whether the next paint must start over.
+    property var _painted: []
+    property bool _repaintAll: true
+
+    onStrokesChanged: {
+        const next = root.strokes ?? [];
+        const previous = root._painted;
+        // Appended to, with everything before untouched: paint just the new strokes.
+        // Anything else — an undo, an erase, another sheet — starts over.
+        let appended = !root._repaintAll && next.length >= previous.length;
+        for (let i = 0; appended && i < previous.length; ++i)
+            appended = next[i] === previous[i];
+        if (!appended)
+            root._repaintAll = true;
+        // A stroke just handed over from the pen: the shape keeps showing it until the
+        // canvas has painted it, or the line would blink out for a frame in between.
+        if (root.liveStroke)
+            root._awaitingCommit = true;
+        committed.requestPaint();
+    }
+    onWidthChanged: root.refresh()
+    onHeightChanged: root.refresh()
 
     function refresh() {
+        root._repaintAll = true;
         committed.requestPaint();
-        live.requestPaint();
+        root.refreshLive();
     }
 
+    /// The live stroke changed. Rebuilt at most once per ~8 ms, however many samples
+    /// arrived in between — a 1000 Hz mouse would otherwise rebuild it a thousand times
+    /// a second for a screen that shows sixty or a hundred and forty-four of them.
+    ///
+    /// A plain timer, not a FrameAnimation: starting and stopping an animation on every
+    /// pointer event woke the scene's animation driver each time, and in a shell with
+    /// dozens of windows that alone cost most of a CPU core while drawing.
+    property bool _liveDirty: false
+    property bool _awaitingCommit: false
+    property bool _liveShown: false
+
     function refreshLive() {
-        live.requestPaint();
+        root._liveDirty = true;
+        if (!liveTimer.running)
+            liveTimer.start();
+    }
+
+    Timer {
+        id: liveTimer
+        interval: 8
+        repeat: false
+        onTriggered: {
+            if (root._liveDirty)
+                root.rebuildLive();
+        }
+    }
+
+    function rebuildLive() {
+        root._liveDirty = false;
+        const stroke = root.liveStroke;
+        const points = stroke?.points ?? [];
+        if (points.length === 0) {
+            if (!root._awaitingCommit)
+                root.clearLive();
+            return;
+        }
+        livePath.variable = StrokeGeometry.isVariable(stroke);
+        livePath.inkColor = stroke.color;
+        livePath.inkWidth = StrokeGeometry.widthFor(stroke.width, 1, false);
+
+        // Handed over as SVG path data: the curve renderer draws quadratic segments
+        // natively, so the even stroke goes as the samples' own curves rather than as
+        // the flattened polyline the canvas needs — an eighth of the vertices to
+        // re-process every update.
+        livePolyline.path = livePath.variable
+            ? StrokeGeometry.outlineSvg(StrokeGeometry.outline(StrokeGeometry.flattened(points), stroke.width, stroke.usePressure))
+            : StrokeGeometry.curveSvg(points);
+        root._liveShown = true;
+    }
+
+    function clearLive() {
+        root._liveShown = false;
+        livePolyline.path = "";
     }
 
     /**
-     * Draws one stroke into a context.
-     *
-     * Per-segment rather than one path for the whole stroke, because the width changes
-     * along it: a single path can only be stroked at one width, so pressure would be
-     * lost the moment more than two samples were joined. Round caps and joins are what
-     * make the separate segments read as one line.
+     * Draws one stroke into a context, from the same flattened geometry the live shape
+     * uses: one path stroked once for an even line, the filled outline for a pressure
+     * stroke. One path per stroke rather than a stroke call per segment is also simply
+     * fewer calls into the rasteriser.
      */
     function paintStroke(ctx, stroke) {
         const points = stroke?.points ?? [];
         if (points.length === 0)
             return;
 
-        ctx.strokeStyle = stroke.color;
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
-
-        // A tap with no travel is a dot, and a dot drawn as a zero-length line is
-        // nothing at all — which is how a stylus tap used to vanish.
-        if (points.length === 1) {
-            const only = points[0];
+        const flat = StrokeGeometry.flattened(points);
+        if (StrokeGeometry.isVariable(stroke)) {
+            const shape = StrokeGeometry.outline(flat, stroke.width, stroke.usePressure);
             ctx.fillStyle = stroke.color;
             ctx.beginPath();
-            ctx.arc(only.x, only.y,
-                    StrokeGeometry.widthFor(stroke.width, only.p, stroke.usePressure) / 2,
-                    0, Math.PI * 2);
+            ctx.moveTo(shape[0].x, shape[0].y);
+            for (let i = 1; i < shape.length; ++i)
+                ctx.lineTo(shape[i].x, shape[i].y);
+            ctx.closePath();
             ctx.fill();
             return;
         }
 
-        // The midpoint construction needs a previous end point to start from.
-        let fromX = (points[0].x + points[1].x) / 2;
-        let fromY = (points[0].y + points[1].y) / 2;
-        ctx.beginPath();
-        ctx.moveTo(points[0].x, points[0].y);
-        ctx.lineTo(fromX, fromY);
-        ctx.lineWidth = StrokeGeometry.widthFor(stroke.width, points[0].p, stroke.usePressure);
-        ctx.stroke();
-
-        for (let i = 1; i < points.length; ++i) {
-            const segment = StrokeGeometry.quadraticSegment(
-                points[i - 1], points[i], i + 1 < points.length ? points[i + 1] : null);
+        const width = StrokeGeometry.widthFor(stroke.width, 1, false);
+        // A tap with no travel is a dot, and a dot drawn as a zero-length line is
+        // nothing at all — which is how a stylus tap used to vanish.
+        if (flat.length === 1) {
+            ctx.fillStyle = stroke.color;
             ctx.beginPath();
-            ctx.moveTo(fromX, fromY);
-            ctx.quadraticCurveTo(segment.controlX, segment.controlY, segment.endX, segment.endY);
-            ctx.lineWidth = StrokeGeometry.widthFor(stroke.width, segment.pressure, stroke.usePressure);
-            ctx.stroke();
-            fromX = segment.endX;
-            fromY = segment.endY;
+            ctx.arc(flat[0].x, flat[0].y, width / 2, 0, Math.PI * 2);
+            ctx.fill();
+            return;
         }
+
+        ctx.strokeStyle = stroke.color;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.lineWidth = width;
+        ctx.beginPath();
+        ctx.moveTo(flat[0].x, flat[0].y);
+        for (let i = 1; i < flat.length; ++i)
+            ctx.lineTo(flat[i].x, flat[i].y);
+        ctx.stroke();
     }
 
     Canvas {
@@ -125,26 +204,52 @@ Item {
         anchors.fill: parent
         renderStrategy: root.immediate ? Canvas.Immediate : Canvas.Cooperative
         renderTarget: root.immediate ? Canvas.Image : Canvas.FramebufferObject
-        onPainted: root.committedPainted()
+        onPainted: {
+            if (root._awaitingCommit && !root.liveStroke) {
+                root._awaitingCommit = false;
+                root.clearLive();
+            }
+            root.committedPainted();
+        }
         onPaint: {
             const ctx = committed.getContext("2d");
-            ctx.reset();
-            ctx.clearRect(0, 0, committed.width, committed.height);
-            for (const stroke of (root.strokes ?? []))
-                root.paintStroke(ctx, stroke);
+            const list = root.strokes ?? [];
+            let from = root._painted.length;
+            if (root._repaintAll) {
+                ctx.reset();
+                ctx.clearRect(0, 0, committed.width, committed.height);
+                from = 0;
+            }
+            for (let i = from; i < list.length; ++i)
+                root.paintStroke(ctx, list[i]);
+            root._painted = list;
+            root._repaintAll = false;
         }
     }
 
-    Canvas {
+    Shape {
         id: live
         anchors.fill: parent
-        renderStrategy: Canvas.Cooperative
-        onPaint: {
-            const ctx = live.getContext("2d");
-            ctx.reset();
-            ctx.clearRect(0, 0, live.width, live.height);
-            if (root.liveStroke)
-                root.paintStroke(ctx, root.liveStroke);
+        visible: root._liveShown
+        preferredRendererType: Shape.CurveRenderer
+
+        ShapePath {
+            id: livePath
+
+            property bool variable: false
+            property color inkColor: "transparent"
+            property real inkWidth: 1
+
+            strokeColor: livePath.variable ? "transparent" : livePath.inkColor
+            strokeWidth: livePath.variable ? -1 : livePath.inkWidth
+            fillColor: livePath.variable ? livePath.inkColor : "transparent"
+            fillRule: ShapePath.WindingFill
+            capStyle: ShapePath.RoundCap
+            joinStyle: ShapePath.RoundJoin
+
+            PathSvg {
+                id: livePolyline
+            }
         }
     }
 }

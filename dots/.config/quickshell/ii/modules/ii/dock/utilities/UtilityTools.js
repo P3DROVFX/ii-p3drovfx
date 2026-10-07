@@ -7,6 +7,7 @@
 var tools = [
     { id: "screenSnip", symbol: "screenshot_region", title: "Screenshot" },
     { id: "screenRecord", symbol: "videocam", title: "Screen record" },
+    { id: "liveDraw", symbol: "draw", title: "Draw on screen" },
     { id: "colorPicker", symbol: "colorize", title: "Color picker" },
     { id: "keyboard", symbol: "keyboard", title: "On-screen keyboard" },
     { id: "wallpaper", symbol: "imagesmode", title: "Wallpaper" },

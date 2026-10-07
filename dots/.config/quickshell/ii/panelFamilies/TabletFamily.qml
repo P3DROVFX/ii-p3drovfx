@@ -284,10 +284,7 @@ Scope {
             // The action toggles the whole feature — tray and pen together. Toggling the
             // pen alone belongs to the pencil in the tray, which is where the user can
             // see what state it is in.
-            if (TabletLiveDrawStore.trayOpen)
-                TabletLiveDrawStore.close();
-            else
-                TabletLiveDrawStore.open();
+            LiveDraw.toggle();
         };
         GlobalStates.clearHomeScreenAppsHandler = () => {
             const ws = TabletHomeIcons.currentWorkspace;

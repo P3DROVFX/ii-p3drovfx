@@ -42,6 +42,7 @@ import qs.modules.ii.localSendPopup
 import qs.modules.ii.scratchpadOverlay
 import qs.modules.ii.keyboardLayoutTransitionPopup
 import qs.modules.ii.keypressDisplay
+import qs.modules.ii.liveDraw
 import qs.modules.ii.topLayer
 import qs.modules.ii.tilingAssistant
 import qs.modules.ii.usage
@@ -173,6 +174,11 @@ Scope {
         // and invisible until a recording or the quick toggle asks for them.
         extraCondition: Config.ready
         panelUrl: Qt.resolvedUrl("../modules/ii/keypressDisplay/KeypressDisplay.qml")
+    }
+    PanelUrlLoader {
+        // The Scope is a keybind and an IPC target; the per-screen surfaces inside load
+        // only while the tray is open or a screen has ink on it.
+        panelUrl: Qt.resolvedUrl("../modules/ii/liveDraw/LiveDrawOverlay.qml")
     }
     PanelUrlLoader {
         panelUrl: Qt.resolvedUrl("../modules/common/onScreenKeyboard/OnScreenKeyboard.qml")

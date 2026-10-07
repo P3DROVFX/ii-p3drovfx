@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import qs
+import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 
@@ -9,7 +10,9 @@ import qs.modules.common.widgets
  *
  * Only the contracted face is left here: the expanded one is a file of its own
  * (activities/recording/RecordingExpanded.qml), hosted by the auxiliary bubble's card,
- * and the island never shows a widget expanded.
+ * and the island never shows a widget expanded. The one control kept here is the pen:
+ * drawing over the screen is what a recording asks for mid-take, and walking to the bar
+ * for it would put the walk in the video.
  */
 Item {
     id: root
@@ -63,6 +66,38 @@ Item {
                 })
             color: Appearance.colors.colOnSurface
             text: root.paused ? Translation.tr("PAUSED") : root.timeText
+        }
+
+        RippleButton {
+            id: drawButton
+            readonly property bool drawingOut: LiveDraw.trayOpen
+            Layout.alignment: Qt.AlignVCenter
+            implicitWidth: 28
+            implicitHeight: 28
+            buttonRadius: drawButton.drawingOut ? Appearance.rounding.verysmall : Appearance.rounding.full
+            colBackground: drawButton.drawingOut ? Appearance.colors.colPrimary : "transparent"
+            colBackgroundHover: drawButton.drawingOut ? Appearance.colors.colPrimaryHover : Appearance.colors.colLayer1Hover
+            colRipple: drawButton.drawingOut ? Appearance.colors.colPrimaryActive : Appearance.colors.colLayer1Active
+            onClicked: LiveDraw.toggle()
+
+            Behavior on buttonRadius {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+
+            contentItem: MaterialSymbol {
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                text: "draw"
+                fill: drawButton.drawingOut ? 1 : 0
+                iconSize: Appearance.font.pixelSize.normal
+                color: drawButton.drawingOut ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+            }
+
+            StyledToolTip {
+                text: drawButton.drawingOut
+                    ? Translation.tr("Put the drawing tools away")
+                    : Translation.tr("Draw on the screen")
+            }
         }
     }
 }

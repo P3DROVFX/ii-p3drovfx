@@ -135,6 +135,17 @@ ContentPage {
             }
         }
         ConfigSwitch {
+            buttonIcon: "draw"
+            text: Translation.tr("Show Draw on Screen")
+            checked: Config.options.bar.utilButtons.showLiveDraw
+            onCheckedChanged: {
+                Config.options.bar.utilButtons.showLiveDraw = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Annotate the screen over every app, for recordings and screen sharing")
+            }
+        }
+        ConfigSwitch {
             buttonIcon: "imagesmode"
             text: Translation.tr("Show Wallpaper Selector")
             checked: Config.options.bar.utilButtons.showWallpaperToggle

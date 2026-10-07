@@ -49,3 +49,5 @@ SearchTile 1.0 SearchTile.qml
 DiskTile 1.0 DiskTile.qml
 ToolsTile 1.0 ToolsTile.qml
 ToolsPanel 1.0 ToolsPanel.qml
+LiveDrawTile 1.0 LiveDrawTile.qml
+LiveDrawPanel 1.0 LiveDrawPanel.qml

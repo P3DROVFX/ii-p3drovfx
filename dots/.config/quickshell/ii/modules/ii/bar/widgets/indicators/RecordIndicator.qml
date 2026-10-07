@@ -453,6 +453,45 @@ Item {
                         }
                     }
 
+                    // Draw over the screen being recorded. The popup closes first: the
+                    // overlay draws over everything, the bar's popup included.
+                    RippleButton {
+                        id: drawBtn
+                        Layout.preferredWidth: 38
+                        Layout.preferredHeight: 38
+                        buttonRadius: Appearance.rounding.full
+
+                        toggled: LiveDraw.trayOpen
+                        colBackground: Appearance.colors.colSecondaryContainer
+                        colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+
+                        onClicked: {
+                            if (!LiveDraw.trayOpen)
+                                controlsPopup.close();
+                            LiveDraw.toggle();
+                        }
+
+                        contentItem: Item {
+                            implicitWidth: drawIcon.implicitWidth
+                            implicitHeight: drawIcon.implicitHeight
+
+                            MaterialSymbol {
+                                id: drawIcon
+                                anchors.centerIn: parent
+                                text: "draw"
+                                fill: drawBtn.toggled ? 1 : 0
+                                iconSize: 18
+                                color: drawBtn.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
+                            }
+                        }
+
+                        StyledToolTip {
+                            text: drawBtn.toggled
+                                ? Translation.tr("Put the drawing tools away")
+                                : Translation.tr("Draw on the screen while recording")
+                        }
+                    }
+
                     // Pause / Resume
                     RippleButton {
                         id: pauseBtn

@@ -54,43 +54,46 @@ Item {
     property var livePoints: []
     property var smoothPoint: null
 
-    function currentStrokeRecord() {
-        return {
-            points: root.livePoints,
-            color: root.color,
-            width: root.strokeWidth,
-            usePressure: root.usePressure
-        };
-    }
+    /// The record the canvas draws while the pen is down. Its `points` is `livePoints`
+    /// itself, appended to in place: copying the array on every sample made a long
+    /// stroke quadratic in its own length.
+    property var liveRecord: null
 
     function beginStroke(x, y, pressure) {
         const first = StrokeGeometry.point(x, y, pressure);
         root.smoothPoint = first;
         root.livePoints = [first];
-        canvas.liveStroke = root.currentStrokeRecord();
+        root.liveRecord = {
+            points: root.livePoints,
+            color: root.color,
+            width: root.strokeWidth,
+            usePressure: root.usePressure
+        };
+        canvas.liveStroke = root.liveRecord;
         canvas.refreshLive();
     }
 
     function extendStroke(x, y, pressure) {
-        if (root.livePoints.length === 0)
+        if (!root.liveRecord)
             return;
         const raw = StrokeGeometry.point(x, y, pressure);
         // Smoothed before the distance test, so the filter sees every sample and the
         // thinning only decides what is worth keeping afterwards.
         root.smoothPoint = StrokeGeometry.smoothed(root.smoothPoint, raw, root.smoothing);
-        const last = root.livePoints[root.livePoints.length - 1];
-        if (!StrokeGeometry.shouldAppend(last, root.smoothPoint))
+        const points = root.liveRecord.points;
+        if (!StrokeGeometry.shouldAppend(points[points.length - 1], root.smoothPoint))
             return;
-        root.livePoints = root.livePoints.concat([root.smoothPoint]);
-        canvas.liveStroke = root.currentStrokeRecord();
+        points.push(root.smoothPoint);
         canvas.refreshLive();
     }
 
     function endStroke() {
-        if (root.livePoints.length > 0)
-            root.strokeFinished(root.currentStrokeRecord());
+        const finished = root.liveRecord;
+        root.liveRecord = null;
         root.livePoints = [];
         root.smoothPoint = null;
+        if (finished && finished.points.length > 0)
+            root.strokeFinished(finished);
         canvas.liveStroke = null;
         canvas.refreshLive();
     }
@@ -98,6 +101,7 @@ Item {
     /// Drops a stroke in progress without committing it. For a host that leaves drawing
     /// mode mid-stroke.
     function abandonStroke() {
+        root.liveRecord = null;
         root.livePoints = [];
         root.smoothPoint = null;
         canvas.liveStroke = null;
@@ -238,7 +242,7 @@ Item {
                     root.eraseRequested(pen.point.position.x, pen.point.position.y);
                 else
                     root.beginStroke(pen.point.position.x, pen.point.position.y, pen.point.pressure);
-            } else if (root.livePoints.length > 0) {
+            } else if (root.liveRecord) {
                 root.endStroke();
             }
         }

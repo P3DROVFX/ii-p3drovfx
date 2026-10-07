@@ -73,6 +73,34 @@ Item {
             }
 
             Loader {
+                active: Config.options.bar.utilButtons.showLiveDraw
+                visible: active
+                sourceComponent: isMaterial ? liveDrawM3 : legacyLiveDraw
+            }
+            Component {
+                id: liveDrawM3
+                UtilButton {
+                    vertical: root.vertical
+                    iconText: "draw"
+                    forceHovered: LiveDraw.trayOpen
+                    onClicked: LiveDraw.toggle()
+                }
+            }
+            Component {
+                id: legacyLiveDraw
+                CircleUtilButton {
+                    onClicked: LiveDraw.toggle()
+                    MaterialSymbol {
+                        horizontalAlignment: Qt.AlignHCenter
+                        fill: LiveDraw.trayOpen ? 1 : 0
+                        text: "draw"
+                        iconSize: Appearance.font.pixelSize.large
+                        color: Appearance.colors.colOnLayer2
+                    }
+                }
+            }
+
+            Loader {
                 active: Config.options.bar.utilButtons.showColorPicker
                 visible: active
                 sourceComponent: isMaterial ? colorPickerM3 : legacyColorPicker

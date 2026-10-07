@@ -55,6 +55,8 @@ Item {
             list.push("record");
         if (options.showScreenRecord && Persistent.states.screenRecord.active)
             list.push("recordPause");
+        if (options.showLiveDraw)
+            list.push("liveDraw");
         if (options.showKeyboardToggle)
             list.push("keyboard");
         if (options.showWallpaperToggle)
@@ -84,6 +86,8 @@ Item {
             return Persistent.states.screenRecord.active ? "stop" : "screen_record";
         case "recordPause":
             return Persistent.states.screenRecord.paused ? "play_arrow" : "pause";
+        case "liveDraw":
+            return "draw";
         case "keyboard":
             return "keyboard";
         case "wallpaper":
@@ -116,6 +120,8 @@ Item {
             return Persistent.states.screenRecord.active;
         case "recordPause":
             return Persistent.states.screenRecord.paused;
+        case "liveDraw":
+            return LiveDraw.trayOpen;
         case "keyboard":
             return GlobalStates.oskOpen;
         case "wallpaper":
@@ -147,6 +153,9 @@ Item {
             return;
         case "recordPause":
             Quickshell.execDetached([Directories.recordScriptPath, "--pause"]);
+            return;
+        case "liveDraw":
+            LiveDraw.toggle();
             return;
         case "keyboard":
             GlobalStates.oskOpen = !GlobalStates.oskOpen;
@@ -208,6 +217,10 @@ Item {
             return Persistent.states.screenRecord.paused
                 ? Translation.tr("Resume recording")
                 : Translation.tr("Pause recording");
+        case "liveDraw":
+            return LiveDraw.trayOpen
+                ? Translation.tr("Put the drawing tools away")
+                : Translation.tr("Draw on the screen");
         case "keyboard":
             return Translation.tr("On-screen keyboard");
         case "wallpaper":

@@ -18,6 +18,7 @@ var TOGGLE_TYPES = [
     "cloudflareWarp",
     "keyboardBacklight",
     "keypressDisplay",
+    "liveDraw",
     "laptopKeyboard",
     "phoneMirror"
 ];

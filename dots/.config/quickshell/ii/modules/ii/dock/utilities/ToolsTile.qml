@@ -53,6 +53,9 @@ UtilityTile {
             tool.symbol = tile.recordPaused ? "play_arrow" : "pause";
             tool.title = tile.recordPaused ? Translation.tr("Resume recording") : Translation.tr("Pause recording");
             break;
+        case "liveDraw":
+            tool.active = LiveDraw.trayOpen;
+            break;
         case "keyboard":
             tool.active = GlobalStates.oskOpen;
             break;
@@ -125,6 +128,9 @@ UtilityTile {
             break;
         case "colorPicker":
             GlobalStates.launchColorPicker();
+            break;
+        case "liveDraw":
+            LiveDraw.toggle();
             break;
         case "keyboard":
             GlobalStates.oskOpen = !GlobalStates.oskOpen;

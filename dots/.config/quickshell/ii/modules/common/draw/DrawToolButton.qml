@@ -31,13 +31,22 @@ RippleButton {
 
     implicitWidth: Appearance.sizes.minimumTouchTarget
     implicitHeight: Appearance.sizes.minimumTouchTarget
-    buttonRadius: Appearance.rounding.full
+    // Round at rest, a rounded square while on: the shape is the state (Material 3
+    // Expressive toggle buttons), so a lit tool reads as lit without a second cue.
+    buttonRadius: root.active ? Appearance.rounding.normal : Appearance.rounding.full
+    // Opaque tones: the tray floats over applications on a layer nothing blurs. See
+    // DrawToolbar.
     colBackground: root.active
         ? Appearance.colors.colPrimary
-        : (root.emphasised ? Appearance.colors.colSecondaryContainer : Appearance.colors.colLayer1)
+        : (root.emphasised ? Appearance.colors.colSecondaryContainer : Appearance.m3colors.m3surfaceContainerHigh)
     colBackgroundHover: root.active
-        ? Appearance.colors.colPrimaryHover : Appearance.colors.colLayer1Hover
-    colRipple: Appearance.colors.colLayer1Active
+        ? Appearance.colors.colPrimaryHover
+        : (root.emphasised ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colSurfaceContainerHighestHover)
+    colRipple: root.active ? Appearance.colors.colPrimaryActive : Appearance.colors.colSurfaceContainerHighestActive
+
+    Behavior on buttonRadius {
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+    }
     releaseAction: () => root.triggered()
 
     /**
@@ -68,7 +77,7 @@ RippleButton {
         color: root.active
             ? Appearance.m3colors.m3onPrimary
             : (root.emphasised ? Appearance.colors.colOnSecondaryContainer
-                               : Appearance.colors.colOnLayer1)
+                               : Appearance.colors.colOnSurface)
         opacity: root.enabled ? 1 : 0.4
     }
 
