@@ -573,9 +573,11 @@ PanelWindow {
         } else if (key === Qt.Key_K) {
             LiveDraw.setBoard("dark");
         } else if (key === Qt.Key_F) {
-            LiveDraw.setSpotlight(true);
-        } else if (key === Qt.Key_M) {
+            // The zoom gets the key a left hand reaches without looking: it is the mode
+            // used most.
             LiveDraw.setZoom(true);
+        } else if (key === Qt.Key_M) {
+            LiveDraw.setSpotlight(true);
         } else if (key === Qt.Key_T) {
             if (shift && root.trayMovable)
                 LiveDraw.trayCollapsed = !LiveDraw.trayCollapsed;

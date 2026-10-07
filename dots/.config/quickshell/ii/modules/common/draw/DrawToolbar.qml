@@ -595,14 +595,14 @@ Rectangle {
                 symbol: "flashlight_on"
                 active: root.spotlightOn
                 tooltipText: Translation.tr("Spotlight — dim all but the pointer")
-                shortcut: "Ctrl+F"
+                shortcut: "Ctrl+M"
                 onTriggered: root.spotlightToggled()
             }
             GroupButton {
                 symbol: "zoom_in"
                 active: root.zoomOn
                 tooltipText: Translation.tr("Zoom — magnify around the pointer")
-                shortcut: "Ctrl+M"
+                shortcut: "Ctrl+F"
                 onTriggered: root.zoomToggled()
             }
         }
