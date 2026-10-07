@@ -73,6 +73,11 @@ Item {
         "circle_pointer_clock": component_circle_pointer_clock,
         "triple_ring_clock": component_triple_ring_clock,
         "grid_card_clock": component_grid_card_clock,
+        "clock_numeral": component_clock_numeral,
+        "clock_duo": component_clock_duo,
+        "clock_type_weight": component_clock_type_weight,
+        "clock_type_width": component_clock_type_width,
+        "clock_type_stack": component_clock_type_stack,
         "clock_expressive_card": component_clock_expressive_card,
         "circular_media": component_circular_media,
         "media_circular": component_media_circular,
@@ -463,6 +468,71 @@ Item {
         id: component_triple_ring_clock
 
         TripleRingClockWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_clock_type_weight
+
+        WeightClockWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_clock_type_width
+
+        WidthClockWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_clock_type_stack
+
+        StackClockWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_clock_numeral
+
+        NumeralClockWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_clock_duo
+
+        DuoClockWidget {
             screenWidth: delegateRoot.screenWidth
             screenHeight: delegateRoot.screenHeight
             scaledScreenWidth: delegateRoot.screenWidth

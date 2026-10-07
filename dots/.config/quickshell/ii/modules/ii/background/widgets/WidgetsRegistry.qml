@@ -210,6 +210,51 @@ Singleton {
             "configPage": "widgets/DesktopTripleRingClockConfig.qml"
         },
         {
+            "widgetId": "clock_type_weight",
+            "name": Translation.tr("Weight Clock (1x1)"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/WeightClockWidget.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("1x1 type clock: heavy hours over minutes whose weight follows the hour, from a hairline at :00 to heavy at :59."),
+            "configPage": "widgets/DesktopTypeClocksConfig.qml"
+        },
+        {
+            "widgetId": "clock_type_width",
+            "name": Translation.tr("Width Clock (2x1)"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/WidthClockWidget.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("2x1 type clock: the time on one line whose width axis trades from the hours to the minutes as the hour passes."),
+            "configPage": "widgets/DesktopTypeClocksConfig.qml"
+        },
+        {
+            "widgetId": "clock_type_stack",
+            "name": Translation.tr("Stack Clock (1x2)"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/StackClockWidget.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("1x2 type clock: the four digits stacked wide with a weight ramp, split by a band with the day."),
+            "configPage": "widgets/DesktopTypeClocksConfig.qml"
+        },
+        {
+            "widgetId": "clock_numeral",
+            "name": Translation.tr("Numeral Clock (1x1)"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/NumeralClockWidget.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("1x1 analog clock without an hour hand: the numerals are the dial, heavy and large near the hour, hairline far from it."),
+            "configPage": "widgets/DesktopAnalogClocksConfig.qml"
+        },
+        {
+            "widgetId": "clock_duo",
+            "name": Translation.tr("Duo Clock (2x1)"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/DuoClockWidget.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("2x1 analog clock with two sub-dials: hours on a cookie with a thick hand, minutes on a wavy progress ring."),
+            "configPage": "widgets/DesktopAnalogClocksConfig.qml"
+        },
+        {
             "widgetId": "grid_card_clock",
             "name": Translation.tr("Grid Card Clock"),
             "category": "Clock",

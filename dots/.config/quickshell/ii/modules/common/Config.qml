@@ -3764,6 +3764,59 @@ Singleton {
                         property bool enableRam: true
                         property bool enableDisk: true
                     }
+                    property JsonObject clock_type_weight: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                        property bool showBackground: true
+                        property bool textShadow: true
+                        property bool weightFollowsMinutes: true
+                    }
+                    property JsonObject clock_type_width: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                        property bool showBackground: true
+                        property bool textShadow: true
+                        property bool widthFollowsHour: true
+                        property bool showPartOfDay: true
+                    }
+                    property JsonObject clock_type_stack: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                        property bool showBackground: true
+                        property bool textShadow: true
+                        property bool heavyTop: true
+                    }
+                    property JsonObject clock_numeral: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                        property bool showBackground: true
+                        property bool textShadow: true
+                        property bool romanNumerals: false
+                        property bool showDate: true
+                    }
+                    property JsonObject clock_duo: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                        property bool showBackground: true
+                        property bool textShadow: true
+                        property bool wavyRing: true
+                        property bool showNumerals: true
+                    }
                     property JsonObject grid_card_clock: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free"
