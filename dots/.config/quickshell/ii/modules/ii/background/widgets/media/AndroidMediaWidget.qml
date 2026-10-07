@@ -168,7 +168,7 @@ AbstractBackgroundWidget {
     }
 
     Timer {
-        running: root.playing && root.visible
+        running: root.playing && root.live
         interval: 1000
         repeat: true
         onTriggered: if (root.player) root.player.positionChanged()

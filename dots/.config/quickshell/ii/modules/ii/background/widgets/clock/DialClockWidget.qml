@@ -32,6 +32,7 @@ AbstractBackgroundWidget {
 
         DialClock {
             anchors.fill: parent
+            live: root.live
         }
     }
 }

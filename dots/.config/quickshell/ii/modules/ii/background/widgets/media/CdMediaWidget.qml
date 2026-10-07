@@ -67,7 +67,7 @@ AbstractBackgroundWidget {
     }
 
     Timer {
-        running: root.isPlaying
+        running: root.isPlaying && root.live
         interval: 1000
         repeat: true
         onTriggered: {

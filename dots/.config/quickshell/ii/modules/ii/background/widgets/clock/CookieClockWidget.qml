@@ -31,7 +31,9 @@ AbstractBackgroundWidget {
         anchors.centerIn: parent
         spacing: 10
 
-        CookieClock {}
+        CookieClock {
+            live: root.live
+        }
 
         FadeLoader {
             anchors.horizontalCenter: parent.horizontalCenter

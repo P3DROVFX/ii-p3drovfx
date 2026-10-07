@@ -46,6 +46,8 @@ Item {
     required property real wallpaperScale
     required property bool wallpaperSafetyTriggered
     required property bool lockAnimationActive
+    // The desktop is covered: widgets hold their continuous updates (AbstractBackgroundWidget.live).
+    property bool widgetsPaused: false
     required property var widgetSizes
     required property int widgetSizesVersion
     required property int staggerDelay
@@ -1823,6 +1825,12 @@ Item {
     FadeLoader {
         id: widgetLoader
 
+        // Whether the widget takes `paused` (extension widgets may not). Read once per
+        // item: an `in` test inside the Binding's `when` would read the very property
+        // that Binding writes.
+        property bool takesPause: false
+        onItemChanged: takesPause = item !== null && ("paused" in item)
+
         // Which widgets are built at all. Off the lock that is everything but
         // the lock-only ones; on it - a real lock, or Edit Mode's Lockscreen
         // tab, which draws the same layout with no lock session behind it -
@@ -1853,6 +1861,13 @@ Item {
                 };
             }
             when: widgetLoader.status == Loader.Ready
+        }
+
+        Binding {
+            target: widgetLoader.item
+            property: "paused"
+            value: delegateRoot.widgetsPaused
+            when: widgetLoader.status == Loader.Ready && widgetLoader.takesPause
         }
 
         Binding {

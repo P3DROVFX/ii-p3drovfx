@@ -33,6 +33,14 @@ AbstractWidget {
     }
     readonly property bool interactionLocked: pinned || (_positionsLocked && !editModeActive)
     property bool isPreview: false
+    /**
+     * Set by the host while windows cover the desktop. Widgets must not keep the layer
+     * busy then: it is full screen, so any repeating Timer, seconds SystemClock, endless
+     * animation or FrameAnimation re-renders every widget on every frame.
+     * Gate each of those on `live` (tests/check-widget-live.sh enforces it).
+     */
+    property bool paused: false
+    readonly property bool live: !root.paused && root.visible && root.opacity > 0
     property string styleOverride: widgetInstance ? (WidgetsRegistry.getStyleOverride(widgetInstance.widgetId) || "") : ""
 
     property int screenWidth: 1920

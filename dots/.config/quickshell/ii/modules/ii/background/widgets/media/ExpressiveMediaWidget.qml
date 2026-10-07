@@ -196,7 +196,7 @@ AbstractBackgroundWidget {
     }
 
     Timer {
-        running: root.player?.playbackState == MprisPlaybackState.Playing
+        running: root.player?.playbackState == MprisPlaybackState.Playing && root.live
         interval: 500
         repeat: true
         onTriggered: root.player.positionChanged()
@@ -260,7 +260,7 @@ AbstractBackgroundWidget {
 
                         Timer {
                             id: rotationTimer
-                            running: root.player?.isPlaying && root.rotateAlbumArt
+                            running: root.player?.isPlaying && root.rotateAlbumArt && root.live
                             interval: 16  // ~60fps
                             repeat: true
                             onTriggered: albumArtItem._rotationAngle = (albumArtItem._rotationAngle + 0.6) % 360  // 360° in 10s

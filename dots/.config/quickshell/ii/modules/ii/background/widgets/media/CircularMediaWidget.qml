@@ -115,7 +115,7 @@ AbstractBackgroundWidget {
 
     // Trigger position updates for the progress bar
     Timer {
-        running: root.playing
+        running: root.playing && root.live
         interval: Config.options.resources.updateInterval ?? 1000
         repeat: true
         onTriggered: {

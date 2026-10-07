@@ -41,7 +41,7 @@ AbstractBackgroundWidget {
     // the second hand keeps its own clock — alive only while it is drawn.
     SystemClock {
         id: secondsClock
-        enabled: root.showSeconds && root.visible && root.opacity > 0
+        enabled: root.showSeconds && root.live
         precision: SystemClock.Seconds
     }
     readonly property var now: secondsClock.enabled ? secondsClock.date : DateTime.clock.date
@@ -121,15 +121,8 @@ AbstractBackgroundWidget {
                 visible: secondsClock.enabled
                 anchors.fill: parent
                 rotation: root.secondAngle
-                // Clockwise, or 59 → 0 would sweep back around the dial.
-                Behavior on rotation {
-                    RotationAnimation {
-                        direction: RotationAnimation.Clockwise
-                        duration: Appearance.animation.elementMoveFast.duration
-                        easing.type: Appearance.animation.elementMoveFast.type
-                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                    }
-                }
+                // Ticks like a quartz movement. A sweep animated every second kept this
+                // full-screen layer rendering ~12 frames a second; a tick is one.
 
                 Rectangle {
                     width: root.secondHandWidth

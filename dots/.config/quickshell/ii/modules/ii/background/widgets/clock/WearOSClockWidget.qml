@@ -52,8 +52,9 @@ AbstractBackgroundWidget {
     Timer {
         id: clockTimer
         interval: 1000
-        running: true
+        running: root.live
         repeat: true
+        triggeredOnStart: true
         onTriggered: {
             currentTime = new Date();
         }

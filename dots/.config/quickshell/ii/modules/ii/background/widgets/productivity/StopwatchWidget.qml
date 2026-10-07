@@ -31,7 +31,7 @@ ExpressiveCardWidget {
     Timer {
         interval: 100
         repeat: true
-        running: root.running && root.visible && root.opacity > 0
+        running: root.running && root.live
         onTriggered: root.shownTime = TimerService.stopwatchTime
     }
     Connections {

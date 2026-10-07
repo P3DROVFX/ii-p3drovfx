@@ -186,6 +186,66 @@ PanelWindow {
             return w.workspace.id === activeId;
         });
     }
+    // Widgets stop their clocks, repeating timers and endless animations while windows
+    // cover the desktop: this layer is full screen, so one ticking widget re-renders every
+    // widget on every frame for nobody to see. Never while the desktop itself is the point
+    // (lock screen, Edit Mode, overview). See AbstractBackgroundWidget.live.
+    readonly property bool widgetsPaused: hasWindowsInActiveWorkspace && !GlobalStates.screenLocked
+        && !GlobalStates.lockAnimationActive && !GlobalStates.editMode && !GlobalStates.overviewOpen
+
+    // Paused-render watchdog. A widget that keeps animating while paused (one that does
+    // not gate on `live`, or a shared component inside it that animates on its own) shows
+    // up as frames this layer keeps swapping with nothing new to show. Counted only while
+    // paused and once the pause has settled; a burst (a cover crossfade, a weather update)
+    // stays under it, three busy 5 s windows in a row do not. One warning per pause.
+    property int _pausedFrames: 0
+    property int _busyPausedWindows: 0
+    property bool _pauseSettled: false
+    property bool _pauseWarned: false
+    onWidgetsPausedChanged: {
+        bgWidgetsWindow._pausedFrames = 0;
+        bgWidgetsWindow._busyPausedWindows = 0;
+        bgWidgetsWindow._pauseSettled = false;
+        bgWidgetsWindow._pauseWarned = false;
+        pausedFrameWindow.stop();
+        if (bgWidgetsWindow.widgetsPaused)
+            pauseSettleTimer.restart();
+        else
+            pauseSettleTimer.stop();
+    }
+    Timer {
+        id: pauseSettleTimer
+        interval: 2000
+        onTriggered: {
+            bgWidgetsWindow._pausedFrames = 0;
+            bgWidgetsWindow._pauseSettled = true;
+            pausedFrameWindow.restart();
+        }
+    }
+    Timer {
+        id: pausedFrameWindow
+        interval: 5000
+        repeat: true
+        onTriggered: {
+            const frames = bgWidgetsWindow._pausedFrames;
+            bgWidgetsWindow._pausedFrames = 0;
+            bgWidgetsWindow._busyPausedWindows = frames > 10 ? bgWidgetsWindow._busyPausedWindows + 1 : 0;
+            if (bgWidgetsWindow._busyPausedWindows < 3)
+                return;
+            bgWidgetsWindow._pauseWarned = true;
+            stop();
+            console.warn("[BackgroundWidgets] The widget layer on", bgWidgetsWindow.screen?.name ?? "?",
+                "kept rendering while paused (" + frames + " frames in the last 5 s): a desktop widget animates without",
+                "gating on `live`. Remove widgets one by one to find it; see tests/background/widget_live.test.cjs.");
+        }
+    }
+    Connections {
+        target: transformContainer.Window.window
+        enabled: bgWidgetsWindow._pauseSettled && !bgWidgetsWindow._pauseWarned
+        function onFrameSwapped() {
+            bgWidgetsWindow._pausedFrames++;
+        }
+    }
     property bool deferredFullscreen: false
     Timer {
         id: fullscreenDeferTimer
@@ -883,6 +943,7 @@ PanelWindow {
                     wallpaperScale: lockAnim.effectiveWallpaperScale
                     wallpaperSafetyTriggered: bgWidgetsWindow.wallpaperSafetyTriggered
                     lockAnimationActive: lockAnim.lockAnimationActive
+                    widgetsPaused: bgWidgetsWindow.widgetsPaused
                 }
             }
         }

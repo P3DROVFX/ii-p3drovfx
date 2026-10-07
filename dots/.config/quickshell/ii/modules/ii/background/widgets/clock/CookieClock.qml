@@ -34,10 +34,14 @@ Item {
 
     readonly property bool secondHandVisible: Config.options.background.widgets.clock_cookie.secondHandStyle !== "hide"
 
+    /** Set by the widget hosting this dial: false while the desktop is covered. */
+    property bool live: true
+
     Timer {
-        running: root.secondHandVisible && !Config.options.time.secondPrecision
+        running: root.secondHandVisible && !Config.options.time.secondPrecision && root.live
         repeat: true
         interval: 1000
+        triggeredOnStart: true
         onTriggered: root.clockSecond = new Date().getSeconds()
     }
 
@@ -94,7 +98,7 @@ Item {
         anchors.fill: parent
 
         RotationAnimation on rotation {
-            running: Config.options.background.widgets.clock_cookie.constantlyRotate
+            running: Config.options.background.widgets.clock_cookie.constantlyRotate && root.live
             duration: 30000
             easing.type: Easing.Linear
             loops: Animation.Infinite
