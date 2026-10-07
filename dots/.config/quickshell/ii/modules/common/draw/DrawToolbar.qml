@@ -273,13 +273,28 @@ Rectangle {
                 }
             }
 
-            Row {
+            // Centred on the digit's ink, not its text box: a box makes room for
+            // descenders digits never have, so a box-centred number sat high.
+            Item {
+                id: widthValue
                 visible: !root.dense
                 Layout.alignment: Qt.AlignVCenter
-                spacing: 2
+                implicitWidth: digits.width + 2 + unit.implicitWidth
+                implicitHeight: root.target
+
+                readonly property rect glyph: digitMetrics.tightBoundingRect("0")
+
+                FontMetrics {
+                    id: digitMetrics
+                    font: digits.font
+                }
 
                 StyledText {
-                    anchors.baseline: unit.baseline
+                    id: digits
+                    // Baseline placed so the glyph's own middle lands on the row's.
+                    anchors.baseline: parent.top
+                    anchors.baselineOffset: Math.round(widthValue.height / 2
+                        - (widthValue.glyph.y + widthValue.glyph.height / 2))
                     text: Math.round(root.strokeWidth)
                     color: root.eraser ? Appearance.colors.colOnSurfaceVariant : Appearance.colors.colOnSurface
                     font.family: Appearance.font.family.main
@@ -292,6 +307,9 @@ Rectangle {
 
                 StyledText {
                     id: unit
+                    anchors.left: digits.right
+                    anchors.leftMargin: 2
+                    anchors.baseline: digits.baseline
                     text: "PX"
                     color: Appearance.colors.colOnSurfaceVariant
                     font.pixelSize: Appearance.font.pixelSize.smallest
