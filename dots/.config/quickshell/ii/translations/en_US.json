@@ -14097,5 +14097,21 @@
     "Tall 1x2 player covered by the album art: a wide expressive title on top and the controls on a blurred band at the bottom.": "Tall 1x2 player covered by the album art: a wide expressive title on top and the controls on a blurred band at the bottom.",
     "Control band blur": "Control band blur",
     "Artist chip": "Artist chip",
-    "Set the artist on a filled chip under the title instead of plain text.": "Set the artist on a filled chip under the title instead of plain text."
+    "Set the artist on a filled chip under the title instead of plain text.": "Set the artist on a filled chip under the title instead of plain text.",
+    "CPU temp": "CPU temp",
+    "GPU temp": "GPU temp",
+    "%1 °C": "%1 °C",
+    "%1 / %2 GB": "%1 / %2 GB",
+    "Resource Styles Options": "Resource Styles Options",
+    "Resource Columns": "Resource Columns",
+    "Resource Tiles": "Resource Tiles",
+    "Name each metric under its figure.": "Name each metric under its figure.",
+    "Ornament": "Ornament",
+    "Park each metric's shape, large and faint, in the corner of its tile.": "Park each metric's shape, large and faint, in the corner of its tile.",
+    "Show a second line such as used and total memory, or the temperature.": "Show a second line such as used and total memory, or the temperature.",
+    "Shown resources": "Shown resources",
+    "Move earlier": "Move earlier",
+    "Move later": "Move later",
+    "Pill bars that fill with each picked metric, its shape riding the fill. Two bars per grid cell, horizontal or vertical.": "Pill bars that fill with each picked metric, its shape riding the fill. Two bars per grid cell, horizontal or vertical.",
+    "One expressive 1x1 tile per picked metric with tall digits, a load-shaped badge and a wavy line, in a row or a column.": "One expressive 1x1 tile per picked metric with tall digits, a load-shaped badge and a wavy line, in a row or a column."
 }

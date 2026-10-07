@@ -813,6 +813,24 @@ Singleton {
             "configPage": "widgets/DesktopDiskPillConfig.qml"
         },
         {
+            "widgetId": "resource_columns",
+            "name": Translation.tr("Resource Columns"),
+            "category": "Resources",
+            "qmlPath": Qt.resolvedUrl("utility/ResourceColumnsWidget.qml"),
+            "icon": "bar_chart",
+            "description": Translation.tr("Pill bars that fill with each picked metric, its shape riding the fill. Two bars per grid cell, horizontal or vertical."),
+            "configPage": "widgets/DesktopResourceStylesConfig.qml"
+        },
+        {
+            "widgetId": "resource_tiles",
+            "name": Translation.tr("Resource Tiles"),
+            "category": "Resources",
+            "qmlPath": Qt.resolvedUrl("utility/ResourceTilesWidget.qml"),
+            "icon": "grid_view",
+            "description": Translation.tr("One expressive 1x1 tile per picked metric with tall digits, a load-shaped badge and a wavy line, in a row or a column."),
+            "configPage": "widgets/DesktopResourceStylesConfig.qml"
+        },
+        {
             "widgetId": "resource_fill_cards",
             "name": Translation.tr("Resource Fill Cards"),
             "category": "Resources",

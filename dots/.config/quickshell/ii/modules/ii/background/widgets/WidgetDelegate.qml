@@ -141,6 +141,8 @@ Item {
         "resource_ram_pill": component_resource_ram_pill,
         "resource_disk_pill": component_resource_disk_pill,
         "resource_fill_cards": component_resource_fill_cards,
+        "resource_columns": component_resource_columns,
+        "resource_tiles": component_resource_tiles,
         "resource_nothing_disk": component_resource_nothing_disk,
         "resource_nothing_cpu": component_resource_nothing_cpu,
         "resource_nothing_ram": component_resource_nothing_ram
@@ -1337,6 +1339,32 @@ Item {
         id: component_resource_disk_pill
 
         DiskPillWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_resource_columns
+
+        ResourceColumnsWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_resource_tiles
+
+        ResourceTilesWidget {
             screenWidth: delegateRoot.screenWidth
             screenHeight: delegateRoot.screenHeight
             scaledScreenWidth: delegateRoot.screenWidth

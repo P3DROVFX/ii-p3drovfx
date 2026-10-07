@@ -3732,6 +3732,27 @@ Singleton {
                         property string aspectRatio: "2x0.5"
                         property bool showDetails: true
                     }
+                    property JsonObject resource_columns: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 100
+                        property int widgetSize: 100
+                        property string orientation: "horizontal"
+                        property list<string> items: ["cpu", "ram", "disk"]
+                        property bool showLabels: true
+                    }
+                    property JsonObject resource_tiles: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 100
+                        property int widgetSize: 100
+                        property string orientation: "horizontal"
+                        property list<string> items: ["cpu", "ram", "disk"]
+                        property bool showOrnament: true
+                        property bool showDetail: true
+                    }
                     property JsonObject resource_fill_cards: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free"

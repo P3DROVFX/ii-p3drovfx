@@ -492,7 +492,7 @@ AbstractWidget {
         "grid_card_clock": true, "media_cd": true, "media_cover": true, "media_deck": true,
         "media_halo": true, "media_poster": true, "month_clock": true,
         "photo_1x1": true, "resource_cpu_pill": true, "resource_disk_pill": true,
-        "resource_fill_cards": true, "resource_nothing_cpu": true,
+        "resource_columns": true, "resource_fill_cards": true, "resource_tiles": true, "resource_nothing_cpu": true,
         "resource_nothing_disk": true, "resource_nothing_ram": true,
         "resource_ram_pill": true, "scallop_dot_clock": true,
         "scallop_number_clock": true, "search_pill": true,
