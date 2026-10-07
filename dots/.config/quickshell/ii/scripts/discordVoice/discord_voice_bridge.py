@@ -13,7 +13,6 @@ import os
 import stat
 import struct
 import sys
-import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -317,6 +316,9 @@ class Bridge:
 
     @staticmethod
     def exchange(code: str) -> str:
+        # Imported here: urllib pulls in http/ssl (~2.4 MB) for a call made once per
+        # authorization, while the bridge itself lives as long as Discord does.
+        import urllib.request
         request = urllib.request.Request(TOKEN_URL,
             data=json.dumps({"code": code}).encode(),
             headers={"Content-Type": "application/json", "User-Agent": "quickshell-ii/DiscordVoice"},

@@ -31,6 +31,32 @@ Singleton {
     readonly property bool inVoice: channel !== null
     readonly property int maxRestartAttempts: 5
 
+    /**
+     * Stopped because Discord is gone, not because it failed. The bridge reports
+     * "unavailable" while neither the RPC socket nor the Vesktop companion answers;
+     * after a minute of that it is stopped instead of reconnecting every 3 s for the
+     * rest of the session. A Discord window coming back (or any voice command, see
+     * send()) starts it again. A client in the tray keeps its RPC socket, so a call
+     * never loses its bridge.
+     */
+    property bool parked: false
+
+    /**
+     * Vesktop, Equibop and Vencord-patched Discord route voice through arRPC, which
+     * connects but never authorizes voice: on those clients only the iiDiscordVoice
+     * companion plugin makes the bridge useful. Without it the bridge is not started
+     * at all (the overlay offers the install), instead of idling on an RPC socket that
+     * cannot answer. `recheck()` runs again after a successful install.
+     */
+    property bool isVencordClient: false
+    property bool companionInstalled: false
+    readonly property bool companionMissing: isVencordClient && !companionInstalled
+    function recheck() { clientCheck.running = true; }
+    readonly property bool discordWindowOpen: root.parked
+        && (HyprlandData.windowList ?? []).some(client =>
+            GlobalStates._discordClasses.indexOf(String(client?.class ?? "").toLowerCase()) !== -1)
+    onDiscordWindowOpenChanged: if (root.discordWindowOpen) root.start(true)
+
     ListModel {
         id: participantsModel
         dynamicRoles: true
@@ -93,6 +119,7 @@ Singleton {
 
     function start(manual) {
         if (bridge.running) return;
+        parked = false;
         if (manual) restartAttempts = 0;
         status = "starting";
         bridge.running = true;
@@ -111,7 +138,7 @@ Singleton {
         switch (message.type) {
         case "ready": connect(); break;
         case "backend": backend = message.backend || ""; break;
-        case "connected": status = "connected"; reconnectTimer.stop(); break;
+        case "connected": status = "connected"; reconnectTimer.stop(); parkTimer.stop(); break;
         case "auth_required": status = "auth_required"; break;
         case "authorizing":
             status = "authorizing";
@@ -130,7 +157,14 @@ Singleton {
             muted = message.mute === true;
             deafened = message.deaf === true;
             break;
-        case "unavailable": status = "unavailable"; errorMessage = message.message || ""; reconnectTimer.restart(); break;
+        case "unavailable":
+            status = "unavailable";
+            errorMessage = message.message || "";
+            reconnectTimer.restart();
+            // Repeated every reconnect: only the first one starts the countdown.
+            if (!parkTimer.running)
+                parkTimer.start();
+            break;
         // The companion is one of two backends. Its failure leaves Discord's
         // own RPC usable, so this reports the reason without moving `status`
         // into an authorization state the user cannot act on.
@@ -143,7 +177,53 @@ Singleton {
         }
     }
 
-    Component.onCompleted: start(false)
+    Component.onCompleted: clientCheck.running = true
+
+    Process {
+        id: clientCheck
+        // A leftover ~/.config/vesktop or ~/.config/equibop dir (e.g. from a theme
+        // installer) without the client itself must not count, hence has_profile.
+        // The companion counts once a client loads it, see companion_check.py.
+        command: ["bash", "-c", `
+            has_profile() {
+                [ -d "$1/Local Storage" ] || [ -d "$1/Session Storage" ] || [ -d "$1/Cache" ]
+            }
+            if { [ -f ~/.config/Vencord/dist/patcher.js ] \\
+                    && { command -v discord >/dev/null 2>&1 || has_profile ~/.config/discord; }; } \\
+                || command -v vesktop >/dev/null 2>&1 \\
+                || { [ -d ~/.config/vesktop ] && has_profile ~/.config/vesktop; } \\
+                || command -v equibop >/dev/null 2>&1 \\
+                || { [ -d ~/.config/equibop ] && has_profile ~/.config/equibop; }; then
+                echo vencord
+            fi
+            python3 -I "${Directories.scriptPath}/discordVoice/companion_check.py"
+        `]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const lines = text.trim().split("\n");
+                root.isVencordClient = lines.includes("vencord");
+                root.companionInstalled = lines.includes("companion");
+                if (!root.companionMissing) {
+                    root.start(false);
+                } else if (!bridge.running) {
+                    root.status = "auth_required";
+                    root.errorMessage = "Vesktop/Vencord users must install and enable the II Discord Voice companion.";
+                }
+            }
+        }
+    }
+
+    Timer {
+        id: parkTimer
+        interval: 60000
+        onTriggered: {
+            if (root.status !== "unavailable")
+                return;
+            root.parked = true;
+            reconnectTimer.stop();
+            bridge.running = false;
+        }
+    }
 
     Timer {
         id: restartTimer
@@ -177,6 +257,8 @@ Singleton {
         onExited: (code, status) => {
             root.channel = null;
             root.updateParticipants([]);
+            if (root.parked)
+                return;
             if (root.restartAttempts >= root.maxRestartAttempts) {
                 root.status = "stopped";
                 root.errorMessage = "Discord bridge stopped after repeated failures";

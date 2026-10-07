@@ -23,40 +23,8 @@ Rectangle {
     readonly property bool gridMode: layoutMode === "grid"
     property bool namesOnLeft: false
     readonly property bool companionReady: DiscordVoice.backend === "vencord"
-    property bool isVencordClient: false
-
-    Process {
-        id: companionCheck
-        // Mirrors install.sh's own client detection: a leftover ~/.config/vesktop
-        // or ~/.config/equibop dir (e.g. from a theme installer) without the
-        // client itself would otherwise false-positive here. A standalone
-        // Vencord-on-Discord install also needs the companion, so it counts too.
-        command: ["bash", "-c", `
-            has_profile() {
-                [ -d "$1/Local Storage" ] || [ -d "$1/Session Storage" ] || [ -d "$1/Cache" ]
-            }
-            has_vencord_patch=0
-            [ -f ~/.config/Vencord/dist/patcher.js ] && has_vencord_patch=1
-            if [ "$has_vencord_patch" = 1 ] \\
-                && { command -v discord >/dev/null 2>&1 || has_profile ~/.config/discord; }; then
-                echo found; exit 0
-            fi
-            if command -v vesktop >/dev/null 2>&1 \\
-                || { [ -d ~/.config/vesktop ] && has_profile ~/.config/vesktop; }; then
-                echo found; exit 0
-            fi
-            if command -v equibop >/dev/null 2>&1 \\
-                || { [ -d ~/.config/equibop ] && has_profile ~/.config/equibop; }; then
-                echo found; exit 0
-            fi
-        `]
-        running: true
-        stdout: StdioCollector {
-            onStreamFinished: {
-                root.isVencordClient = (text.trim() !== "")
-            }
-        }
-    }
+    // Detected by the service, which also decides whether the bridge runs at all.
+    readonly property bool isVencordClient: DiscordVoice.isVencordClient
 
     readonly property real maxContentWidth: 720
     readonly property int visibleParticipants: Math.min(avatarLimit, DiscordVoice.participantCount)
@@ -124,6 +92,7 @@ Rectangle {
         onExited: (code, status) => {
             if (code === 0) {
                 root.installMessage = "Installed! Restart your Discord client.";
+                DiscordVoice.recheck();
             } else if (!root.installMessage) {
                 root.installMessage = "Failed (exit code " + code + ")";
             }
