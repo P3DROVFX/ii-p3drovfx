@@ -12,6 +12,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Qt.labs.synchronizer
 import QtQuick.Shapes
+import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -1510,22 +1511,20 @@ PanelWindow {
                     var ctx = getContext("2d");
                     ctx.clearRect(0, 0, width, height);
 
+                    // Pixelation only. The blur is a real Gaussian blur (gaussBlur
+                    // below): upscaling the same downscaled image with smoothing on was
+                    // supposed to blur, but a Canvas ignores the hint and the result was
+                    // a second pixelation.
                     var pixelateAnns = [];
-                    var gaussAnns = [];
                     for (var i = 0; i < root.annotations.length; i++) {
-                        var t = root.annotations[i].type;
-                        if (t === "blur")
+                        if (root.annotations[i].type === "blur")
                             pixelateAnns.push(root.annotations[i]);
-                        else if (t === "gaussblur")
-                            gaussAnns.push(root.annotations[i]);
                     }
                     var temp = drawingArea.tempAnnotation;
                     if (temp && temp.type === "blur")
                         pixelateAnns.push(temp);
-                    else if (temp && temp.type === "gaussblur")
-                        gaussAnns.push(temp);
 
-                    if (pixelateAnns.length === 0 && gaussAnns.length === 0)
+                    if (pixelateAnns.length === 0)
                         return;
 
                     // Downscaled screenshot region, shared by both groups.
@@ -1534,7 +1533,6 @@ PanelWindow {
                     smallCtx.drawImage(editorImage, root.editorRegionX, root.editorRegionY, width, height, 0, 0, smallCanvas.width, smallCanvas.height);
 
                     paintMaskedGroup(pixelateAnns, false);
-                    paintMaskedGroup(gaussAnns, true);
                 }
                 Connections {
                     target: root
@@ -1557,6 +1555,92 @@ PanelWindow {
                     }
                 }
             }
+            // --- Gaussian blur ---
+            // The screenshot blurred for real (MultiEffect, on the GPU) and shown only
+            // under the blur strokes, which are drawn white into a mask. A binary mask
+            // is exactly what MultiEffect's thresholded mask is good at. Built only
+            // while there is a blur stroke; the strength chips set the radius.
+            readonly property var gaussAnns: {
+                var list = [];
+                for (var i = 0; i < root.annotations.length; i++) {
+                    if (root.annotations[i].type === "gaussblur")
+                        list.push(root.annotations[i]);
+                }
+                var temp = drawingArea.tempAnnotation;
+                if (temp && temp.type === "gaussblur")
+                    list.push(temp);
+                return list;
+            }
+
+            Loader {
+                id: gaussBlur
+                anchors.fill: parent
+                z: 1
+                active: root.inlineEditorActive && editorContent.gaussAnns.length > 0
+
+                sourceComponent: Item {
+                    // Sampled with a margin of the screenshot all round: a blur reads
+                    // the pixels around each one, and at the region's edge those would
+                    // otherwise be transparent, darkening the blur where it meets it.
+                    readonly property real pad: 64
+
+                    // The mask: every blur stroke, white, in editor coordinates.
+                    Item {
+                        id: blurMask
+                        x: -parent.pad
+                        y: -parent.pad
+                        width: editorContent.width + parent.pad * 2
+                        height: editorContent.height + parent.pad * 2
+                        layer.enabled: true
+                        visible: false
+
+                        Item {
+                            x: blurMask.parent.pad
+                            y: blurMask.parent.pad
+                            width: editorContent.width
+                            height: editorContent.height
+
+                            Repeater {
+                                model: editorContent.gaussAnns
+                                delegate: PencilAnnotationComponent {
+                                    required property var modelData
+                                    annData: modelData
+                                    canvasWidth: editorContent.width
+                                    canvasHeight: editorContent.height
+                                }
+                            }
+                        }
+                    }
+
+                    // The part of the screenshot the editor shows, and the margin.
+                    ShaderEffectSource {
+                        id: regionSource
+                        width: blurMask.width
+                        height: blurMask.height
+                        sourceItem: editorImage
+                        sourceRect: Qt.rect(root.editorRegionX - parent.pad, root.editorRegionY - parent.pad,
+                                            blurMask.width, blurMask.height)
+                        visible: false
+                    }
+
+                    MultiEffect {
+                        x: blurMask.x
+                        y: blurMask.y
+                        width: blurMask.width
+                        height: blurMask.height
+                        source: regionSource
+                        blurEnabled: true
+                        blur: 1.0
+                        blurMax: 64
+                        // 12 / 24 / 48 on the strength chips: soft, medium, heavy.
+                        blurMultiplier: Math.max(0.25, root.blurStrength / 24)
+                        autoPaddingEnabled: false
+                        maskEnabled: true
+                        maskSource: blurMask
+                    }
+                }
+            }
+
             // ----------------------------------------
 
             // Drawing area

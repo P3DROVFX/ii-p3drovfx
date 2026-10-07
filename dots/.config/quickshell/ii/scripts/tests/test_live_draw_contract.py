@@ -184,6 +184,13 @@ class ScreenshotEditorTests(unittest.TestCase):
         for tool in ('"eraser"', '"ellipse"'):
             self.assertIn(tool, toolbar)
 
+    def test_blur_is_a_real_blur(self):
+        # Upscaling the pixelation's downscaled image "with smoothing" pixelated too.
+        sel = read("modules/ii/regionSelector/RegionSelection.qml")
+        self.assertIn("MultiEffect {", sel)
+        self.assertIn("maskSource: blurMask", sel)
+        self.assertNotIn("paintMaskedGroup(gaussAnns, true)", sel)
+
     def test_highlighter_under_the_marks(self):
         self.assertIn('z: modelData.type === "highlighter" ? 0 : 0.5', read("modules/ii/regionSelector/RegionSelection.qml"))
 

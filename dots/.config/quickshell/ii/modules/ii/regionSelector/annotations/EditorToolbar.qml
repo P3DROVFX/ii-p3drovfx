@@ -218,7 +218,7 @@ Toolbar {
             open: editor.currentTool === "blur" || editor.currentTool === "gaussblur"
 
             Repeater {
-                // [divisor, block size] — bigger divisor = chunkier pixelation
+                // [strength, dot size] — bigger = chunkier pixelation, wider blur
                 model: [[12, 5], [24, 9], [48, 14]]
 
                 delegate: OptionButton {
