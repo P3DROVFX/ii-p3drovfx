@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Effects
 import Qt5Compat.GraphicalEffects
+import Quickshell.Services.Mpris
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
@@ -8,7 +9,8 @@ import qs.services
 
 // Focused five-row lyrics presentation used exclusively by the background Media Mode.
 // Blur follows physical distance from the viewport center, keeping retargets coherent.
-// Row motion mirrors PixelPlayer: timed FastOutSlowIn scroll plus cubic parallax.
+// Row motion follows PixelPlayer's animated lyrics: cubic parallax, and a verse change
+// that ripples through the rows as a slow chain with a soft bounce.
 Item {
     id: root
 
@@ -40,16 +42,19 @@ Item {
     property real rowOpacityFalloff: 0.34
     // Top/bottom fade: how much of the viewport each edge dissolves over.
     property real edgeFadeFraction: 0.16
-    property int activeRowTransitionDuration: rowTransitionDuration
     property real focusReveal: hasCurrentLine ? 1 : 0
-    property real waveProgress: 1
-    property int waveTargetIndex: -1
-    property int lastWaveIndex: -1
-    property int waveAnimationDuration: 700
-    property real waveDurationMultiplier: 1.2
-    property real waveMagnificationStrength: 0.022
-    property real waveBandWidth: 0.065
-    property real waveColorStrength: 0.08
+    // Verse change: every row travels its own offset back to rest, starting a
+    // little after the row before it (the chain), and settles with a soft overshoot.
+    property int chainStaggerMs: 80
+    property int chainMaximumRank: 6
+    property int chainMinimumDuration: 900
+    property int chainMaximumDuration: 1800
+    property real chainDurationFactor: 1.15
+    // Ease in and out, almost linear in between. The second control point sits a
+    // little above 1, which is the whole bounce: the row overshoots, then settles.
+    property real bounceLevel: 1.08
+    // Words not yet sung keep this share of the line colour.
+    property real unsungWordOpacity: 0.38
 
     readonly property int halfVisibleLines: 2
     readonly property int visibleLineCount: halfVisibleLines * 2 + 1
@@ -86,14 +91,205 @@ Item {
         return gaps[Math.floor(gaps.length / 2)];
     }
     readonly property real parallaxMaximum: Appearance.font.pixelSize.hugeass * 1.75
-    readonly property real waveLift: Appearance.font.pixelSize.normal * 0.075
-    readonly property bool waveRunning: waveAnimation.running
+    // Verse-change state shared with the rows. chainDelta is the distance the
+    // list jumped (rows start displaced by it); chainActive covers rows that are
+    // created while the ripple is still travelling.
+    property real chainDelta: 0
+    property int chainDirection: 1
+    property bool chainActive: false
+    property double chainStartMs: 0
+    property int chainDuration: chainMinimumDuration
+    signal chainStarted()
+    signal chainCancelled()
     readonly property int blurMaximum: Math.max(2, Math.ceil(farBlurRadius))
     readonly property color focusedTextColor: ColorUtils.mix(
         root.textColor,
         activeColor,
         0.82
     )
+
+    readonly property var currentLineData: hasCurrentLine && LyricsService.syncedLines[currentIndex]
+        ? LyricsService.syncedLines[currentIndex] : null
+    readonly property var nextLineData: (hasCurrentLine && currentIndex + 1 < LyricsService.syncedLines.length)
+        ? LyricsService.syncedLines[currentIndex + 1] : null
+    readonly property var currentWordRanges: {
+        if (!hasCurrentLine || !currentLineData)
+            return [];
+        return root.computeWordRanges(
+            currentLineData.text,
+            currentLineData.words,
+            currentLineData.time,
+            currentLineData.endTime,
+            nextLineData?.time
+        );
+    }
+    readonly property bool currentLineHasWords: Boolean(currentWordRanges && currentWordRanges.length > 0)
+    // Rich text for the line being sung. Words flip colour as they are reached, so
+    // the string only changes at word boundaries (and a few steps within a word).
+    readonly property string currentLineHtml: currentLineHasWords
+        ? root.karaokeHtml(currentLineData.text, currentWordRanges, LyricsService.syncPosition)
+        : ""
+
+    function computeWordRanges(lineText, words, lineStartTime, lineEndTime, nextLineStartTime) {
+        if (!lineText || !lineText.trim())
+            return [];
+
+        const totalChars = lineText.length;
+        if (totalChars === 0)
+            return [];
+
+        // 1. If explicit word/syllable timestamps exist (e.g. BetterLyrics syllable TTML):
+        if (words && words.length > 0) {
+            const ranges = [];
+            let searchPos = 0;
+
+            for (let i = 0; i < words.length; i++) {
+                const w = words[i];
+                const wText = (w.text || "").trim();
+                if (!wText)
+                    continue;
+
+                let idx = lineText.indexOf(wText, searchPos);
+                if (idx === -1) {
+                    idx = lineText.indexOf(wText);
+                }
+
+                const begin = w.begin !== undefined ? w.begin : (w.startTime || 0);
+                const end = w.end !== undefined ? w.end : (w.endTime || begin + 0.3);
+
+                if (idx !== -1) {
+                    const startFrac = idx / totalChars;
+                    const endFrac = (idx + wText.length) / totalChars;
+                    ranges.push({
+                        begin: begin,
+                        end: end,
+                        startFrac: startFrac,
+                        endFrac: endFrac
+                    });
+                    searchPos = idx + wText.length;
+                } else {
+                    const prevEnd = ranges.length > 0 ? ranges[ranges.length - 1].endFrac : 0;
+                    const remainingWords = words.length - i;
+                    const step = (1.0 - prevEnd) / remainingWords;
+                    ranges.push({
+                        begin: begin,
+                        end: end,
+                        startFrac: prevEnd,
+                        endFrac: prevEnd + step
+                    });
+                    searchPos = Math.round((prevEnd + step) * totalChars);
+                }
+            }
+
+            if (ranges.length > 0)
+                return ranges;
+        }
+
+        // 2. Synthesize word ranges from line timing (for line-synced lyrics from LRCLib or line-only TTML)
+        const lineStart = (lineStartTime !== undefined && !isNaN(lineStartTime)) ? lineStartTime : 0;
+        let lineEnd = (lineEndTime !== undefined && !isNaN(lineEndTime) && lineEndTime > lineStart) ? lineEndTime : 0;
+
+        if (lineEnd <= lineStart) {
+            if (nextLineStartTime !== undefined && !isNaN(nextLineStartTime) && nextLineStartTime > lineStart) {
+                const gap = nextLineStartTime - lineStart;
+                lineEnd = lineStart + Math.max(0.6, Math.min(gap * 0.85, gap - 0.25));
+            } else {
+                lineEnd = lineStart + Math.max(2.5, lineText.length * 0.16);
+            }
+        }
+
+        const lineDuration = Math.max(0.4, lineEnd - lineStart);
+        const ranges = [];
+        const wordRegex = /\S+/g;
+        const matches = [];
+        let totalWordChars = 0;
+        let m;
+        while ((m = wordRegex.exec(lineText)) !== null) {
+            matches.push({ text: m[0], index: m.index });
+            totalWordChars += m[0].length;
+        }
+
+        if (matches.length > 0 && totalWordChars > 0) {
+            let currentOffset = lineStart;
+            for (let i = 0; i < matches.length; i++) {
+                const wordMatch = matches[i];
+                const charShare = wordMatch.text.length / totalWordChars;
+                const wordDur = lineDuration * charShare;
+                const bTime = currentOffset;
+                const eTime = (i === matches.length - 1) ? lineEnd : (bTime + wordDur);
+                ranges.push({
+                    begin: bTime,
+                    end: eTime,
+                    startFrac: wordMatch.index / totalChars,
+                    endFrac: (wordMatch.index + wordMatch.text.length) / totalChars
+                });
+                currentOffset = eTime;
+            }
+        }
+
+        return ranges;
+    }
+
+    function colorHex(c) {
+        const q = Qt.color(c);
+        const h = v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, "0");
+        return "#" + h(q.a) + h(q.r) + h(q.g) + h(q.b);
+    }
+
+    function escapeHtml(text) {
+        return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    function karaokeHtml(lineText, wordRanges, pos) {
+        const total = lineText.length;
+        const steps = 6;
+        const base = root.focusedTextColor;
+        let html = "";
+        let cursor = 0;
+
+        for (let i = 0; i < wordRanges.length; i++) {
+            const r = wordRanges[i];
+            const start = Math.max(cursor, Math.round(r.startFrac * total));
+            const end = Math.max(start, Math.min(total, Math.round(r.endFrac * total)));
+
+            if (start > cursor)
+                html += root.escapeHtml(lineText.slice(cursor, start));
+
+            const span = Math.max(0.001, r.end - r.begin);
+            const progress = Math.max(0, Math.min(1, (pos - r.begin) / span));
+            const level = Math.round(progress * steps) / steps;
+            const color = root.colorHex(Qt.rgba(base.r, base.g, base.b,
+                root.unsungWordOpacity + (1 - root.unsungWordOpacity) * level));
+
+            html += "<font color=\"" + color + "\">"
+                + root.escapeHtml(lineText.slice(start, end)) + "</font>";
+            cursor = end;
+        }
+
+        if (cursor < total)
+            html += "<font color=\"" + root.colorHex(base) + "\">"
+                + root.escapeHtml(lineText.slice(cursor)) + "</font>";
+
+        return html;
+    }
+
+    // High-frequency position ticker for fluid word-by-word swipe synchronization.
+    // Only ticks while media is playing and the current line has word timestamps.
+    Timer {
+        id: karaokePositionTimer
+        interval: 50
+        repeat: true
+        running: Boolean(((root.player?.isPlaying ?? LyricsService.activePlayer?.isPlaying)
+                || ((root.player ?? LyricsService.activePlayer)?.playbackState == MprisPlaybackState.Playing))
+            && root.hasCurrentLine
+            && root.currentLineHasWords)
+        onTriggered: {
+            const p = root.player ?? LyricsService.activePlayer;
+            if (p) {
+                p.positionChanged();
+            }
+        }
+    }
 
     function blurForDistance(distanceInRows) {
         const distance = Math.max(0, distanceInRows);
@@ -138,26 +334,6 @@ Item {
         );
     }
 
-    function effectiveTransitionDuration(baseDuration) {
-        if (root.rowTransitionDuration <= 0 || Appearance.animMultiplier <= 0)
-            return 0;
-
-        return Math.round(Math.max(
-            root.minimumRowTransitionDuration,
-            Math.min(root.rowTransitionDuration, baseDuration * Appearance.animMultiplier)
-        ));
-    }
-
-    function textDirection(text) {
-        const firstStrong = String(text ?? "").match(
-            /[A-Za-z\u00c0-\u052f\u0590-\u08ff\ufb1d-\ufdff\ufe70-\ufefc]/
-        );
-        if (!firstStrong)
-            return 1;
-        return /[\u0590-\u08ff\ufb1d-\ufdff\ufe70-\ufefc]/.test(firstStrong[0])
-            ? -1 : 1;
-    }
-
     // Smootherstep. The centre line snaps into focus rather than crossing it
     // linearly, which is what reads as impact during the row change.
     function focusEasing(linearFocus) {
@@ -165,82 +341,54 @@ Item {
         return t * t * t * (t * (t * 6 - 15) + 10);
     }
 
-    function cancelMagnificationWave() {
-        waveAnimation.stop();
-        root.waveProgress = 1;
-        root.waveTargetIndex = -1;
+    // The list jumps to the new line at once and each row carries the distance it
+    // would have scrolled as an offset of its own. Rows then release that offset
+    // one after another (see chainAnimation in the delegate), which is what turns
+    // the scroll into a wave with a soft bounce.
+    function startRowChain(deltaY) {
+        const limit = root.rowHeight * root.halfVisibleLines;
+        root.chainDelta = Math.max(-limit, Math.min(limit, deltaY));
+        root.chainDirection = deltaY >= 0 ? 1 : -1;
+        root.chainDuration = Math.round(Math.max(
+            root.chainMinimumDuration,
+            Math.min(root.chainMaximumDuration,
+                root.transitionDurationForIndex(root.currentIndex) * root.chainDurationFactor)
+        ) * Appearance.animMultiplier);
+        root.chainStartMs = Date.now();
+        root.chainActive = true;
+        chainSettleTimer.interval = root.chainDuration
+            + root.chainMaximumRank * root.chainStaggerMs * Appearance.animMultiplier + 80;
+        chainSettleTimer.restart();
+        root.chainStarted();
     }
 
-    function scheduleMagnificationWave() {
-        root.cancelMagnificationWave();
-
-        if (!root.hasCurrentLine) {
-            root.lastWaveIndex = -1;
-            return;
-        }
-
-        const previousIndex = root.lastWaveIndex;
-        root.lastWaveIndex = root.currentIndex;
-        if (previousIndex < 0)
-            return;
-
-        const jumpDistance = Math.abs(root.currentIndex - previousIndex);
-
-        const transitionDuration = root.effectiveTransitionDuration(
-            root.activeRowTransitionDuration
-        );
-        if (!rowMoveAnimation.running
-                || jumpDistance > root.halfVisibleLines
-                || transitionDuration < 240)
-            return;
-
-        root.waveTargetIndex = root.currentIndex;
-        root.waveAnimationDuration = Math.round(
-            transitionDuration * root.waveDurationMultiplier
-        );
-        root.waveProgress = 0;
-        waveAnimation.restart();
+    function settleRows() {
+        chainSettleTimer.stop();
+        root.chainActive = false;
+        root.chainCancelled();
     }
 
     function centerCurrentLine(animated) {
-        rowMoveAnimation.stop();
-
         if (root.rowHeight <= 0)
             return;
 
         if (!root.hasCurrentLine) {
-            root.activeRowTransitionDuration = root.rowTransitionDuration;
+            root.settleRows();
             lyricsList.contentY = lyricsList.originY;
             return;
         }
 
         const targetY = root.targetContentY(root.currentIndex);
+        const deltaY = targetY - lyricsList.contentY;
+        lyricsList.contentY = targetY;
 
-        if (!animated || root.rowTransitionDuration <= 0 || Appearance.animMultiplier <= 0) {
-            root.activeRowTransitionDuration = root.rowTransitionDuration;
-            lyricsList.contentY = targetY;
+        if (!animated || Appearance.animMultiplier <= 0) {
+            root.settleRows();
             return;
         }
 
-        let deltaY = targetY - lyricsList.contentY;
-        let distanceInRows = Math.abs(deltaY) / root.rowHeight;
-
-        if (distanceInRows > root.halfVisibleLines) {
-            const direction = deltaY > 0 ? 1 : -1;
-            lyricsList.contentY = targetY - direction * root.rowHeight;
-            deltaY = targetY - lyricsList.contentY;
-            distanceInRows = Math.abs(deltaY) / root.rowHeight;
-        }
-
-        if (distanceInRows < 0.001) {
-            root.activeRowTransitionDuration = root.rowTransitionDuration;
-            lyricsList.contentY = targetY;
-            return;
-        }
-
-        root.activeRowTransitionDuration = root.transitionDurationForIndex(root.currentIndex);
-        rowMoveAnimation.to = targetY;
-        rowMoveAnimation.restart();
+        if (Math.abs(deltaY) > 0.5)
+            root.startRowChain(deltaY);
     }
 
     Component.onCompleted: {
@@ -250,12 +398,9 @@ Item {
         });
     }
 
-    onCurrentIndexChanged: {
-        root.centerCurrentLine(true);
-        root.scheduleMagnificationWave();
-    }
+    onCurrentIndexChanged: root.centerCurrentLine(true)
     onRowHeightChanged: {
-        root.cancelMagnificationWave();
+        root.settleRows();
         Qt.callLater(function() {
             root.centerCurrentLine(false);
         });
@@ -277,38 +422,17 @@ Item {
         target: LyricsService
 
         function onSyncedLinesChanged() {
-            root.cancelMagnificationWave();
+            root.settleRows();
             Qt.callLater(function() {
                 root.centerCurrentLine(false);
             });
         }
     }
 
-    NumberAnimation {
-        id: rowMoveAnimation
+    Timer {
+        id: chainSettleTimer
 
-        target: lyricsList
-        property: "contentY"
-        duration: Appearance.animMultiplier <= 0 ? 0 : Math.round(Math.max(
-            root.minimumRowTransitionDuration,
-            Math.min(root.rowTransitionDuration,
-                root.activeRowTransitionDuration * Appearance.animMultiplier)
-        ))
-        // Jetpack Compose FastOutSlowInEasing, used by PixelPlayer's lyric scroll.
-        easing.type: Easing.BezierSpline
-        easing.bezierCurve: [0.4, 0, 0.2, 1, 1, 1]
-    }
-
-    NumberAnimation {
-        id: waveAnimation
-
-        target: root
-        property: "waveProgress"
-        from: 0
-        to: 1
-        duration: root.waveAnimationDuration
-        easing.type: Easing.InOutSine
-        onFinished: root.waveTargetIndex = -1
+        onTriggered: root.chainActive = false
     }
 
     ListView {
@@ -351,7 +475,10 @@ Item {
 
             required property int index
 
+            // Verse-change offset: distance this row still has to travel back to rest.
+            property real chainOffset: 0
             readonly property real centerYInViewport: y - lyricsList.contentY + height / 2
+                + chainOffset
             readonly property real signedDistanceRatio: root.height > 0
                 ? Math.max(-1, Math.min(1,
                     (centerYInViewport - root.height / 2) / (root.height / 2)))
@@ -371,15 +498,81 @@ Item {
             readonly property int gradeAxis: Math.round(root.focusedFontGrade * focusFactor / 5) * 5
             readonly property real depthOpacity: Math.max(root.minimumRowOpacity,
                 1 - distanceInRows * root.rowOpacityFalloff)
-            readonly property string lineText: LyricsService.syncedLines[lyricRow.index]
-                ? LyricsService.syncedLines[lyricRow.index].text
-                : ""
-            readonly property bool waveActive: lyricRow.index === root.waveTargetIndex
-                && root.waveRunning
-            readonly property real waveDirection: root.textDirection(lineText)
+            readonly property var lineData: LyricsService.syncedLines[lyricRow.index] ?? null
+            readonly property bool isCurrentLine: lyricRow.index === root.currentIndex
+            readonly property bool hasWordTiming: isCurrentLine && root.currentLineHasWords
+            readonly property string lineText: lineData ? (lineData.text ?? "") : ""
 
             width: lyricsList.width
             height: root.rowHeight
+
+            // The row that leads the ripple is the one the list is moving away from;
+            // every row after it waits one more stagger step.
+            function beginChain() {
+                chainAnimation.stop();
+
+                const limit = root.rowHeight * root.halfVisibleLines;
+                lyricRow.chainOffset = Math.max(-limit, Math.min(limit,
+                    lyricRow.chainOffset + root.chainDelta));
+
+                const lead = root.chainDirection > 0
+                    ? root.currentIndex - 1 : root.currentIndex + 1;
+                const rank = Math.min(root.chainMaximumRank, Math.max(0,
+                    root.chainDirection > 0 ? lyricRow.index - lead : lead - lyricRow.index));
+                // A row created mid-ripple joins it where the others already are.
+                const elapsed = Date.now() - root.chainStartMs;
+
+                chainAnimation.startDelay = Math.max(0, Math.round(
+                    rank * root.chainStaggerMs * Appearance.animMultiplier - elapsed));
+                chainAnimation.restart();
+            }
+
+            function settle() {
+                chainAnimation.stop();
+                lyricRow.chainOffset = 0;
+            }
+
+            Component.onCompleted: {
+                if (root.chainActive)
+                    beginChain();
+            }
+            ListView.onPooled: settle()
+            ListView.onReused: {
+                if (root.chainActive)
+                    beginChain();
+                else
+                    settle();
+            }
+
+            Connections {
+                target: root
+
+                function onChainStarted() {
+                    lyricRow.beginChain();
+                }
+
+                function onChainCancelled() {
+                    lyricRow.settle();
+                }
+            }
+
+            SequentialAnimation {
+                id: chainAnimation
+
+                property int startDelay: 0
+
+                PauseAnimation {
+                    duration: chainAnimation.startDelay
+                }
+                NumberAnimation {
+                    target: lyricRow
+                    property: "chainOffset"
+                    to: 0
+                    duration: root.chainDuration
+                    easing.type: Easing.BezierSpline
+                    easing.bezierCurve: [0.45, 0.12, 0.45, root.bounceLevel, 1, 1]
+                }
+            }
 
             Item {
                 id: blurLayer
@@ -387,7 +580,7 @@ Item {
                 anchors.fill: parent
                 opacity: lyricRow.depthOpacity
                 transform: Translate {
-                    y: lyricRow.parallaxTranslation
+                    y: lyricRow.parallaxTranslation + lyricRow.chainOffset
                 }
                 layer.enabled: true
                 layer.smooth: true
@@ -400,20 +593,11 @@ Item {
                 StyledText {
                     id: lyricText
 
-                    property real firstVisualLineSpan: 1
-                    property real secondVisualLineSpan: 1
-                    property real thirdVisualLineSpan: 1
-                    // Where the laid-out block sits inside this taller box, in
-                    // normalised coordinates, so the wave shader can locate each line.
-                    readonly property real textTopNorm: height > 0
-                        ? (height - contentHeight) / 2 / height : 0
-                    readonly property real lineSpanNorm: (height > 0 && lineCount > 0)
-                        ? contentHeight / lineCount / height : 1
-
                     anchors.fill: parent
                     anchors.leftMargin: root.nearBlurRadius + Appearance.font.pixelSize.normal
                     anchors.rightMargin: root.nearBlurRadius + Appearance.font.pixelSize.normal
-                    text: lyricRow.lineText
+                    textFormat: lyricRow.hasWordTiming ? Text.StyledText : Text.PlainText
+                    text: lyricRow.hasWordTiming ? root.currentLineHtml : lyricRow.lineText
                     color: ColorUtils.mix(
                         root.focusedTextColor,
                         root.dimTextColor,
@@ -438,44 +622,6 @@ Item {
                     wrapMode: Text.WordWrap
                     maximumLineCount: root.maximumLyricLines
                     elide: Text.ElideRight
-
-                    onTextChanged: {
-                        firstVisualLineSpan = 1;
-                        secondVisualLineSpan = 1;
-                        thirdVisualLineSpan = 1;
-                    }
-                    onLineLaidOut: line => {
-                        const span = Math.max(0.05, Math.min(1,
-                            line.implicitWidth / Math.max(1, lyricText.width)));
-                        if (line.number === 0)
-                            firstVisualLineSpan = span;
-                        else if (line.number === 1)
-                            secondVisualLineSpan = span;
-                        else if (line.number === 2)
-                            thirdVisualLineSpan = span;
-                    }
-
-                    // The extra texture exists only during the one-shot focus wave. The
-                    // outer row layer continues to own the distance-based blur.
-                    layer.enabled: lyricRow.waveActive
-                    layer.smooth: true
-                    layer.effect: ShaderEffect {
-                        property real waveProgress: root.waveProgress
-                        property real waveStrength: root.waveMagnificationStrength
-                        property real waveWidth: root.waveBandWidth
-                        property real waveLift: root.waveLift / Math.max(1, lyricText.height)
-                        property real lineCountValue: lyricText.lineCount
-                        property real firstLineSpan: lyricText.firstVisualLineSpan
-                        property real secondLineSpan: lyricText.secondVisualLineSpan
-                        property real thirdLineSpan: lyricText.thirdVisualLineSpan
-                        property real textTopNorm: lyricText.textTopNorm
-                        property real lineSpanNorm: lyricText.lineSpanNorm
-                        property real waveDirection: lyricRow.waveDirection
-                        property real colorStrength: root.waveColorStrength
-                        property color waveColor: root.activeColor
-
-                        fragmentShader: "shaders/lyricsMagnificationWave.frag.qsb"
-                    }
                 }
             }
 

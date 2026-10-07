@@ -59,23 +59,33 @@ Item {
         if (!rawTitle)
             return "";
 
-        let cleaned = StringUtils.cleanMusicTitle(rawTitle);
-        const parts = cleaned.split(" - ");
-        let main = parts[0].trim();
-        let suffix = parts.slice(1).join(" - ").trim();
-        if (suffix && /\b(remix|version|edit|mix|rework)\b/i.test(suffix))
-            cleaned = `${main} ${suffix}`;
-        else
-            cleaned = main;
+        let cleaned = String(rawTitle).trim();
 
+        // 1. Strip bracketed/parenthesized content, unless it mentions featuring
         cleaned = cleaned.replace(/\s*[\(\[\{]([^\)\]\}]*)[\)\]\}]\s*/g, function(_, inner) {
             if (/(?:feat\.?|ft\.?|featuring)/i.test(inner)) {
                 const m = inner.replace(/^(?:feat\.?|ft\.?|featuring)\s*/i, '').trim();
                 return m ? ` feat. ${m} ` : ' ';
             }
             return ' ';
-        }).replace(/\s+/g, " ").trim();
+        });
 
+        // 2. Check for hyphens separating title from edition/remaster suffixes
+        const parts = cleaned.split(" - ");
+        const main = parts[0].trim();
+        if (parts.length > 1) {
+            const suffix = parts.slice(1).join(" - ").trim();
+            if (/\b(remaster|remastered|deluxe|bonus|expanded|edition|live|mono|stereo|anniversary|edit|mix|rework)\b/i.test(suffix))
+                cleaned = main;
+            else if (/\b(remix)\b/i.test(suffix))
+                cleaned = `${main} ${suffix}`;
+            else
+                cleaned = main;
+        } else {
+            cleaned = main;
+        }
+
+        cleaned = cleaned.replace(/\s+/g, " ").trim();
         return cleaned;
     }
 
@@ -96,7 +106,12 @@ Item {
     function normalizeAlbum(rawAlbum) {
         if (!rawAlbum)
             return "";
-        return rawAlbum.replace(/\s*[\(\[\{](?:deluxe|bonus|remastered|expanded)[^\)\]\}]*[\)\]\}]\s*/gi, "").trim();
+        let cleaned = String(rawAlbum).trim();
+        cleaned = cleaned.replace(/\s*[\(\[\{](?:deluxe|bonus|remaster|remastered|expanded|anniversary|edition)[^\)\]\}]*[\)\]\}]\s*/gi, " ");
+        const parts = cleaned.split(" - ");
+        if (parts.length > 1 && /\b(deluxe|bonus|remaster|remastered|expanded|anniversary|edition)\b/i.test(parts[1]))
+            cleaned = parts[0];
+        return cleaned.replace(/\s+/g, " ").trim();
     }
 
     function parseTime(timeStr) {
@@ -155,22 +170,39 @@ Item {
             let endTime = endMatch ? parseTime(endMatch[1]) : 0;
 
             const words = [];
-            const spanRegex = /<span\b([^>]*)>([\s\S]*?)<\/span>/gi;
+            const spanRegex = /<span\b([^>]*)>([\s\S]*?)<\/span>(\s*)/gi;
             let spanMatch;
 
             while ((spanMatch = spanRegex.exec(content)) !== null) {
                 const spanAttrs = spanMatch[1];
                 const spanContent = spanMatch[2];
+                const trailingSpace = spanMatch[3] !== undefined ? spanMatch[3] : " ";
                 const spanBegin = /\bbegin=["']([^"']+)["']/i.exec(spanAttrs);
                 const spanEnd = /\bend=["']([^"']+)["']/i.exec(spanAttrs);
                 const spanText = decodeXmlEntities(spanContent.replace(/<[^>]+>/g, ""));
 
                 if (spanBegin && spanText) {
+                    const bTime = parseTime(spanBegin[1]);
+                    const eTime = spanEnd ? parseTime(spanEnd[1]) : 0;
                     words.push({
                         text: spanText,
-                        begin: parseTime(spanBegin[1]),
-                        end: spanEnd ? parseTime(spanEnd[1]) : 0
+                        trailingSpace: trailingSpace,
+                        begin: bTime,
+                        end: eTime > 0 ? eTime : 0,
+                        startTime: bTime,
+                        endTime: eTime > 0 ? eTime : 0
                     });
+                }
+            }
+
+            // Ensure positive duration for every word/syllable
+            for (let w = 0; w < words.length; w++) {
+                if (words[w].end <= words[w].begin) {
+                    const nextBegin = (w + 1 < words.length)
+                        ? words[w + 1].begin
+                        : (endTime > words[w].begin ? endTime : words[w].begin + 0.35);
+                    words[w].end = Math.max(words[w].begin + 0.1, nextBegin);
+                    words[w].endTime = words[w].end;
                 }
             }
 
@@ -259,23 +291,28 @@ Item {
 
         const base = "https://api.betterlyrics.org/getLyrics";
 
-        // Attempt 0: with album and duration if present
-        if (attempt === 0) {
-            let u = `${base}?s=${encodeURIComponent(title)}&a=${encodeURIComponent(artist)}`;
-            if (album)
-                u += `&al=${encodeURIComponent(album)}`;
-            if (duration > 0)
-                u += `&d=${duration}`;
-            return u;
-        }
-
-        // Attempt 1: without album, with duration (if album was used in attempt 0)
-        if (attempt === 1 && album && duration > 0) {
+        // Attempt 0: Song, Artist, Duration (highest cache-hit rate, matches any album edition)
+        if (attempt === 0 && duration > 0) {
             return `${base}?s=${encodeURIComponent(title)}&a=${encodeURIComponent(artist)}&d=${duration}`;
         }
 
-        // Attempt 2: song and artist only
-        if ((attempt === 1 && (!album || duration <= 0)) || attempt === 2) {
+        // Attempt 1: With Album and Duration (if album exists)
+        if (attempt === 1 && album && duration > 0) {
+            return `${base}?s=${encodeURIComponent(title)}&a=${encodeURIComponent(artist)}&al=${encodeURIComponent(album)}&d=${duration}`;
+        }
+
+        // Attempt 2: Small duration tolerance (+1s)
+        if (attempt === 2 && duration > 0) {
+            return `${base}?s=${encodeURIComponent(title)}&a=${encodeURIComponent(artist)}&d=${duration + 1}`;
+        }
+
+        // Attempt 3: Small duration tolerance (-1s)
+        if (attempt === 3 && duration > 0) {
+            return `${base}?s=${encodeURIComponent(title)}&a=${encodeURIComponent(artist)}&d=${duration - 1}`;
+        }
+
+        // Attempt 4: Song and Artist only (fallback)
+        if (attempt === 4 || (attempt === 0 && duration <= 0)) {
             return `${base}?s=${encodeURIComponent(title)}&a=${encodeURIComponent(artist)}`;
         }
 
