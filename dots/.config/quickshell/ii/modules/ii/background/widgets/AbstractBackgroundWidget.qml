@@ -486,6 +486,9 @@ AbstractWidget {
     // everyone else uses the per-instance Item scale.
     readonly property var _widgetSizeConsumers: ({
         "android_search_bar": true, "at_a_glance": true,
+        "calendar_date_banner": true, "calendar_date_shapes": true, "calendar_date_stack": true,
+        "calendar_date_type": true,
+        "calendar_month_tall": true, "calendar_week_agenda": true, "calendar_week_strip": true,
         "circle_pointer_clock": true, "circular_media": true,
         "clock_expressive_card": true, "clock_flex": true,
         "clock_hori": true, "compact_media": true, "concentric_clock": true,

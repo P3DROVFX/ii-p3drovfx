@@ -3975,6 +3975,69 @@ Singleton {
                         property real y: 200
                         property bool expressiveColors: false
                     }
+                    property JsonObject calendar_date_stack: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                        property bool showShape: true
+                        property bool showWeekNumber: true
+                    }
+                    property JsonObject calendar_date_banner: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                        property bool italicHeadline: true
+                        property bool showNextEvent: true
+                    }
+                    property JsonObject calendar_week_strip: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                        property bool showEventDots: true
+                        property bool dimPastDays: true
+                    }
+                    property JsonObject calendar_week_agenda: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                        property int maxEventsPerDay: 2
+                        property bool dimPastDays: true
+                    }
+                    property JsonObject calendar_month_tall: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                        property bool showEventDots: true
+                        property bool showOtherMonths: false
+                    }
+                    property JsonObject calendar_date_type: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                        property bool heavyFirst: true
+                        property bool accentWord: false
+                    }
+                    property JsonObject calendar_date_shapes: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                        property string dayShape: "Clover4Leaf"
+                        property bool showWeekShapes: true
+                    }
                     property JsonObject calendar_upcoming_3days: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free"

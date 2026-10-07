@@ -498,6 +498,69 @@ Singleton {
             "configPage": "widgets/DesktopCalendarPillConfig.qml"
         },
         {
+            "widgetId": "calendar_date_stack",
+            "name": Translation.tr("Date Stack (1x1)"),
+            "category": "Date",
+            "qmlPath": Qt.resolvedUrl("DateWidget/DateStackWidget.qml"),
+            "icon": "today",
+            "description": Translation.tr("1x1 date: the day of the month, tall and condensed, on a morphing cookie, with the weekday and a month chip."),
+            "configPage": "widgets/DesktopCalendarStylesConfig.qml"
+        },
+        {
+            "widgetId": "calendar_date_banner",
+            "name": Translation.tr("Date Banner (2x1)"),
+            "category": "Date",
+            "qmlPath": Qt.resolvedUrl("DateWidget/DateBannerWidget.qml"),
+            "icon": "event_note",
+            "description": Translation.tr("2x1 editorial date: the weekday as a headline over a fact sheet with date, week, day of the year and the next event."),
+            "configPage": "widgets/DesktopCalendarStylesConfig.qml"
+        },
+        {
+            "widgetId": "calendar_week_strip",
+            "name": Translation.tr("Week Strip (2x0.5)"),
+            "category": "Date",
+            "qmlPath": Qt.resolvedUrl("DateWidget/WeekStripWidget.qml"),
+            "icon": "view_week",
+            "description": Translation.tr("2x0.5 strip of this week's days as chips, today wide and filled, with event dots."),
+            "configPage": "widgets/DesktopCalendarStylesConfig.qml"
+        },
+        {
+            "widgetId": "calendar_week_agenda",
+            "name": Translation.tr("Week Agenda (2x2)"),
+            "category": "Date",
+            "qmlPath": Qt.resolvedUrl("DateWidget/WeekAgendaWidget.qml"),
+            "icon": "calendar_view_week",
+            "description": Translation.tr("2x2 week agenda: one row per day with a condensed date block and the day's events as chips."),
+            "configPage": "widgets/DesktopCalendarStylesConfig.qml"
+        },
+        {
+            "widgetId": "calendar_month_tall",
+            "name": Translation.tr("Month Tall (1x2)"),
+            "category": "Date",
+            "qmlPath": Qt.resolvedUrl("DateWidget/MonthTallWidget.qml"),
+            "icon": "calendar_month",
+            "description": Translation.tr("1x2 month: the month's name huge on top and the month grid below, today as a sunny shape."),
+            "configPage": "widgets/DesktopCalendarStylesConfig.qml"
+        },
+        {
+            "widgetId": "calendar_date_type",
+            "name": Translation.tr("Date Type (2x1)"),
+            "category": "Date",
+            "qmlPath": Qt.resolvedUrl("DateWidget/DateTypeWidget.qml"),
+            "icon": "text_fields",
+            "description": Translation.tr("2x1 text-only date: the weekday set with a weight and width ramp across its letters, framed by small monospace and italic lines."),
+            "configPage": "widgets/DesktopCalendarStylesConfig.qml"
+        },
+        {
+            "widgetId": "calendar_date_shapes",
+            "name": Translation.tr("Date Shapes (2x1)"),
+            "category": "Date",
+            "qmlPath": Qt.resolvedUrl("DateWidget/DateShapesWidget.qml"),
+            "icon": "interests",
+            "description": Translation.tr("2x1 expressive date: a heavy weekday, the month on a chip, the day on a big shape off the corner and the week as seven little shapes."),
+            "configPage": "widgets/DesktopCalendarStylesConfig.qml"
+        },
+        {
             "widgetId": "calendar_upcoming_3days",
             "name": Translation.tr("Calendar Upcoming 3 Days 1x1"),
             "category": "Date",

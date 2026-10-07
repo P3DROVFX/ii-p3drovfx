@@ -111,6 +111,13 @@ Item {
         "calendar_next_event": component_calendar_next_event,
         "calendar_pill": component_calendar_pill,
         "calendar_upcoming_3days": component_calendar_upcoming_3days,
+        "calendar_date_type": component_calendar_date_type,
+        "calendar_date_shapes": component_calendar_date_shapes,
+        "calendar_date_stack": component_calendar_date_stack,
+        "calendar_date_banner": component_calendar_date_banner,
+        "calendar_week_strip": component_calendar_week_strip,
+        "calendar_week_agenda": component_calendar_week_agenda,
+        "calendar_month_tall": component_calendar_month_tall,
         "photo": component_photo,
         "photo_1x1": component_photo_1x1,
         "photo_weather_2x1": component_photo_weather_2x1,
@@ -884,6 +891,97 @@ Item {
         id: component_calendar_pill
 
         CalendarPillWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_calendar_date_stack
+
+        DateStackWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_calendar_date_banner
+
+        DateBannerWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_calendar_week_strip
+
+        WeekStripWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_calendar_week_agenda
+
+        WeekAgendaWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_calendar_month_tall
+
+        MonthTallWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_calendar_date_type
+
+        DateTypeWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_calendar_date_shapes
+
+        DateShapesWidget {
             screenWidth: delegateRoot.screenWidth
             screenHeight: delegateRoot.screenHeight
             scaledScreenWidth: delegateRoot.screenWidth
