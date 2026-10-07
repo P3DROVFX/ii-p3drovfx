@@ -4344,6 +4344,105 @@ Singleton {
                         property bool enableInnerShadow: false
                         property int widgetSize: 100
                     }
+                    property JsonObject todo_focus: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 120
+                        property int widgetSize: 100
+                        property bool showPosition: true
+                    }
+                    property JsonObject todo_board: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 120
+                        property int widgetSize: 100
+                    }
+                    property JsonObject todo_column: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 120
+                        property int widgetSize: 100
+                        property bool showProgress: true
+                    }
+                    property JsonObject timer_pomodoro: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 120
+                        property int widgetSize: 100
+                        property bool wavyRing: true
+                    }
+                    property JsonObject timer_stopwatch: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 120
+                        property int widgetSize: 100
+                    }
+                    property JsonObject timer_countdown: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 120
+                        property int widgetSize: 100
+                    }
+                    property JsonObject translator_widget: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 120
+                        property int widgetSize: 100
+                        property list<string> quickLanguages: ["en", "pt-BR", "es", "fr", "de", "ja"]
+                    }
+                    property JsonObject phone_key: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 120
+                        property int widgetSize: 100
+                    }
+                    property JsonObject phone_deck: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 120
+                        property int widgetSize: 100
+                    }
+                    property JsonObject phone_tower: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 120
+                        property int widgetSize: 100
+                    }
+                    property JsonObject send_drop: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 120
+                        property int widgetSize: 100
+                        property string backend: "kdeconnect"
+                        property string kdeDevice: ""
+                        property string localsendIp: ""
+                        property string localsendAlias: ""
+                    }
+                    property JsonObject session_grid: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 120
+                        property int widgetSize: 100
+                    }
+                    property JsonObject water_glass: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 120
+                        property int widgetSize: 100
+                    }
                     property JsonObject water_reminder: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free"
@@ -5676,7 +5775,6 @@ Singleton {
                     }
                     property JsonObject timer: JsonObject {
                         // Quick-start durations, in minutes.
-                        property list<int> presets: [1, 5, 10, 25]
                         property bool clickPauses: true
                     }
                     property JsonObject pomodoro: JsonObject {

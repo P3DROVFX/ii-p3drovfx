@@ -903,6 +903,123 @@ Singleton {
             "configPage": "widgets/DesktopQuoteConfig.qml"
         },
         {
+            "widgetId": "todo_focus",
+            "name": Translation.tr("To-Do Focus (1x1)"),
+            "category": "Utility",
+            "qmlPath": Qt.resolvedUrl("productivity/TodoFocusWidget.qml"),
+            "icon": "task_alt",
+            "description": Translation.tr("1x1 to-do that shows one open task at a time in big type, with keys to complete it or pass to the next."),
+            "configPage": "widgets/DesktopTodoWidgetsConfig.qml"
+        },
+        {
+            "widgetId": "todo_board",
+            "name": Translation.tr("To-Do Board (2x1)"),
+            "category": "Utility",
+            "qmlPath": Qt.resolvedUrl("productivity/TodoBoardWidget.qml"),
+            "icon": "checklist",
+            "description": Translation.tr("2x1 to-do with the open count on a slab and a checkable list with a field to add tasks."),
+            "configPage": "widgets/DesktopTodoWidgetsConfig.qml"
+        },
+        {
+            "widgetId": "todo_column",
+            "name": Translation.tr("To-Do Column (1x2)"),
+            "category": "Utility",
+            "qmlPath": Qt.resolvedUrl("productivity/TodoColumnWidget.qml"),
+            "icon": "list_alt",
+            "description": Translation.tr("1x2 to-do list with today's progress as segments, checkable tasks with due days and an add field."),
+            "configPage": "widgets/DesktopTodoWidgetsConfig.qml"
+        },
+        {
+            "widgetId": "timer_pomodoro",
+            "name": Translation.tr("Pomodoro (1x1)"),
+            "category": "Utility",
+            "qmlPath": Qt.resolvedUrl("productivity/PomodoroWidget.qml"),
+            "icon": "timer",
+            "description": Translation.tr("1x1 pomodoro with the phase's wavy ring, turning phase shape, cycle dots and start, reset and skip keys."),
+            "configPage": "widgets/DesktopTimerWidgetsConfig.qml"
+        },
+        {
+            "widgetId": "timer_stopwatch",
+            "name": Translation.tr("Stopwatch (1x1)"),
+            "category": "Utility",
+            "qmlPath": Qt.resolvedUrl("productivity/StopwatchWidget.qml"),
+            "icon": "timer_play",
+            "description": Translation.tr("1x1 stopwatch with tall digits and a scalloped start key that turns with the elapsed time; lap and reset."),
+            "configPage": "widgets/DesktopTimerWidgetsConfig.qml"
+        },
+        {
+            "widgetId": "timer_countdown",
+            "name": Translation.tr("Countdown (1x1)"),
+            "category": "Utility",
+            "qmlPath": Qt.resolvedUrl("productivity/CountdownWidget.qml"),
+            "icon": "hourglass_bottom",
+            "description": Translation.tr("1x1 timer whose card drains like an hourglass, with pause, +1:00 and quick-start presets."),
+            "configPage": "widgets/DesktopTimerWidgetsConfig.qml"
+        },
+        {
+            "widgetId": "translator_widget",
+            "name": Translation.tr("Translator (1x2)"),
+            "category": "Utility",
+            "qmlPath": Qt.resolvedUrl("productivity/TranslatorWidget.qml"),
+            "icon": "translate",
+            "description": Translation.tr("1x2 translator with the sidebar's engine: language pair with a swap hinge, typed or pasted text, copy and listen."),
+            "configPage": "widgets/DesktopTranslatorWidgetConfig.qml"
+        },
+        {
+            "widgetId": "water_glass",
+            "name": Translation.tr("Water Glass (2x1)"),
+            "category": "Utility",
+            "qmlPath": Qt.resolvedUrl("productivity/WaterGlassWidget.qml"),
+            "icon": "water_full",
+            "description": Translation.tr("2x1 hydration tracker on the Water Reminder's counter: a glass that fills, the week as bars, add and take back."),
+            "configPage": "widgets/DesktopWaterGlassConfig.qml"
+        },
+        {
+            "widgetId": "phone_key",
+            "name": Translation.tr("Phone Key (1x1)"),
+            "category": "Devices",
+            "qmlPath": Qt.resolvedUrl("phone/PhoneKeyWidget.qml"),
+            "icon": "cast",
+            "description": Translation.tr("1x1 phone mirror key (scrcpy) with battery and keys to send a file or the clipboard over KDE Connect."),
+            "configPage": "widgets/DesktopPhoneWidgetsConfig.qml"
+        },
+        {
+            "widgetId": "phone_deck",
+            "name": Translation.tr("Phone Deck (2x1)"),
+            "category": "Devices",
+            "qmlPath": Qt.resolvedUrl("phone/PhoneDeckWidget.qml"),
+            "icon": "phone_android",
+            "description": Translation.tr("2x1 phone card with its picture, battery cells and a button group: mirror, send file, send clipboard."),
+            "configPage": "widgets/DesktopPhoneWidgetsConfig.qml"
+        },
+        {
+            "widgetId": "phone_tower",
+            "name": Translation.tr("Phone Tower (1x2)"),
+            "category": "Devices",
+            "qmlPath": Qt.resolvedUrl("phone/PhoneTowerWidget.qml"),
+            "icon": "smartphone",
+            "description": Translation.tr("1x2 phone at full height with its battery badge and a grouped list: mirror, send file, send clipboard."),
+            "configPage": "widgets/DesktopPhoneWidgetsConfig.qml"
+        },
+        {
+            "widgetId": "send_drop",
+            "name": Translation.tr("Send (2x1)"),
+            "category": "Devices",
+            "qmlPath": Qt.resolvedUrl("phone/SendDropWidget.qml"),
+            "icon": "send_to_mobile",
+            "description": Translation.tr("2x1 drop target that sends files over KDE Connect or LocalSend to the device you pick."),
+            "configPage": "widgets/DesktopPhoneWidgetsConfig.qml"
+        },
+        {
+            "widgetId": "session_grid",
+            "name": Translation.tr("Session (1x1)"),
+            "category": "System",
+            "qmlPath": Qt.resolvedUrl("system/SessionGridWidget.qml"),
+            "icon": "power_settings_new",
+            "description": Translation.tr("1x1 grid with lock, power off, restart and log out, each asking for a second press."),
+            "configPage": "widgets/DesktopSessionGridConfig.qml"
+        },
+        {
             "widgetId": "water_reminder",
             "name": Translation.tr("Water Reminder"),
             "category": "Utility",

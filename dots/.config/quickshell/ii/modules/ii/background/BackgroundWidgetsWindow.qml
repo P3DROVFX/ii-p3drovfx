@@ -131,8 +131,24 @@ PanelWindow {
                 bgWidgetsWindow.seedEditFocus();
         }
     }
-    WlrLayershell.keyboardFocus: bgWidgetsWindow.editFocusSeed ? WlrKeyboardFocus.Exclusive
-        : ((widgetCanvas.draggingActive || widgetCanvas.keyboardFocusHeld || desktopIcons.item?.dialogOpen || desktopIcons.item?.hasSelection) ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None)
+    // A widget's text field on this screen wants the keyboard. Same seed as Edit
+    // Mode: Exclusive for a beat so the keys arrive at once, then OnDemand so a
+    // click elsewhere takes them away again.
+    readonly property bool widgetTyping: GlobalStates.widgetTypingOwner.length > 0
+        && GlobalStates.widgetTypingOwner.startsWith(bgWidgetsWindow.editScreenName + "|")
+    property bool typingFocusSeed: false
+    Timer {
+        id: typingFocusSeedTimer
+        interval: 120
+        onTriggered: bgWidgetsWindow.typingFocusSeed = false
+    }
+    onWidgetTypingChanged: {
+        bgWidgetsWindow.typingFocusSeed = bgWidgetsWindow.widgetTyping;
+        if (bgWidgetsWindow.widgetTyping)
+            typingFocusSeedTimer.restart();
+    }
+    WlrLayershell.keyboardFocus: (bgWidgetsWindow.editFocusSeed || bgWidgetsWindow.typingFocusSeed) ? WlrKeyboardFocus.Exclusive
+        : ((bgWidgetsWindow.widgetTyping || widgetCanvas.draggingActive || widgetCanvas.keyboardFocusHeld || desktopIcons.item?.dialogOpen || desktopIcons.item?.hasSelection) ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None)
     color: "transparent"
 
     anchors {

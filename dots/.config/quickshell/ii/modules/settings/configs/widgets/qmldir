@@ -29,3 +29,8 @@ TranslatorDefaultsPicker 1.0 TranslatorDefaultsPicker.qml
 WeatherLocationCard 1.0 WeatherLocationCard.qml
 WeekStartPicker 1.0 WeekStartPicker.qml
 PlainPhotoOptions 1.0 PlainPhotoOptions.qml
+WidgetPageHeader 1.0 WidgetPageHeader.qml
+WidgetPlacementNote 1.0 WidgetPlacementNote.qml
+WidgetPreviewSlot 1.0 WidgetPreviewSlot.qml
+WidgetPreviewStage 1.0 WidgetPreviewStage.qml
+WidgetSizeSlider 1.0 WidgetSizeSlider.qml

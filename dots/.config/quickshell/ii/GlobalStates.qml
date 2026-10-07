@@ -574,6 +574,10 @@ Singleton {
     // mode's real key surface - reads it to know when to take the keyboard back
     // (BackgroundWidgetsWindow).
     property bool editSearchFocused: false
+    // A desktop widget's text field that is being typed into (To-Do, Translator),
+    // as "<screen>|<owner>". The desktop's surface on that screen takes the
+    // keyboard while it is set (BackgroundWidgetsWindow); WidgetTextEntry owns it.
+    property string widgetTypingOwner: ""
     // Ctrl+F. The key arrives on the canvas, which is the only surface in the
     // mode holding a keyboard, and the drawer on the edited screen answers it.
     signal editSearchFocusRequested()

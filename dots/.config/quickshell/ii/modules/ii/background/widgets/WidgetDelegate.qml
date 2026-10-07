@@ -7,7 +7,9 @@ import qs.modules.ii.background.widgets.DateWidget
 import qs.modules.ii.background.widgets.bluetooth
 import qs.modules.ii.background.widgets.clock
 import qs.modules.ii.background.widgets.media
+import qs.modules.ii.background.widgets.phone
 import qs.modules.ii.background.widgets.photo
+import qs.modules.ii.background.widgets.productivity
 import qs.modules.ii.background.widgets.system
 import qs.modules.ii.background.widgets.utility
 import qs.modules.ii.background.widgets.weather
@@ -75,6 +77,19 @@ Item {
         "grid_card_clock": component_grid_card_clock,
         "clock_numeral": component_clock_numeral,
         "clock_duo": component_clock_duo,
+        "todo_focus": component_todo_focus,
+        "todo_board": component_todo_board,
+        "todo_column": component_todo_column,
+        "timer_pomodoro": component_timer_pomodoro,
+        "timer_stopwatch": component_timer_stopwatch,
+        "timer_countdown": component_timer_countdown,
+        "translator_widget": component_translator_widget,
+        "water_glass": component_water_glass,
+        "phone_key": component_phone_key,
+        "phone_deck": component_phone_deck,
+        "phone_tower": component_phone_tower,
+        "send_drop": component_send_drop,
+        "session_grid": component_session_grid,
         "clock_type_weight": component_clock_type_weight,
         "clock_type_width": component_clock_type_width,
         "clock_type_stack": component_clock_type_stack,
@@ -523,6 +538,175 @@ Item {
         id: component_clock_numeral
 
         NumeralClockWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_todo_focus
+
+        TodoFocusWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_todo_board
+
+        TodoBoardWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_todo_column
+
+        TodoColumnWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_timer_pomodoro
+
+        PomodoroWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_timer_stopwatch
+
+        StopwatchWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_timer_countdown
+
+        CountdownWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_translator_widget
+
+        TranslatorWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_water_glass
+
+        WaterGlassWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_phone_key
+
+        PhoneKeyWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_phone_deck
+
+        PhoneDeckWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_phone_tower
+
+        PhoneTowerWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_send_drop
+
+        SendDropWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_session_grid
+
+        SessionGridWidget {
             screenWidth: delegateRoot.screenWidth
             screenHeight: delegateRoot.screenHeight
             scaledScreenWidth: delegateRoot.screenWidth
