@@ -6,6 +6,7 @@ import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.services
 import qs.modules.ii.regionSelector.annotations
+import "../../common/draw/StrokeGeometry.js" as StrokeGeometry
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -63,7 +64,7 @@ PanelWindow {
     property bool exporting: false
     // Monotonic source for annotation ids and z-order; reset in clearEditor().
     property int annotationCounter: 0
-    // "rect", "arrow", "line", "ruler", "circle", "star", "pencil", "highlighter", "text", "number", "blur", "gaussblur", "recrop", "none"
+    // "rect", "ellipse", "arrow", "line", "ruler", "circle", "star", "pencil", "highlighter", "eraser", "text", "number", "blur", "gaussblur", "recrop", "none"
     property string currentTool: "none"
     property color currentColor: "#ff3b30"
     property list<color> presetColors: ["#ff3b30", "#ffcc00", "#34c759", "#007aff", "#af52de", "#ffffff", "#000000"]
@@ -129,10 +130,58 @@ PanelWindow {
     // Toggling fill retargets a selected closed shape (rect/circle/star).
     onFillEnabledChanged: {
         var sel = root.selectedAnnotation();
-        if (!sel || (sel.type !== "rect" && sel.type !== "circle" && sel.type !== "star"))
+        if (!sel || (sel.type !== "rect" && sel.type !== "ellipse" && sel.type !== "circle" && sel.type !== "star"))
             return;
         root.pushUndo();
         root.restyleSelected("fill", root.fillEnabled ? String(root.currentColor) : null);
+    }
+
+    /// The thickness steps the toolbar offers, thinnest first.
+    readonly property var lineWidthSteps: [2, 4, 8, 14]
+
+    /**
+     * Live draw's tool shortcuts, in the screenshot editor: always Ctrl+key, so a
+     * letter typed into a text annotation is a letter.
+     *   Ctrl+P pencil · Ctrl+H highlighter · Ctrl+A arrow · Ctrl+R rectangle
+     *   Ctrl+O ellipse · Ctrl+I line · Ctrl+E eraser · Ctrl+1–9 colour
+     *   Ctrl+[ / Ctrl+] thinner / thicker
+     */
+    function drawShortcut(event) {
+        const tools = {};
+        tools[Qt.Key_P] = "pencil";
+        tools[Qt.Key_H] = "highlighter";
+        tools[Qt.Key_A] = "arrow";
+        tools[Qt.Key_R] = "rect";
+        tools[Qt.Key_O] = "ellipse";
+        tools[Qt.Key_I] = "line";
+        tools[Qt.Key_E] = "eraser";
+        const tool = tools[event.key];
+        if (tool) {
+            root.currentTool = root.currentTool === tool ? "none" : tool;
+            if (tool === "ellipse")
+                root.shapePopupVisible = true;
+            return true;
+        }
+        // By position as well as by symbol, for layouts whose number row types
+        // something else without Shift (AZERTY).
+        const scan = event.nativeScanCode;
+        const digit = (event.key >= Qt.Key_1 && event.key <= Qt.Key_9) ? event.key - Qt.Key_1
+            : (scan >= 10 && scan <= 18 ? scan - 10 : -1);
+        if (digit >= 0) {
+            if (digit < root.presetColors.length)
+                root.currentColor = root.presetColors[digit];
+            return true;
+        }
+        if (event.key === Qt.Key_BracketLeft || event.key === Qt.Key_BracketRight) {
+            const steps = root.lineWidthSteps;
+            let i = steps.indexOf(root.currentLineWidth);
+            if (i < 0)
+                i = 0;
+            i = Math.max(0, Math.min(steps.length - 1, i + (event.key === Qt.Key_BracketRight ? 1 : -1)));
+            root.currentLineWidth = steps[i];
+            return true;
+        }
+        return false;
     }
 
     function pushUndo() {
@@ -1257,6 +1306,8 @@ PanelWindow {
             } else if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_C) {
                 root.finalizeScreenshot(false);
                 event.accepted = true;
+            } else if ((event.modifiers & Qt.ControlModifier) && root.editingTextId === null && root.drawShortcut(event)) {
+                event.accepted = true;
             } else if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) {
                 root.deleteSelected();
                 event.accepted = true;
@@ -1293,6 +1344,10 @@ PanelWindow {
             Component {
                 id: rectAnnotationComp
                 RectAnnotationComponent {}
+            }
+            Component {
+                id: ellipseAnnotationComp
+                EllipseAnnotationComponent {}
             }
             Component {
                 id: arrowAnnotationComp
@@ -1334,10 +1389,15 @@ PanelWindow {
                 model: root.annotations
                 delegate: Loader {
                     required property var modelData
+                    // Highlighter under every other mark, as on live draw: a pass of
+                    // marker over an arrow must not cover the arrow.
+                    z: modelData.type === "highlighter" ? 0 : 0.5
                     sourceComponent: {
                         switch (modelData.type) {
                         case "rect":
                             return rectAnnotationComp;
+                        case "ellipse":
+                            return ellipseAnnotationComp;
                         case "arrow":
                             return arrowAnnotationComp;
                         case "circle":
@@ -1509,7 +1569,7 @@ PanelWindow {
                 cursorShape: {
                     if (root.currentTool === "text")
                         return Qt.IBeamCursor;
-                    if (root.currentTool === "pencil" || root.currentTool === "blur" || root.currentTool === "gaussblur" || root.currentTool === "highlighter")
+                    if (root.currentTool === "pencil" || root.currentTool === "blur" || root.currentTool === "gaussblur" || root.currentTool === "highlighter" || root.currentTool === "eraser")
                         return Qt.CrossCursor;
                     return Qt.ArrowCursor;
                 }
@@ -1517,9 +1577,86 @@ PanelWindow {
                 property real startY: 0
                 property var tempAnnotation: null
 
+                // ── Live draw's pen engine (pencil and highlighter) ─────────────
+                // Pressure from a stylus (the handler below), an exponential filter
+                // and thinning on every sample, and for a mouse, touchpad or finger the
+                // lazy brush: the line hangs on a short string behind the pointer so a
+                // shaky hand never reaches it. Same numbers as live draw.
+                property var smoothPoint: null
+                property var brush: null
+                property var lastRaw: null
+                property bool steadied: false
+                property bool erasedAny: false
+                readonly property real stringLength: LiveDraw.mouseSmoothing * 18
+                readonly property real eraserRadius: Math.max(10, root.currentLineWidth * 3)
+
+                function pressure() {
+                    return stylus.active ? stylus.point.pressure : 1;
+                }
+
+                function freehandTool(tool) {
+                    return tool === "pencil" || tool === "highlighter";
+                }
+
+                // Feeds one sample into the stroke being drawn; false when it was too
+                // close to the last one to keep.
+                function appendSmoothed(sample) {
+                    smoothPoint = StrokeGeometry.smoothed(smoothPoint, sample, LiveDraw.smoothing);
+                    var pts = tempAnnotation.geom.points;
+                    if (!StrokeGeometry.shouldAppend(pts[pts.length - 1], smoothPoint))
+                        return false;
+                    var next = pts.slice();
+                    next.push({ "x": smoothPoint.x, "y": smoothPoint.y, "p": smoothPoint.p });
+                    tempAnnotation = AnnotationModel.make(tempAnnotation.type, tempAnnotation.id, tempAnnotation.z, {
+                        "points": next
+                    }, tempAnnotation.style);
+                    return true;
+                }
+
+                function eraseAt(x, y) {
+                    var kept = [];
+                    var hit = false;
+                    var list = Array.from(root.annotations);
+                    for (var i = 0; i < list.length; i++) {
+                        if (AnnotationModel.hitBy(list[i], x, y, eraserRadius))
+                            hit = true;
+                        else
+                            kept.push(list[i]);
+                    }
+                    if (!hit)
+                        return;
+                    // One undo step for the whole rub, taken at the first thing it hit.
+                    if (!erasedAny)
+                        root.pushUndo();
+                    erasedAny = true;
+                    root.annotations = kept;
+                }
+
+                // The end of a shape drag, snapped while Shift is held.
+                function shapeEnd(mouse) {
+                    if (!(mouse.modifiers & Qt.ShiftModifier))
+                        return { "x": mouse.x, "y": mouse.y };
+                    return AnnotationModel.constrained(root.currentTool, startX, startY, mouse.x, mouse.y);
+                }
+
+                /// A stylus, for its pressure. Passive: the strokes still come in through
+                /// this MouseArea (Qt synthesises mouse events from the tablet's), the
+                /// handler only answers how hard the pen is pressed.
+                PointHandler {
+                    id: stylus
+                    acceptedDevices: PointerDevice.Stylus
+                    enabled: drawingArea.freehandTool(root.currentTool)
+                }
+
                 onPressed: mouse => {
                     startX = mouse.x;
                     startY = mouse.y;
+                    if (root.currentTool === "eraser") {
+                        erasedAny = false;
+                        eraseAt(mouse.x, mouse.y);
+                        tempAnnotation = null;
+                        return;
+                    }
                     root.pushUndo();
                     var id = "a" + root.annotationCounter;
                     var z = root.annotationCounter;
@@ -1558,8 +1695,15 @@ PanelWindow {
                         tempAnnotation = null;
                         return;
                     }
-                    if (root.currentTool === "rect") {
-                        tempAnnotation = AnnotationModel.make("rect", id, z, {
+                    if (freehandTool(root.currentTool)) {
+                        var first = StrokeGeometry.point(startX, startY, drawingArea.pressure());
+                        smoothPoint = first;
+                        brush = first;
+                        lastRaw = first;
+                        steadied = !stylus.active && stringLength > 0.5;
+                    }
+                    if (root.currentTool === "rect" || root.currentTool === "ellipse") {
+                        tempAnnotation = AnnotationModel.make(root.currentTool, id, z, {
                             "x": startX,
                             "y": startY,
                             "w": 0,
@@ -1593,7 +1737,8 @@ PanelWindow {
                             "points": [
                                 {
                                     "x": startX,
-                                    "y": startY
+                                    "y": startY,
+                                    "p": 1
                                 }
                             ]
                         }, hlStyle);
@@ -1611,11 +1756,15 @@ PanelWindow {
                             "innerR": 0
                         }, style);
                     } else if (root.currentTool === "pencil") {
+                        // Pressure shapes the line only for a pen, and only when live
+                        // draw's pressure setting is on — the same preference.
+                        style.usePressure = stylus.active && LiveDraw.usePressure;
                         tempAnnotation = AnnotationModel.make("pencil", id, z, {
                             "points": [
                                 {
                                     "x": startX,
-                                    "y": startY
+                                    "y": startY,
+                                    "p": drawingArea.pressure()
                                 }
                             ]
                         }, style);
@@ -1632,38 +1781,44 @@ PanelWindow {
                     }
                 }
                 onPositionChanged: mouse => {
+                    if (root.currentTool === "eraser") {
+                        if (pressed)
+                            eraseAt(mouse.x, mouse.y);
+                        return;
+                    }
                     if (!tempAnnotation)
                         return;
                     var id = tempAnnotation.id;
                     var z = tempAnnotation.z;
                     var style = tempAnnotation.style;
-                    if (root.currentTool === "rect") {
-                        tempAnnotation = AnnotationModel.make("rect", id, z, {
-                            "x": Math.min(startX, mouse.x),
-                            "y": Math.min(startY, mouse.y),
-                            "w": Math.abs(mouse.x - startX),
-                            "h": Math.abs(mouse.y - startY)
+                    var end = shapeEnd(mouse);
+                    if (root.currentTool === "rect" || root.currentTool === "ellipse") {
+                        tempAnnotation = AnnotationModel.make(root.currentTool, id, z, {
+                            "x": Math.min(startX, end.x),
+                            "y": Math.min(startY, end.y),
+                            "w": Math.abs(end.x - startX),
+                            "h": Math.abs(end.y - startY)
                         }, style);
                     } else if (root.currentTool === "arrow") {
                         tempAnnotation = AnnotationModel.make("arrow", id, z, {
                             "x1": startX,
                             "y1": startY,
-                            "x2": mouse.x,
-                            "y2": mouse.y
+                            "x2": end.x,
+                            "y2": end.y
                         }, style);
                     } else if (root.currentTool === "line") {
                         tempAnnotation = AnnotationModel.make("line", id, z, {
                             "x1": startX,
                             "y1": startY,
-                            "x2": mouse.x,
-                            "y2": mouse.y
+                            "x2": end.x,
+                            "y2": end.y
                         }, style);
                     } else if (root.currentTool === "ruler") {
                         tempAnnotation = AnnotationModel.make("ruler", id, z, {
                             "x1": startX,
                             "y1": startY,
-                            "x2": mouse.x,
-                            "y2": mouse.y
+                            "x2": end.x,
+                            "y2": end.y
                         }, style);
                     } else if (root.currentTool === "circle") {
                         var dx = mouse.x - startX;
@@ -1685,7 +1840,18 @@ PanelWindow {
                             "outerR": outerRadius,
                             "innerR": innerRadius
                         }, style);
-                    } else if (root.currentTool === "pencil" || root.currentTool === "blur" || root.currentTool === "gaussblur" || root.currentTool === "highlighter") {
+                    } else if (freehandTool(root.currentTool)) {
+                        var raw = StrokeGeometry.point(mouse.x, mouse.y, drawingArea.pressure());
+                        lastRaw = raw;
+                        var sample = raw;
+                        if (steadied) {
+                            sample = StrokeGeometry.pulled(brush, raw, stringLength);
+                            if (!sample)
+                                return;
+                            brush = sample;
+                        }
+                        appendSmoothed(sample);
+                    } else if (root.currentTool === "blur" || root.currentTool === "gaussblur") {
                         var pts = tempAnnotation.geom.points;
                         var lastPoint = pts[pts.length - 1];
                         var dxP = mouse.x - lastPoint.x;
@@ -1703,10 +1869,21 @@ PanelWindow {
                     }
                 }
                 onReleased: mouse => {
+                    if (root.currentTool === "eraser") {
+                        erasedAny = false;
+                        return;
+                    }
                     if (!tempAnnotation)
                         return;
+                    // The lazy brush's slack is taken up: the line ends where the
+                    // pointer let go.
+                    if (freehandTool(tempAnnotation.type) && steadied && lastRaw) {
+                        for (var step of [0.5, 1])
+                            appendSmoothed(StrokeGeometry.point(brush.x + (lastRaw.x - brush.x) * step,
+                                                                brush.y + (lastRaw.y - brush.y) * step, lastRaw.p));
+                    }
                     var g = tempAnnotation.geom;
-                    if (root.currentTool === "rect") {
+                    if (root.currentTool === "rect" || root.currentTool === "ellipse") {
                         if (g.w < 2 || g.h < 2) {
                             tempAnnotation = null;
                             return;
@@ -1726,7 +1903,7 @@ PanelWindow {
                             tempAnnotation = null;
                             return;
                         }
-                    } else if (root.currentTool === "pencil" || root.currentTool === "blur" || root.currentTool === "gaussblur" || root.currentTool === "highlighter") {
+                    } else if (root.currentTool === "blur" || root.currentTool === "gaussblur") {
                         if (g.points.length < 2) {
                             tempAnnotation = null;
                             return;
@@ -1744,6 +1921,9 @@ PanelWindow {
                 // Temp annotation while drawing
                 RectAnnotationComponent {
                     annData: drawingArea.tempAnnotation?.type === "rect" ? drawingArea.tempAnnotation : null
+                }
+                EllipseAnnotationComponent {
+                    annData: drawingArea.tempAnnotation?.type === "ellipse" ? drawingArea.tempAnnotation : null
                 }
 
                 ArrowAnnotationComponent {

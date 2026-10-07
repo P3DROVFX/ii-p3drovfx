@@ -3,6 +3,7 @@
 
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Shapes
 import qs
 import qs.modules.common
 import qs.modules.common.widgets
@@ -46,14 +47,14 @@ Toolbar {
 
         ToolButton {
             symbol: "undo"
-            tip: Translation.tr("Undo")
+            tip: Translation.tr("Undo") + "  ·  Ctrl+Z"
             enabled: editor.undoStack.length > 0
             onClicked: editor.undo()
         }
 
         ToolButton {
             symbol: "redo"
-            tip: Translation.tr("Redo")
+            tip: Translation.tr("Redo") + "  ·  Ctrl+Shift+Z"
             enabled: editor.redoStack.length > 0
             onClicked: editor.redo()
         }
@@ -80,28 +81,28 @@ Toolbar {
 
         ToolButton {
             symbol: "edit"
-            tip: Translation.tr("Pencil")
+            tip: Translation.tr("Pencil — pen pressure and mouse smoothing, as in live draw") + "  ·  Ctrl+P"
             toggled: editor.currentTool === "pencil"
             onClicked: toolbar.toggleTool("pencil")
         }
 
         ToolButton {
             symbol: "ink_highlighter"
-            tip: Translation.tr("Highlighter")
+            tip: Translation.tr("Highlighter — under the other marks") + "  ·  Ctrl+H"
             toggled: editor.currentTool === "highlighter"
             onClicked: toolbar.toggleTool("highlighter")
         }
 
         ToolButton {
             symbol: "horizontal_rule"
-            tip: Translation.tr("Line")
+            tip: Translation.tr("Line · Shift snaps to 15°") + "  ·  Ctrl+I"
             toggled: editor.currentTool === "line"
             onClicked: toolbar.toggleTool("line")
         }
 
         ToolButton {
             symbol: "north_east"
-            tip: Translation.tr("Arrow")
+            tip: Translation.tr("Arrow · Shift snaps to 15°") + "  ·  Ctrl+A"
             toggled: editor.currentTool === "arrow"
             onClicked: toolbar.toggleTool("arrow")
         }
@@ -117,7 +118,7 @@ Toolbar {
         // Rectangle, with the extra shapes folded behind a chevron.
         ToolButton {
             symbol: "crop_square"
-            tip: Translation.tr("Rectangle")
+            tip: Translation.tr("Rectangle · Shift makes a square") + "  ·  Ctrl+R"
             toggled: editor.currentTool === "rect"
             onClicked: {
                 toolbar.toggleTool("rect");
@@ -127,6 +128,39 @@ Toolbar {
 
         Drawer {
             open: editor.shapePopupVisible
+
+            // No ellipse glyph in the installed symbol font, so the icon is drawn: an
+            // outline in the same weight as the symbols beside it.
+            ToolButton {
+                id: ellipseButton
+                tip: Translation.tr("Ellipse · Shift makes a circle") + "  ·  Ctrl+O"
+                toggled: editor.currentTool === "ellipse"
+                onClicked: toolbar.toggleTool("ellipse")
+
+                contentItem: Item {
+                    Shape {
+                        anchors.centerIn: parent
+                        width: 22
+                        height: 14
+                        preferredRendererType: Shape.CurveRenderer
+
+                        ShapePath {
+                            strokeColor: ellipseButton.colContent
+                            strokeWidth: 2
+                            fillColor: ellipseButton.toggled ? ellipseButton.colContent : "transparent"
+
+                            PathAngleArc {
+                                centerX: 11
+                                centerY: 7
+                                radiusX: 10
+                                radiusY: 6
+                                startAngle: 0
+                                sweepAngle: 360
+                            }
+                        }
+                    }
+                }
+            }
 
             ToolButton {
                 symbol: "circle"
@@ -154,6 +188,14 @@ Toolbar {
                     editor.lineWidthPopupVisible = false;
                 }
             }
+        }
+
+        // Live draw's eraser: whatever it rubs over goes, whole.
+        ToolButton {
+            symbol: "ink_eraser"
+            tip: Translation.tr("Eraser") + "  ·  Ctrl+E"
+            toggled: editor.currentTool === "eraser"
+            onClicked: toolbar.toggleTool("eraser")
         }
 
         ToolButton {
@@ -236,7 +278,7 @@ Toolbar {
         ToolButton {
             id: lineWidthBtn
 
-            tip: Translation.tr("Line Thickness")
+            tip: Translation.tr("Line Thickness") + "  ·  Ctrl+[ ]"
             toggled: editor.lineWidthPopupVisible
             secondary: true
             onClicked: {
@@ -272,7 +314,7 @@ Toolbar {
             open: editor.lineWidthPopupVisible
 
             Repeater {
-                model: [2, 4, 8]
+                model: editor.lineWidthSteps
 
                 delegate: OptionButton {
                     id: widthOption
@@ -329,7 +371,7 @@ Toolbar {
 
             StyledToolTip {
                 z: 9999
-                text: Translation.tr("Color")
+                text: Translation.tr("Color") + "  ·  Ctrl+1–9"
             }
 
             // MaterialShape's borderWidth is in normalised units, so the

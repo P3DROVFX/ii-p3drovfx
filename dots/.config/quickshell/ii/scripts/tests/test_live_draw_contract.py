@@ -164,6 +164,34 @@ class WhiteboardTests(unittest.TestCase):
         self.assertIn("active: !root.nativeCursor && root.drawing && hover.hovered", surface)
 
 
+class ScreenshotEditorTests(unittest.TestCase):
+    """Live draw's drawing tools, ported into the region selector's editor."""
+
+    def test_pencil_uses_the_live_draw_engine(self):
+        sel = read("modules/ii/regionSelector/RegionSelection.qml")
+        self.assertIn("StrokeGeometry.pulled(brush, raw, stringLength)", sel)
+        self.assertIn("StrokeGeometry.smoothed(smoothPoint, sample, LiveDraw.smoothing)", sel)
+        self.assertIn("acceptedDevices: PointerDevice.Stylus", sel)
+        pencil = read("modules/ii/regionSelector/annotations/PencilAnnotationComponent.qml")
+        self.assertIn("StrokeGeometry.strokeSvg(AnnotationModel.strokeOf(ann))", pencil)
+
+    def test_eraser_ellipse_and_snap(self):
+        model = read("modules/ii/regionSelector/annotations/AnnotationModel.qml")
+        self.assertIn("function hitBy(ann, px, py, radius)", model)
+        self.assertIn("function constrained(tool, sx, sy, ex, ey)", model)
+        self.assertTrue((ROOT / "modules/ii/regionSelector/annotations/EllipseAnnotationComponent.qml").exists())
+        toolbar = read("modules/ii/regionSelector/annotations/EditorToolbar.qml")
+        for tool in ('"eraser"', '"ellipse"'):
+            self.assertIn(tool, toolbar)
+
+    def test_highlighter_under_the_marks(self):
+        self.assertIn('z: modelData.type === "highlighter" ? 0 : 0.5', read("modules/ii/regionSelector/RegionSelection.qml"))
+
+    def test_shortcuts_need_ctrl(self):
+        sel = read("modules/ii/regionSelector/RegionSelection.qml")
+        self.assertIn("(event.modifiers & Qt.ControlModifier) && root.editingTextId === null && root.drawShortcut(event)", sel)
+
+
 class OverlayTests(unittest.TestCase):
     def test_family_loads_the_overlay(self):
         family = read("panelFamilies/IllogicalImpulseFamily.qml")

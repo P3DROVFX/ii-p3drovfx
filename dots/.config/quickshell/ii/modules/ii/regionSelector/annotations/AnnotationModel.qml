@@ -1,17 +1,20 @@
 pragma Singleton
 import QtQuick
 import Quickshell
+import "../../../common/draw/StrokeGeometry.js" as StrokeGeometry
 
 // Pure helper library for the inline region-editor annotation object model.
 // Annotations are plain dicts of the shape:
 //   { id, type, z, geom: {...}, style: { stroke, strokeWidth, fill, fillOpacity, opacity, fontPx } }
 // Geometry keys per type:
 //   rect    -> { x, y, w, h }
+//   ellipse -> { x, y, w, h } (the box it is inscribed in)
 //   arrow   -> { x1, y1, x2, y2 }
 //   ruler   -> { x1, y1, x2, y2 } (measured segment; fixed tuner styling)
 //   circle  -> { x, y, r }
 //   star    -> { x, y, outerR, innerR }
-//   pencil  -> { points: [{x, y}, ...] }
+//   pencil  -> { points: [{x, y, p}, ...] } (p: pen pressure 0..1, 1 for a mouse;
+//              style.usePressure says whether p shapes the width — live draw's engine)
 //   blur    -> { points: [{x, y}, ...] }
 //   (line = arrow; circle/number = {x, y, r}; text = rect + text;
 //    highlighter/gaussblur = pencil)
@@ -56,6 +59,7 @@ Singleton {
         var g = ann.geom ?? ann;
         switch (ann.type) {
         case "rect":
+        case "ellipse":
             return {
                 "x": g.x ?? 0,
                 "y": g.y ?? 0,
@@ -172,6 +176,7 @@ Singleton {
         var g = ann.geom;
         switch (ann.type) {
         case "rect":
+        case "ellipse":
         case "circle":
         case "star":
         case "text":
@@ -279,6 +284,7 @@ Singleton {
         var w = x2 - x1, h = y2 - y1;
         switch (start.type) {
         case "rect":
+        case "ellipse":
             g.x = x1;
             g.y = y1;
             g.w = w;
@@ -325,4 +331,80 @@ Singleton {
         return ann;
     }
 
+    // ── Live draw's tools ──────────────────────────────────────────────
+
+    /// Whether the eraser at (px, py) with `radius` touches an annotation: the line
+    /// itself for strokes, lines and outlines, the whole area for a filled shape, a
+    /// badge or a text box. Whole annotations go, as on live draw's sheets.
+    function hitBy(ann, px, py, radius) {
+        var g = ann.geom;
+        var half = ((ann.style && ann.style.strokeWidth) || 2) / 2;
+        var reach = radius + half;
+        var filled = !!(ann.style && ann.style.fill);
+        function nearSegment(ax, ay, bx, by) {
+            var dx = bx - ax, dy = by - ay;
+            var len = dx * dx + dy * dy;
+            var t = len > 0 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len)) : 0;
+            var cx = ax + dx * t - px, cy = ay + dy * t - py;
+            return cx * cx + cy * cy <= reach * reach;
+        }
+        switch (ann.type) {
+        case "pencil":
+        case "highlighter":
+        case "blur":
+        case "gaussblur": {
+            var pts = g.points || [];
+            for (var i = 0; i < pts.length; i++) {
+                if (i + 1 < pts.length ? nearSegment(pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y)
+                                       : nearSegment(pts[i].x, pts[i].y, pts[i].x, pts[i].y))
+                    return true;
+            }
+            return false;
+        }
+        case "arrow":
+        case "line":
+        case "ruler":
+            return nearSegment(g.x1, g.y1, g.x2, g.y2);
+        case "rect":
+            if (filled && contains(ann, px, py, radius))
+                return true;
+            return nearSegment(g.x, g.y, g.x + g.w, g.y) || nearSegment(g.x + g.w, g.y, g.x + g.w, g.y + g.h)
+                || nearSegment(g.x + g.w, g.y + g.h, g.x, g.y + g.h) || nearSegment(g.x, g.y + g.h, g.x, g.y);
+        case "ellipse":
+        case "circle": {
+            var cx = ann.type === "circle" ? g.x : g.x + g.w / 2;
+            var cy = ann.type === "circle" ? g.y : g.y + g.h / 2;
+            var rx = ann.type === "circle" ? g.r : g.w / 2;
+            var ry = ann.type === "circle" ? g.r : g.h / 2;
+            if (rx <= 0 || ry <= 0)
+                return false;
+            // Distance from the outline, measured along the normalised radius.
+            var nx = (px - cx) / rx, ny = (py - cy) / ry;
+            var d = Math.sqrt(nx * nx + ny * ny);
+            if (filled && d <= 1)
+                return true;
+            return Math.abs(d - 1) * Math.min(rx, ry) <= reach;
+        }
+        default:
+            return contains(ann, px, py, radius);
+        }
+    }
+
+    /// The end of a drag held with Shift: lines, arrows and rulers in 15° steps, boxes
+    /// square. The same snap as live draw (StrokeGeometry.constrained).
+    function constrained(tool, sx, sy, ex, ey) {
+        var kind = (tool === "line" || tool === "arrow" || tool === "ruler") ? "line" : "rect";
+        return StrokeGeometry.constrained(kind, { "x": sx, "y": sy }, { "x": ex, "y": ey, "p": 1 });
+    }
+
+    /// A pencil or highlighter annotation as live draw's stroke record, for its SVG.
+    function strokeOf(ann) {
+        return {
+            "tool": "pen",
+            "points": ann.geom.points || [],
+            "color": ann.style.stroke,
+            "width": ann.style.strokeWidth,
+            "usePressure": ann.type === "pencil" && ann.style.usePressure === true
+        };
+    }
 }

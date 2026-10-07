@@ -14406,5 +14406,11 @@
     "Transparent, cropped to the ink": "Transparente, recortado na tinta",
     "Transparent, in Pictures/Drawings": "Transparente, em Imagens/Drawings",
     "Vector, sharp at any size": "Vetorial, nítido em qualquer tamanho",
-    "Zoom — magnify around the pointer": "Zoom — amplia em volta do ponteiro"
+    "Zoom — magnify around the pointer": "Zoom — amplia em volta do ponteiro",
+    "Pencil — pen pressure and mouse smoothing, as in live draw": "Lápis — pressão da caneta e suavização do mouse, como no desenho na tela",
+    "Highlighter — under the other marks": "Marca-texto — por baixo das outras marcações",
+    "Line · Shift snaps to 15°": "Linha · Shift alinha em 15°",
+    "Arrow · Shift snaps to 15°": "Seta · Shift alinha em 15°",
+    "Rectangle · Shift makes a square": "Retângulo · Shift faz um quadrado",
+    "Ellipse · Shift makes a circle": "Elipse · Shift faz um círculo"
 }

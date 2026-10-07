@@ -14399,5 +14399,11 @@
     "Transparent, cropped to the ink": "Transparent, cropped to the ink",
     "Transparent, in Pictures/Drawings": "Transparent, in Pictures/Drawings",
     "Vector, sharp at any size": "Vector, sharp at any size",
-    "Zoom — magnify around the pointer": "Zoom — magnify around the pointer"
+    "Zoom — magnify around the pointer": "Zoom — magnify around the pointer",
+    "Pencil — pen pressure and mouse smoothing, as in live draw": "Pencil — pen pressure and mouse smoothing, as in live draw",
+    "Highlighter — under the other marks": "Highlighter — under the other marks",
+    "Line · Shift snaps to 15°": "Line · Shift snaps to 15°",
+    "Arrow · Shift snaps to 15°": "Arrow · Shift snaps to 15°",
+    "Rectangle · Shift makes a square": "Rectangle · Shift makes a square",
+    "Ellipse · Shift makes a circle": "Ellipse · Shift makes a circle"
 }
