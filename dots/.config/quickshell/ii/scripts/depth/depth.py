@@ -115,6 +115,16 @@ def install_runtime(root, report):
     shell's venv already has numpy, and the inference path imports nothing else."""
     staging = root.path / "runtime.part"
     shutil.rmtree(staging, ignore_errors=True)
+    # The shell's venv is uv-created and ships no pip; stdlib ensurepip puts it
+    # back (it keeps its bundled wheel). Without this the install below dies
+    # with "No module named pip".
+    if subprocess.run([sys.executable, "-m", "pip", "--version"],
+                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0:
+        boot = subprocess.run([sys.executable, "-m", "ensurepip", "--default-pip"],
+                              capture_output=True, text=True)
+        if boot.returncode != 0:
+            fail("Could not install the ONNX runtime",
+                 detail=(boot.stdout + boot.stderr).strip()[-1000:])
     cmd = [sys.executable, "-m", "pip", "install", "--no-cache-dir", "--no-deps",
            "--disable-pip-version-check", "--progress-bar", "raw",
            "--target", str(staging), CATALOG["runtime"]["package"]]
