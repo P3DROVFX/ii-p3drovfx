@@ -20,12 +20,15 @@ Layout of <root>:
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
+import sysconfig
 import time
 import urllib.request
 from pathlib import Path
@@ -110,32 +113,47 @@ def cmd_prune(root, args):
 
 # ── downloads ───────────────────────────────────────────────────────────────
 
+def pip_command():
+    """How to run pip. The shell's venv is made by uv, which ships no pip; rather
+    than install one into that shared venv, run the copy Python bundles for
+    ensurepip straight from its wheel, so the venv is left as it was."""
+    if importlib.util.find_spec("pip"):
+        return [sys.executable, "-m", "pip"]
+    import ensurepip
+    dirs = [Path(ensurepip.__file__).parent / "_bundled"]
+    # Distros that unbundle the wheels point ensurepip at their own folder.
+    if sysconfig.get_config_var("WHEEL_PKG_DIR"):
+        dirs.insert(0, Path(sysconfig.get_config_var("WHEEL_PKG_DIR")))
+    wheels = [wheel for folder in dirs for wheel in sorted(folder.glob("pip-*.whl"))]
+    if not wheels:
+        fail("Python has no pip to install the ONNX runtime with",
+             detail=f"no pip wheel in {', '.join(map(str, dirs))}")
+    return [sys.executable, str(wheels[-1] / "pip")]
+
+
 def install_runtime(root, report):
     """pip --target into runtime.part, then swap it in. No cache, no deps: the
     shell's venv already has numpy, and the inference path imports nothing else."""
     staging = root.path / "runtime.part"
     shutil.rmtree(staging, ignore_errors=True)
-    # The shell's venv is uv-created and ships no pip; stdlib ensurepip puts it
-    # back (it keeps its bundled wheel). Without this the install below dies
-    # with "No module named pip".
-    if subprocess.run([sys.executable, "-m", "pip", "--version"],
-                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0:
-        boot = subprocess.run([sys.executable, "-m", "ensurepip", "--default-pip"],
-                              capture_output=True, text=True)
-        if boot.returncode != 0:
-            fail("Could not install the ONNX runtime",
-                 detail=(boot.stdout + boot.stderr).strip()[-1000:])
-    cmd = [sys.executable, "-m", "pip", "install", "--no-cache-dir", "--no-deps",
-           "--disable-pip-version-check", "--progress-bar", "raw",
-           "--target", str(staging), CATALOG["runtime"]["package"]]
+    cmd = pip_command() + [
+        "install", "--no-cache-dir", "--no-deps", "--disable-pip-version-check",
+        "--progress-bar", "raw", "--target", str(staging), CATALOG["runtime"]["package"]]
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     tail = []
-    for line in proc.stdout:
-        match = re.match(r"Progress (\d+) of (\d+)", line.strip())
-        if match:
-            report(int(match.group(1)), int(match.group(2)))
-        else:
-            tail = (tail + [line.strip()])[-6:]
+    try:
+        for line in proc.stdout:
+            match = re.match(r"Progress (\d+) of (\d+)", line.strip())
+            if match:
+                report(int(match.group(1)), int(match.group(2)))
+            else:
+                tail = (tail + [line.strip()])[-6:]
+    finally:
+        # A cancelled download (SIGTERM, see main) takes pip down with it, so
+        # nothing keeps writing into runtime.part after the shell cleans it up.
+        if proc.poll() is None:
+            proc.terminate()
+            proc.wait()
     if proc.wait() != 0:
         shutil.rmtree(staging, ignore_errors=True)
         fail("Could not install the ONNX runtime", detail="\n".join(tail))
@@ -401,6 +419,9 @@ def main():
     p.add_argument("--model", required=True)
     p.add_argument("--image", required=True)
     args = parser.parse_args()
+    # The shell cancels with SIGTERM; exiting through SystemExit runs the
+    # cleanup in install_runtime instead of orphaning pip.
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(128 + signal.SIGTERM))
     root = Root(args.root)
     {"status": cmd_status, "download": cmd_download, "remove": cmd_remove,
      "prune": cmd_prune, "segment": cmd_segment}[args.command](root, args)
