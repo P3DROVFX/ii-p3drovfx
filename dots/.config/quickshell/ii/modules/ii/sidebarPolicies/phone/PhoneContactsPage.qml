@@ -6,6 +6,7 @@ import QtQuick.Controls
 import Qt5Compat.GraphicalEffects
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.common.functions
 import qs.services
 
 Rectangle {
@@ -231,13 +232,11 @@ Rectangle {
                         enabled: Config?.options.interactions.scrolling.fasterTouchpadScroll ?? false
                         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
                         onWheel: event => {
-                            // Mouse wheels emit multiples of ±120 on one axis; touchpads emit
-                            // small continuous deltas, so each gets its own amplification factor.
-                            const raw = event.angleDelta.x !== 0 ? event.angleDelta.x : event.angleDelta.y;
-                            const threshold = Config.options.interactions.scrolling.mouseScrollDeltaThreshold;
-                            const scrollFactor = Math.abs(raw) >= threshold ? Config.options.interactions.scrolling.mouseScrollFactor : Config.options.interactions.scrolling.touchpadScrollFactor;
+                            const horizontal = event.angleDelta.x !== 0;
+                            const step = ScrollWheel.step(horizontal ? event.angleDelta.x : event.angleDelta.y,
+                                horizontal ? event.pixelDelta.x : event.pixelDelta.y, Config.options.interactions.scrolling);
                             const maxX = Math.max(0, favFlickable.contentWidth - favFlickable.width);
-                            favFlickable.contentX = Math.max(0, Math.min(favFlickable.contentX - (raw / threshold) * scrollFactor, maxX));
+                            favFlickable.contentX = Math.max(0, Math.min(favFlickable.contentX - step, maxX));
                         }
                     }
 

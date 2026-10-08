@@ -16,11 +16,13 @@ Flickable {
     property real touchpadScrollFactor: Config?.options.interactions.scrolling.touchpadScrollFactor ?? 450
     property real mouseScrollFactor: Config?.options.interactions.scrolling.mouseScrollFactor ?? 120
     property real mouseScrollDeltaThreshold: Config?.options.interactions.scrolling.mouseScrollDeltaThreshold ?? 120
-    // Every wheel event this flickable handles, for anything that wants to show
-    // what the device sent (the scrolling settings' test area)
-    signal wheelScrolled(real angleDelta, real pixelDelta)
+    // Every wheel step this flickable takes, in px, and whether the device sent a
+    // mouse notch (the scrolling settings' test area shows both)
+    signal wheelScrolled(real step, bool notch)
     // Accumulated scroll destination so wheel deltas stack while animating
     property real scrollTargetY: 0
+    // Touchpad: the content follows the fingers and glides on after they lift
+    TouchpadKinetic { id: kinetic; flickable: root }
 
     readonly property real minY: root.originY - root.topMargin
     readonly property real maxY: Math.max(minY, root.originY + root.contentHeight - root.height + root.bottomMargin)
@@ -37,10 +39,6 @@ Flickable {
     property bool _wheelScrolling: false
 
     ScrollBar.vertical: StyledScrollBar {}
-
-    function wheelStep(wheelEvent) {
-        return ScrollWheel.step(wheelEvent.angleDelta.y, wheelEvent.pixelDelta.y, root);
-    }
 
     function triggerBounceRebound(targetBound) {
         bounceAnim.stop();
@@ -82,9 +80,22 @@ Flickable {
      * swallow the wheel (a preview that takes no input) can hand it on to the page.
      */
     function scrollByWheel(wheelEvent) {
-        const step = root.wheelStep(wheelEvent);
-        root.wheelScrolled(wheelEvent.angleDelta.y, wheelEvent.pixelDelta.y);
+        const angle = wheelEvent.angleDelta.y;
 
+        if (!ScrollWheel.isNotch(angle, root)) {
+            const px = ScrollWheel.touchpadStep(angle, wheelEvent.pixelDelta.y, root);
+            root.wheelScrolled(px, false);
+            scrollAnim.stop();
+            bounceAnim.stop();
+            root._wheelScrolling = false;
+            kinetic.feed(px);
+            wheelEvent.accepted = true;
+            return;
+        }
+
+        kinetic.stop();
+        const step = ScrollWheel.notchStep(angle, root);
+        root.wheelScrolled(step, true);
         bounceAnim.stop();
 
         const currentPos = (scrollAnim.running || bounceAnim.running) ? root.scrollTargetY : root.contentY;
@@ -154,6 +165,7 @@ Flickable {
 
     onDraggingChanged: {
         if (root.dragging) {
+            kinetic.stop();
             bounceAnim.stop();
             reboundTimer.stop();
             root._wheelScrolling = false;

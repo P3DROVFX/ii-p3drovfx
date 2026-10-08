@@ -66,10 +66,6 @@ ListView {
         root.dragDistance = 0;
     }
 
-    function wheelStep(wheelEvent) {
-        return ScrollWheel.step(wheelEvent.angleDelta.y, wheelEvent.pixelDelta.y, root);
-    }
-
     function triggerBounceRebound(targetBound) {
         scrollAnim.stop();
         bounceAnim.stop();
@@ -113,6 +109,8 @@ ListView {
     // Same reasoning as StyledFlickable: the scroll Behavior is for wheel
     // jumps, not for the contentY that dragging and flicking write per frame.
     property bool _wheelScrolling: false
+    // Touchpad: the content follows the fingers and glides on after they lift
+    TouchpadKinetic { id: kinetic; flickable: root }
 
     onHeightChanged: {
         root._suppressScrollAnim = true;
@@ -121,6 +119,7 @@ ListView {
 
     onDraggingChanged: {
         if (root.dragging) {
+            kinetic.stop();
             scrollAnim.stop();
             bounceAnim.stop();
             reboundTimer.stop();
@@ -146,8 +145,19 @@ ListView {
         enabled: root.interactive && root.contentHeight > root.height
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
         onWheel: wheelEvent => {
-            const step = root.wheelStep(wheelEvent);
+            const angle = wheelEvent.angleDelta.y;
+            if (!ScrollWheel.isNotch(angle, root)) {
+                scrollAnim.stop();
+                bounceAnim.stop();
+                root._wheelScrolling = false;
+                kinetic.feed(ScrollWheel.touchpadStep(angle, wheelEvent.pixelDelta.y, root));
+                root.userScrolled(kinetic.target, root.maxY);
+                wheelEvent.accepted = true;
+                return;
+            }
 
+            kinetic.stop();
+            const step = ScrollWheel.notchStep(angle, root);
             bounceAnim.stop();
 
             const currentPos = (scrollAnim.running || bounceAnim.running) ? root.scrollTargetY : root.contentY;
