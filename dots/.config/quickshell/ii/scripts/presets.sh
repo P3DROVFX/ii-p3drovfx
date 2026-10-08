@@ -214,6 +214,9 @@ bundle_preset_assets() {
     # Edit Mode's per-screen wallpapers, as `{name}_screen<N>.<ext>`.
     python3 "$SCRIPTS_DIR/presets_helper.py" bundle-screens \
         "$PRESETS_DIR/$preset_name.json" "$PRESETS_DIR" "$preset_name"
+    # Desktop photo widget images, as `{name}_photo<N>.<ext>`.
+    python3 "$SCRIPTS_DIR/presets_helper.py" bundle-photos \
+        "$PRESETS_DIR/$preset_name.json" "$PRESETS_DIR" "$preset_name"
 }
 
 action=$1
@@ -349,7 +352,10 @@ case $action in
             fail_export "The 'zip' utility is not installed."
         fi
         
-        if command -v zenity >/dev/null; then
+        dest_override="$3"
+        if [[ -n "$dest_override" ]]; then
+            DEST_ZIP="$dest_override"
+        elif command -v zenity >/dev/null; then
             DEST_ZIP=$(zenity --file-selection --save --confirm-overwrite --filename="$HOME/${name}.zip" --file-filter="ZIP | *.zip" 2>/dev/null)
         else
             DEST_ZIP=$(kdialog --getsavefilename "$HOME/${name}.zip" "*.zip" 2>/dev/null)
@@ -412,6 +418,15 @@ case $action in
                 cp "$file" "$TMP_DIR/${base#"${name}_"}"
             done
 
+            # 1c. Desktop photo widget images keep their asset id as the file name.
+            for file in "$PRESETS_DIR/${name}_photo"[0-9]*.*; do
+                [[ -f "$file" ]] || continue
+                base=$(basename "$file")
+                cp "$file" "$TMP_DIR/${base#"${name}_"}"
+            done
+            python3 "$SCRIPTS_DIR/presets_helper.py" export-photos \
+                "$TMP_DIR/config.json" "$TMP_DIR" "$PRESETS_DIR" "$name"
+
             # 2. The profile picture is deliberately not exported. It is the
             #    user's own avatar, it says nothing about the theme, and an
             #    exported preset is meant to be handed to other people.
@@ -458,7 +473,10 @@ case $action in
         fi
         ;;
     import)
-        if command -v zenity >/dev/null; then
+        file_override="$2"
+        if [[ -n "$file_override" && -f "$file_override" ]]; then
+            FILE="$file_override"
+        elif command -v zenity >/dev/null; then
             FILE=$(zenity --file-selection --file-filter="Presets (*.zip *.json) | *.zip *.json" 2>/dev/null)
         else
             FILE=$(kdialog --getopenfilename "$HOME" "*.zip *.json" 2>/dev/null)
@@ -506,6 +524,8 @@ case $action in
                             if [[ "$f_ext" != "json" && "$f_ext" != "zip" ]]; then
                                 fname_lower=$(echo "$fname" | tr '[:upper:]' '[:lower:]')
                                 if [[ "$fname_lower" =~ ^screen[0-9]+\.[^.]+$ ]]; then
+                                    cp "$f" "$PRESETS_DIR/${preset_name}_$fname_lower"
+                                elif [[ "$fname_lower" =~ ^photo[0-9]+\.[^.]+$ ]]; then
                                     cp "$f" "$PRESETS_DIR/${preset_name}_$fname_lower"
                                 elif [[ "$fname_lower" == profile.* || "$fname_lower" == *profile*.* ]]; then
                                     cp "$f" "$PRESETS_DIR/${preset_name}_profile.$f_ext"

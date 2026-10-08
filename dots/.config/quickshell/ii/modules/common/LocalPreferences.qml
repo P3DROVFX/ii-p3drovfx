@@ -93,7 +93,6 @@ Singleton {
         "userProfile.customGreeting",
         "userProfile.imagePath",
         "sidebar.dashboardHeader.profileImagePath",
-        "background.widgets.*.imagePath",
         "background.thumbnailPath",
         "bluetoothDeviceImages",
         "soundcore.macAddress",

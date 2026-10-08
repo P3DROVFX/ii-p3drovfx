@@ -7,6 +7,7 @@ import io
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -458,14 +459,15 @@ class TestPersonalDataStripping(unittest.TestCase):
         self.assertTrue(sanitized["soundcore"]["enableEqualizer"])
         self.assertTrue(sanitized["phone"]["contacts"]["showAvatars"])
 
-    def test_desktop_widget_photos_do_not_travel(self):
+    def test_desktop_widget_photos_travel(self):
         data = {"background": {"widgets": {
-            "photo_pill_2x1": {"imagePath": "/home/testuser/Downloads/me.png", "radius": 12},
+            "photo_pill_2x1": {"imagePath": f"{self.home_dir}/Downloads/me.png", "radius": 12},
             "showOnlyOnSingleMonitor": True,
         }}}
         sanitized = presets_helper.sanitize_data(copy.deepcopy(data), self.home_dir)
         widget = sanitized["background"]["widgets"]["photo_pill_2x1"]
-        self.assertNotIn("imagePath", widget)
+        self.assertEqual(widget["imagePath"], "$HOME/Downloads/me.png")
+        self.assertEqual(widget.get("asset"), "photo0")
         self.assertEqual(widget["radius"], 12)
 
     def test_weather_location_does_not_travel(self):
@@ -511,16 +513,16 @@ class TestPersonalDataStripping(unittest.TestCase):
         self.assertEqual(sanitized["phone"]["webcam"]["resolution"], "1280x720")
         self.assertTrue(sanitized["interactions"]["touchGestures"]["enable"])
 
-    def test_photo_instance_pictures_do_not_travel(self):
-        """Each photo widget instance can carry its own picture; a path on the
-        author's disk never leaves with a preset."""
+    def test_photo_instance_pictures_travel(self):
+        """Each photo widget instance carries its own picture and travels with the preset."""
         data = {"background": {"activeWidgets": [
             {"id": "a", "widgetId": "photo", "x": 0, "y": 0, "imagePath": f"{self.home_dir}/Pictures/a.png"},
             {"id": "b", "widgetId": "photo", "x": 10, "y": 0},
         ]}}
         sanitized = presets_helper.sanitize_data(copy.deepcopy(data), self.home_dir)
         widgets = sanitized["background"]["activeWidgets"]
-        self.assertNotIn("imagePath", widgets[0])
+        self.assertEqual(widgets[0]["imagePath"], "$HOME/Pictures/a.png")
+        self.assertEqual(widgets[0].get("asset"), "photo0")
         self.assertEqual(widgets[0]["widgetId"], "photo")
         self.assertEqual(widgets[1]["x"], 10)
 
@@ -1542,6 +1544,205 @@ class TestBlacklistAndWidgetNormalization(unittest.TestCase):
             self.assertEqual(merged["search"]["baseWidth"], 700)
             self.assertEqual(merged["search"]["baseHeight"], 560)
 
+
+class TestDesktopPhotoWidgetsPresetExport(unittest.TestCase):
+    """Contracts and integration tests for desktop photo widgets in presets."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.home = self.tmp.name
+        self.old_home = os.environ.get("HOME")
+        os.environ["HOME"] = self.home
+        def restore_home():
+            if self.old_home is not None:
+                os.environ["HOME"] = self.old_home
+            else:
+                os.environ.pop("HOME", None)
+        self.addCleanup(restore_home)
+
+        self.pics_dir = os.path.join(self.home, "Pictures")
+        self.presets_dir = os.path.join(self.home, "presets")
+        os.makedirs(self.pics_dir, exist_ok=True)
+        os.makedirs(self.presets_dir, exist_ok=True)
+
+        self.img1 = os.path.join(self.pics_dir, "cat.png")
+        self.img2 = os.path.join(self.pics_dir, "dog.jpg")
+        with open(self.img1, "wb") as f:
+            f.write(b"PNG_CAT_DATA")
+        with open(self.img2, "wb") as f:
+            f.write(b"JPG_DOG_DATA")
+
+    def test_portable_photo_widgets_assignment(self):
+        data = {
+            "background": {
+                "activeWidgets": [
+                    {"id": "w1", "widgetId": "photo", "imagePath": self.img1},
+                    {"id": "w2", "widgetId": "photo_1x1", "imagePath": self.img2},
+                    {"id": "w3", "widgetId": "photo", "imagePath": self.img1},  # Duplicate image
+                    {"id": "w4", "widgetId": "clock"},
+                ],
+                "widgets": {
+                    "photo_pill_2x1": {"imagePath": self.img2},
+                    "clock": {"showSeconds": True},
+                }
+            }
+        }
+        presets_helper.portable_photo_widgets(data)
+        active = data["background"]["activeWidgets"]
+        self.assertEqual(active[0]["asset"], "photo0")
+        self.assertEqual(active[1]["asset"], "photo1")
+        # Duplicate image reuses photo0
+        self.assertEqual(active[2]["asset"], "photo0")
+        self.assertNotIn("asset", active[3])
+
+        widgets = data["background"]["widgets"]
+        # photo_pill_2x1 reuses photo1 because it points to img2
+        self.assertEqual(widgets["photo_pill_2x1"]["asset"], "photo1")
+        self.assertNotIn("asset", widgets["clock"])
+
+    def test_bundle_photos_copies_images_to_presets_dir(self):
+        preset_name = "MyPreset"
+        preset_file = os.path.join(self.presets_dir, f"{preset_name}.json")
+        data = {
+            "background": {
+                "activeWidgets": [
+                    {"id": "w1", "widgetId": "photo", "imagePath": self.img1, "asset": "photo0"},
+                ],
+                "widgets": {
+                    "photo_pill_2x1": {"imagePath": self.img2, "asset": "photo1"},
+                }
+            }
+        }
+        with open(preset_file, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+
+        presets_helper.bundle_photos(preset_file, self.presets_dir, preset_name)
+
+        bundled = presets_helper.photo_asset_files(self.presets_dir, preset_name)
+        self.assertIn("photo0", bundled)
+        self.assertIn("photo1", bundled)
+        self.assertTrue(os.path.isfile(bundled["photo0"]))
+        self.assertTrue(os.path.isfile(bundled["photo1"]))
+        with open(bundled["photo0"], "rb") as f:
+            self.assertEqual(f.read(), b"PNG_CAT_DATA")
+        with open(bundled["photo1"], "rb") as f:
+            self.assertEqual(f.read(), b"JPG_DOG_DATA")
+
+    def test_export_photos_stages_files_into_destination(self):
+        preset_name = "MyPreset"
+        export_dir = os.path.join(self.home, "export_tmp")
+        os.makedirs(export_dir, exist_ok=True)
+        config_file = os.path.join(export_dir, "config.json")
+
+        data = {
+            "background": {
+                "activeWidgets": [
+                    {"id": "w1", "widgetId": "photo", "imagePath": self.img1, "asset": "photo0"},
+                    {"id": "w2", "widgetId": "photo_plain_2x1", "imagePath": self.img2, "asset": "photo1"},
+                ]
+            }
+        }
+        with open(config_file, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+
+        presets_helper.export_photos(config_file, export_dir, self.presets_dir, preset_name)
+
+        p0 = os.path.join(export_dir, "photo0.png")
+        p1 = os.path.join(export_dir, "photo1.jpg")
+        self.assertTrue(os.path.isfile(p0))
+        self.assertTrue(os.path.isfile(p1))
+        with open(p0, "rb") as f:
+            self.assertEqual(f.read(), b"PNG_CAT_DATA")
+        with open(p1, "rb") as f:
+            self.assertEqual(f.read(), b"JPG_DOG_DATA")
+
+    def test_resolve_photo_assets_on_merge(self):
+        preset_name = "AlienTheme"
+        # Bundle a photo under presets_dir
+        bundled_photo = os.path.join(self.presets_dir, f"{preset_name}_photo0.png")
+        with open(bundled_photo, "wb") as f:
+            f.write(b"ALIEN_PHOTO")
+
+        preset = {
+            "background": {
+                "activeWidgets": [
+                    {"id": "inst_x", "widgetId": "photo", "imagePath": "/author/disk/old.png", "asset": "photo0"},
+                ]
+            }
+        }
+        current = {
+            "background": {
+                "activeWidgets": []
+            }
+        }
+        merged = copy.deepcopy(preset)
+        presets_helper.resolve_photo_assets(merged, preset, current, self.presets_dir, preset_name)
+
+        resolved_path = merged["background"]["activeWidgets"][0]["imagePath"]
+        self.assertEqual(resolved_path, bundled_photo)
+        self.assertTrue(os.path.isfile(resolved_path))
+
+    def test_full_roundtrip_save_export_import_merge(self):
+        # 1. Author config has a photo widget
+        author_config = {
+            "background": {
+                "activeWidgets": [
+                    {"id": "pw1", "widgetId": "photo_plain_2x1", "imagePath": self.img1, "x": 100, "y": 200}
+                ]
+            }
+        }
+
+        # 2. Save snapshot & bundle
+        preset_name = "TestPreset"
+        preset_file = os.path.join(self.presets_dir, f"{preset_name}.json")
+        author_config = presets_helper.sanitize_data(author_config, self.home, snapshot=True)
+        with open(preset_file, "w", encoding="utf-8") as f:
+            json.dump(author_config, f)
+        presets_helper.bundle_photos(preset_file, self.presets_dir, preset_name)
+
+        # Verify bundled next to preset
+        bundled_files = presets_helper.photo_asset_files(self.presets_dir, preset_name)
+        self.assertIn("photo0", bundled_files)
+
+        # 3. Export to temp staging directory (simulating export to zip)
+        export_tmp = os.path.join(self.home, "export_tmp")
+        os.makedirs(export_tmp, exist_ok=True)
+        exported_config = os.path.join(export_tmp, "config.json")
+        presets_helper.sanitize(preset_file, exported_config)
+        presets_helper.export_photos(exported_config, export_tmp, self.presets_dir, preset_name)
+
+        self.assertTrue(os.path.isfile(os.path.join(export_tmp, "photo0.png")))
+
+        # 4. Import on a different machine (simulated)
+        importer_presets = os.path.join(self.home, "importer_presets")
+        os.makedirs(importer_presets, exist_ok=True)
+        # Unpack exported zip: config.json -> importer preset, photo0.png -> {name}_photo0.png
+        shutil.copy2(os.path.join(export_tmp, "photo0.png"),
+                     os.path.join(importer_presets, f"{preset_name}_photo0.png"))
+        presets_helper.sanitize(exported_config, os.path.join(importer_presets, f"{preset_name}.json"))
+
+        # 5. Merge on importer machine
+        importer_config_file = os.path.join(self.home, "importer_config.json")
+        importer_base = {"background": {"activeWidgets": []}}
+        with open(importer_config_file, "w", encoding="utf-8") as f:
+            json.dump(importer_base, f)
+
+        presets_helper.merge(os.path.join(importer_presets, f"{preset_name}.json"),
+                             importer_config_file,
+                             importer_config_file,
+                             importer_presets,
+                             preset_name)
+
+        with open(importer_config_file, "r", encoding="utf-8") as f:
+            final_config = json.load(f)
+
+        imported_widget = final_config["background"]["activeWidgets"][0]
+        expected_photo_path = os.path.join(importer_presets, f"{preset_name}_photo0.png")
+        self.assertEqual(imported_widget["imagePath"], expected_photo_path)
+        self.assertTrue(os.path.isfile(imported_widget["imagePath"]))
+        with open(imported_widget["imagePath"], "rb") as f:
+            self.assertEqual(f.read(), b"PNG_CAT_DATA")
 
 
 if __name__ == "__main__":

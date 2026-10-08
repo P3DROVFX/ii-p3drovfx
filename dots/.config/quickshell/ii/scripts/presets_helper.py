@@ -103,11 +103,11 @@ PERSONAL_PATHS = (
     "userProfile.customGreeting",
     "userProfile.imagePath",
     "sidebar.dashboardHeader.profileImagePath",
-    "background.widgets.*.imagePath",
     "background.thumbnailPath",
     "bluetoothDeviceImages",
     # Dock utility widgets: the LocalSend target, folders and favorite sites.
     "dock.utilities.send.localsendIp",
+    "background.widgets.send_drop.localsendIp",
     "dock.utilities.send.localsendAlias",
     "dock.utilities.send.kdeDevice",
     "dock.utilities.files.folder",
@@ -632,6 +632,8 @@ VIDEO_EXTS = ('.mp4', '.mkv', '.webm', '.avi', '.mov', '.m4v', '.ogv')
 # Edit Mode's per-screen wallpapers ship next to the preset as
 # `{name}_screen<N>.<ext>`; an entry names its file by this id.
 SCREEN_ASSET_RE = re.compile(r'^screen[0-9]+$')
+# Desktop photo widget images ship next to the preset as `{name}_photo<N>.<ext>`.
+PHOTO_ASSET_RE = re.compile(r'^photo[0-9]+$')
 # WallpaperLayout.framingMemory.
 FRAMING_MEMORY = 12
 
@@ -788,6 +790,66 @@ def portable_monitor_wallpapers(data, live=False, keep_keys=True):
     background['monitorWallpapers'] = portable
 
 
+def portable_photo_widgets(data):
+    """Make desktop photo widgets carry portable asset IDs (photo0, photo1, ...)."""
+    background = data.get('background')
+    if not isinstance(background, dict):
+        return
+
+    assets = {}
+
+    active = background.get('activeWidgets')
+    if isinstance(active, list):
+        for entry in active:
+            if isinstance(entry, dict) and isinstance(entry.get('asset'), str) and PHOTO_ASSET_RE.match(entry['asset']):
+                path = plain_path(entry.get('imagePath', ''))
+                if path:
+                    assets[path] = entry['asset']
+
+    widgets = background.get('widgets')
+    if isinstance(widgets, dict):
+        for conf in widgets.values():
+            if isinstance(conf, dict) and isinstance(conf.get('asset'), str) and PHOTO_ASSET_RE.match(conf['asset']):
+                path = plain_path(conf.get('imagePath', ''))
+                if path:
+                    assets[path] = conf['asset']
+
+    def next_asset(path):
+        if not path:
+            return None
+        if path not in assets:
+            existing_nums = set()
+            for a in assets.values():
+                m = re.match(r'^photo(\d+)$', a)
+                if m:
+                    existing_nums.add(int(m.group(1)))
+            idx = 0
+            while idx in existing_nums:
+                idx += 1
+            assets[path] = f'photo{idx}'
+        return assets[path]
+
+    if isinstance(active, list):
+        for entry in active:
+            if not isinstance(entry, dict):
+                continue
+            path = plain_path(entry.get('imagePath', ''))
+            if path:
+                entry['asset'] = next_asset(path)
+            elif 'asset' in entry:
+                entry.pop('asset', None)
+
+    if isinstance(widgets, dict):
+        for key, conf in widgets.items():
+            if not isinstance(conf, dict):
+                continue
+            path = plain_path(conf.get('imagePath', ''))
+            if path:
+                conf['asset'] = next_asset(path)
+            elif 'asset' in conf:
+                conf.pop('asset', None)
+
+
 def screen_asset_files(presets_dir, preset_name):
     """{asset id: file} for the per-screen wallpapers bundled with a preset."""
     found = {}
@@ -828,6 +890,151 @@ def bundle_screens(preset_path, presets_dir, preset_name):
             os.remove(old)
         for asset, target in staged.items():
             os.replace(target, os.path.join(presets_dir, '%s_%s' % (preset_name, os.path.basename(target))))
+
+
+def photo_asset_files(presets_dir, preset_name):
+    """{asset id: file} for the photo widget images bundled with a preset."""
+    found = {}
+    if not presets_dir or not preset_name or not os.path.isdir(presets_dir):
+        return found
+    prefix = '%s_' % preset_name
+    pattern = os.path.join(glob.escape(presets_dir), glob.escape(prefix) + 'photo*.*')
+    for filepath in glob.glob(pattern):
+        stem, ext = os.path.splitext(os.path.basename(filepath)[len(prefix):])
+        if PHOTO_ASSET_RE.match(stem) and ext.lower() not in ('.json', '.zip'):
+            found[stem] = filepath
+    return found
+
+
+def bundle_photos(preset_path, presets_dir, preset_name):
+    """Copy every desktop photo widget image a preset names next to it."""
+    if not os.path.isfile(preset_path):
+        return
+    with open(preset_path, 'r', encoding='utf-8') as f:
+        preset = json.load(f)
+    background = preset.get('background') if isinstance(preset, dict) else None
+    if not isinstance(background, dict):
+        return
+
+    portable_photo_widgets(preset)
+    with open(preset_path, 'w', encoding='utf-8') as f:
+        json.dump(preset, f, indent=4)
+
+    wanted = {}
+
+    active = background.get('activeWidgets')
+    for entry in active if isinstance(active, list) else []:
+        if not isinstance(entry, dict):
+            continue
+        asset = entry.get('asset')
+        source = plain_path(expand_val(entry.get('imagePath', ''), user_home()))
+        if isinstance(asset, str) and PHOTO_ASSET_RE.match(asset) and source and os.path.isfile(source):
+            wanted.setdefault(asset, source)
+
+    widgets = background.get('widgets')
+    for conf in widgets.values() if isinstance(widgets, dict) else []:
+        if not isinstance(conf, dict):
+            continue
+        asset = conf.get('asset')
+        source = plain_path(expand_val(conf.get('imagePath', ''), user_home()))
+        if isinstance(asset, str) and PHOTO_ASSET_RE.match(asset) and source and os.path.isfile(source):
+            wanted.setdefault(asset, source)
+
+    os.makedirs(presets_dir, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=presets_dir, prefix='.photos-') as staging:
+        staged = {}
+        for asset, source in wanted.items():
+            ext = os.path.splitext(source)[1].lower() or '.png'
+            target = os.path.join(staging, asset + ext)
+            shutil.copy2(source, target)
+            staged[asset] = target
+        for old in photo_asset_files(presets_dir, preset_name).values():
+            try:
+                os.remove(old)
+            except OSError:
+                pass
+        for asset, target in staged.items():
+            dest = os.path.join(presets_dir, '%s_%s' % (preset_name, os.path.basename(target)))
+            os.replace(target, dest)
+
+
+def export_photos(config_path, dest_dir, presets_dir=None, preset_name=None):
+    """Ensure all photo widget images in config_path exist in dest_dir as {asset}.{ext}."""
+    if not os.path.isfile(config_path):
+        return
+    with open(config_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        return
+
+    portable_photo_widgets(data)
+    with open(config_path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=4)
+
+    background = data.get('background', {})
+    bundled = photo_asset_files(presets_dir, preset_name) if presets_dir and preset_name else {}
+
+    entries_to_check = []
+    active = background.get('activeWidgets')
+    if isinstance(active, list):
+        entries_to_check.extend([e for e in active if isinstance(e, dict)])
+    widgets = background.get('widgets')
+    if isinstance(widgets, dict):
+        entries_to_check.extend([c for c in widgets.values() if isinstance(c, dict)])
+
+    for entry in entries_to_check:
+        asset = entry.get('asset')
+        if not (isinstance(asset, str) and PHOTO_ASSET_RE.match(asset)):
+            continue
+
+        already_staged = glob.glob(os.path.join(glob.escape(dest_dir), glob.escape(asset) + '.*'))
+        if already_staged:
+            continue
+
+        source = bundled.get(asset)
+        if not source or not os.path.isfile(source):
+            source = plain_path(expand_val(entry.get('imagePath', ''), user_home()))
+
+        if source and os.path.isfile(source):
+            ext = os.path.splitext(source)[1].lower() or '.png'
+            target = os.path.join(dest_dir, asset + ext)
+            shutil.copy2(source, target)
+
+
+def resolve_photo_assets(merged, preset, current, presets_dir=None, preset_name=None):
+    """Point desktop photo widgets at the copies bundled next to the preset."""
+    files = photo_asset_files(presets_dir, preset_name) if presets_dir and preset_name else {}
+    background = merged.get('background')
+    if not isinstance(background, dict):
+        return
+
+    # 1. activeWidgets
+    active = background.get('activeWidgets')
+    if isinstance(active, list):
+        for entry in active:
+            if not isinstance(entry, dict):
+                continue
+            asset = entry.get('asset')
+            if isinstance(asset, str) and asset in files:
+                entry['imagePath'] = files[asset]
+            else:
+                raw_path = plain_path(expand_val(entry.get('imagePath', ''), user_home()))
+                if raw_path and os.path.isfile(raw_path):
+                    entry['imagePath'] = raw_path
+
+    # 2. widgets
+    widgets = background.get('widgets')
+    if isinstance(widgets, dict):
+        for conf in widgets.values():
+            if not isinstance(conf, dict):
+                continue
+            asset = conf.get('asset')
+            if isinstance(asset, str) and asset in files:
+                conf['imagePath'] = files[asset]
+            else:
+                raw_path = plain_path(expand_val(conf.get('imagePath', ''), user_home()))
+                if raw_path and os.path.isfile(raw_path):
+                    conf['imagePath'] = raw_path
 
 
 def apply_monitor_wallpapers(merged, preset, current, presets_dir=None, preset_name=None):
@@ -1024,12 +1231,6 @@ def sanitize_data(data, home_dir, snapshot=False):
     # dropped rather than blanked so that applying the preset falls through to
     # whatever the importer already had.
     strip_paths(data, PERSONAL_PATHS)
-    # A photo widget instance's own picture is a file on the author's disk.
-    # Stripped on save only: entries are matched by position on apply, and the
-    # importer's instances are not the author's, so handing theirs back would
-    # pin a picture to the wrong widget. Without one an instance shows its
-    # type's picture, which merge() does restore (background.widgets.*.imagePath).
-    strip_paths(data, ("background.activeWidgets.*.imagePath",))
 
     if 'appearance' in data and isinstance(data['appearance'], dict):
         icons = data['appearance'].get('icons')
@@ -1053,6 +1254,8 @@ def sanitize_data(data, home_dir, snapshot=False):
     # Per-screen wallpapers travel, matched to the importer's screens on
     # apply. A monitor's model/serial stays on the author's machine.
     portable_monitor_wallpapers(data, live=snapshot, keep_keys=snapshot)
+    # Desktop photo widgets travel as portable assets (photo0, photo1, ...)
+    portable_photo_widgets(data)
     # Where switchwall put this machine's screen-sized copy of the video.
     background = data.get('background')
     if isinstance(background, dict):
@@ -1148,6 +1351,7 @@ def merge(preset_path, config_path, out_path, presets_dir=None, preset_name=None
     restore_local_preferences(merged, load_local_preferences(config_path))
     resolve_asset_paths(merged, current, presets_dir, preset_name)
     apply_monitor_wallpapers(merged, preset, current, presets_dir, preset_name)
+    resolve_photo_assets(merged, preset, current, presets_dir, preset_name)
     carry_video_frame_time(merged, preset, current)
     # A screen-sized copy of the importer's previous video, not of this one;
     # switchwall publishes the right one when it switches.
@@ -1333,7 +1537,10 @@ def find_wallpaper_fallback(presets_dir, preset_name):
         ext = os.path.splitext(filepath)[1].lower()
         if ext not in ('.json', '.zip'):
             base = os.path.basename(filepath)
-            if not base.startswith(f"{preset_name}_profile.") and not base.startswith(f"{preset_name}_banner."):
+            if (not base.startswith(f"{preset_name}_profile.") and
+                not base.startswith(f"{preset_name}_banner.") and
+                not base.startswith(f"{preset_name}_photo") and
+                not base.startswith(f"{preset_name}_screen")):
                 return filepath
     return None
 
@@ -1449,6 +1656,16 @@ def main():
         if len(sys.argv) < 5:
             sys.exit(1)
         bundle_screens(sys.argv[2], sys.argv[3], sys.argv[4])
+    elif action == 'bundle-photos':
+        if len(sys.argv) < 5:
+            sys.exit(1)
+        bundle_photos(sys.argv[2], sys.argv[3], sys.argv[4])
+    elif action == 'export-photos':
+        if len(sys.argv) < 4:
+            sys.exit(1)
+        presets_dir = sys.argv[4] if len(sys.argv) > 4 else None
+        preset_name = sys.argv[5] if len(sys.argv) > 5 else None
+        export_photos(sys.argv[2], sys.argv[3], presets_dir, preset_name)
     elif action == 'list':
         if len(sys.argv) < 3:
             sys.exit(1)
