@@ -22,16 +22,23 @@ Item {
 
     readonly property real gap: 12
     readonly property real minCardWidth: 210
-    readonly property real cardHeight: 156
+    readonly property real cardHeight: 178
     readonly property real stageHeight: 64
     readonly property real stageMargin: 10
     readonly property real ringWidth: 2.5
     readonly property real ringGap: 2
     readonly property real ringRoom: root.ringWidth + root.ringGap
     readonly property real unit: 24
-    readonly property int columns: Math.max(1, Math.min(Catalog.STYLES.length, Math.floor((width + root.gap) / (root.minCardWidth + root.gap))))
-    readonly property real cardWidth: Math.floor((width - root.gap * (root.columns - 1)) / root.columns)
+    readonly property int fits: Math.floor((width + root.gap) / (root.minCardWidth + root.gap))
+    readonly property int columns: root.fits >= Catalog.STYLES.length ? Catalog.STYLES.length : root.fits >= 3 ? 3 : Math.max(1, root.fits)
     readonly property int rows: Math.ceil(Catalog.STYLES.length / root.columns)
+    readonly property int lastRowCount: Catalog.STYLES.length - (root.rows - 1) * root.columns
+
+    function widthAt(index) {
+        const inLastRow = Math.floor(index / root.columns) === root.rows - 1;
+        const across = inLastRow ? root.lastRowCount : root.columns;
+        return Math.floor((width - root.gap * (across - 1)) / across);
+    }
 
     property string tried: ""
 
@@ -52,9 +59,9 @@ Item {
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
             }
 
-            x: (shell.index % root.columns) * (root.cardWidth + root.gap)
+            x: (shell.index % root.columns) * (root.widthAt(shell.index) + root.gap)
             y: Math.floor(shell.index / root.columns) * (root.cardHeight + root.gap)
-            width: root.cardWidth
+            width: root.widthAt(shell.index)
             height: root.cardHeight
 
             Rectangle {

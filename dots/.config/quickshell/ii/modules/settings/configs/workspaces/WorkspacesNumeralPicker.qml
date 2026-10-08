@@ -18,7 +18,9 @@ Flow {
     property string currentValue: "normal"
     property var names: ({})
 
-    readonly property real cardWidth: 128
+    readonly property real minCardWidth: 120
+    readonly property int columns: Math.max(1, Math.min(Catalog.NUMERALS.length, Math.floor((width + root.spacing) / (root.minCardWidth + root.spacing))))
+    readonly property real cardWidth: Math.floor((width - root.spacing * (root.columns - 1)) / root.columns)
     readonly property real cardHeight: 112
     readonly property real bigGlyph: 34
     readonly property real smallGlyph: 17

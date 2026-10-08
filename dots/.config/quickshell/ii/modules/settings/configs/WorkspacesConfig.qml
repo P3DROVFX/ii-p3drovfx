@@ -347,7 +347,7 @@ Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 symbol: "select_window"
-                title: Translation.tr("Maximum window count per workspace")
+                title: Translation.tr("Windows per workspace")
                 summary: Translation.tr("Icons past this many are left out")
                 from: 1
                 to: 20
