@@ -168,6 +168,7 @@ PanelWindow {
         active: (Config.options.background.useBackgroundOverviewAlways ?? false)
             || bgRoot.lockEffectRequested
             || (GlobalStates.overviewBackgroundActive && bgRoot.isMonitorFocused)
+            || (Boolean(Config.options.background?.zoomOutEnabled) && bgRoot.scratchpadOpenOnMonitor)
         // Only where the overview is what would zoom this wallpaper in the first place.
         held: GlobalStates.overviewDragging && bgRoot.isMonitorFocused && !bgRoot.lockEffectRequested
             && !GlobalStates.overviewUsesAppDrawer && Config.options.background.zoomOutEnabled
@@ -260,6 +261,14 @@ PanelWindow {
 
     // Workspaces calculations
     property HyprlandMonitor monitor: Hyprland.monitorFor(modelData)
+    readonly property var thisMonitorData: {
+        const monName = bgRoot.monitor?.name ?? (bgRoot.screen?.name ?? "");
+        return (HyprlandData.monitors ?? []).find(m => m.name === monName) ?? null;
+    }
+    readonly property bool scratchpadOpenOnMonitor: {
+        const spec = bgRoot.thisMonitorData?.specialWorkspace;
+        return Boolean(spec && spec.name !== "" && (spec.id ?? 0) !== 0);
+    }
     readonly property bool isMonitorFocused: Quickshell.screens.length <= 1 || ((Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "") == (monitor ? monitor.name : ""))
     readonly property bool loopEnabled: !videoEffectsDisabled && Config.options.background.parallax.loop
     readonly property var intensitySpans: [20, 15, 12, 10, 8, 7, 5, 4, 3, 2]

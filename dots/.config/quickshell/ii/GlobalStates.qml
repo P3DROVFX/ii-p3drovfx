@@ -275,7 +275,7 @@ Singleton {
         const monitors = HyprlandData.monitors;
         if (!monitors)
             return false;
-        return monitors.some(mon => mon.specialWorkspace && mon.specialWorkspace.name !== "");
+        return monitors.some(mon => mon.specialWorkspace && mon.specialWorkspace.name !== "" && (mon.specialWorkspace.id ?? 0) !== 0);
     }
     property bool scratchpadEmptyOverlayActive: false
     readonly property bool overviewBackgroundActive: {
@@ -283,7 +283,7 @@ Singleton {
         const allowOverviewBg = Config.options && Config.options.overview && Config.options.overview.animationStyle !== "none";
         return Boolean(background && (background.useBackgroundOverviewAlways
             || (background.zoomOutEnabled
-                && ((root.classicOverviewOpen && allowOverviewBg) || root.cheatsheetOpen || root.scratchpadOpen))));
+                && ((root.classicOverviewOpen && allowOverviewBg) || root.cheatsheetOpen))));
     }
 
     // BackgroundRoot owns one controller per monitor. Other background surfaces
