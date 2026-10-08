@@ -57,7 +57,7 @@ Item {
      */
     property string hostId: ""
     property var hostProps: ({})
-    /** "notch" or "island" to try a shape on; "" follows the setting. */
+    /** "notch", "sculpted" or "island" to try a shape on; "" follows the setting. */
     property string shapeOverride: ""
 
     /**
@@ -78,9 +78,12 @@ Item {
 
     // ── What the island draws ────────────────────────────────────────────
     readonly property bool bubblesOn: Config.options.bar.floatingNotch.auxiliaryBubble === true
-    readonly property bool pillShape: (root.shapeOverride !== "" ? root.shapeOverride : IslandPolicy.shape) === "island"
+    readonly property string shownShape: root.shapeOverride !== "" ? root.shapeOverride : IslandPolicy.shape
+    readonly property bool pillShape: root.shownShape === "island"
+    readonly property bool sculptedShape: root.shownShape === "sculpted"
     readonly property real restHeight: IslandMotion.pillHeight
-    readonly property real filletSize: Appearance.rounding.verysmall
+    // The island's own reach for each shell (NotchIsland.filletSize/sculptWing).
+    readonly property real filletSize: root.sculptedShape ? Math.round(root.restHeight * 1.25) : Appearance.rounding.verysmall
     readonly property real pillInset: Appearance.sizes.hyprlandGapsOut
     readonly property real bubbleDiameter: IslandMotion.pillHeight - 6
     readonly property color islandColor: Config.options.bar.expressiveColors
@@ -592,6 +595,10 @@ Item {
                     attached: !root.pillShape
                     topRadius: root.pillShape ? body.bottomRadius : 0
                     bottomRadius: Math.min(scene.islandHeight / 2, Appearance.rounding.large)
+                    sculpted: root.sculptedShape
+                    flareDepth: root.restHeight / 2
+                    foot: Math.round(root.restHeight)
+                    slant: Math.max(0, Math.min(1, 2 - body.height / root.restHeight))
                     color: root.islandColor
 
                 }

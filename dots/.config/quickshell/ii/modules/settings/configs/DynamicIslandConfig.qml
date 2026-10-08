@@ -304,7 +304,8 @@ Item {
                             if (!dynamicIslandConfigRoot.islandOn)
                                 return Translation.tr("Off");
                             const where = dynamicIslandConfigRoot.centerInBarActive ? Translation.tr("In the bar") : Translation.tr("Floating");
-                            const shape = IslandPolicy.shape === "island" ? Translation.tr("Island") : Translation.tr("Notch");
+                            const shape = IslandPolicy.shape === "island" ? Translation.tr("Island")
+                                : IslandPolicy.shape === "sculpted" ? Translation.tr("Sculpted") : Translation.tr("Notch");
                             return where + " · " + shape;
                         }
                         font.pixelSize: Appearance.font.pixelSize.smaller

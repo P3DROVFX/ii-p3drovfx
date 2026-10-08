@@ -9,9 +9,9 @@ import qs.modules.common.widgets
 import qs.modules.ii.dynamicIsland.styles.notch
 
 /**
- * The island's two shells as cards, each with its own silhouette drawn by the
- * island's `NotchShape`: the notch flat against the top edge, flaring into it, and
- * the island floating free as a pill. The chosen one fills with the secondary
+ * The island's three shells as cards, each with its own silhouette drawn by the
+ * island's `NotchShape`: the notch flat against the top edge, flaring into it, the
+ * sculpted notch whose sides are one long S, and the island floating free as a pill. The chosen one fills with the secondary
  * container and wears the primary ring; pointing at one tries it on the page's
  * live island (`tried`). A shell the bar cannot host says why.
  */
@@ -24,6 +24,7 @@ Item {
     property color islandColor: Appearance.colors.colLayer0
     /** The shell under the pointer, "" when none. */
     readonly property string tried: notchCard.hovered && !root.notchBlocked ? "notch"
+        : sculptedCard.hovered && !root.notchBlocked ? "sculpted"
         : islandCard.hovered ? "island" : ""
     /** Room around each card for the chosen one's ring, kept inside the picker's own box. */
     readonly property real ringGap: 2
@@ -33,14 +34,25 @@ Item {
     signal selected(string value)
 
     readonly property int gap: 12
-    readonly property bool stacked: width < 520
-    readonly property real cardWidth: root.stacked ? width : Math.floor((width - root.gap) / 2)
-    implicitHeight: root.stacked ? notchCard.height + root.gap + islandCard.height : notchCard.height
+    // Three across while each card keeps room for its silhouette; one per row below.
+    readonly property int columns: width >= 720 ? 3 : 1
+    readonly property real cardWidth: Math.floor((width - (root.columns - 1) * root.gap) / root.columns)
+    /** Narrow cards put the silhouette above the text instead of beside it. */
+    readonly property bool tall: root.columns > 1 && root.cardWidth < 330
+    readonly property real cardHeight: root.tall ? 210 : 148
+    implicitHeight: Math.ceil(3 / root.columns) * (root.cardHeight + root.gap) - root.gap
+
+    function cardX(index) {
+        return (index % root.columns) * (root.cardWidth + root.gap);
+    }
+    function cardY(index) {
+        return Math.floor(index / root.columns) * (root.cardHeight + root.gap);
+    }
 
     ShapeCard {
         id: notchCard
-        x: 0
-        y: 0
+        x: root.cardX(0)
+        y: root.cardY(0)
         value: "notch"
         title: Translation.tr("Notch")
         summary: root.notchBlocked ? root.notchBlockedText : Translation.tr("Flat against the top edge, flaring into it like the screen grew it")
@@ -48,9 +60,19 @@ Item {
     }
 
     ShapeCard {
+        id: sculptedCard
+        x: root.cardX(1)
+        y: root.cardY(1)
+        value: "sculpted"
+        title: Translation.tr("Sculpted")
+        summary: root.notchBlocked ? root.notchBlockedText : Translation.tr("A wider notch whose sides melt into the edge in one long curve")
+        blocked: root.notchBlocked
+    }
+
+    ShapeCard {
         id: islandCard
-        x: root.stacked ? 0 : root.cardWidth + root.gap
-        y: root.stacked ? notchCard.height + root.gap : 0
+        x: root.cardX(2)
+        y: root.cardY(2)
         value: "island"
         title: Translation.tr("Island")
         summary: Translation.tr("A pill floating free of every edge; also sits in a Float or Rect bar")
@@ -74,7 +96,7 @@ Item {
         }
 
         width: root.cardWidth
-        height: 148
+        height: root.cardHeight
 
         Rectangle {
             anchors.fill: parent
@@ -126,8 +148,8 @@ Item {
                 id: edge
                 x: 14
                 y: 14
-                width: Math.min(196, parent.width * 0.42)
-                height: parent.height - 28
+                width: root.tall ? parent.width - 28 : Math.min(196, parent.width * 0.42)
+                height: root.tall ? 74 : parent.height - 28
                 radius: Appearance.rounding.large
                 color: card.chosen ? ColorUtils.mix(Appearance.colors.colSecondaryContainer, Appearance.colors.colOnSecondaryContainer, 0.88)
                     : Appearance.colors.colLayer2
@@ -143,12 +165,19 @@ Item {
 
                 NotchShape {
                     readonly property bool pill: card.value === "island"
+                    readonly property bool wave: card.value === "sculpted"
+                    // Kept clear of the frame's rounded corners, which the wide S reaches.
+                    readonly property real bodyWidth: Math.min(124, edge.width * 0.62,
+                        edge.width - 2 * (shoulder + edge.radius)) * (1 + 0.12 * edge.swellLive)
                     anchors.horizontalCenter: parent.horizontalCenter
                     y: pill ? 10 : 0
-                    width: Math.round(edge.width * (0.62 + 0.08 * edge.swellLive))
+                    width: Math.round(bodyWidth + 2 * shoulder)
                     height: Math.round(26 + 6 * edge.swellLive)
-                    shoulder: pill ? 0 : 7
+                    // The sculpted S at the island's own proportions (NotchIsland.sculptWing).
+                    shoulder: pill ? 0 : wave ? 33 : 7
                     attached: !pill
+                    sculpted: wave
+                    foot: 26
                     topRadius: pill ? height / 2 : 0
                     bottomRadius: height / 2
                     color: root.islandColor
@@ -177,12 +206,12 @@ Item {
                 }
             }
 
+            // Placed rather than anchored: the two arrangements swap at run time, and a
+            // conditional anchor released to `undefined` keeps its old offset.
             ColumnLayout {
-                anchors.left: edge.right
-                anchors.leftMargin: 18
-                anchors.right: parent.right
-                anchors.rightMargin: 18
-                anchors.verticalCenter: parent.verticalCenter
+                x: root.tall ? 18 : edge.x + edge.width + 18
+                y: root.tall ? edge.y + edge.height + 12 : Math.round((parent.height - height) / 2)
+                width: parent.width - x - 18
                 spacing: 4
 
                 RowLayout {

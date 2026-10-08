@@ -40,8 +40,10 @@ QtObject {
      * in and the two answers must never disagree. When IslandPolicy.useModernSchema
      * flips, the new block has to be read here as well.
      */
-    readonly property string islandShape: (Config.ready
-        && Config.options.bar.floatingNotch.shape === "island") ? "island" : "notch"
+    readonly property string islandShape: {
+        const shape = Config.ready ? Config.options.bar.floatingNotch.shape : "";
+        return (shape === "island" || shape === "sculpted") ? shape : "notch";
+    }
 
     // Which bar styles leave the centred island somewhere to sit depends on its shell.
     // A notch retracts *into* the screen edge, so it needs a bar welded to that edge

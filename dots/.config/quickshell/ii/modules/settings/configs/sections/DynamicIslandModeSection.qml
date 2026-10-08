@@ -179,6 +179,11 @@ ColumnLayout {
                 "value": "notch",
                 "enabled": !ShellModePolicy.notchShapeBlockedByCenterInBar
             }, {
+                "displayName": Translation.tr("Sculpted"),
+                "icon": "line_curve",
+                "value": "sculpted",
+                "enabled": !ShellModePolicy.notchShapeBlockedByCenterInBar
+            }, {
                 "displayName": Translation.tr("Island"),
                 "icon": "pill",
                 "value": "island"

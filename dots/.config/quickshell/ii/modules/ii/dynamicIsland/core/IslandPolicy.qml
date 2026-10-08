@@ -76,12 +76,15 @@ Singleton {
     }
 
     /**
-     * The outer shell: "notch" (attached to the edge) or "island" (a floating pill).
-     * Only the shell changes; the faces inside are the same.
+     * The outer shell: "notch" (attached to the edge), "sculpted" (a notch whose
+     * sides are one long S) or "island" (a floating pill). Only the shell changes;
+     * the faces inside are the same.
      */
     readonly property string shape: {
-        if (root.modern && root.modern.appearance && root.modern.appearance.shape)
-            return root.modern.appearance.shape === "island" ? "island" : "notch";
+        if (root.modern && root.modern.appearance && root.modern.appearance.shape) {
+            const shape = root.modern.appearance.shape;
+            return (shape === "island" || shape === "sculpted") ? shape : "notch";
+        }
         // The legacy block is read through ShellModePolicy, which needs the same answer
         // to decide which bar styles the centred island supports.
         return ShellModePolicy.islandShape;

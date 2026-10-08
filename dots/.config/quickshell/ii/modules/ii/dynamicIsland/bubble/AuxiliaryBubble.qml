@@ -74,6 +74,8 @@ Item {
     required property real reservedLeft
     required property color surfaceColor
     required property bool shadowEnabled
+    /** The body's capsule is not the silhouette drawn there: cut the field at its edge, never under it. */
+    property bool cutAtEdge: false
 
     /** The pointer rested on this bubble: it asks to expand into an island of its own. */
     signal expandRequested(string activityId)
@@ -743,6 +745,7 @@ Item {
         gap: bubble.gap
         surfaceColor: bubble.surfaceColor
         shadowEnabled: bubble.shadowEnabled
+        cutAtEdge: bubble.anchorBubble === null && bubble.cutAtEdge
     }
 
     // The glance itself, fading in once the bubble has mostly left.

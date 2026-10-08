@@ -59,6 +59,12 @@ Item {
 
     property color surfaceColor: "black"
     property bool shadowEnabled: false
+    /**
+     * The main shape is not exactly what the island draws there (the sculpted shell's
+     * S eases in under the capsule's lower end), so the tuck under it would show as a
+     * sliver of its outline: cut at the edge instead.
+     */
+    property bool cutAtEdge: false
     property color shadowColor: Qt.rgba(0, 0, 0, 0.45)
 
     // ── The motion ───────────────────────────────────────────────────────────
@@ -261,7 +267,7 @@ Item {
      * nothing under the island). An opaque body keeps the tuck, where it is invisible
      * and is what makes the neck seamless.
      */
-    readonly property real bodyCut: root.surfaceColor.a >= 0.999 ? 1.5 : 0
+    readonly property real bodyCut: root.surfaceColor.a >= 0.999 && !root.cutAtEdge ? 1.5 : 0
 
     ShaderEffect {
         id: field
