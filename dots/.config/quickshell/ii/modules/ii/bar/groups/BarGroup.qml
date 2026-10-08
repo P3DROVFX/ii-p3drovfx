@@ -25,7 +25,7 @@ Item {
     property var startRadius // left - top
     property var endRadius // right - bottom
 
-    property color colBackground: Appearance.m3colors.m3surfaceContainerLow
+    property color colBackground: Appearance.colors.colLayer1
 
     Rectangle {
         id: background

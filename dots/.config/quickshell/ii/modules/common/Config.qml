@@ -5147,7 +5147,7 @@ Singleton {
                     property bool centerInBar: false // "Dynamic Island in bar center" integration mode
                 }
 
-                property int barGroupStyle: 0 // 0: Pills | 1: Island (opaque) | 2: Transparent (or maybe line-separated in the future)
+                property int barGroupStyle: 0 // 0: Pills | 1: Island | 2: Transparent (or maybe line-separated in the future)
                 property string topLeftIcon: "spark" // Options: "distro" or any icon name in ~/.config/quickshell/ii/assets/icons
                 property bool useMaterialSymbolForTopLeftIcon: false
                 property int barBackgroundStyle: 1 // 0: Transparent | 1: Visible | 2: Adaptive

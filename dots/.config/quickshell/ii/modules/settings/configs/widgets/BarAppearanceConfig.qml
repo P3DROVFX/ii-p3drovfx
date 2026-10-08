@@ -183,7 +183,7 @@ Item {
                 ContentSubsection {
                     title: Translation.tr("Group style")
                     icon: "group_work"
-                    tooltip: Translation.tr("Island style makes the group background opaque when bar is transparent")
+                    tooltip: Translation.tr("Style for widget group containers on the bar")
 
                     ConfigSelectionArray {
                         currentValue: Config.options.bar.barGroupStyle
