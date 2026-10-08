@@ -8,6 +8,7 @@ import qs.services
 import QtQuick
 import Quickshell
 import Quickshell.Widgets
+import Quickshell.Io
 
 Item {
     id: root
@@ -54,6 +55,13 @@ Item {
     property real toolbarPadding: 8
     property real toolbarH: toolbarBtnHeight + toolbarPadding * 2
     readonly property real columnSpacing: 8
+
+    // KDE Connect takes the capture only while its service is on, the phone is
+    // paired and reachable, and that phone can receive shared files.
+    readonly property bool phoneShareAvailable: KdeConnectService.serviceEnabled
+        && KdeConnectService.activeReachable
+        && (KdeConnectService.activeDevice?.paired ?? false)
+        && (KdeConnectService.activeDevice?.supportedPlugins ?? []).indexOf("kdeconnect_share") >= 0
 
     implicitWidth: Math.max(previewW, toolbar.implicitWidth)
     implicitHeight: previewH + columnSpacing + toolbarH
@@ -189,6 +197,54 @@ Item {
         root.toolbarOffset += root.swipeOffset;
         root.swipeOffset = 0;
         closeAnim.start();
+    }
+
+    // Copies what the preview shows, under a name the phone can display, and
+    // shares that copy. The copy comes first: dismissing the overlay deletes the
+    // snip temp file.
+    function sendToPhone() {
+        if (phoneSend.running || !root.phoneShareAvailable)
+            return;
+        var esc = function (s) {
+            return String(s).replace(/'/g, "'\\''");
+        };
+        var dir = Directories.phoneShare;
+        var dst = dir + "/screenshot-" + Qt.formatDateTime(new Date(), "yyyy-MM-dd_hh.mm.ss") + ".png";
+        var srcPath = GlobalStates.screenshotOverlayImagePath;
+        var hasCrop = GlobalStates.screenshotOverlayRegionW > 0 && GlobalStates.screenshotOverlayRegionH > 0;
+
+        var cmd = "mkdir -p '" + esc(dir) + "' && find '" + esc(dir) + "' -maxdepth 1 -name 'screenshot-*.png' -mtime +1 -delete";
+        if (hasCrop) {
+            cmd += " && magick '" + esc(srcPath) + "' -crop " + Math.round(GlobalStates.screenshotOverlayRegionW) + "x" + Math.round(GlobalStates.screenshotOverlayRegionH) + "+" + Math.round(GlobalStates.screenshotOverlayRegionX) + "+" + Math.round(GlobalStates.screenshotOverlayRegionY) + " +repage '" + esc(dst) + "'";
+        } else {
+            cmd += " && cp '" + esc(srcPath) + "' '" + esc(dst) + "'";
+        }
+
+        phoneSend.deviceId = KdeConnectService.activeDeviceId;
+        phoneSend.deviceName = KdeConnectService.activeDeviceDisplayName;
+        phoneSend.target = dst;
+        phoneSend.command = ["bash", "-c", cmd];
+        phoneSend.running = true;
+    }
+
+    // Runs the copy and then the share. The overlay closes only once this ends:
+    // closing destroys the Process, so an exit after that is never delivered.
+    Process {
+        id: phoneSend
+
+        property string deviceId: ""
+        property string deviceName: ""
+        property string target: ""
+
+        onExited: (exitCode, exitStatus) => {
+            if (exitCode === 0) {
+                KdeConnectService.shareUrl(phoneSend.deviceId, "file://" + phoneSend.target);
+                Quickshell.execDetached(["notify-send", "-a", "Shell", "-i", "camera-photo", "-t", "4000", "KDE Connect", Translation.tr("Sending screenshot to %1").arg(String(phoneSend.deviceName))]);
+            } else {
+                Quickshell.execDetached(["notify-send", "-a", "Shell", "-i", "dialog-error", "KDE Connect", Translation.tr("Could not prepare the screenshot")]);
+            }
+            root._startClose();
+        }
     }
 
     // Swipe left to dismiss; a short swipe springs back.
@@ -417,6 +473,15 @@ Item {
                     }
                     root._startClose();
                 }
+            }
+
+            OverlayButton {
+                objectName: "phoneShareButton"
+                visible: root.phoneShareAvailable
+                size: root.toolbarBtnHeight
+                symbol: "smartphone"
+                label: Translation.tr("Send to %1").arg(String(KdeConnectService.activeDeviceDisplayName || Translation.tr("phone")))
+                onClicked: root.sendToPhone()
             }
         }
     }

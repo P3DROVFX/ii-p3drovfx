@@ -55,6 +55,9 @@ Singleton {
     property string booruDownloads: FileUtils.trimFileProtocol(Directories.pictures + "/homework")
     property string booruDownloadsNsfw: FileUtils.trimFileProtocol(Directories.pictures + "/homework/🌶️")
     property string latexOutput: FileUtils.trimFileProtocol(`${Directories.cache}/media/latex`)
+    // Named copies of screenshots sent to a phone. kdeconnectd reads the file
+    // while the transfer runs, so the copy has to outlive the overlay.
+    property string phoneShare: FileUtils.trimFileProtocol(`${Directories.cache}/phone-share`)
     property string shellConfig: FileUtils.trimFileProtocol(`${Directories.config}/illogical-impulse`)
     property string shellConfigName: "config.json"
     property string shellConfigPath: `${Directories.shellConfig}/${Directories.shellConfigName}`
