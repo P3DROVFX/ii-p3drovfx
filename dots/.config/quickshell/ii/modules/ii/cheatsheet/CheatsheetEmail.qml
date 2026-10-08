@@ -112,9 +112,13 @@ Item {
             Layout.fillHeight: true
             Layout.fillWidth: true
 
-            EmailAuth {
+            // The setup form, the composer and the settings were built with
+            // every opening and hidden; together they were most of the tab's
+            // build cost. Each is now built when first shown.
+            Loader {
                 anchors.fill: parent
-                visible: !EmailService.authenticated
+                active: !EmailService.authenticated
+                sourceComponent: EmailAuth {}
             }
 
             EmailInbox {
@@ -232,7 +236,7 @@ Item {
                 onReplyRequested: function (to, subject, body, threadId, inReplyTo) {
                     emailStackedContent.startClose();
                     root.activeTab = "compose";
-                    emailCompose.setReplyMode(to, subject, body, threadId, inReplyTo);
+                    composeLoader.item.setReplyMode(to, subject, body, threadId, inReplyTo);
                 }
             }
 
@@ -277,25 +281,39 @@ Item {
                 onReplyRequested: {
                     emailContent.startClose();
                     root.activeTab = "compose";
-                    emailCompose.setReplyMode(to, subject, body, threadId, inReplyTo);
+                    composeLoader.item.setReplyMode(to, subject, body, threadId, inReplyTo);
                 }
             }
 
-            EmailCompose {
-                id: emailCompose
+            // Kept after its first use, for the closing animation and the draft.
+            Loader {
+                id: composeLoader
+                readonly property bool wanted: root.activeTab === "compose"
+                property bool built: false
+                onWantedChanged: if (wanted) built = true
                 anchors.fill: parent
                 z: 11
-                visible: isOpen || isAnimating
-                isOpen: root.activeTab === "compose"
-                onCloseRequested: {
-                    root.activeTab = "inbox";
-                    emailSidebar.activeTab = "inbox";
+                active: wanted || built
+                sourceComponent: EmailCompose {
+                    visible: isOpen || isAnimating
+                    onCloseRequested: {
+                        root.activeTab = "inbox";
+                        emailSidebar.activeTab = "inbox";
+                    }
                 }
+                // Bound after creation, so the first opening runs
+                // onIsOpenChanged and animates like the later ones.
+                onLoaded: item.isOpen = Qt.binding(() => root.activeTab === "compose")
             }
 
-            EmailSettings {
+            Loader {
+                readonly property bool shown: (EmailService.authenticated || EmailService.userEmail !== "") && root.activeTab === "settings"
+                property bool built: false
+                onShownChanged: if (shown) built = true
                 anchors.fill: parent
-                visible: (EmailService.authenticated || EmailService.userEmail !== "") && root.activeTab === "settings"
+                active: shown || built
+                visible: shown
+                sourceComponent: EmailSettings {}
             }
 
             // Global Loading Overlay - Only shown if the list is empty and we are fetching

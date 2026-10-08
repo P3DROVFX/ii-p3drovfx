@@ -21,6 +21,9 @@ Item {
 
     property real maxContentWidth: 1600
     property real maxHeight: 700
+    // The cheatsheet clears this while it is on screen: a view asked for
+    // there is built in one pass instead of incubated a few ms per frame.
+    property bool incubateAsync: true
 
     implicitWidth: root.maxContentWidth
     implicitHeight: root.maxHeight
@@ -454,9 +457,10 @@ Item {
             id: weekViewLoader
             anchors.fill: parent
             active: root.activeMode !== "month"
-            asynchronous: true
+            asynchronous: root.incubateAsync
             onLoaded: root.handleViewLoaded()
             sourceComponent: WeekView {
+                incubateAsync: root.incubateAsync
                 maxHeight: root.maxHeight
                 maxContentWidth: root.maxContentWidth
                 sportsEnabled: root.sportsReady
@@ -469,9 +473,10 @@ Item {
             id: monthViewLoader
             anchors.fill: parent
             active: root.activeMode === "month"
-            asynchronous: true
+            asynchronous: root.incubateAsync
             onLoaded: root.handleViewLoaded()
             sourceComponent: MonthView {
+                incubateAsync: root.incubateAsync
                 showUpcoming: Persistent.states.cheatsheet.timetableShowUpcoming
                 sportsEnabled: root.sportsReady
                 showShortcutHints: root.hintsVisible

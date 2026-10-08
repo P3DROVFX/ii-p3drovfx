@@ -518,99 +518,47 @@ Item {
 
         property int layoutRevision: 0
 
-        // Total content height = tallest column; used to drive Flickable.contentHeight
-        property real totalContentHeight: {
+        // Every card's slot in one pass. Each card used to walk all the
+        // cards before it for its column and again for its y, so every
+        // height change while the page settled cost O(n²).
+        readonly property var masonry: {
             var _rev = layoutRevision;
             var h = [0, 0, 0, 0];
+            var columns = [];
+            var ys = [];
             for (var i = 0; i < sectionOrderModel.count; i++) {
                 var child = cardRepeater.itemAt(i);
-                if (!child) continue;
-                var childH = child.hasMatches ? (child.implicitHeight || 100) : 0;
-                if (childH <= 0) continue;
-                var minIdx = 0;
-                for (var j = 1; j < 4; j++) { if (h[j] < h[minIdx]) minIdx = j; }
-                h[minIdx] += childH + root.cardSpacing;
-            }
-            return Math.max(h[0], h[1], h[2], h[3]);
-        }
-
-        function getColumnIndex(targetIndex) {
-            var h = [0, 0, 0, 0];
-            var count = 0;
-            var maxH = 99999;  // no vertical clip — Flickable handles overflow
-            for (var i = 0; i < sectionOrderModel.count; i++) {
-                var child = cardRepeater.itemAt(i);
-                if (!child) continue;
-                var childH = child.implicitHeight || 100;
-                if (!child.hasMatches) childH = 0;
-                if (childH <= 0) continue;
-
+                var childH = child && child.hasMatches ? (child.implicitHeight || 100) : 0;
+                if (childH <= 0) {
+                    columns.push(0);
+                    ys.push(0);
+                    continue;
+                }
                 var minIdx = 0;
                 for (var j = 1; j < 4; j++) {
                     if (h[j] < h[minIdx]) minIdx = j;
                 }
-
-                if (h[minIdx] + childH + root.cardSpacing > maxH) {
-                    var bestIdx = minIdx;
-                    var bestH = h[minIdx];
-                    var found = false;
-                    for (var j = 0; j < 4; j++) {
-                        if (h[j] + childH + root.cardSpacing <= maxH && h[j] < bestH) {
-                            bestH = h[j];
-                            bestIdx = j;
-                            found = true;
-                        }
-                    }
-                    if (found) minIdx = bestIdx;
-                }
-
-                if (i === targetIndex) return minIdx;
+                columns.push(minIdx);
+                ys.push(h[minIdx]);
                 h[minIdx] += childH + root.cardSpacing;
-                count++;
             }
-            return 0;
+            return { columns: columns, ys: ys, height: Math.max(h[0], h[1], h[2], h[3]) };
         }
 
-        function getY(targetIndex) {
-            var h = [0, 0, 0, 0];
-            var count = 0;
-            var maxH = 99999;  // no vertical clip — Flickable handles overflow
-            for (var i = 0; i < sectionOrderModel.count; i++) {
-                var child = cardRepeater.itemAt(i);
-                if (!child) continue;
-                var childH = child.implicitHeight || 100;
-                if (!child.hasMatches) childH = 0;
-                if (childH <= 0) continue;
+        // Total content height = tallest column; used to drive Flickable.contentHeight
+        readonly property real totalContentHeight: masonry.height
 
-                var minIdx = 0;
-                for (var j = 1; j < 4; j++) {
-                    if (h[j] < h[minIdx]) minIdx = j;
-                }
-
-                if (h[minIdx] + childH + root.cardSpacing > maxH) {
-                    var bestIdx = minIdx;
-                    var bestH = h[minIdx];
-                    var found = false;
-                    for (var j = 0; j < 4; j++) {
-                        if (h[j] + childH + root.cardSpacing <= maxH && h[j] < bestH) {
-                            bestH = h[j];
-                            bestIdx = j;
-                            found = true;
-                        }
-                    }
-                    if (found) minIdx = bestIdx;
-                }
-
-                if (i === targetIndex) return h[minIdx];
-                h[minIdx] += childH + root.cardSpacing;
-                count++;
-            }
-            return 0;
-        }
+        // Cards take their first slots without motion: the heights settle
+        // over the first polish passes, and animating those corrections read
+        // as the page sliding into place after it was already built.
+        property bool animateLayout: false
 
         Repeater {
             id: cardRepeater
             model: sectionOrderModel
+            // itemAt() is not a binding dependency of the masonry pass.
+            onItemAdded: contentArea.layoutRevision++
+            onItemRemoved: contentArea.layoutRevision++
 
             delegate: CheatsheetKeybindsCategory {
                 id: cardDelegate
@@ -626,14 +574,8 @@ Item {
 
                 readonly property bool isDragged: root.dragging && uniqueId === root.dragUniqueId
 
-                readonly property int _col: {
-                    var _rev = contentArea.layoutRevision;
-                    return contentArea.getColumnIndex(index);
-                }
-                readonly property real _yPos: {
-                    var _rev = contentArea.layoutRevision;
-                    return contentArea.getY(index);
-                }
+                readonly property int _col: contentArea.masonry.columns[index] ?? 0
+                readonly property real _yPos: contentArea.masonry.ys[index] ?? 0
 
                 readonly property real targetX: root.isTabActive ? _col * (root.cardWidth + root.cardSpacing) : (contentArea.width - root.cardWidth) / 2
                 readonly property real targetY: root.isTabActive ? _yPos : index * 20
@@ -647,7 +589,7 @@ Item {
                 }
 
                 Behavior on x {
-                    enabled: !cardDelegate.isDragged
+                    enabled: !cardDelegate.isDragged && contentArea.animateLayout
                     NumberAnimation {
                         duration: 220
                         easing.type: Easing.BezierSpline
@@ -655,7 +597,7 @@ Item {
                     }
                 }
                 Behavior on y {
-                    enabled: !cardDelegate.isDragged
+                    enabled: !cardDelegate.isDragged && contentArea.animateLayout
                     NumberAnimation {
                         duration: 220
                         easing.type: Easing.BezierSpline
@@ -818,7 +760,10 @@ Item {
             id: settlingTimer
             interval: 500
             repeat: false
-            onTriggered: contentArea.layoutRevision = contentArea.layoutRevision + 1
+            onTriggered: {
+                contentArea.layoutRevision = contentArea.layoutRevision + 1;
+                contentArea.animateLayout = true;
+            }
         }
     }  // end contentArea
 

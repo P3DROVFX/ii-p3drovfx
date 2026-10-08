@@ -281,6 +281,29 @@ class KeybindFeatureContractTests(unittest.TestCase):
         self.assertIn("pageForm.openCreate()", rail)
         self.assertIn('text: "add"', rail)
 
+    def test_hyprland_masonry_is_one_pass_and_settles_without_motion(self):
+        page = (ROOT / "modules/ii/cheatsheet/CheatsheetHyprlandKeybinds.qml").read_text(encoding="utf-8")
+        category = (ROOT / "modules/ii/cheatsheet/CheatsheetKeybindsCategory.qml").read_text(encoding="utf-8")
+        # Each card used to walk every earlier card twice per relayout.
+        self.assertIn("readonly property var masonry: {", page)
+        self.assertNotIn("function getColumnIndex", page)
+        self.assertNotIn("function getY", page)
+        self.assertIn("contentArea.masonry.columns[index]", page)
+        self.assertIn("onItemAdded: contentArea.layoutRevision++", page)
+        # The first heights settle without animating cards into place.
+        self.assertEqual(page.count("enabled: !cardDelegate.isDragged && contentArea.animateLayout"), 2)
+        self.assertIn("contentArea.animateLayout = true;", page)
+        self.assertIn("interval: Math.min(sectionIndex * 20, 160)", category)
+
+    def test_email_tab_builds_hidden_panels_on_demand(self):
+        email = (ROOT / "modules/ii/cheatsheet/CheatsheetEmail.qml").read_text(encoding="utf-8")
+        self.assertIn("sourceComponent: EmailAuth {}", email)
+        self.assertIn("sourceComponent: EmailSettings {}", email)
+        self.assertIn("id: composeLoader", email)
+        # Bound after creation so the first opening animates.
+        self.assertIn('onLoaded: item.isOpen = Qt.binding(() => root.activeTab === "compose")', email)
+        self.assertNotIn("emailCompose.", email)
+
 
 if __name__ == "__main__":
     unittest.main()

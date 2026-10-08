@@ -47,6 +47,8 @@ Item {
     property bool initialScrollApplied: false
     property bool sportsEnabled: false
     property int loadedDayCount: 0
+    // See MonthView.incubateAsync.
+    property bool incubateAsync: true
     property string requestedSportsRange: ""
     readonly property int visibleDayCount: root.viewMode === "day" ? 1 : (root.viewMode === "threeDay" ? 3 : 7)
     property date viewWeekStart: root.rangeStartFor(DateTime.clock.date)
@@ -814,9 +816,18 @@ Item {
     onViewWeekStartChanged: root.refreshVisibleRange()
 
     function restartDayLoading() {
-        root.loadedDayCount = -1;
         root.requestedSportsRange = "";
+        if (!root.incubateAsync) {
+            root.loadedDayCount = root.dayCount;
+            return;
+        }
+        root.loadedDayCount = -1;
         Qt.callLater(() => root.loadedDayCount = 0);
+    }
+
+    onIncubateAsyncChanged: {
+        if (!root.incubateAsync && root.loadedDayCount >= 0)
+            root.loadedDayCount = Math.max(root.loadedDayCount, root.dayCount);
     }
 
     function advanceDayLoading(index) {
@@ -1297,7 +1308,7 @@ Item {
                                 width: root.dayColumnWidth
                                 height: root.contentHeight
                                 active: index <= root.loadedDayCount
-                                asynchronous: true
+                                asynchronous: root.incubateAsync
 
                                 onLoaded: root.advanceDayLoading(index)
 

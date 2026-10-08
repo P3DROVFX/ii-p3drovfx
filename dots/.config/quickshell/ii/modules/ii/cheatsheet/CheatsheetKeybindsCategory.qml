@@ -57,7 +57,9 @@ Rectangle {
 
     Timer {
         id: entryTimer
-        interval: Math.min(sectionIndex * 35, 400)
+        // The last card lands with the tab's own fade-in (~460 ms) rather
+        // than 700 ms after the page was ready.
+        interval: Math.min(sectionIndex * 20, 160)
         repeat: false
         onTriggered: {
             entryAnim.start();

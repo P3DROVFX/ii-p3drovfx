@@ -25,6 +25,9 @@ Item {
     property string categoryFilter: ""
     property bool sportsEnabled: false
     property int loadedCellCount: 0
+    // False while the cheatsheet is on screen: every cell is built in one
+    // pass. Chaining 35-42 async cells cost ~360 ms of wall time there.
+    property bool incubateAsync: true
     property string requestedSportsRange: ""
     property var keyboardDate: H.startOfDay(DateTime.clock.date)
     property bool keyboardNavigationActive: true
@@ -470,8 +473,18 @@ Item {
     }
 
     function restartCellLoading() {
+        if (!root.incubateAsync) {
+            root.loadedCellCount = root.cellCount;
+            return;
+        }
         root.loadedCellCount = -1;
         Qt.callLater(() => root.loadedCellCount = 0);
+    }
+
+    // Opened mid-chain: finish the remaining cells at once.
+    onIncubateAsyncChanged: {
+        if (!root.incubateAsync && root.loadedCellCount >= 0)
+            root.loadedCellCount = Math.max(root.loadedCellCount, root.cellCount);
     }
 
     function advanceCellLoading(index) {
@@ -1072,7 +1085,7 @@ Item {
                         width: gridArea.cellWidth
                         height: gridArea.cellHeight
                         active: index <= root.loadedCellCount
-                        asynchronous: true
+                        asynchronous: root.incubateAsync
 
                         onLoaded: root.advanceCellLoading(index)
 

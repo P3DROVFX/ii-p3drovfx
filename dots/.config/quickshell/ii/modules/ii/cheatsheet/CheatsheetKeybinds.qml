@@ -23,6 +23,8 @@ Item {
     id: root
 
     property Item keyNavTarget: null
+    // Cleared by the cheatsheet while it is on screen (see CheatsheetTimetable).
+    property bool incubateAsync: true
     readonly property bool isCurrentTab: {
         try {
             return swipeView.currentIndex === index;
@@ -924,7 +926,7 @@ Item {
             active: KeybindsService.ready
             Layout.fillWidth: true
             Layout.fillHeight: true
-            asynchronous: true
+            asynchronous: root.incubateAsync
             onLoaded: {
                 Qt.callLater(root.focusSelectedPage);
                 contentLoader.revealPage();

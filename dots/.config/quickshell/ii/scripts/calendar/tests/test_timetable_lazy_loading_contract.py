@@ -13,16 +13,25 @@ TIMETABLE = CHEATSHEET / "timetable"
 
 
 class TimetableLazyLoadingContractTests(unittest.TestCase):
-    def test_timetable_tab_and_selected_view_incubate_across_frames(self) -> None:
+    def test_timetable_incubates_hidden_and_builds_in_one_pass_on_screen(self) -> None:
+        """Async incubation only gets ~1/3 of each animating frame: a page
+        asked for on screen took 3-4x its build cost, so only the hidden
+        preload incubates."""
         cheatsheet = (CHEATSHEET / "Cheatsheet.qml").read_text(encoding="utf-8")
         host = (CHEATSHEET / "CheatsheetTimetable.qml").read_text(encoding="utf-8")
+        keybinds = (CHEATSHEET / "CheatsheetKeybinds.qml").read_text(encoding="utf-8")
 
-        self.assertGreaterEqual(host.count("asynchronous: true"), 2)
-        # The tab delegate incubates and keeps only the selected page: the
-        # timetable must not be built synchronously just because it is first.
+        self.assertIn("property bool incubateAsync: true", host)
+        self.assertEqual(host.count("asynchronous: root.incubateAsync"), 2)
+        self.assertEqual(host.count("incubateAsync: root.incubateAsync"), 2)
+        self.assertIn("property bool incubateAsync: true", keybinds)
+        self.assertIn("asynchronous: root.incubateAsync", keybinds)
+        # The tab delegate keeps only the selected page.
         tab_delegate = cheatsheet.split("delegate: Loader {", 1)[1].split("source: {", 1)[0]
-        self.assertIn("asynchronous: true", tab_delegate)
-        self.assertIn("active: isCurrent && (root.activeState || root.cachePrepared)", tab_delegate)
+        self.assertIn("asynchronous: !root.activeState", tab_delegate)
+        self.assertIn('property: "incubateAsync"', tab_delegate)
+        self.assertIn("value: tabDelegate.asynchronous", tab_delegate)
+        self.assertIn("active: isCurrent && (root.activeState || root.cachePrepared", tab_delegate)
         self.assertIn('return "CheatsheetTimetable.qml";', cheatsheet)
 
     def test_view_pickers_are_built_on_request(self) -> None:
@@ -85,7 +94,10 @@ class TimetableLazyLoadingContractTests(unittest.TestCase):
         self.assertIn("model: root.cells ?? []", month)
         self.assertIn("id: cellLoader", month)
         self.assertIn("active: index <= root.loadedCellCount", month)
-        self.assertIn("asynchronous: true", month)
+        # Progressive only while incubating hidden; on screen, one pass.
+        self.assertIn("property bool incubateAsync: true", month)
+        self.assertIn("asynchronous: root.incubateAsync", month)
+        self.assertIn("root.loadedCellCount = root.cellCount;", month)
         self.assertIn("onLoaded: root.advanceCellLoading(index)", month)
         self.assertIn("sportsEnabled: root.sportsEnabled", month)
         self.assertIn("property bool sportsEnabled: false", cell)
@@ -103,7 +115,9 @@ class TimetableLazyLoadingContractTests(unittest.TestCase):
         self.assertIn("model: root.days ?? []", week)
         self.assertIn("id: dayLoader", week)
         self.assertIn("active: index <= root.loadedDayCount", week)
-        self.assertIn("asynchronous: true", week)
+        self.assertIn("property bool incubateAsync: true", week)
+        self.assertIn("asynchronous: root.incubateAsync", week)
+        self.assertIn("root.loadedDayCount = root.dayCount;", week)
         self.assertIn("onLoaded: root.advanceDayLoading(index)", week)
 
     def test_week_initial_scroll_stops_retrying_after_it_is_applied(self) -> None:
@@ -149,6 +163,22 @@ class TimetableLazyLoadingContractTests(unittest.TestCase):
         self.assertNotIn("root.timetableProjectionSource = root.cachedRangeEvents()", sports)
         self.assertIn("timetableProjectionCompactEvents", sports)
         self.assertNotIn("const rawEvents = root.timetableProjectionRawEvents", sports)
+
+    def test_month_chip_slot_builds_only_its_own_kind(self) -> None:
+        """A slot used to build event, birthday, task and group chips and hide
+        three of them; that was most of a busy month's build cost."""
+        cell = (TIMETABLE / "MonthDayCell.qml").read_text(encoding="utf-8")
+        slot = cell.split("model: root.chipModel", 1)[1].split("Component {", 1)[0]
+
+        self.assertIn("delegate: Loader {", slot)
+        for component in ("eventChipComponent", "birthdayChipComponent", "taskChipComponent", "taskGroupChipComponent"):
+            self.assertIn(f"return {component};", slot)
+            self.assertIn(f"id: {component}", cell)
+        self.assertNotIn("visible: parent.modelData.kind", cell)
+        # The hover-only add button and the overflow row are built on demand.
+        self.assertIn("id: addButtonSlot", cell)
+        self.assertIn("active: root.hiddenCount > 0", cell)
+        self.assertIn('source: visible ? WeatherIcons.getWeatherIcon', cell)
 
 
 if __name__ == "__main__":
