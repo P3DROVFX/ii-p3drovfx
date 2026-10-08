@@ -1,12 +1,22 @@
 import QtQuick
 import QtQuick.Layouts
-import Quickshell
-import qs.modules.common
-import qs.modules.common.functions
-import qs.modules.common.widgets
-import qs.modules.settings.configs.widgets
 import qs.services
+import qs.modules.common
+import qs.modules.common.widgets
+import qs.modules.settings.configs.colors
+import qs.modules.settings.configs.lockscreen
+import qs.modules.settings.configs.workspaces
+import "workspaces/WorkspacesCatalog.js" as Catalog
 
+/**
+ * Settings → Workspaces.
+ *
+ * Leads with the workspace row live on a pretend bar, then the style cards and
+ * colour swatches, the switches as tiles, the counts as steppers, the numerals as
+ * type specimens, the active indicator acted out and the compactor. Anything the
+ * pointer rests on is tried on the stage (and on the floating peek once the stage
+ * has scrolled away). Search indexes sections/WorkspacesOptionsSection.qml.
+ */
 Item {
     id: workspacesRoot
     anchors.fill: parent
@@ -14,442 +24,468 @@ Item {
     property alias contentY: page.contentY
     property alias activeSubPage: subPageOverlay.activeSubPage
 
+    readonly property var cfg: Config.options.bar.workspaces
+    readonly property string savedStyle: Config.options.bar.styles.workspaces
+    readonly property var spec: Catalog.style(workspacesRoot.savedStyle)
+    readonly property string indicatorMode: Catalog.indicatorOf(workspacesRoot.cfg)
+
+    readonly property int tileMinWidth: 260
+    readonly property int tileHeight: 188
+    readonly property int blockGap: 12
+    readonly property int wideBreakpoint: 640
+
+    readonly property var styleNames: ({
+        "default": Translation.tr("Default"),
+        "minimal": Translation.tr("Minimal"),
+        "expressive": Translation.tr("Expressive"),
+        "dock": Translation.tr("Dock"),
+        "index": Translation.tr("Index")
+    })
+    readonly property var styleLines: ({
+        "default": Translation.tr("Pills that melt together, with icons and numbers"),
+        "minimal": Translation.tr("A quiet row of dots and a sliding mark"),
+        "expressive": Translation.tr("Round chips, the current one stretched and numbered"),
+        "dock": Translation.tr("Buttons carrying each workspace's app"),
+        "index": Translation.tr("Numerals only, the current one set large")
+    })
+    readonly property var colorNames: ({
+        "primary": Translation.tr("Primary"),
+        "primaryContainer": Translation.tr("Primary container"),
+        "secondary": Translation.tr("Secondary"),
+        "secondaryContainer": Translation.tr("Secondary container"),
+        "tertiary": Translation.tr("Tertiary"),
+        "tertiaryContainer": Translation.tr("Tertiary container"),
+        "neutral": Translation.tr("Neutral"),
+        "neutralContainer": Translation.tr("Neutral container")
+    })
+    readonly property var indicatorNames: ({
+        "pill": Translation.tr("Pill"),
+        "shape": Translation.tr("Material shape"),
+        "random": Translation.tr("Random shape"),
+        "arrow": Translation.tr("Direction arrow")
+    })
+    readonly property var indicatorLines: ({
+        "pill": Translation.tr("Stretches over the whole workspace"),
+        "shape": Translation.tr("Always the shape you pick below"),
+        "random": Translation.tr("A new shape on every switch"),
+        "arrow": Translation.tr("Points the way you moved, then settles")
+    })
+    readonly property var numeralNames: ({
+        "normal": Translation.tr("Normal"),
+        "han": Translation.tr("Han chars"),
+        "roman": Translation.tr("Roman"),
+        "greek": Translation.tr("Greek"),
+        "rods": Translation.tr("Counting rods")
+    })
+
+    BarWidgetPalette {
+        id: savedTone
+        colorMode: workspacesRoot.cfg.colorMode
+    }
+
+    WorkspacesPreviewState {
+        id: previewState
+        stageVisible: workspacesRoot.visible && !subPageOverlay.isOpen
+        tryProps: {
+            const t = {};
+            if (stylePicker.tried !== "")
+                t.style = stylePicker.tried;
+            if (swatches.tried !== "")
+                t.colorMode = swatches.tried;
+            if (indicatorPicker.tried !== "")
+                t.indicator = indicatorPicker.tried;
+            if (indicatorShapes.tried !== "") {
+                t.indicator = "shape";
+                t.indicatorShape = indicatorShapes.tried;
+            }
+            if (numerals.tried !== "") {
+                t.numberMap = Catalog.numeralMap(numerals.tried);
+                t.alwaysNumbers = true;
+            }
+            if (iconsPane.triedShape !== "") {
+                t.showIcons = true;
+                t.maskIcons = true;
+                t.maskShape = iconsPane.triedShape;
+            }
+            if (iconsTile.engaged)
+                t.showIcons = !workspacesRoot.cfg.showAppIcons;
+            if (dynamicTile.engaged)
+                t.dynamic = !workspacesRoot.cfg.dynamicWorkspaces;
+            if (numbersTile.engaged)
+                t.alwaysNumbers = !workspacesRoot.cfg.alwaysShowNumbers;
+            return t;
+        }
+    }
+
+    readonly property string caption: {
+        if (stylePicker.tried !== "")
+            return Translation.tr("Trying %1").arg(workspacesRoot.styleNames[stylePicker.tried]);
+        if (swatches.tried !== "")
+            return Translation.tr("Trying %1").arg(workspacesRoot.colorNames[swatches.tried]);
+        if (indicatorShapes.tried !== "")
+            return Translation.tr("Trying %1").arg(indicatorShapes.tried);
+        if (indicatorPicker.tried !== "")
+            return Translation.tr("Trying %1").arg(workspacesRoot.indicatorNames[indicatorPicker.tried]);
+        if (numerals.tried !== "")
+            return Translation.tr("Trying %1").arg(workspacesRoot.numeralNames[numerals.tried]);
+        if (iconsPane.triedShape !== "")
+            return Translation.tr("Icons as %1").arg(iconsPane.triedShape);
+        if (iconsTile.engaged)
+            return workspacesRoot.cfg.showAppIcons ? Translation.tr("Without app icons") : Translation.tr("With app icons");
+        if (dynamicTile.engaged)
+            return workspacesRoot.cfg.dynamicWorkspaces ? Translation.tr("Showing every slot") : Translation.tr("Hiding empty workspaces");
+        if (numbersTile.engaged)
+            return workspacesRoot.cfg.alwaysShowNumbers ? Translation.tr("Numbers only while Super is held") : Translation.tr("Numbers always shown");
+        return "";
+    }
+
+    function openSubPage(file) {
+        workspacesRoot.activeSubPage = Qt.resolvedUrl(file);
+    }
+
     ContentPage {
         id: page
         anchors.fill: parent
         forceWidth: false
         opacity: subPageOverlay.slideProgress
 
-        property bool showBackButton: false
-        signal goBack()
+        WorkspacesPreview {
+            id: hero
+            Layout.fillWidth: true
+            Layout.preferredHeight: implicitHeight
+            preview: previewState
+            caption: workspacesRoot.caption
+        }
 
-        RowLayout {
-            spacing: 12
-            visible: page.showBackButton
+        Rectangle {
+            id: lookPane
+            Layout.fillWidth: true
+            implicitHeight: lookColumn.implicitHeight + 40
+            radius: Appearance.rounding.verylarge
+            color: Appearance.colors.colLayer1
 
-            RippleButton {
-                implicitWidth: implicitHeight
-                implicitHeight: 40
-                topLeftRadius: Appearance.rounding.full
-                topRightRadius: Appearance.rounding.full
-                bottomLeftRadius: Appearance.rounding.full
-                bottomRightRadius: Appearance.rounding.full
-                colBackground: Appearance.colors.colSecondaryContainer
-                colBackgroundHover: Appearance.colors.colSecondaryContainerHover
-                colRipple: Appearance.colors.colSecondaryContainerActive
-                onClicked: page.goBack()
+            ColumnLayout {
+                id: lookColumn
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.margins: 20
+                spacing: 18
 
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "arrow_back"
-                    iconSize: Appearance.font.pixelSize.large
-                    color: Appearance.colors.colOnSecondaryContainer
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 14
+
+                    MaterialShapeWrappedMaterialSymbol {
+                        id: styleGlyph
+                        text: workspacesRoot.spec.icon
+                        iconSize: 24
+                        padding: 12
+                        fill: 1
+                        shape: styleGlyph.getShape(workspacesRoot.spec.shape)
+                        color: Appearance.colors.colPrimaryContainer
+                        colSymbol: Appearance.colors.colOnPrimaryContainer
+                    }
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 0
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: workspacesRoot.styleNames[workspacesRoot.savedStyle] ?? Translation.tr("Style")
+                            font.family: Appearance.font.family.title
+                            font.variableAxes: Appearance.font.variableAxes.titleRounded
+                            font.pixelSize: Appearance.font.pixelSize.huge
+                            color: Appearance.colors.colOnLayer1
+                            elide: Text.ElideRight
+                        }
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: workspacesRoot.styleLines[stylePicker.tried !== "" ? stylePicker.tried : workspacesRoot.savedStyle] ?? ""
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            color: Appearance.colors.colSubtext
+                            elide: Text.ElideRight
+                        }
+                    }
                 }
-            }
 
-            StyledText {
-                text: Translation.tr("Workspaces Settings")
-                font.pixelSize: Appearance.font.pixelSize.large
-                font.family: Appearance.font.family.title
-                color: Appearance.colors.colOnLayer0
+                WorkspacesStylePicker {
+                    id: stylePicker
+                    Layout.fillWidth: true
+                    preview: previewState
+                    currentValue: workspacesRoot.savedStyle
+                    names: workspacesRoot.styleNames
+                    lines: workspacesRoot.styleLines
+                    onSelected: value => Config.options.bar.styles.workspaces = value
+                }
+
+                StyledText {
+                    text: Translation.tr("Colour treatment")
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    font.weight: Font.DemiBold
+                    color: Appearance.colors.colOnLayer1
+                }
+
+                WorkspacesColorSwatches {
+                    id: swatches
+                    Layout.fillWidth: true
+                    currentValue: savedTone.effectiveMode
+                    names: workspacesRoot.colorNames
+                    onSelected: value => workspacesRoot.cfg.colorMode = value
+                }
             }
         }
 
-        ContentSection {
-            title: Translation.tr("Style & Design")
-            icon: "palette"
+        Item {
+            id: tiles
+            Layout.fillWidth: true
+            Layout.topMargin: workspacesRoot.blockGap
+            implicitHeight: tileFlow.implicitHeight
 
-            ContentSubsection {
-                title: Translation.tr("Visual style")
-                icon: "style"
+            readonly property int fits: Math.max(1, Math.floor((width + workspacesRoot.blockGap) / (workspacesRoot.tileMinWidth + workspacesRoot.blockGap)))
+            readonly property int columns: fits >= 4 ? 4 : fits >= 2 ? 2 : 1
+            readonly property int tileWidth: Math.floor((width - workspacesRoot.blockGap * (columns - 1)) / columns)
 
-                ConfigSelectionArray {
-                    currentValue: Config.options.bar.styles.workspaces
-                    onSelected: newValue => Config.options.bar.styles.workspaces = String(newValue)
-                    options: [
-                        { displayName: Translation.tr("Default"), icon: "workspaces", value: "default" },
-                        { displayName: Translation.tr("Minimal"), icon: "navigation", value: "minimal" },
-                        { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" },
-                        { displayName: Translation.tr("Dock"), icon: "dock_to_left", value: "dock" },
-                        { displayName: Translation.tr("Index"), icon: "format_list_numbered", value: "index" }
-                    ]
+            Flow {
+                id: tileFlow
+                width: parent.width
+                spacing: workspacesRoot.blockGap
+
+                ColorsFeatureTile {
+                    id: iconsTile
+                    width: tiles.tileWidth
+                    height: workspacesRoot.tileHeight
+                    symbol: "award_star"
+                    shapeOn: MaterialShape.Shape.Clover8Leaf
+                    title: Translation.tr("Show app icons")
+                    summary: checked
+                        ? Translation.tr("Up to %1 per workspace").arg(workspacesRoot.cfg.maxWindowCount)
+                        : Translation.tr("Numbers and dots only")
+                    checked: workspacesRoot.cfg.showAppIcons
+                    onToggled: value => workspacesRoot.cfg.showAppIcons = value
                 }
-            }
 
-            ExpressiveColorModeSubsection {
-                currentValue: Config.options.bar.workspaces.colorMode
-                onSelected: newValue => Config.options.bar.workspaces.colorMode = String(newValue)
+                ColorsFeatureTile {
+                    id: dynamicTile
+                    width: tiles.tileWidth
+                    height: workspacesRoot.tileHeight
+                    symbol: "hdr_weak"
+                    shapeOn: MaterialShape.Shape.Cookie12Sided
+                    title: Translation.tr("Dynamic workspaces")
+                    summary: checked
+                        ? Translation.tr("Empty workspaces step aside")
+                        : Translation.tr("Always %1 workspaces in a row").arg(workspacesRoot.cfg.shown)
+                    checked: workspacesRoot.cfg.dynamicWorkspaces
+                    onToggled: value => workspacesRoot.cfg.dynamicWorkspaces = value
+                }
+
+                ColorsFeatureTile {
+                    id: numbersTile
+                    width: tiles.tileWidth
+                    height: workspacesRoot.tileHeight
+                    symbol: "counter_1"
+                    shapeOn: MaterialShape.Shape.Pentagon
+                    title: Translation.tr("Always show numbers")
+                    summary: checked
+                        ? Translation.tr("Every workspace wears its numeral")
+                        : Translation.tr("Numbers appear while Super is held")
+                    checked: workspacesRoot.cfg.alwaysShowNumbers
+                    onToggled: value => workspacesRoot.cfg.alwaysShowNumbers = value
+                }
+
+                ColorsFeatureTile {
+                    width: tiles.tileWidth
+                    height: workspacesRoot.tileHeight
+                    symbol: "map"
+                    shapeOn: MaterialShape.Shape.Gem
+                    title: Translation.tr("Use workspace map")
+                    summary: checked
+                        ? Translation.tr("Each monitor keeps its own range")
+                        : Translation.tr("Every monitor shares one row")
+                    checked: workspacesRoot.cfg.useWorkspaceMap
+                    configurable: true
+                    onToggled: value => workspacesRoot.cfg.useWorkspaceMap = value
+                    onConfigureRequested: workspacesRoot.openSubPage("widgets/WorkspaceMapConfig.qml")
+                }
             }
         }
 
-        ContentSection {
-            title: Translation.tr("Display Options")
-            icon: "monitor"
+        WorkspacesIconsPane {
+            id: iconsPane
+            Layout.fillWidth: true
+            Layout.topMargin: workspacesRoot.blockGap
+            visible: workspacesRoot.cfg.showAppIcons || workspacesRoot.savedStyle === "dock"
+        }
 
-            ConfigSwitch {
-                buttonIcon: "map"
-                text: Translation.tr("Use workspace map")
-                checked: Config.options.bar.workspaces.useWorkspaceMap
-                configPage: Qt.resolvedUrl("widgets/WorkspaceMapConfig.qml")
-                onCheckedChanged: {
-                    Config.options.bar.workspaces.useWorkspaceMap = checked;
-                }
-                StyledToolTip {
-                    text: Translation.tr("Isolate workspace ranges for multi-monitor setups. Click button text to configure monitor mapping.")
-                }
-            }
+        WorkspacesSectionHeader {
+            symbol: "view_column"
+            shape: MaterialShape.Shape.Cookie4Sided
+            title: Translation.tr("How many")
+            summary: Translation.tr("Scroll over a card to step it")
+        }
 
-            ConfigSwitch {
-                buttonIcon: "counter_1"
-                text: Translation.tr("Always show numbers")
-                checked: Config.options.bar.workspaces.alwaysShowNumbers
-                onCheckedChanged: {
-                    Config.options.bar.workspaces.alwaysShowNumbers = checked;
-                }
-            }
+        GridLayout {
+            Layout.fillWidth: true
+            columns: width >= workspacesRoot.wideBreakpoint ? 2 : 1
+            columnSpacing: workspacesRoot.blockGap
+            rowSpacing: workspacesRoot.blockGap
 
-            ConfigSwitch {
-                buttonIcon: "award_star"
-                text: Translation.tr("Show app icons")
-                checked: Config.options.bar.workspaces.showAppIcons
-                onCheckedChanged: {
-                    Config.options.bar.workspaces.showAppIcons = checked;
-                }
-            }
-
-            ConfigSwitch {
-                visible: Config.options.bar.workspaces.showAppIcons
-                buttonIcon: "palette"
-                text: Translation.tr("Tint workspaces icons")
-                checked: Config.options.bar.workspaces.monochromeIcons
-                onCheckedChanged: {
-                    Config.options.bar.workspaces.monochromeIcons = checked;
-                }
-                StyledToolTip {
-                    text: Translation.tr("Applies monochrome tint to workspaces icons")
-                }
-            }
-
-            ConfigSlider {
-                visible: Config.options.bar.workspaces.showAppIcons
-                buttonIcon: "humidity_percentage"
-                text: Translation.tr("Tint (%)")
-                value: Config.options.appearance.iconTintPercentage ?? 0.6
-                onValueChanged: Config.options.appearance.iconTintPercentage = value
-                enabled: Config.options.bar.workspaces.monochromeIcons
-                opacity: enabled ? 1 : 0.5
-            }
-
-            ConfigSwitch {
-                buttonIcon: "hdr_weak"
-                text: Translation.tr("Dynamic workspaces")
-                checked: Config.options.bar.workspaces.dynamicWorkspaces
-                onCheckedChanged: {
-                    Config.options.bar.workspaces.dynamicWorkspaces = checked;
-                }
-                StyledToolTip {
-                    text: Translation.tr("Hides the empty workspaces and only shows the ones with windows")
-                }
-            }
-
-            ConfigSpinBox {
-                enabled: !Config.options.bar.workspaces.dynamicWorkspaces
-                icon: "view_column"
-                text: Translation.tr("Workspaces shown")
-                value: Config.options.bar.workspaces.shown
+            WorkspacesStepper {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                enabled: !workspacesRoot.cfg.dynamicWorkspaces
+                symbol: "view_column"
+                title: Translation.tr("Workspaces shown")
+                summary: Translation.tr("How many slots the row holds")
+                note: workspacesRoot.cfg.dynamicWorkspaces ? Translation.tr("Dynamic workspaces decides this while it is on") : ""
                 from: 1
                 to: 30
-                stepSize: 1
-                onValueChanged: {
-                    Config.options.bar.workspaces.shown = value;
-                }
+                value: workspacesRoot.cfg.shown
+                onStepped: value => workspacesRoot.cfg.shown = value
             }
 
-            ConfigSpinBox {
-                icon: "select_window"
-                text: Translation.tr("Maximum window count per workspace")
-                value: Config.options.bar.workspaces.maxWindowCount
+            WorkspacesStepper {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                symbol: "select_window"
+                title: Translation.tr("Maximum window count per workspace")
+                summary: Translation.tr("Icons past this many are left out")
                 from: 1
                 to: 20
-                stepSize: 1
-                onValueChanged: {
-                    Config.options.bar.workspaces.maxWindowCount = value;
-                }
+                value: workspacesRoot.cfg.maxWindowCount
+                onStepped: value => workspacesRoot.cfg.maxWindowCount = value
             }
+        }
 
-            ConfigSpinBox {
-                icon: "touch_long"
-                text: Translation.tr("Number show delay when pressing Super (ms)")
-                value: Config.options.bar.workspaces.showNumberDelay
+        WorkspacesSectionHeader {
+            symbol: "format_list_numbered"
+            shape: MaterialShape.Shape.Pentagon
+            colGlyph: Appearance.colors.colTertiaryContainer
+            colOnGlyph: Appearance.colors.colOnTertiaryContainer
+            title: Translation.tr("Number style")
+            summary: Translation.tr("Point at a set to read it on the bar")
+        }
+
+        WorkspacesNumeralPicker {
+            id: numerals
+            Layout.fillWidth: true
+            currentValue: Catalog.numeralOf(workspacesRoot.cfg.numberMap)
+            names: workspacesRoot.numeralNames
+            onSelected: value => workspacesRoot.cfg.numberMap = Catalog.numeralMap(value)
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            visible: !workspacesRoot.cfg.alwaysShowNumbers
+            implicitHeight: delayRow.implicitHeight + 32
+            radius: Appearance.rounding.large
+            color: Appearance.colors.colLayer1
+
+            LockSliderRow {
+                id: delayRow
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.margins: 18
+                symbol: "touch_long"
+                label: Translation.tr("Number show delay when pressing Super (ms)")
+                activeShape: MaterialShape.Shape.Cookie6Sided
                 from: 0
                 to: 1000
                 stepSize: 50
-                onValueChanged: {
-                    Config.options.bar.workspaces.showNumberDelay = value;
-                }
+                value: workspacesRoot.cfg.showNumberDelay
+                zeroText: Translation.tr("Instant")
+                format: v => Translation.tr("%1 ms").arg(Math.round(v))
+                onMoved: v => workspacesRoot.cfg.showNumberDelay = Math.round(v)
             }
+        }
 
-            ContentSubsection {
-                title: Translation.tr("Number style")
-                icon: "format_list_numbered"
-                Layout.fillWidth: true
+        WorkspacesSectionHeader {
+            symbol: "token"
+            shape: MaterialShape.Shape.Clover4Leaf
+            title: Translation.tr("Active indicator")
+            summary: workspacesRoot.spec.indicator
+                ? Translation.tr("How the workspace you are on is marked")
+                : Translation.tr("The %1 style marks the current workspace its own way").arg(workspacesRoot.styleNames[workspacesRoot.savedStyle])
+        }
 
-                ConfigSelectionArray {
-                    currentValue: JSON.stringify(Config.options.bar.workspaces.numberMap)
-                    onSelected: (newValue) => {
-                        Config.options.bar.workspaces.numberMap = JSON.parse(newValue);
-                    }
-                    options: [{
-                        "displayName": Translation.tr("Normal"),
-                        "icon": "timer_10",
-                        "value": '[]'
-                    }, {
-                        "displayName": Translation.tr("Han chars"),
-                        "icon": "square_dot",
-                        "value": '["一","二","三","四","五","六","七","八","九","十","十一","十二","十三","十四","十五","十六","十七","十八","十九","二十"]'
-                    }, {
-                        "displayName": Translation.tr("Roman"),
-                        "icon": "account_balance",
-                        "value": '["I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII","XIII","XIV","XV","XVI","XVII","XVIII","XIX","XX"]'
-                    }, {
-                        "displayName": Translation.tr("Greek"),
-                        "icon": "functions",
-                        "value": '["α","β","γ","δ","ε","ζ","η","θ","ι","κ","λ","μ","ν","ξ","ο","π","ρ","σ","τ","υ"]'
-                    }, {
-                        // Suzhou / Hangzhou rod numerals: the counting-rod
-                        // figures a Chinese abacus clerk wrote. 1-9 are upright
-                        // strokes, and the tens place has its own glyphs, so 11
-                        // is 〸〡 the same way the Han preset writes 十一.
-                        "displayName": Translation.tr("Counting rods"),
-                        "icon": "view_column",
-                        "value": '["〡","〢","〣","〤","〥","〦","〧","〨","〩","〸","〸〡","〸〢","〸〣","〸〤","〸〥","〸〦","〸〧","〸〨","〸〩","〹"]'
-                    }]
-                }
+        WorkspacesIndicatorPicker {
+            id: indicatorPicker
+            Layout.fillWidth: true
+            enabled: workspacesRoot.spec.indicator
+            opacity: enabled ? 1 : 0.5
+            currentValue: workspacesRoot.indicatorMode
+            shapeName: workspacesRoot.cfg.activeIndicatorShape
+            names: workspacesRoot.indicatorNames
+            lines: workspacesRoot.indicatorLines
+            unavailable: ({
+                "arrow": !workspacesRoot.spec.arrow,
+                "arrowText": Translation.tr("Only the Default style points the way")
+            })
+            onSelected: value => Catalog.applyIndicator(workspacesRoot.cfg, value)
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            visible: workspacesRoot.indicatorMode === "shape" && workspacesRoot.spec.indicator
+            implicitHeight: indicatorShapes.implicitHeight + 32
+            radius: Appearance.rounding.large
+            color: Appearance.colors.colLayer1
+
+            WorkspacesShapeGrid {
+                id: indicatorShapes
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.margins: 16
+                currentValue: workspacesRoot.cfg.activeIndicatorShape
+                onSelected: value => workspacesRoot.cfg.activeIndicatorShape = value
             }
+        }
+
+        WorkspacesDockCard {
+            Layout.fillWidth: true
+            Layout.topMargin: workspacesRoot.blockGap
+            visible: workspacesRoot.savedStyle === "dock"
+            onMoreRequested: workspacesRoot.openSubPage("widgets/DockWorkspaceConfig.qml")
+        }
+
+        WorkspacesCompactorCard {
+            Layout.fillWidth: true
+            Layout.topMargin: workspacesRoot.blockGap
         }
 
         ContentSection {
-            title: Translation.tr("Shape Customization")
-            icon: "category"
+            icon: "link"
+            title: Translation.tr("Related settings")
 
-            ConfigSwitch {
-                buttonIcon: "interests"
-                text: Translation.tr("Apply shape mask to icons")
-                checked: Config.options.appearance.icons.enableShapeMask
-                onCheckedChanged: {
-                    Config.options.appearance.icons.enableShapeMask = checked;
-                }
-                StyledToolTip {
-                    text: Translation.tr("Crops the icons using the selected material shape")
-                }
-
-                extraComponent: Component {
-                    RippleButtonWithShape {
-                        enabled: Config.options.appearance.icons.enableShapeMask
-                        shapeString: Config.options.appearance.icons.shapeMask
-                        implicitWidth: 60
-                        extraIcon: "edit"
-                        onClicked: {
-                            iconsShapeMaskLoader.active = !iconsShapeMaskLoader.active;
-                        }
-                        StyledToolTip {
-                            text: Translation.tr("Edit the material shape")
-                        }
-                    }
-                }
-            }
-
-            Loader {
-                id: iconsShapeMaskLoader
-                active: false
-                visible: active
+            Flow {
                 Layout.fillWidth: true
+                spacing: 8
 
-                sourceComponent: ContentSubsection {
-                    title: Translation.tr("Mask shape")
-                    icon: "shape_line"
-
-                    ConfigSelectionArray {
-                        currentValue: Config.options.appearance.icons.shapeMask
-                        onSelected: (newValue) => {
-                            Config.options.appearance.icons.shapeMask = newValue;
-                        }
-                        options: (["Circle", "Square", "Slanted", "Arch", "Arrow", "SemiCircle", "Oval", "Pill", "Triangle", "Diamond", "ClamShell", "Pentagon", "Gem", "Sunny", "VerySunny", "Cookie4Sided", "Cookie6Sided", "Cookie7Sided", "Cookie9Sided", "Cookie12Sided", "Ghostish", "Clover4Leaf", "Clover8Leaf", "Burst", "SoftBurst", "Flower", "Puffy", "PuffyDiamond", "PixelCircle", "Bun", "Heart"]).map((icon) => {
-                            return {
-                                "displayName": "",
-                                "shape": icon,
-                                "value": icon
-                            };
-                        })
-                    }
+                RelatedChip {
+                    pageId: "bar"
+                    label: Translation.tr("Bar layout")
                 }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "token"
-                text: Translation.tr("Use Material Shape for active indicator")
-                checked: Config.options.bar.workspaces.useMaterialShapeForActiveIndicator
-                onCheckedChanged: {
-                    Config.options.bar.workspaces.useMaterialShapeForActiveIndicator = checked;
+                RelatedChip {
+                    pageId: "overview"
+                    label: Translation.tr("Overview")
                 }
-
-                extraComponent: Component {
-                    RippleButtonWithShape {
-                        enabled: Config.options.bar.workspaces.useMaterialShapeForActiveIndicator
-                        shapeString: Config.options.bar.workspaces.activeIndicatorShape
-                        implicitWidth: 60
-                        extraIcon: "edit"
-                        onClicked: {
-                            activeIndicatorShapeLoader.active = !activeIndicatorShapeLoader.active;
-                        }
-                        StyledToolTip {
-                            text: Translation.tr("Edit the material shape")
-                        }
-                    }
-                }
-            }
-
-            Loader {
-                id: activeIndicatorShapeLoader
-                active: false
-                visible: active
-                Layout.fillWidth: true
-
-                sourceComponent: ContentSubsection {
-                    title: Translation.tr("Active indicator shape")
-                    icon: "shape_line"
-
-                    ConfigSelectionArray {
-                        currentValue: Config.options.bar.workspaces.activeIndicatorShape
-                        onSelected: (newValue) => {
-                            Config.options.bar.workspaces.activeIndicatorShape = newValue;
-                        }
-                        options: (["Circle", "Square", "Slanted", "Arch", "Arrow", "SemiCircle", "Oval", "Pill", "Triangle", "Diamond", "ClamShell", "Pentagon", "Gem", "Sunny", "VerySunny", "Cookie4Sided", "Cookie6Sided", "Cookie7Sided", "Cookie9Sided", "Cookie12Sided", "Ghostish", "Clover4Leaf", "Clover8Leaf", "Burst", "SoftBurst", "Flower", "Puffy", "PuffyDiamond", "PixelCircle", "Bun", "Heart"]).map((icon) => {
-                            return {
-                                "displayName": "",
-                                "shape": icon,
-                                "value": icon
-                            };
-                        })
-                    }
-                }
-            }
-
-            ConfigSwitch {
-                enabled: !Config.options.bar.workspaces.useMaterialShapeForActiveIndicator
-                    && !Config.options.bar.workspaces.useDirectionArrowForActiveIndicator
-                buttonIcon: "shuffle"
-                text: Translation.tr("Use random shape for active indicator")
-                checked: Config.options.bar.workspaces.useRandomShapeForActiveIndicator
-                onCheckedChanged: {
-                    Config.options.bar.workspaces.useRandomShapeForActiveIndicator = checked;
-                }
-            }
-
-            ConfigSwitch {
-                enabled: !Config.options.bar.workspaces.useMaterialShapeForActiveIndicator
-                buttonIcon: "arrow_forward"
-                text: Translation.tr("Point the active indicator the way you moved")
-                checked: Config.options.bar.workspaces.useDirectionArrowForActiveIndicator
-                onCheckedChanged: {
-                    Config.options.bar.workspaces.useDirectionArrowForActiveIndicator = checked;
-                }
-                StyledToolTip {
-                    text: Translation.tr("Switching workspaces morphs the circle into a triangle aimed at where you went, then back. It replaces the random shape while it is on, and follows the bar: right or left on a horizontal bar, down or up on a vertical one.")
+                RelatedChip {
+                    pageId: "hyprland"
+                    label: Translation.tr("Workspace gestures")
                 }
             }
         }
+    }
 
-        ContentSection {
-            visible: Config.options.bar.styles.workspaces === "dock"
-            title: Translation.tr("Dock Workspace Style")
-            icon: "dock"
-
-            ConfigSwitch {
-                buttonIcon: "dock"
-                text: Translation.tr("Dock workspace style options")
-                checked: Config.options.bar.workspaces.dockShowActiveIndicator
-                configPage: Qt.resolvedUrl("widgets/DockWorkspaceConfig.qml")
-                onCheckedChanged: {
-                    Config.options.bar.workspaces.dockShowActiveIndicator = checked;
-                }
-                StyledToolTip {
-                    text: Translation.tr("Click button text to configure active indicator, window count dots, hover effects, and app icons in dock style.")
-                }
-            }
-        }
-
-        ContentSection {
-            title: Translation.tr("Workspace Compactor")
-            icon: "compress"
-
-            HelperCodeBox {
-                Layout.fillWidth: true
-                icon: "terminal"
-                title: Translation.tr("Build it once")
-                text: Translation.tr("Pulls the focused monitor's occupied workspaces down to 1..N with no gaps. The workspaces themselves are renumbered, so every window keeps its exact place. Rust is the only requirement.")
-                codeSnippet: `${Directories.rustHelpersScriptPath.replace(FileUtils.trimFileProtocol(Directories.home), "~")} build workspace_compactor`
-                snippetWrapMode: Text.Wrap
-            }
-
-            KeyboardShortcutBox {
-                Layout.fillWidth: true
-                text: Translation.tr("Compact workspaces into 1..N")
-                keys: ["Ctrl", "Super", "C"]
-            }
-
-            ConfigSwitch {
-                buttonIcon: "autorenew"
-                text: Translation.tr("Auto-Compact")
-                checked: Config.options.bar.workspaces.autoCompact
-                onCheckedChanged: {
-                    Config.options.bar.workspaces.autoCompact = checked;
-                }
-                StyledToolTip {
-                    text: Translation.tr("Compact automatically whenever closing or moving a window leaves a gap on the focused monitor. The keybind above keeps working either way.")
-                }
-            }
-
-            ConfigSpinBox {
-                enabled: Config.options.bar.workspaces.autoCompact
-                icon: "timer"
-                text: Translation.tr("Auto-Compact delay (ms)")
-                value: Config.options.bar.workspaces.autoCompactDelay
-                from: 100
-                to: 5000
-                stepSize: 100
-                onValueChanged: {
-                    Config.options.bar.workspaces.autoCompactDelay = value;
-                }
-            }
-
-            ContentSubsection {
-                title: Translation.tr("When the gap is the current workspace")
-                icon: "conditions"
-                Layout.fillWidth: true
-                visible: Config.options.bar.workspaces.autoCompact
-
-                ConfigSelectionArray {
-                    currentValue: Config.options.bar.workspaces.autoCompactCurrentGap
-                    onSelected: (newValue) => {
-                        Config.options.bar.workspaces.autoCompactCurrentGap = newValue;
-                    }
-                    options: [{
-                        "displayName": Translation.tr("Compact on switch"),
-                        "icon": "move_group",
-                        "value": "onswitch"
-                    }, {
-                        "displayName": Translation.tr("Immediately"),
-                        "icon": "bolt",
-                        "value": "immediate"
-                    }, {
-                        "displayName": Translation.tr("Never"),
-                        "icon": "block",
-                        "value": "never"
-                    }]
-                }
-            }
-        }
+    WorkspacesPeek {
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        z: 5
+        preview: previewState
+        caption: workspacesRoot.caption
+        shown: !subPageOverlay.isOpen && page.contentY > hero.y + hero.height * 0.8
     }
 
     ConfigSubPageHost {

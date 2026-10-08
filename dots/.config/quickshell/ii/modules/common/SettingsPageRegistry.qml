@@ -126,7 +126,8 @@ Singleton {
             "icon": "workspaces",
             "component": "modules/settings/configs/WorkspacesConfig.qml",
             "subPages": ["widgets/DockWorkspaceConfig.qml"],
-            "aliases": ["Tint workspaces icons"]
+            "searchSources": ["sections/WorkspacesOptionsSection.qml"],
+            "aliases": ["Tint workspaces icons", "Workspace Compactor", "Active indicator", "Number style"]
         },
         {
             "id": "overview",

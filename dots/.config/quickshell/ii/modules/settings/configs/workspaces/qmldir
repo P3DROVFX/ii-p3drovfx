@@ -1,0 +1,19 @@
+module qs.modules.settings.configs.workspaces
+
+WorkspacesColorSwatches 1.0 WorkspacesColorSwatches.qml
+WorkspacesCompactorCard 1.0 WorkspacesCompactorCard.qml
+WorkspacesCompactorDiagram 1.0 WorkspacesCompactorDiagram.qml
+WorkspacesDockCard 1.0 WorkspacesDockCard.qml
+WorkspacesIconsPane 1.0 WorkspacesIconsPane.qml
+WorkspacesIndicatorPicker 1.0 WorkspacesIndicatorPicker.qml
+WorkspacesKeyCap 1.0 WorkspacesKeyCap.qml
+WorkspacesLiveStrip 1.0 WorkspacesLiveStrip.qml
+WorkspacesNumeralPicker 1.0 WorkspacesNumeralPicker.qml
+WorkspacesPeek 1.0 WorkspacesPeek.qml
+WorkspacesPreview 1.0 WorkspacesPreview.qml
+WorkspacesPreviewState 1.0 WorkspacesPreviewState.qml
+WorkspacesSectionHeader 1.0 WorkspacesSectionHeader.qml
+WorkspacesShapeGrid 1.0 WorkspacesShapeGrid.qml
+WorkspacesStepper 1.0 WorkspacesStepper.qml
+WorkspacesStrip 1.0 WorkspacesStrip.qml
+WorkspacesStylePicker 1.0 WorkspacesStylePicker.qml
