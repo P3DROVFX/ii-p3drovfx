@@ -5536,6 +5536,9 @@ Singleton {
                 // Announce the end of charging: a firmware charge limit holding the pack counts,
                 // and 101 above means the soft "nearly there" reminder is off.
                 property bool notifyCharged: true
+                // Opt-in: at 100 % on AC (or UPower's fully charged), show the default battery look
+                // instead of the charging bolt and green fill.
+                property bool defaultStateWhenFull: false
                 // Grace period between the low-battery warning and the suspend itself; 0 suspends
                 // immediately.
                 property int suspendWarningSeconds: 30

@@ -66,6 +66,8 @@
     "Widget background opacity": "Opacidade do fundo dos widgets",
     "Color battery by power profile": "Colorir bateria pelo perfil de energia",
     "Change battery icon color when power saver or performance mode is active": "Alterar cor do ícone da bateria nos modos economia ou performance",
+    "Show default state when full": "Mostrar estado padrão quando cheia",
+    "At 100 % on AC, drop the charging bolt and green fill and show the regular battery look": "Em 100 % na tomada, tira o raio de carregamento e o verde e mostra o visual normal da bateria",
     "Laptop Keyboard": "Teclado do Laptop",
     "No laps recorded yet": "Nenhuma volta registrada ainda",
     "Disable built-in laptop keyboard": "Desativar teclado integrado do laptop",

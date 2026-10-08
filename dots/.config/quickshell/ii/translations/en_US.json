@@ -66,6 +66,8 @@
     "Widget background opacity": "Widget background opacity",
     "Color battery by power profile": "Color battery by power profile",
     "Change battery icon color when power saver or performance mode is active": "Change battery icon color when power saver or performance mode is active",
+    "Show default state when full": "Show default state when full",
+    "At 100 % on AC, drop the charging bolt and green fill and show the regular battery look": "At 100 % on AC, drop the charging bolt and green fill and show the regular battery look",
     "Laptop Keyboard": "Laptop Keyboard",
     "No laps recorded yet": "No laps recorded yet",
     "Disable built-in laptop keyboard": "Disable built-in laptop keyboard",

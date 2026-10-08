@@ -155,6 +155,16 @@ ContentPage {
                 Config.options.bar.battery.colorByPowerProfile = checked;
             }
         }
+
+        ConfigSwitch {
+            buttonIcon: "battery_charging_full"
+            text: Translation.tr("Show default state when full")
+            description: Translation.tr("At 100 % on AC, drop the charging bolt and green fill and show the regular battery look")
+            checked: Config.options.battery.defaultStateWhenFull
+            onCheckedChanged: {
+                Config.options.battery.defaultStateWhenFull = checked;
+            }
+        }
     }
 
     MaterialWidgetLayoutSection {
