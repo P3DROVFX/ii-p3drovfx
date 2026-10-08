@@ -62,9 +62,10 @@
   --m3-duration-long: 420ms;
   --m3-nav-height: 90px;
   --m3-player-height: 96px;
-  --m3-player-side-width: clamp(460px, 31vw, 560px);
+  --m3-player-side-width: clamp(400px, 31vw, 560px);
   --m3-page-gutter: clamp(20px, 3vw, 52px);
   --m3-page-max: 1760px;
+  --m3-guide-width: 240px;
   --m3-state-hover: color-mix(in srgb, var(--m3-on-surface) 8%, transparent);
   --m3-state-press: color-mix(in srgb, var(--m3-on-surface) 12%, transparent);
   --m3-state-primary-hover: color-mix(in srgb, var(--m3-on-primary-container) 8%, transparent);
@@ -242,8 +243,18 @@ ytmusic-app-layout[is-cairo-voting-animation-enabled] #nav-bar-background.ytmusi
 }
 
 ytmusic-nav-bar {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
   min-height: 72px !important;
   padding-inline: 14px 20px !important;
+}
+
+ytmusic-nav-bar .left-content,
+ytmusic-nav-bar .right-content {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  min-width: 0 !important;
 }
 
 ytmusic-nav-bar .left-content,
@@ -278,10 +289,11 @@ ytmusic-nav-bar ytmusic-logo picture.ytmusic-logo::after {
 }
 
 ytmusic-nav-bar .center-content {
-  flex: 0 1 480px !important;
-  width: clamp(300px, 36vw, 480px) !important;
+  flex: 1 1 0 !important;
+  width: auto !important;
   min-width: 0 !important;
   max-width: 480px !important;
+  margin-inline: auto !important;
   overflow: visible !important;
 }
 
@@ -337,12 +349,10 @@ ytmusic-nav-bar #avatar-btn:hover {
   background-color: var(--m3-state-hover) !important;
 }
 
-/* The avatar belongs to the search cluster, while history navigation stays right. */
+/* In the nav flow: a viewport-centred offset drifted onto the right-hand controls at narrow widths. */
 ytmusic-nav-bar ytmusic-settings-button.settings-button {
-  position: fixed !important;
-  top: 23px !important;
-  right: auto !important;
-  left: calc(50% + clamp(150px, 18vw, 240px) + 42px) !important;
+  position: relative !important;
+  flex: 0 0 auto !important;
   z-index: 2 !important;
   display: block !important;
   width: 44px !important;
@@ -401,8 +411,8 @@ ytmusic-nav-bar #guide-button #guide-icon {
 
 ytmusic-search-box {
   --ytmusic-search-background: var(--m3-surface-container-high) !important;
-  flex: 0 1 480px !important;
-  width: clamp(300px, 36vw, 480px) !important;
+  flex: 1 1 auto !important;
+  width: 100% !important;
   min-width: 0 !important;
   max-width: 480px !important;
   color: var(--m3-on-surface) !important;
@@ -671,7 +681,7 @@ ytmusic-visual-header-renderer yt-img-shadow {
 /* Chips, tabs and actions. */
 ytmusic-chip-cloud-renderer {
   min-height: 72px !important;
-  height: 72px !important;
+  height: auto !important;
   padding-block: 16px !important;
   align-items: center !important;
   box-sizing: border-box !important;
@@ -1118,6 +1128,30 @@ ytmusic-player-page #play-pause-button {
   border-radius: var(--m3-shape-lg) !important;
 }
 
+/* Native icon and time colours assume a dark scrim. On the tonal palette the
+   controls take on-surface, and disabled controls keep a 38% tint. */
+ytmusic-player-page .current-time,
+ytmusic-player-page .total-time {
+  color: var(--m3-on-surface-variant) !important;
+}
+
+ytmusic-player-page yt-icon-button.previous-button,
+ytmusic-player-page yt-icon-button.next-button,
+ytmusic-player-page yt-icon-button.shuffle,
+ytmusic-player-page yt-icon-button.repeat,
+ytmusic-player-page yt-icon-button.toggle-player-page-button,
+ytmusic-player-page yt-icon-button.collapse-button,
+ytmusic-player-bar yt-icon-button.shuffle,
+ytmusic-player-bar yt-icon-button.repeat,
+ytmusic-player-bar yt-icon-button.toggle-player-page-button {
+  color: var(--m3-on-surface) !important;
+}
+
+ytmusic-player-page yt-icon-button[disabled],
+ytmusic-player-bar yt-icon-button[disabled] {
+  color: color-mix(in srgb, var(--m3-on-surface) 38%, transparent) !important;
+}
+
 /* Music/video uses the same tonal pill system as the side-panel tabs. */
 ytmusic-player-page #av-id.ytmusic-player-page,
 ytmusic-player-page #av-id ytmusic-av-toggle,
@@ -1343,7 +1377,7 @@ ytmusic-app-layout[player-visible] > [slot="player-bar"] {
 
 ytmusic-player-bar {
   display: grid !important;
-  grid-template-columns: minmax(260px, 1fr) minmax(360px, 1.25fr) minmax(260px, 1fr) !important;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) !important;
   align-items: center !important;
   width: 100% !important;
   height: 100% !important;
@@ -1362,27 +1396,22 @@ ytmusic-player-bar {
 }
 
 .left-controls.ytmusic-player-bar {
+  width: auto !important;
   grid-column: 2 !important;
   grid-row: 1 !important;
   justify-content: center !important;
   gap: 6px !important;
 }
 
-/* Center transport controls against the complete bar, independent of metadata/time. */
+/* Transport lives in the centre grid column, so it cannot land on the metadata column at any width. */
 ytmusic-player-bar .left-controls-buttons.ytmusic-player-bar {
-  position: absolute !important;
-  top: 50% !important;
-  left: 50% !important;
+  flex: 0 0 auto !important;
   margin: 0 !important;
-  transform: translate(-50%, -50%) !important;
 }
 
 ytmusic-player-bar .left-controls.ytmusic-player-bar .time-info.ytmusic-player-bar {
-  position: absolute !important;
-  top: 50% !important;
-  left: calc(50% + 118px) !important;
+  flex: 0 0 auto !important;
   margin: 0 !important;
-  transform: translateY(-50%) !important;
   white-space: nowrap !important;
 }
 
@@ -1391,9 +1420,16 @@ ytmusic-player-bar .left-controls.ytmusic-player-bar .time-info.ytmusic-player-b
   grid-row: 1 !important;
   justify-content: flex-start !important;
   gap: 12px !important;
+  min-width: 0 !important;
+}
+
+ytmusic-player-bar .content-info-wrapper.ytmusic-player-bar {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
 }
 
 .right-controls.ytmusic-player-bar {
+  width: auto !important;
   grid-column: 3 !important;
   grid-row: 1 !important;
   justify-content: flex-end !important;
@@ -1779,7 +1815,7 @@ ytmusic-player-page[player-page-open] #tab-renderer ytmusic-carousel ytmusic-res
 
 ytmusic-player-page[player-page-open] #tab-renderer ytmusic-carousel:has(> #items > ytmusic-two-row-item-renderer) > #items {
   grid-template-columns: none !important;
-  grid-auto-columns: calc((100% - 12px) / 2) !important;
+  grid-auto-columns: min(calc((100% - 12px) / 2), 232px) !important;
   row-gap: 0 !important;
 }
 
@@ -1879,17 +1915,13 @@ ytmusic-player-page[player-page-open] ytmusic-player-queue #contents.ytmusic-pla
 }
 
 ytmusic-app-layout[player-page-open] > [slot="player-bar"] {
-  right: calc(var(--m3-player-side-width) + 68px) !important;
+  right: calc(var(--m3-player-side-width) + 44px) !important;
   bottom: 36px !important;
-  left: 120px !important;
+  left: calc(var(--m3-guide-width) + 24px) !important;
   width: auto !important;
   height: 84px !important;
   padding: 8px 16px !important;
   background: color-mix(in srgb, var(--m3-surface-container-highest) 97%, transparent) !important;
-}
-
-ytmusic-app-layout[player-page-open] ytmusic-player-bar {
-  grid-template-columns: minmax(280px, 1fr) minmax(390px, 1.2fr) minmax(220px, .85fr) !important;
 }
 
 /* Scrollbars and responsive behavior. */
@@ -1928,17 +1960,50 @@ ytmusic-grid-renderer {
   animation: m3-content-enter var(--m3-duration-long) var(--m3-motion-emphasized) both;
 }
 
+/* Responsive layers. Breakpoints follow YouTube Music's own shell, so these
+   overrides never fight the layout it is actually drawing:
+     1180px  volume narrows; the expanded player keeps only its expand control
+     1100px  the expanded player stacks into one column
+      940px  the guide drops from its 240px drawer to the 72px rail
+      860px  the bar keeps transport and expand; volume and extras go
+      760px  the wordmark goes so search keeps its room
+      600px  YouTube serves its mweb shell (bottom mini player, drawer guide)
+   No width from 320px up may scroll horizontally. */
+
+@media (max-width: 1440px) {
+  /* Expanded player: the bar's right cluster must fit in the space beside the transport. */
+  ytmusic-app-layout[player-page-open] #volume-slider,
+  ytmusic-app-layout[player-page-open] yt-icon-button.volume,
+  ytmusic-app-layout[player-page-open] yt-icon-button.captions {
+    display: none !important;
+  }
+
+  ytmusic-app-layout[player-page-open] .previous-button.ytmusic-player-bar,
+  ytmusic-app-layout[player-page-open] .next-button.ytmusic-player-bar {
+    width: 40px !important;
+    height: 40px !important;
+  }
+
+  ytmusic-app-layout[player-page-open] .play-pause-button.ytmusic-player-bar {
+    width: 56px !important;
+    min-width: 56px !important;
+    height: 48px !important;
+    min-height: 48px !important;
+  }
+}
+
 @media (max-width: 1180px) {
   :root {
     --m3-page-gutter: 22px;
   }
 
-  ytmusic-player-bar {
-    grid-template-columns: minmax(220px, 1fr) minmax(310px, 1.1fr) minmax(180px, .8fr) !important;
-  }
-
   ytmusic-player-bar #volume-slider {
     width: 76px !important;
+  }
+
+  ytmusic-app-layout[player-page-open] .right-controls-buttons,
+  ytmusic-app-layout[player-page-open] #volume-slider {
+    display: none !important;
   }
 }
 
@@ -1955,29 +2020,28 @@ ytmusic-grid-renderer {
     padding: 18px 20px 122px !important;
   }
 
+  /* The art must end above the floating bar on short windows: its top sits ~156px down. */
   ytmusic-player-page[player-page-open] #player.ytmusic-player-page {
-    width: min(62vh, 100%) !important;
+    width: min(calc(56vh - 40px), 100%) !important;
     max-width: 620px !important;
     max-height: 620px !important;
   }
 
   ytmusic-player-page[player-page-open] #side-panel.side-panel.ytmusic-player-page {
     width: 100% !important;
-    height: 720px !important;
-    margin-top: 136px !important;
+    height: min(720px, 80vh) !important;
+    margin-top: 16px !important;
   }
 
   ytmusic-app-layout[player-page-open] > [slot="player-bar"] {
-    right: 32px !important;
-    left: 104px !important;
+    right: 16px !important;
+    left: calc(var(--m3-guide-width) + 16px) !important;
   }
+}
 
-  ytmusic-app-layout[player-page-open] ytmusic-player-bar {
-    grid-template-columns: minmax(240px, 1fr) minmax(300px, 1.15fr) !important;
-  }
-
-  ytmusic-app-layout[player-page-open] .right-controls.ytmusic-player-bar {
-    display: none !important;
+@media (max-width: 940px) {
+  :root {
+    --m3-guide-width: 72px;
   }
 }
 
@@ -1995,21 +2059,27 @@ ytmusic-grid-renderer {
     border-radius: var(--m3-shape-lg) !important;
   }
 
-  ytmusic-player-bar {
-    grid-template-columns: minmax(190px, 1fr) minmax(260px, 1fr) !important;
+  ytmusic-player-bar yt-img-shadow {
+    width: 52px !important;
+    height: 52px !important;
   }
 
-  ytmusic-nav-bar .center-content {
-    flex: 1 1 260px !important;
-    width: auto !important;
-    min-width: 220px !important;
+  ytmusic-player-bar .play-pause-button.ytmusic-player-bar {
+    width: 60px !important;
+    min-width: 60px !important;
+    height: 52px !important;
+    min-height: 52px !important;
+    margin-inline: 4px !important;
   }
 
-  ytmusic-search-box {
-    width: 100% !important;
+  ytmusic-player-bar .previous-button.ytmusic-player-bar,
+  ytmusic-player-bar .next-button.ytmusic-player-bar {
+    width: 44px !important;
+    height: 44px !important;
   }
 
-  .right-controls.ytmusic-player-bar {
+  ytmusic-player-bar #volume-slider,
+  ytmusic-player-bar .right-controls-buttons {
     display: none !important;
   }
 
@@ -2019,6 +2089,56 @@ ytmusic-grid-renderer {
     left: 10px !important;
     padding-inline: 12px !important;
     border-radius: var(--m3-shape-lg) !important;
+  }
+
+  ytmusic-app-layout[player-page-open] > [slot="player-bar"] {
+    left: calc(var(--m3-guide-width) + 10px) !important;
+  }
+}
+
+@media (max-width: 760px) {
+  ytmusic-nav-bar ytmusic-logo {
+    display: none !important;
+  }
+}
+
+@media (max-width: 600px) {
+  :root {
+    --m3-guide-width: 0px;
+    --m3-page-gutter: 14px;
+  }
+
+  ytmusic-nav-bar {
+    gap: 8px !important;
+    padding-inline: 8px 12px !important;
+  }
+
+  ytmusic-immersive-header-renderer,
+  ytmusic-details-header-renderer,
+  ytmusic-detail-header-renderer,
+  ytmusic-visual-header-renderer {
+    margin-inline: 10px !important;
+    padding: 20px !important;
+  }
+
+  ytmusic-immersive-header-renderer .title,
+  ytmusic-details-header-renderer .title,
+  ytmusic-detail-header-renderer .title,
+  ytmusic-visual-header-renderer .title,
+  ytmusic-visual-header-renderer h1 {
+    font-size: clamp(30px, 9vw, 44px) !important;
+  }
+
+  ytmusic-app-layout[player-visible] > [slot="player-bar"] {
+    right: 8px !important;
+    bottom: 8px !important;
+    left: 8px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  ytmusic-nav-bar ytmusic-cast-button {
+    display: none !important;
   }
 }
 
