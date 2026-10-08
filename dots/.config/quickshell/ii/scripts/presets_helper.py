@@ -201,9 +201,26 @@ LOCAL_PREFERENCE_PATHS = (
     "interactions.touchpadGestures",
 ) + SEARCH_LOCAL_PREFERENCE_PATHS
 
+# Daily limits and the usage tracker they count from. A limit on someone else's
+# app list, or a tracker switched off, would land on the importer without a word,
+# so neither travels: removed on export with the root sections, and handed back
+# from the importer's own config on apply.
+SCREEN_TIME_PATHS = (
+    "screenTime",
+    "appStats",
+)
+
+# Modes & Routines, with the game detector that feeds them. A preset's modes
+# would start shell actions and automatic triggers on the importer's machine,
+# so they never travel either.
+MODES_PATHS = (
+    "modes",
+)
+
 # Everything merge() hands back to the importer.
 LOCAL_ONLY_PATHS = (
     MONITOR_BINDING_PATHS + PERSONAL_PATHS + LOCAL_FOLDER_PATHS + LOCAL_PREFERENCE_PATHS
+    + SCREEN_TIME_PATHS + MODES_PATHS
 )
 # The shell keeps a durable mirror of every path here (plus the dock/search
 # keys above and the blacklisted root sections) in
@@ -533,6 +550,8 @@ ROOT_PRESET_BLACKLIST_KEYS = {
     "todo",
     "ai",
     "cheatsheet",
+    *SCREEN_TIME_PATHS,
+    *MODES_PATHS,
 }
 
 def remove_secrets_and_userdata(data, is_root=True):

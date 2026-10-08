@@ -3189,7 +3189,8 @@ Singleton {
             // that reads its flags once at startup, so everything above the display
             // options relaunches it rather than taking effect in place.
             property JsonObject appStats: JsonObject {
-                property bool enable: true
+                // Off by default: the user turns usage tracking on in Settings.
+                property bool enable: false
                 property int sampleIntervalMs: 10000
                 property int flushIntervalMs: 60000
                 // Days of history kept. Under "previousMonth" this is a floor rather
@@ -3263,10 +3264,11 @@ Singleton {
                 property bool pinForEdits: false
             }
 
-            // Modes & Routines (services/Modes.qml). Definitions are user data
-            // but live here on purpose so one file carries the whole setup.
+            // Modes & Routines (services/Modes.qml). Definitions are user data kept
+            // in this file, but presets never carry them (presets_helper.py MODES_PATHS).
             property JsonObject modes: JsonObject {
-                property bool enable: true
+                // Off by default: once on, modes and routines start on their own triggers.
+                property bool enable: false
                 // Loads the Modes & Routines app (named from when it was an overlay).
                 property bool overlayEnabled: true
                 // Presets are added once; deleting one afterwards sticks.

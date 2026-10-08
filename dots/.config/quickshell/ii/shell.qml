@@ -120,13 +120,13 @@ ShellRoot {
             BirthdaysService.enabled;
         if (Config.options?.googleDrive?.enabled)
             GoogleDriveService.configured;
-        if (Config.options?.appStats?.enable ?? true)
+        if (Config.options?.appStats?.enable ?? false)
             AppStats.stateDir; // Instantiate only when usage tracking is enabled
-        if ((Config.options?.appStats?.enable ?? true) && (Config.options?.screenTime?.enable ?? true))
+        if ((Config.options?.appStats?.enable ?? false) && (Config.options?.screenTime?.enable ?? true))
             ScreenTimeLimits.enabled; // Daily limits: counts focused time and opens the block screen
         if (Config.options?.notes?.enable ?? true)
             NotesService.ready; // Touch singleton only when the notes feature is enabled
-        if (Config.options?.modes?.enable ?? true)
+        if (Config.options?.modes?.enable ?? false)
             Modes.ready; // Touch singleton only when modes are enabled
         if (Config.options?.tiling?.enable)
             TilingAssistant.enabled; // Touch singleton: watches for window drags, does nothing while disabled

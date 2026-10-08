@@ -1012,26 +1012,19 @@ class TestPresetScan(unittest.TestCase):
         self.assertEqual(self.paths(result, "shell"), ["apps.terminal"])
         self.assertEqual(self.group(result, "shell")["severity"], "high")
 
-    def test_mode_shell_action_is_reported_with_its_mode_name(self):
+    def test_mode_shell_action_in_a_preset_is_not_reported(self):
+        """Modes never travel, so this action never reaches the importer's machine and nothing is shown."""
         preset = {"modes": {"modes": [{"id": "focus", "name": "Focus", "actions": [
             {"type": "dnd", "value": True},
             {"type": "shell", "value": {"start": "rm -rf ~/Documents", "end": "echo bye"}},
         ]}]}}
-        result = self.scan(preset, {})
-        self.assertEqual(self.paths(result, "shell"),
-                         ["modes.modes.0.actions.1.value.start",
-                          "modes.modes.0.actions.1.value.end"])
-        labels = [i["label"] for i in self.group(result, "shell")["items"]]
-        self.assertEqual(labels, ["Focus (on start)", "Focus (on end)"])
+        self.assertEqual(self.scan(preset, {})["total"], 0)
 
-    def test_routine_shell_action_with_a_bare_string_value(self):
+    def test_routine_shell_action_in_a_preset_is_not_reported(self):
         preset = {"modes": {"routines": [
             {"id": "r1", "name": "Morning", "actions": [
                 {"type": "shell", "value": "systemctl --user stop firewall"}]}]}}
-        result = self.scan(preset, {})
-        # Once, as a shell command -- not a second time as an unclassified one.
-        self.assertEqual(self.paths(result),
-                         ["modes.routines.0.actions.0.value.start"])
+        self.assertEqual(self.scan(preset, {})["total"], 0)
 
     def test_shell_command_already_in_the_config_is_not_reported(self):
         """Matched on the command, so reordering modes is not a page of warnings."""
@@ -1543,6 +1536,112 @@ class TestBlacklistAndWidgetNormalization(unittest.TestCase):
             self.assertEqual(merged["search"]["bestMatch"]["secondaryActions"], 2)
             self.assertEqual(merged["search"]["baseWidth"], 700)
             self.assertEqual(merged["search"]["baseHeight"], 560)
+
+
+def merge_preset_into_config(preset, local_config):
+    """Apply `preset` onto `local_config` with presets_helper.merge() and return the result."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        preset_file = os.path.join(tmp_dir, "preset.json")
+        config_file = os.path.join(tmp_dir, "config.json")
+        with open(preset_file, "w", encoding="utf-8") as f:
+            json.dump(preset, f)
+        with open(config_file, "w", encoding="utf-8") as f:
+            json.dump(local_config, f)
+        presets_helper.merge(preset_file, config_file, config_file)
+        with open(config_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+
+class TestScreenTimeStaysLocal(unittest.TestCase):
+    """Daily limits and the usage tracker never leave a machine in a preset, nor overwrite the importer's."""
+
+    LIMIT = {
+        "id": "abc123", "kind": "app", "name": "", "keys": ["org.vinegarhq.Sober"],
+        "minutes": 60, "days": [True] * 7, "enabled": True, "strict": False,
+    }
+
+    def test_screen_time_and_app_stats_blacklisted_on_export(self):
+        input_data = {
+            "appearance": {"palette": "vynx"},
+            "screenTime": {"enable": True, "limits": [self.LIMIT]},
+            "appStats": {"enable": False, "idleTimeoutSec": 0},
+        }
+        sanitized = presets_helper.sanitize_data(copy.deepcopy(input_data), "/home/testuser")
+        self.assertNotIn("screenTime", sanitized)
+        self.assertNotIn("appStats", sanitized)
+        self.assertEqual(sanitized["appearance"]["palette"], "vynx")
+
+    def test_preset_limits_and_tracker_are_not_imported(self):
+        preset = {
+            "appearance": {"palette": "nord"},
+            "screenTime": {"enable": True, "limits": [self.LIMIT]},
+            "appStats": {"enable": False},
+        }
+        local_config = {
+            "appearance": {"palette": "vynx"},
+            "screenTime": {"enable": True, "limits": []},
+            "appStats": {"enable": True, "idleTimeoutSec": 300},
+        }
+        merged = merge_preset_into_config(preset, local_config)
+        self.assertEqual(merged["appearance"]["palette"], "nord")
+        self.assertEqual(merged["screenTime"]["limits"], [])
+        self.assertTrue(merged["appStats"]["enable"])
+        self.assertEqual(merged["appStats"]["idleTimeoutSec"], 300)
+
+    def test_preset_cannot_add_limits_to_a_config_without_them(self):
+        preset = {"screenTime": {"enable": True, "limits": [self.LIMIT]}}
+        merged = merge_preset_into_config(preset, {"appearance": {"palette": "vynx"}})
+        self.assertNotIn("screenTime", merged)
+
+    def test_restore_local_only_hands_back_screen_time(self):
+        # The risk scan merges without the sanitizer, so this path has to hold on its own.
+        current = {"screenTime": {"enable": True, "limits": []}, "appStats": {"enable": True}}
+        merged = {"screenTime": {"enable": True, "limits": [self.LIMIT]}, "appStats": {"enable": False}}
+        presets_helper.restore_local_only(merged, current)
+        self.assertEqual(merged["screenTime"], current["screenTime"])
+        self.assertEqual(merged["appStats"], current["appStats"])
+
+
+class TestModesStayLocal(unittest.TestCase):
+    """Modes & Routines never leave a machine in a preset, nor overwrite the importer's."""
+
+    MODE = {"id": "focus", "name": "Focus", "actions": [{"type": "dnd", "value": True}]}
+
+    def test_modes_blacklisted_on_export(self):
+        input_data = {
+            "appearance": {"palette": "vynx"},
+            "modes": {"enable": True, "modes": [self.MODE], "routines": []},
+        }
+        sanitized = presets_helper.sanitize_data(copy.deepcopy(input_data), "/home/testuser")
+        self.assertNotIn("modes", sanitized)
+        self.assertEqual(sanitized["appearance"]["palette"], "vynx")
+
+    def test_preset_modes_are_not_imported(self):
+        preset = {
+            "appearance": {"palette": "nord"},
+            "modes": {"enable": False, "modes": [self.MODE], "routines": [self.MODE]},
+        }
+        local_config = {
+            "appearance": {"palette": "vynx"},
+            "modes": {"enable": True, "modes": [], "routines": []},
+        }
+        merged = merge_preset_into_config(preset, local_config)
+        self.assertEqual(merged["appearance"]["palette"], "nord")
+        self.assertTrue(merged["modes"]["enable"])
+        self.assertEqual(merged["modes"]["modes"], [])
+        self.assertEqual(merged["modes"]["routines"], [])
+
+    def test_preset_cannot_add_modes_to_a_config_without_them(self):
+        preset = {"modes": {"enable": True, "modes": [self.MODE]}}
+        merged = merge_preset_into_config(preset, {"appearance": {"palette": "vynx"}})
+        self.assertNotIn("modes", merged)
+
+    def test_restore_local_only_hands_back_modes(self):
+        # The risk scan merges without the sanitizer, so this path has to hold on its own.
+        current = {"modes": {"enable": True, "modes": []}}
+        merged = {"modes": {"enable": False, "modes": [self.MODE]}}
+        presets_helper.restore_local_only(merged, current)
+        self.assertEqual(merged["modes"], current["modes"])
 
 
 class TestDesktopPhotoWidgetsPresetExport(unittest.TestCase):

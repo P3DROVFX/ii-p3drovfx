@@ -69,6 +69,11 @@ Singleton {
         "cheatsheet",
         "googleDrive",
         "todo",
+        // Daily limits and the usage tracker they count from (presets_helper.py SCREEN_TIME_PATHS).
+        "screenTime",
+        "appStats",
+        // Modes & Routines (presets_helper.py MODES_PATHS).
+        "modes",
         "language",
         "policies",
         "workSafety",

@@ -127,7 +127,7 @@ Scope {
     }
     // The mode start/end banner; the dynamic island draws it when a notch is on.
     PanelUrlLoader {
-        extraCondition: (Config.options?.modes?.enable ?? true) && !IslandPolicy.ownsModeFlash
+        extraCondition: (Config.options?.modes?.enable ?? false) && !IslandPolicy.ownsModeFlash
         panelUrl: Qt.resolvedUrl("../modules/ii/modeFlashPopup/ModeFlashPopup.qml")
     }
     PanelUrlLoader {
