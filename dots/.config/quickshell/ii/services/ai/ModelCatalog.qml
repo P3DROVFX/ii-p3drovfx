@@ -144,6 +144,48 @@ QtObject {
                 maxOutput: 64000
             },
             models: [
+                // Sonnet 5.5, Opus 5.5 and Fable 5.1 refuse `thinking: disabled`
+                // with a 400; always-on turns "off" into adaptive at low effort.
+                // "128K" output is 128000 here: 131072 is refused with a 400.
+                {
+                    value: "claude-sonnet-5-5",
+                    title: "Claude Sonnet 5.5",
+                    thinking: true,
+                    thinkingKind: "anthropic-adaptive",
+                    thinkingAlwaysOn: true,
+                    samplingParams: false,
+                    contextWindow: 1000000,
+                    maxOutput: 128000
+                },
+                {
+                    value: "claude-opus-5-5",
+                    title: "Claude Opus 5.5",
+                    thinking: true,
+                    thinkingKind: "anthropic-adaptive",
+                    thinkingAlwaysOn: true,
+                    samplingParams: false,
+                    contextWindow: 1000000,
+                    maxOutput: 128000
+                },
+                {
+                    value: "claude-haiku-5-5",
+                    title: "Claude Haiku 5.5",
+                    thinking: true,
+                    thinkingKind: "anthropic-adaptive",
+                    samplingParams: false,
+                    contextWindow: 1000000,
+                    maxOutput: 128000
+                },
+                {
+                    value: "claude-fable-5-1",
+                    title: "Claude Fable 5.1",
+                    thinking: true,
+                    thinkingKind: "anthropic-adaptive",
+                    thinkingAlwaysOn: true,
+                    samplingParams: false,
+                    contextWindow: 1000000,
+                    maxOutput: 128000
+                },
                 {
                     value: "claude-sonnet-5",
                     title: "Claude Sonnet 5",
@@ -151,7 +193,7 @@ QtObject {
                     thinkingKind: "anthropic-adaptive",
                     samplingParams: false,
                     contextWindow: 1000000,
-                    maxOutput: 131072
+                    maxOutput: 128000
                 },
                 {
                     value: "claude-opus-5",
