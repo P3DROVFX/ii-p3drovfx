@@ -5907,8 +5907,8 @@ Singleton {
                     property bool fasterTouchpadScroll: false // Enable faster scrolling with touchpad
                     property int mouseScrollDeltaThreshold: 120 // delta >= this then it gets detected as mouse scroll rather than touchpad
                     property int mouseScrollFactor: 120
-                    // Touchpad speed while fasterTouchpadScroll is on. 225 is the finger's own speed
-                    // (100%), so the default 450 is 200%. Off, the touchpad moves 1:1 with the fingers.
+                    // Touchpad speed while fasterTouchpadScroll is on: px per 10 px of finger
+                    // (ScrollWheel.touchpadStep). Off, the touchpad moves 1:1 with the fingers.
                     property int touchpadScrollFactor: 450
                     // The content keeps gliding for a moment after the fingers lift (TouchpadKinetic)
                     property bool touchpadKinetic: true

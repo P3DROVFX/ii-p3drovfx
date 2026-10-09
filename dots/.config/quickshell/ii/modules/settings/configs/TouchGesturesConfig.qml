@@ -424,12 +424,12 @@ Item {
                     enabled: fasterSwitch.checked
                     opacity: enabled ? 1 : 0.4
                     usePercentTooltip: false
-                    // Shown as a share of the finger's own speed (100%)
+                    // Shown as a share of the default speed (450)
                     from: 45
                     to: 900
                     stepSize: 22.5
-                    stopIndicatorValues: [ScrollWheel.touchpadSpeedOne]
-                    badgeText: Math.round(value / ScrollWheel.touchpadSpeedOne * 100) + "%"
+                    stopIndicatorValues: [ScrollWheel.touchpadSpeedDefault]
+                    badgeText: Math.round(value / ScrollWheel.touchpadSpeedDefault * 100) + "%"
                     tooltipContent: badgeText
                     Binding {
                         target: touchpadSpeedSlider

@@ -35,16 +35,18 @@ Singleton {
         return angle / threshold * (settings?.mouseScrollFactor ?? 120);
     }
 
-    // The touchpad speed setting that means the finger's own speed (100%)
-    readonly property real touchpadSpeedOne: 225
+    // The default touchpad speed setting (100% on the slider)
+    readonly property real touchpadSpeedDefault: 450
 
     /**
-     * Pixels one touchpad event moves: the finger's own distance, scaled by the touchpad
-     * speed setting while faster scrolling is on.
+     * Pixels one touchpad event moves: the finger's own distance, or, while faster
+     * scrolling is on, touchpadScrollFactor px per notch's worth of angle (10 px of
+     * finger). That is the gain fasterTouchpadScroll always had; the compositor's
+     * touchpad scroll_factor shrinks the finger's distance before it gets here.
      */
     function touchpadStep(angle, pixel, settings) {
         const finger = pixel !== 0 ? pixel : angle / touchpadAnglePerPixel;
-        const speed = settings?.fasterTouchpadScroll ? (settings?.touchpadScrollFactor ?? 450) / touchpadSpeedOne : 1;
+        const speed = settings?.fasterTouchpadScroll ? (settings?.touchpadScrollFactor ?? 450) * touchpadAnglePerPixel / 120 : 1;
         return finger * speed;
     }
 
