@@ -116,6 +116,14 @@ QtObject {
         return Array.from(Brightness.monitors ?? []).find(m => m && m.screen?.name === name) ?? null;
     }
 
+    // The window rules the chosen presets carry (ModeSchema.HYPRLAND_PRESET_RULES).
+    function hyprlandPresetRules(v) {
+        const obj = root.asObject(v);
+        return ModeSchema.toArray(obj.presets)
+            .map(preset => ModeSchema.HYPRLAND_PRESET_RULES[String(preset)])
+            .filter(rule => !!rule);
+    }
+
     // Hyprland option keys/values go through a shell command line; only
     // accept the characters an option can actually contain.
     function hyprlandOptions(v) {
@@ -998,16 +1006,18 @@ QtObject {
             available: () => true,
             apply: v => {
                 const options = root.hyprlandOptions(v);
-                if (!Object.keys(options).length)
+                const rules = root.hyprlandPresetRules(v);
+                if (!Object.keys(options).length && !rules.length)
                     throw new Error("no options");
-                HyprlandConfig.setMany(options, null);
+                HyprlandConfig.setMany(options, rules.length ? { addLines: rules.map(r => r.line) } : null);
             },
             revert: (was, action) => {
                 let keys = Object.keys(root.hyprlandOptions(action?.value));
                 if (root.gameModeOn)
                     keys = keys.filter(k => ModeSchema.GAME_MODE_OPTIONS[k] === undefined);
-                if (keys.length)
-                    HyprlandConfig.resetMany(keys, null);
+                const markers = root.hyprlandPresetRules(action?.value).map(r => r.marker);
+                if (keys.length || markers.length)
+                    HyprlandConfig.resetMany(keys, markers.length ? { removeMatching: markers } : null);
             }
         },
         gameMode: {

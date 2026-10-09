@@ -213,7 +213,20 @@ var HYPRLAND_PRESETS = {
     shadows: { "decoration:shadow:enabled": 0 },
     gaps: { "general:gaps_in": 0, "general:gaps_out": 0 },
     rounding: { "decoration:rounding": 0, "decoration:rounding_power": 0 },
-    tearing: { "general:allow_tearing": 1 }
+    tearing: { "general:allow_tearing": 1 },
+    // A window rule rather than options: see HYPRLAND_PRESET_RULES.
+    transparency: {}
+};
+
+// Presets carried as window rules, added while the action runs and removed by
+// their marker afterwards. `transparency` makes every window opaque, over the
+// per-app opacity rules, the way Game Mode does (its own marker, so the two
+// never remove each other's rule).
+var OPAQUE_RULE_MARKER = "shell:routine-opaque";
+var HYPRLAND_PRESET_RULES = {
+    transparency: { marker: OPAQUE_RULE_MARKER,
+        line: 'hl.window_rule({name="' + OPAQUE_RULE_MARKER + '",match={class=".*"},'
+            + 'opacity="1.0 override 1.0 override 1.0 override",opaque=true})' }
 };
 
 function isArrayLike(value) {

@@ -757,6 +757,8 @@ Singleton {
             return Translation.tr("Rounding");
         case "tearing":
             return Translation.tr("Tearing");
+        case "transparency":
+            return Translation.tr("Transparency");
         }
         return key;
     }
