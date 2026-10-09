@@ -60,7 +60,9 @@ Singleton {
             "name": "Background",
             "icon": "wallpaper",
             "component": "modules/settings/configs/BackgroundConfig.qml",
-            "subPages": ["widgets/ParallaxConfig.qml", "widgets/MediaModeBackgroundConfig.qml"],
+            "subPages": ["widgets/ParallaxConfig.qml", "widgets/MediaModeBackgroundConfig.qml", "widgets/DepthEffectConfig.qml", "widgets/VideoWallpaperConfig.qml"],
+            "searchComponent": false,
+            "searchSources": ["sections/BackgroundOptionsSection.qml"],
             "aliases": ["Wallpaper", "Backgrounds", "Wallpaper Engine"]
         },
         {

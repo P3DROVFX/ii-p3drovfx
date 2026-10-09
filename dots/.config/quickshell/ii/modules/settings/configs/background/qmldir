@@ -1,0 +1,15 @@
+module qs.modules.settings.configs.background
+
+BackgroundPreviewHero 1.0 BackgroundPreviewHero.qml
+BackgroundStage 1.0 BackgroundStage.qml
+BackgroundEffectChip 1.0 BackgroundEffectChip.qml
+BackgroundDialCard 1.0 BackgroundDialCard.qml
+BackgroundPane 1.0 BackgroundPane.qml
+BackgroundActionPill 1.0 BackgroundActionPill.qml
+BackgroundStyleList 1.0 BackgroundStyleList.qml
+BackgroundBackendCard 1.0 BackgroundBackendCard.qml
+BackgroundLinkRow 1.0 BackgroundLinkRow.qml
+BackgroundModelRow 1.0 BackgroundModelRow.qml
+BackgroundSubPageHeader 1.0 BackgroundSubPageHeader.qml
+VideoPlayerSetup 1.0 VideoPlayerSetup.qml
+VideoColorFrame 1.0 VideoColorFrame.qml
