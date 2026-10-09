@@ -1,0 +1,13 @@
+module qs.modules.settings.configs.workspaces
+
+WorkspacesPane 1.0 WorkspacesPane.qml
+WorkspacesStage 1.0 WorkspacesStage.qml
+WorkspacesStylePane 1.0 WorkspacesStylePane.qml
+WorkspacesIndicatorPane 1.0 WorkspacesIndicatorPane.qml
+WorkspacesIndicatorDemo 1.0 WorkspacesIndicatorDemo.qml
+WorkspacesShapeGrid 1.0 WorkspacesShapeGrid.qml
+WorkspacesNumeralPane 1.0 WorkspacesNumeralPane.qml
+WorkspacesCountCard 1.0 WorkspacesCountCard.qml
+WorkspacesIconShapePane 1.0 WorkspacesIconShapePane.qml
+WorkspacesReveal 1.0 WorkspacesReveal.qml
+WorkspacesCompactPane 1.0 WorkspacesCompactPane.qml
