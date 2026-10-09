@@ -3079,6 +3079,11 @@ Singleton {
                 // Keep blurSize at its existing path for presets. These defaults
                 // match the II Hyprland look; the compositor still owns enabled.
                 property JsonObject blur: JsonObject {
+                    // Compositor blur for windows and shell surfaces: "live" blurs what
+                    // is behind, "xray" only the cached wallpaper (cheap), "off" none.
+                    property string mode: "live"
+                    // Every app window opaque, over the per-app opacity rules.
+                    property bool opaqueWindows: false
                     property bool advancedOptions: false
                     property int passes: 3
                     property real noise: 0.05

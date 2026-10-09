@@ -322,6 +322,21 @@ Singleton {
     property int blurSize: Config.options.appearance.blurSize ?? 8
     readonly property string blurConfigScript: HyprlandBlur.buildScript(root.blurSize, Config.options.appearance.blur)
     onBlurConfigScriptChanged: root.scheduleBlurUpdate()
+    // Compositor blur for windows and shell surfaces (Settings > Windows): "live", "xray"
+    // (only the cached wallpaper is blurred) or "off". "off" travels in blurConfigScript, so
+    // every config reload (Game Mode, routines) re-applies it; the other modes leave
+    // blur.enabled to whoever owns it, so leaving "off" has to turn blur back on - unless
+    // Game Mode (animations off) is holding it off.
+    readonly property string compositorBlurMode: Config.options.appearance.blur?.mode ?? "live"
+    readonly property bool compositorBlurOff: root.compositorBlurMode === "off"
+    onCompositorBlurOffChanged: {
+        if (Config.ready && !root.compositorBlurOff)
+            Quickshell.execDetached(["sh", "-c", "hyprctl getoption animations:enabled -j | grep -qE '\"(int|bool)\": *(0|false)' "
+                + "|| hyprctl eval 'hl.config({ decoration = { blur = { enabled = true } } })'"]);
+    }
+    onCompositorBlurModeChanged: root.pushHyprlandLayerRules()
+    readonly property bool opaqueWindows: Config.options.appearance.blur?.opaqueWindows ?? false
+    onOpaqueWindowsChanged: root.pushHyprlandLayerRules()
     property bool _blurUpdatePending: false
     property bool _blurLayerRulesPending: false
 
@@ -409,7 +424,9 @@ Singleton {
         var script = "";
         // Named rules merge on re-declaration: dragging Ignore Alpha must update
         // the existing rules, not keep adding anonymous rules to the compositor.
-        script += "hl.layer_rule({ name = 'ii:appearance:layers', match = { namespace = 'quickshell.*' }, blur = true, blur_popups = true, ignore_alpha = " + a + " }) ";
+        // xray is explicit: rules.lua turns it off for every shell layer.
+        const xray = root.compositorBlurMode === "xray" ? "true" : "false";
+        script += "hl.layer_rule({ name = 'ii:appearance:layers', match = { namespace = 'quickshell.*' }, blur = true, blur_popups = true, xray = " + xray + ", ignore_alpha = " + a + " }) ";
         if (root.popupBlurEnabled) {
             var popupA = root.popupIgnoreAlpha;
             script += "hl.layer_rule({ name = 'ii:appearance:popup-family', match = { namespace = 'quickshell:.*[pP]opup' }, blur = true, blur_popups = true, ignore_alpha = " + popupA + " }) ";
@@ -418,7 +435,7 @@ Singleton {
             script += "hl.layer_rule({ name = 'ii:appearance:popup-family', match = { namespace = 'quickshell:.*[pP]opup' }, blur = false, blur_popups = false, ignore_alpha = 0.5 }) ";
             script += "hl.layer_rule({ name = 'ii:appearance:popup', match = { namespace = 'quickshell:popup' }, blur = false, blur_popups = false, ignore_alpha = 0.5 }) ";
         }
-        script += "hl.layer_rule({ name = 'ii:appearance:bar', match = { namespace = 'quickshell:(bar|floatingNotch)' }, blur = true, ignore_alpha = " + barA + " }) ";
+        script += "hl.layer_rule({ name = 'ii:appearance:bar', match = { namespace = 'quickshell:(bar|floatingNotch)' }, blur = true, xray = " + xray + ", ignore_alpha = " + barA + " }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:background', match = { namespace = 'quickshell:background' }, blur = false }) ";
         // See backgroundWidgetsBlur. Re-declared on every change; rules.lua keeps it off
         // until the shell has pushed this one.
@@ -438,6 +455,11 @@ Singleton {
         // These layer surfaces animate their content with the Windows preset. Never also
         // animate the fullscreen transparent layer (or alter animations for other overlays).
         script += "hl.layer_rule({ name = 'ii:appearance:window-animation-overlays', match = { namespace = '^quickshell:(usage|modes|cheatsheet)$' }, no_anim = true }) ";
+        // Opaque app windows (Settings > Windows). A named rule cannot be dropped at
+        // runtime, so turning it off re-declares it with a match nothing has.
+        script += root.opaqueWindows
+            ? "hl.window_rule({ name = 'ii:appearance:opaque-windows', match = { class = '.*' }, opacity = '1.0 override 1.0 override 1.0 override', opaque = true }) "
+            : "hl.window_rule({ name = 'ii:appearance:opaque-windows', match = { class = '^ii-no-window-has-this-class$' } }) ";
         // ignore_alpha is a layer effect, not a supported window-rule field.
         script += "hl.window_rule({ name = 'ii:appearance:settings', match = { title = '^(illogical-impulse Settings)$' }, no_blur = false }) ";
         return script;

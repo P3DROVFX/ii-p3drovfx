@@ -96,7 +96,8 @@ Singleton {
         "decoration:blur:popups": "windows",
         "decoration:blur:popups_ignorealpha": "windows",
         "decoration:blur:input_methods": "windows",
-        "decoration:blur:input_methods_ignorealpha": "windows"
+        "decoration:blur:input_methods_ignorealpha": "windows",
+        "decoration:blur:enabled": "windows"
     })
 
     property bool ready: false

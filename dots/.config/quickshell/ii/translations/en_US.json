@@ -14409,5 +14409,19 @@
     "Line · Shift snaps to 15°": "Line · Shift snaps to 15°",
     "Arrow · Shift snaps to 15°": "Arrow · Shift snaps to 15°",
     "Rectangle · Shift makes a square": "Rectangle · Shift makes a square",
-    "Ellipse · Shift makes a circle": "Ellipse · Shift makes a circle"
+    "Ellipse · Shift makes a circle": "Ellipse · Shift makes a circle",
+    "Compositor blur": "Compositor blur",
+    "Blur whatever is behind, windows included. The heaviest on the GPU: every animation behind a blurred surface blurs it again": "Blur whatever is behind, windows included. The heaviest on the GPU: every animation behind a blurred surface blurs it again",
+    "Wallpaper only": "Wallpaper only",
+    "Blur only the wallpaper, computed once and reused. Glass stays, animations stay smooth": "Blur only the wallpaper, computed once and reused. Glass stays, animations stay smooth",
+    "No compositor blur anywhere, for the lightest rendering": "No compositor blur anywhere, for the lightest rendering",
+    "Blur threshold": "Blur threshold",
+    "Above %1%": "Above %1%",
+    "Only parts more than %1% opaque are blurred": "Only parts more than %1% opaque are blurred",
+    "Blur is applied only behind parts of the shell that are more opaque than this. Lower it to blur more transparent surfaces; raise it to keep blur off soft shadows and edges. Above a surface's own opacity, that surface is not blurred at all.": "Blur is applied only behind parts of the shell that are more opaque than this. Lower it to blur more transparent surfaces; raise it to keep blur off soft shadows and edges. Above a surface's own opacity, that surface is not blurred at all.",
+    "A low threshold also blurs shadows and soft edges, which can show as a frosted halo around panels and widgets.": "A low threshold also blurs shadows and soft edges, which can show as a frosted halo around panels and widgets.",
+    "App windows": "App windows",
+    "Per app": "Per app",
+    "Each app keeps the opacity your window rules give it": "Each app keeps the opacity your window rules give it",
+    "Every window fully opaque, over any opacity rule. Nothing behind them is drawn or blurred": "Every window fully opaque, over any opacity rule. Nothing behind them is drawn or blurred"
 }

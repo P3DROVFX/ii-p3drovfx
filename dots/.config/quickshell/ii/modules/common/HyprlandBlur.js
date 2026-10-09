@@ -1,7 +1,8 @@
 .pragma library
 
-// Only appearance parameters belong here. Leave blur.enabled to Hyprland / Game
-// Mode so reapplying a saved look cannot undo a temporary blur-disable override.
+// Appearance parameters, plus blur.enabled only when the user turned compositor blur
+// off (mode "off"). In the other modes enabled stays with Hyprland / Game Mode, so
+// reapplying a saved look cannot undo a temporary blur-disable override.
 function numberInRange(value, fallback, minimum, maximum, integer) {
     const number = typeof value === "number" && isFinite(value) ? value : fallback;
     const bounded = Math.max(minimum, Math.min(maximum, number));
@@ -35,6 +36,14 @@ function configValues(size, options) {
     // X-ray requires the optimized blur path. Preserve the preference while the
     // optimization is off, and restore it when that path is enabled again.
     values.xray = values.new_optimizations && values.xray;
+    // "xray": everything blurs the cached, already blurred wallpaper instead of
+    // re-blurring whatever moves behind it - far cheaper during animations.
+    if (blur.mode === "xray") {
+        values.new_optimizations = true;
+        values.xray = true;
+    } else if (blur.mode === "off") {
+        values.enabled = false;
+    }
     return values;
 }
 

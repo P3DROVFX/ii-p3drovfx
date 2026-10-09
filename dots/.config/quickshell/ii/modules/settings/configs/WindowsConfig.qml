@@ -183,6 +183,43 @@ Item {
                 }
             }
 
+            // Hyprland's own blur, for windows and shell surfaces alike.
+            ContentSubsection {
+                title: Translation.tr("Compositor blur")
+                icon: "blur_on"
+                Layout.fillWidth: true
+
+                ConfigSelectionArray {
+                    currentValue: windowsRoot.appearance.blur.mode ?? "live"
+                    onSelected: newValue => windowsRoot.appearance.blur.mode = newValue
+                    options: [
+                        { displayName: Translation.tr("Live"), icon: "blur_on", value: "live",
+                          tooltip: Translation.tr("Blur whatever is behind, windows included. The heaviest on the GPU: every animation behind a blurred surface blurs it again") },
+                        { displayName: Translation.tr("Wallpaper only"), icon: "wallpaper", value: "xray",
+                          tooltip: Translation.tr("Blur only the wallpaper, computed once and reused. Glass stays, animations stay smooth") },
+                        { displayName: Translation.tr("Off"), icon: "blur_off", value: "off",
+                          tooltip: Translation.tr("No compositor blur anywhere, for the lightest rendering") }
+                    ]
+                }
+            }
+
+            ContentSubsection {
+                title: Translation.tr("App windows")
+                icon: "select_window"
+                Layout.fillWidth: true
+
+                ConfigSelectionArray {
+                    currentValue: windowsRoot.appearance.blur.opaqueWindows ?? false
+                    onSelected: newValue => windowsRoot.appearance.blur.opaqueWindows = newValue
+                    options: [
+                        { displayName: Translation.tr("Per app"), icon: "opacity", value: false,
+                          tooltip: Translation.tr("Each app keeps the opacity your window rules give it") },
+                        { displayName: Translation.tr("Opaque"), icon: "rectangle", value: true,
+                          tooltip: Translation.tr("Every window fully opaque, over any opacity rule. Nothing behind them is drawn or blurred") }
+                    ]
+                }
+            }
+
             ConfigSlider {
                 visible: windowsRoot.transparencyMode === "custom"
                 buttonIcon: "blur_on"

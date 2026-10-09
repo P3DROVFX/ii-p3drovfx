@@ -14416,5 +14416,19 @@
     "Line · Shift snaps to 15°": "Linha · Shift alinha em 15°",
     "Arrow · Shift snaps to 15°": "Seta · Shift alinha em 15°",
     "Rectangle · Shift makes a square": "Retângulo · Shift faz um quadrado",
-    "Ellipse · Shift makes a circle": "Elipse · Shift faz um círculo"
+    "Ellipse · Shift makes a circle": "Elipse · Shift faz um círculo",
+    "Compositor blur": "Desfoque do compositor",
+    "Blur whatever is behind, windows included. The heaviest on the GPU: every animation behind a blurred surface blurs it again": "Desfoca o que estiver atrás, inclusive janelas. O mais pesado para a GPU: cada animação atrás de uma superfície desfocada a desfoca de novo",
+    "Wallpaper only": "Só o papel de parede",
+    "Blur only the wallpaper, computed once and reused. Glass stays, animations stay smooth": "Desfoca só o papel de parede, calculado uma vez e reaproveitado. O efeito de vidro continua e as animações seguem fluidas",
+    "No compositor blur anywhere, for the lightest rendering": "Nenhum desfoque do compositor, para a renderização mais leve",
+    "Blur threshold": "Limite do desfoque",
+    "Above %1%": "Acima de %1%",
+    "Only parts more than %1% opaque are blurred": "Só partes com mais de %1% de opacidade são desfocadas",
+    "Blur is applied only behind parts of the shell that are more opaque than this. Lower it to blur more transparent surfaces; raise it to keep blur off soft shadows and edges. Above a surface's own opacity, that surface is not blurred at all.": "O desfoque é aplicado só atrás das partes do shell mais opacas que isto. Diminua para desfocar superfícies mais transparentes; aumente para tirar o desfoque de sombras e bordas suaves. Acima da opacidade da própria superfície, ela não é desfocada.",
+    "A low threshold also blurs shadows and soft edges, which can show as a frosted halo around panels and widgets.": "Um limite baixo também desfoca sombras e bordas suaves, o que pode aparecer como um halo fosco em volta de painéis e widgets.",
+    "App windows": "Janelas de apps",
+    "Per app": "Por app",
+    "Each app keeps the opacity your window rules give it": "Cada app mantém a opacidade definida nas suas regras de janela",
+    "Every window fully opaque, over any opacity rule. Nothing behind them is drawn or blurred": "Todas as janelas totalmente opacas, acima de qualquer regra de opacidade. Nada atrás delas é desenhado ou desfocado"
 }
