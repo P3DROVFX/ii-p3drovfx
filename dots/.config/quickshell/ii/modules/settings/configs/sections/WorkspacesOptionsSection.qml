@@ -192,52 +192,22 @@ ColumnLayout {
             buttonIcon: "interests"
             text: Translation.tr("Apply shape mask to icons")
             checked: Config.options.appearance.icons.enableShapeMask
-            onCheckedChanged: {
-                Config.options.appearance.icons.enableShapeMask = checked;
-            }
+            onCheckedChanged: Config.options.appearance.icons.enableShapeMask = checked
             StyledToolTip {
                 text: Translation.tr("Crops the icons using the selected material shape")
             }
-
-            extraComponent: Component {
-                RippleButtonWithShape {
-                    enabled: Config.options.appearance.icons.enableShapeMask
-                    shapeString: Config.options.appearance.icons.shapeMask
-                    implicitWidth: 60
-                    extraIcon: "edit"
-                    onClicked: {
-                        iconsShapeMaskLoader.active = !iconsShapeMaskLoader.active;
-                    }
-                    StyledToolTip {
-                        text: Translation.tr("Edit the material shape")
-                    }
-                }
-            }
         }
 
-        Loader {
-            id: iconsShapeMaskLoader
-            active: false
-            visible: active
-            Layout.fillWidth: true
+        ContentSubsection {
+            title: Translation.tr("Mask shape")
+            icon: "shape_line"
 
-            sourceComponent: ContentSubsection {
-                title: Translation.tr("Mask shape")
-                icon: "shape_line"
-
-                ConfigSelectionArray {
-                    currentValue: Config.options.appearance.icons.shapeMask
-                    onSelected: (newValue) => {
-                        Config.options.appearance.icons.shapeMask = newValue;
-                    }
-                    options: (["Circle", "Square", "Slanted", "Arch", "Arrow", "SemiCircle", "Oval", "Pill", "Triangle", "Diamond", "ClamShell", "Pentagon", "Gem", "Sunny", "VerySunny", "Cookie4Sided", "Cookie6Sided", "Cookie7Sided", "Cookie9Sided", "Cookie12Sided", "Ghostish", "Clover4Leaf", "Clover8Leaf", "Burst", "SoftBurst", "Flower", "Puffy", "PuffyDiamond", "PixelCircle", "Bun", "Heart"]).map((icon) => {
-                        return {
-                            "displayName": "",
-                            "shape": icon,
-                            "value": icon
-                        };
-                    })
-                }
+            ConfigSelectionArray {
+                currentValue: Config.options.appearance.icons.shapeMask
+                onSelected: newValue => Config.options.appearance.icons.shapeMask = newValue
+                options: (["Circle", "Square", "Slanted", "Arch", "Arrow", "SemiCircle", "Oval", "Pill", "Triangle", "Diamond", "ClamShell", "Pentagon", "Gem", "Sunny", "VerySunny", "Cookie4Sided", "Cookie6Sided", "Cookie7Sided", "Cookie9Sided", "Cookie12Sided", "Ghostish", "Clover4Leaf", "Clover8Leaf", "Burst", "SoftBurst", "Flower", "Puffy", "PuffyDiamond", "PixelCircle", "Bun", "Heart"]).map((icon) => {
+                    return { "displayName": "", "shape": icon, "value": icon };
+                })
             }
         }
 
@@ -245,71 +215,34 @@ ColumnLayout {
             buttonIcon: "token"
             text: Translation.tr("Use Material Shape for active indicator")
             checked: Config.options.bar.workspaces.useMaterialShapeForActiveIndicator
-            onCheckedChanged: {
-                Config.options.bar.workspaces.useMaterialShapeForActiveIndicator = checked;
-            }
-
-            extraComponent: Component {
-                RippleButtonWithShape {
-                    enabled: Config.options.bar.workspaces.useMaterialShapeForActiveIndicator
-                    shapeString: Config.options.bar.workspaces.activeIndicatorShape
-                    implicitWidth: 60
-                    extraIcon: "edit"
-                    onClicked: {
-                        activeIndicatorShapeLoader.active = !activeIndicatorShapeLoader.active;
-                    }
-                    StyledToolTip {
-                        text: Translation.tr("Edit the material shape")
-                    }
-                }
-            }
+            onCheckedChanged: Config.options.bar.workspaces.useMaterialShapeForActiveIndicator = checked
         }
 
-        Loader {
-            id: activeIndicatorShapeLoader
-            active: false
-            visible: active
-            Layout.fillWidth: true
+        ContentSubsection {
+            title: Translation.tr("Active indicator shape")
+            icon: "shape_line"
 
-            sourceComponent: ContentSubsection {
-                title: Translation.tr("Active indicator shape")
-                icon: "shape_line"
-
-                ConfigSelectionArray {
-                    currentValue: Config.options.bar.workspaces.activeIndicatorShape
-                    onSelected: (newValue) => {
-                        Config.options.bar.workspaces.activeIndicatorShape = newValue;
-                    }
-                    options: (["Circle", "Square", "Slanted", "Arch", "Arrow", "SemiCircle", "Oval", "Pill", "Triangle", "Diamond", "ClamShell", "Pentagon", "Gem", "Sunny", "VerySunny", "Cookie4Sided", "Cookie6Sided", "Cookie7Sided", "Cookie9Sided", "Cookie12Sided", "Ghostish", "Clover4Leaf", "Clover8Leaf", "Burst", "SoftBurst", "Flower", "Puffy", "PuffyDiamond", "PixelCircle", "Bun", "Heart"]).map((icon) => {
-                        return {
-                            "displayName": "",
-                            "shape": icon,
-                            "value": icon
-                        };
-                    })
-                }
+            ConfigSelectionArray {
+                currentValue: Config.options.bar.workspaces.activeIndicatorShape
+                onSelected: newValue => Config.options.bar.workspaces.activeIndicatorShape = newValue
+                options: (["Circle", "Square", "Slanted", "Arch", "Arrow", "SemiCircle", "Oval", "Pill", "Triangle", "Diamond", "ClamShell", "Pentagon", "Gem", "Sunny", "VerySunny", "Cookie4Sided", "Cookie6Sided", "Cookie7Sided", "Cookie9Sided", "Cookie12Sided", "Ghostish", "Clover4Leaf", "Clover8Leaf", "Burst", "SoftBurst", "Flower", "Puffy", "PuffyDiamond", "PixelCircle", "Bun", "Heart"]).map((icon) => {
+                    return { "displayName": "", "shape": icon, "value": icon };
+                })
             }
         }
 
         ConfigSwitch {
-            enabled: !Config.options.bar.workspaces.useMaterialShapeForActiveIndicator
-                && !Config.options.bar.workspaces.useDirectionArrowForActiveIndicator
             buttonIcon: "shuffle"
             text: Translation.tr("Use random shape for active indicator")
             checked: Config.options.bar.workspaces.useRandomShapeForActiveIndicator
-            onCheckedChanged: {
-                Config.options.bar.workspaces.useRandomShapeForActiveIndicator = checked;
-            }
+            onCheckedChanged: Config.options.bar.workspaces.useRandomShapeForActiveIndicator = checked
         }
 
         ConfigSwitch {
-            enabled: !Config.options.bar.workspaces.useMaterialShapeForActiveIndicator
             buttonIcon: "arrow_forward"
             text: Translation.tr("Point the active indicator the way you moved")
             checked: Config.options.bar.workspaces.useDirectionArrowForActiveIndicator
-            onCheckedChanged: {
-                Config.options.bar.workspaces.useDirectionArrowForActiveIndicator = checked;
-            }
+            onCheckedChanged: Config.options.bar.workspaces.useDirectionArrowForActiveIndicator = checked
             StyledToolTip {
                 text: Translation.tr("Switching workspaces morphs the circle into a triangle aimed at where you went, then back. It replaces the random shape while it is on, and follows the bar: right or left on a horizontal bar, down or up on a vertical one.")
             }

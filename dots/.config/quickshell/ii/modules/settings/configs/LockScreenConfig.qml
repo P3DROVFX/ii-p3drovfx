@@ -41,8 +41,8 @@ Item {
                 Layout.fillWidth: true
 
                 ConfigSelectionArray {
-                    currentValue: lockScreenRoot.lock.centerAlignment ?? "horizontal"
-                    onSelected: newValue => lockScreenRoot.lock.centerAlignment = newValue
+                    currentValue: Config.options.lock.centerAlignment ?? "horizontal"
+                    onSelected: newValue => Config.options.lock.centerAlignment = newValue
                     options: [
                         { displayName: Translation.tr("Side by side"), icon: "view_column", value: "horizontal" },
                         { displayName: Translation.tr("Stacked"), icon: "view_agenda", value: "vertical" }
@@ -57,8 +57,8 @@ Item {
                 to: 100
                 stepSize: 5
                 usePercentTooltip: false
-                value: lockScreenRoot.lock.centerSpacing ?? 20
-                onValueChanged: lockScreenRoot.lock.centerSpacing = value
+                value: Config.options.lock.centerSpacing ?? 20
+                onValueChanged: Config.options.lock.centerSpacing = value
             }
 
             ConfigRow {
@@ -67,8 +67,8 @@ Item {
                 ConfigSwitch {
                     buttonIcon: "text_fields"
                     text: Translation.tr("Show \"Locked\" text")
-                    checked: lockScreenRoot.lock.showLockedText
-                    onCheckedChanged: lockScreenRoot.lock.showLockedText = checked
+                    checked: Config.options.lock.showLockedText
+                    onCheckedChanged: Config.options.lock.showLockedText = checked
                     StyledToolTip {
                         text: Translation.tr("Write \"Locked\" under the clock while the screen is locked.")
                     }
@@ -90,8 +90,8 @@ Item {
                 ConfigSwitch {
                     buttonIcon: "music_note"
                     text: Translation.tr("Show Now Playing widget")
-                    checked: lockScreenRoot.lock.nowPlaying ?? true
-                    onCheckedChanged: lockScreenRoot.lock.nowPlaying = checked
+                    checked: Config.options.lock.nowPlaying ?? true
+                    onCheckedChanged: Config.options.lock.nowPlaying = checked
                     StyledToolTip {
                         text: Translation.tr("Show the playing media at the top while something plays.")
                     }
@@ -99,8 +99,8 @@ Item {
                 ConfigSwitch {
                     buttonIcon: "sports_soccer"
                     text: Translation.tr("Show sports widget")
-                    checked: lockScreenRoot.lock.sports ?? true
-                    onCheckedChanged: lockScreenRoot.lock.sports = checked
+                    checked: Config.options.lock.sports ?? true
+                    onCheckedChanged: Config.options.lock.sports = checked
                     StyledToolTip {
                         text: Translation.tr("Show the live score of a followed game at the top.")
                     }
@@ -113,8 +113,8 @@ Item {
                 ConfigSwitch {
                     buttonIcon: "alarm"
                     text: Translation.tr("Show next alarm")
-                    checked: lockScreenRoot.lock.showAlarm ?? true
-                    onCheckedChanged: lockScreenRoot.lock.showAlarm = checked
+                    checked: Config.options.lock.showAlarm ?? true
+                    onCheckedChanged: Config.options.lock.showAlarm = checked
                     StyledToolTip {
                         text: Translation.tr("Show the next alarm in the left island.")
                     }
@@ -122,8 +122,8 @@ Item {
                 ConfigSwitch {
                     buttonIcon: "cloud"
                     text: Translation.tr("Show weather icon")
-                    checked: lockScreenRoot.lock.showWeather ?? true
-                    onCheckedChanged: lockScreenRoot.lock.showWeather = checked
+                    checked: Config.options.lock.showWeather ?? true
+                    onCheckedChanged: Config.options.lock.showWeather = checked
                     StyledToolTip {
                         text: Translation.tr("Show the current weather in the left island.")
                     }
@@ -136,8 +136,8 @@ Item {
                 ConfigSwitch {
                     buttonIcon: "category"
                     text: Translation.tr("Shaped password characters")
-                    checked: lockScreenRoot.lock.materialShapeChars
-                    onCheckedChanged: lockScreenRoot.lock.materialShapeChars = checked
+                    checked: Config.options.lock.materialShapeChars
+                    onCheckedChanged: Config.options.lock.materialShapeChars = checked
                     StyledToolTip {
                         text: Translation.tr("Draw each typed character as a different Material shape instead of a dot.")
                     }
@@ -145,8 +145,8 @@ Item {
                 ConfigSwitch {
                     buttonIcon: "waves"
                     text: Translation.tr("Ripple effect on touch")
-                    checked: lockScreenRoot.lock.rippleEffect ?? true
-                    onCheckedChanged: lockScreenRoot.lock.rippleEffect = checked
+                    checked: Config.options.lock.rippleEffect ?? true
+                    onCheckedChanged: Config.options.lock.rippleEffect = checked
                     StyledToolTip {
                         text: Translation.tr("Send a ripple across the wallpaper where the lock screen is touched or clicked.")
                     }
@@ -311,6 +311,7 @@ Item {
         }
 
         // ── Behavior ────────────────────────────────────────────────────
+        // Search clones these controls out of context: nothing here may name a page id.
         ContentSection {
             icon: "tune"
             title: Translation.tr("Behavior")
@@ -321,8 +322,8 @@ Item {
                 Layout.fillWidth: true
 
                 ConfigSelectionArray {
-                    currentValue: lockScreenRoot.lock.useHyprlock
-                    onSelected: newValue => lockScreenRoot.lock.useHyprlock = newValue
+                    currentValue: Config.options.lock.useHyprlock
+                    onSelected: newValue => Config.options.lock.useHyprlock = newValue
                     options: [
                         { displayName: "Quickshell", icon: "auto_awesome", value: false },
                         { displayName: "Hyprlock", icon: "terminal", value: true }
@@ -337,10 +338,10 @@ Item {
 
                 ConfigSelectionArray {
                     currentValue: {
-                        const style = lockScreenRoot.lock.zoomAnimation?.style ?? "default";
+                        const style = Config.options.lock.zoomAnimation?.style ?? "default";
                         return (style === "gnome" || style === "material-shape") ? style : "default";
                     }
-                    onSelected: newValue => lockScreenRoot.lock.zoomAnimation.style = newValue
+                    onSelected: newValue => Config.options.lock.zoomAnimation.style = newValue
                     options: [
                         {
                             displayName: Translation.tr("Default zoom"),
@@ -367,8 +368,8 @@ Item {
             ConfigSwitch {
                 buttonIcon: "power_settings_new"
                 text: Translation.tr("Launch on startup")
-                checked: lockScreenRoot.lock.launchOnStartup
-                onCheckedChanged: lockScreenRoot.lock.launchOnStartup = checked
+                checked: Config.options.lock.launchOnStartup
+                onCheckedChanged: Config.options.lock.launchOnStartup = checked
                 StyledToolTip {
                     text: Translation.tr("Start the lock screen daemon when the session begins.")
                 }
@@ -380,8 +381,8 @@ Item {
                 Layout.fillWidth: true
 
                 ConfigSelectionArray {
-                    currentValue: lockScreenRoot.lock.touchKeyboard.show
-                    onSelected: newValue => lockScreenRoot.lock.touchKeyboard.show = newValue
+                    currentValue: Config.options.lock.touchKeyboard.show
+                    onSelected: newValue => Config.options.lock.touchKeyboard.show = newValue
                     options: [
                         { displayName: Translation.tr("Auto"), icon: "auto_mode", value: "auto" },
                         { displayName: Translation.tr("Always"), icon: "keyboard", value: "always" },
@@ -391,14 +392,14 @@ Item {
             }
 
             ContentSubsection {
-                visible: lockScreenRoot.lock.touchKeyboard.show !== "never"
+                visible: Config.options.lock.touchKeyboard.show !== "never"
                 title: Translation.tr("Touch keys")
                 icon: "dialpad"
                 Layout.fillWidth: true
 
                 ConfigSelectionArray {
-                    currentValue: lockScreenRoot.lock.touchKeyboard.mode
-                    onSelected: newValue => lockScreenRoot.lock.touchKeyboard.mode = newValue
+                    currentValue: Config.options.lock.touchKeyboard.mode
+                    onSelected: newValue => Config.options.lock.touchKeyboard.mode = newValue
                     options: [
                         { displayName: Translation.tr("Letters"), icon: "abc", value: "text" },
                         { displayName: Translation.tr("PIN"), icon: "dialpad", value: "pin" }

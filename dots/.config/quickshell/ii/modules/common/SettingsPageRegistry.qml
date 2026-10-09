@@ -44,7 +44,7 @@ Singleton {
             "icon": "palette",
             "component": "modules/settings/configs/ColorsThemesConfig.qml",
             "subPages": ["widgets/OpenRGBConfig.qml", "widgets/WallpaperEngineConfig.qml"],
-            "searchSources": ["sections/ColorsPreviewSection.qml", "sections/ColorsSchedulingSection.qml", "sections/ColorsWallpaperThemingSection.qml", "sections/ColorsWallpaperVariantsSection.qml"],
+            "searchSources": ["sections/ColorsPreviewSection.qml", "sections/ColorsSchedulingSection.qml", "sections/ColorsWallpaperThemingSection.qml", "sections/ColorsWallpaperVariantsSection.qml", "sections/ColorsPickerSection.qml"],
             "aliases": []
         },
         {
@@ -126,6 +126,7 @@ Singleton {
             "icon": "workspaces",
             "component": "modules/settings/configs/WorkspacesConfig.qml",
             "subPages": ["widgets/DockWorkspaceConfig.qml"],
+            "searchComponent": false,
             "searchSources": ["sections/WorkspacesOptionsSection.qml"],
             "aliases": ["Tint workspaces icons", "Active indicator", "Numerals", "Workspace compactor"]
         },

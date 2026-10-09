@@ -8,10 +8,6 @@ import qs.services
 // activity as a tile over the live island preview; SearchRegistry indexes this file
 // (see SettingsPageRegistry `searchSources`) so each switch stays searchable.
 ColumnLayout {
-    id: proxyRoot
-    readonly property bool islandOn: Config.options.bar.floatingNotch.enable
-        || Config.options.bar.floatingNotch.centerInBar
-
     // ── Announcements ─────────────────────────────────────────────────────
     ContentSection {
         icon: "campaign"
@@ -25,7 +21,7 @@ ColumnLayout {
             ConfigSwitch {
                 buttonIcon: "tab"
                 text: Translation.tr("Workspaces")
-                visible: proxyRoot.islandOn
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
                 checked: !Config.options.bar.floatingNotch.disableWorkspaces
                 onCheckedChanged: Config.options.bar.floatingNotch.disableWorkspaces = !checked
                 StyledToolTip { text: Translation.tr("Show the workspace strip when the workspace changes") }
@@ -34,7 +30,7 @@ ColumnLayout {
             ConfigSwitch {
                 buttonIcon: "keyboard"
                 text: Translation.tr("Keyboard layout")
-                visible: proxyRoot.islandOn
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
                 checked: !Config.options.bar.floatingNotch.disableKeyboard
                 onCheckedChanged: Config.options.bar.floatingNotch.disableKeyboard = !checked
                 StyledToolTip { text: Translation.tr("Show the layout switcher when the keyboard layout changes") }
@@ -43,7 +39,7 @@ ColumnLayout {
             ConfigSwitch {
                 buttonIcon: "wifi"
                 text: Translation.tr("Wi-Fi")
-                visible: proxyRoot.islandOn
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
                 checked: !Config.options.bar.floatingNotch.disableWifi
                 onCheckedChanged: Config.options.bar.floatingNotch.disableWifi = !checked
                 StyledToolTip { text: Translation.tr("Show the network name when Wi-Fi connects") }
@@ -52,7 +48,7 @@ ColumnLayout {
             ConfigSwitch {
                 buttonIcon: "bluetooth"
                 text: Translation.tr("Bluetooth")
-                visible: proxyRoot.islandOn
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
                 checked: !Config.options.bar.floatingNotch.disableBluetooth
                 onCheckedChanged: Config.options.bar.floatingNotch.disableBluetooth = !checked
                 StyledToolTip { text: Translation.tr("Show the device and its battery when Bluetooth connects. Off hands the connection popup back to the bar") }
@@ -61,7 +57,7 @@ ColumnLayout {
             ConfigSwitch {
                 buttonIcon: "battery_charging_full"
                 text: Translation.tr("Battery charging")
-                visible: proxyRoot.islandOn
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
                 checked: !Config.options.bar.floatingNotch.disableBattery
                 onCheckedChanged: Config.options.bar.floatingNotch.disableBattery = !checked
                 StyledToolTip { text: Translation.tr("Show the charging status when the charger is plugged in") }
@@ -70,7 +66,7 @@ ColumnLayout {
             ConfigSwitch {
                 buttonIcon: "content_paste"
                 text: Translation.tr("Clipboard")
-                visible: proxyRoot.islandOn
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
                 checked: !Config.options.bar.floatingNotch.disableClipboard
                 onCheckedChanged: Config.options.bar.floatingNotch.disableClipboard = !checked
                 StyledToolTip { text: Translation.tr("Show a new clipboard entry as it is copied") }
@@ -79,7 +75,7 @@ ColumnLayout {
             ConfigSwitch {
                 buttonIcon: "vpn_key"
                 text: Translation.tr("VPN")
-                visible: proxyRoot.islandOn
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
                 checked: !Config.options.bar.floatingNotch.disableVpn
                 onCheckedChanged: Config.options.bar.floatingNotch.disableVpn = !checked
                 StyledToolTip { text: Translation.tr("Say when a VPN or Tailscale connects or drops, including connections started outside the shell") }
@@ -100,7 +96,7 @@ ColumnLayout {
             ConfigSwitch {
                 buttonIcon: "music_note"
                 text: Translation.tr("Media")
-                visible: proxyRoot.islandOn
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
                 checked: !Config.options.bar.floatingNotch.disableMedia
                 onCheckedChanged: Config.options.bar.floatingNotch.disableMedia = !checked
                 StyledToolTip { text: Translation.tr("Show the playing track, its cover and the visualizer") }
@@ -109,7 +105,7 @@ ColumnLayout {
             ConfigSwitch {
                 buttonIcon: "bubble_chart"
                 text: Translation.tr("Workspace bubble")
-                visible: proxyRoot.islandOn && !Config.options.bar.floatingNotch.disableWorkspaces
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar) && !Config.options.bar.floatingNotch.disableWorkspaces
                 checked: !Config.options.bar.floatingNotch.disableWorkspacesBubble
                 onCheckedChanged: Config.options.bar.floatingNotch.disableWorkspacesBubble = !checked
                 StyledToolTip { text: Translation.tr("Workspace changes move into a small bubble beside the island instead of taking the island over. Off keeps the strip on the island itself") }
@@ -118,7 +114,7 @@ ColumnLayout {
             ConfigSwitch {
                 buttonIcon: "auto_awesome"
                 text: Translation.tr("AI agent status")
-                visible: proxyRoot.islandOn
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
                 checked: !Config.options.bar.floatingNotch.disableAiStatus
                 onCheckedChanged: Config.options.bar.floatingNotch.disableAiStatus = !checked
                 StyledToolTip { text: Translation.tr("Show agents working, waiting or finished") }
@@ -127,7 +123,7 @@ ColumnLayout {
             ConfigSwitch {
                 buttonIcon: "timer"
                 text: Translation.tr("Timer & stopwatch")
-                visible: proxyRoot.islandOn
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
                 checked: !Config.options.bar.floatingNotch.disableTimer
                 onCheckedChanged: Config.options.bar.floatingNotch.disableTimer = !checked
                 StyledToolTip { text: Translation.tr("Show a running Pomodoro, countdown or stopwatch") }
@@ -136,7 +132,7 @@ ColumnLayout {
             ConfigSwitch {
                 buttonIcon: "screen_record"
                 text: Translation.tr("Screen recording")
-                visible: proxyRoot.islandOn
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
                 checked: !Config.options.bar.floatingNotch.disableRecording
                 onCheckedChanged: Config.options.bar.floatingNotch.disableRecording = !checked
                 StyledToolTip { text: Translation.tr("Show the recording indicator while the screen is captured") }
@@ -145,7 +141,7 @@ ColumnLayout {
             ConfigSwitch {
                 buttonIcon: "privacy_tip"
                 text: Translation.tr("Privacy indicator")
-                visible: proxyRoot.islandOn
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
                 checked: !Config.options.bar.floatingNotch.disablePrivacy
                 onCheckedChanged: Config.options.bar.floatingNotch.disablePrivacy = !checked
                 StyledToolTip { text: Translation.tr("A microphone, camera or screen share in use: named once in the centre, then a pill beside the island - in the auxiliary bubble - for as long as it is held") }
@@ -154,7 +150,7 @@ ColumnLayout {
             ConfigSwitch {
                 buttonIcon: "mic"
                 text: Translation.tr("Dictation")
-                visible: proxyRoot.islandOn
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
                 checked: !Config.options.bar.floatingNotch.disableDictation
                 onCheckedChanged: Config.options.bar.floatingNotch.disableDictation = !checked
                 StyledToolTip { text: Translation.tr("Show the waveform while dictating") }
@@ -163,7 +159,7 @@ ColumnLayout {
             ConfigSwitch {
                 buttonIcon: "music_cast"
                 text: Translation.tr("Song recognition")
-                visible: proxyRoot.islandOn
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
                 checked: !Config.options.bar.floatingNotch.disableSongRec
                 onCheckedChanged: Config.options.bar.floatingNotch.disableSongRec = !checked
                 StyledToolTip { text: Translation.tr("Show that a song is being listened for, then the song it found") }
@@ -172,7 +168,7 @@ ColumnLayout {
             ConfigSwitch {
                 buttonIcon: "sports_soccer"
                 text: Translation.tr("Live sports")
-                visible: proxyRoot.islandOn
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
                 checked: !Config.options.bar.floatingNotch.disableSports
                 onCheckedChanged: Config.options.bar.floatingNotch.disableSports = !checked
                 StyledToolTip { text: Translation.tr("The score of a live game beside the clock, and a moment in the centre when it changes. Follows the bar's sports team filter") }
@@ -181,7 +177,7 @@ ColumnLayout {
             ConfigSwitch {
                 buttonIcon: "progress_activity"
                 text: Translation.tr("Live progress")
-                visible: proxyRoot.islandOn
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
                 checked: !Config.options.bar.floatingNotch.disableProgress
                 onCheckedChanged: Config.options.bar.floatingNotch.disableProgress = !checked
                 StyledToolTip { text: Translation.tr("Show background transfers and builds while they run") }
@@ -190,7 +186,7 @@ ColumnLayout {
             ConfigSwitch {
                 buttonIcon: "share"
                 text: Translation.tr("LocalSend sharing")
-                visible: proxyRoot.islandOn
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
                 checked: !Config.options.bar.floatingNotch.disableLocalSend
                 onCheckedChanged: Config.options.bar.floatingNotch.disableLocalSend = !checked
                 StyledToolTip { text: Translation.tr("The drop target, transfers and the incoming request card. Off hands them back to the floating popups") }
@@ -199,7 +195,7 @@ ColumnLayout {
             ConfigSwitch {
                 buttonIcon: "tune"
                 text: Translation.tr("Modes & Routines")
-                visible: proxyRoot.islandOn
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
                 checked: !Config.options.bar.floatingNotch.disableMode
                 onCheckedChanged: {
                     Config.options.bar.floatingNotch.disableMode = !checked;
@@ -212,7 +208,7 @@ ColumnLayout {
             ConfigSwitch {
                 buttonIcon: "deployed_code_update"
                 text: Translation.tr("Shell update")
-                visible: proxyRoot.islandOn
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
                 checked: !Config.options.bar.floatingNotch.disableUpdate
                 onCheckedChanged: {
                     Config.options.bar.floatingNotch.disableUpdate = !checked;
@@ -225,7 +221,7 @@ ColumnLayout {
             ConfigSwitch {
                 buttonIcon: "apps"
                 text: Translation.tr("System tray")
-                visible: proxyRoot.islandOn
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
                 checked: !Config.options.bar.floatingNotch.disableSystemTray
                 onCheckedChanged: {
                     Config.options.bar.floatingNotch.disableSystemTray = !checked;
@@ -238,7 +234,7 @@ ColumnLayout {
             ConfigSwitch {
                 buttonIcon: "graphic_eq"
                 text: Translation.tr("EasyEffects")
-                visible: proxyRoot.islandOn && EasyEffects.available
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar) && EasyEffects.available
                 checked: !(Config.options.bar.floatingNotch.disableEasyEffects ?? false)
                 onCheckedChanged: {
                     Config.options.bar.floatingNotch.disableEasyEffects = !checked;
@@ -263,7 +259,7 @@ ColumnLayout {
             ConfigSwitch {
                 buttonIcon: "headphones"
                 text: Translation.tr("Earbuds battery")
-                visible: proxyRoot.islandOn
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
                 checked: !Config.options.bar.floatingNotch.disableEarbuds
                 onCheckedChanged: Config.options.bar.floatingNotch.disableEarbuds = !checked
                 StyledToolTip { text: Translation.tr("The connected headset: with bubbles on, a bubble whose ring is its battery, opening into each bud's battery and the noise control; otherwise its battery beside the clock") }
@@ -272,7 +268,7 @@ ColumnLayout {
             ConfigSwitch {
                 buttonIcon: "partly_cloudy_day"
                 text: Translation.tr("Weather")
-                visible: proxyRoot.islandOn
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
                 checked: !Config.options.bar.floatingNotch.disableWeather
                 onCheckedChanged: Config.options.bar.floatingNotch.disableWeather = !checked
                 StyledToolTip { text: Translation.tr("The weather icon and temperature beside the clock, kept fresh on the service's fetch interval") }
@@ -281,7 +277,7 @@ ColumnLayout {
             ConfigSwitch {
                 buttonIcon: "battery_android_full"
                 text: Translation.tr("Battery level")
-                visible: proxyRoot.islandOn
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
                 checked: !Config.options.bar.floatingNotch.disableBatteryGlance
                 onCheckedChanged: Config.options.bar.floatingNotch.disableBatteryGlance = !checked
                 StyledToolTip { text: Translation.tr("The laptop battery beside the clock, with a bolt while it charges. Separate from the charging announcement") }
@@ -290,7 +286,7 @@ ColumnLayout {
             ConfigSwitch {
                 buttonIcon: "headset_mic"
                 text: Translation.tr("Discord voice")
-                visible: proxyRoot.islandOn
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
                 checked: !Config.options.bar.floatingNotch.disableDiscordVoice
                 onCheckedChanged: Config.options.bar.floatingNotch.disableDiscordVoice = !checked
                 StyledToolTip { text: Translation.tr("Name the channel when you join a Discord call, then show who is talking and whether you are muted. Click it to mute. Only starts watching once Discord or Vesktop has opened a window") }
@@ -299,7 +295,7 @@ ColumnLayout {
             ConfigSwitch {
                 buttonIcon: "phonelink"
                 text: Translation.tr("Phone camera & mic")
-                visible: proxyRoot.islandOn
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
                 checked: !Config.options.bar.floatingNotch.disablePhoneLink
                 onCheckedChanged: Config.options.bar.floatingNotch.disablePhoneLink = !checked
                 StyledToolTip { text: Translation.tr("Show when the phone's camera or microphone is streaming into this computer, with a way to stop it") }
@@ -308,7 +304,7 @@ ColumnLayout {
             ConfigSwitch {
                 buttonIcon: "mobile_screen_share"
                 text: Translation.tr("Phone mirror")
-                visible: proxyRoot.islandOn
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
                 checked: !Config.options.bar.floatingNotch.disablePhoneMirror
                 onCheckedChanged: Config.options.bar.floatingNotch.disablePhoneMirror = !checked
                 StyledToolTip { text: Translation.tr("Show while the phone's screen or one of its apps is mirrored into a window, with a way to jump to it or stop it") }
@@ -329,7 +325,7 @@ ColumnLayout {
             ConfigSwitch {
                 buttonIcon: "call"
                 text: Translation.tr("Phone calls")
-                visible: proxyRoot.islandOn
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
                 checked: !Config.options.bar.floatingNotch.disablePhoneCall
                 onCheckedChanged: Config.options.bar.floatingNotch.disablePhoneCall = !checked
                 StyledToolTip { text: Translation.tr("A call ringing on the paired phone, with Answer and Decline over ADB, then the call in progress") }
@@ -338,7 +334,7 @@ ColumnLayout {
             ConfigSwitch {
                 buttonIcon: "fingerprint"
                 text: Translation.tr("Fingerprint prompt")
-                visible: proxyRoot.islandOn
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
                 checked: !Config.options.bar.floatingNotch.disableFingerprint
                 onCheckedChanged: Config.options.bar.floatingNotch.disableFingerprint = !checked
                 StyledToolTip { text: Translation.tr("Ask for a touch whenever anything waits on the fingerprint reader: sudo in a terminal, polkit, pkexec. The lock screen keeps its own prompt") }
@@ -347,7 +343,7 @@ ColumnLayout {
             ConfigSwitch {
                 buttonIcon: "alarm"
                 text: Translation.tr("Alarms")
-                visible: proxyRoot.islandOn
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
                 checked: !Config.options.bar.floatingNotch.disableAlarm
                 onCheckedChanged: Config.options.bar.floatingNotch.disableAlarm = !checked
                 StyledToolTip { text: Translation.tr("A ringing alarm, with Stop and Snooze, instead of the fullscreen alarm popup") }
@@ -369,7 +365,7 @@ ColumnLayout {
             ConfigSwitch {
                 buttonIcon: "notifications"
                 text: Translation.tr("Notifications")
-                visible: proxyRoot.islandOn
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
                 checked: !Config.options.bar.floatingNotch.disableNotification
                 onCheckedChanged: Config.options.bar.floatingNotch.disableNotification = !checked
                 StyledToolTip { text: Translation.tr("Incoming notifications open inside the island instead of as floating toasts") }
@@ -378,7 +374,7 @@ ColumnLayout {
             ConfigSwitch {
                 buttonIcon: "short_text"
                 text: Translation.tr("One-line notifications")
-                visible: proxyRoot.islandOn && !Config.options.bar.floatingNotch.disableNotification
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar) && !Config.options.bar.floatingNotch.disableNotification
                 checked: Config.options.dynamicIsland.widgets.notification.oneLine
                 onCheckedChanged: Config.options.dynamicIsland.widgets.notification.oneLine = checked
                 StyledToolTip { text: Translation.tr("A slim single line (title, then the body) instead of the title over the body") }
@@ -387,7 +383,7 @@ ColumnLayout {
             ConfigSwitch {
                 buttonIcon: "volume_up"
                 text: Translation.tr("OSD")
-                visible: proxyRoot.islandOn
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
                 checked: !Config.options.bar.floatingNotch.disableOsd
                 onCheckedChanged: Config.options.bar.floatingNotch.disableOsd = !checked
                 StyledToolTip { text: Translation.tr("Volume, brightness and input feedback inside the island instead of the floating indicators") }

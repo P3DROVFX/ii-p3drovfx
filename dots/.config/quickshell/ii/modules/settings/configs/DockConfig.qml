@@ -517,6 +517,7 @@ Item {
         }
 
         // ── Behavior ──────────────────────────────────────────────────────
+        // Search clones these controls out of context: nothing here may name a page id.
         ContentSection {
             Layout.topMargin: 12
             icon: "tune"
@@ -527,17 +528,17 @@ Item {
                 ConfigSwitch {
                     buttonIcon: "toggle_on"
                     text: Translation.tr("Enable")
-                    checked: dockConfigRoot.dock.enable
+                    checked: Config.options.dock.enable
                     onCheckedChanged: Config.options.dock.enable = checked
                     StyledToolTip {
                         text: Translation.tr("Show the dock on screen")
                     }
                 }
                 ConfigSwitch {
-                    enabled: dockConfigRoot.dockOn
+                    enabled: Config.options.dock.enable
                     buttonIcon: "push_pin"
                     text: Translation.tr("Pinned on startup")
-                    checked: dockConfigRoot.dock.pinnedOnStartup
+                    checked: Config.options.dock.pinnedOnStartup
                     onCheckedChanged: Config.options.dock.pinnedOnStartup = checked
                     StyledToolTip {
                         text: Translation.tr("Start with the dock kept on screen instead of hiding until you reach for it")
@@ -547,21 +548,21 @@ Item {
 
             ConfigRow {
                 uniform: true
-                visible: dockConfigRoot.dockOn
+                visible: Config.options.dock.enable
                 ConfigSwitch {
                     buttonIcon: "mouse"
                     text: Translation.tr("Hover to reveal")
-                    checked: dockConfigRoot.dock.hoverToReveal
+                    checked: Config.options.dock.hoverToReveal
                     onCheckedChanged: Config.options.dock.hoverToReveal = checked
                     StyledToolTip {
                         text: Translation.tr("Bring the hidden dock back when the pointer reaches its edge")
                     }
                 }
                 ConfigSwitch {
-                    enabled: dockConfigRoot.dock.hoverToReveal
+                    enabled: Config.options.dock.hoverToReveal
                     buttonIcon: "fullscreen"
                     text: Translation.tr("Block hover in fullscreen")
-                    checked: dockConfigRoot.dock.blockHoverInFullscreen
+                    checked: Config.options.dock.blockHoverInFullscreen
                     onCheckedChanged: Config.options.dock.blockHoverInFullscreen = checked
                     StyledToolTip {
                         text: Translation.tr("Prevent the dock from revealing on hover when a window or media is fullscreen")
@@ -571,17 +572,17 @@ Item {
 
             ConfigRow {
                 uniform: true
-                visible: dockConfigRoot.dockOn
+                visible: Config.options.dock.enable
                 ConfigSwitch {
                     buttonIcon: "monitor"
                     text: Translation.tr("Isolate monitors")
-                    checked: dockConfigRoot.dock.isolateMonitors
+                    checked: Config.options.dock.isolateMonitors
                     onCheckedChanged: Config.options.dock.isolateMonitors = checked
                 }
                 ConfigSwitch {
                     buttonIcon: "center_focus_strong"
                     text: Translation.tr("Show only on focused monitor")
-                    checked: dockConfigRoot.dock.showOnlyOnFocusedMonitor
+                    checked: Config.options.dock.showOnlyOnFocusedMonitor
                     onCheckedChanged: Config.options.dock.showOnlyOnFocusedMonitor = checked
                     StyledToolTip {
                         text: Translation.tr("When workspace is empty, show the dock only on the focused monitor instead of all monitors")
@@ -591,11 +592,11 @@ Item {
 
             ConfigRow {
                 uniform: true
-                visible: dockConfigRoot.dockOn
+                visible: Config.options.dock.enable
                 ConfigSwitch {
                     buttonIcon: "lock"
                     text: Translation.tr("Lock arrangement")
-                    checked: dockConfigRoot.dock.lockReorder
+                    checked: Config.options.dock.lockReorder
                     onCheckedChanged: Config.options.dock.lockReorder = checked
                     StyledToolTip {
                         text: Translation.tr("Apps and widgets cannot be dragged: nothing is reordered, grouped or moved by accident")
@@ -604,7 +605,7 @@ Item {
                 ConfigSwitch {
                     buttonIcon: "swipe_vertical"
                     text: Translation.tr("Switch presets on scroll")
-                    checked: dockConfigRoot.dock.switchPresetsOnScroll ?? false
+                    checked: Config.options.dock.switchPresetsOnScroll ?? false
                     onCheckedChanged: Config.options.dock.switchPresetsOnScroll = checked
                     StyledToolTip {
                         text: Translation.tr("Scroll the mouse wheel anywhere over the dock to cycle between presets when more than 1 exists")
@@ -613,7 +614,7 @@ Item {
             }
 
             ContentSubsection {
-                visible: dockConfigRoot.dockOn
+                visible: Config.options.dock.enable
                 title: Translation.tr("Show on")
                 icon: "desktop_windows"
                 Layout.fillWidth: true
@@ -621,7 +622,7 @@ Item {
 
                 ConfigSelectionArray {
                     currentValue: {
-                        const wanted = dockConfigRoot.dock.monitor ?? "";
+                        const wanted = Config.options.dock.monitor ?? "";
                         return Quickshell.screens.some(screen => screen.name === wanted) ? wanted : "";
                     }
                     onSelected: newValue => Config.options.dock.monitor = newValue

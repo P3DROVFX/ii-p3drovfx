@@ -10,11 +10,6 @@ import qs.services
 // SearchRegistry indexes this file (see SettingsPageRegistry `searchSources`) so the
 // plain switches stay searchable and keep the page's side effects.
 ColumnLayout {
-    id: proxyRoot
-    readonly property bool barNotTop: Config.options.bar.bottom || Config.options.bar.vertical
-    readonly property bool centerInBarActive: Config.options.bar.floatingNotch.centerInBar
-    readonly property bool islandOn: Config.options.bar.floatingNotch.enable
-        || Config.options.bar.floatingNotch.centerInBar
 
     // ── Mode ──────────────────────────────────────────────────────────────
     ContentSection {
@@ -30,7 +25,7 @@ ColumnLayout {
                 buttonIcon: "align_justify_center"
                 text: Translation.tr("Dynamic Island in bar center")
                 checked: Config.options.bar.floatingNotch.centerInBar
-                enabled: !proxyRoot.barNotTop && ShellModePolicy.centerInBarStyleSupported
+                enabled: !(Config.options.bar.bottom || Config.options.bar.vertical) && ShellModePolicy.centerInBarStyleSupported
 
                 onCheckedChanged: {
                     if (checked === Config.options.bar.floatingNotch.centerInBar)
@@ -91,7 +86,7 @@ ColumnLayout {
 
             NoticeBox {
                 Layout.fillWidth: true
-                visible: !proxyRoot.centerInBarActive
+                visible: !Config.options.bar.floatingNotch.centerInBar
                 materialIcon: "info"
                 text: Translation.tr("Prerequisites to enable:\n• Bar position must be set to Top\n• Bar style must be Hug or Dynamic Island, unless the shape below is set to Island — that one also sits in a Float or Rect bar\n• Bar background style must be Transparent or Islands\nCenter widgets are stashed automatically while the island holds the centre, and restored when it gives it back.")
 
@@ -106,14 +101,14 @@ ColumnLayout {
 
             NoticeBox {
                 Layout.fillWidth: true
-                visible: proxyRoot.centerInBarActive
+                visible: Config.options.bar.floatingNotch.centerInBar
                 materialIcon: "check_circle"
                 text: Translation.tr("Active: Dynamic Island floats above the bar center. All prerequisites are active and locked (Bar at Top, Transparent background, Center widgets hidden).")
             }
 
             NoticeBox {
                 Layout.fillWidth: true
-                visible: proxyRoot.centerInBarActive && Config.options.bar.cornerStyle === 3
+                visible: Config.options.bar.floatingNotch.centerInBar && Config.options.bar.cornerStyle === 3
                 materialIcon: "expand"
                 text: Translation.tr("With the Dynamic Island bar style the bar flanks the island: its widget groups sit on either side and are pushed outward as the island grows, then close back in as it shrinks.")
             }
@@ -122,12 +117,12 @@ ColumnLayout {
                 buttonIcon: "water_drop"
                 text: Translation.tr("Floating Dynamic Island")
                 checked: Config.options.bar.floatingNotch.enable
-                enabled: proxyRoot.barNotTop
+                enabled: (Config.options.bar.bottom || Config.options.bar.vertical)
                 onCheckedChanged: {
                     if (checked === Config.options.bar.floatingNotch.enable)
                         return;
 
-                    if (checked && !proxyRoot.barNotTop)
+                    if (checked && !(Config.options.bar.bottom || Config.options.bar.vertical))
                         return;
 
                     if (checked && Config.options.bar.floatingNotch.centerInBar) {
@@ -142,7 +137,7 @@ ColumnLayout {
                 }
 
                 StyledToolTip {
-                    text: proxyRoot.barNotTop
+                    text: (Config.options.bar.bottom || Config.options.bar.vertical)
                         ? Translation.tr("Enables an independent, floating Dynamic Island at the top of the screen")
                         : Translation.tr("Floating Dynamic Island requires the bar to be Vertical or at the Bottom")
                 }
@@ -150,7 +145,7 @@ ColumnLayout {
 
             NoticeBox {
                 Layout.fillWidth: true
-                visible: !proxyRoot.barNotTop
+                visible: !(Config.options.bar.bottom || Config.options.bar.vertical)
                 materialIcon: "info"
                 text: Translation.tr("Floating Dynamic Island is only supported with a Vertical or Bottom bar. Change bar position to enable.")
 
@@ -166,7 +161,7 @@ ColumnLayout {
     }
 
     ContentSection {
-        visible: proxyRoot.islandOn
+        visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
         icon: "interests"
         title: Translation.tr("Shape")
 
@@ -193,7 +188,7 @@ ColumnLayout {
 
     // ── Integrations ──────────────────────────────────────────────────────
     ContentSection {
-        visible: proxyRoot.islandOn
+        visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
         icon: "apps"
         title: Translation.tr("Island integrations")
         tooltip: Translation.tr("What the island owns: bubbles beside it, and which surfaces open inside it.")
@@ -292,7 +287,7 @@ ColumnLayout {
 
     // ── Teleprompter ────────────────────────────────────────────────────
     ContentSection {
-        visible: proxyRoot.islandOn
+        visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
         icon: "subtitles"
         title: Translation.tr("Teleprompter")
         tooltip: Translation.tr("Read a script scrolling on the island, for recordings and interviews")

@@ -51,9 +51,14 @@ Item {
         for (let p of SettingsPageRegistry.pages) {
             if (p.searchable === false)
                 continue;
-            files.push(configRoot + p.component);
-            ids.push(p.id);
-            subPages.push("");
+            // A page drawn with tiles, cards and live previews can have its options
+            // indexed through `searchSources` alone: its own file would add the
+            // sections whose controls name page ids, which a clone cannot resolve.
+            if (p.searchComponent !== false) {
+                files.push(configRoot + p.component);
+                ids.push(p.id);
+                subPages.push("");
+            }
             for (let sub of (p.subPages ?? [])) {
                 files.push(basePath + sub);
                 ids.push(p.id);
@@ -435,7 +440,21 @@ Item {
             while (j < text.length && depth > 0) {
                 let ch = text[j];
 
-                if (!inString && (ch === '"' || ch === "'")) {
+                // Prose in comments ("the user's …") holds quotes and braces that
+                // are not code. Skipping them keeps one apostrophe from turning the
+                // rest of the file into a string and swallowing every section after it.
+                if (!inString && ch === "/" && (text[j + 1] === "/" || text[j + 1] === "*")) {
+                    if (text[j + 1] === "/") {
+                        const eol = text.indexOf("\n", j);
+                        j = eol === -1 ? text.length : eol;
+                    } else {
+                        const close = text.indexOf("*/", j + 2);
+                        j = close === -1 ? text.length : close + 2;
+                    }
+                    continue;
+                }
+
+                if (!inString && (ch === '"' || ch === "'" || ch === "`")) {
                     inString = true;
                     stringChar = ch;
                 } else if (inString && ch === stringChar) {
