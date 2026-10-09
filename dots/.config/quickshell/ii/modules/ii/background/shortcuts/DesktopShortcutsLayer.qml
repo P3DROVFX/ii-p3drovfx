@@ -804,7 +804,6 @@ Item {
                         // "auto" draws the M3 inverse pair's scrim there and
                         // the shadow elsewhere; the other two force one.
                         readonly property bool pill: labelBox.style === "pill"
-                            || (labelBox.style === "auto" && root.wallpaperLight)
                         visible: labelBox.mode !== "never"
                         opacity: labelBox.mode === "hover" ? (tile.hovered || tile.selected ? 1 : 0) : 1
                         Behavior on opacity {
@@ -828,13 +827,14 @@ Item {
                             anchors.topMargin: 2
                             text: tile.entry.name || tile.entry.id
                             font.pixelSize: Appearance.font.pixelSize.smaller
-                            color: labelBox.pill ? Appearance.m3colors.m3inverseOnSurface : Appearance.m3colors.m3onSurface
+                            color: labelBox.pill ? Appearance.m3colors.m3inverseOnSurface
+                                : (root.wallpaperLight ? Appearance.m3colors.m3inverseOnSurface : Appearance.m3colors.m3onSurface)
                             elide: Text.ElideRight
                             wrapMode: (root.options.labelLines ?? 1) === 2 ? Text.Wrap : Text.NoWrap
                             horizontalAlignment: Text.AlignHCenter
                             maximumLineCount: (root.options.labelLines ?? 1) === 2 ? 2 : 1
                             style: labelBox.pill ? Text.Normal : Text.Raised
-                            styleColor: root.wallpaperLight ? Qt.alpha("white", 0.6) : Appearance.colors.colShadow
+                            styleColor: Appearance.colors.colShadow
                         }
                     }
                 }
@@ -862,7 +862,7 @@ Item {
                         // shrink has no counter for them — they are the
                         // desktop). Mipmapping keeps their edges clean.
                         mipmap: true
-                        source: Quickshell.iconPath(tile.entry.icon || (tile.entry.type === "file" ? "text-x-generic" : "folder"), "image-missing")
+                        source: DesktopShortcuts.iconSource(tile.entry.icon, tile.entry.type === "file" ? "text-x-generic" : "folder")
                     }
                 }
                 Component {
@@ -883,7 +883,7 @@ Item {
                                     required property var modelData
                                     implicitSize: (groupPlate.style === "circle" ? 18 : 22) * root.iconScale
                                     mipmap: true
-                                    source: Quickshell.iconPath(modelData.icon, "image-missing")
+                                    source: DesktopShortcuts.iconSource(modelData.icon, "image-missing")
                                 }
                             }
                         }

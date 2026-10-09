@@ -497,14 +497,26 @@ Item {
     readonly property var desktopAppsItems: {
         const q = root.needle;
         const all = Array.from(AppSearch.list ?? []).filter(e => e && e.id && !e.noDisplay);
-        const onDesktop = new Set(DesktopShortcuts.itemsFor(root.screenName)
-            .filter(item => item.type === "app").map(item => item.id));
+        const desktopItems = DesktopShortcuts.itemsFor(root.screenName).filter(item => item.type === "app");
+        const onDesktop = new Set();
+        for (const item of desktopItems) {
+            onDesktop.add(item.id);
+            if (item.fileName) {
+                onDesktop.add(item.fileName);
+                onDesktop.add(item.fileName.replace(/\.desktop$/, ""));
+            }
+            if (item.path) {
+                const fn = item.path.substring(item.path.lastIndexOf("/") + 1);
+                onDesktop.add(fn);
+                onDesktop.add(fn.replace(/\.desktop$/, ""));
+            }
+        }
         const mapped = all.map(entry => ({
             "id": entry.id,
             "name": entry.name ?? entry.id,
             "genericName": entry.genericName ?? "",
             "comment": entry.comment ?? "",
-            "onScreen": onDesktop.has(entry.id)
+            "onScreen": onDesktop.has(entry.id) || onDesktop.has(entry.id + ".desktop")
         }));
         if (!q)
             return mapped;
@@ -522,16 +534,16 @@ Item {
         if (!appId)
             return;
         const items = DesktopShortcuts.itemsFor(root.screenName);
-        if (items.some(item => item.type === "app" && item.id === appId)) {
-            DesktopShortcuts.remove(root.screenName, appId);
+        const match = items.find(item => item.type === "app" && (
+            item.id === appId || item.id === "desktop:" + appId
+            || (item.fileName && (item.fileName === appId || item.fileName === appId + ".desktop"))
+            || (item.path && (item.path.endsWith("/" + appId) || item.path.endsWith("/" + appId + ".desktop")))
+        ));
+        if (match) {
+            DesktopShortcuts.remove(root.screenName, match.id);
             return;
         }
-        const app = DesktopShortcuts.application(appId);
-        if (!app)
-            return;
-        const screen = Quickshell.screens.find(s => s.name === root.screenName);
-        DesktopShortcuts.add(root.screenName, [app], 20, 80, "",
-            screen?.width ?? 1920, screen?.height ?? 1080);
+        DesktopShortcuts.addDockApps(root.screenName, [appId], 20, 80);
     }
 
     readonly property bool lockTab: GlobalStates.editLockPreview

@@ -5,11 +5,16 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Hyprland
+import Qt.labs.folderlistmodel
 import qs.services
 import qs.modules.common
 
 Singleton {
     id: root
+
+    readonly property string desktopFolder: Directories.desktopPath
+    property var pendingPlacements: ({})
+    property var actionQueue: []
 
     // Decode only when persisted state changes, not on pointer movement or per icon.
     readonly property var screens: {
@@ -24,6 +29,123 @@ Singleton {
     property string error: ""
     property var importQueue: []
     property var currentImport: null
+
+    // ── Desktop Folder Watcher & Scanner ───────────────────────────────────
+    FolderListModel {
+        id: desktopWatcher
+        folder: root.desktopFolder ? ("file://" + root.desktopFolder) : ""
+        showDirs: true
+        showFiles: true
+        showHidden: false
+        showDotAndDotDot: false
+        onCountChanged: scanDebounce.restart()
+        onRowsInserted: scanDebounce.restart()
+        onRowsRemoved: scanDebounce.restart()
+        onDataChanged: scanDebounce.restart()
+    }
+
+    Timer {
+        id: scanDebounce
+        interval: 150
+        onTriggered: root.scanDesktop()
+    }
+
+    function scanDesktop() {
+        if (!Persistent.ready)
+            return;
+        if (scanner.running)
+            return;
+        scanner.command = ["/usr/bin/python3", Directories.scriptPath + "/desktop_shortcuts.py",
+            "scan", root.desktopFolder];
+        scanner.running = true;
+    }
+
+    Process {
+        id: scanner
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    const result = JSON.parse(text);
+                    if (Array.isArray(result.items))
+                        root.syncFromDisk(result.items);
+                } catch (error) {
+                    console.warn("[DesktopShortcuts] Scan parse error:", error);
+                }
+            }
+        }
+        onExited: (exitCode, exitStatus) => {
+            scanner.command = [];
+        }
+    }
+
+    // ── Action Queue & Worker ──────────────────────────────────────────────
+    Item {
+        id: actionRunner
+        function run(cmd) {
+            root.actionQueue.push(cmd);
+            actionRunner.processNext();
+        }
+        function processNext() {
+            if (actionProc.running || !root.actionQueue.length)
+                return;
+            const nextCmd = root.actionQueue.shift();
+            actionProc.command = nextCmd;
+            actionProc.running = true;
+        }
+    }
+
+    Process {
+        id: actionProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    const res = JSON.parse(text);
+                    if (res && res.oldPath && res.newPath) {
+                        const curScreens = Object.assign({}, root.screens);
+                        let changed = false;
+                        for (const s of Object.keys(curScreens)) {
+                            const list = (curScreens[s] || []).map(it => {
+                                if (it.path === res.oldPath || it.id === res.oldPath || (it.id && it.id.endsWith(res.oldPath))) {
+                                    changed = true;
+                                    return Object.assign({}, it, {
+                                        id: res.item ? res.item.id : ("file:" + res.newPath),
+                                        path: res.newPath,
+                                        fileName: res.item ? res.item.fileName : res.newPath.substring(res.newPath.lastIndexOf("/") + 1),
+                                        name: res.item ? res.item.name : it.name
+                                    });
+                                }
+                                return it;
+                            });
+                            if (changed)
+                                curScreens[s] = list;
+                        }
+                        if (changed)
+                            root.writeAll(curScreens);
+                    } else if (res && res.item && res.item.path) {
+                        const fallback = root.pendingPlacements["__new_item__"];
+                        if (res.item.name && root.pendingPlacements[res.item.name]) {
+                            root.registerPlacement(res.item.path,
+                                root.pendingPlacements[res.item.name].screen,
+                                root.pendingPlacements[res.item.name].x,
+                                root.pendingPlacements[res.item.name].y);
+                        } else if (fallback) {
+                            root.registerPlacement(res.item.path,
+                                fallback.screen,
+                                fallback.x,
+                                fallback.y);
+                        }
+                    }
+                } catch (e) {}
+            }
+        }
+        onExited: (exitCode, exitStatus) => {
+            actionProc.command = [];
+            Qt.callLater(() => {
+                root.scanDesktop();
+                actionRunner.processNext();
+            });
+        }
+    }
 
     // ── Grid ───────────────────────────────────────────────────────────────
     // One lattice for everything that places an icon. The cell is the
@@ -52,6 +174,28 @@ Singleton {
     }
     function setHidden(value) {
         Config.options.background.desktopIcons.hidden = value;
+    }
+
+    // ── Icons ──────────────────────────────────────────────────────────────
+    // An `icon` field is either a themed icon name or a path to an image file
+    // (a person's pick, or a .desktop entry that named one). Only the names
+    // go through the icon theme.
+    function isIconPath(icon) {
+        const value = String(icon ?? "").trim();
+        return value.startsWith("/") || value.startsWith("file://") || value.startsWith("~/");
+    }
+    // What an `icon` draws as, on the tile, the plate and the rows alike. A
+    // name that finds nothing takes the caller's `fallback`.
+    function iconSource(icon, fallback) {
+        const value = String(icon ?? "").trim();
+        if (root.isIconPath(value)) {
+            if (value.startsWith("file://"))
+                return value;
+            if (value.startsWith("~/"))
+                return "file://" + Directories.home + value.slice(1);
+            return "file://" + value;
+        }
+        return Quickshell.iconPath(value !== "" ? value : fallback, "image-missing");
     }
 
     // The part of the screen icons are placed in: the margin on every edge,
@@ -356,16 +500,26 @@ Singleton {
     // A hot reload builds this singleton with the config already loaded:
     // no ready edge will come, so the size in force is the baseline now.
     Component.onCompleted: {
+        Quickshell.execDetached(["mkdir", "-p", root.desktopFolder]);
         if (Config.ready) {
             root.lastCellWidth = root.cellWidth;
             root.lastCellHeight = root.cellHeight;
         }
+        if (Persistent.ready)
+            Qt.callLater(root.scanDesktop);
     }
     Connections {
         target: Config
         function onReadyChanged() {
             root.lastCellWidth = 0;
             Qt.callLater(root.reflow);
+        }
+    }
+    Connections {
+        target: Persistent
+        function onReadyChanged() {
+            if (Persistent.ready)
+                Qt.callLater(root.scanDesktop);
         }
     }
     function reflow() {
@@ -401,9 +555,193 @@ Singleton {
     }
 
     // ── Store ──────────────────────────────────────────────────────────────
+    function syncFromDisk(diskItems) {
+        if (!Persistent.ready || Persistent.blockWrites)
+            return;
+        const currentScreens = Object.assign({}, root.screens);
+        let changed = false;
+
+        const matchedDiskPaths = new Set();
+        const nextScreens = {};
+
+        const activeScreenNames = Quickshell.screens.length > 0
+            ? Quickshell.screens.map(s => s.name)
+            : (Object.keys(currentScreens).length > 0 ? Object.keys(currentScreens) : ["eDP-1"]);
+
+        const allScreenNames = Array.from(new Set(activeScreenNames.concat(Object.keys(currentScreens))));
+
+        for (const sName of allScreenNames) {
+            const existing = Array.isArray(currentScreens[sName]) ? currentScreens[sName] : [];
+            const kept = [];
+
+            for (const item of existing) {
+                if (item.type === "group" && Array.isArray(item.apps)) {
+                    const survivingApps = item.apps.filter(app => {
+                        const m = diskItems.find(d =>
+                            (app.path && d.path && app.path === d.path) ||
+                            (app.id && d.id && app.id === d.id) ||
+                            (app.fileName && d.fileName && app.fileName === d.fileName) ||
+                            (app.path && d.fileName && app.path.endsWith("/" + d.fileName))
+                        );
+                        if (m)
+                            matchedDiskPaths.add(m.path);
+                        return !!m;
+                    });
+                    if (survivingApps.length > 0) {
+                        if (survivingApps.length !== item.apps.length)
+                            changed = true;
+                        kept.push(Object.assign({}, item, { apps: survivingApps }));
+                    } else {
+                        changed = true;
+                    }
+                    continue;
+                }
+
+                const diskMatch = diskItems.find(d =>
+                    (item.path && d.path && item.path === d.path) ||
+                    (item.id && d.id && item.id === d.id) ||
+                    (item.fileName && d.fileName && item.fileName === d.fileName) ||
+                    (item.path && d.fileName && item.path.endsWith("/" + d.fileName))
+                );
+
+                if (diskMatch) {
+                    matchedDiskPaths.add(diskMatch.path);
+                    const updated = Object.assign({}, item, {
+                        id: diskMatch.id,
+                        name: diskMatch.name,
+                        icon: diskMatch.icon,
+                        type: diskMatch.type,
+                        path: diskMatch.path,
+                        fileName: diskMatch.fileName
+                    });
+                    if (JSON.stringify(updated) !== JSON.stringify(item))
+                        changed = true;
+                    kept.push(updated);
+                } else {
+                    changed = true;
+                }
+            }
+            nextScreens[sName] = kept;
+        }
+
+        const newItems = diskItems.filter(d => !matchedDiskPaths.has(d.path));
+        if (newItems.length > 0) {
+            changed = true;
+            const primaryScreen = (Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name)?.name)
+                || Quickshell.screens[0]?.name
+                || allScreenNames[0]
+                || "eDP-1";
+
+            for (const newItem of newItems) {
+                let px = -1, py = -1;
+                let targetScreen = primaryScreen;
+
+                const pendingKey = newItem.path || newItem.fileName;
+                const foundPending = root.pendingPlacements[pendingKey]
+                    || root.pendingPlacements[newItem.fileName]
+                    || (newItem.name ? root.pendingPlacements[newItem.name] : null)
+                    || root.pendingPlacements["__new_item__"];
+                if (foundPending) {
+                    targetScreen = foundPending.screen || primaryScreen;
+                    px = foundPending.x;
+                    py = foundPending.y;
+                    const nextPending = Object.assign({}, root.pendingPlacements);
+                    delete nextPending[pendingKey];
+                    delete nextPending[newItem.fileName];
+                    if (newItem.name)
+                        delete nextPending[newItem.name];
+                    delete nextPending["__new_item__"];
+                    root.pendingPlacements = nextPending;
+                }
+
+                if (!nextScreens[targetScreen])
+                    nextScreens[targetScreen] = [];
+
+                const targetG = root.grid(targetScreen);
+                const taken = root.takenCells(targetG, nextScreens[targetScreen]);
+
+                if (px < 0 || py < 0) {
+                    const cell = root.firstFree(targetG, taken) || root.slotCell(targetG, nextScreens[targetScreen].length);
+                    const pos = root.cellPos(targetG, cell.col, cell.row);
+                    px = pos.x;
+                    py = pos.y;
+                } else {
+                    px = Math.round(px / 10) * 10;
+                    py = Math.round(py / 10) * 10;
+                    if (root.options.autoArrange) {
+                        const want = root.cellOf(targetG, px, py);
+                        const cell = root.nearestFree(targetG, taken, want.col, want.row);
+                        const pos = root.cellPos(targetG, cell.col, cell.row);
+                        px = pos.x;
+                        py = pos.y;
+                    }
+                }
+
+                const placed = Object.assign({}, newItem, {
+                    x: px,
+                    y: py,
+                    addedAt: Date.now(),
+                    launchCount: 0
+                });
+                nextScreens[targetScreen].push(placed);
+            }
+        }
+
+        if (changed) {
+            for (const sName of Object.keys(nextScreens)) {
+                if (root.options.keepSorted)
+                    nextScreens[sName] = root.normalize(sName, nextScreens[sName]);
+            }
+            root.writeAll(nextScreens);
+        }
+    }
+
+    function createFolder(screenName, x, y, name = "") {
+        Quickshell.execDetached(["mkdir", "-p", root.desktopFolder]);
+        root.registerPlacement(name || "New Folder", screenName, x, y);
+        root.registerPlacement("__new_item__", screenName, x, y);
+        actionRunner.run(["/usr/bin/python3", Directories.scriptPath + "/desktop_shortcuts.py",
+            "create-folder", root.desktopFolder, name]);
+    }
+
+    function createFile(screenName, x, y, name = "") {
+        Quickshell.execDetached(["mkdir", "-p", root.desktopFolder]);
+        root.registerPlacement(name || "New Document.txt", screenName, x, y);
+        root.registerPlacement("__new_item__", screenName, x, y);
+        actionRunner.run(["/usr/bin/python3", Directories.scriptPath + "/desktop_shortcuts.py",
+            "create-file", root.desktopFolder, name]);
+    }
+
+    function addDockApps(screenName, appIds, x, y) {
+        if (!appIds || !appIds.length)
+            return false;
+        Quickshell.execDetached(["mkdir", "-p", root.desktopFolder]);
+        let curX = Math.round(x / 10) * 10;
+        let curY = Math.round(y / 10) * 10;
+        for (const appId of appIds) {
+            root.registerPlacement(appId, screenName, curX, curY);
+            actionRunner.run(["/usr/bin/python3", Directories.scriptPath + "/desktop_shortcuts.py",
+                "create-app", root.desktopFolder, appId]);
+            curY += root.cellHeight;
+        }
+        return true;
+    }
+
+    function registerPlacement(key, screenName, x, y) {
+        const next = Object.assign({}, root.pendingPlacements);
+        next[key] = { screen: screenName, x: x, y: y };
+        root.pendingPlacements = next;
+    }
+
+    function openDesktopFolder() {
+        Quickshell.execDetached(["mkdir", "-p", root.desktopFolder]);
+        Quickshell.execDetached(["xdg-open", root.desktopFolder]);
+    }
+
     function importUrls(screenName, urls, x, y, targetId, width, height) {
         if (!Persistent.ready || !urls.length)
             return false;
+        Quickshell.execDetached(["mkdir", "-p", root.desktopFolder]);
         root.importQueue.push({ screen: screenName, urls: urls, x: x, y: y,
             target: targetId, width: width, height: height });
         root.startImport();
@@ -416,7 +754,7 @@ Singleton {
         root.error = "";
         root.currentImport = root.importQueue.shift();
         resolver.command = ["/usr/bin/python3", Directories.scriptPath + "/desktop_shortcuts.py",
-            JSON.stringify(root.currentImport.urls)];
+            "copy-to-desktop", root.desktopFolder, JSON.stringify(root.currentImport.urls)];
         resolver.running = true;
     }
 
@@ -427,8 +765,17 @@ Singleton {
                 try {
                     const result = JSON.parse(text);
                     const request = root.currentImport;
-                    root.error = result.errors.join("\n");
-                    root.add(request.screen, result.items, request.x, request.y, request.target, request.width, request.height);
+                    root.error = (result.errors || []).join("\n");
+                    if (Array.isArray(result.items) && result.items.length > 0) {
+                        let curX = request.x;
+                        let curY = request.y;
+                        for (const it of result.items) {
+                            root.registerPlacement(it.path, request.screen, curX, curY);
+                            root.registerPlacement(it.fileName, request.screen, curX, curY);
+                            curY += root.cellHeight;
+                        }
+                        root.scanDesktop();
+                    }
                 } catch (error) {
                     root.error = Translation.tr("Could not import desktop shortcut");
                     console.warn("[DesktopShortcuts]", error);
@@ -476,8 +823,16 @@ Singleton {
     }
 
     function add(screenName, entries, x, y, targetId, width, height) {
-        if (!entries.length)
+        if (!entries || !entries.length)
             return false;
+        const appEntries = entries.filter(e => e.type === "app" && !e.path);
+        if (appEntries.length > 0)
+            return root.addDockApps(screenName, appEntries.map(e => e.id), x, y);
+
+        const outsideEntries = entries.filter(e => e.path && !e.path.startsWith(root.desktopFolder));
+        if (outsideEntries.length > 0)
+            return root.importUrls(screenName, outsideEntries.map(e => e.path), x, y, targetId, width, height);
+
         const items = root.itemsFor(screenName).slice();
         const targetIndex = targetId && entries.every(entry => root.isGroupable(entry))
             ? items.findIndex(item => item.id === targetId && root.isGroupable(item)) : -1;
@@ -588,7 +943,11 @@ Singleton {
     }
 
     function remove(screenName, itemId) {
+        const item = root.itemsFor(screenName).find(i => i.id === itemId);
+        const path = item ? (item.path || item.id) : itemId;
         root.save(screenName, root.itemsFor(screenName).filter(item => item.id !== itemId));
+        actionRunner.run(["/usr/bin/python3", Directories.scriptPath + "/desktop_shortcuts.py",
+            "trash", path]);
     }
     // Bulk forms of the two gestures a multi-selection produces. One save
     // for the whole set: a group move must not write the store per icon.
@@ -605,7 +964,13 @@ Singleton {
 
     function removeMany(screenName, ids) {
         const gone = new Set(ids);
+        const items = root.itemsFor(screenName);
+        const toTrash = items.filter(i => gone.has(i.id)).map(i => i.path || i.id);
         root.save(screenName, root.itemsFor(screenName).filter(item => !gone.has(item.id)));
+        for (const p of toTrash) {
+            actionRunner.run(["/usr/bin/python3", Directories.scriptPath + "/desktop_shortcuts.py",
+                "trash", p]);
+        }
     }
     // "Align to grid": every icon onto the nearest free cell of the grid,
     // in reading order from the origin, so the set keeps its shape and
@@ -766,8 +1131,32 @@ Singleton {
     function rename(screenName, itemId, name) {
         if (!name.trim())
             return;
-        root.save(screenName, root.itemsFor(screenName).map(item => item.id === itemId
-            ? Object.assign({}, item, { name: name.trim() }) : item));
+        const newName = name.trim();
+        const item = root.itemsFor(screenName).find(i => i.id === itemId);
+        const targetId = item ? (item.path || item.id) : itemId;
+        if (item)
+            root.registerPlacement(newName, screenName, item.x, item.y);
+        root.save(screenName, root.itemsFor(screenName).map(i => i.id === itemId
+            ? Object.assign({}, i, { name: newName }) : i));
+        actionRunner.run(["/usr/bin/python3", Directories.scriptPath + "/desktop_shortcuts.py",
+            "rename", root.desktopFolder, targetId, newName]);
+    }
+
+    // A person's picture for one item, as the path of an image file; "" puts
+    // it back on whatever its kind draws (the store drops the field rather
+    // than keeping an empty one). How it becomes an image is iconSource().
+    function setIcon(screenName, itemId, icon) {
+        const value = String(icon ?? "").trim();
+        root.save(screenName, root.itemsFor(screenName).map(item => {
+            if (item.id !== itemId)
+                return item;
+            const next = Object.assign({}, item);
+            if (value === "")
+                delete next.icon;
+            else
+                next.icon = value;
+            return next;
+        }));
     }
 
     function removeMember(screenName, groupId, appId) {
@@ -895,6 +1284,20 @@ Singleton {
         target: "desktopIcons"
         function toggleHidden(): void {
             root.setHidden(!root.hidden);
+        }
+        function refresh(): void {
+            root.scanDesktop();
+        }
+        function newFolder(): void {
+            const screen = Hyprland.focusedMonitor?.name ?? (Quickshell.screens[0]?.name ?? "eDP-1");
+            root.createFolder(screen, 100, 100);
+        }
+        function newFile(): void {
+            const screen = Hyprland.focusedMonitor?.name ?? (Quickshell.screens[0]?.name ?? "eDP-1");
+            root.createFile(screen, 100, 100);
+        }
+        function openFolder(): void {
+            root.openDesktopFolder();
         }
         function sort(by: string): void {
             const screen = Hyprland.focusedMonitor?.name ?? "";

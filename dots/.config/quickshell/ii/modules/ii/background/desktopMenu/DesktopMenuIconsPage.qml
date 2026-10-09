@@ -195,6 +195,21 @@ ColumnLayout {
                 }
             }
 
+            SectionLabel {
+                text: Translation.tr("Desktop folder")
+            }
+            MenuRow {
+                first: true
+                last: true
+                symbol: "folder_open"
+                title: Translation.tr("Open Desktop folder")
+                subtitle: Directories.desktopPath
+                onActivated: {
+                    root.dismissRequested();
+                    DesktopShortcuts.openDesktopFolder();
+                }
+            }
+
             // Icons stored for another output - a monitor unplugged, or one
             // beside this - can be brought onto this screen's free cells.
             SectionLabel {

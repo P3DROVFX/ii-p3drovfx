@@ -161,7 +161,7 @@ FocusScope {
                         delegate: IconImage {
                             required property var modelData
                             implicitSize: 11
-                            source: Quickshell.iconPath(modelData.icon, "image-missing")
+                            source: DesktopShortcuts.iconSource(modelData.icon, "image-missing")
                         }
                     }
                 }
@@ -271,7 +271,7 @@ FocusScope {
                                     Layout.alignment: Qt.AlignHCenter
                                     Layout.topMargin: 8
                                     implicitSize: 36
-                                    source: Quickshell.iconPath(modelData.icon, "image-missing")
+                                    source: DesktopShortcuts.iconSource(modelData.icon, "image-missing")
                                 }
                                 StyledText {
                                     Layout.fillWidth: true

@@ -38,9 +38,8 @@ DropArea {
         if (event.formats.indexOf("application/x-ii-desktop-shortcut") !== -1) {
             try {
                 const data = JSON.parse(event.getDataAsString("application/x-ii-desktop-shortcut"));
-                const apps = Array.isArray(data.apps) ? data.apps.map(id => DesktopShortcuts.application(id)).filter(app => app !== null) : [];
-                const entries = data.type === "group" ? [{ id: "group:" + Date.now(), type: "group", name: data.name || "", apps: apps }] : apps;
-                if (entries.length && DesktopShortcuts.add(root.screenName, entries, x, y, target, w, h))
+                const appIds = Array.isArray(data.apps) ? data.apps : (data.id ? [data.id] : []);
+                if (appIds.length > 0 && DesktopShortcuts.addDockApps(root.screenName, appIds, x, y))
                     event.accept(Qt.CopyAction);
             } catch (error) {
                 console.warn("[DesktopShortcuts] Invalid dock drop:", error);

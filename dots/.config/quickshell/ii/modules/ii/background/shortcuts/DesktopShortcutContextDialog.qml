@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Io
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -41,8 +42,8 @@ ItemContextDialog {
     title: entry.name || entry.id || ""
     subtitle: root.selectionCount > 1 ? Translation.tr("%1 items selected").arg(String(root.selectionCount))
         : entry.path || (entry.type === "group" ? Translation.tr("App group") : Translation.tr("Application"))
-    iconSource: Quickshell.iconPath(entry.icon || (entry.type === "group" ? "folder-applications"
-        : entry.type === "directory" ? "folder" : "text-x-generic"), "image-missing")
+    iconSource: DesktopShortcuts.iconSource(entry.icon, entry.type === "group" ? "folder-applications"
+        : entry.type === "directory" ? "folder" : "text-x-generic")
 
     // Windows-like contextual actions. The source stays untouched: the
     // clipboard receives data via wl-copy with single-quote escaping.
@@ -86,7 +87,9 @@ ItemContextDialog {
             icon: entry.type === "group" ? "apps" : "open_in_new", submenu: entry.type === "group" },
         { id: "pinDock", text: Translation.tr("Pinned to dock"), icon: "push_pin",
             toggle: true, checked: root.dockPinned, visible: root.pinKey !== "" },
-        { id: "rename", text: Translation.tr("Rename shortcut"), icon: "edit", submenu: true, enabled: root.writable },
+        { id: "rename", text: Translation.tr("Rename"), icon: "edit", submenu: true, enabled: root.writable },
+        { id: "icon", text: Translation.tr("Change icon"), icon: "image", submenu: true,
+            visible: entry.type === "directory", enabled: root.writable },
         { id: "details", text: Translation.tr("Details"), icon: "info", submenu: true },
         { id: "reveal", text: Translation.tr("Show in folder"), icon: "folder_open", visible: entry.path !== "" },
         { id: "copyName", text: Translation.tr("Copy name"), icon: "content_copy", visible: entry.name !== "" },
@@ -97,12 +100,13 @@ ItemContextDialog {
         { id: "screen", text: root.selectionCount > 1 ? Translation.tr("Move selection to screen")
             : Translation.tr("Move to screen"), icon: "screen_share",
             submenu: true, visible: root.otherScreens.length > 0, enabled: root.writable },
-        { id: "remove", text: root.selectionCount > 1 ? Translation.tr("Remove selected items")
-            : Translation.tr("Remove from desktop"), icon: "remove_circle_outline",
+        { id: "remove", text: root.selectionCount > 1 ? Translation.tr("Move selected to trash")
+            : Translation.tr("Move to trash"), icon: "delete",
             destructive: true, enabled: root.writable }
     ].filter(action => action.visible !== false)
     pageComponent: page === "rename" ? renamePage : page === "members" ? membersPage
         : page === "add" ? addPage : page === "member" ? memberPage : page === "details" ? detailsPage
+        : page === "icon" ? iconPage
         : page === "arrange" ? arrangePage : page === "screen" ? screenPage : null
     pageDepth: page === "" ? 0 : (page === "add" || page === "member" ? 2 : 1)
     onBackRequested: root.back()
@@ -142,6 +146,33 @@ ItemContextDialog {
             root.confirmCopy(actionId);
         } else {
             root.page = actionId;
+        }
+    }
+
+    // The folder's new picture is picked the way this shell picks images
+    // everywhere else: the XDG portal helper the banner and profile pickers
+    // use, which prints the chosen path - and nothing at all when the person
+    // backs out. Its own Process, like theirs; what it prints goes into the
+    // shortcut, not into a config key.
+    Process {
+        id: imagePicker
+        function pick(): void {
+            if (imagePicker.running)
+                return;
+            const args = ["python3", Directories.scriptPath + "/image_picker.py",
+                "--title", Translation.tr("Choose an image for this folder"),
+                "--filters", JSON.stringify([Translation.tr("Images (*.png *.jpg *.jpeg *.webp *.svg *.gif *.bmp *.avif)")])];
+            if (root.entry.path)
+                args.push("--folder", "file://" + root.entry.path);
+            imagePicker.command = args;
+            imagePicker.running = true;
+        }
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (!text.trim())
+                    return;
+                DesktopShortcuts.setIcon(root.screenName, root.entry.id, JSON.parse(text));
+            }
         }
     }
 
@@ -203,12 +234,12 @@ ItemContextDialog {
         id: renamePage
         ColumnLayout {
             spacing: 3
-            PageHeader { title: Translation.tr("Rename shortcut") }
+            PageHeader { title: Translation.tr("Rename") }
             StyledText {
                 Layout.fillWidth: true
                 Layout.leftMargin: 6
                 Layout.bottomMargin: 4
-                text: Translation.tr("Only the shortcut label changes")
+                text: Translation.tr("Renames the item on the desktop")
                 font.pixelSize: Appearance.font.pixelSize.smaller
                 color: Appearance.colors.colSubtext
             }
@@ -231,6 +262,45 @@ ItemContextDialog {
                     DesktopShortcuts.rename(root.screenName, root.entry.id, renameField.text);
                     root.page = "";
                 }
+            }
+        }
+    }
+    // A folder's own picture. The shortcut only remembers the path - the
+    // file stays where it is - and the plate above redraws the moment the
+    // store moves, so a pick is answered in place and the way back to the
+    // theme's icon sits one row under it.
+    Component {
+        id: iconPage
+        ColumnLayout {
+            spacing: 3
+            readonly property bool picked: DesktopShortcuts.isIconPath(root.entry.icon)
+            PageHeader { title: Translation.tr("Folder icon") }
+            MenuRow {
+                first: true
+                last: !iconPage.picked
+                symbol: "image_search"
+                title: Translation.tr("Choose an image…")
+                subtitle: iconPage.picked ? String(root.entry.icon) : ""
+                rowEnabled: root.writable
+                onActivated: imagePicker.pick()
+            }
+            MenuRow {
+                visible: iconPage.picked
+                first: false
+                last: true
+                symbol: "restart_alt"
+                title: Translation.tr("Use the theme's folder icon")
+                rowEnabled: root.writable
+                onActivated: DesktopShortcuts.setIcon(root.screenName, root.entry.id, "")
+            }
+            StyledText {
+                Layout.fillWidth: true
+                Layout.margins: 12
+                Layout.topMargin: 4
+                text: Translation.tr("Any image file can stand in for this folder's icon")
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                color: Appearance.colors.colSubtext
+                wrapMode: Text.Wrap
             }
         }
     }
@@ -257,7 +327,7 @@ ItemContextDialog {
                     required property var modelData
                     required property int index
                     title: modelData.name
-                    iconSource: Quickshell.iconPath(modelData.icon, "image-missing")
+                    iconSource: DesktopShortcuts.iconSource(modelData.icon, "image-missing")
                     trailingKind: "chevron"
                     first: index === 0 && !!root.entry.stack
                     last: index === membersColumn.apps.length - 1
@@ -342,7 +412,7 @@ ItemContextDialog {
                     first: index === 0
                     last: index === appList.count - 1
                     title: modelData.name
-                    iconSource: Quickshell.iconPath(modelData.icon, "image-missing")
+                    iconSource: DesktopShortcuts.iconSource(modelData.icon, "image-missing")
                     trailingKind: "add"
                     rowEnabled: root.writable
                     onActivated: {

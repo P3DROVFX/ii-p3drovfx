@@ -162,7 +162,6 @@ Item {
     readonly property bool pasteAvailable: root.pasteUrls.length > 0
         && !root.onBar && !root.onDock
     readonly property bool hasIcons: PanelFamily.isIi && !root.onBar && !root.onDock
-        && DesktopShortcuts.itemsFor(GlobalStates.desktopMenuScreenName).length > 0
 
     Process {
         id: pasteProbe
@@ -262,6 +261,13 @@ Item {
                 : Translation.tr("Edit layout")
         },
         {
+            "key": "new",
+            "shown": !root.onBar && !root.onDock,
+            "symbol": "add",
+            "title": Translation.tr("New"),
+            "trailing": "chevron"
+        },
+        {
             "key": "paste",
             "shown": root.pasteAvailable,
             "symbol": "content_paste",
@@ -287,7 +293,7 @@ Item {
             root.pasteNow();
             return;
         }
-        if (key === "colors" || key === "presets" || key === "icons") {
+        if (key === "colors" || key === "presets" || key === "icons" || key === "new") {
             root.openPage(key);
             return;
         }
@@ -350,6 +356,7 @@ Item {
     readonly property Item currentPage: root.page === "colors" && colorsLoader.item ? colorsLoader.item
         : root.page === "presets" && presetsLoader.item ? presetsLoader.item
         : root.page === "icons" && iconsLoader.item ? iconsLoader.item
+        : root.page === "new" && newLoader.item ? newLoader.item
         : column
 
     // The page change: 0 on the menu, 1 on a page. The menu slides out to
@@ -468,6 +475,27 @@ Item {
 
             sourceComponent: DesktopMenuIconsPage {
                 screenName: GlobalStates.desktopMenuScreenName
+                reveal: root.pageProgress
+                onBackRequested: root.back()
+                onDismissRequested: root.dismissRequested()
+            }
+        }
+
+        Loader {
+            id: newLoader
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.margins: root.padding
+            active: root.loadedPages["new"] === true
+            visible: root.pageProgress > 0 && root.shownPage === "new"
+            enabled: root.page === "new"
+            transform: Translate { x: (1 - root.pageProgress) * root.pageSlide }
+
+            sourceComponent: DesktopMenuNewPage {
+                screenName: GlobalStates.desktopMenuScreenName
+                targetX: GlobalStates.desktopMenuX
+                targetY: GlobalStates.desktopMenuY
                 reveal: root.pageProgress
                 onBackRequested: root.back()
                 onDismissRequested: root.dismissRequested()
