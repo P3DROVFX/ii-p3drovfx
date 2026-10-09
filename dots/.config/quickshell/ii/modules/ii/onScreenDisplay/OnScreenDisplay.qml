@@ -417,9 +417,36 @@ Scope {
         }
     }
 
+    // ── Classic OSD slide-out ─────────────────────────────────────────────────────
+    // The window is destroyed as soon as the Loader's `active` turns false. Reading
+    // `isClosing` there was a race: the Loader re-evaluates before the window's own handler
+    // sets it, so the window died before it could slide out. This latch changes only when
+    // the OSD opens (immediately) or once the slide has finished (the timer), never in the
+    // close notification itself.
+    property bool osdWindowAlive: false
+
+    Timer {
+        id: osdCloseTimer
+        // The slide is the 300 ms openedProgress Behavior below, plus a little margin.
+        interval: Math.round(300 * Appearance.animMultiplier) + 50
+        onTriggered: root.osdWindowAlive = false
+    }
+
+    Connections {
+        target: GlobalStates
+        function onOsdVolumeOpenChanged() {
+            if (GlobalStates.osdVolumeOpen) {
+                osdCloseTimer.stop();
+                root.osdWindowAlive = true;
+            } else {
+                osdCloseTimer.restart();
+            }
+        }
+    }
+
     Loader {
         id: osdLoader
-        active: (GlobalStates.osdVolumeOpen || root.isClosing) && !GlobalStates.osdConnectActive && !IslandPolicy.ownsOsd
+        active: root.osdWindowAlive && !GlobalStates.osdConnectActive && !IslandPolicy.ownsOsd
             && !root.tunerStyle
 
         sourceComponent: PanelWindow {
@@ -1786,5 +1813,6 @@ Scope {
     Component.onCompleted: {
         GlobalStates.osdCurrentIndicator = currentIndicator;
         GlobalStates.osdProtectionMessage = protectionMessage;
+        root.osdWindowAlive = GlobalStates.osdVolumeOpen;
     }
 }
