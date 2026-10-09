@@ -19,6 +19,8 @@ Item {
 
     readonly property real sectionGap: 12
     readonly property real cardGap: 12
+    // ContentSection's own spacing: what a block needs on top of it to sit one gap away.
+    readonly property real sectionSpacing: 4
     readonly property real cacheMin: 280
     readonly property var sidebar: Config.options.sidebar
     readonly property bool cornersAvailable: Config.options.panelFamily !== "tablet"
@@ -80,6 +82,7 @@ Item {
             Item {
                 id: cache
                 Layout.fillWidth: true
+                Layout.topMargin: sidebarsRoot.cardGap - sidebarsRoot.sectionSpacing
                 implicitHeight: cacheFlow.implicitHeight
 
                 readonly property int columns: Math.floor((width + sidebarsRoot.cardGap) / (sidebarsRoot.cacheMin + sidebarsRoot.cardGap)) >= 2 ? 2 : 1

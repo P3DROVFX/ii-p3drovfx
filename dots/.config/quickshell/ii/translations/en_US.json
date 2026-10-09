@@ -14508,5 +14508,18 @@
     "Dashboard panel": "Dashboard panel",
     "On demand": "On demand",
     "Kept in memory, so it opens instantly": "Kept in memory, so it opens instantly",
-    "Rebuilt on every open to save memory": "Rebuilt on every open to save memory"
+    "Rebuilt on every open to save memory": "Rebuilt on every open to save memory",
+    "Cheatsheet shortcut": "Cheatsheet shortcut",
+    "%1 pages ready": "%1 pages ready",
+    "Open cheatsheet": "Open cheatsheet",
+    "Close cheatsheet": "Close cheatsheet",
+    "Hidden from the cheatsheet": "Hidden from the cheatsheet",
+    "Weekly and monthly calendar with events, alarms and sports": "Weekly and monthly calendar with events, alarms and sports",
+    "Unread Gmail messages, right in the cheatsheet": "Unread Gmail messages, right in the cheatsheet",
+    "Interactive periodic table": "Interactive periodic table",
+    "Structures and side-chain classes": "Structures and side-chain classes",
+    "Terminal commands reference": "Terminal commands reference",
+    "Profiles, layouts and monitors": "Profiles, layouts and monitors",
+    "Offline test with score history": "Offline test with score history",
+    "Generators, encoders and converters": "Generators, encoders and converters"
 }

@@ -16,6 +16,8 @@ Item {
     id: root
 
     readonly property int gap: 12
+    // ContentSection's own spacing: what a block needs on top of it to sit one gap away.
+    readonly property real sectionSpacing: 4
     readonly property real tileMin: 280
     readonly property int tileHeight: 200
     readonly property string hidden: Translation.tr("Not shown in the sidebar")
@@ -83,6 +85,7 @@ Item {
     readonly property int tileWidth: Math.floor((width - root.gap * (root.columns - 1)) / root.columns)
 
     Layout.fillWidth: true
+    Layout.topMargin: root.gap - root.sectionSpacing
     implicitHeight: flow.implicitHeight
 
     Flow {

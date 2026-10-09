@@ -62,11 +62,12 @@ Rectangle {
 
     HoverHandler {
         id: cardHover
-        cursorShape: Qt.PointingHandCursor
     }
-    // Under the content, so the switch keeps its own click.
+    // Under the content, so the switch keeps its own click. It owns the cursor: a
+    // MouseArea without one would put the arrow back over the whole card.
     MouseArea {
         anchors.fill: parent
+        cursorShape: Qt.PointingHandCursor
         onClicked: root.toggled(!root.checked)
     }
 

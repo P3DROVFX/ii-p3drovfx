@@ -14515,5 +14515,18 @@
     "Dashboard panel": "Painel do dashboard",
     "On demand": "Sob demanda",
     "Kept in memory, so it opens instantly": "Mantido na memória, abre instantaneamente",
-    "Rebuilt on every open to save memory": "Reconstruído a cada abertura para economizar memória"
+    "Rebuilt on every open to save memory": "Reconstruído a cada abertura para economizar memória",
+    "Cheatsheet shortcut": "Atalho do cheatsheet",
+    "%1 pages ready": "%1 páginas prontas",
+    "Open cheatsheet": "Abrir cheatsheet",
+    "Close cheatsheet": "Fechar cheatsheet",
+    "Hidden from the cheatsheet": "Oculto no cheatsheet",
+    "Weekly and monthly calendar with events, alarms and sports": "Calendário semanal e mensal com eventos, alarmes e esportes",
+    "Unread Gmail messages, right in the cheatsheet": "Mensagens não lidas do Gmail, direto no cheatsheet",
+    "Interactive periodic table": "Tabela periódica interativa",
+    "Structures and side-chain classes": "Estruturas e classes das cadeias laterais",
+    "Terminal commands reference": "Referência de comandos de terminal",
+    "Profiles, layouts and monitors": "Perfis, layouts e monitores",
+    "Offline test with score history": "Teste offline com histórico de pontuação",
+    "Generators, encoders and converters": "Geradores, codificadores e conversores"
 }

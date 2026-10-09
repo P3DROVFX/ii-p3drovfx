@@ -239,6 +239,8 @@ Singleton {
             "icon": "help",
             "component": "modules/settings/configs/CheatSheetConfig.qml",
             "subPages": [],
+            "searchComponent": false,
+            "searchSources": ["sections/CheatSheetOptionsSection.qml"],
             "aliases": ["Shortcuts", "Keybinds", "Timetable", "Gmail", "Amino acids", "Commands reference", "Periodic table"]
         },
         {
