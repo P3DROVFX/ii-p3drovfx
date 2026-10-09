@@ -1615,7 +1615,7 @@ function moveToTrashFile(modelData) {
                                 if (raw === 0)
                                     return;
                                 const step = ScrollWheel.step(raw, sideways ? event.pixelDelta.x : event.pixelDelta.y,
-                                    Config.options?.interactions?.scrolling);
+                                    Config.options?.interactions?.scrolling, event.phase);
 
                                 const maxX = Math.max(0, grid.contentWidth - grid.width);
                                 const base = hScrollAnim.running ? grid.scrollTargetX : grid.contentX;

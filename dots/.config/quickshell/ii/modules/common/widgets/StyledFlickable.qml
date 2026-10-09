@@ -82,7 +82,7 @@ Flickable {
     function scrollByWheel(wheelEvent) {
         const angle = wheelEvent.angleDelta.y;
 
-        if (!ScrollWheel.isNotch(angle, root)) {
+        if (!ScrollWheel.isNotch(angle, root, wheelEvent.phase)) {
             const px = ScrollWheel.touchpadStep(angle, wheelEvent.pixelDelta.y, root);
             root.wheelScrolled(px, false);
             scrollAnim.stop();

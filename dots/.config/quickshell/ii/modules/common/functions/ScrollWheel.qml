@@ -17,9 +17,22 @@ Singleton {
     readonly property int touchpadWindowMs: 250
     property real _lastTouchpadMs: 0
 
-    /** Whether this event is a mouse-wheel notch. Records touchpad events. */
-    function isNotch(angle, settings) {
+    /**
+     * Whether this event comes from a mouse wheel. Records touchpad events.
+     * `phase` is the WheelEvent's: Qt gives a scroll phase to finger (touchpad)
+     * scrolls only, so a wheel is NoScrollPhase however finely it reports and
+     * however the compositor's scroll_factor scales it (a high-res wheel at 0.1
+     * sends 1.5° steps that the angle rule below takes for a touchpad).
+     * Without a phase, a whole notch of angle is a wheel.
+     */
+    function isNotch(angle, settings, phase) {
         const now = Date.now();
+        if (phase !== undefined) {
+            if (phase !== Qt.NoScrollPhase)
+                _lastTouchpadMs = now;
+            // A sideways tilt leaves this axis at 0: no step to take
+            return phase === Qt.NoScrollPhase && angle !== 0;
+        }
         if (angle % 120 !== 0) {
             _lastTouchpadMs = now;
             return false;
@@ -50,7 +63,7 @@ Singleton {
         return finger * speed;
     }
 
-    function step(angle, pixel, settings) {
-        return isNotch(angle, settings) ? notchStep(angle, settings) : touchpadStep(angle, pixel, settings);
+    function step(angle, pixel, settings, phase) {
+        return isNotch(angle, settings, phase) ? notchStep(angle, settings) : touchpadStep(angle, pixel, settings);
     }
 }

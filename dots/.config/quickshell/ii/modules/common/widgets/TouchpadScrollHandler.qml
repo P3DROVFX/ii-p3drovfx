@@ -64,7 +64,7 @@ WheelHandler {
     }
 
     function wheelStep(event) {
-        return ScrollWheel.step(event.angleDelta.y, event.pixelDelta.y, root);
+        return ScrollWheel.step(event.angleDelta.y, event.pixelDelta.y, root, event.phase);
     }
 
     // Halts a wheel scroll still animating, for a view about to place its

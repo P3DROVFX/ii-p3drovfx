@@ -146,7 +146,7 @@ ListView {
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
         onWheel: wheelEvent => {
             const angle = wheelEvent.angleDelta.y;
-            if (!ScrollWheel.isNotch(angle, root)) {
+            if (!ScrollWheel.isNotch(angle, root, wheelEvent.phase)) {
                 scrollAnim.stop();
                 bounceAnim.stop();
                 root._wheelScrolling = false;
