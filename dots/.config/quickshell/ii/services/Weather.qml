@@ -101,8 +101,10 @@ Singleton {
     onGpsActiveChanged: {
         if (root.gpsActive) {
             positionSource.start();
+            fallbackTimer.restart();
         } else {
             positionSource.stop();
+            fallbackTimer.stop();
             requestRefetch();
         }
     }
@@ -237,7 +239,7 @@ Singleton {
         temp.windDir = degreesToCompass(current.wind_direction_10m);
         temp.wCode = wmoToWwo(current.weather_code);
         temp.wDesc = getWeatherDescription(temp.wCode);
-        temp.city = cityName;
+        temp.city = cityName || root.location.city || root.city || "City";
         
         if (root.useUSCS) {
             temp.wind = Math.round(current.wind_speed_10m * 0.621371) + " mph";
@@ -257,7 +259,7 @@ Singleton {
         
         temp.lastRefresh = DateTime.time + " • " + DateTime.date;
         root.data = temp;
-        console.info(`[WeatherService] Successfully fetched weather for ${cityName}: ${temp.temp}, ${temp.wDesc}`);
+        console.info(`[WeatherService] Successfully fetched weather for ${temp.city}: ${temp.temp}, ${temp.wDesc}`);
 
         // Parse forecastData (daily)
         let forecastList = [];
@@ -312,44 +314,141 @@ Singleton {
         lastFetchTimestamp = now;
         root.lastFetchedKey = root.fetchKey;
 
-        if (root.gpsActive && root.location.valid) {
-            // If GPS is active and we have a valid position, fetch weather for it directly
-            fetchWeather(root.location.lat, root.location.lon, root.location.city || "Current Location");
-        } else if (root.city !== "" && !root.gpsActive) {
+        if (root.gpsActive) {
+            if (root.location.valid) {
+                // If GPS is active and we already have valid coordinates and city name
+                if (root.location.city && root.location.city !== "" && root.location.city !== "Current Location" && root.location.city !== "City") {
+                    fetchWeather(root.location.lat, root.location.lon, root.location.city);
+                } else {
+                    reverseGeocode(root.location.lat, root.location.lon, cityName => {
+                        const resolvedCity = cityName || "Current Location";
+                        root.location.city = resolvedCity;
+                        fetchWeather(root.location.lat, root.location.lon, resolvedCity);
+                    });
+                }
+            } else {
+                positionSource.start();
+                fallbackTimer.restart();
+            }
+        } else if (root.city !== "") {
             // If manual city is set and GPS is off, use geocoding
             fetchCoordinates(root.city);
         } else {
-            // Default to ip-api for automatic location
-            const xhr = new XMLHttpRequest();
-            xhr.onreadystatechange = function() {
-                if (xhr.readyState === XMLHttpRequest.DONE) {
-                    if (xhr.status === 200) {
-                        try {
-                            const loc = JSON.parse(xhr.responseText);
-                            if (loc.status === "success") {
-                                root.location.lat = loc.lat;
-                                root.location.lon = loc.lon;
-                                root.location.long = loc.lon;
-                                root.location.city = loc.city;
-                                root.location.valid = true;
-                                fetchWeather(loc.lat, loc.lon, loc.city);
-                            } else {
-                                console.error("[WeatherService] ip-api failed:", loc.message);
-                                root.refreshFailed(`ip-api: ${loc.message}`);
-                            }
-                        } catch (e) {
-                            console.error("[WeatherService] Failed to parse location:", e);
-                            root.refreshFailed(`ip-api parse: ${e}`);
+            // Fallback to IP location
+            fetchIpLocation();
+        }
+    }
+
+    function reverseGeocode(lat, lon, callback) {
+        const bdcUrl = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`;
+        const xhr = new XMLHttpRequest();
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                if (xhr.status === 200) {
+                    try {
+                        const geo = JSON.parse(xhr.responseText);
+                        const cityName = geo.city || geo.locality || geo.principalSubdivision || "";
+                        if (cityName && cityName.length > 0) {
+                            callback(cityName);
+                            return;
                         }
-                    } else {
-                        console.error("[WeatherService] ip-api error:", xhr.status);
-                        root.refreshFailed(`ip-api HTTP ${xhr.status}`);
+                    } catch (e) {
+                        console.error("[WeatherService] Failed to parse BigDataCloud reverse geocode:", e);
                     }
                 }
-            };
-            xhr.open("GET", "http://ip-api.com/json/");
-            xhr.send();
-        }
+                fallbackNominatim(lat, lon, callback);
+            }
+        };
+        xhr.open("GET", bdcUrl);
+        xhr.send();
+    }
+
+    function fallbackNominatim(lat, lon, callback) {
+        const nomUrl = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`;
+        const xhr = new XMLHttpRequest();
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                if (xhr.status === 200) {
+                    try {
+                        const geo = JSON.parse(xhr.responseText);
+                        const addr = geo.address || {};
+                        const cityName = addr.city || addr.town || addr.village || addr.municipality || addr.county || addr.state || geo.name || "";
+                        if (cityName && cityName.length > 0) {
+                            callback(cityName);
+                            return;
+                        }
+                    } catch (e) {
+                        console.error("[WeatherService] Failed to parse Nominatim reverse geocode:", e);
+                    }
+                }
+                callback(root.location.city || root.city || "");
+            }
+        };
+        xhr.open("GET", nomUrl);
+        xhr.setRequestHeader("User-Agent", "Quickshell-ii/1.0");
+        xhr.send();
+    }
+
+    function fetchIpLocation() {
+        const xhr = new XMLHttpRequest();
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                if (xhr.status === 200) {
+                    try {
+                        const loc = JSON.parse(xhr.responseText);
+                        if (loc.status === "success") {
+                            root.location.lat = loc.lat;
+                            root.location.lon = loc.lon;
+                            root.location.long = loc.lon;
+                            root.location.city = loc.city || "";
+                            root.location.valid = true;
+                            fetchWeather(loc.lat, loc.lon, loc.city || "Current Location");
+                            return;
+                        } else {
+                            console.error("[WeatherService] ip-api failed:", loc.message);
+                        }
+                    } catch (e) {
+                        console.error("[WeatherService] Failed to parse location:", e);
+                    }
+                } else {
+                    console.error("[WeatherService] ip-api error:", xhr.status);
+                }
+                fetchIpInfoFallback();
+            }
+        };
+        xhr.open("GET", "http://ip-api.com/json/");
+        xhr.send();
+    }
+
+    function fetchIpInfoFallback() {
+        const xhr = new XMLHttpRequest();
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                if (xhr.status === 200) {
+                    try {
+                        const info = JSON.parse(xhr.responseText);
+                        if (info.loc) {
+                            const parts = info.loc.split(",");
+                            const lat = parseFloat(parts[0]);
+                            const lon = parseFloat(parts[1]);
+                            const city = info.city || "";
+                            root.location.lat = lat;
+                            root.location.lon = lon;
+                            root.location.long = lon;
+                            root.location.city = city;
+                            root.location.valid = true;
+                            fetchWeather(lat, lon, city || "Current Location");
+                            return;
+                        }
+                    } catch (e) {
+                        console.error("[WeatherService] Failed to parse ipinfo.io response:", e);
+                    }
+                }
+                root.refreshFailed("Unable to determine location from IP");
+            }
+        };
+        xhr.open("GET", "https://ipinfo.io/json");
+        xhr.send();
     }
 
     function fetchCoordinates(cityName) {
@@ -431,8 +530,7 @@ Singleton {
             if (!root.location.valid) {
                 console.info("[WeatherService] GPS timed out or invalid. Falling back to IP-based location.");
                 positionSource.stop();
-                root.gpsActive = false;
-                root.getData(true);
+                fetchIpLocation();
             }
         }
     }
@@ -444,13 +542,25 @@ Singleton {
         onPositionChanged: {
             if (position.latitudeValid && position.longitudeValid) {
                 fallbackTimer.stop();
-                root.location.lat = position.coordinate.latitude;
-                root.location.lon = position.coordinate.longitude;
-                root.location.long = position.coordinate.longitude;
+                const newLat = position.coordinate.latitude;
+                const newLon = position.coordinate.longitude;
+                const coordsChanged = Math.abs(root.location.lat - newLat) > 0.05 || Math.abs(root.location.lon - newLon) > 0.05;
+
+                root.location.lat = newLat;
+                root.location.lon = newLon;
+                root.location.long = newLon;
                 root.location.valid = true;
-                root.getData();
+
+                if (coordsChanged || !root.location.city || root.location.city === "" || root.location.city === "Current Location" || root.location.city === "City") {
+                    reverseGeocode(newLat, newLon, cityName => {
+                        const resolvedCity = cityName || "Current Location";
+                        root.location.city = resolvedCity;
+                        fetchWeather(newLat, newLon, resolvedCity);
+                    });
+                } else {
+                    root.getData();
+                }
             } else {
-                root.gpsActive = root.location.valid ? true : false;
                 console.error("[WeatherService] Failed to get the GPS location.");
             }
         }
@@ -459,11 +569,9 @@ Singleton {
             if (!positionSource.valid) {
                 positionSource.stop();
                 fallbackTimer.stop();
-                root.location.valid = false;
-                root.gpsActive = false;
                 Quickshell.execDetached(["notify-send", Translation.tr("Weather Service"), Translation.tr("Cannot find a GPS service. Using the fallback method instead."), "-a", "Shell"]);
                 console.error("[WeatherService] Could not aquire a valid backend plugin.");
-                root.getData(true);
+                fetchIpLocation();
             }
         }
     }

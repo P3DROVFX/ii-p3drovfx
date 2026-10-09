@@ -6218,7 +6218,7 @@ Singleton {
             }
 
             property JsonObject oledSaver: JsonObject {
-                property bool enable: true
+                property bool enable: false
                 property bool antiBurnIn: false // periodically shift widgets to prevent OLED burn-in
                 property int cursorHideDelay: 5 // seconds of no mouse movement before the cursor hides again
                 property int lockTimeout: 10 // minutes without input on the lock screen before it turns into the Always On Display; 0 = never
