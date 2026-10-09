@@ -1,0 +1,7 @@
+module qs.modules.settings.configs.sidebars
+
+SidebarsHero 1.0 SidebarsHero.qml
+SidebarsPolicyGrid 1.0 SidebarsPolicyGrid.qml
+SidebarsPlacementPane 1.0 SidebarsPlacementPane.qml
+SidebarsCacheCard 1.0 SidebarsCacheCard.qml
+SidebarsLinkCard 1.0 SidebarsLinkCard.qml

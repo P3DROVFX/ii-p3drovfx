@@ -101,6 +101,8 @@ Singleton {
             "icon": "side_navigation",
             "component": "modules/settings/configs/SidebarsConfig.qml",
             "subPages": ["widgets/SidebarQuickTogglesConfig.qml", "widgets/ScreenCornersConfig.qml"],
+            "searchComponent": false,
+            "searchSources": ["sections/SidebarsOptionsSection.qml"],
             "aliases": ["Sidebars & Panels", "Panels"]
         },
         {

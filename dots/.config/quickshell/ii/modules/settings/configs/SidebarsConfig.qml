@@ -1,17 +1,34 @@
 import QtQuick
 import QtQuick.Layouts
-import Quickshell
-import Quickshell.Io
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.settings.configs.sidebars
 import qs.services
 
+/**
+ * Settings → Sidebars.
+ *
+ * Leads with how many tabs the policies sidebar opens with (and a button that opens it),
+ * then each tab as a tile, where the two sidebars sit, whether their panels stay cached (as
+ * a word that changes weight), the quick-toggles sub-page as a card and the rest in the
+ * original sections. Search indexes sections/SidebarsOptionsSection.qml for everything drawn here.
+ */
 Item {
     id: sidebarsRoot
     anchors.fill: parent
 
+    readonly property real sectionGap: 12
+    readonly property real cardGap: 12
+    readonly property real cacheMin: 280
+    readonly property var sidebar: Config.options.sidebar
+    readonly property bool cornersAvailable: Config.options.panelFamily !== "tablet"
+
     property alias contentY: page.contentY
     property alias activeSubPage: subPageOverlay.activeSubPage
+
+    function openSubPage(file) {
+        sidebarsRoot.activeSubPage = Qt.resolvedUrl("widgets/" + file);
+    }
 
     ContentPage {
         id: page
@@ -19,188 +36,116 @@ Item {
         forceWidth: false
         opacity: subPageOverlay.slideProgress
 
-        property bool showBackButton: false
-        signal goBack()
-
-        RowLayout {
-            spacing: 12
-            visible: page.showBackButton
-
-            RippleButton {
-                implicitWidth: implicitHeight
-                implicitHeight: 40
-                topLeftRadius: Appearance.rounding.full
-                topRightRadius: Appearance.rounding.full
-                bottomLeftRadius: Appearance.rounding.full
-                bottomRightRadius: Appearance.rounding.full
-                colBackground: Appearance.colors.colSecondaryContainer
-                colBackgroundHover: Appearance.colors.colSecondaryContainerHover
-                colRipple: Appearance.colors.colSecondaryContainerActive
-                onClicked: page.goBack()
-
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "arrow_back"
-                    iconSize: Appearance.font.pixelSize.large
-                    color: Appearance.colors.colOnSecondaryContainer
-                }
-            }
-
-            StyledText {
-                text: Translation.tr("Sidebars")
-                font.pixelSize: Appearance.font.pixelSize.large
-                font.family: Appearance.font.family.title
-                color: Appearance.colors.colOnLayer0
-            }
+        SidebarsHero {
+            Layout.fillWidth: true
+            visibleCount: policyGrid.shown
+            total: policyGrid.total
+            placement: placementPane.summary
         }
 
+        // ── The tabs ──────────────────────────────────────────────────────
         ContentSection {
+            Layout.topMargin: sidebarsRoot.sectionGap
+            title: Translation.tr("Policies tabs")
             icon: "policy"
-            title: Translation.tr("Sidebar Policies Visibility")
 
             NoticeBox {
                 Layout.fillWidth: true
                 isFirst: true
-                text: Translation.tr("Choose which policy tabs are visible in the left sidebar when it is opened.")
+                text: Translation.tr("Choose which tabs are available when the policies sidebar opens.")
             }
 
-            ConfigToggleGrid {
+            SidebarsPolicyGrid {
+                id: policyGrid
+            }
+        }
+
+        SidebarsPlacementPane {
+            id: placementPane
+            Layout.fillWidth: true
+        }
+
+        // ── Panel cache ───────────────────────────────────────────────────
+        ContentSection {
+            Layout.topMargin: sidebarsRoot.sectionGap
+            title: Translation.tr("Panel cache")
+            icon: "memory"
+
+            NoticeBox {
                 Layout.fillWidth: true
-                gridColumns: Math.max(1, Math.floor(parent.width / 300))
-                currentValues: {
-                    return {
-                        "ai": Config.options.policies.ai,
-                        "weeb": Config.options.policies.weeb,
-                        "wallpapers": Config.options.policies.wallpapers,
-                        "translator": Config.options.policies.translator,
-                        "player": Config.options.policies.player,
-                        "phone": Config.options.policies.phone
-                    };
-                }
-                model: [{
-                    "key": "ai",
-                    "name": Translation.tr("AI"),
-                    "icon": "smart_toy",
-                    "options": [{
-                        "displayName": Translation.tr("No"),
-                        "icon": "close",
-                        "value": 0
-                    }, {
-                        "displayName": Translation.tr("Yes"),
-                        "icon": "check",
-                        "value": 1
-                    }, {
-                        "displayName": Translation.tr("Local"),
-                        "icon": "sync_saved_locally",
-                        "value": 2
-                    }]
-                }, {
-                    "key": "weeb",
-                    "name": Translation.tr("Weeb"),
-                    "icon": "face",
-                    "options": [{
-                        "displayName": Translation.tr("No"),
-                        "icon": "close",
-                        "value": 0
-                    }, {
-                        "displayName": Translation.tr("Yes"),
-                        "icon": "check",
-                        "value": 1
-                    }, {
-                        "displayName": Translation.tr("Closet"),
-                        "icon": "ev_shadow",
-                        "value": 2
-                    }]
-                }, {
-                    "key": "wallpapers",
-                    "name": Translation.tr("Wallpaper browser"),
-                    "icon": "wallpaper",
-                    "options": [{
-                        "displayName": Translation.tr("No"),
-                        "icon": "close",
-                        "value": 0
-                    }, {
-                        "displayName": Translation.tr("Yes"),
-                        "icon": "check",
-                        "value": 1
-                    }]
-                }, {
-                    "key": "translator",
-                    "name": Translation.tr("Translator"),
-                    "icon": "translate",
-                    "options": [{
-                        "displayName": Translation.tr("No"),
-                        "icon": "close",
-                        "value": 0
-                    }, {
-                        "displayName": Translation.tr("Yes"),
-                        "icon": "check",
-                        "value": 1
-                    }]
-                }, {
-                    "key": "player",
-                    "name": Translation.tr("Sidebar player"),
-                    "icon": "music_note",
-                    "options": [{
-                        "displayName": Translation.tr("No"),
-                        "icon": "close",
-                        "value": 0
-                    }, {
-                        "displayName": Translation.tr("Yes"),
-                        "icon": "check",
-                        "value": 1
-                    }]
-                }, {
-                    "key": "phone",
-                    "name": Translation.tr("Phone"),
-                    "icon": "smartphone",
-                    "options": [{
-                        "displayName": Translation.tr("No"),
-                        "icon": "close",
-                        "value": 0
-                    }, {
-                        "displayName": Translation.tr("Yes"),
-                        "icon": "check",
-                        "value": 1
-                    }]
-                }]
-                onItemChanged: (key, value) => {
-                    Config.options.policies[key] = value;
+                isFirst: true
+                text: Translation.tr("Keep a sidebar's panel cached in memory so it opens instantly, or rebuild it on every open to save memory.")
+            }
+
+            Item {
+                id: cache
+                Layout.fillWidth: true
+                implicitHeight: cacheFlow.implicitHeight
+
+                readonly property int columns: Math.floor((width + sidebarsRoot.cardGap) / (sidebarsRoot.cacheMin + sidebarsRoot.cardGap)) >= 2 ? 2 : 1
+                readonly property int cardWidth: Math.floor((width - sidebarsRoot.cardGap * (columns - 1)) / columns)
+
+                Flow {
+                    id: cacheFlow
+                    width: parent.width
+                    spacing: sidebarsRoot.cardGap
+
+                    SidebarsCacheCard {
+                        width: cache.cardWidth
+                        symbol: "left_panel_open"
+                        shapeOn: MaterialShape.Shape.Cookie12Sided
+                        title: Translation.tr("Left sidebar")
+                        subtitle: Translation.tr("Policies panel")
+                        wordOn: Translation.tr("Cached")
+                        wordOff: Translation.tr("On demand")
+                        summaryOn: Translation.tr("Kept in memory, so it opens instantly")
+                        summaryOff: Translation.tr("Rebuilt on every open to save memory")
+                        checked: sidebarsRoot.sidebar.keepLeftSidebarLoaded
+                        onToggled: value => sidebarsRoot.sidebar.keepLeftSidebarLoaded = value
+                    }
+
+                    SidebarsCacheCard {
+                        width: cache.cardWidth
+                        symbol: "right_panel_open"
+                        shapeOn: MaterialShape.Shape.Flower
+                        title: Translation.tr("Right sidebar")
+                        subtitle: Translation.tr("Dashboard panel")
+                        wordOn: Translation.tr("Cached")
+                        wordOff: Translation.tr("On demand")
+                        summaryOn: Translation.tr("Kept in memory, so it opens instantly")
+                        summaryOff: Translation.tr("Rebuilt on every open to save memory")
+                        checked: sidebarsRoot.sidebar.keepRightSidebarLoaded
+                        onToggled: value => sidebarsRoot.sidebar.keepRightSidebarLoaded = value
+                    }
                 }
             }
         }
 
+        // ── Quick toggles ─────────────────────────────────────────────────
+        SidebarsLinkCard {
+            Layout.fillWidth: true
+            Layout.topMargin: sidebarsRoot.sectionGap
+            symbol: "tune"
+            shapeIdle: MaterialShape.Shape.Clover4Leaf
+            shapeEngaged: MaterialShape.Shape.Flower
+            title: Translation.tr("Quick toggles and sliders")
+            summary: Translation.tr("Toggle styles, Android column count, capsule sliders and fixed sliders")
+            onClicked: sidebarsRoot.openSubPage("SidebarQuickTogglesConfig.qml")
+        }
+
+        // ── Dashboard ─────────────────────────────────────────────────────
         ContentSection {
-            title: Translation.tr("Sidebar Layout & Loading")
-            icon: "view_sidebar"
-
-            ConfigSwitch {
-                buttonIcon: "keep"
-                text: Translation.tr("Keep right sidebar loaded")
-                checked: Config.options.sidebar.keepRightSidebarLoaded
-                onCheckedChanged: {
-                    if (Config.ready && checked !== Config.options.sidebar.keepRightSidebarLoaded)
-                        Config.options.sidebar.keepRightSidebarLoaded = checked;
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "keep"
-                text: Translation.tr("Keep left sidebar loaded")
-                checked: Config.options.sidebar.keepLeftSidebarLoaded
-                onCheckedChanged: {
-                    if (Config.ready && checked !== Config.options.sidebar.keepLeftSidebarLoaded)
-                        Config.options.sidebar.keepLeftSidebarLoaded = checked;
-                }
-            }
+            Layout.topMargin: sidebarsRoot.sectionGap
+            title: Translation.tr("Dashboard")
+            icon: "dashboard"
 
             ConfigSwitch {
                 buttonIcon: "animation"
                 text: Translation.tr("Dashboard entrance animations")
-                checked: Config.options.sidebar.dashboardEntranceAnimations
+                checked: sidebarsRoot.sidebar.dashboardEntranceAnimations
                 onCheckedChanged: {
-                    if (Config.ready && checked !== Config.options.sidebar.dashboardEntranceAnimations)
-                        Config.options.sidebar.dashboardEntranceAnimations = checked;
+                    if (Config.ready && checked !== sidebarsRoot.sidebar.dashboardEntranceAnimations)
+                        sidebarsRoot.sidebar.dashboardEntranceAnimations = checked;
                 }
 
                 StyledToolTip {
@@ -212,40 +157,10 @@ Item {
                 buttonIcon: "note_stack"
                 text: Translation.tr("Notes tab in dashboard")
                 description: Translation.tr("Show Notes in the bottom widget group alongside Calendar, Tasks, and Timer")
-                checked: Config.options.sidebar.bottomGroup?.notesTab ?? true
+                checked: sidebarsRoot.sidebar.bottomGroup?.notesTab ?? true
                 onCheckedChanged: {
-                    if (Config.ready && Config.options.sidebar?.bottomGroup)
-                        Config.options.sidebar.bottomGroup.notesTab = checked;
-                }
-            }
-
-            ContentSubsection {
-                title: Translation.tr("Sidebar position")
-                icon: "switch_right"
-                Layout.fillWidth: true
-
-                ConfigSelectionArray {
-                    currentValue: Config.options.sidebar.position
-                    onSelected: (newValue) => {
-                        Config.options.sidebar.position = newValue;
-                    }
-                    options: [{
-                        "displayName": Translation.tr("Default"),
-                        "icon": "vertical_align_center",
-                        "value": "default"
-                    }, {
-                        "displayName": Translation.tr("Inverted"),
-                        "icon": "swap_horiz",
-                        "value": "inverted"
-                    }, {
-                        "displayName": Translation.tr("Left"),
-                        "icon": "keyboard_arrow_left",
-                        "value": "left"
-                    }, {
-                        "displayName": Translation.tr("Right"),
-                        "icon": "keyboard_arrow_right",
-                        "value": "right"
-                    }]
+                    if (Config.ready && sidebarsRoot.sidebar.bottomGroup)
+                        sidebarsRoot.sidebar.bottomGroup.notesTab = checked;
                 }
             }
 
@@ -255,64 +170,42 @@ Item {
                 Layout.fillWidth: true
 
                 ConfigSelectionArray {
-                    currentValue: Config.options.sidebar.dashboardHeader.buttonsDesign
-                    onSelected: (newValue) => {
-                        Config.options.sidebar.dashboardHeader.buttonsDesign = newValue;
-                    }
-                    options: [{
-                        "displayName": Translation.tr("Default"),
-                        "icon": "crop_square",
-                        "value": "default"
-                    }, {
-                        "displayName": Translation.tr("Circles"),
-                        "icon": "circle",
-                        "value": "circles"
-                    }]
+                    currentValue: sidebarsRoot.sidebar.dashboardHeader.buttonsDesign
+                    onSelected: newValue => sidebarsRoot.sidebar.dashboardHeader.buttonsDesign = newValue
+                    options: [
+                        { displayName: Translation.tr("Default"), icon: "crop_square", value: "default" },
+                        { displayName: Translation.tr("Circles"), icon: "circle", value: "circles" }
+                    ]
                 }
             }
         }
 
+        // ── Screen corners ────────────────────────────────────────────────
         ContentSection {
-            title: Translation.tr("Quick Toggles & Sliders")
-            icon: "tune"
-            tooltip: Translation.tr("Configure quick toggle layout, Android columns and capsule sliders.")
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: Appearance.sizes.elevationMargin / 2
-
-                ConfigSubpageRow {
-                    buttonIcon: "tune"
-                    title: Translation.tr("Quick toggles and slider settings")
-                    description: Translation.tr("Configure toggle styles, Android column count, capsule sliders, and fixed sliders")
-                    onClicked: sidebarsRoot.activeSubPage = Qt.resolvedUrl("widgets/SidebarQuickTogglesConfig.qml")
-                }
-            }
-        }
-
-        ContentSection {
+            visible: sidebarsRoot.cornersAvailable
             title: Translation.tr("Screen Corners")
             icon: "mouse"
-            visible: Config.options.panelFamily !== "tablet"
 
             ConfigSwitch {
                 buttonIcon: "touch_app"
                 text: Translation.tr("Enable corner open")
-                checked: Config.options.sidebar.cornerOpen.enable
+                checked: sidebarsRoot.sidebar.cornerOpen.enable
                 configPage: Qt.resolvedUrl("widgets/ScreenCornersConfig.qml")
                 property bool readyForToggle: false
                 Component.onCompleted: readyForToggle = true
                 onCheckedChanged: {
                     if (!readyForToggle || !Config.ready)
                         return;
-                    Config.options.sidebar.cornerOpen.enable = checked;
+                    sidebarsRoot.sidebar.cornerOpen.enable = checked;
                 }
+
                 StyledToolTip {
                     text: Translation.tr("Toggle corner open activation. Click button text to configure hover trigger, vertical offset, and region bounds.")
                 }
             }
         }
 
+        // ── Related ───────────────────────────────────────────────────────
         ContentSection {
             icon: "link"
             title: Translation.tr("Related settings")
