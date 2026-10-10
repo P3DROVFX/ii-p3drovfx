@@ -138,6 +138,12 @@ Scope {
     }
     Component.onDestruction: transitionScope.forceWindowHandoffInactive()
 
+    IpcHandler { // DRAGTEST
+        target: "realGnomeDragTest" // DRAGTEST
+        function shift(n: int): void { GlobalStates.realGnomeDragShift = n; } // DRAGTEST
+        function commit(ws: int): void { GlobalStates.realGnomeDragCommitWs = ws; Hyprland.dispatch(`hl.dsp.focus({ workspace = ${ws} })`); } // DRAGTEST
+    } // DRAGTEST
+
     Variants {
         id: transitionVariants
         model: Quickshell.screens
@@ -258,7 +264,74 @@ Scope {
             property real slideFromCenter: 0
             readonly property real stripCenter: tRoot.sliding && tRoot.slideToWs > 0
                 ? tRoot.slideFromCenter + (tRoot.slideToWs - tRoot.slideFromCenter) * tRoot.transitionProgress
-                : tRoot.displayedWsId
+                : tRoot.displayedWsId + tRoot.dragCenterOffset
+
+            // ── Drag preview ────────────────────────────────────────────────
+            // A window held at the plane's edge previews the neighbouring
+            // workspace by moving the strip only (RealGnomeWindowPicker); the
+            // drop switches for real, and the switch then starts from where the
+            // strip already is, so nothing slides twice.
+            property real dragCenterOffset: 0
+            property bool dragOffsetAnimated: true
+            property int pendingDragShift: 0
+            Behavior on dragCenterOffset {
+                enabled: tRoot.dragOffsetAnimated && !transitionScope.animationsDisabled
+                NumberAnimation {
+                    duration: Math.round(Math.max(1, Math.min(10, Number(Config.options.appearance.appLaunchAnimation.speed) || 4))
+                        * 100 * Appearance.animMultiplier)
+                    easing.type: Easing.BezierSpline
+                    easing.bezierCurve: [0.22, 1, 0.36, 1, 1, 1]
+                }
+            }
+            function applyDragShift() {
+                const shift = GlobalStates.realGnomeDragShift;
+                if (!tRoot.isRealGnome || !tRoot.monitorFocused || tRoot.sliding)
+                    return;
+                if (shift !== 0) {
+                    tRoot.pendingDragShift = shift;
+                    tRoot.beginPlaneHandover();
+                    if (tRoot.planeHandedOver)
+                        tRoot.dragCenterOffset = shift;
+                } else if (GlobalStates.realGnomeDragCommitWs <= 0) {
+                    tRoot.pendingDragShift = 0;
+                    tRoot.dragCenterOffset = 0;
+                    dragSettleTimer.restart();
+                }
+            }
+            onPlaneHandedOverChanged: {
+                if (tRoot.planeHandedOver && tRoot.pendingDragShift !== 0 && !tRoot.sliding)
+                    tRoot.dragCenterOffset = tRoot.pendingDragShift;
+            }
+            // Back at the middle with nothing dropped: the plane takes over again.
+            Timer {
+                id: dragSettleTimer
+                interval: Math.round(Math.max(1, Math.min(10, Number(Config.options.appearance.appLaunchAnimation.speed) || 4))
+                    * 100 * Appearance.animMultiplier) + 40
+                onTriggered: {
+                    if (GlobalStates.realGnomeDragShift === 0 && !tRoot.sliding && tRoot.dragCenterOffset === 0)
+                        tRoot.returnPlane();
+                }
+            }
+            // A drop whose switch never arrives slides the strip back.
+            Timer {
+                id: dragCommitFallbackTimer
+                interval: 600
+                onTriggered: {
+                    if (GlobalStates.realGnomeDragCommitWs <= 0)
+                        return;
+                    GlobalStates.realGnomeDragCommitWs = 0;
+                    GlobalStates.realGnomeDragShift = 0;
+                    tRoot.applyDragShift();
+                }
+            }
+            Connections {
+                target: GlobalStates
+                function onRealGnomeDragShiftChanged() { tRoot.applyDragShift(); }
+                function onRealGnomeDragCommitWsChanged() {
+                    if (GlobalStates.realGnomeDragCommitWs > 0 && tRoot.monitorFocused)
+                        dragCommitFallbackTimer.restart();
+                }
+            }
             readonly property int workspacesPerGroup: Math.max(1, (Config.options.overview.rows ?? 2) * (Config.options.overview.columns ?? 5))
             // The workspaces on the strip: two either side of an anchor that
             // follows the displayed workspace only once a slide has settled,
@@ -316,6 +389,10 @@ Scope {
                     planeReturnTimer.restart();
             }
             function resetPlaneHandover() {
+                tRoot.dragOffsetAnimated = false;
+                tRoot.dragCenterOffset = 0;
+                tRoot.dragOffsetAnimated = true;
+                tRoot.pendingDragShift = 0;
                 planeHideTimer.stop();
                 planeReturnTimer.stop();
                 tRoot.planeHandedOver = false;
@@ -338,8 +415,9 @@ Scope {
                 const anchor = tRoot.stripAnchorWs > 0 ? tRoot.stripAnchorWs : id;
                 const groupStart = Math.floor((anchor - 1) / tRoot.workspacesPerGroup) * tRoot.workspacesPerGroup + 1;
                 const groupEnd = groupStart + tRoot.workspacesPerGroup - 1;
-                let lo = Math.max(1, Math.min(Math.max(groupStart, anchor - 2), id - 1));
-                let hi = Math.max(Math.min(groupEnd, anchor + 2), id + 1);
+                const previewed = id + Math.round(tRoot.pendingDragShift);
+                let lo = Math.max(1, Math.min(Math.max(groupStart, anchor - 2), id - 1, previewed - 1));
+                let hi = Math.max(Math.min(groupEnd, anchor + 2), id + 1, previewed + 1);
                 if (tRoot.sliding && tRoot.slideToWs > 0) {
                     lo = Math.max(1, Math.min(lo, tRoot.slideFromWs, Math.floor(tRoot.slideFromCenter) - 1));
                     hi = Math.max(hi, tRoot.slideFromWs, Math.ceil(tRoot.slideFromCenter) + 1);
@@ -1037,6 +1115,18 @@ Scope {
                 if (tRoot.isRealGnome)
                     tRoot.beginPlaneHandover()
                 slideFromCenter = center
+                // A dropped drag lands here: the strip is already on this
+                // workspace, so the preview offset folds into the switch.
+                if (tRoot.isRealGnome && (GlobalStates.realGnomeDragCommitWs === activeWsId || tRoot.dragCenterOffset !== 0)) {
+                    dragCommitFallbackTimer.stop()
+                    tRoot.dragOffsetAnimated = false
+                    tRoot.dragCenterOffset = 0
+                    tRoot.dragOffsetAnimated = true
+                    tRoot.pendingDragShift = 0
+                    GlobalStates.realGnomeDragCommitWs = 0
+                    if (GlobalStates.realGnomeDragShift !== 0)
+                        GlobalStates.realGnomeDragShift = 0
+                }
                 slideFromWs = displayedWsId
                 slideToWs = activeWsId
                 slideAnimEnabled = false
@@ -1542,7 +1632,9 @@ Scope {
         }
         // Windows opened while the picker is up fade in at their slot.
         property real appear: 1.0
-        opacity: tile.appear * (!tile.requireFrame || capture.hasContent ? 1.0 : 0.0)
+        readonly property bool dragged: tRoot.isRealGnome && GlobalStates.realGnomeDraggedWindow !== ""
+            && GlobalStates.realGnomeDraggedWindow === tile.address
+        opacity: tile.dragged ? 0.0 : tile.appear * (!tile.requireFrame || capture.hasContent ? 1.0 : 0.0)
         Behavior on opacity {
             enabled: tile.requireFrame && !transitionScope.animationsDisabled
             NumberAnimation { duration: Math.round(180 * Appearance.animMultiplier) }

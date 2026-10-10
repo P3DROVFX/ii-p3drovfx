@@ -1373,6 +1373,13 @@ Singleton {
         root.realGnomePlaneWallpapers = next;
     }
     property string realGnomePlaneHiddenScreen: ""
+    // Real Gnome window drag: the window being dragged (hidden at its slot), how many
+    // workspaces the strip is previewed away from the active one (a real switch would
+    // end the drag, so it only happens on drop), and the workspace a drop is
+    // switching to, so the strip lands there without sliding again.
+    property string realGnomeDraggedWindow: ""
+    property int realGnomeDragShift: 0
+    property int realGnomeDragCommitWs: 0
     // Gnome-like overviews: the focused monitor's zoom waits at 0 until the window
     // captures have a frame and Hyprland has hidden the real windows under them.
     property bool overviewZoomHeld: false
