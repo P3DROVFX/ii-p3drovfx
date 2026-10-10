@@ -447,6 +447,26 @@ Scope {
             readonly property bool isVertical: Config.options.background.parallax.vertical
 
             property list<var> outgoingToplevels: []
+            // Two capture slots trade the incoming/outgoing roles on every
+            // switch. The slot that was on screen keeps its tiles (and their
+            // ScreencopyView frames) as the outgoing side; rebuilding them
+            // under a second Repeater blanked the outgoing windows for the
+            // first frames of the slide.
+            property int currentSlot: 0
+            property list<var> slot0Toplevels: []
+            property list<var> slot1Toplevels: []
+            onFrozenToplevelsChanged: {
+                if (tRoot.currentSlot === 0)
+                    tRoot.slot0Toplevels = tRoot.frozenToplevels;
+                else
+                    tRoot.slot1Toplevels = tRoot.frozenToplevels;
+            }
+            onOutgoingToplevelsChanged: {
+                if (tRoot.currentSlot === 0)
+                    tRoot.slot1Toplevels = tRoot.outgoingToplevels;
+                else
+                    tRoot.slot0Toplevels = tRoot.outgoingToplevels;
+            }
 
             property real transitionProgress: 1.0
             property int transitionDirection: 1 // 1: next, -1: prev
@@ -464,8 +484,9 @@ Scope {
             readonly property bool incomingCapturesReady: {
                 if (!tRoot.incomingModelReady)
                     return false;
-                for (let i = 0; i < incomingRepeater.count; i++) {
-                    const item = incomingRepeater.itemAt(i);
+                const repeater = tRoot.currentSlot === 0 ? slot0Repeater : slot1Repeater;
+                for (let i = 0; i < repeater.count; i++) {
+                    const item = repeater.itemAt(i);
                     if (item && !item.captureReady)
                         return false;
                 }
@@ -487,16 +508,34 @@ Scope {
                         return;
                     }
                     tRoot.slideAnimEnabled = true;
-                    tRoot.transitionProgress = 1.0;
+                    if (transitionScope.animationsDisabled)
+                        tRoot.transitionProgress = 1.0;
+                    else
+                        slideAnim.restart();
                 }
             }
 
-            Behavior on transitionProgress {
-                enabled: tRoot.slideAnimEnabled && !transitionScope.animationsDisabled
-                // GNOME's workspace motion accelerates into the handoff and
-                // settles at the destination instead of using the generic
-                // spatial curve that made the two captures feel detached.
-                animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
+            onSlideAnimEnabledChanged: {
+                if (!tRoot.slideAnimEnabled)
+                    slideAnim.stop();
+            }
+
+            // Same timing as Hyprland's own window motion (Settings ->
+            // Windows -> app animation: iiAppOpen, speed in tenths of a
+            // second), so the slide matches the compositor instead of the
+            // abrupt emphasizedDecel start. Explicit animation, not a
+            // Behavior: a disabled Behavior keeps a running animation alive
+            // and it overwrote the reset of a quick second switch.
+            NumberAnimation {
+                id: slideAnim
+                target: tRoot
+                property: "transitionProgress"
+                from: 0.0
+                to: 1.0
+                duration: Math.round(Math.max(1, Math.min(10, Number(Config.options.appearance.appLaunchAnimation.speed) || 4))
+                    * 100 * Appearance.animMultiplier)
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: [0.22, 1, 0.36, 1, 1, 1]
             }
 
             onTransitionProgressChanged: {
@@ -545,18 +584,26 @@ Scope {
                 // Workspace changed while overview open: determine direction
                 const direction = activeWsId > displayedWsId ? 1 : -1
 
-                // 1. Capture current workspace windows as outgoing
-                outgoingToplevels = frozenToplevels
+                // 1. The slot on screen becomes the outgoing side as-is:
+                // drop a half-finished outgoing slot, flip the roles, then
+                // hand the same list back so its tiles are kept.
+                const previous = frozenToplevels
+                slideAnimEnabled = false
+                outgoingToplevels = []
+                currentSlot = 1 - currentSlot
+                outgoingToplevels = previous
 
                 // 2. Setup progress and direction with animation disabled
-                slideAnimEnabled = false
                 transitionDirection = direction
                 transitionProgress = 0.0
                 slideWaitTicks = 0
                 incomingModelReady = false
 
-                // 3. Switch model to the new workspace (so frozenToplevels updates)
+                // 3. Fill the incoming slot now; the 16 ms coalescing timer
+                // only delayed the first capture frame.
                 displayedWsId = activeWsId
+                toplevelUpdateTimer.stop()
+                refreshToplevels()
 
                 // 4. Start only after the incoming capture has had time to
                 // submit its first frame to the compositor.
@@ -669,43 +716,15 @@ Scope {
                     opacity: tRoot.overviewController ? tRoot.overviewController.dimAmount : 0.0
                 }
 
-                // ── OUTGOING WORKSPACE CONTAINER ────────────────────────────
-                Item {
-                    id: outgoingContainer
-                    width: parent.width
-                    height: parent.height
-                    
-                    x: !tRoot.isVertical ? -tRoot.transitionDirection * tRoot.transitionProgress * tRoot.workspaceSlideDistance : 0
-                    y: tRoot.isVertical ? -tRoot.transitionDirection * tRoot.transitionProgress * tRoot.workspaceSlideDistance : 0
-                    // Workspace changes are a spatial handoff. Keep both
-                    // captures opaque so the wallpaper never shows through a
-                    // cross-fade while the incoming frame is settling.
-                    opacity: tRoot.captureOpacity
-                    scale: 1.0 - (0.02 * tRoot.transitionProgress)
-                    visible: tRoot.shouldBeActive
-                        && tRoot.transitionProgress < 1.0
-                        && outgoingRepeater.count > 0
-
-                    // Apply the same scale transform as the wallpaper
-                    transform: [
-                        Scale {
-                            origin.x: tRoot.captureOriginX
-                            origin.y: tRoot.captureOriginY
-                            xScale: tRoot.captureScale
-                            yScale: tRoot.captureScale
-                        },
-                        Translate {
-                            x: tRoot.captureTranslateX
-                            y: tRoot.captureTranslateY
-                        }
-                    ]
-
+                // ── WORKSPACE SLOTS (roles swap on every switch) ───────────
+                WorkspaceSlot {
+                    slotIndex: 0
+                    hasTiles: slot0Repeater.count > 0
                     Repeater {
-                        id: outgoingRepeater
+                        id: slot0Repeater
                         model: ScriptModel {
-                            values: tRoot.outgoingToplevels
+                            values: tRoot.slot0Toplevels
                         }
-
                         delegate: WindowCaptureTile {
                             required property var modelData
                             required property int index
@@ -714,43 +733,19 @@ Scope {
                             monitorData: tRoot.monitorData
                             screenWidth: tRoot.screen.width
                             screenHeight: tRoot.screen.height
-                            freezeGeometry: true
+                            freezeGeometry: tRoot.currentSlot !== 0
                         }
                     }
                 }
 
-                // ── INCOMING WORKSPACE CONTAINER ────────────────────────────
-                Item {
-                    id: incomingContainer
-                    width: parent.width
-                    height: parent.height
-
-                    x: !tRoot.isVertical ? tRoot.transitionDirection * (1.0 - tRoot.transitionProgress) * tRoot.workspaceSlideDistance : 0
-                    y: tRoot.isVertical ? tRoot.transitionDirection * (1.0 - tRoot.transitionProgress) * tRoot.workspaceSlideDistance : 0
-                    opacity: tRoot.captureOpacity
-                    scale: 0.98 + (0.02 * tRoot.transitionProgress)
-                    visible: tRoot.shouldBeActive && incomingRepeater.count > 0
-
-                    // Apply the same scale transform as the wallpaper
-                    transform: [
-                        Scale {
-                            origin.x: tRoot.captureOriginX
-                            origin.y: tRoot.captureOriginY
-                            xScale: tRoot.captureScale
-                            yScale: tRoot.captureScale
-                        },
-                        Translate {
-                            x: tRoot.captureTranslateX
-                            y: tRoot.captureTranslateY
-                        }
-                    ]
-
+                WorkspaceSlot {
+                    slotIndex: 1
+                    hasTiles: slot1Repeater.count > 0
                     Repeater {
-                        id: incomingRepeater
+                        id: slot1Repeater
                         model: ScriptModel {
-                            values: tRoot.frozenToplevels
+                            values: tRoot.slot1Toplevels
                         }
-
                         delegate: WindowCaptureTile {
                             required property var modelData
                             required property int index
@@ -759,12 +754,49 @@ Scope {
                             monitorData: tRoot.monitorData
                             screenWidth: tRoot.screen.width
                             screenHeight: tRoot.screen.height
-                            freezeGeometry: false
+                            freezeGeometry: tRoot.currentSlot !== 1
                         }
                     }
                 }
             }
         }
+    }
+
+    // ── Workspace capture slot ──────────────────────────────────────────────
+    // Incoming: slides in from the switch direction. Outgoing: the previous
+    // workspace leaving the other way. Both stay opaque so the wallpaper
+    // never shows through a cross-fade.
+    component WorkspaceSlot: Item {
+        required property int slotIndex
+        property bool hasTiles: false
+        readonly property bool incoming: tRoot.currentSlot === slotIndex
+        readonly property real offset: incoming
+            ? tRoot.transitionDirection * (1.0 - tRoot.transitionProgress) * tRoot.workspaceSlideDistance
+            : -tRoot.transitionDirection * tRoot.transitionProgress * tRoot.workspaceSlideDistance
+
+        width: parent.width
+        height: parent.height
+        x: !tRoot.isVertical ? offset : 0
+        y: tRoot.isVertical ? offset : 0
+        opacity: tRoot.captureOpacity
+        scale: incoming ? 0.98 + (0.02 * tRoot.transitionProgress) : 1.0 - (0.02 * tRoot.transitionProgress)
+        visible: tRoot.shouldBeActive
+            && hasTiles
+            && (incoming || tRoot.transitionProgress < 1.0)
+
+        // Apply the same scale transform as the wallpaper
+        transform: [
+            Scale {
+                origin.x: tRoot.captureOriginX
+                origin.y: tRoot.captureOriginY
+                xScale: tRoot.captureScale
+                yScale: tRoot.captureScale
+            },
+            Translate {
+                x: tRoot.captureTranslateX
+                y: tRoot.captureTranslateY
+            }
+        ]
     }
 
     // ── Per-window capture item ─────────────────────────────────────────────
