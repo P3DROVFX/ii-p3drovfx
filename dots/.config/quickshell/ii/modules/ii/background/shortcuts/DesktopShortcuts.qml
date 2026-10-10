@@ -18,6 +18,9 @@ Singleton {
     // next is announced so the layer opens its rename at once.
     property var renameOnCreate: null
     signal createdForRename(string screenName, string itemId)
+    // Something on the desktop was opened: the layers drop their selection,
+    // so the opened icon is not left highlighted under the new window.
+    signal launched(string itemId)
     // The icons' hover and selection plates, per screen, in screen pixels.
     // The layer publishes them and the wallpaper surface draws them: the
     // widgets surface is compositor-blurred behind anything translucent.
@@ -42,6 +45,9 @@ Singleton {
     property string error: ""
     property var importQueue: []
     property var currentImport: null
+    // Folder path → up to four images drawn on its icon (Dolphin's folder
+    // thumbnails), from the last scan. Not persisted.
+    property var folderPreviews: ({})
 
     // ── Desktop Folder Watcher & Scanner ───────────────────────────────────
     FolderListModel {
@@ -640,6 +646,15 @@ Singleton {
     function syncFromDisk(diskItems) {
         if (!Persistent.ready || Persistent.blockWrites)
             return;
+        // Kept beside the store, never in it: a folder's contents changing
+        // must not rewrite the saved layout.
+        const previews = {};
+        for (const d of diskItems) {
+            if (d.type === "directory" && Array.isArray(d.previews) && d.previews.length > 0)
+                previews[d.path] = d.previews;
+        }
+        if (JSON.stringify(previews) !== JSON.stringify(root.folderPreviews))
+            root.folderPreviews = previews;
         const currentScreens = Object.assign({}, root.screens);
         let changed = false;
 
@@ -833,12 +848,16 @@ Singleton {
         Quickshell.execDetached(["xdg-open", root.desktopFolder]);
     }
 
-    function importUrls(screenName, urls, x, y, targetId, width, height) {
+    // Dropped and pasted files and folders are linked, never copied: the
+    // desktop shows them where they live (a dropped project folder was once
+    // copied whole, 196 GB, in the background). "copy" and "move" remain
+    // for a caller that means them.
+    function importUrls(screenName, urls, x, y, targetId, width, height, mode = "link") {
         if (!Persistent.ready || !urls.length)
             return false;
         Quickshell.execDetached(["mkdir", "-p", root.desktopFolder]);
         root.importQueue.push({ screen: screenName, urls: urls, x: x, y: y,
-            target: targetId, width: width, height: height });
+            target: targetId, width: width, height: height, mode: mode });
         root.startImport();
         return true;
     }
@@ -849,7 +868,8 @@ Singleton {
         root.error = "";
         root.currentImport = root.importQueue.shift();
         resolver.command = ["/usr/bin/python3", Directories.scriptPath + "/desktop_shortcuts.py",
-            "copy-to-desktop", root.desktopFolder, JSON.stringify(root.currentImport.urls)];
+            "copy-to-desktop", root.desktopFolder, JSON.stringify(root.currentImport.urls),
+            root.currentImport.mode ?? "link"];
         resolver.running = true;
     }
 
@@ -1295,11 +1315,14 @@ Singleton {
         if (entry.type === "file" && /\.appimage$/i.test(entry.path ?? ""))
             Quickshell.execDetached(["sh", "-c", '[ -x "$1" ] && exec "$1"; exec xdg-open "$1"', "sh", entry.path]);
         else if ((entry.type === "directory" || entry.type === "file") && entry.path)
-            Quickshell.execDetached(["xdg-open", entry.path]);
+            // Through a link's target, so a linked folder opens where it
+            // lives rather than under Desktop/.
+            Quickshell.execDetached(["sh", "-c", 'exec xdg-open "$(readlink -f -- "$1")"', "sh", entry.path]);
         else if (entry.path)
             Quickshell.execDetached(["gio", "launch", entry.path]);
         else
             TaskbarApps.getCachedDesktopEntry(entry.id)?.execute();
+        root.launched(entry.id);
         Qt.callLater(() => root.countLaunch(entry.id));
     }
     // "Most used" is fed here: the entry, wherever it lives - loose on any

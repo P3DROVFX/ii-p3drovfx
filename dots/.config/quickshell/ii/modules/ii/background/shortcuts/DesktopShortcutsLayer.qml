@@ -475,6 +475,12 @@ Item {
             root.renameWhenPlaced = itemId;
             Qt.callLater(root.openPendingRename);
         }
+        // Opened - by double-click, Enter, the menu or a group: the
+        // selection goes, or its plate stays lit under the window.
+        function onLaunched(itemId) {
+            root.armedId = "";
+            root.clearSelection();
+        }
     }
 
     // ── Plates on the wallpaper ────────────────────────────────────────────
@@ -1165,12 +1171,45 @@ Item {
                 Component {
                     id: singleIcon
                     IconImage {
+                        id: glyphIcon
                         implicitSize: root.iconSize
                         // The tiles ARE minified in Edit Mode (the mode's
                         // shrink has no counter for them — they are the
                         // desktop). Mipmapping keeps their edges clean.
                         mipmap: true
                         source: DesktopShortcuts.iconSource(tile.entry.icon, tile.entry.type === "file" ? "text-x-generic" : "folder")
+
+                        // A folder shows what is in it, as Dolphin does: up
+                        // to four pictures on the folder's front, one alone
+                        // drawn large. The face is the part of a folder icon
+                        // below the tab, kept clear of its rim.
+                        readonly property var previews: tile.entry.type === "directory"
+                            ? (DesktopShortcuts.folderPreviews[tile.entry.path] ?? []) : []
+                        Grid {
+                            visible: glyphIcon.previews.length > 0
+                            x: glyphIcon.width * 0.2
+                            y: glyphIcon.height * 0.32
+                            width: glyphIcon.width * 0.6
+                            height: glyphIcon.height * 0.52
+                            columns: glyphIcon.previews.length > 1 ? 2 : 1
+                            spacing: glyphIcon.width * 0.04
+                            readonly property real cell: glyphIcon.previews.length > 1 ? (width - spacing) / 2 : width
+                            readonly property real cellHeight: glyphIcon.previews.length > 1 ? (height - spacing) / 2 : height
+                            Repeater {
+                                model: glyphIcon.previews
+                                delegate: Image {
+                                    required property string modelData
+                                    width: parent.cell
+                                    height: parent.cellHeight
+                                    source: "file://" + modelData
+                                    sourceSize: Qt.size(Math.ceil(width * 2), Math.ceil(height * 2))
+                                    fillMode: Image.PreserveAspectFit
+                                    asynchronous: true
+                                    mipmap: true
+                                    smooth: true
+                                }
+                            }
+                        }
                     }
                 }
                 Component {

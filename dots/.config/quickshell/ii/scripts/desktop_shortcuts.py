@@ -94,8 +94,69 @@ def appimage_icon(path: Path):
     return str(target)
 
 
+THUMBNAIL_ROOT = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "thumbnails"
+PREVIEW_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg"}
+PREVIEW_IMAGE_MAX_BYTES = 16 * 1024 * 1024
+PREVIEW_MAX = 4
+PREVIEW_SCAN_LIMIT = 2000
+
+
+def cached_thumbnail(path: Path):
+    """The freedesktop thumbnail a file manager already made for `path`
+    (Dolphin, Nautilus...), when it is at least as new as the file."""
+    import hashlib
+    uri = Gio.File.new_for_path(str(path)).get_uri()
+    name = hashlib.md5(uri.encode()).hexdigest() + ".png"
+    mtime = path.stat().st_mtime
+    for size in ("x-large", "large", "normal"):
+        thumb = THUMBNAIL_ROOT / size / name
+        try:
+            if thumb.stat().st_mtime >= mtime:
+                return str(thumb)
+        except OSError:
+            continue
+    return None
+
+
+def folder_previews(path: Path):
+    """Up to four images for a folder's icon, like Dolphin's folder
+    thumbnails: from its top level, in name order, the files that have a
+    picture - a cached thumbnail, a small image, an AppImage's own icon."""
+    import itertools
+    previews = []
+    try:
+        with os.scandir(path) as it:
+            names = sorted((e.name for e in itertools.islice(it, PREVIEW_SCAN_LIMIT)
+                            if not e.name.startswith(".")), key=str.lower)
+    except OSError:
+        return previews
+    for name in names:
+        child = path / name
+        try:
+            if not child.is_file():
+                continue
+            real = child.resolve()
+            picture = cached_thumbnail(real)
+            if not picture and real.suffix.lower() in PREVIEW_IMAGE_SUFFIXES \
+                    and real.stat().st_size <= PREVIEW_IMAGE_MAX_BYTES:
+                picture = str(real)
+            if not picture and real.suffix.lower() == ".appimage":
+                picture = appimage_icon(real)
+        except OSError:
+            continue
+        if picture:
+            previews.append(picture)
+            if len(previews) == PREVIEW_MAX:
+                break
+    return previews
+
+
 def resolve_path(path: Path):
-    path = path.resolve()
+    # Everything up to the last component is resolved, the last is not: a
+    # link on the desktop stays the link, so rename and trash act on it and
+    # never on the folder it points to. Type and icon still follow it.
+    path = Path(os.path.normpath(path))
+    path = path.parent.resolve() / path.name
     if path.is_dir():
         return {
             "id": "directory:" + str(path),
@@ -104,6 +165,7 @@ def resolve_path(path: Path):
             "name": path.name or str(path),
             "fileName": path.name,
             "icon": "folder",
+            "previews": folder_previews(path),
             "modified": int(path.stat().st_mtime * 1000) if path.exists() else 0
         }
     if not path.is_file():
@@ -301,6 +363,9 @@ def cmd_rename(desktop_dir: str, item_id_or_path: str, new_name: str):
         if dst != src:
             os.rename(src, dst)
         try:
+            # A linked launcher keeps its target's Name=: the rename is the link's.
+            if dst.is_symlink():
+                raise OSError("linked launcher")
             display_name = new_name_clean[:-8] if new_name_clean.endswith(".desktop") else new_name_clean
             lines = dst.read_text(encoding="utf-8").splitlines()
             updated = False
@@ -330,7 +395,7 @@ def cmd_trash(item_id_or_path: str):
             break
 
     src = Path(raw)
-    if not src.exists():
+    if not src.exists() and not src.is_symlink():
         return {"success": True, "path": str(src), "note": "Path already gone"}
 
     try:
@@ -339,7 +404,11 @@ def cmd_trash(item_id_or_path: str):
         return {"success": True, "path": str(src), "trashed": True}
     except Exception as e:
         try:
-            if src.is_dir():
+            # A link goes alone: is_dir() follows it, and rmtree must never
+            # reach the folder it points to.
+            if src.is_symlink():
+                src.unlink()
+            elif src.is_dir():
                 shutil.rmtree(src)
             else:
                 src.unlink()
@@ -348,7 +417,17 @@ def cmd_trash(item_id_or_path: str):
             return {"success": False, "error": f"{e}; delete fallback: {del_err}"}
 
 
-def cmd_copy_to_desktop(desktop_dir: str, json_urls: str):
+def notify(summary: str, body: str = ""):
+    notifier = shutil.which("notify-send")
+    if notifier:
+        import subprocess
+        subprocess.run([notifier, "-a", "Desktop", "-i", "folder", summary, body],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5, check=False)
+
+
+def cmd_copy_to_desktop(desktop_dir: str, json_urls: str, mode: str = "link"):
+    """Bring files and folders onto the desktop: "link" (a symlink, what a
+    drop and Paste do), "copy" or "move"."""
     p = Path(desktop_dir).expanduser().resolve()
     p.mkdir(parents=True, exist_ok=True)
     try:
@@ -369,26 +448,51 @@ def cmd_copy_to_desktop(desktop_dir: str, json_urls: str):
             else:
                 src = Path(value)
 
+            # Already in the desktop directory (a link there included): only
+            # placed. Checked before following links, or dragging a desktop
+            # link back onto the desktop would link it a second time.
+            lexical = Path(os.path.normpath(src))
+            if lexical.parent.resolve() == p and (lexical.exists() or lexical.is_symlink()):
+                items.append(resolve_path(lexical))
+                continue
+
             src = src.resolve()
             if not src.exists():
                 errors.append(f"{value}: File does not exist")
                 continue
 
-            # If source is already in desktop directory, just resolve it
             if src.parent == p:
                 items.append(resolve_path(src))
                 continue
 
+            # A folder that holds the desktop would copy into itself forever.
+            if mode != "link" and src.is_dir() and p.is_relative_to(src):
+                errors.append(f"{value}: Cannot {mode} a folder into itself")
+                continue
+
             dst = p / src.name
             counter = 2
-            while dst.exists():
+            while dst.exists() or dst.is_symlink():
                 stem = src.stem if src.is_file() else src.name
                 suffix = src.suffix if src.is_file() else ""
                 dst = p / f"{stem} ({counter}){suffix}"
                 counter += 1
 
-            if src.is_dir():
-                shutil.copytree(src, dst)
+            if mode == "link":
+                dst.symlink_to(src)
+            elif mode == "move":
+                # A rename on the same filesystem; a copy and delete across.
+                shutil.move(str(src), str(dst))
+            elif src.is_dir():
+                # Runs in the background with nothing on the desktop until it
+                # ends, so a folder copy says when it starts and when it ends.
+                notify(f"Copying “{src.name}” to the desktop", str(src))
+                try:
+                    shutil.copytree(src, dst, symlinks=True)
+                except Exception:
+                    notify(f"Could not copy “{src.name}” to the desktop", "The partial copy was left in place.")
+                    raise
+                notify(f"Copied “{src.name}” to the desktop", str(dst))
             else:
                 shutil.copy2(src, dst)
                 if dst.suffix == ".desktop":
@@ -453,7 +557,11 @@ def main():
     elif cmd == "copy-to-desktop":
         desktop_dir = sys.argv[2] if len(sys.argv) > 2 else "~/Desktop"
         urls = sys.argv[3] if len(sys.argv) > 3 else "[]"
-        print(json.dumps(cmd_copy_to_desktop(desktop_dir, urls), ensure_ascii=False))
+        mode = sys.argv[4] if len(sys.argv) > 4 else "link"
+        if mode not in ("copy", "link", "move"):
+            print(json.dumps({"items": [], "errors": [f"Unknown mode: {mode}"]}))
+            return
+        print(json.dumps(cmd_copy_to_desktop(desktop_dir, urls, mode), ensure_ascii=False))
     elif cmd == "resolve":
         urls = sys.argv[2] if len(sys.argv) > 2 else "[]"
         print(json.dumps(cmd_resolve(urls), ensure_ascii=False))
