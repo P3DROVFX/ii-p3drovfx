@@ -11,6 +11,7 @@ DropArea {
     property bool available: true
     enabled: available && PanelFamily.isIi && !GlobalStates.screenLocked
         && !GlobalStates.isMediaModeActiveForScreen(screenName)
+        && !DesktopShortcuts.hidden
     keys: ["application/x-ii-desktop-item", "application/x-ii-desktop-shortcut", "text/uri-list"]
 
     function isDesktopItem(event) {

@@ -86,112 +86,126 @@ ColumnLayout {
             width: flick.width
             spacing: 3
 
-            SectionLabel {
-                Layout.topMargin: 0
-                text: Translation.tr("Sort by")
-            }
-            Repeater {
-                model: root.sorts
-                delegate: MenuRow {
-                    required property var modelData
-                    required property int index
-                    readonly property bool current: root.options.sortBy === modelData.key
-                    first: index === 0
-                    last: false
-                    symbol: modelData.symbol
-                    title: modelData.title
-                    selected: current && root.options.keepSorted
-                    trailingKind: current ? "value" : "none"
-                    valueText: current ? (root.options.sortDescending ? "↓" : "↑") : ""
-                    onActivated: DesktopShortcuts.sortBy(root.screenName, modelData.key)
-                }
-            }
-            MenuRow {
-                first: false
-                last: true
-                symbol: "autorenew"
-                title: Translation.tr("Keep sorted")
-                subtitle: Translation.tr("Re-sort when icons come and go")
-                trailingKind: "switch"
-                switchChecked: root.options.keepSorted
-                onActivated: DesktopShortcuts.setKeepSorted(!root.options.keepSorted)
-            }
-
-            SectionLabel {
-                text: Translation.tr("Layout")
-            }
             MenuRow {
                 first: true
-                last: false
-                symbol: "grid_on"
-                title: Translation.tr("Align to grid")
-                onActivated: DesktopShortcuts.alignToGrid(root.screenName)
-            }
-            MenuRow {
-                first: false
-                last: false
-                symbol: "auto_awesome_mosaic"
-                title: Translation.tr("Auto-arrange")
-                subtitle: Translation.tr("Drops snap to the nearest free cell")
-                trailingKind: "switch"
-                switchChecked: root.options.autoArrange
-                onActivated: DesktopShortcuts.setAutoArrange(!root.options.autoArrange)
-            }
-            MenuRow {
-                first: false
                 last: true
-                symbol: "stacks"
-                title: Translation.tr("Stacks")
-                subtitle: Translation.tr("Group apps, folders and files by kind")
-                trailingKind: "switch"
-                switchChecked: root.options.stacks
-                onActivated: DesktopShortcuts.setStacks(!root.options.stacks)
-            }
-
-            SectionLabel {
-                text: Translation.tr("Display")
-            }
-            MenuRow {
-                first: true
-                last: false
-                symbol: "photo_size_select_large"
-                title: Translation.tr("Icon size")
-                trailingKind: "stepper"
-                valueText: `${DesktopShortcuts.iconScale}×`
-                stepDownEnabled: DesktopShortcuts.iconScale > DesktopShortcuts.iconSteps[0]
-                stepUpEnabled: DesktopShortcuts.iconScale < DesktopShortcuts.iconSteps[DesktopShortcuts.iconSteps.length - 1]
-                onStepUp: DesktopShortcuts.stepIconScale(1)
-                onStepDown: DesktopShortcuts.stepIconScale(-1)
-            }
-            MenuRow {
-                readonly property bool locked: Config.options.background.desktopIconsLocked ?? false
-                first: false
-                last: false
-                symbol: locked ? "lock" : "lock_open"
-                title: Translation.tr("Lock icons")
-                trailingKind: "switch"
-                switchChecked: locked
-                onActivated: Config.options.background.desktopIconsLocked = !locked
-            }
-            MenuRow {
-                first: false
-                last: false
                 symbol: DesktopShortcuts.hidden ? "visibility_off" : "visibility"
                 title: Translation.tr("Show icons")
+                subtitle: DesktopShortcuts.hidden ? Translation.tr("Hidden") : Translation.tr("Visible")
                 trailingKind: "switch"
                 switchChecked: !DesktopShortcuts.hidden
                 onActivated: DesktopShortcuts.setHidden(!DesktopShortcuts.hidden)
             }
-            MenuRow {
-                first: false
-                last: true
-                symbol: "tune"
-                title: Translation.tr("Icon appearance")
-                subtitle: Translation.tr("Spacing, labels, backgrounds, badges")
-                trailingKind: "chevron"
-                onActivated: {
-                    root.dismissRequested();
-                    GlobalStates.openEditCatalogue("widgets", root.screenName, "desktopIcons");
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 3
+                opacity: DesktopShortcuts.hidden ? 0.45 : 1
+                enabled: !DesktopShortcuts.hidden
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: 150
+                        easing.type: Easing.OutQuad
+                    }
+                }
+
+                SectionLabel {
+                    text: Translation.tr("Sort by")
+                }
+                Repeater {
+                    model: root.sorts
+                    delegate: MenuRow {
+                        required property var modelData
+                        required property int index
+                        readonly property bool current: root.options.sortBy === modelData.key
+                        first: index === 0
+                        last: false
+                        symbol: modelData.symbol
+                        title: modelData.title
+                        selected: current && root.options.keepSorted
+                        trailingKind: current ? "value" : "none"
+                        valueText: current ? (root.options.sortDescending ? "↓" : "↑") : ""
+                        onActivated: DesktopShortcuts.sortBy(root.screenName, modelData.key)
+                    }
+                }
+                MenuRow {
+                    first: false
+                    last: true
+                    symbol: "autorenew"
+                    title: Translation.tr("Keep sorted")
+                    subtitle: Translation.tr("Re-sort when icons come and go")
+                    trailingKind: "switch"
+                    switchChecked: root.options.keepSorted
+                    onActivated: DesktopShortcuts.setKeepSorted(!root.options.keepSorted)
+                }
+
+                SectionLabel {
+                    text: Translation.tr("Layout")
+                }
+                MenuRow {
+                    first: true
+                    last: false
+                    symbol: "grid_on"
+                    title: Translation.tr("Align to grid")
+                    onActivated: DesktopShortcuts.alignToGrid(root.screenName)
+                }
+                MenuRow {
+                    first: false
+                    last: false
+                    symbol: "auto_awesome_mosaic"
+                    title: Translation.tr("Auto-arrange")
+                    subtitle: Translation.tr("Drops snap to the nearest free cell")
+                    trailingKind: "switch"
+                    switchChecked: root.options.autoArrange
+                    onActivated: DesktopShortcuts.setAutoArrange(!root.options.autoArrange)
+                }
+                MenuRow {
+                    first: false
+                    last: true
+                    symbol: "stacks"
+                    title: Translation.tr("Stacks")
+                    subtitle: Translation.tr("Group apps, folders and files by kind")
+                    trailingKind: "switch"
+                    switchChecked: root.options.stacks
+                    onActivated: DesktopShortcuts.setStacks(!root.options.stacks)
+                }
+
+                SectionLabel {
+                    text: Translation.tr("Display")
+                }
+                MenuRow {
+                    first: true
+                    last: false
+                    symbol: "photo_size_select_large"
+                    title: Translation.tr("Icon size")
+                    trailingKind: "stepper"
+                    valueText: `${DesktopShortcuts.iconScale}×`
+                    stepDownEnabled: DesktopShortcuts.iconScale > DesktopShortcuts.iconSteps[0]
+                    stepUpEnabled: DesktopShortcuts.iconScale < DesktopShortcuts.iconSteps[DesktopShortcuts.iconSteps.length - 1]
+                    onStepUp: DesktopShortcuts.stepIconScale(1)
+                    onStepDown: DesktopShortcuts.stepIconScale(-1)
+                }
+                MenuRow {
+                    readonly property bool locked: Config.options.background.desktopIconsLocked ?? false
+                    first: false
+                    last: false
+                    symbol: locked ? "lock" : "lock_open"
+                    title: Translation.tr("Lock icons")
+                    trailingKind: "switch"
+                    switchChecked: locked
+                    onActivated: Config.options.background.desktopIconsLocked = !locked
+                }
+                MenuRow {
+                    first: false
+                    last: true
+                    symbol: "tune"
+                    title: Translation.tr("Icon appearance")
+                    subtitle: Translation.tr("Spacing, labels, backgrounds, badges")
+                    trailingKind: "chevron"
+                    onActivated: {
+                        root.dismissRequested();
+                        GlobalStates.openEditCatalogue("widgets", root.screenName, "desktopIcons");
+                    }
                 }
             }
 

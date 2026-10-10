@@ -276,7 +276,7 @@ Item {
         {
             "key": "icons",
             "shown": root.hasIcons,
-            "symbol": "grid_view",
+            "symbol": DesktopShortcuts.hidden ? "visibility_off" : "grid_view",
             "title": Translation.tr("Desktop icons"),
             "trailing": "chevron"
         },
