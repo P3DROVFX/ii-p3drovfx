@@ -15,17 +15,24 @@ QtObject {
 
     // The content closes most of the gap to its destination in about this long
     readonly property real followTau: 0.02
-    // The glide loses its speed over about this long; its length is speed times this
-    readonly property real glideTau: 0.25
-    // How far back from the lift the speed is measured, in ms
-    readonly property int windowMs: 100
-    // Below this speed a touch is a tap or a resting finger, not a fling: no glide
-    readonly property real glideStartSpeed: 40
-    // The glide is over once it has slowed below this, px/s
-    readonly property real stopSpeed: 8
+    // The glide keeps (1 - friction) of its speed per ms: it fades over glideTau
+    // (about half a second) and runs speed × glideTau in all
+    readonly property real friction: 0.002
+    readonly property real glideTau: -0.001 / Math.log(1 - friction)
+    // The lift speed is the mean of the last few per-event speeds that are no older
+    // than relevanceMs; an event closer than minSampleMs to the last sample is
+    // folded into the next, so a burst of near-simultaneous events can't spike it
+    readonly property int relevanceMs: 100
+    readonly property int maxSamples: 5
+    readonly property int minSampleMs: 5
+    // Speeds in device px per ms, as the finger sees the screen; px/s on the content
+    // is that × 1000 / devicePixelRatio. Below glideStartSpeed a lift is a tap or a
+    // slow placement, not a fling: no glide. Below stopSpeed the glide is over.
+    readonly property real devicePixelRatio: Math.max(1, Screen.devicePixelRatio || 1)
+    readonly property real glideStartSpeed: 0.5 * 1000 / devicePixelRatio
+    readonly property real stopSpeed: 0.01 * 1000 / devicePixelRatio
     // A touch after this much silence lands on the content as it is: a glide stops dead
     readonly property int resumeMs: 60
-    readonly property real maxSpeed: 4000
     // Off: the content follows the fingers and stops where they stop
     readonly property bool glide: Config.options?.interactions?.scrolling?.touchpadKinetic ?? true
 
@@ -43,7 +50,12 @@ QtObject {
     property real _glideSpeed: 0
     property double _lastEventMs: 0
     property double _lastTickMs: 0
-    // { t, d } for the events of the last windowMs; d is the step fed
+    // Where the fingers alone have moved the content this touch (unclamped), and the
+    // position and time of the last speed sample
+    property real _fingerY: 0
+    property real _sampleY: 0
+    property double _sampleMs: 0
+    // { t, v } for the last maxSamples per-event speeds, v in px/s (positive = down)
     property var _samples: []
 
     /**
@@ -59,12 +71,22 @@ QtObject {
                 // A new touch starts from wherever the content is now, a glide included
                 _eventTarget = flickable.contentY;
                 _samples = [];
+                _fingerY = 0;
+                _sampleY = 0;
+                _sampleMs = now;
                 _glideSpeed = 0;
                 _lastTickMs = now;
                 frame.running = true;
             }
             _eventTarget = clamp(_eventTarget - step);
-            _samples = _samples.concat([{ t: now, d: step }]).filter(s => s.t >= now - windowMs);
+            // The content moves against the step
+            _fingerY -= step;
+            if (now - _sampleMs > minSampleMs) {
+                const v = (_fingerY - _sampleY) / (now - _sampleMs) * 1000;
+                _samples = _samples.concat([{ t: now, v: v }]).slice(-maxSamples);
+                _sampleY = _fingerY;
+                _sampleMs = now;
+            }
             _lastEventMs = now;
             _target = _eventTarget;
         }
@@ -72,9 +94,9 @@ QtObject {
             lift(now);
     }
 
-    // The fingers left the pad: glide on at the speed of their last windowMs
+    // The fingers left the pad: glide on at the speed they had just before
     function lift(now) {
-        const speed = speedSince(now - windowMs);
+        const speed = liftSpeed(now);
         _samples = [];
         if (speed === 0)
             return;
@@ -100,17 +122,19 @@ QtObject {
         return Math.max(minY, Math.min(maxY, value));
     }
 
-    // The content speed the events since `fromMs` add up to, zero when too slow to glide
-    function speedSince(fromMs) {
+    // The mean of the per-event speeds no older than relevanceMs at nowMs, zero when
+    // too slow to glide. Resting fingers age every sample out: no speed.
+    function liftSpeed(nowMs) {
         if (!glide)
             return 0;
+        const recent = _samples.filter(s => nowMs - s.t < relevanceMs);
+        if (recent.length === 0)
+            return 0;
         let sum = 0;
-        for (const s of _samples)
-            if (s.t >= fromMs)
-                sum += s.d;
-        // The content moves against the step
-        const speed = Math.max(-maxSpeed, Math.min(maxSpeed, -sum / (windowMs / 1000)));
-        return Math.abs(speed) < glideStartSpeed ? 0 : speed;
+        for (const s of recent)
+            sum += s.v;
+        const speed = sum / recent.length;
+        return Math.abs(speed) <= glideStartSpeed ? 0 : speed;
     }
 
     // How far the glide has carried the content past the lift, at nowMs
