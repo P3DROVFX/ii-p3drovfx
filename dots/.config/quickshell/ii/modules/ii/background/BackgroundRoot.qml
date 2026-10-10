@@ -793,6 +793,11 @@ PanelWindow {
             screenName: bgRoot.editScreenName
         }
 
+        DesktopIconPlates {
+            anchors.fill: parent
+            screenName: bgRoot.editScreenName
+        }
+
         // Edit Mode's card: the blurred backdrop, corner, shadow and edge around the shrunk
         // desktop, drawn over the wallpaper and cut out to the card. Loaded only while the mode is
         // on or animating, so at rest nothing here exists. Non-interactive: the widgets surface

@@ -14,6 +14,19 @@ Singleton {
 
     readonly property string desktopFolder: Directories.desktopPath
     property var pendingPlacements: ({})
+    // Set by the menu's New folder / New document: the item the scan places
+    // next is announced so the layer opens its rename at once.
+    property var renameOnCreate: null
+    signal createdForRename(string screenName, string itemId)
+    // The icons' hover and selection plates, per screen, in screen pixels.
+    // The layer publishes them and the wallpaper surface draws them: the
+    // widgets surface is compositor-blurred behind anything translucent.
+    property var plates: ({})
+    function setPlates(screenName, list) {
+        const next = Object.assign({}, root.plates);
+        next[screenName] = list;
+        root.plates = next;
+    }
     property var actionQueue: []
 
     // Decode only when persisted state changes, not on pointer movement or per icon.
@@ -291,6 +304,75 @@ Singleton {
         }
         return null;
     }
+    // The spot nearest (x, y) where a tile overlaps no other: the point
+    // itself when it is clear, else the closest edge-to-edge neighbour of
+    // whatever blocks it, else the nearest free grid cell.
+    function isLocalPath(path) {
+        return typeof path === "string" && path.startsWith("/");
+    }
+    function fileUrl(path) {
+        return "file://" + path.split("/").map(part => encodeURIComponent(part)).join("/");
+    }
+    function fits(g, others, x, y) {
+        return !others.some(other => Math.abs(x - other.x) < g.cw && Math.abs(y - other.y) < g.ch);
+    }
+    function freeSpot(g, others, x, y) {
+        const clampX = v => Math.max(0, Math.min(g.area.screenWidth - g.cw, Math.round(v)));
+        const clampY = v => Math.max(0, Math.min(g.area.screenHeight - g.ch, Math.round(v)));
+        const ox = clampX(x), oy = clampY(y);
+        if (root.fits(g, others, ox, oy))
+            return { x: ox, y: oy };
+        let best = null, bestDistance = Infinity;
+        const consider = (px, py) => {
+            px = clampX(px);
+            py = clampY(py);
+            const d = (px - ox) * (px - ox) + (py - oy) * (py - oy);
+            if (d < bestDistance && root.fits(g, others, px, py)) {
+                bestDistance = d;
+                best = { x: px, y: py };
+            }
+        };
+        for (const other of others) {
+            if (Math.abs(ox - other.x) >= g.cw * 2 || Math.abs(oy - other.y) >= g.ch * 2)
+                continue;
+            for (const dx of [-1, 0, 1]) {
+                for (const dy of [-1, 0, 1]) {
+                    if (dx === 0 && dy === 0)
+                        continue;
+                    consider(dx === 0 ? ox : other.x + dx * g.cw, dy === 0 ? oy : other.y + dy * g.ch);
+                }
+            }
+        }
+        if (best)
+            return best;
+        const want = root.cellOf(g, ox, oy);
+        const cell = root.nearestFree(g, root.takenCells(g, others), want.col, want.row);
+        return root.cellPos(g, cell.col, cell.row);
+    }
+    // Moved items resolved one after another against what stays and what
+    // has already landed, so a group keeps its shape where it fits.
+    function resolveMoved(g, items, movedIds) {
+        const moving = new Set(movedIds);
+        const placed = items.filter(item => !moving.has(item.id));
+        const landed = new Map();
+        for (const item of items) {
+            if (!moving.has(item.id))
+                continue;
+            const spot = root.freeSpot(g, placed, item.x, item.y);
+            const moved = Object.assign({}, item, spot);
+            placed.push(moved);
+            landed.set(item.id, moved);
+        }
+        return items.map(item => landed.get(item.id) ?? item);
+    }
+    // Where a free-form drop at (x, y) lands, for the layer's ghost.
+    function planFreeDrop(screenName, ids, x, y) {
+        const g = root.grid(screenName);
+        const skip = new Set(ids);
+        const spot = root.freeSpot(g, root.itemsFor(screenName).filter(item => !skip.has(item.id)), x, y);
+        return { x: spot.x, y: spot.y, bumpId: "", bumpX: 0, bumpY: 0 };
+    }
+
     function takenCells(g, items, exceptIds) {
         const taken = new Set();
         for (const item of items) {
@@ -625,6 +707,7 @@ Singleton {
         }
 
         const newItems = diskItems.filter(d => !matchedDiskPaths.has(d.path));
+        let created = null;
         if (newItems.length > 0) {
             changed = true;
             const primaryScreen = (Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name)?.name)
@@ -674,6 +757,10 @@ Singleton {
                         const pos = root.cellPos(targetG, cell.col, cell.row);
                         px = pos.x;
                         py = pos.y;
+                    } else {
+                        const spot = root.freeSpot(targetG, nextScreens[targetScreen], px, py);
+                        px = spot.x;
+                        py = spot.y;
                     }
                 }
 
@@ -684,6 +771,10 @@ Singleton {
                     launchCount: 0
                 });
                 nextScreens[targetScreen].push(placed);
+                if (foundPending && root.renameOnCreate) {
+                    created = { screen: targetScreen, id: placed.id };
+                    root.renameOnCreate = null;
+                }
             }
         }
 
@@ -694,12 +785,15 @@ Singleton {
             }
             root.writeAll(nextScreens);
         }
+        if (created)
+            root.createdForRename(created.screen, created.id);
     }
 
     function createFolder(screenName, x, y, name = "") {
         Quickshell.execDetached(["mkdir", "-p", root.desktopFolder]);
         root.registerPlacement(name || "New Folder", screenName, x, y);
         root.registerPlacement("__new_item__", screenName, x, y);
+        root.renameOnCreate = { screen: screenName };
         actionRunner.run(["/usr/bin/python3", Directories.scriptPath + "/desktop_shortcuts.py",
             "create-folder", root.desktopFolder, name]);
     }
@@ -708,6 +802,7 @@ Singleton {
         Quickshell.execDetached(["mkdir", "-p", root.desktopFolder]);
         root.registerPlacement(name || "New Document.txt", screenName, x, y);
         root.registerPlacement("__new_item__", screenName, x, y);
+        root.renameOnCreate = { screen: screenName };
         actionRunner.run(["/usr/bin/python3", Directories.scriptPath + "/desktop_shortcuts.py",
             "create-file", root.desktopFolder, name]);
     }
@@ -911,7 +1006,9 @@ Singleton {
             root.releaseKeptOrder();
             let next = items.map(item => item.id === itemId
                 ? Object.assign({}, item, { x: Math.round(x), y: Math.round(y) }) : item);
-            if (root.options.autoArrange) {
+            if (!root.options.autoArrange)
+                next = root.resolveMoved(root.grid(screenName), next, [itemId]);
+            else {
                 const plan = root.planDrop(screenName, itemId, x, y);
                 next = items.map(item => item.id === itemId ? Object.assign({}, item, { x: plan.x, y: plan.y })
                     : item.id === plan.bumpId ? Object.assign({}, item, { x: plan.bumpX, y: plan.bumpY }) : item);
@@ -959,6 +1056,8 @@ Singleton {
             : item);
         if (root.options.autoArrange)
             next = root.settle(root.grid(screenName), next, moves.map(move => move.id));
+        else
+            next = root.resolveMoved(root.grid(screenName), next, moves.map(move => move.id));
         root.save(screenName, next);
     }
 

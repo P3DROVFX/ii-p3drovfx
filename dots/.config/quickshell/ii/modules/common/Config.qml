@@ -4476,7 +4476,7 @@ Singleton {
                 // Desktop shortcut icon scale (apps, folders, files). Fixed
                 // steps only — 1, 1.25, 1.5 — written from the Edit Mode
                 // panel; the layer re-reads it, one binding, no rebuild.
-                property real desktopIconScale: 1.0
+                property real desktopIconScale: 1.5
                 // Drag-lock for desktop shortcut icons. The desktop menu's
                 // "Lock icons" row is the writer outside Settings; the layer
                 // reads it in one binding and gates only drag START — click,
@@ -4501,7 +4501,7 @@ Singleton {
                     property bool stacks: false // one stack per kind: apps, folders, files
                     property bool hidden: false // a clean desktop; the icons stay stored
                     property string labels: "always" // always | hover | never
-                    property int labelLines: 1 // 1 | 2
+                    property int labelLines: 2 // 1 | 2
                     property string labelStyle: "auto" // auto | shadow | pill
                     property string iconBackground: "none" // none | translucent | circle | squircle
                     property bool runningBadges: true // the dock's "open" dot under running apps

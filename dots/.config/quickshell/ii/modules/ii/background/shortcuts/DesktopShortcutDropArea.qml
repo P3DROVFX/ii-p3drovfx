@@ -11,7 +11,11 @@ DropArea {
     property bool available: true
     enabled: available && PanelFamily.isIi && !GlobalStates.screenLocked
         && !GlobalStates.isMediaModeActiveForScreen(screenName)
-    keys: ["application/x-ii-desktop-shortcut", "text/uri-list"]
+    keys: ["application/x-ii-desktop-item", "application/x-ii-desktop-shortcut", "text/uri-list"]
+
+    function isDesktopItem(event) {
+        return event.formats.indexOf("application/x-ii-desktop-item") !== -1;
+    }
 
     function pointFor(event) {
         return root.iconsLayer ? root.iconsLayer.mapFromItem(root, event.x, event.y) : Qt.point(event.x, event.y);
@@ -22,12 +26,38 @@ DropArea {
             root.iconsLayer.dropTargetId = root.iconsLayer.targetAt(p.x, p.y, "");
         }
     }
-    onEntered: event => root.updateTarget(event)
-    onPositionChanged: event => root.updateTarget(event)
+    // A desktop icon's own drag follows through the layer that started it,
+    // which owns the merge target and the landing ghost.
+    function follow(event) {
+        if (root.isDesktopItem(event)) {
+            if (root.iconsLayer)
+                root.iconsLayer.systemDragMove(root.pointFor(event));
+            return;
+        }
+        root.updateTarget(event);
+    }
+    onEntered: event => root.follow(event)
+    onPositionChanged: event => root.follow(event)
     onExited: { if (iconsLayer) iconsLayer.dropTargetId = ""; }
     onDropped: event => root.handleDrop(event)
     function handleDrop(event) {
         const p = root.pointFor(event);
+        if (root.isDesktopItem(event)) {
+            if (root.iconsLayer && root.iconsLayer.systemDragDrop(p)) {
+                event.accept(Qt.MoveAction);
+                return;
+            }
+            try {
+                const data = JSON.parse(event.getDataAsString("application/x-ii-desktop-item"));
+                if (data.screen && data.screen !== root.screenName) {
+                    DesktopShortcuts.moveToScreen(data.screen, root.screenName, data.ids);
+                    event.accept(Qt.MoveAction);
+                }
+            } catch (error) {
+                console.warn("[DesktopShortcuts] Invalid desktop item drop:", error);
+            }
+            return;
+        }
         const target = root.iconsLayer?.dropTargetId ?? "";
         if (root.iconsLayer)
             root.iconsLayer.dropTargetId = "";

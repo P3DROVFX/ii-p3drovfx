@@ -147,6 +147,15 @@ PanelWindow {
         if (bgWidgetsWindow.widgetTyping)
             typingFocusSeedTimer.restart();
     }
+    // An icon's menu or rename opened from another surface (the desktop
+    // menu's New folder) has no click on this one to earn OnDemand focus.
+    readonly property bool iconsDialogOpen: desktopIcons.item?.dialogOpen ?? false
+    onIconsDialogOpenChanged: {
+        if (!bgWidgetsWindow.iconsDialogOpen)
+            return;
+        bgWidgetsWindow.typingFocusSeed = true;
+        typingFocusSeedTimer.restart();
+    }
     WlrLayershell.keyboardFocus: (bgWidgetsWindow.editFocusSeed || bgWidgetsWindow.typingFocusSeed) ? WlrKeyboardFocus.Exclusive
         : ((bgWidgetsWindow.widgetTyping || widgetCanvas.draggingActive || widgetCanvas.keyboardFocusHeld || desktopIcons.item?.dialogOpen || desktopIcons.item?.hasSelection) ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None)
     color: "transparent"

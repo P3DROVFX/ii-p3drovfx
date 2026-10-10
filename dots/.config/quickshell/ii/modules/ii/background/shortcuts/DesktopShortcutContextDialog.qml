@@ -196,6 +196,15 @@ ItemContextDialog {
             if (selectAll)
                 fieldInput.selectAll();
         }
+        // The name without its extension, the part a rename is about.
+        function focusStem(isFile: bool): void {
+            fieldInput.forceActiveFocus();
+            const dot = fieldInput.text.lastIndexOf(".");
+            if (isFile && dot > 0)
+                fieldInput.select(0, dot);
+            else
+                fieldInput.selectAll();
+        }
         Layout.fillWidth: true
         implicitHeight: 52
         radius: Math.max(Appearance.rounding.verysmall, Appearance.rounding.windowRounding - 8)
@@ -249,7 +258,7 @@ ItemContextDialog {
                 text: root.entry.name || ""
                 inputEnabled: root.writable
                 onAccepted: saveName.activated()
-                Component.onCompleted: renameField.focusField(true)
+                Component.onCompleted: renameField.focusStem(root.entry.type === "file")
             }
             MenuRow {
                 id: saveName

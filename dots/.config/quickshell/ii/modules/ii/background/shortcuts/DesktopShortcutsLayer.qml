@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Window
 import Quickshell
 import Quickshell.Widgets
 import qs
@@ -11,6 +12,32 @@ import qs.modules.common.widgets
 
 Item {
     id: root
+
+    readonly property real plateRadius: Appearance.rounding.large
+    readonly property real plateInset: -4
+    readonly property color colSelected: Appearance.colors.colSecondaryContainer
+    readonly property real selectedAlpha: 0.82
+    readonly property real focusedAlpha: 0.96
+    readonly property color colHover: Appearance.m3colors.m3surfaceContainerHighest
+    readonly property real hoverAlpha: 0.42
+    readonly property color colGhost: Appearance.colors.colSecondaryContainer
+    readonly property real ghostAlpha: 0.5
+    readonly property var labelAxes: ({ "wght": 650, "wdth": 92, "ROND": 100 })
+    readonly property real labelSize: Math.round(Appearance.font.pixelSize.smaller * Math.max(1, Math.min(1.25, root.iconScale)))
+    readonly property real labelLineHeight: 0.92
+    readonly property real labelGap: 4
+    readonly property int labelLines: (root.options.labelLines ?? 1) === 2 ? 2 : 1
+    // The label's slot is reserved for its full line count, so a row of icons
+    // stays level whatever each name wraps to, and icon + label sit centred.
+    readonly property real labelHeight: Math.ceil(labelMetrics.height * root.labelLineHeight * root.labelLines)
+    FontMetrics {
+        id: labelMetrics
+        font.family: Appearance.font.family.main
+        font.pixelSize: root.labelSize
+    }
+    readonly property real labelShadowOffset: 1
+    readonly property real systemDragEdge: 96
+    readonly property string dragMimeType: "application/x-ii-desktop-item"
 
     required property string screenName
     // The grid is the store's (DesktopShortcuts.cellWidth/cellHeight): the
@@ -337,6 +364,151 @@ Item {
         dropGhost.snapping = false;
     }
 
+    // Off the snap grid, a drop onto another icon is answered by the
+    // nearest clear spot; the ghost shows it only when that differs.
+    function freePlan(tile, pending) {
+        const plan = DesktopShortcuts.planFreeDrop(root.screenName, [tile.entry.id], pending.x, pending.y);
+        return plan.x !== pending.x || plan.y !== pending.y ? plan : null;
+    }
+
+    // ── System drag ────────────────────────────────────────────────────────
+    // On the desktop the tile itself follows the pointer. Once the pointer
+    // reaches a window or the screen-edge band where the bar, dock and island
+    // live, the tile hands over to a real drag (text/uri-list) carrying its
+    // own snapshot, so file managers, browsers, the dock and the island take
+    // it; the tile hides, so one icon is on screen throughout. Dropped back on
+    // a desktop, the DropArea finds the private type and makes it a move.
+    function leavesDesktop(p) {
+        if (GlobalStates.editMode)
+            return false;
+        const window = root.Window.window;
+        if (!window)
+            return false;
+        const w = root.mapToItem(null, p.x, p.y);
+        const edge = root.systemDragEdge;
+        if (w.x < edge || w.y < edge || w.x > window.width - edge || w.y > window.height - edge)
+            return true;
+        const monitor = (HyprlandData.monitors ?? []).find(m => m.name === root.screenName);
+        if (!monitor)
+            return false;
+        const gx = monitor.x + w.x;
+        const gy = monitor.y + w.y;
+        const shown = [monitor.activeWorkspace?.id, monitor.specialWorkspace?.id].filter(id => id);
+        return (HyprlandData.windowList ?? []).some(c => c.mapped !== false && !c.hidden
+            && shown.indexOf(c.workspace?.id) !== -1
+            && gx >= c.at[0] && gx < c.at[0] + c.size[0]
+            && gy >= c.at[1] && gy < c.at[1] + c.size[1]);
+    }
+    property Item systemDragTile: null
+    property var systemDragIds: []
+    property bool systemDropHandled: false
+    readonly property bool systemDragging: root.systemDragTile !== null
+
+    function beginSystemDrag(tile) {
+        if (tile.systemDrag)
+            return;
+        const ids = groupDrag.leaderId === tile.entry.id ? groupDrag.ids : [tile.entry.id];
+        const urls = [];
+        for (const id of ids) {
+            const member = root.tileFor(id);
+            if (member && member.fileUrl !== "")
+                urls.push(member.fileUrl);
+        }
+        if (tile.fileUrl === "" || urls.length === 0)
+            return;
+        tile.Drag.mimeData = {
+            "text/uri-list": urls.join("\r\n") + "\r\n",
+            [root.dragMimeType]: JSON.stringify({ "screen": root.screenName, "ids": ids, "leader": tile.entry.id })
+        };
+        root.systemDropHandled = false;
+        root.systemDragIds = ids;
+        root.systemDragTile = tile;
+        tile.systemDrag = true;
+        tile.Drag.active = true;
+    }
+
+    function systemDragMove(p) {
+        if (root.systemDragTile)
+            root.systemDragTile.dragTo(p);
+    }
+
+    // A drop on this screen's desktop: the pointer's last point, then the
+    // same commit a release makes.
+    function systemDragDrop(p) {
+        const tile = root.systemDragTile;
+        if (!tile)
+            return false;
+        tile.dragTo(p);
+        tile.finishDrag();
+        root.systemDropHandled = true;
+        return true;
+    }
+
+    function endSystemDrag(tile, dropAction) {
+        if (!root.systemDropHandled)
+            tile.cancelDrag();
+        tile.systemDrag = false;
+        tile.Drag.active = false;
+        root.systemDragTile = null;
+        root.systemDragIds = [];
+        root.systemDropHandled = false;
+    }
+
+    // New folder / New document land straight in their rename, at the tile.
+    property string renameWhenPlaced: ""
+    function openPendingRename() {
+        const entry = root.items.find(item => item.id === root.renameWhenPlaced);
+        if (!entry)
+            return;
+        root.renameWhenPlaced = "";
+        const s = root.positionAt(entry.x, entry.y);
+        root.selectedIds = [entry.id];
+        root.openContext(entry.id, s.x + root.cellWidth / 2, s.y + root.cellHeight / 2, "rename");
+    }
+    Connections {
+        target: DesktopShortcuts
+        function onCreatedForRename(screenName, itemId) {
+            if (screenName !== root.screenName)
+                return;
+            root.renameWhenPlaced = itemId;
+            Qt.callLater(root.openPendingRename);
+        }
+    }
+
+    // ── Plates on the wallpaper ────────────────────────────────────────────
+    // Hover, selection and the landing ghost are drawn by DesktopIconPlates on
+    // the wallpaper surface, which is never blurred, whenever this layer sits
+    // 1:1 on the screen; Edit Mode and a scaled overview keep them here.
+    readonly property bool platesOnWallpaper: !GlobalStates.editMode
+        && Math.abs(root.surfaceScale - 1) < 0.001 && root.visible
+    readonly property var plateEntries: {
+        if (!root.platesOnWallpaper)
+            return [];
+        const out = [];
+        const inset = root.plateInset;
+        const push = (id, x, y, kind) => {
+            const p = root.mapToItem(null, x + inset, y + inset);
+            out.push({ "id": id, "x": p.x, "y": p.y, "w": root.cellWidth - inset * 2, "h": root.cellHeight - inset * 2, "kind": kind });
+        };
+        for (let i = 0; i < iconRepeater.count; ++i) {
+            const tile = iconRepeater.itemAt(i);
+            if (!tile || root.systemDragIds.indexOf(tile.entry.id) !== -1 || tile.intro < 1)
+                continue;
+            const follow = tile.dragging ? Qt.point(tile.pending.x - tile.x, tile.pending.y - tile.y)
+                : tile.groupMember ? Qt.point(groupDrag.dx, groupDrag.dy) : Qt.point(0, 0);
+            if (tile.selected)
+                push(tile.entry.id, tile.x + follow.x, tile.y + follow.y,
+                    root.focusId === tile.entry.id && root.selectedIds.length > 1 ? "focus" : "selected");
+            else if (tile.hovered && !tile.dragging && root.dropTargetId !== tile.entry.id)
+                push(tile.entry.id, tile.x, tile.y, "hover");
+        }
+        if (dropGhost.shown)
+            push("__ghost__", dropGhost.x, dropGhost.y, "ghost");
+        return out;
+    }
+    onPlateEntriesChanged: DesktopShortcuts.setPlates(root.screenName, root.plateEntries)
+    Component.onDestruction: DesktopShortcuts.setPlates(root.screenName, [])
+
     // ── Keyboard ───────────────────────────────────────────────────────────
     // The icon the arrows walk from: the last one clicked or reached.
     property string focusId: ""
@@ -483,11 +655,9 @@ Item {
         property bool snapping: false
         width: root.cellWidth
         height: root.cellHeight
-        radius: Appearance.rounding.large
-        color: Qt.alpha(Appearance.colors.colPrimary, 0.1)
-        border.width: 2
-        border.color: Qt.alpha(Appearance.colors.colPrimary, 0.55)
-        opacity: dropGhost.shown ? 1 : 0
+        radius: root.plateRadius
+        color: Qt.alpha(root.colGhost, root.ghostAlpha)
+        opacity: dropGhost.shown && !root.platesOnWallpaper ? 1 : 0
         visible: opacity > 0.001
         scale: dropGhost.shown ? 1 : 0.9
         Behavior on x {
@@ -674,6 +844,128 @@ Item {
                 }
             }
 
+            // ── The drag ───────────────────────────────────────────────────
+            // One path for the pointer and for a system drag the desktop's
+            // own DropArea reports back: `dragTo` follows, `finishDrag`
+            // commits, `cancelDrag` puts everything back.
+            property bool systemDrag: false
+            property url dragImage: ""
+            readonly property string fileUrl: DesktopShortcuts.isLocalPath(tile.entry.path) ? DesktopShortcuts.fileUrl(tile.entry.path) : ""
+
+            Drag.dragType: Drag.Automatic
+            Drag.supportedActions: Qt.CopyAction | Qt.MoveAction | Qt.LinkAction
+            Drag.proposedAction: Qt.CopyAction
+            Drag.imageSource: tile.dragImage
+            Drag.hotSpot.x: tile.pressPoint.x - tile.origin.x
+            Drag.hotSpot.y: tile.pressPoint.y - tile.origin.y
+            Drag.onDragFinished: dropAction => root.endSystemDrag(tile, dropAction)
+
+            function dragTo(p) {
+                const dx = p.x - tile.pressPoint.x;
+                const dy = p.y - tile.pressPoint.y;
+                if (!tile.dragging) {
+                    tile.dragging = true;
+                    root.dragId = tile.entry.id;
+                    if (root.selectedIds.length > 1 && root.isSelected(tile.entry.id)) {
+                        // Grabbing a selected tile drags the whole set.
+                        groupDrag.leaderId = tile.entry.id;
+                        groupDrag.ids = root.selectedIds;
+                        groupDrag.dx = 0;
+                        groupDrag.dy = 0;
+                    } else if (root.hasSelection) {
+                        // Grabbing outside the selection is a click-away
+                        // (the widget canvas's rule): single drag.
+                        root.clearSelection();
+                    }
+                }
+                tile.suppressClick = true;
+                tile.pending = root.positionAt(tile.origin.x + dx, tile.origin.y + dy);
+                if (groupDrag.leaderId === tile.entry.id) {
+                    // Re-clamp the leader's own snapped position to what
+                    // the cluster's tightest member allows, so the whole
+                    // selection stops at the first wall.
+                    const travel = root.groupDelta(groupDrag.ids,
+                        tile.pending.x - tile.origin.x, tile.pending.y - tile.origin.y);
+                    tile.pending = Qt.point(tile.origin.x + travel.x, tile.origin.y + travel.y);
+                    groupDrag.dx = travel.x;
+                    groupDrag.dy = travel.y;
+                    root.dragPlan = null;
+                } else {
+                    root.dropTargetId = DesktopShortcuts.isGroupable(tile.entry) ? root.targetAt(p.x, p.y, tile.entry.id) : "";
+                    root.dragPlan = root.dropTargetId !== "" ? null
+                        : root.autoArrange ? DesktopShortcuts.planDrop(root.screenName, tile.entry.id, tile.pending.x, tile.pending.y)
+                        : tile.systemDrag ? null : root.freePlan(tile, tile.pending);
+                }
+            }
+
+            function finishDrag() {
+                if (!tile.dragging)
+                    return;
+                const itemId = tile.entry.id;
+                const targetId = root.dropTargetId;
+                const p = tile.pending;
+                tile.dragging = false;
+                root.dragId = "";
+                root.dropTargetId = "";
+                root.dragPlan = null;
+                if (groupDrag.leaderId === itemId) {
+                    // One write for the cluster; merging is a single-drag
+                    // gesture, so the group just travels. Every member is
+                    // held where it was dropped and glides from there.
+                    const ids = groupDrag.ids;
+                    const ddx = groupDrag.dx;
+                    const ddy = groupDrag.dy;
+                    for (const id of ids) {
+                        const member = root.tileFor(id);
+                        if (member)
+                            member.holdAt(member.settled.x + ddx, member.settled.y + ddy);
+                    }
+                    groupDrag.leaderId = "";
+                    groupDrag.ids = [];
+                    groupDrag.dx = 0;
+                    groupDrag.dy = 0;
+                    if (ddx !== 0 || ddy !== 0) {
+                        const moves = [];
+                        for (const entry of root.items) {
+                            if (ids.indexOf(entry.id) === -1)
+                                continue;
+                            const s = root.positionAt(entry.x, entry.y);
+                            moves.push({ id: entry.id, x: s.x + ddx, y: s.y + ddy });
+                        }
+                        Qt.callLater(() => DesktopShortcuts.moveMany(root.screenName, moves));
+                    }
+                    return;
+                }
+                if (targetId !== "" && DesktopShortcuts.isGroupable(tile.entry)) {
+                    // Play the swallow first, commit on its last frame:
+                    // the store write destroying an invisible delegate
+                    // is what made the old merge read as a teleport.
+                    tile.holdAt(p.x, p.y);
+                    tile.merging = true;
+                    tile.mergeData = { id: itemId, x: p.x, y: p.y, target: targetId };
+                    mergeMotion.start();
+                    return;
+                }
+                // Held at the drop point; the store write moves the cell
+                // and the tile glides into it.
+                tile.holdAt(p.x, p.y);
+                Qt.callLater(() => DesktopShortcuts.move(root.screenName, itemId, p.x, p.y, targetId));
+            }
+
+            function cancelDrag() {
+                if (groupDrag.leaderId === tile.entry.id) {
+                    groupDrag.leaderId = "";
+                    groupDrag.ids = [];
+                    groupDrag.dx = 0;
+                    groupDrag.dy = 0;
+                }
+                tile.dragging = false;
+                tile.suppressClick = true;
+                root.dragId = "";
+                root.dropTargetId = "";
+                root.dragPlan = null;
+            }
+
             HoverHandler {
                 id: tileHover
             }
@@ -681,7 +973,7 @@ Item {
             Item {
                 id: tileContent
                 anchors.fill: parent
-                opacity: tile.intro
+                opacity: tile.intro * (root.systemDragIds.indexOf(tile.entry.id) !== -1 ? 0 : 1)
                 // Press feedback mirrors RippleButton's interactionScale (dip
                 // while held, spring back on release), but at 0.9: a 100px
                 // tile at 0.96 moves the icon barely 2px. Suppressed during a
@@ -696,30 +988,46 @@ Item {
                 }
                 transform: [
                     Translate {
-                        x: tile.dragging ? tile.pending.x - tile.x : (tile.groupMember ? groupDrag.dx : 0)
-                        y: tile.dragging ? tile.pending.y - tile.y : (tile.groupMember ? groupDrag.dy : 0)
+                        x: root.systemDragging ? 0 : tile.dragging ? tile.pending.x - tile.x : (tile.groupMember ? groupDrag.dx : 0)
+                        y: root.systemDragging ? 0 : tile.dragging ? tile.pending.y - tile.y : (tile.groupMember ? groupDrag.dy : 0)
                     },
                     // The entrance's rise.
                     Translate {
                         y: (1 - tile.intro) * 14
                     }
                 ]
+                // Selection: a filled tonal plate, no outline.
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: root.plateInset
+                    radius: root.plateRadius
+                    color: Qt.alpha(root.colSelected, root.focusId === tile.entry.id && root.selectedIds.length > 1
+                        ? root.focusedAlpha : root.selectedAlpha)
+                    opacity: tile.selected && !root.platesOnWallpaper ? 1 : 0
+                    visible: opacity > 0.001
+                    Behavior on opacity {
+                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                    }
+                }
                 // Hover and merge-target plates.
                 Rectangle {
                     anchors.fill: parent
-                    radius: Appearance.rounding.normal
+                    radius: root.plateRadius
                     color: root.dropTargetId === tile.entry.id ? Appearance.colors.colPrimaryContainer
-                        : Qt.alpha(Appearance.m3colors.m3onSurface, 0.08)
-                    opacity: root.dropTargetId === tile.entry.id || (tile.hovered && !tile.selected && !tile.dragging) ? 1 : 0
+                        : Qt.alpha(root.colHover, root.hoverAlpha)
+                    opacity: root.dropTargetId === tile.entry.id
+                        || (tile.hovered && !tile.selected && !tile.dragging && !root.platesOnWallpaper) ? 1 : 0
                     visible: opacity > 0.001
                     Behavior on opacity {
                         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                     }
                 }
                 ColumnLayout {
-                    anchors.fill: parent
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
                     anchors.margins: 4
-                    spacing: 2
+                    spacing: root.labelGap
                     Item {
                         id: plate
                         Layout.alignment: Qt.AlignHCenter
@@ -797,7 +1105,7 @@ Item {
                     Item {
                         id: labelBox
                         Layout.fillWidth: true
-                        Layout.fillHeight: true
+                        Layout.preferredHeight: root.labelHeight
                         readonly property string mode: root.options.labels ?? "always"
                         readonly property string style: root.options.labelStyle ?? "auto"
                         // A bright wallpaper swallows the raised shadow, so
@@ -824,34 +1132,18 @@ Item {
                             anchors.left: parent.left
                             anchors.right: parent.right
                             anchors.top: parent.top
-                            anchors.topMargin: 2
                             text: tile.entry.name || tile.entry.id
-                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            font.family: Appearance.font.family.main
+                            font.variableAxes: root.labelAxes
+                            font.pixelSize: root.labelSize
+                            lineHeight: root.labelLineHeight
                             color: labelBox.pill ? Appearance.m3colors.m3inverseOnSurface
                                 : (root.wallpaperLight ? Appearance.m3colors.m3inverseOnSurface : Appearance.m3colors.m3onSurface)
                             elide: Text.ElideRight
                             wrapMode: (root.options.labelLines ?? 1) === 2 ? Text.Wrap : Text.NoWrap
                             horizontalAlignment: Text.AlignHCenter
                             maximumLineCount: (root.options.labelLines ?? 1) === 2 ? 2 : 1
-                            style: labelBox.pill ? Text.Normal : Text.Raised
-                            styleColor: Appearance.colors.colShadow
                         }
-                    }
-                }
-                // Selection halo: the widget canvas's own, scaled to a tile —
-                // same colour, fill and border, so one language says "picked"
-                // whether it is a clock or a shortcut.
-                Rectangle {
-                    visible: opacity > 0.001
-                    opacity: tile.selected ? 1 : 0
-                    anchors.fill: parent
-                    anchors.margins: -6
-                    radius: Appearance.rounding.large
-                    color: Qt.alpha(Appearance.colors.colPrimary, 0.08)
-                    border.color: Appearance.colors.colPrimary
-                    border.width: root.focusId === tile.entry.id && root.selectedIds.length > 1 ? 3 : 2
-                    Behavior on opacity {
-                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                     }
                 }
                 Component {
@@ -901,9 +1193,11 @@ Item {
                     tile.suppressClick = false;
                     tile.pressPoint = root.mapFromItem(gesture, mouse.x, mouse.y);
                     tile.origin = Qt.point(tile.settled.x, tile.settled.y);
+                    if (mouse.button === Qt.LeftButton && tile.fileUrl !== "" && !root.iconsLocked)
+                        tileContent.grabToImage(result => tile.dragImage = result.url);
                 }
                 onPositionChanged: mouse => {
-                    if (!(pressedButtons & Qt.LeftButton))
+                    if (!(pressedButtons & Qt.LeftButton) || tile.systemDrag)
                         return;
                     // The lock gates only the drag START — press feedback,
                     // selection and the menu keep working.
@@ -914,104 +1208,17 @@ Item {
                     const dy = p.y - tile.pressPoint.y;
                     if (!tile.dragging && dx * dx + dy * dy < 100)
                         return;
-                    if (!tile.dragging) {
-                        tile.dragging = true;
-                        root.dragId = tile.entry.id;
-                        if (root.selectedIds.length > 1 && root.isSelected(tile.entry.id)) {
-                            // Grabbing a selected tile drags the whole set.
-                            groupDrag.leaderId = tile.entry.id;
-                            groupDrag.ids = root.selectedIds;
-                            groupDrag.dx = 0;
-                            groupDrag.dy = 0;
-                        } else if (root.hasSelection) {
-                            // Grabbing outside the selection is a click-away
-                            // (the widget canvas's rule): single drag.
-                            root.clearSelection();
-                        }
-                    }
-                    tile.suppressClick = true;
-                    tile.pending = root.positionAt(tile.origin.x + dx, tile.origin.y + dy);
-                    if (groupDrag.leaderId === tile.entry.id) {
-                        // Re-clamp the leader's own snapped position to what
-                        // the cluster's tightest member allows, so the whole
-                        // selection stops at the first wall.
-                        const travel = root.groupDelta(groupDrag.ids,
-                            tile.pending.x - tile.origin.x, tile.pending.y - tile.origin.y);
-                        tile.pending = Qt.point(tile.origin.x + travel.x, tile.origin.y + travel.y);
-                        groupDrag.dx = travel.x;
-                        groupDrag.dy = travel.y;
-                    } else {
-                        root.dropTargetId = DesktopShortcuts.isGroupable(tile.entry) ? root.targetAt(p.x, p.y, tile.entry.id) : "";
-                        root.dragPlan = root.autoArrange && root.dropTargetId === ""
-                            ? DesktopShortcuts.planDrop(root.screenName, tile.entry.id, tile.pending.x, tile.pending.y)
-                            : null;
-                    }
+                    tile.dragTo(p);
+                    if (tile.dragging && root.leavesDesktop(p))
+                        root.beginSystemDrag(tile);
                 }
                 onReleased: {
-                    if (!tile.dragging)
-                        return;
-                    const itemId = tile.entry.id;
-                    const targetId = root.dropTargetId;
-                    const p = tile.pending;
-                    tile.dragging = false;
-                    root.dragId = "";
-                    root.dropTargetId = "";
-                    root.dragPlan = null;
-                    if (groupDrag.leaderId === itemId) {
-                        // One write for the cluster; merging is a single-drag
-                        // gesture, so the group just travels. Every member is
-                        // held where it was dropped and glides from there.
-                        const ids = groupDrag.ids;
-                        const ddx = groupDrag.dx;
-                        const ddy = groupDrag.dy;
-                        for (const id of ids) {
-                            const member = root.tileFor(id);
-                            if (member)
-                                member.holdAt(member.settled.x + ddx, member.settled.y + ddy);
-                        }
-                        groupDrag.leaderId = "";
-                        groupDrag.ids = [];
-                        groupDrag.dx = 0;
-                        groupDrag.dy = 0;
-                        if (ddx !== 0 || ddy !== 0) {
-                            const moves = [];
-                            for (const entry of root.items) {
-                                if (ids.indexOf(entry.id) === -1)
-                                    continue;
-                                const s = root.positionAt(entry.x, entry.y);
-                                moves.push({ id: entry.id, x: s.x + ddx, y: s.y + ddy });
-                            }
-                            Qt.callLater(() => DesktopShortcuts.moveMany(root.screenName, moves));
-                        }
-                        return;
-                    }
-                    if (targetId !== "" && DesktopShortcuts.isGroupable(tile.entry)) {
-                        // Play the swallow first, commit on its last frame:
-                        // the store write destroying an invisible delegate
-                        // is what made the old merge read as a teleport.
-                        tile.holdAt(p.x, p.y);
-                        tile.merging = true;
-                        tile.mergeData = { id: itemId, x: p.x, y: p.y, target: targetId };
-                        mergeMotion.start();
-                        return;
-                    }
-                    // Held at the drop point; the store write moves the cell
-                    // and the tile glides into it.
-                    tile.holdAt(p.x, p.y);
-                    Qt.callLater(() => DesktopShortcuts.move(root.screenName, itemId, p.x, p.y, targetId));
+                    if (!tile.systemDrag)
+                        tile.finishDrag();
                 }
                 onCanceled: {
-                    if (groupDrag.leaderId === tile.entry.id) {
-                        groupDrag.leaderId = "";
-                        groupDrag.ids = [];
-                        groupDrag.dx = 0;
-                        groupDrag.dy = 0;
-                    }
-                    tile.dragging = false;
-                    tile.suppressClick = true;
-                    root.dragId = "";
-                    root.dropTargetId = "";
-                    root.dragPlan = null;
+                    if (!tile.systemDrag)
+                        tile.cancelDrag();
                 }
                 onClicked: mouse => {
                     if (tile.suppressClick)
