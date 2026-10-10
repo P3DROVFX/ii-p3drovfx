@@ -150,7 +150,7 @@ ListView {
                 scrollAnim.stop();
                 bounceAnim.stop();
                 root._wheelScrolling = false;
-                kinetic.feed(ScrollWheel.touchpadStep(angle, wheelEvent.pixelDelta.y, root));
+                kinetic.feed(ScrollWheel.touchpadStep(angle, wheelEvent.pixelDelta.y, root), wheelEvent.phase);
                 root.userScrolled(kinetic.target, root.maxY);
                 wheelEvent.accepted = true;
                 return;

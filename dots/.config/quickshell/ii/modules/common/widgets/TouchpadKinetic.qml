@@ -3,9 +3,10 @@ import qs.modules.common
 
 /**
  * Touchpad scrolling for a Flickable. The content follows the fingers through a
- * short ease, and once they stop it carries on for a moment at the speed they had,
- * slowing as it goes. The owner feeds it each touchpad event (ScrollWheel.touchpadStep)
- * and calls stop() when a mouse wheel or a drag takes over.
+ * short ease, and once they lift it carries on for a moment at the speed they had,
+ * slowing as it goes. Fingers that stop but stay on the pad hold the content still.
+ * The owner feeds it each touchpad event (ScrollWheel.touchpadStep, with the event's
+ * phase) and calls stop() when a mouse wheel or a drag takes over.
  */
 QtObject {
     id: root
@@ -16,7 +17,7 @@ QtObject {
     readonly property real followTau: 0.02
     // The glide loses its speed over about this long; its length is speed times this
     readonly property real glideTau: 0.25
-    // How far back the speed is measured, in ms
+    // How far back from the lift the speed is measured, in ms
     readonly property int windowMs: 100
     // Below this speed a touch is a tap or a resting finger, not a fling: no glide
     readonly property real glideStartSpeed: 40
@@ -37,31 +38,53 @@ QtObject {
     property real _target: 0
     // Where the events alone put the content; the glide is added on top of it
     property real _eventTarget: 0
-    // Content speed at the last event (px/s, positive = down), and when that event came
+    // Content speed at the lift (px/s, positive = down), 0 while the fingers are down;
+    // _lastEventMs is the last event, or the lift once gliding
     property real _glideSpeed: 0
     property double _lastEventMs: 0
     property double _lastTickMs: 0
     // { t, d } for the events of the last windowMs; d is the step fed
     property var _samples: []
 
-    /** One touchpad event. `step` is ScrollWheel's: positive scrolls toward the top. */
-    function feed(step) {
-        if (step === 0)
-            return;
+    /**
+     * One touchpad event. `step` is ScrollWheel's: positive scrolls toward the top.
+     * `phase` is the WheelEvent's: the glide starts at Qt.ScrollEnd, which Qt sends
+     * (with no delta) when the fingers lift. Resting fingers send nothing, so they
+     * hold the content; a lift after a rest finds no recent speed and doesn't glide.
+     */
+    function feed(step, phase) {
         const now = Date.now();
-        if (!frame.running || now - _lastEventMs > resumeMs) {
-            // A new touch starts from wherever the content is now
+        if (step !== 0) {
+            if (!frame.running || _glideSpeed !== 0 || now - _lastEventMs > resumeMs) {
+                // A new touch starts from wherever the content is now, a glide included
+                _eventTarget = flickable.contentY;
+                _samples = [];
+                _glideSpeed = 0;
+                _lastTickMs = now;
+                frame.running = true;
+            }
+            _eventTarget = clamp(_eventTarget - step);
+            _samples = _samples.concat([{ t: now, d: step }]).filter(s => s.t >= now - windowMs);
+            _lastEventMs = now;
+            _target = _eventTarget;
+        }
+        if (phase === Qt.ScrollEnd)
+            lift(now);
+    }
+
+    // The fingers left the pad: glide on at the speed of their last windowMs
+    function lift(now) {
+        const speed = speedSince(now - windowMs);
+        _samples = [];
+        if (speed === 0)
+            return;
+        if (!frame.running) {
             _eventTarget = flickable.contentY;
-            _samples = [];
-            _glideSpeed = 0;
             _lastTickMs = now;
             frame.running = true;
         }
-        _eventTarget = clamp(_eventTarget - step);
-        _samples = trimmed(_samples.concat([{ t: now, d: step }]));
+        _glideSpeed = speed;
         _lastEventMs = now;
-        _glideSpeed = speedOfSamples();
-        _target = _eventTarget;
     }
 
     /** A drag or a mouse wheel took over: the content stays where it is. */
@@ -77,24 +100,20 @@ QtObject {
         return Math.max(minY, Math.min(maxY, value));
     }
 
-    function trimmed(samples) {
-        const newest = samples[samples.length - 1].t;
-        return samples.filter(s => s.t >= newest - windowMs);
-    }
-
-    // The content speed the recent events add up to, zero when too slow to glide
-    function speedOfSamples() {
+    // The content speed the events since `fromMs` add up to, zero when too slow to glide
+    function speedSince(fromMs) {
         if (!glide)
             return 0;
         let sum = 0;
         for (const s of _samples)
-            sum += s.d;
+            if (s.t >= fromMs)
+                sum += s.d;
         // The content moves against the step
         const speed = Math.max(-maxSpeed, Math.min(maxSpeed, -sum / (windowMs / 1000)));
         return Math.abs(speed) < glideStartSpeed ? 0 : speed;
     }
 
-    // How far the glide has carried the content past the last event, at nowMs
+    // How far the glide has carried the content past the lift, at nowMs
     function glideAt(nowMs) {
         const t = Math.max(0, (nowMs - _lastEventMs) / 1000);
         return _glideSpeed * glideTau * (1 - Math.exp(-t / glideTau));

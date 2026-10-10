@@ -84,11 +84,13 @@ Flickable {
 
         if (!ScrollWheel.isNotch(angle, root, wheelEvent.phase)) {
             const px = ScrollWheel.touchpadStep(angle, wheelEvent.pixelDelta.y, root);
-            root.wheelScrolled(px, false);
+            // The lift (ScrollEnd) carries no delta: no step to show
+            if (px !== 0)
+                root.wheelScrolled(px, false);
             scrollAnim.stop();
             bounceAnim.stop();
             root._wheelScrolling = false;
-            kinetic.feed(px);
+            kinetic.feed(px, wheelEvent.phase);
             wheelEvent.accepted = true;
             return;
         }
