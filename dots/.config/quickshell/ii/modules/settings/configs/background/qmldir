@@ -11,5 +11,6 @@ BackgroundBackendCard 1.0 BackgroundBackendCard.qml
 BackgroundLinkRow 1.0 BackgroundLinkRow.qml
 BackgroundModelRow 1.0 BackgroundModelRow.qml
 BackgroundSubPageHeader 1.0 BackgroundSubPageHeader.qml
+BackgroundWindowShape 1.0 BackgroundWindowShape.qml
 VideoPlayerSetup 1.0 VideoPlayerSetup.qml
 VideoColorFrame 1.0 VideoColorFrame.qml
