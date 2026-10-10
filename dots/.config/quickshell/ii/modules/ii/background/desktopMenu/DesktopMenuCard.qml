@@ -221,12 +221,6 @@ Item {
 
     readonly property var rows: [
         {
-            "key": "style",
-            "shown": !root.onBar,
-            "symbol": "wallpaper",
-            "title": Translation.tr("Wallpaper & style")
-        },
-        {
             "key": "colors",
             "shown": !root.onBar,
             "symbol": "palette",
@@ -239,12 +233,6 @@ Item {
             "symbol": "style",
             "title": Translation.tr("Presets"),
             "trailing": "chevron"
-        },
-        {
-            "key": "widgets",
-            "shown": !root.onDock,
-            "symbol": "widgets",
-            "title": root.onBar ? Translation.tr("Bar widgets") : Translation.tr("Desktop widgets")
         },
         {
             "key": "apps",
@@ -300,14 +288,6 @@ Item {
         root.dismissRequested();
         const screenName = GlobalStates.desktopMenuScreenName;
         switch (key) {
-        case "style":
-            // The wallpaper has a catalogue of its own now; Style is one tap
-            // away from it.
-            GlobalStates.openEditCatalogue("wallpaper", screenName);
-            break;
-        case "widgets":
-            GlobalStates.openEditCatalogue(root.onBar ? "bar" : "widgets", screenName);
-            break;
         case "apps":
             GlobalStates.openEditCatalogue("apps", screenName);
             break;

@@ -6,6 +6,7 @@ import Quickshell
 import Quickshell.Io
 import qs.services
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.modules.ii.editMode
 
@@ -92,9 +93,8 @@ ItemContextDialog {
             visible: entry.type === "directory", enabled: root.writable },
         { id: "details", text: Translation.tr("Details"), icon: "info", submenu: true },
         { id: "reveal", text: Translation.tr("Show in folder"), icon: "folder_open", visible: entry.path !== "" },
-        { id: "copyName", text: Translation.tr("Copy name"), icon: "content_copy", visible: entry.name !== "" },
-        { id: "copyPath", text: Translation.tr("Copy path"), icon: "content_paste", visible: entry.path !== "" },
-        { id: "copyItem", text: Translation.tr("Copy"), icon: "file_copy", visible: entry.path !== "" },
+        { id: "copy", text: Translation.tr("Copy"), icon: "content_copy", submenu: true,
+            visible: entry.name !== "" || entry.path !== "" },
         { id: "arrange", text: Translation.tr("Arrange selection"), icon: "align_horizontal_left",
             submenu: true, visible: root.selectionCount > 1, enabled: root.writable },
         { id: "screen", text: root.selectionCount > 1 ? Translation.tr("Move selection to screen")
@@ -106,7 +106,7 @@ ItemContextDialog {
     ].filter(action => action.visible !== false)
     pageComponent: page === "rename" ? renamePage : page === "members" ? membersPage
         : page === "add" ? addPage : page === "member" ? memberPage : page === "details" ? detailsPage
-        : page === "icon" ? iconPage
+        : page === "icon" ? iconPage : page === "copy" ? copyPage
         : page === "arrange" ? arrangePage : page === "screen" ? screenPage : null
     pageDepth: page === "" ? 0 : (page === "add" || page === "member" ? 2 : 1)
     onBackRequested: root.back()
@@ -135,15 +135,6 @@ ItemContextDialog {
             root.dismiss();
         } else if (actionId === "reveal") {
             root.revealInFolder();
-        } else if (actionId === "copyName") {
-            root.copyText(root.entry.name || "");
-            root.confirmCopy(actionId);
-        } else if (actionId === "copyPath") {
-            root.copyText(root.entry.path || "");
-            root.confirmCopy(actionId);
-        } else if (actionId === "copyItem") {
-            root.copyItemReference();
-            root.confirmCopy(actionId);
         } else {
             root.page = actionId;
         }
@@ -239,6 +230,46 @@ ItemContextDialog {
         trailingKind: "none"
     }
 
+    // The three copies behind one row: the name, the path, the file itself.
+    // A copy answers in place (the row turns into "Copied") before the menu
+    // goes, like the old top-level rows did.
+    Component {
+        id: copyPage
+        ColumnLayout {
+            id: copyColumn
+            spacing: 3
+            readonly property var copies: [
+                { id: "copyName", text: Translation.tr("Copy name"), icon: "badge", visible: root.entry.name !== "" },
+                { id: "copyPath", text: Translation.tr("Copy path"), icon: "content_paste", visible: root.entry.path !== "" },
+                { id: "copyItem", text: Translation.tr("Copy file"), icon: "file_copy", visible: root.entry.path !== "" }
+            ].filter(copy => copy.visible)
+            PageHeader { title: Translation.tr("Copy") }
+            Repeater {
+                model: copyColumn.copies
+                delegate: MenuRow {
+                    required property var modelData
+                    required property int index
+                    readonly property bool done: modelData.id === root.doneId
+                    first: index === 0
+                    last: index === copyColumn.copies.length - 1
+                    symbol: done ? "check" : modelData.icon
+                    title: done ? root.doneText : modelData.text
+                    selected: done
+                    onActivated: {
+                        if (root.doneId !== "")
+                            return;
+                        if (modelData.id === "copyName")
+                            root.copyText(root.entry.name || "");
+                        else if (modelData.id === "copyPath")
+                            root.copyText(root.entry.path || "");
+                        else
+                            root.copyItemReference();
+                        root.confirmCopy(modelData.id);
+                    }
+                }
+            }
+        }
+    }
     Component {
         id: renamePage
         ColumnLayout {
@@ -443,10 +474,237 @@ ItemContextDialog {
             }
         }
     }
+    // What the filesystem knows about the item, read once when the page opens:
+    // one shell pass printing key=value lines (see `info`). Folders also get
+    // their total size, bounded by a timeout so a huge tree cannot hold the
+    // page; the size row then says it was not measured.
     Component {
         id: detailsPage
         ColumnLayout {
+            id: details
             spacing: 3
+            property var info: ({})
+            property bool loaded: root.entry.path === ""
+            readonly property bool isDir: root.entry.type === "directory"
+            readonly property bool isGroup: root.entry.type === "group"
+
+            function bytes(n) {
+                n = Number(n);
+                if (!isFinite(n))
+                    return "";
+                const units = ["B", "KB", "MB", "GB", "TB"];
+                let i = 0;
+                while (n >= 1024 && i < units.length - 1) {
+                    n /= 1024;
+                    i++;
+                }
+                return (i === 0 ? String(n) : n.toFixed(n >= 100 ? 0 : n >= 10 ? 1 : 2)) + " " + units[i];
+            }
+            function exact(n) {
+                return Translation.tr("%1 bytes").arg(Number(n).toLocaleString(Qt.locale(), "f", 0));
+            }
+            function count(n) {
+                return Number(n).toLocaleString(Qt.locale(), "f", 0);
+            }
+            function date(seconds) {
+                const value = Number(seconds);
+                if (!isFinite(value) || value <= 0)
+                    return "";
+                return new Date(value * 1000).toLocaleString(Qt.locale(), Locale.ShortFormat);
+            }
+            function duration(seconds) {
+                let total = Math.round(Number(seconds));
+                if (!isFinite(total) || total <= 0)
+                    return "";
+                const h = Math.floor(total / 3600);
+                const m = Math.floor((total % 3600) / 60);
+                const sec = total % 60;
+                const two = v => (v < 10 ? "0" : "") + v;
+                return h > 0 ? `${h}:${two(m)}:${two(sec)}` : `${m}:${two(sec)}`;
+            }
+            function frameRate(fraction) {
+                const parts = String(fraction ?? "").split("/");
+                const rate = Number(parts[0]) / (Number(parts[1]) || 1);
+                return isFinite(rate) && rate > 0 ? `${Math.round(rate * 100) / 100} fps` : "";
+            }
+            function kindName(kind) {
+                const k = String(kind ?? "");
+                if (k.startsWith("symbolic link"))
+                    return Translation.tr("Link");
+                if (k === "directory")
+                    return Translation.tr("Folder");
+                if (k.startsWith("regular"))
+                    return Translation.tr("File");
+                return k.charAt(0).toUpperCase() + k.slice(1);
+            }
+
+            // The rows, as data: sections of { label, value, sub, long }. A
+            // long value (a path, a description) goes under its label and may
+            // wrap; a short one sits at the row's end.
+            readonly property var sections: {
+                const i = details.info;
+                const out = [];
+                const section = (title, rows) => {
+                    const kept = rows.filter(row => row && row.value);
+                    if (kept.length > 0)
+                        out.push({ "title": title, "rows": kept });
+                };
+                const row = (label, value, sub, long) => ({
+                    "label": label, "value": value ? String(value) : "", "sub": sub ?? "", "long": long === true
+                });
+                const e = root.entry;
+                const dock = root.pinKey !== "";
+
+                if (details.isGroup) {
+                    section(Translation.tr("Group"), [
+                        row(Translation.tr("Applications"), details.count((e.apps ?? []).length)),
+                        row(Translation.tr("Layout"), e.stack ? Translation.tr("Stack") : Translation.tr("Group"))
+                    ]);
+                }
+
+                const size = i.size !== undefined && i.size !== "" ? Number(i.size) : NaN;
+                const disk = String(i.disk ?? "").split(" ");
+                const onDisk = Number(disk[0]) * Number(disk[1]);
+                const fs = String(i.fs ?? "").trim().split(/\s+/);
+                const total = i.total !== undefined && i.total !== "" ? Number(i.total) : NaN;
+                const desc = String(i.desc ?? "");
+                // `file` also prints the print density ("density 72x72") of a JPEG.
+                const dims = /(\d{2,6})\s*x\s*(\d{2,6})/.exec(desc.replace(/density \d+x\d+/g, ""));
+                const isLink = i.link !== undefined;
+
+                section(Translation.tr("General"), [
+                    row(Translation.tr("Kind"), isLink ? Translation.tr("Link") + " · " + details.kindName(i.kind) : details.kindName(i.kind)),
+                    row(Translation.tr("Content type"), i.mime),
+                    row(details.isDir ? Translation.tr("Size on disk") : Translation.tr("Size"),
+                        details.isDir ? (isFinite(total) ? details.bytes(total) : (i.kind ? Translation.tr("Not measured") : ""))
+                            : (isFinite(size) ? details.bytes(size) : ""),
+                        details.isDir ? (isFinite(total) ? details.exact(total) : "")
+                            : (isFinite(size) ? details.exact(size) : "")),
+                    row(Translation.tr("Space used"), !details.isDir && isFinite(onDisk) && onDisk > 0 ? details.bytes(onDisk) : ""),
+                    row(Translation.tr("Description"), desc, "", true),
+                    row(Translation.tr("Location"), e.path ? FileUtils.parentDirectory(e.path) : "", "", true),
+                    row(Translation.tr("Link target"), i.link, "", true),
+                    row(Translation.tr("Resolves to"), isLink && i.real !== i.link ? i.real : "", "", true)
+                ]);
+
+                if (details.isDir) {
+                    section(Translation.tr("Contents"), [
+                        row(Translation.tr("Folders"), i.folders !== undefined ? details.count(i.folders) : ""),
+                        row(Translation.tr("Files"), i.files !== undefined ? details.count(i.files) : ""),
+                        row(Translation.tr("Hidden items"), Number(i.hidden) > 0 ? details.count(i.hidden) : "")
+                    ]);
+                } else {
+                    section(Translation.tr("Contents"), [
+                        row(Translation.tr("Dimensions"), dims && String(i.mime ?? "").startsWith("image/") ? `${dims[1]} × ${dims[2]} px` : ""),
+                        row(Translation.tr("Lines"), i.lines !== undefined ? details.count(i.lines) : ""),
+                        row(Translation.tr("Words"), i.words !== undefined ? details.count(i.words) : ""),
+                        row(Translation.tr("Characters"), i.chars !== undefined ? details.count(i.chars) : ""),
+                        row(Translation.tr("Duration"), details.duration(i.f_duration)),
+                        row(Translation.tr("Resolution"), i.v_width ? `${i.v_width} × ${i.v_height} px` : ""),
+                        row(Translation.tr("Frame rate"), details.frameRate(i.v_r_frame_rate)),
+                        row(Translation.tr("Video codec"), i.v_codec_name),
+                        row(Translation.tr("Audio codec"), i.a_codec_name),
+                        row(Translation.tr("Sample rate"), i.a_sample_rate ? `${Number(i.a_sample_rate) / 1000} kHz` : ""),
+                        row(Translation.tr("Channels"), i.a_channels),
+                        row(Translation.tr("Bit rate"), i.f_bit_rate ? `${Math.round(Number(i.f_bit_rate) / 1000)} kb/s` : "")
+                    ]);
+                }
+
+                section(Translation.tr("Application"), [
+                    row(Translation.tr("Description"), i.de_Comment, "", true),
+                    row(Translation.tr("Command"), i.de_Exec, "", true),
+                    row(Translation.tr("Categories"), String(i.de_Categories ?? "").split(";").filter(c => c).join(", "), "", true),
+                    row(Translation.tr("Runs in terminal"), String(i.de_Terminal ?? "").toLowerCase() === "true" ? Translation.tr("Yes") : "")
+                ]);
+
+                section(Translation.tr("Dates"), [
+                    row(Translation.tr("Modified"), details.date(i.mtime)),
+                    row(Translation.tr("Opened"), details.date(i.atime)),
+                    row(Translation.tr("Changed"), details.date(i.ctime)),
+                    row(Translation.tr("Created"), details.date(i.btime))
+                ]);
+
+                section(Translation.tr("Access"), [
+                    row(Translation.tr("Permissions"), i.permStr, i.perm ? String(i.perm) : ""),
+                    row(Translation.tr("Owner"), i.owner),
+                    row(Translation.tr("Group"), i.group)
+                ]);
+
+                section(Translation.tr("Storage"), [
+                    row(Translation.tr("Filesystem"), fs[0] && fs[0] !== "" ? fs[0] : "", fs[1] ?? ""),
+                    row(Translation.tr("Free space"), i.free ? details.bytes(i.free) : ""),
+                    row(Translation.tr("Inode"), i.inode),
+                    row(Translation.tr("Hard links"), Number(i.links) > 1 ? i.links : "")
+                ]);
+
+                section(Translation.tr("On the desktop"), [
+                    row(Translation.tr("Screen"), root.screenName),
+                    row(Translation.tr("Pinned to dock"), dock ? (root.dockPinned ? Translation.tr("Yes") : Translation.tr("No")) : "")
+                ]);
+                return out;
+            }
+
+            Process {
+                id: infoProcess
+                running: root.entry.path !== ""
+                command: ["bash", "-c", details.script, "_", root.entry.path ?? ""]
+                stdout: StdioCollector {
+                    onStreamFinished: {
+                        const next = {};
+                        for (const line of text.split("\n")) {
+                            const at = line.indexOf("=");
+                            if (at > 0 && next[line.substring(0, at)] === undefined)
+                                next[line.substring(0, at)] = line.substring(at + 1).trim();
+                        }
+                        details.info = next;
+                        details.loaded = true;
+                    }
+                }
+            }
+            readonly property string script: `p=$1
+[ -e "$p" ] || [ -L "$p" ] || exit 0
+st() { stat -c "$1" -- "$p" 2>/dev/null; }
+echo "kind=$(st %F)"
+echo "size=$(stat -L -c %s -- "$p" 2>/dev/null)"
+echo "disk=$(stat -L -c '%b %B' -- "$p" 2>/dev/null)"
+echo "perm=$(st %a)"; echo "permStr=$(st %A)"
+echo "owner=$(st %U)"; echo "group=$(st %G)"
+echo "atime=$(st %X)"; echo "mtime=$(st %Y)"; echo "ctime=$(st %Z)"; echo "btime=$(st %W)"
+echo "inode=$(st %i)"; echo "links=$(st %h)"
+echo "fs=$(df --output=fstype,source -- "$p" 2>/dev/null | tail -n1)"
+echo "free=$(df -B1 --output=avail -- "$p" 2>/dev/null | tail -n1 | tr -d ' ')"
+if [ -L "$p" ]; then echo "link=$(readlink -- "$p")"; echo "real=$(readlink -f -- "$p")"; fi
+mime=$(file -b -L --mime-type -- "$p" 2>/dev/null); echo "mime=$mime"
+echo "desc=$(file -b -L -- "$p" 2>/dev/null | cut -c1-200)"
+if [ -d "$p" ]; then
+  echo "folders=$(find "$p" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)"
+  echo "files=$(find "$p" -mindepth 1 -maxdepth 1 ! -type d 2>/dev/null | wc -l)"
+  echo "hidden=$(find "$p" -mindepth 1 -maxdepth 1 -name '.*' 2>/dev/null | wc -l)"
+  echo "total=$(timeout 3 du -sb -- "$p" 2>/dev/null | cut -f1)"
+elif [ -f "$p" ]; then
+  bytes=$(stat -L -c %s -- "$p" 2>/dev/null)
+  case $mime in
+    text/*|application/json|application/xml|application/x-shellscript|application/javascript)
+      if [ "\${bytes:-0}" -lt 20000000 ]; then
+        echo "lines=$(wc -l < "$p")"; echo "words=$(wc -w < "$p")"; echo "chars=$(wc -m < "$p")"
+      fi ;;
+  esac
+  case $mime in
+    video/*|audio/*)
+      if command -v ffprobe >/dev/null 2>&1; then
+        ffprobe -v error -show_entries format=duration,bit_rate -of default=nw=1 -- "$p" 2>/dev/null | sed 's/^/f_/'
+        ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,width,height,r_frame_rate -of default=nw=1 -- "$p" 2>/dev/null | sed 's/^/v_/'
+        ffprobe -v error -select_streams a:0 -show_entries stream=codec_name,sample_rate,channels -of default=nw=1 -- "$p" 2>/dev/null | sed 's/^/a_/'
+      fi ;;
+  esac
+fi
+case $p in
+  *.desktop)
+    for k in Comment Exec Categories Terminal; do
+      echo "de_$k=$(grep -m1 "^$k=" -- "$p" | cut -d= -f2-)"
+    done ;;
+esac`
+
             PageHeader { title: Translation.tr("Details") }
             // The item's identity as a static pill of the row's geometry
             // (circle + two lines), a whole run on its own.
@@ -506,6 +764,62 @@ ItemContextDialog {
                         }
                     }
                 }
+            }
+
+            StyledFlickable {
+                id: detailsFlick
+                Layout.fillWidth: true
+                Layout.topMargin: 3
+                Layout.preferredHeight: Math.min(380, detailsColumn.implicitHeight)
+                visible: details.sections.length > 0
+                contentWidth: width
+                contentHeight: detailsColumn.implicitHeight
+                clip: true
+                ColumnLayout {
+                    id: detailsColumn
+                    width: detailsFlick.width
+                    spacing: 3
+                    Repeater {
+                        model: details.sections
+                        delegate: ColumnLayout {
+                            id: sectionColumn
+                            required property var modelData
+                            Layout.fillWidth: true
+                            spacing: 3
+                            StyledText {
+                                Layout.fillWidth: true
+                                Layout.topMargin: 6
+                                Layout.leftMargin: 6
+                                text: sectionColumn.modelData.title
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                font.weight: Font.Medium
+                                color: Appearance.colors.colSubtext
+                            }
+                            Repeater {
+                                model: sectionColumn.modelData.rows
+                                delegate: MenuRow {
+                                    required property var modelData
+                                    required property int index
+                                    first: index === 0
+                                    last: index === sectionColumn.modelData.rows.length - 1
+                                    title: modelData.label
+                                    subtitle: modelData.long ? modelData.value : modelData.sub
+                                    subtitleWrap: true
+                                    valueText: modelData.long ? "" : modelData.value
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            StyledText {
+                Layout.fillWidth: true
+                Layout.margins: 12
+                Layout.topMargin: 6
+                visible: !details.loaded
+                text: Translation.tr("Reading details…")
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                color: Appearance.colors.colSubtext
             }
         }
     }
