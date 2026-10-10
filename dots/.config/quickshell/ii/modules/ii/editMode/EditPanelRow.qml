@@ -83,8 +83,15 @@ EditDragArea {
         }
     }
 
+    // A switch that is on fills the row in the primary container family; its
+    // icon leaves the circle for a rounded square on primary.
+    readonly property bool switchOn: root.trailingKind === "switch" && root.switchChecked && !root.selected
+    readonly property real iconBoxSize: 38
+    readonly property real iconBoxActiveRadius: Math.round(root.iconBoxSize * 0.3)
+
     readonly property color colOn: root.selected
         ? Appearance.colors.colOnPrimary
+        : root.switchOn ? Appearance.colors.colOnPrimaryContainer
         : root.destructive ? Appearance.m3colors.m3error : Appearance.colors.colOnSurface
 
     // The corner of the surface this row sits on, and how far in from it the
@@ -119,6 +126,10 @@ EditDragArea {
             ? (root.pressed ? Appearance.colors.colPrimaryActive
                 : root.containsMouse ? Appearance.colors.colPrimaryHover
                 : Appearance.colors.colPrimary)
+            : root.switchOn
+            ? (root.pressed ? Appearance.colors.colPrimaryContainerActive
+                : root.containsMouse || root.activeFocus ? Appearance.colors.colPrimaryContainerHover
+                : Appearance.colors.colPrimaryContainer)
             : (root.pressed ? Appearance.colors.colSurfaceContainerHighestActive
                 : root.containsMouse || root.activeFocus ? Appearance.colors.colSurfaceContainerHighest
                 : Appearance.colors.colSurfaceContainerHigh)
@@ -157,18 +168,22 @@ EditDragArea {
         Rectangle {
             Layout.alignment: Qt.AlignVCenter
             visible: root.symbol !== "" || root.iconSource !== ""
-            implicitWidth: 38
-            implicitHeight: 38
-            radius: width / 2
+            implicitWidth: root.iconBoxSize
+            implicitHeight: root.iconBoxSize
+            radius: root.switchOn ? root.iconBoxActiveRadius : width / 2
             color: root.selected
                 ? Qt.alpha(Appearance.colors.colOnPrimary, 0.2)
-                : root.trailingKind === "switch" && root.switchChecked
-                    ? Appearance.colors.colPrimaryContainer
+                : root.switchOn
+                    ? Appearance.colors.colPrimary
                     : Appearance.colors.colSurfaceContainerHighest
 
             Behavior on color {
                 enabled: !Appearance.reducedMotion
                 animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+            }
+            Behavior on radius {
+                enabled: !Appearance.reducedMotion
+                animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(this)
             }
 
             MaterialSymbol {
@@ -178,8 +193,7 @@ EditDragArea {
                 text: root.symbol
                 iconSize: 21
                 fill: (root.trailingKind === "switch" && root.switchChecked) ? 1 : 0
-                color: (root.trailingKind === "switch" && root.switchChecked && !root.selected)
-                    ? Appearance.colors.colOnPrimaryContainer : root.colOn
+                color: root.switchOn ? Appearance.colors.colOnPrimary : root.colOn
 
                 // A glyph that changes under a settled row (a copy turning
                 // into a check, pin into unpin) pops back in from small, so

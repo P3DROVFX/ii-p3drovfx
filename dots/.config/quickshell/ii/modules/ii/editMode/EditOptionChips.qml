@@ -4,146 +4,334 @@ import qs.modules.common
 import qs.modules.common.widgets
 
 /**
- * A named choice on Edit Mode's panel, drawn as a wrapping run of chips.
+ * A named choice on Edit Mode's panel: a grid of tiles that fills the width,
+ * joined like a connected button group (outer corners open, seams tight).
  *
- * Settings answers the same question with ConfigSelectionArray, which lays its
- * options out as a fixed row of cards; the panel is 380px wide and four of
- * those do not fit. These wrap, and carry the icon Settings already picked for
- * each option so the two read as the same choice.
+ * Columns are balanced over the rows the set needs, and the last row's tiles
+ * share the full width, so no set ends with a lone straggler. Icon options
+ * stack their glyph in a shape over the name; a set too large for two rows
+ * of names drops to icons, and the header names the option under the pointer
+ * (or the chosen one), which is why the tiles carry no tooltips.
  *
- * Only the CHOSEN chip spends the words. Five labelled chips wrapped onto
- * three lines is most of a page spent saying what the options are called, and
- * the answer - which one is on - is the thing the eye is actually looking for.
- * The rest collapse to their icon and name themselves on hover, the same trade
- * ToolbarTabButton's `collapseInactiveLabel` makes in a narrow toolbar.
+ * Chosen = secondary container, corners opening to a pill, the glyph on a
+ * primary shape, and the name in a heavier cut.
  */
 ColumnLayout {
     id: root
+
+    readonly property real gap: 3
+    readonly property real tileHeightStacked: 66
+    readonly property real tileHeightIcon: 50
+    readonly property real tileHeightText: 46
+    readonly property real tileMinIcon: 48
+    readonly property real tileMinText: 56
+    readonly property real tileMaxStacked: 84
+    readonly property real tilePadding: 8
+    readonly property real textPadding: 14
+    readonly property int maxStackedRows: 2
+    readonly property real shapeSize: 30
+    readonly property real glyphSize: 18
+    readonly property real checkSize: 16
+    readonly property real headerInset: 10
+    readonly property real hostRadius: Appearance.rounding.verylarge
+    readonly property real hostPadding: 14
+    readonly property real radiusOuter: Math.max(Appearance.rounding.verysmall, root.hostRadius - root.hostPadding)
+    readonly property real radiusSeam: Math.max(Appearance.rounding.unsharpen, Math.round(root.radiusOuter * 0.34))
+    readonly property var axesIdle: ({ "wght": 450, "wdth": 92, "ROND": 100 })
+    readonly property var axesChosen: ({ "wght": 680, "wdth": 100, "ROND": 100 })
+    readonly property string shapeChosen: "Cookie7Sided"
+    readonly property string shapeIdle: "Circle"
 
     property string label: ""
     property var options: []
     property var currentValue: null
     property string lockedNote: ""
-    // Off for a choice whose icons cannot carry it on their own.
+    // Off for a choice whose icons cannot carry it on their own: names stay
+    // on the tiles however many rows that takes.
     property bool compact: true
 
     signal selected(var value)
 
-    spacing: 6
+    spacing: 8
     Layout.fillWidth: true
+    Layout.bottomMargin: 8
 
-    StyledText {
-        Layout.fillWidth: true
-        Layout.leftMargin: 6
-        visible: root.label !== ""
-        text: root.label
-        font.pixelSize: Appearance.font.pixelSize.smaller
-        font.weight: Font.Medium
-        color: Appearance.colors.colOnSurfaceVariant
+    property int hoveredIndex: -1
+    readonly property int count: root.options.length
+    readonly property bool allIcons: root.count > 0 && root.options.every(option => (option.icon ?? "") !== "")
+    readonly property var currentOption: root.options.find(option => String(option.value) === String(root.currentValue)) ?? null
+    readonly property var shownOption: root.hoveredIndex >= 0 && root.hoveredIndex < root.count
+        ? root.options[root.hoveredIndex] : root.currentOption
+
+    function nameOf(option) {
+        return option ? (option.displayName ?? String(option.value)) : "";
     }
 
-    Flow {
+    // The widest name, measured in the chosen cut so a tile never grows when
+    // it is picked.
+    readonly property real widestName: {
+        let widest = 0;
+        for (let i = 0; i < measures.count; i++)
+            widest = Math.max(widest, measures.itemAt(i)?.implicitWidth ?? 0);
+        return widest;
+    }
+
+    function plan(minTile, height) {
+        const width = Math.max(1, grid.width);
+        const maxCols = Math.max(1, Math.floor((width + root.gap) / (minTile + root.gap)));
+        const rows = Math.max(1, Math.ceil(root.count / maxCols));
+        return { "cols": Math.ceil(root.count / rows), "rows": rows, "height": height };
+    }
+
+    readonly property var layoutPlan: {
+        if (root.count === 0)
+            return { "cols": 1, "rows": 0, "height": 0, "mode": "text" };
+        if (!root.allIcons) {
+            const p = root.plan(Math.max(root.tileMinText, root.widestName + root.textPadding * 2 + root.checkSize), root.tileHeightText);
+            p.mode = "text";
+            return p;
+        }
+        const stackedMin = Math.max(root.tileMinIcon, root.widestName + root.tilePadding * 2);
+        const stacked = root.plan(root.compact ? Math.min(root.tileMaxStacked, stackedMin) : stackedMin, root.tileHeightStacked);
+        if (!root.compact || stacked.rows <= root.maxStackedRows) {
+            stacked.mode = "stacked";
+            return stacked;
+        }
+        const icons = root.plan(root.tileMinIcon, root.tileHeightIcon);
+        icons.mode = "icon";
+        return icons;
+    }
+
+    Repeater {
+        id: measures
+        model: root.options
+        delegate: StyledText {
+            required property var modelData
+            visible: false
+            text: root.nameOf(modelData)
+            font.pixelSize: Appearance.font.pixelSize.smaller
+            font.variableAxes: root.axesChosen
+        }
+    }
+
+    RowLayout {
         Layout.fillWidth: true
-        spacing: 6
+        Layout.leftMargin: root.headerInset
+        Layout.rightMargin: root.headerInset
+        visible: root.label !== "" || root.layoutPlan.mode === "icon"
+        spacing: 12
+
+        StyledText {
+            text: root.label
+            font.pixelSize: Appearance.font.pixelSize.smaller
+            font.weight: Font.DemiBold
+            color: Appearance.colors.colOnSurfaceVariant
+        }
+        StyledText {
+            Layout.fillWidth: true
+            horizontalAlignment: Text.AlignRight
+            text: root.nameOf(root.shownOption)
+            font.pixelSize: Appearance.font.pixelSize.smaller
+            font.variableAxes: root.axesChosen
+            color: root.hoveredIndex >= 0 ? Appearance.colors.colOnSurface : Appearance.colors.colPrimary
+            elide: Text.ElideRight
+
+            Behavior on color {
+                enabled: !Appearance.reducedMotion
+                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+            }
+        }
+    }
+
+    Item {
+        id: grid
+        Layout.fillWidth: true
+        implicitHeight: root.layoutPlan.rows * root.layoutPlan.height + Math.max(0, root.layoutPlan.rows - 1) * root.gap
+
+        readonly property int cols: root.layoutPlan.cols
+        readonly property int rows: root.layoutPlan.rows
+        readonly property int lastRowCount: root.count - grid.cols * (grid.rows - 1)
+        // Laid out once before anything slides: a page opening must not
+        // replay the tiles growing from zero width.
+        property bool settled: false
+        onWidthChanged: {
+            if (!grid.settled && grid.width > 0)
+                Qt.callLater(() => grid.settled = true);
+        }
 
         Repeater {
             model: root.options
 
             delegate: Rectangle {
-                id: chip
+                id: tile
                 required property var modelData
-                readonly property bool current: String(chip.modelData.value) === String(root.currentValue)
-                readonly property bool available: chip.modelData.enabled !== false
-                readonly property string optionLabel: chip.modelData.displayName ?? String(chip.modelData.value)
-                readonly property string optionIcon: chip.modelData.icon ?? ""
-                // An option with no icon has nothing to collapse to.
-                readonly property bool labelShown: !root.compact || chip.current || chip.optionIcon === ""
+                required property int index
 
-                implicitWidth: chipRow.width + 24
-                implicitHeight: 38
-                radius: Appearance.rounding.full
-                opacity: chip.available ? 1 : 0.4
-                color: chip.current
-                    ? (chipMouse.containsPress ? Appearance.colors.colPrimaryActive
-                        : chipMouse.containsMouse ? Appearance.colors.colPrimaryHover
-                        : Appearance.colors.colPrimary)
-                    : (chipMouse.containsPress ? Appearance.colors.colSurfaceContainerHighestActive
-                        : chipMouse.containsMouse ? Appearance.colors.colSurfaceContainerHighest
+                readonly property int row: Math.floor(tile.index / grid.cols)
+                readonly property int col: tile.index % grid.cols
+                readonly property bool lastRow: tile.row === grid.rows - 1
+                readonly property int rowCount: tile.lastRow ? grid.lastRowCount : grid.cols
+                readonly property real cellWidth: (grid.width - root.gap * (tile.rowCount - 1)) / tile.rowCount
+                readonly property bool current: String(tile.modelData.value) === String(root.currentValue)
+                readonly property bool available: tile.modelData.enabled !== false
+                readonly property string mode: root.layoutPlan.mode
+                readonly property bool open: tile.current || tileMouse.pressed
+                readonly property real radiusOpen: Math.min(tile.height / 2, Appearance.rounding.large)
+
+                function corner(outer) {
+                    return tile.open ? tile.radiusOpen : (outer ? root.radiusOuter : root.radiusSeam);
+                }
+
+                x: tile.col * (tile.cellWidth + root.gap)
+                y: tile.row * (root.layoutPlan.height + root.gap)
+                width: tile.cellWidth
+                height: root.layoutPlan.height
+                opacity: tile.available ? 1 : 0.4
+
+                topLeftRadius: tile.corner(tile.row === 0 && tile.col === 0)
+                topRightRadius: tile.corner(tile.row === 0 && tile.col === tile.rowCount - 1)
+                bottomLeftRadius: tile.corner(tile.lastRow && tile.col === 0)
+                bottomRightRadius: tile.corner(tile.lastRow && tile.col === tile.rowCount - 1)
+
+                color: tile.current
+                    ? (tileMouse.pressed ? Appearance.colors.colSecondaryContainerActive
+                        : tileMouse.containsMouse ? Appearance.colors.colSecondaryContainerHover
+                        : Appearance.colors.colSecondaryContainer)
+                    : (tileMouse.pressed ? Appearance.colors.colSurfaceContainerHighestActive
+                        : tileMouse.containsMouse ? Appearance.colors.colSurfaceContainerHighest
                         : Appearance.colors.colSurfaceContainerHigh)
+                readonly property color colOn: tile.current ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurface
 
-                readonly property color colOn: chip.current
-                    ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                property real boldness: tile.current ? 1 : 0
+                readonly property var axes: {
+                    const t = Math.max(0, Math.min(1, tile.boldness));
+                    return {
+                        "wght": Math.round(root.axesIdle.wght + (root.axesChosen.wght - root.axesIdle.wght) * t),
+                        "wdth": Math.round(root.axesIdle.wdth + (root.axesChosen.wdth - root.axesIdle.wdth) * t),
+                        "ROND": 100
+                    };
+                }
 
+                Behavior on boldness {
+                    enabled: !Appearance.reducedMotion
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(tile)
+                }
                 Behavior on color {
                     enabled: !Appearance.reducedMotion
-                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(chip)
+                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(tile)
                 }
-                Behavior on implicitWidth {
+                Behavior on x {
+                    enabled: !Appearance.reducedMotion && grid.settled
+                    animation: Appearance.animation.elementMove.numberAnimation.createObject(tile)
+                }
+                Behavior on width {
+                    enabled: !Appearance.reducedMotion && grid.settled
+                    animation: Appearance.animation.elementMove.numberAnimation.createObject(tile)
+                }
+                Behavior on topLeftRadius {
                     enabled: !Appearance.reducedMotion
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(chip)
+                    animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(tile)
+                }
+                Behavior on topRightRadius {
+                    enabled: !Appearance.reducedMotion
+                    animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(tile)
+                }
+                Behavior on bottomLeftRadius {
+                    enabled: !Appearance.reducedMotion
+                    animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(tile)
+                }
+                Behavior on bottomRightRadius {
+                    enabled: !Appearance.reducedMotion
+                    animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(tile)
                 }
 
-                // A Row rather than a RowLayout: the label's width is what
-                // animates, and a layout would keep its spacing around a
-                // zero-width child, leaving a gap where the word used to be.
-                Row {
-                    id: chipRow
+                Column {
                     anchors.centerIn: parent
-                    spacing: chip.labelShown ? 6 : 0
+                    width: parent.width - root.tilePadding * 2
+                    visible: tile.mode !== "text"
+                    spacing: 4
 
-                    Behavior on spacing {
-                        enabled: !Appearance.reducedMotion
-                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(chipRow)
+                    MaterialShapeWrappedMaterialSymbol {
+                        id: glyphShape
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        implicitSize: root.shapeSize
+                        shape: glyphShape.getShape(tile.current ? root.shapeChosen : root.shapeIdle)
+                        text: tile.modelData.icon ?? ""
+                        iconSize: root.glyphSize
+                        fill: tile.current ? 1 : 0
+                        color: tile.current ? Appearance.colors.colPrimary : "transparent"
+                        colSymbol: tile.current ? Appearance.colors.colOnPrimary : tile.colOn
+
+                        Behavior on color {
+                            enabled: !Appearance.reducedMotion
+                            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(glyphShape)
+                        }
                     }
+                    StyledText {
+                        width: parent.width
+                        visible: tile.mode === "stacked"
+                        horizontalAlignment: Text.AlignHCenter
+                        text: root.nameOf(tile.modelData)
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        fontSizeMode: Text.HorizontalFit
+                        minimumPixelSize: Appearance.font.pixelSize.smallest
+                        font.variableAxes: tile.axes
+                        color: tile.colOn
+                        elide: Text.ElideRight
+                    }
+                }
+
+                Row {
+                    id: textRow
+                    readonly property bool hasIcon: (tile.modelData.icon ?? "") !== ""
+                    readonly property bool leadShown: textRow.hasIcon || tile.current
+                    anchors.centerIn: parent
+                    visible: tile.mode === "text"
+                    spacing: textRow.leadShown ? 6 : 0
 
                     MaterialSymbol {
                         anchors.verticalCenter: parent.verticalCenter
-                        visible: chip.optionIcon !== ""
-                        text: chip.optionIcon
-                        iconSize: 18
-                        fill: chip.current ? 1 : 0
-                        color: chip.colOn
-                    }
-                    StyledText {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: chip.optionLabel
-                        font.pixelSize: Appearance.font.pixelSize.smaller
-                        color: chip.colOn
+                        text: textRow.hasIcon ? tile.modelData.icon : "check"
+                        iconSize: root.checkSize
+                        fill: tile.current ? 1 : 0
+                        color: tile.colOn
+                        width: textRow.leadShown ? root.checkSize : 0
+                        opacity: textRow.leadShown ? 1 : 0
                         clip: true
-                        width: chip.labelShown ? implicitWidth : 0
-                        opacity: chip.labelShown ? 1 : 0
 
                         Behavior on width {
                             enabled: !Appearance.reducedMotion
-                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                            animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(this)
                         }
                         Behavior on opacity {
                             enabled: !Appearance.reducedMotion
                             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                         }
                     }
-                }
-
-                // Below the chip, not above it: the panel's pages are clipped
-                // flickables, and a tip drawn upward from the first run of
-                // chips is cut off by the page's own top edge.
-                StyledToolTipContent {
-                    anchors.top: parent.bottom
-                    anchors.topMargin: 4
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    z: 100
-                    visible: !chip.labelShown
-                    text: chip.optionLabel
-                    shown: chipMouse.containsMouse
+                    StyledText {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Math.min(implicitWidth, tile.width - root.textPadding * 2 - root.checkSize)
+                        text: root.nameOf(tile.modelData)
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        font.variableAxes: tile.axes
+                        color: tile.colOn
+                        elide: Text.ElideRight
+                    }
                 }
 
                 MouseArea {
-                    id: chipMouse
+                    id: tileMouse
                     anchors.fill: parent
-                    enabled: chip.available
+                    enabled: tile.available
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: root.selected(chip.modelData.value)
+                    onContainsMouseChanged: {
+                        if (tileMouse.containsMouse)
+                            root.hoveredIndex = tile.index;
+                        else if (root.hoveredIndex === tile.index)
+                            root.hoveredIndex = -1;
+                    }
+                    onClicked: root.selected(tile.modelData.value)
                 }
             }
         }
