@@ -604,6 +604,11 @@ Singleton {
     // The desktop's right-click menu: which screen, where on it. Session
     // state like the widget menu's; exists in and out of Edit Mode.
     property bool desktopMenuOpen: false
+    // Desktop icon dialogs alive (the item menu and its rename field). They
+    // take the keyboard through a layer surface, which leaves no focused
+    // window behind: type-to-search reads this to leave their keys alone.
+    property int desktopDialogCount: 0
+    readonly property bool desktopDialogOpen: root.desktopDialogCount > 0
     // The exit runs inside the live surface (DesktopMenuCard's reveal), so
     // `open` stays true while the card plays out; only the card's
     // exitFinished may clear it, through finishDesktopMenuClose.

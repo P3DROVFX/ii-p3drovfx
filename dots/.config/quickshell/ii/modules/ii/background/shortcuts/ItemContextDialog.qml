@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import qs
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.ii.editMode
@@ -192,7 +193,9 @@ FocusScope {
         return true;
     }
     focus: true
+    Component.onDestruction: GlobalStates.desktopDialogCount = Math.max(0, GlobalStates.desktopDialogCount - 1)
     Component.onCompleted: {
+        GlobalStates.desktopDialogCount += 1;
         // Opened straight onto a page (F2 → rename), that page's field
         // claims focus itself — grabbing it here, after the children have
         // completed, would steal it back.

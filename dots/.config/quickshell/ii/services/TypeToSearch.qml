@@ -124,6 +124,8 @@ Singleton {
         // Its own search bars must receive printable keys instead of the Overview's
         // compositor-level type-to-search binds consuming them.
         || GlobalStates.editMode
+        // The desktop icon menu and its rename field type into a layer surface too.
+        || GlobalStates.desktopDialogOpen
 
     // Not under an open Alt+Tab: its typing submap binds the bare letters, and arming or
     // disarming here (hl.unbind reaches into every submap) would take them away mid-search.
