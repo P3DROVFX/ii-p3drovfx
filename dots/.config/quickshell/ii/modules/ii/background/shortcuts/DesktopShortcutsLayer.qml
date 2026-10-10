@@ -3,11 +3,13 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Window
+import Qt5Compat.GraphicalEffects as GE
 import Quickshell
 import Quickshell.Widgets
 import qs
 import qs.services
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
 
 Item {
@@ -1108,9 +1110,11 @@ Item {
                         Layout.preferredHeight: root.labelHeight
                         readonly property string mode: root.options.labels ?? "always"
                         readonly property string style: root.options.labelStyle ?? "auto"
-                        // A bright wallpaper swallows the raised shadow, so
-                        // "auto" draws the M3 inverse pair's scrim there and
-                        // the shadow elsewhere; the other two force one.
+                        // "auto" and "shadow" draw light text in a soft dark
+                        // halo, readable on any wallpaper: the palette only
+                        // knows the wallpaper's overall brightness, never the
+                        // patch behind one label. "pill" draws the M3
+                        // inverse pair's scrim instead.
                         readonly property bool pill: labelBox.style === "pill"
                         visible: labelBox.mode !== "never"
                         opacity: labelBox.mode === "hover" ? (tile.hovered || tile.selected ? 1 : 0) : 1
@@ -1143,6 +1147,18 @@ Item {
                             wrapMode: (root.options.labelLines ?? 1) === 2 ? Text.Wrap : Text.NoWrap
                             horizontalAlignment: Text.AlignHCenter
                             maximumLineCount: (root.options.labelLines ?? 1) === 2 ? 2 : 1
+                            // The halo: a wide, spread shadow rather than a
+                            // 1 px offset, so a white patch of wallpaper behind
+                            // white text still leaves a dark rim to read.
+                            layer.enabled: !labelBox.pill
+                            layer.effect: GE.DropShadow {
+                                radius: Math.max(4, Math.round(root.labelSize * 0.45))
+                                samples: radius * 2 + 1
+                                spread: 0.3
+                                verticalOffset: 1
+                                color: ColorUtils.transparentize(Appearance.m3colors.m3shadow, 0.35)
+                                transparentBorder: true
+                            }
                         }
                     }
                 }
