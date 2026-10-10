@@ -364,6 +364,10 @@ Item {
         return root.widgetGroups.find(group => group.key === key) ?? null;
     }
 
+    function widgetCategoryTitle(widget) {
+        return root.widgetGroups.find(group => group.items.indexOf(widget) !== -1)?.title ?? "";
+    }
+
     // How many KINDS in this category are placed, not how many copies: the
     // header reads "3/20", which is about the catalogue, and a copy count
     // there could exceed the number of rows below it.
@@ -1206,74 +1210,30 @@ Item {
         }
     }
 
-    // A category's widgets, or a query's answer: a click adds or removes,
-    // a drag places the widget where the pointer is let go.
+    // A category's widgets, or a query's answer: a click adds one, a drag
+    // places it where the pointer is let go, the minus takes the last back.
     Component {
         id: widgetListPage
 
-        // The empty line is a SIBLING of the list, never a child of it: a
-        // plain child of a ListView is parented into its content item, which
-        // scrolls and is zero-sized when the model is empty - exactly the case
-        // the line exists for.
-        Item {
-            StyledListView {
-                id: widgetList
-                anchors.fill: parent
-                staggerStep: root.staggerStep
-                clip: true
-                spacing: 3
-                model: root.widgetItems
+        EditWidgetCatalogPage {
+            items: root.widgetItems
+            group: root.searching ? null : root.widgetGroupByKey(root.page.substring(9))
+            searching: root.searching
+            lockTab: root.lockTab
+            staggerStep: root.staggerStep
+            countOf: widgetId => root.widgetCount(widgetId)
+            captionOf: widget => root.widgetCategoryTitle(widget)
 
-                delegate: EditPanelRow {
-                    id: widgetRow
-                    required property var modelData
-                    required property int index
-                    readonly property int placed: root.widgetCount(modelData.widgetId)
-
-                    width: widgetList.width
-                    first: index === 0
-                    last: index === root.widgetItems.length - 1
-                    symbol: modelData.icon ?? "widgets"
-                    title: modelData.name ?? modelData.widgetId
-                    subtitle: modelData.description ?? ""
-                    // The row always offers ANOTHER one, and says how many are
-                    // out there. A checkmark would be claiming the row is a
-                    // switch, and it is not one any more.
-                    //
-                    // Once one is placed the count becomes a stepper: the plus
-                    // it already had, and the minus it never did. Taking a
-                    // widget back off meant hunting the copy down on the
-                    // desktop and using its own menu - fine for one, absurd for
-                    // the five a stray click leaves behind, and impossible for
-                    // a copy that landed under another window's worth of
-                    // widgets. The minus takes the last one placed.
-                    valueText: widgetRow.placed > 0 ? `×${widgetRow.placed}` : ""
-                    trailingKind: widgetRow.placed > 0 ? "stepper" : "add"
-                    stepDownEnabled: widgetRow.placed > 0
-                    onStepDown: Config.removeLastWidgetInstance(modelData.widgetId)
-                    onStepUp: root.addInstanceRequested(modelData.widgetId)
-                    draggable: true
-                    dragOwner: widgetList
-
-                    onActivated: root.addInstanceRequested(modelData.widgetId)
-                    onDragBegan: root.dragMetadata = modelData
-                    onDragMovedTo: (x, y) => root.moveGhost(x, y)
-                    onDragFinished: (x, y) => {
-                        root.dragMetadata = null;
-                        const p = root.toGhost(x, y);
-                        root.addRequested(modelData.widgetId, p.x, p.y);
-                    }
-                    onDragCancelled: root.dragMetadata = null
-                }
+            onAddOne: widgetId => root.addInstanceRequested(widgetId)
+            onRemoveOne: widgetId => Config.removeLastWidgetInstance(widgetId)
+            onDragBegan: widget => root.dragMetadata = widget
+            onDragMoved: (x, y) => root.moveGhost(x, y)
+            onDragDropped: (widgetId, x, y) => {
+                root.dragMetadata = null;
+                const p = root.toGhost(x, y);
+                root.addRequested(widgetId, p.x, p.y);
             }
-
-            StyledText {
-                anchors.centerIn: parent
-                visible: widgetList.count === 0
-                text: Translation.tr("No matches")
-                font.pixelSize: Appearance.font.pixelSize.small
-                color: Appearance.colors.colOnSurfaceVariant
-            }
+            onDragCancelled: root.dragMetadata = null
         }
     }
 

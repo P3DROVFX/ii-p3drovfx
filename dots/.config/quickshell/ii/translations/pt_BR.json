@@ -8495,7 +8495,7 @@
     "No lyrics": "No lyrics",
     "No lyrics found for this track": "No lyrics found for this track",
     "No manual synchronization has run in this session.": "No manual synchronization has run in this session.",
-    "No matches": "No matches",
+    "No matches": "Nenhum resultado",
     "No matching shortcuts": "No matching shortcuts",
     "No media player is active": "No media player is active",
     "No messages match this search": "No messages match this search",
@@ -14629,5 +14629,12 @@
     "Subject in front of widgets · %1 model(s) installed": "Sujeito à frente dos widgets · %1 modelo(s) instalado(s)",
     "%1 model(s) installed": "%1 modelo(s) instalado(s)",
     "Cut the subject out so a clock can sit behind a person": "Recorta o sujeito para um relógio ficar atrás de uma pessoa",
-    "A full-screen overlay with lyrics, visualizers and album art while Media Mode is on": "Uma sobreposição em tela cheia com letras, visualizadores e capa do álbum enquanto o modo mídia está ligado"
+    "A full-screen overlay with lyrics, visualizers and album art while Media Mode is on": "Uma sobreposição em tela cheia com letras, visualizadores e capa do álbum enquanto o modo mídia está ligado",
+    "on the lock screen": "na tela de bloqueio",
+    "on your desktop": "na sua área de trabalho",
+    "Click to add, or drag a card onto the lock screen": "Clique para adicionar ou arraste um card para a tela de bloqueio",
+    "Click to add, or drag a card onto the desktop": "Clique para adicionar ou arraste um card para a área de trabalho",
+    "1 widget": "1 widget",
+    "%1 widgets": "%1 widgets",
+    "Try a shorter name or another word": "Tente um nome mais curto ou outra palavra"
 }

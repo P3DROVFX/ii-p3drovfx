@@ -17,13 +17,11 @@ import qs.modules.common.widgets
  * its children, so counting siblings answers with whatever the pool happens to
  * hold rather than with the row's place in the model.
  *
- * A MouseArea rather than a RippleButton because half of these rows are also
- * drag handles - a catalogue row carried onto the desktop or onto the bar -
- * and that needs `preventStealing` against the list's own flick plus a
- * press/move/release the button does not expose. `activated()` is the click,
- * emitted only for a release that was NOT a drag.
+ * An EditDragArea rather than a RippleButton because half of these rows are
+ * also drag handles - a catalogue row carried onto the desktop or onto the
+ * bar - and that needs a press/move/release the button does not expose.
  */
-MouseArea {
+EditDragArea {
     id: root
 
     property string symbol: ""
@@ -47,17 +45,11 @@ MouseArea {
     // A second line that has to be READ rather than glanced at - a choice's
     // description - wraps and grows the row instead of eliding.
     property bool subtitleWrap: false
-    // A drag on this row carries something; the list it sits in must let go of
-    // the gesture the moment it wins.
-    property bool draggable: false
-    property Flickable dragOwner: null
     // Place in the fill, for the cascade a page arrives with. -1 arrives
     // settled, which is what a row outside a run wants. ListView pages get
     // this from the view's own `populate` transition instead; this is for the
     // Repeater-built pages, which have no equivalent.
     property int staggerIndex: -1
-
-    signal activated()
 
     // A row only takes the keyboard when a host hands it focus (the icon
     // menu's arrow navigation); it then reads as hovered and Enter/Space
@@ -65,22 +57,11 @@ MouseArea {
     Keys.onReturnPressed: event => { event.accepted = true; if (root.rowEnabled) root.activated(); }
     Keys.onEnterPressed: event => { event.accepted = true; if (root.rowEnabled) root.activated(); }
     Keys.onSpacePressed: event => { event.accepted = true; if (root.rowEnabled) root.activated(); }
-    signal dragBegan()
-    signal dragMovedTo(real sceneX, real sceneY)
-    signal dragFinished(real sceneX, real sceneY)
-    signal dragCancelled()
     signal stepUp()
     signal stepDown()
 
     implicitHeight: Math.max(58, rowLayout.implicitHeight + 16)
-    hoverEnabled: true
     enabled: root.rowEnabled
-    cursorShape: Qt.PointingHandCursor
-    acceptedButtons: Qt.LeftButton
-    // Only a row that CARRIES something holds the gesture against its list.
-    // A static row must let the flick through, or a settings page cannot be
-    // scrolled by dragging over the rows that fill it.
-    preventStealing: root.draggable
     opacity: (root.rowEnabled ? 1 : 0.45) * revealProxy.opacity
     scale: revealProxy.scale
 
@@ -105,57 +86,6 @@ MouseArea {
     readonly property color colOn: root.selected
         ? Appearance.colors.colOnPrimary
         : root.destructive ? Appearance.m3colors.m3error : Appearance.colors.colOnSurface
-
-    // ── The gesture ──────────────────────────────────────────────────────────
-    property real _pressX: 0
-    property real _pressY: 0
-    property bool dragActive: false
-
-    function _scene(mouse) {
-        return root.mapToItem(null, mouse.x, mouse.y);
-    }
-
-    onPressed: mouse => {
-        root._pressX = mouse.x;
-        root._pressY = mouse.y;
-        root.dragActive = false;
-    }
-    onPositionChanged: mouse => {
-        if (!root.pressed || !root.draggable)
-            return;
-        if (!root.dragActive
-                && Math.abs(mouse.x - root._pressX) < 5
-                && Math.abs(mouse.y - root._pressY) < 5)
-            return;
-        if (!root.dragActive) {
-            root.dragActive = true;
-            if (root.dragOwner)
-                root.dragOwner.interactive = false;
-            root.dragBegan();
-        }
-        const p = root._scene(mouse);
-        root.dragMovedTo(p.x, p.y);
-    }
-    onReleased: mouse => {
-        const wasDrag = root.dragActive;
-        root.dragActive = false;
-        if (root.dragOwner)
-            root.dragOwner.interactive = true;
-        if (!wasDrag) {
-            root.activated();
-            return;
-        }
-        const p = root._scene(mouse);
-        root.dragFinished(p.x, p.y);
-    }
-    onCanceled: {
-        if (!root.dragActive)
-            return;
-        root.dragActive = false;
-        if (root.dragOwner)
-            root.dragOwner.interactive = true;
-        root.dragCancelled();
-    }
 
     // The corner of the surface this row sits on, and how far in from it the
     // row starts. The end of a run is drawn CONCENTRIC with that surface -
