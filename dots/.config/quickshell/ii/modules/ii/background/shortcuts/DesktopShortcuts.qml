@@ -1289,8 +1289,12 @@ Singleton {
 
     function launch(entry) {
         // Folders and plain files go to the default handler; only .desktop
-        // paths are launchable through gio directly.
-        if ((entry.type === "directory" || entry.type === "file") && entry.path)
+        // paths are launchable through gio directly. An AppImage has no
+        // handler (xdg-open drops it silently), so one marked executable runs
+        // itself, as in a file manager; an unmarked one still goes to xdg-open.
+        if (entry.type === "file" && /\.appimage$/i.test(entry.path ?? ""))
+            Quickshell.execDetached(["sh", "-c", '[ -x "$1" ] && exec "$1"; exec xdg-open "$1"', "sh", entry.path]);
+        else if ((entry.type === "directory" || entry.type === "file") && entry.path)
             Quickshell.execDetached(["xdg-open", entry.path]);
         else if (entry.path)
             Quickshell.execDetached(["gio", "launch", entry.path]);

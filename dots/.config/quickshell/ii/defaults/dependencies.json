@@ -283,6 +283,13 @@
             "label": "Dock trash",
             "description": "Opening the trash from the dock.",
             "packages": [{ "name": "nautilus", "bin": "nautilus" }]
+        },
+        {
+            "id": "appimage-icons",
+            "tier": "optional",
+            "label": "AppImage icons",
+            "description": "AppImages on the desktop show their own icon.",
+            "packages": [{ "name": "squashfs-tools", "bin": "unsquashfs" }]
         }
     ]
 }

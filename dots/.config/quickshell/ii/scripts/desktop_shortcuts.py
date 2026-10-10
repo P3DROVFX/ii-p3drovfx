@@ -29,6 +29,71 @@ def icon_string(icon, fallback):
     return text.split(":")[0] if text else fallback
 
 
+APPIMAGE_ICON_CACHE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "ii" / "desktop-icons"
+APPIMAGE_ICON_MAX_BYTES = 4 * 1024 * 1024
+
+
+def appimage_squashfs_offset(path: Path):
+    # A type 2 AppImage is an ELF runtime with the squashfs image appended
+    # right after the section header table, the offset `--appimage-offset`
+    # prints. Read from the headers so the file is never run.
+    with path.open("rb") as f:
+        head = f.read(64)
+        if len(head) < 64 or head[:4] != b"\x7fELF" or head[8:11] != b"AI\x02":
+            return None
+        endian = "little" if head[5] == 1 else "big"
+        field = lambda start, end: int.from_bytes(head[start:end], endian)
+        if head[4] == 2:  # ELF64
+            offset = field(0x28, 0x30) + field(0x3A, 0x3C) * field(0x3C, 0x3E)
+        else:
+            offset = field(0x20, 0x24) + field(0x2E, 0x30) * field(0x30, 0x32)
+        f.seek(offset)
+        return offset if f.read(4) == b"hsqs" else None
+
+
+def appimage_icon(path: Path):
+    """The icon an AppImage carries (its `.DirIcon`), extracted once into the
+    cache. None when it cannot be read: the mime icon stands in."""
+    unsquashfs = shutil.which("unsquashfs")
+    if not unsquashfs:
+        return None
+    import hashlib
+    import subprocess
+    stat = path.stat()
+    key = hashlib.sha1(str(path).encode()).hexdigest()
+    stamp = f"{key}-{stat.st_mtime_ns}-{stat.st_size}"
+    for ext in (".png", ".svg"):
+        cached = APPIMAGE_ICON_CACHE / (stamp + ext)
+        if cached.is_file():
+            return str(cached)
+    try:
+        offset = appimage_squashfs_offset(path)
+        if offset is None:
+            return None
+        # `-cat` follows .DirIcon's usual symlink to the real icon.
+        data = subprocess.run([unsquashfs, "-o", str(offset), "-cat", str(path), ".DirIcon"],
+                              capture_output=True, timeout=5, check=True).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if not data or len(data) > APPIMAGE_ICON_MAX_BYTES:
+        return None
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        ext = ".png"
+    elif b"<svg" in data[:1024]:
+        ext = ".svg"
+    else:
+        return None
+    APPIMAGE_ICON_CACHE.mkdir(parents=True, exist_ok=True)
+    # The AppImage changed (or moved back): its older extractions go.
+    for stale in APPIMAGE_ICON_CACHE.glob(key + "-*"):
+        stale.unlink(missing_ok=True)
+    target = APPIMAGE_ICON_CACHE / (stamp + ext)
+    partial = target.with_name(target.name + ".part")
+    partial.write_bytes(data)
+    partial.replace(target)
+    return str(target)
+
+
 def resolve_path(path: Path):
     path = path.resolve()
     if path.is_dir():
@@ -57,13 +122,14 @@ def resolve_path(path: Path):
             "modified": int(path.stat().st_mtime * 1000) if path.exists() else 0
         }
     content_type = Gio.content_type_guess(str(path), None)[0]
+    icon = appimage_icon(path) if content_type == "application/vnd.appimage" else None
     return {
         "id": "file:" + str(path),
         "type": "file",
         "path": str(path),
         "name": path.name or str(path),
         "fileName": path.name,
-        "icon": icon_string(Gio.content_type_get_icon(content_type), "text-x-generic"),
+        "icon": icon or icon_string(Gio.content_type_get_icon(content_type), "text-x-generic"),
         "modified": int(path.stat().st_mtime * 1000) if path.exists() else 0
     }
 
