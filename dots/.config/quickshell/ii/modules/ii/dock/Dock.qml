@@ -220,7 +220,12 @@ Scope {
             // dock is doing, and stage 6 edits the dock in place. A preset switch takes it off
             // screen with the bar: the preset may move it to another edge, and it would make that
             // move in full view while the shell is busy applying the rest.
-            property bool reveal: !GlobalStates.presetBarHidden && (dock.pinned || GlobalStates.editMode || DockPresets.isSwitchingPreset || (!anySidebarOpen && ((dockRoot.effectiveHoverToReveal && dockMouseArea.containsMouse) || (dockContent.requestDockShow) || (workspaceEmpty && !isSpecialWorkspaceOpen && (!(Config.options?.dock.showOnlyOnFocusedMonitor ?? false) || isFocusedMonitor)))))
+            // Real Gnome's overview puts a workspace plane where the dock sits; on an
+            // empty workspace the dock would cover its bottom, so it steps aside.
+            readonly property var overviewController: GlobalStates.overviewBackgroundControllerFor(dockRoot.screen?.name ?? "")
+            readonly property bool realGnomeOverviewOpen: GlobalStates.overviewOpen && !GlobalStates.editMode
+                && !!dockRoot.overviewController && dockRoot.overviewController.isRealGnome
+            property bool reveal: !GlobalStates.presetBarHidden && !dockRoot.realGnomeOverviewOpen && (dock.pinned || GlobalStates.editMode || DockPresets.isSwitchingPreset || (!anySidebarOpen && ((dockRoot.effectiveHoverToReveal && dockMouseArea.containsMouse) || (dockContent.requestDockShow) || (workspaceEmpty && !isSpecialWorkspaceOpen && (!(Config.options?.dock.showOnlyOnFocusedMonitor ?? false) || isFocusedMonitor)))))
             property bool positionChanging: false
 
             // TODO: check for multi-monitor situations

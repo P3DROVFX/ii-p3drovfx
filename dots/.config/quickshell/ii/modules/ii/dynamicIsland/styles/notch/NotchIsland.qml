@@ -710,6 +710,7 @@ Scope {
      * transition - not only while search is technically active.
      */
     readonly property bool overviewVisible: root.searchActive
+        && !root.realGnome
         && LauncherSearch.query === ""
         && !root.searchPanelOwned
         && !GlobalStates.searchOnlyMode
@@ -728,6 +729,44 @@ Scope {
     readonly property int overviewColumns: 3
     /** Relative to the screen, like Config.options.overview.scale. */
     readonly property real overviewScale: 0.15
+
+    /**
+     * Real Gnome overview style: no workspace grid - the plane and its neighbours are
+     * the workspaces - so the island holds only search, and the window picker takes the
+     * free area under it. The island publishes that area for the background zoom and
+     * hosts the picker's input (the capture layer below takes none).
+     */
+    readonly property var realGnomeController: GlobalStates.overviewBackgroundControllerFor(root.targetScreen?.name ?? "")
+    readonly property bool realGnome: !!root.realGnomeController && root.realGnomeController.isRealGnome
+        && root.integratedOverview && !root.scrollingLayout
+    /** Room the workspace indicator keeps under the plane. */
+    readonly property real realGnomeIndicatorRoom: 40
+    readonly property bool realGnomeSearchOpen: root.realGnome && root.searchActive
+        && LauncherSearch.query === "" && !root.searchPanelOwned
+    onRealGnomeSearchOpenChanged: {
+        if (root.realGnomeSearchOpen)
+            realGnomeAreaTimer.restart();
+    }
+    onRealGnomeChanged: realGnomeAreaTimer.restart()
+    Timer {
+        id: realGnomeAreaTimer
+        // After the morph has settled: the island's size is final then.
+        interval: 450
+        onTriggered: {
+            if (!root.realGnomeSearchOpen || !root.targetScreen)
+                return;
+            const bottom = container.mapToItem(null, 0, container.height).y;
+            if (bottom <= 0)
+                return;
+            const screen = root.targetScreen;
+            const reserved = HyprlandData.monitors.find(m => m.name === screen.name)?.reserved ?? [0, 0, 0, 0];
+            // Clear of the island's body and its shadow.
+            const top = bottom + 12;
+            // The workspace indicator keeps the bottom strip.
+            GlobalStates.setRealGnomeArea(screen.name, Qt.rect(reserved[0], top,
+                screen.width - reserved[0] - reserved[2], screen.height - reserved[3] - root.realGnomeIndicatorRoom - top));
+        }
+    }
 
     /**
      * How the overview arrives. Integrated, it is a plain fade on the island's own
@@ -1927,7 +1966,8 @@ Scope {
                 // maskTarget already covers.
                 const outsideGrid = root.overviewVisible
                     && (root.scrollingLayout || !root.integratedOverview);
-                return outsideGrid ? fullWindow : maskTarget;
+                // Real Gnome's window picker sits under the island and takes the pointer.
+                return outsideGrid || root.realGnomeSearchOpen ? fullWindow : maskTarget;
             }
             // The bubbles take the pointer too, so hovering one can open the island.
             regions: root.bubbleMaskRegions
@@ -1952,6 +1992,31 @@ Scope {
                         return;
                     }
                     GlobalStates.closeOverview();
+                }
+            }
+
+            // Window coordinates are screen coordinates: the window spans the screen.
+            Loader {
+                anchors.fill: parent
+                active: root.realGnome
+                sourceComponent: RealGnomeWindowPicker {
+                    screenName: root.targetScreen?.name ?? ""
+                    shown: GlobalStates.overviewOpen && root.realGnomeSearchOpen
+                        && GlobalStates.activeSearchQuery === "" && !GlobalStates.searchPanelActive
+                        && !!root.realGnomeController && root.realGnomeController.progress > 0.9
+                }
+            }
+
+            Loader {
+                active: root.realGnome
+                readonly property var reserved: HyprlandData.monitors.find(m => m.name === (root.targetScreen?.name ?? ""))?.reserved ?? [0, 0, 0, 0]
+                anchors.horizontalCenter: parent.horizontalCenter
+                y: parent.height - reserved[3] - root.realGnomeIndicatorRoom / 2 - (item ? item.height / 2 : 0)
+                sourceComponent: RealGnomeWorkspaceIndicator {
+                    screenName: root.targetScreen?.name ?? ""
+                    shown: GlobalStates.overviewOpen && root.realGnomeSearchOpen
+                        && GlobalStates.activeSearchQuery === "" && !GlobalStates.searchPanelActive
+                        && !!root.realGnomeController && root.realGnomeController.progress > 0.6
                 }
             }
         }

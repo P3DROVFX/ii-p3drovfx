@@ -18,7 +18,7 @@ ContentPage {
     readonly property string overviewBackgroundStyle: {
         const background = Config.options.background;
         const style = background.overviewBackgroundStyle;
-        if (["gnome", "soft-focus", "camera-push", "depth", "card-lift", "desaturate", "directional", "material-shape"].indexOf(style) >= 0)
+        if (["gnome", "real-gnome", "soft-focus", "camera-push", "depth", "card-lift", "desaturate", "directional", "material-shape"].indexOf(style) >= 0)
             return style;
         switch (background.zoomOutStyle) {
         case 0:
@@ -34,7 +34,7 @@ ContentPage {
     // Hyprland's scrolling layout locks the zoom to Gnome Like: the wallpaper and
     // windows zoom out onto the scrolling overview's active row.
     readonly property bool scrollingLayout: Persistent.states.hyprland.layout === "scrolling"
-    readonly property bool windowTransitionAvailable: scrollingLayout || overviewBackgroundStyle === "gnome" || overviewBackgroundStyle === "soft-focus"
+    readonly property bool windowTransitionAvailable: scrollingLayout || overviewBackgroundStyle === "gnome" || overviewBackgroundStyle === "real-gnome" || overviewBackgroundStyle === "soft-focus"
 
     /**
      * The Dynamic Island lays the overview out itself when it owns it: a fixed 2x3 grid
@@ -450,7 +450,7 @@ ContentPage {
                     currentValue: page.overviewBackgroundStyle
                     onSelected: newValue => {
                         Config.options.background.overviewBackgroundStyle = newValue;
-                        Config.options.background.zoomOutStyle = newValue === "gnome" ? 0 : newValue === "soft-focus" ? 1 : 2;
+                        Config.options.background.zoomOutStyle = (newValue === "gnome" || newValue === "real-gnome") ? 0 : newValue === "soft-focus" ? 1 : 2;
                     }
                     options: [
                         {
@@ -459,6 +459,13 @@ ContentPage {
                             tooltip: Translation.tr("Zooms the wallpaper out with rounded corners, shadow and a blurred backing."),
                             enabled: !page.videoWallpaper,
                             value: "gnome"
+                        },
+                        {
+                            displayName: Translation.tr("Real Gnome"),
+                            icon: "auto_awesome_mosaic",
+                            tooltip: Translation.tr("Gnome Like reworked after GNOME Shell: windows spread into a non-overlapping picker under small workspace thumbnails, eased motion, neighbouring workspaces at the edges and a vignetted backing."),
+                            enabled: !page.videoWallpaper,
+                            value: "real-gnome"
                         },
                         {
                             displayName: Translation.tr("Soft Focus"),

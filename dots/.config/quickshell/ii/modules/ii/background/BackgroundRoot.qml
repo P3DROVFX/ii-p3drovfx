@@ -177,6 +177,7 @@ PanelWindow {
         heldProgress: GlobalStates.gestureDragProgress
         style: bgRoot.lockEffectActive ? bgRoot.lockEffectStyle : Config.options.background.overviewBackgroundStyle
         lockDriven: bgRoot.lockEffectActive
+        openHold: GlobalStates.overviewZoomHeld && bgRoot.isMonitorFocused && !bgRoot.lockEffectActive
         legacyStyle: Config.options.background.zoomOutStyle
         videoEffectsDisabled: bgRoot.videoEffectsDisabled
         screenWidth: bgRoot.screen.width
@@ -196,6 +197,11 @@ PanelWindow {
         // on screen.
         scrollingTarget: bgRoot.lockEffectActive ? Qt.rect(0, 0, 0, 0)
             : GlobalStates.scrollingOverviewTargets[bgRoot.screen?.name ?? ""] ?? Qt.rect(0, 0, 0, 0)
+        realGnomeArea: {
+            const name = bgRoot.screen?.name ?? "";
+            const area = GlobalStates.realGnomeAreas[name] ?? Persistent.states.overview?.realGnomeAreas?.[name];
+            return area ? Qt.rect(area.x, area.y, area.width, area.height) : Qt.rect(0, 0, 0, 0);
+        }
     }
 
     readonly property bool isGnomeLikeOverview: overviewController.isGnomeLike

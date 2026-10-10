@@ -1330,6 +1330,52 @@ Singleton {
         next[screenName] = rect;
         root.scrollingOverviewTargets = next;
     }
+    // Real Gnome overview: screen name -> the free area under the workspace
+    // thumbnails (screen coordinates), where the wallpaper plane lands.
+    property var realGnomeAreas: ({})
+    function setRealGnomeArea(screenName, rect) {
+        const current = root.realGnomeAreas[screenName];
+        if (current && Math.abs(current.x - rect.x) < 0.5 && Math.abs(current.y - rect.y) < 0.5
+                && Math.abs(current.width - rect.width) < 0.5 && Math.abs(current.height - rect.height) < 0.5)
+            return;
+        const next = Object.assign({}, root.realGnomeAreas);
+        next[screenName] = rect;
+        root.realGnomeAreas = next;
+        const stored = Persistent.states.overview?.realGnomeAreas?.[screenName];
+        if (!stored || Math.abs(stored.x - rect.x) >= 0.5 || Math.abs(stored.y - rect.y) >= 0.5
+                || Math.abs(stored.width - rect.width) >= 0.5 || Math.abs(stored.height - rect.height) >= 0.5) {
+            const saved = Object.assign({}, Persistent.states.overview.realGnomeAreas);
+            saved[screenName] = { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+            Persistent.states.overview.realGnomeAreas = saved;
+        }
+    }
+    // Real Gnome window picker: screen name -> [{ address, title, x, y, width, height }]
+    // of each window's slot at full open (screen coordinates), and the window
+    // the pointer is over, shared by the capture layer and the overview's input.
+    property var realGnomePickerSlots: ({})
+    function setRealGnomePickerSlots(screenName, slots) {
+        const next = Object.assign({}, root.realGnomePickerSlots);
+        next[screenName] = slots;
+        root.realGnomePickerSlots = next;
+    }
+    property string realGnomeHoveredWindow: ""
+    // Real Gnome workspace slide: the plane's wallpaper exactly as the background draws
+    // it (screen name -> { source, x, y, width, height, decodeWidth, decodeHeight, mipmap },
+    // unscaled screen coordinates), so the strip's cards paint the same pixels; and the
+    // screen whose plane steps aside while the cards carry the whole strip.
+    property var realGnomePlaneWallpapers: ({})
+    function setRealGnomePlaneWallpaper(screenName, value) {
+        const current = root.realGnomePlaneWallpapers[screenName];
+        if (current && JSON.stringify(current) === JSON.stringify(value))
+            return;
+        const next = Object.assign({}, root.realGnomePlaneWallpapers);
+        next[screenName] = value;
+        root.realGnomePlaneWallpapers = next;
+    }
+    property string realGnomePlaneHiddenScreen: ""
+    // Gnome-like overviews: the focused monitor's zoom waits at 0 until the window
+    // captures have a frame and Hyprland has hidden the real windows under them.
+    property bool overviewZoomHeld: false
     // Search panels are lazy and may be hosted on any monitor. Keep a small
     // transient intent here so callers do not need to know which SearchWidget
     // instance will render it.

@@ -98,6 +98,13 @@ Item {
             "description": Translation.tr("Zooms the wallpaper out with rounded corners, shadow and a blurred backing.")
         },
         {
+            "value": "real-gnome",
+            "name": Translation.tr("Real Gnome"),
+            "icon": "auto_awesome_mosaic",
+            "shape": MaterialShape.Shape.Cookie6Sided,
+            "description": Translation.tr("Gnome Like reworked after GNOME Shell: windows spread into a non-overlapping picker under small workspace thumbnails, eased motion, neighbouring workspaces at the edges and a vignetted backing.")
+        },
+        {
             "value": "material-shape",
             "name": Translation.tr("Material Shape"),
             "icon": "shapes",
@@ -402,7 +409,7 @@ Item {
                 currentValue: backgroundRoot.overviewValue
                 onSelected: value => {
                     backgroundRoot.background.overviewBackgroundStyle = value;
-                    backgroundRoot.background.zoomOutStyle = value === "gnome" ? 0 : 2;
+                    backgroundRoot.background.zoomOutStyle = (value === "gnome" || value === "real-gnome") ? 0 : 2;
                 }
             }
 

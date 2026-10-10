@@ -544,6 +544,13 @@ Singleton {
                 property string layout: "dwindle"
             }
 
+            property JsonObject overview: JsonObject {
+                // Real Gnome: screen name -> { x, y, width, height } of the free area
+                // under the workspace thumbnails, last measured. The first open after a
+                // start lands the plane there instead of on an estimate.
+                property var realGnomeAreas: ({})
+            }
+
             property JsonObject idle: JsonObject {
                 property bool inhibit: false
                 property real expiresAt: 0 // Epoch ms; 0 means indefinite. Must be real, not int

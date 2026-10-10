@@ -1946,7 +1946,7 @@ Singleton {
             "phone.webcam.connection": ["wifi", "usb"],
             "appearance.fakeScreenRounding": [0, 1, 2, 3, 4],
             "background.zoomOutStyle": [0, 1, 2],
-            "background.overviewBackgroundStyle": ["", "gnome", "soft-focus", "camera-push", "depth", "card-lift", "desaturate", "directional", "material-shape"],
+            "background.overviewBackgroundStyle": ["", "gnome", "real-gnome", "soft-focus", "camera-push", "depth", "card-lift", "desaturate", "directional", "material-shape"],
             "background.mediaMode.visualizerMode": [0, 1, 2, 3],
             "background.mediaMode.syllable.textHighlightStyle": [0, 1],
             "bar.cornerStyle": [0, 1, 2, 3],

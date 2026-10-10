@@ -125,8 +125,10 @@ Item {
      */
     readonly property bool scrollingHandedOff: scrollingAimed && active && progress >= 0.999
 
-    readonly property real scaleOriginX: scrollingAimed ? scrollingTarget.x / (1.0 - scrollingScale) : centeredScaleOriginX
-    readonly property real scaleOriginY: scrollingAimed ? scrollingTarget.y / (1.0 - scrollingScale) : centeredScaleOriginY
+    readonly property real scaleOriginX: scrollingAimed ? scrollingTarget.x / (1.0 - scrollingScale)
+        : realGnomeAimed ? realGnomeTarget.x / (1.0 - realGnomeScale) : centeredScaleOriginX
+    readonly property real scaleOriginY: scrollingAimed ? scrollingTarget.y / (1.0 - scrollingScale)
+        : realGnomeAimed ? realGnomeTarget.y / (1.0 - realGnomeScale) : centeredScaleOriginY
 
     // Minimum transform that keeps the actual wallpaper covering the visible
     // monitor area.  This is the single source used by non-backing styles,
@@ -145,10 +147,10 @@ Item {
     readonly property real gnomeTargetScale: Math.max(0.85, overviewCoverScale * 0.85)
 
     readonly property string resolvedStyle: {
-        const persistentAllowedStyles = ["gnome", "camera-push", "card-lift", "desaturate", "directional", "material-shape"];
+        const persistentAllowedStyles = ["gnome", "real-gnome", "camera-push", "card-lift", "desaturate", "directional", "material-shape"];
         const knownStyles = isOverviewAlwaysActive
             ? persistentAllowedStyles
-            : ["gnome", "soft-focus", "camera-push", "depth", "card-lift", "desaturate", "directional", "material-shape"];
+            : ["gnome", "real-gnome", "soft-focus", "camera-push", "depth", "card-lift", "desaturate", "directional", "material-shape"];
         if (knownStyles.indexOf(root.style) >= 0)
             return root.style;
 
@@ -171,12 +173,64 @@ Item {
     readonly property string effectiveStyle: {
         if (root.scrollingLayout && !root.isOverviewAlwaysActive && !root.lockDriven)
             return "gnome";
+        // Real Gnome is the Gnome-like pipeline plus the `isRealGnome`
+        // refinements below, so every consumer of "gnome" serves both.
         if (!root.videoEffectsDisabled)
-            return root.resolvedStyle;
+            return root.resolvedStyle === "real-gnome" ? "gnome" : root.resolvedStyle;
         return (root.resolvedStyle === "camera-push" || root.isOverviewAlwaysActive) ? "camera-push" : "soft-focus";
     }
 
     readonly property bool isGnomeLike: effectiveStyle === "gnome"
+
+    /**
+     * Real Gnome: the Gnome-like zoom reworked after GNOME Shell's overview.
+     *
+     * The plane lands in the free area under the workspace thumbnails instead
+     * of the screen centre, the windows spread into a non-overlapping picker
+     * (OverviewWindowTransition), the motion eases without overshoot and the
+     * backing gains GNOME's vignette. The scrolling layout, the lock and the
+     * always-on overview keep plain Gnome Like.
+     */
+    readonly property bool isRealGnome: resolvedStyle === "real-gnome" && isGnomeLike
+        && !scrollingLayout && !lockDriven && !isOverviewAlwaysActive
+    /** Free area under the thumbnails (screen coordinates), published by the overview. */
+    property rect realGnomeArea: Qt.rect(0, 0, 0, 0)
+    // Until the overview has laid out once, estimate the search above the plane
+    // (field plus the now-playing card it can show).
+    readonly property rect realGnomeFallbackArea: {
+        // Plus the workspace indicator's strip at the bottom.
+        const chrome = 200;
+        const indicator = 40;
+        return barBottom && !barVertical
+            ? Qt.rect(padLeft, padTop, screenWidth - padLeft - padRight, screenHeight - padTop - padBottom - chrome - indicator)
+            : Qt.rect(padLeft, padTop + chrome, screenWidth - padLeft - padRight, screenHeight - padTop - padBottom - chrome - indicator);
+    }
+    readonly property rect realGnomeTarget: {
+        if (!isRealGnome || screenWidth <= 0 || screenHeight <= 0)
+            return Qt.rect(0, 0, 0, 0);
+        const area = realGnomeArea.width > 1 && realGnomeArea.height > 1 ? realGnomeArea : realGnomeFallbackArea;
+        const margin = Appearance.sizes.elevationMargin * 2;
+        const s = Math.max(0.3, Math.min(gnomeTargetScale,
+            (area.width - margin * 2) / screenWidth, (area.height - margin * 2) / screenHeight));
+        const w = screenWidth * s;
+        const h = screenHeight * s;
+        return Qt.rect(area.x + (area.width - w) / 2, area.y + (area.height - h) / 2, w, h);
+    }
+    readonly property bool realGnomeAimed: realGnomeTarget.width > 1 && realGnomeTarget.width < screenWidth
+    readonly property real realGnomeScale: realGnomeAimed ? realGnomeTarget.width / screenWidth : gnomeTargetScale
+    /** On-screen corner radius of the workspace plane. */
+    readonly property real realGnomeRadius: Appearance.rounding.large
+
+    // GNOME eases without overshoot. Opening uses the compositor's own window
+    // curve and speed (Settings -> Windows), closing is shorter and lands
+    // softly on the real windows.
+    readonly property real realGnomeWindowSpeed: Math.max(1, Math.min(10, Number(Config.options.appearance.appLaunchAnimation.speed) || 4))
+    readonly property int realGnomeOpenDuration: Math.round(realGnomeWindowSpeed * 100 * Appearance.animMultiplier)
+    readonly property int realGnomeCloseDuration: Math.round(realGnomeWindowSpeed * 75 * Appearance.animMultiplier)
+    readonly property var realGnomeOpenCurve: [0.22, 1, 0.36, 1, 1, 1]
+    readonly property var realGnomeCloseCurve: [0.25, 0.46, 0.45, 0.94, 1, 1]
+    /** GNOME's radial shade over the blurred backing. */
+    readonly property real vignetteAmount: isRealGnome ? progress : 0.0
     readonly property bool isMaterialShape: effectiveStyle === "material-shape"
 
     readonly property var availableMaterialShapes: [
@@ -225,7 +279,7 @@ Item {
     readonly property real targetScale: {
         switch (effectiveStyle) {
         case "gnome":
-            return scrollingAimed ? scrollingScale : gnomeTargetScale;
+            return scrollingAimed ? scrollingScale : isRealGnome ? realGnomeScale : gnomeTargetScale;
         case "soft-focus":
             return 1.035;
         case "camera-push":
@@ -252,10 +306,22 @@ Item {
     property bool held: false
     property real heldProgress: 0
 
-    property real progress: root.held ? root.heldProgress : (active ? 1.0 : 0.0)
+    /// Held at 0 on open until the window captures have taken over (see OverviewWindowTransition).
+    property bool openHold: false
+    property real progress: root.held ? root.heldProgress : (active && !root.openHold ? 1.0 : 0.0)
     Behavior on progress {
         enabled: !root.isOverviewAlwaysActive && !root.held
-        animation: Appearance.animation.elementMove.numberAnimation.createObject(root)
+        // Bound to `active`: the Behavior reads them after the target flips,
+        // so each direction runs on its own curve.
+        NumberAnimation {
+            duration: root.isRealGnome
+                ? (root.active ? root.realGnomeOpenDuration : root.realGnomeCloseDuration)
+                : Appearance.animation.elementMove.duration
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: root.isRealGnome
+                ? (root.active ? root.realGnomeOpenCurve : root.realGnomeCloseCurve)
+                : Appearance.animation.elementMove.bezierCurve
+        }
     }
 
     readonly property real scale: 1.0 + (safeTargetScale - 1.0) * progress
@@ -263,7 +329,7 @@ Item {
     readonly property real scaleProgress: {
         if (!isGnomeLike)
             return progress;
-        const denominator = 1.0 - (scrollingAimed ? scrollingScale : gnomeTargetScale);
+        const denominator = 1.0 - (scrollingAimed ? scrollingScale : isRealGnome ? realGnomeScale : gnomeTargetScale);
         if (Math.abs(denominator) < 0.0001)
             return 0.0;
         return Math.max(0.0, Math.min(1.0, (1.0 - scale) / denominator));
@@ -339,8 +405,10 @@ Item {
     // on-screen radius is divided back out of the current scale.
     readonly property real cornerRadius: scrollingAimed
         ? progress * scrollingFrameRadius / Math.max(0.05, scale)
+        : isRealGnome
+        ? progress * realGnomeRadius / Math.max(0.05, scale)
         : progress * (effectiveStyle === "gnome" ? Appearance.rounding.windowRounding : effectiveStyle === "card-lift" ? Appearance.rounding.large : 0)
-    readonly property real borderOpacity: isGnomeLike && !scrollingLayout ? scaleProgress : 0.0
+    readonly property real borderOpacity: isGnomeLike && !scrollingLayout && !isRealGnome ? scaleProgress : 0.0
     readonly property real shadowAmount: (isGnomeLike ? scaleProgress : progress) * ((effectiveStyle === "gnome" || effectiveStyle === "card-lift" || (effectiveStyle === "material-shape" && (Config.options.background.materialShapeShadow === true))) ? 1.0 : 0.0)
 
     readonly property bool followWidgetsScale: ["gnome", "camera-push", "depth", "card-lift"].indexOf(effectiveStyle) >= 0

@@ -134,10 +134,11 @@ ColumnLayout {
                 currentValue: Config.options.background.overviewBackgroundStyle ?? "gnome"
                 onSelected: newValue => {
                     Config.options.background.overviewBackgroundStyle = newValue;
-                    Config.options.background.zoomOutStyle = newValue === "gnome" ? 0 : 2;
+                    Config.options.background.zoomOutStyle = (newValue === "gnome" || newValue === "real-gnome") ? 0 : 2;
                 }
                 options: [
                     { displayName: Translation.tr("Gnome Like"), icon: "blur_on", value: "gnome" },
+                    { displayName: Translation.tr("Real Gnome"), icon: "auto_awesome_mosaic", value: "real-gnome" },
                     { displayName: Translation.tr("Material Shape"), icon: "shapes", value: "material-shape" },
                     { displayName: Translation.tr("Card Lift"), icon: "style", value: "card-lift" },
                     { displayName: Translation.tr("Camera Push"), icon: "zoom_in", value: "camera-push" },

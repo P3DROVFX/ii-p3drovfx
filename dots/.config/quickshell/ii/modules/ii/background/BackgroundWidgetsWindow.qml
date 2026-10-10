@@ -636,8 +636,11 @@ PanelWindow {
 
         // The scrolling overview's rows show the bare wallpaper, so the widgets
         // leave while it zooms onto the active row instead of landing in it.
+        // Real Gnome's plane is a workspace in a sliding strip: per-workspace
+        // widgets would swap in place while the windows slide, so they step out too.
         opacity: GlobalStates.isMediaModeActiveForScreen(bgWidgetsWindow.screen ? bgWidgetsWindow.screen.name : "")
                 || (bgWidgetsWindow.overviewController && bgWidgetsWindow.overviewController.scrollingAimed && bgWidgetsWindow.overviewController.active)
+                || (bgWidgetsWindow.overviewController && bgWidgetsWindow.overviewController.isRealGnome && bgWidgetsWindow.overviewController.active)
             ? 0.0
             : (bgWidgetsWindow.isGnomeLikeOverview
                 ? 1.0
