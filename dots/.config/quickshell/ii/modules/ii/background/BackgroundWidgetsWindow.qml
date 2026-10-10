@@ -596,12 +596,12 @@ PanelWindow {
     readonly property bool widgetSelfBlurShown: bgWidgetsWindow.visible && bgWidgetsWindow.windowBlurActive
     onWidgetSelfBlurShownChanged: Appearance.setWidgetSelfBlur(bgWidgetsWindow.editScreenName, bgWidgetsWindow.widgetSelfBlurShown)
     Component.onDestruction: Appearance.setWidgetSelfBlur(bgWidgetsWindow.editScreenName, false)
-    // Fades in alongside the wallpaper's blur and drops at once with it, like WindowBlur.
+    // Fades in alongside the wallpaper's blur and drops at once with it, like WindowBlur. It is
+    // the cross-fade's weight, never the radius: the wallpaper fades a fully blurred copy in over
+    // the sharp one, so the widgets do the same (see widgetBlurLoader). A growing radius read as
+    // a different, stepping animation next to the wallpaper's, and baked a shader per frame.
     property real windowBlurProgress: windowBlurActive ? 1 : 0
     Behavior on windowBlurProgress {
-        // GaussianBlur derives its deviation from the radius and recompiles its
-        // shader on every change, so the fade costs a shader bake per frame.
-        // A preset switch already has a frame budget to protect; it snaps.
         enabled: bgWidgetsWindow.windowBlurActive && !GlobalStates.presetRecoloring
         NumberAnimation {
             duration: 400
@@ -612,11 +612,6 @@ PanelWindow {
     // which on the widgets' transparent edges shows up as blocky, grainy halos. Radius scales
     // like the wallpaper's MultiEffect (blurMax 64), on the same half-resolution texture.
     readonly property real windowBlurRadius: 64 * Config.options.background.blurWhenWindowsOpenRadius / 100.0
-    property Component windowBlurEffect: GE.GaussianBlur {
-        radius: bgWidgetsWindow.windowBlurRadius * bgWidgetsWindow.windowBlurProgress
-        samples: Math.max(3, Math.round(bgWidgetsWindow.windowBlurRadius * 2 + 1))
-        transparentBorder: true
-    }
     property Component aodEffect: MultiEffect {
         saturation: -bgWidgetsWindow.aodProgress
     }
@@ -760,27 +755,24 @@ PanelWindow {
             visible: bgWidgetsWindow.isTargetMonitor
             // The widgets step back while the wallpaper is being framed: still
             // there to frame the picture around, not in the way of it.
-            opacity: 1 - 0.75 * bgWidgetsWindow.wallpaperFramingProgress
+            // The sharp half of the window blur's cross-fade: it gives way to the blurred copy
+            // above it (widgetBlurLoader), which still captures it at opacity 0. Input is not
+            // gated by opacity, so the desktop keeps every click while blurred.
+            opacity: (1 - 0.75 * bgWidgetsWindow.wallpaperFramingProgress) * (1 - bgWidgetsWindow.windowBlurProgress)
             // The canvas STAYS visible under the lock preview. The preview's
             // LockSurface only draws the islands over a transparent surface -
             // the lock wallpaper lives in the background window, and the
             // widgets in their lock state (keep/center/lockOnly, the centered
             // ones force-centered by `editLockPreview`) are this canvas. A
-            // cross-fade here blanked the lock tab: do not re-add one.
+            // cross-fade here blanked the lock tab: do not re-add one. (The
+            // window blur's is off while locked and in the mode, so it never runs there.)
             antialiasing: true
             smooth: true
             // Always On Display over the lock: the widgets stay where the lock put them,
             // drained of colour. The layer only exists while that is on screen.
-            // The window blur shares it: half resolution, the trade WindowBlur makes, so the same
-            // radius reads the same on the widgets as on the wallpaper beneath them.
-            layer.enabled: bgWidgetsWindow.aodProgress > 0 || bgWidgetsWindow.windowBlurProgress > 0
-            layer.textureSize: bgWidgetsWindow.windowBlurProgress > 0
-                ? Qt.size(Math.max(1, Math.round(width / 2)), Math.max(1, Math.round(height / 2)))
-                : Qt.size(0, 0)
+            layer.enabled: bgWidgetsWindow.aodProgress > 0
             layer.smooth: true
-            // The two never overlap: the window blur is off while locked and the AOD only runs
-            // locked.
-            layer.effect: bgWidgetsWindow.windowBlurProgress > 0 ? windowBlurEffect : aodEffect
+            layer.effect: aodEffect
             gridOverlayEnabled: Config.options.background.widgets.enableGrid ?? false
             alignmentGridStep: 10
             visualGridStep: 28
@@ -956,6 +948,40 @@ PanelWindow {
                     wallpaperSafetyTriggered: bgWidgetsWindow.wallpaperSafetyTriggered
                     lockAnimationActive: lockAnim.lockAnimationActive
                     widgetsPaused: bgWidgetsWindow.widgetsPaused
+                }
+            }
+        }
+
+        // The blurred half of the window blur, WindowBlur's method on the widgets: one capture
+        // blurred at the full radius, faded in over the sharp canvas (whose opacity takes the
+        // rest), and gone the instant the blur ends. The radius never moves, so the kernel is
+        // built once. Half resolution, the trade WindowBlur makes, so the same radius reads the
+        // same here as on the wallpaper beneath. Nothing in it takes the pointer: clicks fall
+        // through to the canvas.
+        Loader {
+            id: widgetBlurLoader
+            x: widgetCanvas.x
+            y: widgetCanvas.y
+            width: widgetCanvas.width
+            height: widgetCanvas.height
+            active: widgetCanvas.visible && bgWidgetsWindow.windowBlurProgress > 0
+            opacity: bgWidgetsWindow.windowBlurProgress * (1 - 0.75 * bgWidgetsWindow.wallpaperFramingProgress)
+            sourceComponent: Item {
+                ShaderEffectSource {
+                    id: widgetBlurSource
+                    anchors.fill: parent
+                    sourceItem: widgetCanvas
+                    textureSize: Qt.size(Math.max(1, Math.round(width / 2)), Math.max(1, Math.round(height / 2)))
+                    live: true
+                    smooth: true
+                    visible: false
+                }
+                GE.GaussianBlur {
+                    anchors.fill: parent
+                    source: widgetBlurSource
+                    radius: bgWidgetsWindow.windowBlurRadius
+                    samples: Math.max(3, Math.round(bgWidgetsWindow.windowBlurRadius * 2 + 1))
+                    transparentBorder: true
                 }
             }
         }
