@@ -6655,6 +6655,9 @@ Singleton {
                 property bool orderBottomUp: false
                 property bool showIcons: true
                 property bool centerIcons: true
+                // Window cards of the workspace grid: "classic" (centred icons, outlined
+                // current workspace) or "recents" (app chips with a window menu).
+                property string cardDesign: "classic"
                 property bool showOpeningAnimation: true
                 property bool useWorkspaceMap: false
 

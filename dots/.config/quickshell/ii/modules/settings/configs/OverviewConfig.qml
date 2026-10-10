@@ -250,6 +250,33 @@ ContentPage {
             Layout.fillWidth: true
             spacing: Appearance.rounding.small
 
+            ContentSubsection {
+                Layout.fillWidth: true
+                title: Translation.tr("Window cards")
+                icon: "view_carousel"
+                tooltip: Translation.tr("Recents puts an app chip on every window, with a menu for screenshot, float, fullscreen, pin and close")
+
+                ConfigSelectionArray {
+                    Layout.fillWidth: true
+                    currentValue: Config.options.overview.cardDesign ?? "classic"
+                    onSelected: newValue => {
+                        Config.options.overview.cardDesign = newValue;
+                    }
+                    options: [
+                        {
+                            displayName: Translation.tr("Classic"),
+                            icon: "grid_view",
+                            value: "classic"
+                        },
+                        {
+                            displayName: Translation.tr("Recents"),
+                            icon: "view_carousel",
+                            value: "recents"
+                        }
+                    ]
+                }
+            }
+
             GridLayout {
                 id: classicControls
                 Layout.fillWidth: true

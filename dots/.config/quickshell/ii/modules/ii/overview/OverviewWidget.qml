@@ -167,14 +167,13 @@ Item {
     property var windowByAddress: HyprlandData.windowByAddress
     property var windowAddresses: HyprlandData.addresses
     property var monitorData: HyprlandData.monitors.find(m => m.id === root.monitor?.id)
-    property color activeBorderColor: Appearance.colors.colSecondary
 
     property real workspaceImplicitWidth: minWorkspaceWidth
     property real workspaceImplicitHeight: (monitorData?.transform % 2 === 1) 
         ? ((monitor.width - (monitorData ? (monitorData.reserved?.[0] ?? 0) : 0) - (monitorData ? (monitorData.reserved?.[2] ?? 0) : 0)) * root.workspaceLayoutScale) 
         : ((monitor.height - (monitorData ? (monitorData.reserved?.[1] ?? 0) : 0) - (monitorData ? (monitorData.reserved?.[3] ?? 0) : 0)) * root.workspaceLayoutScale)
-    property real largeWorkspaceRadius: Appearance.rounding.large
-    property real smallWorkspaceRadius: Appearance.rounding.verysmall
+    property real largeWorkspaceRadius: OverviewStyle.radiusCellOuter
+    property real smallWorkspaceRadius: OverviewStyle.radiusCellJoin
 
     // We are using a width map to get all windows width and setting workspaceImplicitWidth to the maximum item of this list/map
     property list<int> widthMap: []
@@ -205,11 +204,32 @@ Item {
     }
 
     property real workspaceNumberMargin: 80
-    readonly property real workspaceNumberPixelSize: Math.min(root.workspaceImplicitWidth, root.workspaceImplicitHeight) * 0.36
+    readonly property real workspaceNumberPixelSize: Math.round(Math.min(root.workspaceImplicitWidth, root.workspaceImplicitHeight) * (OverviewStyle.recents ? OverviewStyle.numberRatio : OverviewStyle.classicNumberRatio))
     property int workspaceZ: 0
     property int windowZ: 1
     property int windowDraggingZ: 99999
-    property real workspaceSpacing: 10
+    property real workspaceSpacing: OverviewStyle.cellSpacing
+
+    // ── The current workspace: one cell that rounds out of the group ─────
+    readonly property int activeWorkspaceCellId: {
+        const actId = monitor.activeWorkspace?.id;
+        return (!actId || !root.isWorkspaceActiveInRange) ? root.workspaceOffset + 1 : actId;
+    }
+    readonly property bool activeWorkspaceOccupied: root.windows.some(w => w.workspace?.id === root.activeWorkspaceCellId)
+    readonly property int activeRow: getWsRow(root.activeWorkspaceCellId)
+    readonly property int activeColumn: getWsColumn(root.activeWorkspaceCellId)
+
+    /** Outer corners of the grid are large, joins small, and the current cell large all round. */
+    function cellRadius(rowIndex, colIndex, top, left) {
+        if (OverviewStyle.recents && root.isWorkspaceActiveInRange && rowIndex === root.activeRow && colIndex === root.activeColumn)
+            return OverviewStyle.radiusCellActive;
+        const atRow = top ? rowIndex === 0 : rowIndex === root.gridRows - 1;
+        const atCol = left ? colIndex === 0 : colIndex === root.gridColumns - 1;
+        return atRow && atCol ? root.largeWorkspaceRadius : root.smallWorkspaceRadius;
+    }
+
+    /** A window is being dragged (past the press threshold). */
+    property bool windowDragging: false
 
     property int dragDropType: -1 // 0: workspace, 1: window
 
@@ -261,14 +281,14 @@ Item {
     }
     Rectangle { // Background
         id: overviewBackground
-        property real padding: 10
+        property real padding: OverviewStyle.panelPadding
         anchors.fill: parent
         anchors.margins: root.surfaceMargin
 
         implicitWidth: workspaceColumnLayout.implicitWidth + padding * 2
         implicitHeight: workspaceColumnLayout.implicitHeight + padding * 2
         radius: root.largeWorkspaceRadius + padding
-        color: root.hosted ? "transparent" : Appearance.colors.colBackgroundSurfaceContainer
+        color: root.hosted ? "transparent" : OverviewStyle.colPanel
 
         /**
          * Static workspace surfaces, painted from the first frame.
@@ -295,20 +315,73 @@ Item {
                     Repeater {
                         model: root.gridColumns
                         Rectangle {
+                            id: backdropCell
                             required property int index
-                            readonly property bool atLeft: index === 0
-                            readonly property bool atRight: index === root.gridColumns - 1
-                            readonly property bool atTop: backdropRow.index === 0
-                            readonly property bool atBottom: backdropRow.index === root.gridRows - 1
                             implicitWidth: root.workspaceImplicitWidth
                             implicitHeight: root.workspaceImplicitHeight
-                            color: Appearance.colors.colSurfaceContainerLow
-                            topLeftRadius: (atLeft && atTop) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius
-                            topRightRadius: (atRight && atTop) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius
-                            bottomLeftRadius: (atLeft && atBottom) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius
-                            bottomRightRadius: (atRight && atBottom) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius
+                            color: OverviewStyle.colCell
+                            topLeftRadius: root.cellRadius(backdropRow.index, backdropCell.index, true, true)
+                            topRightRadius: root.cellRadius(backdropRow.index, backdropCell.index, true, false)
+                            bottomLeftRadius: root.cellRadius(backdropRow.index, backdropCell.index, false, true)
+                            bottomRightRadius: root.cellRadius(backdropRow.index, backdropCell.index, false, false)
+                            Behavior on topLeftRadius {
+                                enabled: !root.animationsDisabled
+                                animation: OverviewStyle.motionMove.numberAnimation.createObject(this)
+                            }
+                            Behavior on topRightRadius {
+                                enabled: !root.animationsDisabled
+                                animation: OverviewStyle.motionMove.numberAnimation.createObject(this)
+                            }
+                            Behavior on bottomLeftRadius {
+                                enabled: !root.animationsDisabled
+                                animation: OverviewStyle.motionMove.numberAnimation.createObject(this)
+                            }
+                            Behavior on bottomRightRadius {
+                                enabled: !root.animationsDisabled
+                                animation: OverviewStyle.motionMove.numberAnimation.createObject(this)
+                            }
                         }
                     }
+                }
+            }
+        }
+
+        // The current workspace as a filled cell that slides between workspaces.
+        Item {
+            anchors.centerIn: parent
+            width: workspaceColumnLayout.implicitWidth
+            height: workspaceColumnLayout.implicitHeight
+
+            Rectangle {
+                id: focusedWorkspaceIndicator
+                visible: OverviewStyle.recents && root.isWorkspaceActiveInRange
+                x: root.hyprscrollingEnabled ? root.activeWindowData?.x ?? 0 : (root.workspaceImplicitWidth + workspaceSpacing) * root.activeColumn
+                y: root.hyprscrollingEnabled ? root.activeWindowData?.y ?? 0 : (root.workspaceImplicitHeight + workspaceSpacing) * root.activeRow
+                width: root.hyprscrollingEnabled ? root.activeWindowData?.width ?? 0 : root.workspaceImplicitWidth
+                height: root.hyprscrollingEnabled ? root.activeWindowData?.height ?? 0 : root.workspaceImplicitHeight
+                radius: OverviewStyle.radiusCellActive
+                color: OverviewStyle.colCellActive
+                // Under windows it would only show as a ring in the gaps around them.
+                opacity: root.activeWorkspaceOccupied ? 0 : 1
+                Behavior on opacity {
+                    enabled: !root.animationsDisabled
+                    animation: OverviewStyle.motionFast.numberAnimation.createObject(this)
+                }
+                Behavior on x {
+                    enabled: !root.animationsDisabled
+                    animation: OverviewStyle.motionMove.numberAnimation.createObject(this)
+                }
+                Behavior on y {
+                    enabled: !root.animationsDisabled
+                    animation: OverviewStyle.motionMove.numberAnimation.createObject(this)
+                }
+                Behavior on width {
+                    enabled: !root.animationsDisabled
+                    animation: OverviewStyle.motionMove.numberAnimation.createObject(this)
+                }
+                Behavior on height {
+                    enabled: !root.animationsDisabled
+                    animation: OverviewStyle.motionMove.numberAnimation.createObject(this)
                 }
             }
         }
@@ -334,10 +407,9 @@ Item {
                             required property int index
                             property int colIndex: index
                             property int workspaceValue: root.workspaceGroup * root.workspacesShown + getWsInCell(row.index, colIndex)
-                            property color defaultWorkspaceColor: Appearance.colors.colSurfaceContainerLow
-                            property color hoveredWorkspaceColor: ColorUtils.mix(defaultWorkspaceColor, Appearance.colors.colLayer1Hover, 0.1)
-                            property color hoveredBorderColor: Appearance.colors.colLayer2Hover
                             property bool hoveredWhileDragging: false
+                            readonly property bool isActive: root.isWorkspaceActiveInRange && row.index === root.activeRow && colIndex === root.activeColumn
+                            readonly property bool pointed: OverviewStyle.recents && workspaceArea.containsMouse && !root.windowDragging
 
                             // The shared clock keeps the same stagger without
                             // allocating per-cell timers and animations.
@@ -361,35 +433,49 @@ Item {
                             implicitWidth: root.workspaceImplicitWidth
                             implicitHeight: root.workspaceImplicitHeight
                             // The surface itself is the static backdrop underneath;
-                            // this cell only adds the drag-hover tint on top of it.
-                            color: hoveredWhileDragging ? ColorUtils.transparentize(Appearance.colors.colLayer1Hover, 0.9) : "transparent"
-                            property bool workspaceAtLeft: colIndex === 0
-                            property bool workspaceAtRight: colIndex === root.gridColumns - 1
-                            property bool workspaceAtTop: row.index === 0
-                            property bool workspaceAtBottom: row.index === root.gridRows - 1
-                            topLeftRadius: (workspaceAtLeft && workspaceAtTop) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius
-                            topRightRadius: (workspaceAtRight && workspaceAtTop) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius
-                            bottomLeftRadius: (workspaceAtLeft && workspaceAtBottom) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius
-                            bottomRightRadius: (workspaceAtRight && workspaceAtBottom) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius
-                            border.width: 2
-                            border.color: hoveredWhileDragging ? hoveredBorderColor : "transparent"
+                            // this cell only adds the pointer tint on top of it.
+                            color: !OverviewStyle.recents ? (hoveredWhileDragging ? OverviewStyle.classicColDropTint : "transparent")
+                                : workspace.pointed && !workspace.isActive ? OverviewStyle.colCellHover : "transparent"
+                            border.width: OverviewStyle.recents ? 0 : OverviewStyle.classicActiveOutlineWidth
+                            border.color: !OverviewStyle.recents && hoveredWhileDragging ? OverviewStyle.classicColDropOutline : "transparent"
+                            topLeftRadius: root.cellRadius(row.index, colIndex, true, true)
+                            topRightRadius: root.cellRadius(row.index, colIndex, true, false)
+                            bottomLeftRadius: root.cellRadius(row.index, colIndex, false, true)
+                            bottomRightRadius: root.cellRadius(row.index, colIndex, false, false)
+                            Behavior on color {
+                                enabled: !root.animationsDisabled
+                                animation: OverviewStyle.motionFast.colorAnimation.createObject(this)
+                            }
+
+                            property real boldness: workspace.isActive || workspace.pointed ? 1 : 0
+                            Behavior on boldness {
+                                enabled: !root.animationsDisabled
+                                animation: OverviewStyle.motionMove.numberAnimation.createObject(this)
+                            }
 
                             StyledText {
                                 anchors.centerIn: parent
                                 text: workspace.workspaceValue
-                                font {
-                                    pixelSize: root.workspaceNumberPixelSize
-                                    weight: Font.DemiBold
-                                    family: Appearance.font.family.numbers
-                                }
-                                color: ColorUtils.transparentize(Appearance.colors.colOnLayer1, 0.8)
+                                font.family: OverviewStyle.recents ? OverviewStyle.numberFamily : OverviewStyle.classicNumberFamily
+                                font.pixelSize: root.workspaceNumberPixelSize
+                                font.weight: OverviewStyle.recents ? Font.Normal : Font.DemiBold
+                                font.variableAxes: OverviewStyle.recents ? OverviewStyle.numberAxes(workspace.boldness) : ({})
+                                color: !OverviewStyle.recents ? OverviewStyle.classicColOnCell
+                                    : workspace.isActive ? OverviewStyle.colOnCellActive
+                                    : workspace.pointed ? OverviewStyle.colOnCellHover : OverviewStyle.colOnCell
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter
+                                Behavior on color {
+                                    enabled: !root.animationsDisabled
+                                    animation: OverviewStyle.motionFast.colorAnimation.createObject(this)
+                                }
                             }
 
                             MouseArea {
                                 id: workspaceArea
                                 anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
                                 acceptedButtons: Qt.LeftButton
                                 onPressed: {
                                     if (root.draggingTargetWorkspace === -1) {
@@ -571,16 +657,8 @@ Item {
                     property real xWithinWorkspaceWidget: Math.max((windowData?.at[0] - (windowMonitorData?.x ?? 0) - (windowMonitorData?.reserved?.[0] ?? 0)) * window.widthRatio * root.scale, 0)
                     property real yWithinWorkspaceWidget: Math.max((windowData?.at[1] - (windowMonitorData?.y ?? 0) - (windowMonitorData?.reserved?.[1] ?? 0)) * window.heightRatio * root.scale, 0)
 
-                    // Radius
-                    property real minRadius: Appearance.rounding.small
-                    property bool workspaceAtLeft: workspaceColIndex === 0
-                    property bool workspaceAtRight: workspaceColIndex === root.gridColumns - 1
-                    property bool workspaceAtTop: workspaceRowIndex === 0
-                    property bool workspaceAtBottom: workspaceRowIndex === root.gridRows - 1
-                    property bool workspaceAtTopLeft: (workspaceAtLeft && workspaceAtTop)
-                    property bool workspaceAtTopRight: (workspaceAtRight && workspaceAtTop)
-                    property bool workspaceAtBottomLeft: (workspaceAtLeft && workspaceAtBottom)
-                    property bool workspaceAtBottomRight: (workspaceAtRight && workspaceAtBottom)
+                    // Radius: the cell's corner, less the window's distance from it
+                    property real minRadius: OverviewStyle.radiusWindowMin
                     property real distanceFromLeftEdge: xWithinWorkspaceWidget
                     property real distanceFromRightEdge: root.workspaceImplicitWidth - (xWithinWorkspaceWidget + targetWindowWidth)
                     property real distanceFromTopEdge: yWithinWorkspaceWidget
@@ -589,10 +667,17 @@ Item {
                     property real distanceFromTopRightCorner: Math.max(distanceFromRightEdge, distanceFromTopEdge)
                     property real distanceFromBottomLeftCorner: Math.max(distanceFromLeftEdge, distanceFromBottomEdge)
                     property real distanceFromBottomRightCorner: Math.max(distanceFromRightEdge, distanceFromBottomEdge)
-                    topLeftRadius: Math.max((workspaceAtTopLeft ? root.largeWorkspaceRadius : root.smallWorkspaceRadius) - distanceFromTopLeftCorner, minRadius)
-                    topRightRadius: Math.max((workspaceAtTopRight ? root.largeWorkspaceRadius : root.smallWorkspaceRadius) - distanceFromTopRightCorner, minRadius)
-                    bottomLeftRadius: Math.max((workspaceAtBottomLeft ? root.largeWorkspaceRadius : root.smallWorkspaceRadius) - distanceFromBottomLeftCorner, minRadius)
-                    bottomRightRadius: Math.max((workspaceAtBottomRight ? root.largeWorkspaceRadius : root.smallWorkspaceRadius) - distanceFromBottomRightCorner, minRadius)
+                    topLeftRadius: Math.max(root.cellRadius(workspaceRowIndex, workspaceColIndex, true, true) - distanceFromTopLeftCorner, minRadius)
+                    topRightRadius: Math.max(root.cellRadius(workspaceRowIndex, workspaceColIndex, true, false) - distanceFromTopRightCorner, minRadius)
+                    bottomLeftRadius: Math.max(root.cellRadius(workspaceRowIndex, workspaceColIndex, false, true) - distanceFromBottomLeftCorner, minRadius)
+                    bottomRightRadius: Math.max(root.cellRadius(workspaceRowIndex, workspaceColIndex, false, false) - distanceFromBottomRightCorner, minRadius)
+
+                    focusedWindow: window.isActiveWindow
+                    onActiveWorkspace: window.wsId === root.monitor?.activeWorkspace?.id
+                    interactionsSuppressed: root.windowDragging
+                    gridWidth: windowSpace.implicitWidth
+                    gridHeight: windowSpace.implicitHeight
+                    swapTarget: OverviewStyle.recents && window.hovering && root.windowDragging && root.dragDropType === 1 && !window.Drag.active && !root.hyprscrollingEnabled
 
                     property int hoveringDir: 0 // 0: none, 1: right, 2: left
                     property bool hovering: false
@@ -664,7 +749,7 @@ Item {
                         }
                     }
 
-                    z: Drag.active ? root.windowDraggingZ : (root.windowZ + windowData?.floating + windowData?.fullscreen * 2)
+                    z: Drag.active ? root.windowDraggingZ : window.menuOpen ? root.windowDraggingZ - 2 : (root.windowZ + windowData?.floating + windowData?.fullscreen * 2)
                     Drag.hotSpot.x: width / 2
                     Drag.hotSpot.y: height / 2
                     MouseArea {
@@ -675,6 +760,7 @@ Item {
                         onExited: hovered = false // For hover color change
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                         drag.target: parent
+                        drag.onActiveChanged: root.windowDragging = dragArea.drag.active
                         onPressed: mouse => {
                             root.draggingFromWorkspace = windowData?.workspace.id;
                             root.draggingFromWindowAddress = windowData?.address;
@@ -744,77 +830,99 @@ Item {
 
                         StyledToolTip {
                             extraVisibleCondition: false
-                            alternativeVisibleCondition: dragArea.containsMouse && !window.Drag.active
+                            alternativeVisibleCondition: dragArea.containsMouse && !window.Drag.active && !root.windowDragging
                             text: `${windowData?.title}${windowData?.xwayland ? "[XWayland] " : ""}`
                         }
                     }
                 }
             }
 
-            Rectangle { // Focused workspace indicator
-                id: focusedWorkspaceIndicator
-                visible: root.isWorkspaceActiveInRange
-                property int activeId: {
-                    let actId = monitor.activeWorkspace?.id;
-                    if (!actId || !root.isWorkspaceActiveInRange) {
-                        return root.workspaceOffset + 1;
-                    }
-                    return actId;
-                }
-                property int rowIndex: getWsRow(activeId)
-                property int colIndex: getWsColumn(activeId)
-
+            // Classic design: the current workspace outlined over its windows.
+            Rectangle {
+                visible: !OverviewStyle.recents && root.isWorkspaceActiveInRange
                 z: 999
-
-                x: root.hyprscrollingEnabled ? root.activeWindowData?.x ?? 0 : (root.workspaceImplicitWidth + workspaceSpacing) * colIndex
-                y: root.hyprscrollingEnabled ? root.activeWindowData?.y ?? 0 : (root.workspaceImplicitHeight + workspaceSpacing) * rowIndex
+                x: root.hyprscrollingEnabled ? root.activeWindowData?.x ?? 0 : (root.workspaceImplicitWidth + workspaceSpacing) * root.activeColumn
+                y: root.hyprscrollingEnabled ? root.activeWindowData?.y ?? 0 : (root.workspaceImplicitHeight + workspaceSpacing) * root.activeRow
                 width: root.hyprscrollingEnabled ? root.activeWindowData?.width ?? 0 : root.workspaceImplicitWidth
                 height: root.hyprscrollingEnabled ? root.activeWindowData?.height ?? 0 : root.workspaceImplicitHeight
-
-                property bool workspaceAtLeft: colIndex === 0
-                property bool workspaceAtRight: colIndex === root.gridColumns - 1
-                property bool workspaceAtTop: rowIndex === 0
-                property bool workspaceAtBottom: rowIndex === root.gridRows - 1
-
-                topLeftRadius: (workspaceAtLeft && workspaceAtTop) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius
-                topRightRadius: (workspaceAtRight && workspaceAtTop) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius
-                bottomLeftRadius: (workspaceAtLeft && workspaceAtBottom) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius
-                bottomRightRadius: (workspaceAtRight && workspaceAtBottom) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius
-
+                topLeftRadius: root.cellRadius(root.activeRow, root.activeColumn, true, true)
+                topRightRadius: root.cellRadius(root.activeRow, root.activeColumn, true, false)
+                bottomLeftRadius: root.cellRadius(root.activeRow, root.activeColumn, false, true)
+                bottomRightRadius: root.cellRadius(root.activeRow, root.activeColumn, false, false)
                 color: "transparent"
-                border.width: 2
-                border.color: root.activeBorderColor
+                border.width: OverviewStyle.classicActiveOutlineWidth
+                border.color: OverviewStyle.classicColActiveOutline
                 Behavior on x {
                     enabled: !root.animationsDisabled
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                    animation: OverviewStyle.motionFast.numberAnimation.createObject(this)
                 }
                 Behavior on y {
                     enabled: !root.animationsDisabled
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                    animation: OverviewStyle.motionFast.numberAnimation.createObject(this)
                 }
                 Behavior on width {
                     enabled: !root.animationsDisabled
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                    animation: OverviewStyle.motionFast.numberAnimation.createObject(this)
                 }
                 Behavior on height {
                     enabled: !root.animationsDisabled
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                    animation: OverviewStyle.motionFast.numberAnimation.createObject(this)
                 }
                 Behavior on topLeftRadius {
                     enabled: !root.animationsDisabled
-                    animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
+                    animation: OverviewStyle.motionEnter.numberAnimation.createObject(this)
                 }
                 Behavior on topRightRadius {
                     enabled: !root.animationsDisabled
-                    animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
+                    animation: OverviewStyle.motionEnter.numberAnimation.createObject(this)
                 }
                 Behavior on bottomLeftRadius {
                     enabled: !root.animationsDisabled
-                    animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
+                    animation: OverviewStyle.motionEnter.numberAnimation.createObject(this)
                 }
                 Behavior on bottomRightRadius {
                     enabled: !root.animationsDisabled
-                    animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
+                    animation: OverviewStyle.motionEnter.numberAnimation.createObject(this)
+                }
+            }
+
+            // Where a dragged window would go: the target cell fills over its windows.
+            Rectangle {
+                id: workspaceDropTarget
+                readonly property bool shown: OverviewStyle.recents && root.windowDragging && root.dragDropType === 0
+                    && root.draggingTargetWorkspace !== -1 && root.draggingTargetWorkspace !== root.draggingFromWorkspace
+                readonly property int targetId: root.draggingTargetWorkspace !== -1 ? root.draggingTargetWorkspace : root.activeWorkspaceCellId
+                readonly property int rowIndex: getWsRow(targetId)
+                readonly property int colIndex: getWsColumn(targetId)
+                z: root.windowDraggingZ - 1
+                x: (root.workspaceImplicitWidth + workspaceSpacing) * colIndex
+                y: (root.workspaceImplicitHeight + workspaceSpacing) * rowIndex
+                width: root.workspaceImplicitWidth
+                height: root.workspaceImplicitHeight
+                radius: OverviewStyle.radiusCellActive
+                color: OverviewStyle.colDropTarget
+                opacity: shown ? 1 : 0
+                visible: opacity > 0
+                Behavior on opacity {
+                    enabled: !root.animationsDisabled
+                    animation: OverviewStyle.motionFast.numberAnimation.createObject(this)
+                }
+                Behavior on x {
+                    enabled: !root.animationsDisabled && workspaceDropTarget.visible
+                    animation: OverviewStyle.motionMove.numberAnimation.createObject(this)
+                }
+                Behavior on y {
+                    enabled: !root.animationsDisabled && workspaceDropTarget.visible
+                    animation: OverviewStyle.motionMove.numberAnimation.createObject(this)
+                }
+
+                StyledText {
+                    anchors.centerIn: parent
+                    text: workspaceDropTarget.targetId
+                    font.family: OverviewStyle.numberFamily
+                    font.pixelSize: root.workspaceNumberPixelSize
+                    font.variableAxes: OverviewStyle.numberAxes(1)
+                    color: OverviewStyle.colOnDropTarget
                 }
             }
         }

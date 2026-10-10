@@ -10039,7 +10039,6 @@
     "Screenshot removed from history": "Screenshot removed from history",
     "Screenshot saved": "Screenshot saved",
     "Screenshot saved.": "Screenshot saved.",
-    "Screenshot this window": "Screenshot this window",
     "Screenshot without the toolbar": "Screenshot without the toolbar",
     "Screenshots": "Screenshots",
     "Screenshots (%1/5)": "Screenshots (%1/5)",
@@ -14636,5 +14635,8 @@
     "Click to add, or drag a card onto the desktop": "Clique para adicionar ou arraste um card para a área de trabalho",
     "1 widget": "1 widget",
     "%1 widgets": "%1 widgets",
-    "Try a shorter name or another word": "Tente um nome mais curto ou outra palavra"
+    "Try a shorter name or another word": "Tente um nome mais curto ou outra palavra",
+    "Window cards": "Cartões de janela",
+    "Recents puts an app chip on every window, with a menu for screenshot, float, fullscreen, pin and close": "Recentes coloca um chip do app em cada janela, com um menu para captura, flutuar, tela cheia, fixar e fechar",
+    "Recents": "Recentes"
 }

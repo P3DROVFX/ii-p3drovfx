@@ -10034,7 +10034,6 @@
     "Screenshot removed from history": "Screenshot removed from history",
     "Screenshot saved": "Screenshot saved",
     "Screenshot saved.": "Screenshot saved.",
-    "Screenshot this window": "Screenshot this window",
     "Screenshot without the toolbar": "Screenshot without the toolbar",
     "Screenshots": "Screenshots",
     "Screenshots (%1/5)": "Screenshots (%1/5)",
@@ -14629,5 +14628,8 @@
     "Click to add, or drag a card onto the desktop": "Click to add, or drag a card onto the desktop",
     "1 widget": "1 widget",
     "%1 widgets": "%1 widgets",
-    "Try a shorter name or another word": "Try a shorter name or another word"
+    "Try a shorter name or another word": "Try a shorter name or another word",
+    "Window cards": "Window cards",
+    "Recents puts an app chip on every window, with a menu for screenshot, float, fullscreen, pin and close": "Recents puts an app chip on every window, with a menu for screenshot, float, fullscreen, pin and close",
+    "Recents": "Recents"
 }
