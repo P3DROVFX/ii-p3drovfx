@@ -545,6 +545,116 @@ class TestPersonalDataStripping(unittest.TestCase):
         presets_helper.restore_local_only(merged, importer)
         self.assertEqual(merged["background"]["depthEffect"], importer["background"]["depthEffect"])
 
+    def test_localsend_and_phone_toggles_do_not_travel(self):
+        """LocalSend and Phone config toggles must not travel in presets,
+        and must not be overwritten when applying presets."""
+        data = {
+            "localsend": {
+                "autoStart": False,
+                "showNotifications": False,
+                "preferPopupOverNotification": False,
+                "downloadPath": "/opt/custom/downloads",
+            },
+            "phone": {
+                "kdeconnectEnabled": False,
+                "remoteCommands": False,
+                "mirrorNotificationsToDesktop": False,
+                "showPeripheralCards": False,
+                "contacts": {"enabled": False, "showAvatars": True},
+                "scrcpy": {
+                    "useWireless": True,
+                    "autoWirelessIp": False,
+                    "pinAdbPort": True,
+                    "autoResume": False,
+                    "embed": {"enabled": False},
+                    "recording": {"folder": "/custom/recordings"},
+                    "bitRate": "16M",
+                },
+            },
+            "background": {
+                "widgets": {
+                    "send_drop": {
+                        "localsendIp": "192.168.1.100",
+                        "localsendAlias": "MyPhone",
+                        "kdeDevice": "device123",
+                    }
+                }
+            }
+        }
+        sanitized = presets_helper.sanitize_data(copy.deepcopy(data), self.home_dir)
+
+        # LocalSend toggles stripped on save
+        self.assertNotIn("autoStart", sanitized["localsend"])
+        self.assertNotIn("showNotifications", sanitized["localsend"])
+        self.assertNotIn("preferPopupOverNotification", sanitized["localsend"])
+        self.assertEqual(sanitized["localsend"]["downloadPath"], "$HOME/Downloads")
+
+        # Phone toggles stripped on save
+        self.assertNotIn("kdeconnectEnabled", sanitized["phone"])
+        self.assertNotIn("remoteCommands", sanitized["phone"])
+        self.assertNotIn("mirrorNotificationsToDesktop", sanitized["phone"])
+        self.assertNotIn("showPeripheralCards", sanitized["phone"])
+        self.assertNotIn("enabled", sanitized["phone"]["contacts"])
+        self.assertNotIn("useWireless", sanitized["phone"]["scrcpy"])
+        self.assertNotIn("autoWirelessIp", sanitized["phone"]["scrcpy"])
+        self.assertNotIn("pinAdbPort", sanitized["phone"]["scrcpy"])
+        self.assertNotIn("autoResume", sanitized["phone"]["scrcpy"])
+        self.assertNotIn("enabled", sanitized["phone"]["scrcpy"]["embed"])
+        self.assertNotIn("folder", sanitized["phone"]["scrcpy"]["recording"])
+
+        # Send drop widget hardware/device IDs stripped
+        send_drop = sanitized["background"]["widgets"]["send_drop"]
+        self.assertNotIn("localsendIp", send_drop)
+        self.assertNotIn("localsendAlias", send_drop)
+        self.assertNotIn("kdeDevice", send_drop)
+
+        # Style options still travel
+        self.assertTrue(sanitized["phone"]["contacts"]["showAvatars"])
+        self.assertEqual(sanitized["phone"]["scrcpy"]["bitRate"], "16M")
+
+        # Verify restore_local_only preserves local user's toggles
+        importer = {
+            "localsend": {
+                "autoStart": True,
+                "showNotifications": True,
+                "preferPopupOverNotification": True,
+                "downloadPath": "/home/importer/Downloads",
+            },
+            "phone": {
+                "kdeconnectEnabled": True,
+                "remoteCommands": True,
+                "mirrorNotificationsToDesktop": True,
+                "showPeripheralCards": True,
+                "contacts": {"enabled": True},
+                "scrcpy": {
+                    "useWireless": False,
+                    "autoWirelessIp": True,
+                    "pinAdbPort": False,
+                    "autoResume": True,
+                    "embed": {"enabled": True},
+                    "recording": {"folder": "/home/importer/Videos"},
+                }
+            }
+        }
+        merged = copy.deepcopy(data)
+        presets_helper.restore_local_only(merged, importer)
+        self.assertTrue(merged["localsend"]["autoStart"])
+        self.assertTrue(merged["localsend"]["showNotifications"])
+        self.assertTrue(merged["localsend"]["preferPopupOverNotification"])
+        self.assertEqual(merged["localsend"]["downloadPath"], "/home/importer/Downloads")
+        self.assertTrue(merged["phone"]["kdeconnectEnabled"])
+        self.assertTrue(merged["phone"]["remoteCommands"])
+        self.assertTrue(merged["phone"]["mirrorNotificationsToDesktop"])
+        self.assertTrue(merged["phone"]["showPeripheralCards"])
+        self.assertTrue(merged["phone"]["contacts"]["enabled"])
+        self.assertFalse(merged["phone"]["scrcpy"]["useWireless"])
+        self.assertTrue(merged["phone"]["scrcpy"]["autoWirelessIp"])
+        self.assertFalse(merged["phone"]["scrcpy"]["pinAdbPort"])
+        self.assertTrue(merged["phone"]["scrcpy"]["autoResume"])
+        self.assertTrue(merged["phone"]["scrcpy"]["embed"]["enabled"])
+        self.assertEqual(merged["phone"]["scrcpy"]["recording"]["folder"], "/home/importer/Videos")
+
+
 
 # Types that can carry an address, an account or a hardware id. A bool named
 # `autoWirelessIp` is a mode, not a machine, so only these are audited.

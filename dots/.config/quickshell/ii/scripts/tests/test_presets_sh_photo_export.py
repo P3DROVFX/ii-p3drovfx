@@ -126,6 +126,104 @@ class TestPresetsShPhotoExport(unittest.TestCase):
         with open(loaded_widgets[0]["imagePath"], "rb") as f:
             self.assertEqual(f.read(), b"SAMPLE_PHOTO_CONTENT_12345")
 
+    def test_presets_sh_localsend_and_phone_toggles_blacklist(self):
+        """Verify that presets.sh save, export, import, and load blacklist localsend
+        and phone config toggles and preserve the recipient's settings."""
+        # 1. Author config with non-default localsend and phone settings
+        with open(self.config_path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        cfg["localsend"] = {
+            "autoStart": False,
+            "showNotifications": False,
+            "preferPopupOverNotification": False,
+            "downloadPath": "/opt/custom/downloads",
+        }
+        cfg["phone"] = {
+            "kdeconnectEnabled": False,
+            "remoteCommands": False,
+            "mirrorNotificationsToDesktop": False,
+            "showPeripheralCards": False,
+            "scrcpy": {
+                "useWireless": True,
+                "bitRate": "12M",
+            }
+        }
+        with open(self.config_path, "w", encoding="utf-8") as f:
+            json.dump(cfg, f)
+
+        # 2. Save and export preset
+        res = self.run_cmd("save", "ServiceTestTheme")
+        self.assertEqual(res.returncode, 0, f"save failed: {res.stderr}")
+
+        export_zip = os.path.join(self.home, "ServiceTestTheme.zip")
+        res = self.run_cmd("export", "ServiceTestTheme", export_zip)
+        self.assertEqual(res.returncode, 0, f"export failed: {res.stderr}")
+
+        # In exported zip config.json, verify toggles are stripped
+        with zipfile.ZipFile(export_zip, "r") as z:
+            exported_cfg = json.loads(z.read("config.json").decode("utf-8"))
+        self.assertNotIn("autoStart", exported_cfg.get("localsend", {}))
+        self.assertNotIn("showNotifications", exported_cfg.get("localsend", {}))
+        self.assertNotIn("preferPopupOverNotification", exported_cfg.get("localsend", {}))
+        self.assertNotIn("kdeconnectEnabled", exported_cfg.get("phone", {}))
+        self.assertNotIn("remoteCommands", exported_cfg.get("phone", {}))
+        self.assertNotIn("mirrorNotificationsToDesktop", exported_cfg.get("phone", {}))
+        self.assertNotIn("showPeripheralCards", exported_cfg.get("phone", {}))
+        self.assertNotIn("useWireless", exported_cfg.get("phone", {}).get("scrcpy", {}))
+        # Non-blacklisted settings still travel
+        self.assertEqual(exported_cfg["phone"]["scrcpy"]["bitRate"], "12M")
+
+        # 3. Recipient has enabled settings
+        other_home = os.path.join(self.home, "other_user2")
+        other_cfg_dir = os.path.join(other_home, ".config", "illogical-impulse")
+        os.makedirs(other_cfg_dir, exist_ok=True)
+        other_config = os.path.join(other_cfg_dir, "config.json")
+        recipient_initial = {
+            "configVersion": 1,
+            "localsend": {
+                "autoStart": True,
+                "showNotifications": True,
+                "preferPopupOverNotification": True,
+                "downloadPath": "/home/other_user2/Downloads",
+            },
+            "phone": {
+                "kdeconnectEnabled": True,
+                "remoteCommands": True,
+                "mirrorNotificationsToDesktop": True,
+                "showPeripheralCards": True,
+                "scrcpy": {
+                    "useWireless": False,
+                    "bitRate": "8M",
+                }
+            }
+        }
+        with open(other_config, "w", encoding="utf-8") as f:
+            json.dump(recipient_initial, f)
+
+        res = self.run_cmd("import", export_zip, env_home=other_home)
+        self.assertEqual(res.returncode, 0, f"import failed: {res.stderr}")
+
+        res = self.run_cmd("load", "ServiceTestTheme", env_home=other_home)
+        self.assertEqual(res.returncode, 0, f"load failed: {res.stderr}")
+
+        # Verify recipient's settings were preserved!
+        with open(other_config, "r", encoding="utf-8") as f:
+            recipient_after = json.load(f)
+
+        self.assertTrue(recipient_after["localsend"]["autoStart"])
+        self.assertTrue(recipient_after["localsend"]["showNotifications"])
+        self.assertTrue(recipient_after["localsend"]["preferPopupOverNotification"])
+        self.assertEqual(recipient_after["localsend"]["downloadPath"], "/home/other_user2/Downloads")
+
+        self.assertTrue(recipient_after["phone"]["kdeconnectEnabled"])
+        self.assertTrue(recipient_after["phone"]["remoteCommands"])
+        self.assertTrue(recipient_after["phone"]["mirrorNotificationsToDesktop"])
+        self.assertTrue(recipient_after["phone"]["showPeripheralCards"])
+        self.assertFalse(recipient_after["phone"]["scrcpy"]["useWireless"])
+        # Theme styling did apply
+        self.assertEqual(recipient_after["phone"]["scrcpy"]["bitRate"], "12M")
+
 
 if __name__ == "__main__":
     unittest.main()
+
