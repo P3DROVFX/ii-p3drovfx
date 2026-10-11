@@ -5,7 +5,7 @@ import QtQuick.Layouts
 /**
  * The lock's keyboard-layout dialog, made generic: a surface card that pops
  * out of the button it belongs to, listing rows of icon + label with the
- * current one filled in primary. Used for layouts, sessions and users.
+ * current one filled in primary. Used for keyboard layouts.
  *
  * `entries` is a list of { icon, label, active }.
  */
@@ -116,9 +116,13 @@ Item {
                         }
                     }
 
+                    // Close before announcing the pick: the pick rebuilds
+                    // `entries`, which destroys this row mid-handler.
                     onClicked: {
-                        root.picked(row.index);
-                        root.close();
+                        const picked = row.index;
+                        const dialog = root;
+                        dialog.close();
+                        dialog.picked(picked);
                     }
                 }
             }

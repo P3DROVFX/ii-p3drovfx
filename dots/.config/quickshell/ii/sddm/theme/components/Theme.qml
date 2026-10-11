@@ -64,6 +64,7 @@ QtObject {
     readonly property color m3surfaceVariant: col("surface_variant", "#49464a")
     readonly property color m3onSurfaceVariant: col("on_surface_variant", "#cbc5ca")
     readonly property color m3outline: col("outline", "#948f94")
+    readonly property color m3outlineVariant: col("outline_variant", "#49454f")
     readonly property color m3shadow: col("shadow", "#000000")
     readonly property color m3primary: col("primary", "#cbc4cb")
     readonly property color m3onPrimary: col("on_primary", "#322f34")
@@ -75,6 +76,8 @@ QtObject {
     // ── derived colours (Appearance.colors) ────────────────────────────────
     readonly property bool extraBackgroundTint: bool("extra_background_tint", true)
     readonly property color colLayer0: mix(m3background, m3primary, extraBackgroundTint ? 0.99 : 1)
+    // The bar popups' 1 px outline.
+    readonly property color colLayer0Border: mix(m3outlineVariant, colLayer0, 0.4)
     readonly property color colLayer1: m3surfaceContainerLow
     readonly property color colOnLayer1: m3onSurfaceVariant
     readonly property color colLayer1Hover: mix(colLayer1, colOnLayer1, 0.92)
@@ -84,6 +87,10 @@ QtObject {
     readonly property color colPrimaryActive: mix(m3primary, colLayer1Active, 0.7)
     readonly property color colSecondaryContainerHover: mix(m3secondaryContainer, m3onSecondaryContainer, 0.90)
     readonly property color colSecondaryContainerActive: mix(m3secondaryContainer, m3onSecondaryContainer, 0.54)
+    // The shell's popup layer (StyledComboBox's list).
+    readonly property color colLayer3: m3surfaceContainerHigh
+    readonly property color colLayer3Hover: mix(colLayer3, m3onSurface, 0.90)
+    readonly property color colLayer3Active: mix(colLayer3, m3onSurface, 0.80)
     readonly property color colSurfaceContainerHighestHover: mix(m3surfaceContainerHighest, m3onSurface, 0.95)
     readonly property color colShadow: transparentize(m3shadow, 0.7)
     readonly property color colTooltip: m3surfaceContainerHigh
@@ -99,6 +106,7 @@ QtObject {
     readonly property int roundingVerySmall: Math.round(8 * roundingScale)
     readonly property int roundingSmall: Math.round(12 * roundingScale)
     readonly property int roundingNormal: Math.round(17 * roundingScale)
+    readonly property int roundingLarge: Math.round(24 * roundingScale)
     readonly property int roundingFull: roundingScale === 0 ? 0 : 9999
     readonly property real toolbarHeight: 46
     readonly property real elevationMargin: 10
@@ -169,7 +177,7 @@ QtObject {
     readonly property bool materialShapeChars: bool("material_shape_chars", true)
 
     readonly property var islandsLeft: list("islands_left", ["battery", "capsLock", "keyboardLayout"])
-    readonly property var islandsRight: list("islands_right", ["session", "sleep", "power", "reboot"])
+    readonly property var islandsRight: list("islands_right", ["sleep", "power", "reboot"])
     readonly property var islandsHidden: list("islands_hidden", [])
     function islandShown(id) {
         return !root.islandsHidden.includes(id);

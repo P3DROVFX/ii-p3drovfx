@@ -9,6 +9,7 @@ IslandButton 1.0 IslandButton.qml
 LoginSurface 1.0 LoginSurface.qml
 MaterialShape 1.0 MaterialShape.qml
 MaterialSymbol 1.0 MaterialSymbol.qml
+MorphPicker 1.0 MorphPicker.qml
 PasswordChars 1.0 PasswordChars.qml
 PickerDialog 1.0 PickerDialog.qml
 StyledText 1.0 StyledText.qml

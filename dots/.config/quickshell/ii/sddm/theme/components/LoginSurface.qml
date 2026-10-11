@@ -5,11 +5,10 @@ import Qt5Compat.GraphicalEffects
 
 /**
  * The lock surface's islands, rebuilt for the greeter:
- *  - top: the padlock pill, which here also carries the user (avatar + name)
- *    and opens a user picker when there is more than one;
  *  - bottom centre: password field + confirm;
- *  - bottom left: battery, caps lock, keyboard layout;
- *  - bottom right: session picker, sleep, power, reboot.
+ *  - bottom left: battery, caps lock, keyboard layout, and before them the
+ *    session and user pills, which open into their lists (MorphPicker);
+ *  - bottom right: sleep, power, reboot.
  * Sizes, colours and motion follow modules/ii/lock/LockSurface.qml.
  */
 FocusScope {
@@ -35,8 +34,12 @@ FocusScope {
     Instantiator {
         id: sessions
         model: sessionModel
+        // Read through `model`: a role a given SDDM build lacks reads as undefined.
         delegate: QtObject {
-            required property string name
+            required property var model
+            readonly property string name: model.name ?? ""
+            // Session::Type: 1 X11, 2 Wayland.
+            readonly property string kind: model.type === 2 ? "Wayland" : model.type === 1 ? "X11" : ""
         }
     }
     property int userIndex: Math.max(0, userModel.lastIndex)
@@ -54,7 +57,9 @@ FocusScope {
         if (!user)
             return "";
         const icon = String(user.icon || "");
-        return icon === "" || icon.indexOf("/usr/share/sddm/faces/") === 0 ? "" : (icon.startsWith("file:") || icon.startsWith("image:") ? icon : "file://" + icon);
+        // The greeter may hand it over as a file:// URL; compare the path.
+        const path = icon.replace(/^file:\/\//, "");
+        return icon === "" || path.indexOf("/usr/share/sddm/faces/") === 0 ? "" : (icon.startsWith("file:") || icon.startsWith("image:") ? icon : "file://" + icon);
     }
 
     function tryLogin() {
@@ -68,8 +73,8 @@ FocusScope {
     }
     function closeDialogs() {
         layoutDialog.close();
-        sessionDialog.close();
-        userDialog.close();
+        sessionPicker.close();
+        userPicker.close();
     }
 
     Connections {
@@ -142,115 +147,6 @@ FocusScope {
         Component {
             id: cookieClock
             CookieClock {}
-        }
-    }
-
-    // ── top: padlock + user ────────────────────────────────────────────────
-    Toolbar {
-        id: userPill
-        anchors {
-            top: parent.top
-            topMargin: 20
-            horizontalCenter: parent.horizontalCenter
-        }
-        z: 5
-        opacity: root.toolbarOpacity
-        scale: root.toolbarScale
-        visible: opacity > 0.01
-        transform: Translate {
-            y: (1.0 - root.toolbarOpacity) * -40
-            Behavior on y {
-                NumberAnimation {
-                    duration: Theme.ms(500)
-                    easing.type: Easing.BezierSpline
-                    easing.bezierCurve: Theme.expressiveFastSpatial
-                }
-            }
-        }
-        readonly property bool canSwitch: users.count > 1
-
-        Item {
-            implicitWidth: Math.max(0, Theme.toolbarHeight - userPill.padding * 2)
-            implicitHeight: implicitWidth
-
-            readonly property string avatar: root.avatarFor(root.currentUser)
-            Image {
-                id: avatarImage
-                anchors.fill: parent
-                source: parent.avatar
-                sourceSize: Qt.size(width * 2, height * 2)
-                fillMode: Image.PreserveAspectCrop
-                visible: false
-                asynchronous: true
-            }
-            OpacityMask {
-                anchors.fill: parent
-                source: avatarImage
-                visible: avatarImage.status === Image.Ready
-                maskSource: Rectangle {
-                    width: avatarImage.width
-                    height: avatarImage.height
-                    radius: width / 2
-                }
-            }
-            MaterialSymbol {
-                anchors.centerIn: parent
-                visible: avatarImage.status !== Image.Ready
-                text: "lock"
-                fill: 1
-                iconSize: Theme.pxLarger
-                color: Theme.m3onSurface
-            }
-        }
-        StyledText {
-            Layout.rightMargin: userPill.canSwitch ? 0 : 14
-            text: root.displayName
-            visible: text !== ""
-            font.pixelSize: Theme.pxSmall
-            color: Theme.m3onSurface
-        }
-        MaterialSymbol {
-            Layout.rightMargin: 10
-            visible: userPill.canSwitch
-            text: userDialog.shown ? "expand_less" : "expand_more"
-            iconSize: Theme.pxHuge
-            color: Theme.m3onSurfaceVariant
-        }
-    }
-    MouseArea {
-        anchors.fill: userPill
-        z: userPill.z
-        enabled: userPill.canSwitch
-        cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-        onClicked: {
-            sessionDialog.close();
-            layoutDialog.close();
-            userDialog.toggle();
-        }
-    }
-
-    PickerDialog {
-        id: userDialog
-        objectName: "userDialog"
-        z: 10
-        growFrom: Item.Top
-        preferredWidth: Math.max(200, userPill.width)
-        x: userPill.x + (userPill.width - width) / 2
-        y: userPill.y + userPill.height + 10
-        entries: {
-            const list = [];
-            for (let i = 0; i < users.count; i++) {
-                const u = users.objectAt(i);
-                if (u)
-                    list.push({ icon: "person", label: u.realName || u.name, active: i === root.userIndex });
-            }
-            return list;
-        }
-        onPicked: index => {
-            root.userIndex = index;
-            root.failed = false;
-            passwordBox.text = "";
-            root.forceFieldFocus();
         }
     }
 
@@ -439,8 +335,8 @@ FocusScope {
             onClicked: {
                 const p = layoutButton.mapToItem(root, layoutButton.width / 2, 0);
                 layoutDialog.anchorX = p.x;
-                sessionDialog.close();
-                userDialog.close();
+                sessionPicker.close();
+                userPicker.close();
                 layoutDialog.toggle();
             }
         }
@@ -490,7 +386,71 @@ FocusScope {
         }
     }
 
-    // ── bottom right: session and power ────────────────────────────────────
+    // ── bottom left, outermost: user and session ───────────────────────────
+    // Same row and order as before the status island: session, user, status.
+    MorphPicker {
+        id: userPicker
+        objectName: "userPicker"
+        anchors {
+            right: leftIsland.visible ? leftIsland.left : mainIsland.left
+            bottom: mainIsland.bottom
+            rightMargin: 10
+        }
+        scale: root.toolbarScale
+        opacity: root.toolbarOpacity
+        icon: "person"
+        title: qsTr("Switch user")
+        image: root.avatarFor(root.currentUser)
+        label: root.displayName
+        entries: {
+            const list = [];
+            for (let i = 0; i < users.count; i++) {
+                const u = users.objectAt(i);
+                if (u)
+                    list.push({ icon: "person", image: root.avatarFor(u), label: u.realName || u.name, detail: u.realName && u.realName !== u.name ? u.name : "", active: i === root.userIndex });
+            }
+            return list;
+        }
+        onOpenChanged: if (open) { layoutDialog.close(); sessionPicker.close(); }
+        onPicked: index => {
+            if (index === root.userIndex)
+                return;
+            root.userIndex = index;
+            root.failed = false;
+            passwordBox.text = "";
+        }
+        onDismissed: root.forceFieldFocus()
+    }
+
+    MorphPicker {
+        id: sessionPicker
+        objectName: "sessionPicker"
+        anchors {
+            right: userPicker.left
+            bottom: mainIsland.bottom
+            rightMargin: 10
+        }
+        scale: root.toolbarScale
+        opacity: root.toolbarOpacity
+        visible: sessions.count > 0
+        icon: "desktop_windows"
+        title: qsTr("Session")
+        label: root.sessionName
+        entries: {
+            const list = [];
+            for (let i = 0; i < sessions.count; i++) {
+                const s = sessions.objectAt(i);
+                if (s)
+                    list.push({ icon: "desktop_windows", label: s.name, detail: s.kind, active: i === root.sessionIndex });
+            }
+            return list;
+        }
+        onOpenChanged: if (open) { layoutDialog.close(); userPicker.close(); }
+        onPicked: index => root.sessionIndex = index
+        onDismissed: root.forceFieldFocus()
+    }
+
+    // ── bottom right: power ────────────────────────────────────────────────
     Toolbar {
         id: rightIsland
         anchors {
@@ -510,14 +470,13 @@ FocusScope {
                 required property string modelData
                 iconName: root.rightIcon(modelData)
                 tooltip: root.rightTooltip(modelData)
-                onClicked: root.rightAction(modelData, this)
+                onClicked: root.rightAction(modelData)
             }
         }
     }
 
     function rightAvailable(id) {
         switch (id) {
-        case "session": return sessions.count > 1;
         case "sleep": return sddm.canSuspend;
         case "power": return sddm.canPowerOff;
         case "reboot": return sddm.canReboot;
@@ -525,54 +484,21 @@ FocusScope {
         }
     }
     function rightIcon(id) {
-        return ({ session: "desktop_windows", sleep: "dark_mode", power: "power_settings_new", reboot: "restart_alt" })[id] ?? "";
+        return ({ sleep: "dark_mode", power: "power_settings_new", reboot: "restart_alt" })[id] ?? "";
     }
     function rightTooltip(id) {
         switch (id) {
-        case "session": return root.sessionName;
         case "sleep": return qsTr("Sleep");
         case "power": return qsTr("Shutdown");
         case "reboot": return qsTr("Reboot");
         default: return "";
         }
     }
-    function rightAction(id, button) {
+    function rightAction(id) {
         switch (id) {
-        case "session": {
-            const p = button.mapToItem(root, button.width / 2, 0);
-            sessionDialog.anchorX = p.x;
-            layoutDialog.close();
-            userDialog.close();
-            sessionDialog.toggle();
-            break;
-        }
         case "sleep": sddm.suspend(); break;
         case "power": sddm.powerOff(); break;
         case "reboot": sddm.reboot(); break;
-        }
-    }
-
-    PickerDialog {
-        id: sessionDialog
-        objectName: "sessionDialog"
-        // Set to the session button's centre on click; it leads the island by default.
-        property real anchorX: rightIsland.x + rightIsland.height / 2
-        z: 10
-        preferredWidth: 200
-        x: Math.min(anchorX - width / 2, root.width - width - 10)
-        y: rightIsland.y - height - 10
-        entries: {
-            const list = [];
-            for (let i = 0; i < sessions.count; i++) {
-                const s = sessions.objectAt(i);
-                if (s)
-                    list.push({ icon: "desktop_windows", label: s.name, active: i === root.sessionIndex });
-            }
-            return list;
-        }
-        onPicked: index => {
-            root.sessionIndex = index;
-            root.forceFieldFocus();
         }
     }
 }

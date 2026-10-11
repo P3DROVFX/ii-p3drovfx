@@ -215,8 +215,7 @@ def main():
         "battery_low": get(cfg, "battery.low", 20),
         "battery_critical": get(cfg, "battery.critical", 5),
         "islands_left": islands(cfg, "left", LEFT_ISLANDS),
-        # The session picker has no place on the lock; it leads the power island.
-        "islands_right": ["session"] + islands(cfg, "right", RIGHT_ISLANDS),
+        "islands_right": islands(cfg, "right", RIGHT_ISLANDS),
         "islands_hidden": [i for i in hidden if i in LEFT_ISLANDS + RIGHT_ISLANDS],
         "clock_style": clock(cfg),
         "clock_time_format": get(cfg, "time.format", "hh:mm"),
