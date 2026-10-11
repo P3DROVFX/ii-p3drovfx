@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Effects
 import QtQuick.Layouts
-import Qt5Compat.GraphicalEffects
 
 /**
  * An island that opens into its own list. Closed, it is a pill with the current
@@ -411,33 +410,6 @@ FocusScope {
                         }
                     }
                 }
-            }
-        }
-    }
-
-    // A picture cropped to a circle; `ready` once it has loaded.
-    component RoundPicture: Item {
-        id: pic
-        property string source: ""
-        readonly property bool ready: image.status === Image.Ready
-
-        Image {
-            id: image
-            anchors.fill: parent
-            source: pic.source
-            sourceSize: Qt.size(128, 128)
-            fillMode: Image.PreserveAspectCrop
-            visible: false
-            asynchronous: true
-        }
-        OpacityMask {
-            anchors.fill: parent
-            source: image
-            visible: pic.ready
-            maskSource: Rectangle {
-                width: image.width
-                height: image.height
-                radius: width / 2
             }
         }
     }

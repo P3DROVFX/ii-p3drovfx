@@ -5,10 +5,11 @@ import Qt5Compat.GraphicalEffects
 
 /**
  * The lock surface's islands, rebuilt for the greeter:
- *  - bottom centre: password field + confirm;
- *  - bottom left: battery, caps lock, keyboard layout, and before them the
- *    session and user pills, which open into their lists (MorphPicker);
- *  - bottom right: sleep, power, reboot.
+ *  - bottom centre: password field + confirm, and above it the current user,
+ *    which unfolds into a strip of every user (UserStrip);
+ *  - bottom left: battery, caps lock, keyboard layout;
+ *  - bottom right: the session pill, which opens into its list (MorphPicker),
+ *    then sleep, power, reboot.
  * Sizes, colours and motion follow modules/ii/lock/LockSurface.qml.
  */
 FocusScope {
@@ -166,7 +167,15 @@ FocusScope {
             objectName: "passwordBox"
             Layout.fillHeight: true
             Layout.rightMargin: -Layout.leftMargin
-            implicitWidth: 200
+            // The lock's 200, widened so the placeholder's name is not cut.
+            implicitWidth: Math.min(320, Math.max(200, Math.ceil(placeholderWidth.implicitWidth) + leftPadding + rightPadding + 4))
+            Behavior on implicitWidth {
+                NumberAnimation {
+                    duration: Theme.ms(300)
+                    easing.type: Easing.BezierSpline
+                    easing.bezierCurve: Theme.expressiveDefaultSpatial
+                }
+            }
             padding: 10
             clip: true
             focus: true
@@ -174,7 +183,7 @@ FocusScope {
             echoMode: TextInput.Password
             passwordCharacter: "●"
             inputMethodHints: Qt.ImhSensitiveData | Qt.ImhNoPredictiveText
-            placeholderText: root.failed ? qsTr("Incorrect password") : qsTr("Enter password")
+            placeholderText: root.failed ? qsTr("Incorrect password") : (root.displayName !== "" ? qsTr("Password for %1").arg(root.displayName) : qsTr("Enter password"))
             placeholderTextColor: Theme.colSubtext
             color: Theme.transparentize(Theme.colOnLayer1, Theme.materialShapeChars ? 1 : 0)
             selectedTextColor: Theme.materialShapeChars ? "transparent" : Theme.m3onSecondaryContainer
@@ -215,6 +224,15 @@ FocusScope {
             ErrorShake {
                 id: wrongPasswordShake
                 target: passwordBox
+            }
+
+            // Measured with the field's own font, like the placeholder draws.
+            Text {
+                id: placeholderWidth
+                visible: false
+                text: passwordBox.placeholderText
+                renderType: passwordBox.renderType
+                font: passwordBox.font
             }
 
             Loader {
@@ -386,35 +404,31 @@ FocusScope {
         }
     }
 
-    // ── bottom left, outermost: user and session ───────────────────────────
-    // Same row and order as before the status island: session, user, status.
-    MorphPicker {
+    // ── above the password: who is logging in ──────────────────────────────
+    UserStrip {
         id: userPicker
         objectName: "userPicker"
         anchors {
-            right: leftIsland.visible ? leftIsland.left : mainIsland.left
-            bottom: mainIsland.bottom
-            rightMargin: 10
+            horizontalCenter: mainIsland.horizontalCenter
+            bottom: mainIsland.top
+            bottomMargin: 10
         }
         scale: root.toolbarScale
         opacity: root.toolbarOpacity
-        icon: "person"
-        title: qsTr("Switch user")
-        image: root.avatarFor(root.currentUser)
-        label: root.displayName
+        currentIndex: root.userIndex
+        // Without `active`: the list stays the same when the user changes,
+        // so the slots survive a pick and the face can glide back down.
         entries: {
             const list = [];
             for (let i = 0; i < users.count; i++) {
                 const u = users.objectAt(i);
                 if (u)
-                    list.push({ icon: "person", image: root.avatarFor(u), label: u.realName || u.name, detail: u.realName && u.realName !== u.name ? u.name : "", active: i === root.userIndex });
+                    list.push({ image: root.avatarFor(u), label: u.realName || u.name });
             }
             return list;
         }
         onOpenChanged: if (open) { layoutDialog.close(); sessionPicker.close(); }
         onPicked: index => {
-            if (index === root.userIndex)
-                return;
             root.userIndex = index;
             root.failed = false;
             passwordBox.text = "";
@@ -422,13 +436,14 @@ FocusScope {
         onDismissed: root.forceFieldFocus()
     }
 
+    // ── bottom right, first: the session ───────────────────────────────────
     MorphPicker {
         id: sessionPicker
         objectName: "sessionPicker"
         anchors {
-            right: userPicker.left
+            left: mainIsland.right
             bottom: mainIsland.bottom
-            rightMargin: 10
+            leftMargin: 10
         }
         scale: root.toolbarScale
         opacity: root.toolbarOpacity
@@ -454,7 +469,7 @@ FocusScope {
     Toolbar {
         id: rightIsland
         anchors {
-            left: mainIsland.right
+            left: sessionPicker.visible ? sessionPicker.right : mainIsland.right
             top: mainIsland.top
             bottom: mainIsland.bottom
             leftMargin: 10

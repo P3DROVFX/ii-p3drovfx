@@ -12,6 +12,8 @@ MaterialSymbol 1.0 MaterialSymbol.qml
 MorphPicker 1.0 MorphPicker.qml
 PasswordChars 1.0 PasswordChars.qml
 PickerDialog 1.0 PickerDialog.qml
+RoundPicture 1.0 RoundPicture.qml
 StyledText 1.0 StyledText.qml
 Toolbar 1.0 Toolbar.qml
 ToolTipContent 1.0 ToolTipContent.qml
+UserStrip 1.0 UserStrip.qml

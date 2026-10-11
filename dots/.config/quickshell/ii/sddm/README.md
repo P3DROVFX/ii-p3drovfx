@@ -48,5 +48,7 @@ off; the login screen then keeps its last synced look.
 - A cursor theme that exists only in your home is copied to
   `/usr/local/share/icons`; system-wide themes are used in place.
 - Islands that depend on your session (alarm, weather, modes, keep awake) are
-  not shown. The login screen adds a session pill and a user pill left of the
-  status island; each opens upward into its list when there is more than one.
+  not shown. The login screen adds the current user above the password field,
+  which unfolds into a strip of every user, and a session pill before the power
+  island, which opens upward into its list. Either opens only when there is
+  more than one to choose from.
