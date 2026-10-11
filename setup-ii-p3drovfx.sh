@@ -3256,6 +3256,23 @@ sddm_install() {
         return 1
     fi
     ui_ok "SDDM theme installed" "takes effect at the next login screen"
+    sddm_warn_osk
+}
+
+# The theme has no on-screen keyboard. With Qt's virtual keyboard enabled for
+# the greeter (3d3f/ii-sddm-theme setups do this), Qt opens it in a window of
+# its own, which takes focus from the password field and pops up again and
+# again. Other files are not ours to edit, so say where and what to remove.
+sddm_osk_files() {
+    grep -ls -e '^GreeterEnvironment=.*QT_IM_MODULE=qtvirtualkeyboard' -e '^InputMethod=qtvirtualkeyboard' \
+        /etc/sddm.conf /etc/sddm.conf.d/*.conf 2>/dev/null
+}
+sddm_warn_osk() {
+    local files
+    files="$(sddm_osk_files)" || true
+    [[ -n "$files" ]] || return 0
+    ui_warn "Qt's on-screen keyboard is on for the login screen, which loops with this theme"
+    ui_note "Remove QT_IM_MODULE=qtvirtualkeyboard (or InputMethod=qtvirtualkeyboard) from: ${files//$'\n'/, }"
 }
 
 sddm_remove() {

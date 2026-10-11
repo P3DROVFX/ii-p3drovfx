@@ -45,6 +45,10 @@ off; the login screen then keeps its last synced look.
   `/etc/sddm.conf.d` already sets `GreeterEnvironment`, in which case it says so
   and leaves that file alone.
 - A video wallpaper is shown as its first frame (needs `ffmpeg`).
+- There is no on-screen keyboard. Remove `QT_IM_MODULE=qtvirtualkeyboard` (or
+  `InputMethod=qtvirtualkeyboard`) from SDDM's config if another theme set it:
+  Qt's keyboard then opens in its own window and pops up in a loop. The
+  installer warns when it finds one.
 - A cursor theme that exists only in your home is copied to
   `/usr/local/share/icons`; system-wide themes are used in place.
 - Islands that depend on your session (alarm, weather, modes, keep awake) are

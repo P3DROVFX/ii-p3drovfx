@@ -96,6 +96,12 @@ select_theme() {
     chmod 0644 "$CONF"
     say "SDDM theme set to $THEME_ID ($CONF)"
     [[ -n "$other" ]] && say "note: another file sets GreeterEnvironment; the battery chip stays hidden until it includes QML_XHR_ALLOW_FILE_READ=1"
+    # The theme has no on-screen keyboard: Qt's own then opens in a window of
+    # its own, takes focus from the password field and pops up again and again.
+    local osk
+    osk="$(grep -ls -e '^GreeterEnvironment=.*QT_IM_MODULE=qtvirtualkeyboard' -e '^InputMethod=qtvirtualkeyboard' \
+        /etc/sddm.conf /etc/sddm.conf.d/*.conf 2>/dev/null || true)"
+    [[ -n "$osk" ]] && say "warning: Qt's on-screen keyboard is on for the greeter and loops with this theme; remove QT_IM_MODULE=qtvirtualkeyboard (or InputMethod=qtvirtualkeyboard) from: ${osk//$'\n'/, }"
     return 0
 }
 
