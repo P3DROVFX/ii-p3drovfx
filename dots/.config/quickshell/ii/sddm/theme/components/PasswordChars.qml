@@ -19,6 +19,15 @@ Flickable {
 
     readonly property var charShapes: ["Clover4Leaf", "Arrow", "Pill", "SoftBurst", "Diamond", "ClamShell", "Pentagon"]
 
+    function syncChars() {
+        if (chars.count > root.length)
+            chars.remove(root.length, chars.count - root.length);
+        while (chars.count < root.length)
+            chars.append({});
+    }
+    onLengthChanged: syncChars()
+    Component.onCompleted: syncChars()
+
     interactive: false
     clip: true
     contentWidth: dotsRow.implicitWidth
@@ -61,7 +70,13 @@ Flickable {
         spacing: 0
 
         Repeater {
-            model: root.length
+            // Not `model: root.length`: a number model rebuilds every delegate
+            // when it changes, replaying each shape's entrance on every key.
+            // The shell's ScriptModel keeps them; this does the same by only
+            // adding or dropping shapes at the end.
+            model: ListModel {
+                id: chars
+            }
 
             delegate: Rectangle {
                 id: charItem
@@ -74,7 +89,8 @@ Flickable {
                 MaterialShape {
                     id: materialShape
                     anchors.centerIn: parent
-                    shape: root.charShapes[charItem.index % root.charShapes.length]
+                    // A removed shape briefly reads index -1 on its way out.
+                    shape: root.charShapes[Math.max(0, charItem.index) % root.charShapes.length]
                     color: charItem.selected ? root.selectedTextColor : root.color
                     implicitSize: 0
                     opacity: 0
