@@ -24,6 +24,8 @@
 #   restart                 Restart Quickshell (alias: run)
 #   doctor                  Report resolved paths, active state and tooling
 #   deps [add|remove|list]  Show, install or remove optional feature packages
+#   sddm [remove]           Install (or remove) the SDDM login theme that
+#                           mirrors the lock screen; needs sudo
 #   hyprset <args>          Write a Hyprland key or animation
 #   hyprmerge <args>        Merge a Hyprland config into the local one
 #   remove-cli              Remove the ii-p3drovfx symlink
@@ -48,6 +50,8 @@
 #       --no-restart          Leave Quickshell alone when finished
 #       --hypr                Install the fork's ~/.config/hypr files (recommended)
 #       --no-hypr             Never install them, never ask
+#       --sddm                Also install/refresh the SDDM login theme (sudo)
+#       --no-sddm             Leave an installed SDDM theme as it is
 #       --rebuild-quickshell  Rebuild Quickshell from source first
 #       --skip-base-check     Do not require illogical-impulse to be present
 #       --ii-subdir <name>    Override ii* auto-detection in the clone
@@ -223,6 +227,8 @@ OPT_II_SUBDIR=""
 OPT_RESTART=true
 OPT_FORCE=false
 OPT_HYPR="" # "" = ask (and -y accepts), true/false = explicit
+OPT_SDDM="" # "" = refresh an installed SDDM theme (asked), true = install/refresh, false = leave alone
+SDDM_ACTION="" # sddm: "" (install or refresh) | remove
 OPT_SKIP_BASE_CHECK=false
 OPT_ASCII=false
 OPT_NO_COLOR=false
@@ -2678,6 +2684,9 @@ apply_config() {
     # so a half-applied pair of configs is not a state you can end up in.
     install_hypr_config "$repo_root"
 
+    # From the deployed tree: sddm/install.sh copies the theme out of it.
+    sddm_after_apply "$TARGET_DIR"
+
     if [[ -n "$CLONE_DIR" ]]; then
         rm -rf "$CLONE_DIR"
         CLONE_DIR=""
@@ -3201,6 +3210,96 @@ deps_remove() {
     ui_ok "Removed" "${#pkgs[@]} package$( ((${#pkgs[@]} == 1)) || printf 's')"
 }
 
+# ── SDDM login theme ─────────────────────────────────────────────────────────
+#
+# Optional. sddm/install.sh (run through sudo) installs the theme, a root path
+# unit that copies what the shell stages into /var/lib/ii-sddm, and selects the
+# theme in /etc/sddm.conf.d. The shell's SddmSync service stages; nothing else
+# here needs root after the install.
+
+SDDM_THEME_DIR="/usr/share/sddm/themes/ii-p3drovfx"
+
+sddm_theme_installed() {
+    grep -qsx "Theme-Id=ii-p3drovfx" "$SDDM_THEME_DIR/metadata.desktop"
+}
+
+# True when the deployed sources differ from what is installed.
+sddm_theme_outdated() {
+    local root="$1"
+    ! diff -rq --exclude=shapes --exclude=theme.conf.user --exclude=README.md \
+        "$root/sddm/theme" "$SDDM_THEME_DIR" >/dev/null 2>&1 ||
+        ! cmp -s "$root/sddm/ii-sddm-sync" /usr/local/lib/ii-sddm/ii-sddm-sync
+}
+
+sddm_install() {
+    local root="$1"
+    if ! have sddm; then
+        ui_fail "SDDM is not installed" "this theme is for the SDDM display manager"
+        return 1
+    fi
+    if [[ ! -f "$root/sddm/install.sh" ]]; then
+        ui_fail "No SDDM theme" "$(tilde "$root") does not ship sddm/install.sh"
+        return 1
+    fi
+    have python3 || {
+        ui_fail "python3 not found" "the sync scripts need the system python3"
+        return 1
+    }
+    ui_step "Login screen"
+    local state="${XDG_STATE_HOME:-$HOME/.local/state}/quickshell/user/generated/sddm/state.json"
+    # Stage once now so the first greeter already looks right; the shell keeps it fresh after.
+    run_logged python3 -I "$root/scripts/sddm/stage_sddm.py" ||
+        ui_warn "Could not stage the lock look yet; the shell will retry once it runs."
+    sudo_prime || return 1
+    if ! run_logged sudo bash "$root/sddm/install.sh" install "$USER" "$state"; then
+        ui_fail "SDDM theme install failed" "see $(tilde "$LOG_FILE")"
+        return 1
+    fi
+    ui_ok "SDDM theme installed" "takes effect at the next login screen"
+}
+
+sddm_remove() {
+    local root="$1"
+    if ! sddm_theme_installed && [[ ! -d /var/lib/ii-sddm ]]; then
+        ui_note "The SDDM theme is not installed."
+        return 0
+    fi
+    ui_step "Login screen"
+    sudo_prime || return 1
+    local script="$root/sddm/install.sh"
+    [[ -f "$script" ]] || script="$SDDM_THEME_DIR/install.sh"
+    if ! run_logged sudo bash "$script" remove "$USER"; then
+        ui_fail "SDDM theme removal failed" "see $(tilde "$LOG_FILE")"
+        return 1
+    fi
+    ui_ok "SDDM theme removed" "SDDM uses its previous theme again"
+}
+
+# After an apply: refresh an installed theme whose sources changed, or install it on --sddm.
+sddm_after_apply() {
+    local root="$1"
+    [[ "$OPT_SDDM" == false ]] && return 0
+    [[ -f "$root/sddm/install.sh" ]] || return 0
+    if [[ "$OPT_SDDM" != true ]]; then
+        sddm_theme_installed || return 0
+        sddm_theme_outdated "$root" || return 0
+        ui_confirm "Update the SDDM login theme too? (needs sudo)" yes || {
+            ui_note "Left the login theme as it was ($CLI_NAME sddm updates it later)."
+            return 0
+        }
+    fi
+    sddm_install "$root" || ui_warn "The shell is updated; the login theme is not."
+    return 0
+}
+
+cmd_sddm() {
+    ui_banner "ii-p3drovfx" "sddm"
+    case "$SDDM_ACTION" in
+        remove) sddm_remove "$TARGET_DIR" || exit 1 ;;
+        *) sddm_install "$TARGET_DIR" || exit 1 ;;
+    esac
+}
+
 cmd_deps() {
     ui_banner "ii-p3drovfx" "deps"
     local root="$TARGET_DIR"
@@ -3333,6 +3432,7 @@ show_help() {
     printf '  %s%-16s%s %s\n' "$C_OK" "restart" "$C_RST" "Restart Quickshell (alias: run)"
     printf '  %s%-16s%s %s\n' "$C_OK" "doctor" "$C_RST" "Report resolved paths, state and tooling"
     printf '  %s%-16s%s %s\n' "$C_OK" "deps" "$C_RST" "Show and install optional feature packages"
+    printf '  %s%-16s%s %s\n' "$C_OK" "sddm [remove]" "$C_RST" "Install the login theme that mirrors the lock"
     printf '  %s%-16s%s %s\n' "$C_OK" "hyprset" "$C_RST" "Write a Hyprland key/animation"
     printf '  %s%-16s%s %s\n' "$C_OK" "hyprmerge" "$C_RST" "Merge a Hyprland config into the local one"
     printf '  %s%-16s%s Remove the %s symlink\n' "$C_OK" "remove-cli" "$C_RST" "$CLI_NAME"
@@ -3355,6 +3455,8 @@ show_help() {
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --no-restart" "$C_RST" "Leave Quickshell alone when finished"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --hypr" "$C_RST" "Install the fork's ~/.config/hypr files (recommended)"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --no-hypr" "$C_RST" "Never install them, never ask"
+    printf '  %s%-24s%s %s\n' "$C_STEP" "    --sddm" "$C_RST" "Also install/refresh the SDDM login theme"
+    printf '  %s%-24s%s %s\n' "$C_STEP" "    --no-sddm" "$C_RST" "Leave an installed SDDM theme as it is"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --rebuild-quickshell" "$C_RST" "Rebuild Quickshell from source first"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --skip-base-check" "$C_RST" "Do not require illogical-impulse to be present"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --ii-subdir <name>" "$C_RST" "Override ii* auto-detection in the clone"
@@ -3520,6 +3622,14 @@ parse_args() {
                 OPT_HYPR=false
                 shift
                 ;;
+            --sddm)
+                OPT_SDDM=true
+                shift
+                ;;
+            --no-sddm)
+                OPT_SDDM=false
+                shift
+                ;;
             --skip-base-check | --force-install)
                 OPT_SKIP_BASE_CHECK=true
                 shift
@@ -3596,7 +3706,7 @@ parse_args() {
         local first="${positional[0]}"
         case "$first" in
             apply | install | update | switch | fork | branch | list-forks | list-branches | \
-                restart | run | doctor | deps | remove-cli | hyprset | hyprmerge | help | version | demo)
+                restart | run | doctor | deps | sddm | remove-cli | hyprset | hyprmerge | help | version | demo)
                 COMMAND="$first"
                 positional=("${positional[@]:1}")
                 ;;
@@ -3635,6 +3745,14 @@ parse_args() {
             if [[ "$DEPS_ACTION" == add || "$DEPS_ACTION" == remove ]] && [[ -z "$DEPS_IDS" ]]; then
                 arg_error "deps $DEPS_ACTION requires feature ids (see deps --list)"
             fi
+            ;;
+        sddm)
+            case "${positional[0]:-}" in
+                "" | install) SDDM_ACTION="" ;;
+                remove) SDDM_ACTION="remove" ;;
+                *) arg_error "sddm takes install or remove, not \"${positional[0]}\"" ;;
+            esac
+            ((${#positional[@]} <= 1)) || arg_error "Unexpected argument \"${positional[1]}\""
             ;;
         *)
             if ((${#positional[@]} > 0)); then
@@ -3721,6 +3839,7 @@ main() {
             ;;
         doctor) cmd_doctor ;;
         deps) cmd_deps ;;
+        sddm) cmd_sddm ;;
         list-forks) cmd_list_forks ;;
         list-branches) cmd_list_branches ;;
         apply | install | update | switch)

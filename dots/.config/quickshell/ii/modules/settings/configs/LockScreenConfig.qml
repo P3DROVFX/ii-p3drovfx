@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell.Io
 import qs.services
 import qs
 import qs.modules.common
@@ -16,6 +17,16 @@ Item {
     property alias activeSubPage: subPageOverlay.activeSubPage
 
     readonly property var lock: Config.options.lock
+
+    // The SDDM theme's own file: present only when setup-ii-p3drovfx.sh sddm installed it.
+    FileView {
+        id: sddmTheme
+        property bool installed: false
+        path: "/usr/share/sddm/themes/ii-p3drovfx/metadata.desktop"
+        printErrors: false
+        onLoaded: installed = true
+        onLoadFailed: installed = false
+    }
 
     ContentPage {
         id: page
@@ -299,6 +310,21 @@ Item {
                             : Translation.tr("Apps ask for the keyring password")
                         checked: lockScreenRoot.lock.security.unlockKeyring
                         onToggled: value => lockScreenRoot.lock.security.unlockKeyring = value
+                    }
+
+                    // Offered only once the optional SDDM theme is installed.
+                    ColorsFeatureTile {
+                        width: tiles.tileWidth
+                        height: tiles.tileHeight
+                        visible: sddmTheme.installed
+                        symbol: "login"
+                        shapeOn: MaterialShape.Shape.Cookie7Sided
+                        title: Translation.tr("Login screen")
+                        summary: checked
+                            ? Translation.tr("The login screen follows this look")
+                            : Translation.tr("The login screen keeps its last look")
+                        checked: lockScreenRoot.lock.sddmSync ?? true
+                        onToggled: value => lockScreenRoot.lock.sddmSync = value
                     }
                 }
             }

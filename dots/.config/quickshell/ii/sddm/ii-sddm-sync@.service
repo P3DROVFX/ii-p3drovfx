@@ -1,0 +1,20 @@
+[Unit]
+Description=Sync the ii-p3drovfx login screen with %i's lock screen
+Documentation=file:///usr/share/sddm/themes/ii-p3drovfx/README.md
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/ii-sddm/ii-sddm-sync %i
+# Root is needed for /var/lib/ii-sddm, /etc/sddm.conf.d, /usr/local/share/icons
+# and the greeter's KWin config; nothing else is writable.
+ProtectSystem=strict
+ReadWritePaths=/var/lib/ii-sddm /etc/sddm.conf.d -/usr/local/share/icons -/var/lib/sddm/.config
+ProtectHome=read-only
+PrivateTmp=true
+PrivateNetwork=true
+NoNewPrivileges=true
+CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_CHOWN CAP_FOWNER CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native

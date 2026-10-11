@@ -1,0 +1,14 @@
+[SddmGreeterTheme]
+Name=ii-p3drovfx
+Description=Login screen that mirrors the ii-p3drovfx Quickshell lock screen
+Author=ii-p3drovfx
+Website=https://github.com/P3DROVFX/ii-p3drovfx
+License=GPL-3.0-or-later
+Type=sddm-theme
+Version=1.0
+ConfigFile=theme.conf
+Screenshot=
+MainScript=Main.qml
+Theme-Id=ii-p3drovfx
+Theme-API=2.0
+QtVersion=6

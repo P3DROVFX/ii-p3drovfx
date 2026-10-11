@@ -47,6 +47,18 @@ ColumnLayout {
                 text: Translation.tr("Automatically unlock the login keyring when unlocking the session.")
             }
         }
+
+        ConfigSwitch {
+            buttonIcon: "login"
+            text: Translation.tr("Login screen follows the lock screen")
+            checked: Config.options.lock.sddmSync ?? true
+            onCheckedChanged: {
+                Config.options.lock.sddmSync = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Keep the ii-p3drovfx SDDM theme in step with this look: wallpaper, colours, effects, fonts and cursor. Only shown when the theme is installed.")
+            }
+        }
     }
 
     ContentSection {

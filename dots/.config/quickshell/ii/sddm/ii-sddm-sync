@@ -1,0 +1,380 @@
+#!/usr/bin/python3 -I
+"""Root half of the ii-p3drovfx SDDM sync. Run by ii-sddm-sync@<user>.service.
+
+Reads the state the shell staged for <user>, then:
+  - copies the wallpaper, fonts and avatar into /var/lib/ii-sddm, where the
+    greeter (user `sddm`, which cannot enter the user's home) can read them;
+  - writes /var/lib/ii-sddm/theme.conf.user, the theme's live settings;
+  - writes the greeter cursor to /etc/sddm.conf.d/zz-ii-p3drovfx-cursor.conf,
+    copying a user-local cursor theme to /usr/local/share/icons first;
+  - sets the greeter KWin's output scales to the shell's, so the login screen
+    and its cursor come out the same size as the lock screen.
+
+Every file the user names is opened with the user's own uid and groups, so
+nothing reaches the greeter that the user could not already read. Every value
+is checked against a fixed shape before it is written anywhere.
+"""
+import json
+import os
+import pwd
+import re
+import shutil
+import stat
+import sys
+import tempfile
+from contextlib import contextmanager
+from pathlib import Path
+
+DATA = Path("/var/lib/ii-sddm")
+CURSOR_CONF = Path("/etc/sddm.conf.d/zz-ii-p3drovfx-cursor.conf")
+ICONS = Path("/usr/local/share/icons")
+KWIN_OUTPUTS = Path("/var/lib/sddm/.config/kwinoutputconfig.json")
+MARKER = ".ii-sddm-copy"  # marks a cursor theme this script copied, so only those are replaced
+
+MAX_STATE = 256 * 1024
+MAX_IMAGE = 96 * 1024 * 1024
+MAX_FONT = 48 * 1024 * 1024
+MAX_AVATAR = 8 * 1024 * 1024
+MAX_CURSOR_FILES = 4000
+MAX_CURSOR_BYTES = 96 * 1024 * 1024
+
+IMAGE_MAGIC = {b"\x89PNG\r\n\x1a\n": ".png", b"\xff\xd8\xff": ".jpg", b"RIFF": ".webp", b"BM": ".bmp", b"GIF8": ".gif"}
+FONT_MAGIC = {b"\x00\x01\x00\x00": ".ttf", b"true": ".ttf", b"OTTO": ".otf"}
+
+HEX = re.compile(r"#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?")
+TOKEN = re.compile(r"[a-z][a-z0-9_]{0,48}")
+NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._+-]{0,63}")
+CONNECTOR = re.compile(r"[A-Za-z0-9-]{1,32}")
+FAMILY = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._+-]{0,63}")
+FORMAT = re.compile(r"[A-Za-z0-9 .,:/'\-]{1,32}")
+ISLAND = re.compile(r"[A-Za-z]{1,24}")
+
+# theme.conf.user keys the shell may set, and their kinds.
+SETTINGS = {
+    "roundness_full": "bool", "sharp_mode": "bool", "transparency": "bool",
+    "extra_background_tint": "bool", "material_shape_chars": "bool",
+    "blur_enable": "bool", "desaturate_enable": "bool", "colorwash_enable": "bool", "vignette_enable": "bool",
+    "rounding_value": ("num", -1, 64), "anim_multiplier": ("num", 0, 4),
+    "blur_radius": ("num", 0, 50), "desaturate_amount": ("num", 0, 1),
+    "colorwash_amount": ("num", 0, 1), "vignette_amount": ("num", 0, 1),
+    "battery_low": ("num", 0, 100), "battery_critical": ("num", 0, 100),
+    "islands_left": "list", "islands_right": "list", "islands_hidden": "list",
+    "clock_style": ("enum", "none", "digital", "cookie"),
+    "clock_time_format": "format", "clock_date_format": "format", "clock_seconds_format": "format",
+    "show_locked_text": "bool", "widget_shadows": "bool",
+    "digital_colorful": "bool", "digital_show_colon": "bool", "digital_show_seconds": "bool",
+    "digital_vertical": "bool", "digital_show_date": "bool",
+    "digital_line_spacing": ("num", -200, 200), "digital_font_size": ("num", 8, 400),
+    "digital_font_weight": ("num", 1, 1000), "digital_font_width": ("num", 25, 200),
+    "digital_font_roundness": ("num", 0, 100), "digital_quote": "text",
+    "cookie_sides": ("num", 0, 64), "cookie_background_style": ("enum", "cookie", "sine", "shape"),
+    "cookie_background_shape": "word", "cookie_dial_style": "word", "cookie_hour_hand": "word",
+    "cookie_minute_hand": "word", "cookie_second_hand": "word", "cookie_date_style": "word",
+    "cookie_time_indicators": "bool", "cookie_hour_marks": "bool", "cookie_constantly_rotate": "bool",
+    "cookie_quote": "text",
+}
+TEXT = re.compile(r'[^"\\\x00-\x1f\x7f]{0,160}')
+WORD = re.compile(r"[A-Za-z0-9]{1,32}")
+
+
+def log(message):
+    print(f"[ii-sddm-sync] {message}", flush=True)
+
+
+@contextmanager
+def as_user(user):
+    """Open files with the user's credentials, then return to root."""
+    os.setgroups(os.getgrouplist(user.pw_name, user.pw_gid))
+    os.setegid(user.pw_gid)
+    os.seteuid(user.pw_uid)
+    try:
+        yield
+    finally:
+        os.seteuid(0)
+        os.setegid(0)
+        os.setgroups([])
+
+
+def read_as_user(user, path, limit):
+    """The bytes of a regular file the user can read, or None."""
+    try:
+        with as_user(user):
+            fd = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NONBLOCK)
+        try:
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode) or info.st_size > limit:
+                return None
+            with os.fdopen(fd, "rb", closefd=False) as handle:
+                data = handle.read(limit + 1)
+            return data if len(data) <= limit else None
+        finally:
+            os.close(fd)
+    except OSError:
+        return None
+
+
+def kind(data, magic):
+    for prefix, ext in magic.items():
+        if data.startswith(prefix):
+            if prefix == b"RIFF" and data[8:12] != b"WEBP":
+                continue
+            return ext
+    return None
+
+
+def write_atomic(path, data, mode=0o644, owner=None):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+        os.chmod(tmp, mode)
+        if owner:
+            os.chown(tmp, *owner)
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
+
+
+def clear_except(directory, keep):
+    for entry in directory.glob("*"):
+        if entry.name not in keep and entry.is_file():
+            entry.unlink()
+
+
+def sync_wallpaper(user, state, conf):
+    path = state.get("wallpaper")
+    data = read_as_user(user, path, MAX_IMAGE) if isinstance(path, str) and path else None
+    ext = kind(data, IMAGE_MAGIC) if data else None
+    keep = set()
+    if ext:
+        target = DATA / f"wallpaper{ext}"
+        write_atomic(target, data)
+        conf["wallpaper"] = str(target)
+        keep.add(target.name)
+    for old in DATA.glob("wallpaper.*"):
+        if old.name not in keep:
+            old.unlink()
+    if not ext:
+        log("no readable wallpaper image; the greeter falls back to a flat colour")
+
+
+def sync_fonts(user, state, conf):
+    fonts = state.get("fonts") if isinstance(state.get("fonts"), dict) else {}
+    families = state.get("families") if isinstance(state.get("families"), dict) else {}
+    directory = DATA / "fonts"
+    directory.mkdir(mode=0o755, exist_ok=True)
+    keep = set()
+    copied = {}  # source path -> target, so one font used for two roles is stored once
+    for role in ("main", "numbers", "expressive", "icons"):
+        family = families.get(role)
+        if isinstance(family, str) and FAMILY.fullmatch(family):
+            conf[f"family_{role}"] = family
+        path = fonts.get(role)
+        if path in copied:
+            conf[f"font_{role}"] = str(copied[path])
+            continue
+        data = read_as_user(user, path, MAX_FONT) if isinstance(path, str) and path else None
+        ext = kind(data, FONT_MAGIC) if data else None
+        if not ext:
+            continue
+        target = directory / f"{role}{ext}"
+        write_atomic(target, data)
+        conf[f"font_{role}"] = str(target)
+        keep.add(target.name)
+        copied[path] = target
+    clear_except(directory, keep)
+
+
+def sync_avatar(user, state):
+    directory = DATA / "avatars"
+    directory.mkdir(mode=0o755, exist_ok=True)
+    target = directory / user.pw_name
+    path = state.get("avatar")
+    data = read_as_user(user, path, MAX_AVATAR) if isinstance(path, str) and path else None
+    if data and kind(data, IMAGE_MAGIC):
+        write_atomic(target, data)
+    else:
+        target.unlink(missing_ok=True)
+
+
+def settings_conf(state, conf):
+    settings = state.get("settings") if isinstance(state.get("settings"), dict) else {}
+    for key, spec in SETTINGS.items():
+        value = settings.get(key)
+        if value is None:
+            continue
+        if spec == "bool" and isinstance(value, bool):
+            conf[key] = "true" if value else "false"
+        elif isinstance(spec, tuple) and spec[0] == "num" and isinstance(value, (int, float)) and not isinstance(value, bool):
+            conf[key] = repr(round(max(spec[1], min(spec[2], float(value))), 4))
+        elif isinstance(spec, tuple) and spec[0] == "enum" and value in spec[1:]:
+            conf[key] = value
+        elif spec == "list" and isinstance(value, list) and all(isinstance(v, str) and ISLAND.fullmatch(v) for v in value):
+            conf[key] = ",".join(value[:16])
+        elif spec == "format" and isinstance(value, str) and FORMAT.fullmatch(value):
+            conf[key] = value
+        elif spec == "word" and isinstance(value, str) and WORD.fullmatch(value):
+            conf[key] = value
+        elif spec == "text" and isinstance(value, str) and TEXT.fullmatch(value):
+            conf[key] = value
+    for source, prefix in (("colors", "color_"), ("widget_colors", "color_widget_")):
+        colors = state.get(source) if isinstance(state.get(source), dict) else {}
+        for token, value in colors.items():
+            if isinstance(token, str) and TOKEN.fullmatch(token) and isinstance(value, str) and HEX.fullmatch(value):
+                conf[f"{prefix}{token}"] = value
+
+
+def write_theme_conf(conf):
+    lines = ["# Written by ii-sddm-sync from the shell's settings. Do not edit: it is overwritten.", "[General]"]
+    for key in sorted(conf):
+        value = conf[key]
+        # QSettings reads a quoted value literally, so commas and spaces survive.
+        lines.append(f'{key}="{value}"' if any(c in value for c in ",; #") else f"{key}={value}")
+    write_atomic(DATA / "theme.conf.user", ("\n".join(lines) + "\n").encode())
+
+
+def copy_cursor_theme(user, source, name):
+    """Copy a cursor theme from the user's home so the greeter can load it."""
+    target = ICONS / name
+    if target.exists() and not (target / MARKER).exists():
+        log(f"{target} exists and was not copied here; leaving it alone")
+        return target.is_dir()
+    staging = ICONS / f".{name}.ii-sddm-new"
+    shutil.rmtree(staging, ignore_errors=True)
+    count = total = 0
+    with as_user(user):
+        walk = list(os.walk(source, followlinks=False))
+    for directory, dirs, files in walk:
+        relative = Path(directory).relative_to(source)
+        if relative.parts and relative.parts[0] not in ("cursors",) and str(relative) != ".":
+            continue
+        (staging / relative).mkdir(parents=True, exist_ok=True)
+        for filename in files:
+            if relative == Path(".") and filename not in ("index.theme", "cursor.theme"):
+                continue
+            src = Path(directory) / filename
+            with as_user(user):
+                is_link = src.is_symlink()
+                link = os.readlink(src) if is_link else ""
+            if is_link:
+                # Cursor aliases are relative links inside cursors/; anything else is dropped.
+                if "/" not in link and NAME.fullmatch(link):
+                    os.symlink(link, staging / relative / filename)
+                continue
+            data = read_as_user(user, src, 8 * 1024 * 1024)
+            count += 1
+            total += len(data or b"")
+            if data is None or count > MAX_CURSOR_FILES or total > MAX_CURSOR_BYTES:
+                shutil.rmtree(staging, ignore_errors=True)
+                log(f"cursor theme {name} is too large or unreadable; not copied")
+                return False
+            write_atomic(staging / relative / filename, data)
+    if not (staging / "cursors").is_dir():
+        shutil.rmtree(staging, ignore_errors=True)
+        log(f"cursor theme {name} has no X cursors; the greeter cannot use it")
+        return False
+    (staging / MARKER).write_text("copied by ii-sddm-sync\n")
+    shutil.rmtree(target, ignore_errors=True)
+    os.replace(staging, target)
+    return True
+
+
+def sync_cursor(user, state):
+    cursor = state.get("cursor") if isinstance(state.get("cursor"), dict) else {}
+    name, size, path = cursor.get("theme"), cursor.get("size"), cursor.get("path")
+    if not (isinstance(name, str) and NAME.fullmatch(name) and isinstance(size, int) and 8 <= size <= 256):
+        log("no valid cursor in the staged state; greeter cursor left as is")
+        return
+    system = any((Path(base) / name / "cursors").is_dir() for base in ("/usr/share/icons", str(ICONS)))
+    home = user.pw_dir.rstrip("/") + "/"
+    if isinstance(path, str) and path.startswith(home) and ".." not in Path(path).parts:
+        if not copy_cursor_theme(user, path, name):
+            return
+    elif not system:
+        log(f"cursor theme {name} not found where the greeter can read it")
+        return
+    text = f"[Theme]\nCursorTheme={name}\nCursorSize={size}\n"
+    try:
+        if CURSOR_CONF.read_text() == text:
+            return
+    except OSError:
+        pass
+    write_atomic(CURSOR_CONF, text.encode())
+    log(f"greeter cursor: {name} {size}px")
+
+
+def sync_scales(state):
+    scales = state.get("scales") if isinstance(state.get("scales"), dict) else {}
+    wanted = {k: float(v) for k, v in scales.items()
+              if isinstance(k, str) and CONNECTOR.fullmatch(k)
+              and isinstance(v, (int, float)) and not isinstance(v, bool) and 0.5 <= v <= 4}
+    if not wanted:
+        return
+    try:
+        info = KWIN_OUTPUTS.lstat()
+        if not stat.S_ISREG(info.st_mode):
+            return
+        doc = json.loads(KWIN_OUTPUTS.read_text())
+    except (OSError, json.JSONDecodeError):
+        # KWin writes this on its first greeter start; the next sync patches it.
+        log("greeter KWin has no output config yet; scales apply after the next sync")
+        return
+    changed = False
+    for section in doc if isinstance(doc, list) else []:
+        if not isinstance(section, dict) or section.get("name") != "outputs":
+            continue
+        for output in section.get("data", []):
+            scale = wanted.get(output.get("connectorName")) if isinstance(output, dict) else None
+            if scale is not None and output.get("scale") != scale:
+                output["scale"] = scale
+                changed = True
+    if changed:
+        write_atomic(KWIN_OUTPUTS, (json.dumps(doc, indent=4) + "\n").encode(), info.st_mode & 0o777, (info.st_uid, info.st_gid))
+        log(f"greeter output scales: {wanted}")
+
+
+def main():
+    if os.geteuid() != 0 or len(sys.argv) != 2:
+        print("usage: ii-sddm-sync <user>  (as root)", file=sys.stderr)
+        return 2
+    try:
+        user = pwd.getpwnam(sys.argv[1])
+    except KeyError:
+        print(f"no such user: {sys.argv[1]}", file=sys.stderr)
+        return 2
+    if user.pw_uid == 0:
+        print("refusing to sync for root", file=sys.stderr)
+        return 2
+
+    state_path = os.environ.get("II_SDDM_STATE") or f"{user.pw_dir}/.local/state/quickshell/user/generated/sddm/state.json"
+    raw = read_as_user(user, state_path, MAX_STATE)
+    if raw is None:
+        log(f"nothing staged at {state_path}")
+        return 0
+    try:
+        state = json.loads(raw)
+    except json.JSONDecodeError:
+        log("staged state is not valid JSON; ignored")
+        return 1
+    if not isinstance(state, dict) or state.get("version") != 1:
+        log("staged state has an unknown version; ignored")
+        return 1
+
+    DATA.mkdir(mode=0o755, exist_ok=True)
+    os.chmod(DATA, 0o755)
+    conf = {}
+    sync_wallpaper(user, state, conf)
+    sync_fonts(user, state, conf)
+    sync_avatar(user, state)
+    settings_conf(state, conf)
+    write_theme_conf(conf)
+    sync_cursor(user, state)
+    sync_scales(state)
+    log(f"synced for {user.pw_name}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,12 @@
+[Unit]
+Description=Watch %i's staged lock-screen state for the ii-p3drovfx login screen
+
+[Path]
+# The setup script adds a drop-in naming the user's state.json:
+#   /etc/systemd/system/ii-sddm-sync@<user>.path.d/state.conf
+#   [Path]
+#   PathChanged=<home>/.local/state/quickshell/user/generated/sddm/state.json
+Unit=ii-sddm-sync@%i.service
+
+[Install]
+WantedBy=multi-user.target

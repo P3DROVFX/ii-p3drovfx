@@ -6126,6 +6126,9 @@ Singleton {
                 property real centerSpacing: 20 // spacing between multiple centered widgets
                 property string centerAlignment: "horizontal" // "vertical" | "horizontal"
                 property bool showLockedText: true
+                // Mirror the lock's look to the ii-p3drovfx SDDM theme, when that theme
+                // is installed (setup-ii-p3drovfx.sh sddm). See services/SddmSync.qml.
+                property bool sddmSync: true
                 property JsonObject security: JsonObject {
                     property bool unlockKeyring: true
                     property bool requirePasswordToPower: false
