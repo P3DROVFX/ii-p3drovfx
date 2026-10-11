@@ -35,15 +35,21 @@ FocusScope {
             easing.bezierCurve: Theme.expressiveDefaultSpatial
         }
     }
+    // A slot's entrance, staggered by position; on the way out every slot
+    // fades together and early, before the card closes over it.
+    function reveal(index) {
+        return root.isOpen ? root.ramp(0.15 + index * 0.06, 0.5) : root.ramp(0.55, 0.4);
+    }
+    // The spring may overshoot past open, never past closed: that would squeeze
+    // the pill below its size and cut the name as it settles.
     function lerp(a, b) {
-        return a + (b - a) * root.progress;
+        return a + (b - a) * Math.max(0, root.progress);
     }
     function ramp(from, span) {
         return Math.max(0, Math.min(1, (root.progress - from) / span));
     }
 
     readonly property var current: root.entries[root.currentIndex] ?? null
-    readonly property string image: root.current ? (root.current.image ?? "") : ""
     readonly property string label: root.current ? (root.current.label ?? "") : ""
 
     readonly property real inset: 3                 // the toolbar's padding
@@ -70,8 +76,14 @@ FocusScope {
     // with `progress` too, interpolating them glides the face in a straight line.
     readonly property real faceClosedX: root.inset + 4
     readonly property real faceClosedY: (root.closedHeight - root.smallFace) / 2
-    readonly property real faceOpenX: (root.openWidth - root.stripWidth) / 2 + root.currentIndex * (root.slotWidth + root.slotSpacing) - strip.contentX + (root.slotWidth - root.bigFace) / 2
+    function faceOpenX(index) {
+        return (root.openWidth - root.stripWidth) / 2 + index * (root.slotWidth + root.slotSpacing) - strip.contentX + (root.slotWidth - root.bigFace) / 2;
+    }
     readonly property real faceOpenY: root.pad + root.faceTop
+    // A face in its slot at the current size (the strip is centred).
+    function faceSlotX(index) {
+        return (root.width - root.stripWidth) / 2 + index * (root.slotWidth + root.slotSpacing) - strip.contentX + (root.slotWidth - root.bigFace) / 2;
+    }
 
     // The slot the keyboard (or the mouse) is on.
     property int highlighted: -1
@@ -175,56 +187,33 @@ FocusScope {
                 required property int index
                 readonly property bool isCurrent: slot.index === root.currentIndex
                 // Staggered entrance, played back in reverse when closing.
-                readonly property real reveal: root.ramp(0.15 + slot.index * 0.06, 0.5)
+                readonly property real reveal: root.reveal(slot.index)
 
                 width: root.slotWidth
                 height: root.slotHeight
                 buttonRadius: Theme.roundingNormal
-                colBackground: slot.index === root.highlighted ? Theme.m3surfaceContainerHigh : Theme.transparentize(Theme.m3surfaceContainerHigh, 1)
-                colBackgroundHover: Theme.m3surfaceContainerHigh
-                colBackgroundActive: Theme.m3surfaceContainerHighest
-                colRipple: Theme.mix(Theme.m3surfaceContainerHighest, Theme.m3onSurface, 0.85)
+                // The current user is a tonal tile, like the current row of the
+                // shell's lists; the colour fades over when another is picked.
+                colBackground: slot.isCurrent ? Theme.m3secondaryContainer : (slot.index === root.highlighted ? Theme.m3surfaceContainerHigh : Theme.transparentize(Theme.m3surfaceContainerHigh, 1))
+                colBackgroundHover: slot.isCurrent ? Theme.colSecondaryContainerHover : Theme.m3surfaceContainerHigh
+                colBackgroundActive: slot.isCurrent ? Theme.colSecondaryContainerActive : Theme.m3surfaceContainerHighest
+                colRipple: slot.isCurrent ? Theme.colSecondaryContainerActive : Theme.mix(Theme.m3surfaceContainerHighest, Theme.m3onSurface, 0.85)
                 onHoveredChanged: if (hovered) root.highlighted = slot.index
 
-                opacity: slot.isCurrent ? 1 : slot.reveal
-                transform: [
-                    Scale {
-                        origin.x: slot.width / 2
-                        origin.y: slot.height / 2
-                        xScale: slot.isCurrent ? 1 : 0.85 + 0.15 * slot.reveal
-                        yScale: xScale
-                    },
-                    Translate {
-                        y: slot.isCurrent ? 0 : 10 * (1 - slot.reveal)
-                    }
-                ]
+                // The faces are drawn above the strip (see `faces`); a slot is
+                // the tile and the name.
+                opacity: slot.reveal
+                transform: Translate {
+                    y: 10 * (1 - slot.reveal)
+                }
 
                 contentItem: Item {
-                    // The current user's ring; its face is the gliding one.
-                    Rectangle {
-                        anchors.centerIn: face
-                        width: root.bigFace + 10
-                        height: width
-                        radius: width / 2
-                        color: "transparent"
-                        border.width: 2
-                        border.color: Theme.m3primary
-                        visible: slot.isCurrent
-                        opacity: slot.reveal
-                    }
-                    Face {
-                        id: face
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        y: root.faceTop
-                        visible: !slot.isCurrent
-                        source: slot.modelData.image ?? ""
-                    }
                     StyledText {
                         anchors {
                             left: parent.left
                             right: parent.right
-                            top: face.bottom
-                            topMargin: 9
+                            top: parent.top
+                            topMargin: root.faceTop + root.bigFace + 9
                             leftMargin: 6
                             rightMargin: 6
                         }
@@ -232,9 +221,8 @@ FocusScope {
                         text: slot.modelData.label ?? ""
                         elide: Text.ElideRight
                         font.pixelSize: Theme.pxSmaller
-                        font.weight: Font.DemiBold
-                        color: slot.isCurrent ? Theme.m3onSurface : Theme.m3onSurfaceVariant
-                        opacity: slot.reveal
+                        font.weight: slot.isCurrent ? Font.Bold : Font.DemiBold
+                        color: slot.isCurrent ? Theme.m3onSecondaryContainer : Theme.m3onSurfaceVariant
                     }
                 }
 
@@ -294,16 +282,33 @@ FocusScope {
             }
         }
 
-        // ── the current face, gliding between the pill and its slot ────────
-        // Drawn at the strip's size and scaled down in the pill, so nothing is
-        // re-rasterised while it moves.
-        Face {
-            id: hero
-            transformOrigin: Item.TopLeft
-            scale: root.lerp(root.smallFace, root.bigFace) / root.bigFace
-            x: root.lerp(root.faceClosedX, root.faceOpenX)
-            y: root.lerp(root.faceClosedY, root.faceOpenY)
-            source: root.image
+        // ── every user's face, above the strip and the pill ────────────────
+        // One face per user, kept for good: a pick never swaps a picture's
+        // source (which would flash the fallback while it reloads). The
+        // current face glides between the pill and its slot; the others
+        // rise into their slots and fade, like the tiles. Drawn at the
+        // strip's size and scaled down, so nothing is re-rasterised in motion.
+        Repeater {
+            id: faces
+            model: root.entries
+
+            delegate: Face {
+                id: face
+                required property var modelData
+                required property int index
+                readonly property bool isCurrent: face.index === root.currentIndex
+                readonly property real reveal: root.reveal(face.index)
+                readonly property real slotScale: 0.85 + 0.15 * face.reveal
+                readonly property real slotInset: root.bigFace * (1 - face.slotScale) / 2
+
+                source: face.modelData.image ?? ""
+                transformOrigin: Item.TopLeft
+                visible: face.isCurrent || face.reveal > 0
+                opacity: face.isCurrent ? 1 : face.reveal
+                scale: face.isCurrent ? root.lerp(root.smallFace, root.bigFace) / root.bigFace : face.slotScale
+                x: face.isCurrent ? root.lerp(root.faceClosedX, root.faceOpenX(face.index)) : root.faceSlotX(face.index) + face.slotInset
+                y: face.isCurrent ? root.lerp(root.faceClosedY, root.faceOpenY) : root.height - root.pad - root.slotHeight + root.faceTop + 10 * (1 - face.reveal) + face.slotInset
+            }
         }
     }
 
@@ -314,19 +319,23 @@ FocusScope {
         width: root.bigFace
         height: root.bigFace
 
+        // Only without a usable picture: not while one is still loading.
+        readonly property bool fallback: faceItem.source === "" || picture.failed
+
+        // Not secondary container: the current user's tile is that colour.
         MaterialShape {
             anchors.fill: parent
-            visible: !picture.ready
+            visible: faceItem.fallback
             shape: "Slanted"
-            color: Theme.m3secondaryContainer
+            color: Theme.m3surfaceContainerHighest
         }
         MaterialSymbol {
             anchors.centerIn: parent
-            visible: !picture.ready
+            visible: faceItem.fallback
             text: root.fallbackIcon
             fill: 1
             iconSize: 28
-            color: Theme.m3onSecondaryContainer
+            color: Theme.m3onSurfaceVariant
         }
         RoundPicture {
             id: picture
