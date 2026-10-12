@@ -6,6 +6,7 @@ DigitalClock 1.0 DigitalClock.qml
 ErrorShake 1.0 ErrorShake.qml
 IconIslandButton 1.0 IconIslandButton.qml
 IslandButton 1.0 IslandButton.qml
+LockKeys 1.0 LockKeys.qml
 LoginSurface 1.0 LoginSurface.qml
 MaterialShape 1.0 MaterialShape.qml
 MaterialSymbol 1.0 MaterialSymbol.qml

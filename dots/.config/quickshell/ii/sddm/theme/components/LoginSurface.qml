@@ -19,7 +19,17 @@ FocusScope {
 
     property bool busy: false
     property bool failed: false
-    property bool capsLock: keyboard ? keyboard.capsLock : false
+    readonly property bool capsLock: lockKeys.capsLock
+    readonly property bool numLock: lockKeys.numLock
+
+    LockKeys {
+        id: lockKeys
+        fallback: keyboard
+    }
+    function lockKeyPressed(event) {
+        if (event.key === Qt.Key_CapsLock || event.key === Qt.Key_NumLock)
+            lockKeys.refreshSoon();
+    }
 
     // ── users and sessions ─────────────────────────────────────────────────
     // The models are C++ list models; their rows are read through Instantiators.
@@ -118,8 +128,7 @@ FocusScope {
 
     // ── keys ───────────────────────────────────────────────────────────────
     Keys.onPressed: event => {
-        if (event.key === Qt.Key_CapsLock)
-            root.capsLock = !root.capsLock;
+        root.lockKeyPressed(event);
         if (event.key === Qt.Key_Escape) {
             passwordBox.text = "";
             root.closeDialogs();
@@ -203,8 +212,8 @@ FocusScope {
             onTextChanged: if (text.length > 0) root.failed = false
             onAccepted: root.tryLogin()
             Keys.onPressed: event => {
-                if (event.key === Qt.Key_CapsLock)
-                    root.capsLock = !root.capsLock;
+                // Reading the LEDs again is harmless if the surface does it too.
+                root.lockKeyPressed(event);
                 if (event.key === Qt.Key_Escape) {
                     passwordBox.text = "";
                     root.closeDialogs();
@@ -316,6 +325,34 @@ FocusScope {
             }
         }
 
+        // Not on the lock screen, which never needs it: next to caps lock, and
+        // shown with it (`capsLock` in islands_left), only while num lock is on.
+        IslandButton {
+            id: numLockPill
+            readonly property bool wanted: root.leftWanted("capsLock")
+            Layout.preferredWidth: root.numLock && wanted ? 100 : 0
+            visible: Layout.preferredWidth > 0
+            clip: true
+            pointingHandCursor: false
+            colBackground: Theme.m3secondaryContainer
+            colBackgroundHover: Theme.colSecondaryContainerHover
+            colRipple: Theme.colSecondaryContainerActive
+            Behavior on Layout.preferredWidth {
+                NumberAnimation {
+                    duration: 300
+                    easing.type: Easing.OutCubic
+                }
+            }
+            contentItem: MaterialSymbol {
+                anchors.centerIn: parent
+                verticalAlignment: Text.AlignVCenter
+                text: "dialpad"
+                iconSize: 22
+                color: Theme.m3onSecondaryContainer
+                fill: 1
+            }
+        }
+
         IslandButton {
             id: layoutButton
             readonly property bool showSwitcher: root.layouts.length > 1 && root.leftWanted("keyboardLayout")
@@ -373,14 +410,14 @@ FocusScope {
     // Re-append the items in the configured order: a RowLayout lays its children out
     // in child order. The same trick as LockSurface.applyIslandOrder().
     function applyLeftOrder() {
-        const items = { battery: batteryButton, capsLock: capsLockPill, keyboardLayout: layoutButton };
+        // Num lock rides with caps lock, right after it.
+        const items = { battery: [batteryButton], capsLock: [capsLockPill, numLockPill], keyboardLayout: [layoutButton] };
         for (const id of Theme.islandsLeft) {
-            const item = items[id];
-            if (!item)
-                continue;
-            const parent = item.parent;
-            item.parent = null;
-            item.parent = parent;
+            for (const item of items[id] ?? []) {
+                const parent = item.parent;
+                item.parent = null;
+                item.parent = parent;
+            }
         }
     }
     Connections {
