@@ -79,10 +79,12 @@ Scope {
 
     PanelUrlLoader {
         extraCondition: !BarPlacement.vertical && barExtraCondition && !GlobalStates.connectModeActive
+        priority: true
         panelUrl: Qt.resolvedUrl("../modules/ii/bar/Bar.qml")
     }
     PanelUrlLoader {
         extraCondition: Config.options.background.enable
+        priority: true
         panelUrl: Qt.resolvedUrl("../modules/ii/background/Background.qml")
     }
     PanelUrlLoader {
@@ -135,6 +137,7 @@ Scope {
         panelUrl: Qt.resolvedUrl("../modules/ii/dock/Dock.qml")
     }
     PanelUrlLoader {
+        priority: true
         panelUrl: Qt.resolvedUrl("../modules/ii/lock/Lock.qml")
     }
     PanelUrlLoader {

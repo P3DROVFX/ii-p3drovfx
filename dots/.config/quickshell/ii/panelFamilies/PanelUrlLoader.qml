@@ -23,7 +23,7 @@ PanelLoader {
 
     required property string panelUrl
 
-    readonly property bool slotReady: root.wanted && root.ticket > 0 && PanelSchedule.released >= root.ticket
+    readonly property bool slotReady: root.wanted && (root.priority || (root.ticket > 0 && PanelSchedule.released >= root.ticket))
 
     source: root.slotReady ? root.panelUrl : ""
     active: root.slotReady && root.source !== ""
