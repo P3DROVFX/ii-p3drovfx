@@ -45,17 +45,23 @@ Singleton {
             return;
         }
         retryTimer.stop();
-        root.savedDefaultSinkName = masterSinkName;
+        // The remap module outlives the shell. After a restart, adopt the one that is
+        // already loaded instead of stacking a remap of the remap sink on top of it.
+        if (masterSinkName !== root.monoSinkName)
+            root.savedDefaultSinkName = masterSinkName;
         enableProc.command = ["bash", "-c",
-            `pactl load-module module-remap-sink sink_name=${root.monoSinkName} master=${masterSinkName} channels=2 channel_map=mono,mono master_channel_map=left,right sink_properties=device.description='ii-Mono'`]
+            `idx=$(pactl list short modules | awk '/sink_name=${root.monoSinkName}( |$)/ {print $1; exit}'); ` +
+            `if [ -n "$idx" ]; then echo "$idx"; else ` +
+            `pactl load-module module-remap-sink sink_name=${root.monoSinkName} master=${masterSinkName} channels=2 channel_map=mono,mono master_channel_map=left,right sink_properties=device.description='ii-Mono'; fi`]
         enableProc.running = true;
     }
 
     function disable() {
         retryTimer.stop();
-        if (loadedModuleIndex === -1) return;
+        // Unload by name: after a shell restart the index is unknown (-1) but the module
+        // is still loaded, and returning early left mono stuck on.
         disableProc.command = ["bash", "-c",
-            `pactl unload-module ${root.loadedModuleIndex}` +
+            `pactl list short modules | awk '/sink_name=${root.monoSinkName}( |$)/ {print $1}' | xargs -r -n1 pactl unload-module` +
             (root.savedDefaultSinkName ? `; pactl set-default-sink ${root.savedDefaultSinkName}` : "")]
         disableProc.running = true;
     }

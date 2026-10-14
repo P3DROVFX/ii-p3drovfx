@@ -550,18 +550,6 @@ Item {
     property bool captureArmed: true
 
     Timer {
-        interval: 1500
-        repeat: true
-        running: root.pageLive
-        onTriggered: console.warn("[MirrorProbe] attached=", PhoneMirrorService.attached,
-            "hasContent=", screencopy.hasContent, "capturing=", root.capturing,
-            "settled=", root.settled, "ns=", GlobalStates.policiesSurfaceNamespace,
-            "placementWanted=", root.placementWanted, "touchActive=", root.touchActive,
-            "published=", GlobalStates.policiesPointerHole.width, GlobalStates.policiesPointerHole.height,
-            "holeActive=", GlobalStates.policiesPointerHoleActive)
-    }
-
-    Timer {
         id: captureRetry
         interval: 400
         repeat: false

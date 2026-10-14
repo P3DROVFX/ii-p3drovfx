@@ -89,10 +89,13 @@ Item {
         loops: Animation.Infinite
         running: root.animationEnabled
 
+        // Restart for the new durations without breaking the `running` binding; the
+        // plain assignment it used here left the animation running after it was
+        // switched off (or under a music video).
         onSpeedChanged: {
             running = false
             Qt.callLater (() => {
-                running = root.animationEnabled
+                running = Qt.binding(() => root.animationEnabled)
             })
         }
 

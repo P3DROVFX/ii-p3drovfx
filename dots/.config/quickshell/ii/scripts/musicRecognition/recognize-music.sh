@@ -38,6 +38,8 @@ fi
 mkfifo "$FIFO"
 
 cleanup() {
+    # The timeout killer outlives an early match; stop it before its PID can be reused.
+    [ -n "${KILLER_PID:-}" ] && kill "$KILLER_PID" 2>/dev/null
     kill "$SONGREC_PID" 2>/dev/null || true
     wait "$SONGREC_PID" 2>/dev/null
     rm -f "$FIFO"
@@ -48,6 +50,7 @@ songrec listen --audio-device "$AUDIO_DEVICE" --json --disable-mpris > "$FIFO" &
 SONGREC_PID=$!
 
 ( sleep "$TOTAL_DURATION" && kill "$SONGREC_PID" 2>/dev/null ) &
+KILLER_PID=$!
 
 while IFS= read -r line; do
     if echo "$line" | grep -q '"matches" *: *\['; then

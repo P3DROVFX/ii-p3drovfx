@@ -239,7 +239,7 @@ PanelWindow {
         const wl = HyprlandData.windowList;
         const monitorData = HyprlandData.monitors.find(m => m.name === (monitor ? monitor.name : ""));
         const activeWsId = monitorData?.activeWorkspace?.id;
-        return wl.some(w => w.workspace?.id === activeWsId && w.fullscreen === 3);
+        return wl.some(w => w.workspace?.id === activeWsId && (w.fullscreen & 2) !== 0);
     }
     property var activeWorkspace: workspacesForMonitor.filter(function(workspace) { return workspace.active; })[0]
     property bool hasWindowsInActiveWorkspace: {

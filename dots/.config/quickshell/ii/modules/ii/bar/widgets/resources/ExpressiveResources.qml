@@ -419,7 +419,9 @@ Item {
         Timer {
             interval: 700
             repeat: true
-            running: rs.isWarning
+            // Only where it can be seen: both layouts are built, and the hidden one (or a
+            // bar hidden for a fullscreen window) pulsed every 700 ms for nobody.
+            running: rs.isWarning && rs.visible
             onTriggered: {
                 rs.scale = (rs.scale > 1.04) ? 1.0 : 1.08
             }

@@ -160,6 +160,8 @@ Item { // Fullscreen MediaMode instance
 
     Connections {
         target: CavaService
+        // No copy 30x/s while the visualizer is off.
+        enabled: root.visualizerMode > 0
         function onVisualizerPointsChanged() {
             if (CavaService.visualizerPoints && CavaService.visualizerPoints.length > 0) {
                 let pts = [];
@@ -174,7 +176,8 @@ Item { // Fullscreen MediaMode instance
     Timer {
         id: proceduralVisualizerTimer
         interval: 50 // ~20 FPS
-        running: root.visualizerMode > 0 && !root.cavaActive
+        // Not while paused: cava stops then too, and this only rebuilt a flat array 20x/s.
+        running: root.visualizerMode > 0 && !root.cavaActive && (root.player?.isPlaying ?? false)
         triggeredOnStart: true
         repeat: true
         onTriggered: {
@@ -193,13 +196,8 @@ Item { // Fullscreen MediaMode instance
         }
     }
 
-    onVideoActiveChanged: {
-        if (videoActive) {
-            Quickshell.execDetached(["hyprctl", "keyword", "layerrule", "unset,quickshell:background"]);
-        } else {
-            Quickshell.execDetached(["hyprctl", "keyword", "layerrule", "blur,quickshell:background"]);
-        }
-    }
+    // (The background layer-rule toggles that were here used `hyprctl keyword`, a
+    // no-op under Hyprland's Lua config; they never took effect.)
 
     onMediaSourceChanged: {
         if (!applicationsSource)
@@ -217,16 +215,12 @@ Item { // Fullscreen MediaMode instance
     Component.onCompleted: {
         Persistent.states.background.mediaMode.userScrollOffset = 0;
         root.opacity = 1.0;
-        if (videoActive) {
-            Quickshell.execDetached(["hyprctl", "keyword", "layerrule", "unset,quickshell:background"]);
-        }
         if (!Idle.inhibit) {
             GlobalStates.mediaModeActivatedKeepAwake = true;
             Idle.toggleInhibit(true);
         }
     }
     Component.onDestruction: {
-        Quickshell.execDetached(["hyprctl", "keyword", "layerrule", "blur,quickshell:background"]);
         if (GlobalStates.mediaModeActivatedKeepAwake && Idle.inhibit && !Idle.timed) {
             if (GlobalStates.mediaModeCount <= 1) {
                 GlobalStates.mediaModeActivatedKeepAwake = false;
@@ -610,7 +604,7 @@ Item { // Fullscreen MediaMode instance
 
                     WaveVisualizer {
                         anchors.fill: parent
-                        live: root.player?.isPlaying ?? false
+                        live: (root.player?.isPlaying ?? false) && root.visualizerMode === 1
                         color: root.dynamicAccentColor
                         points: root.visualizerPoints
                     }
@@ -654,7 +648,7 @@ Item { // Fullscreen MediaMode instance
 
                     RadialWaveVisualizer {
                         anchors.fill: parent
-                        live: root.player?.isPlaying ?? false
+                        live: (root.player?.isPlaying ?? false) && root.visualizerMode === 3
                         color: root.dynamicAccentColor
                         points: root.visualizerPoints
                     }

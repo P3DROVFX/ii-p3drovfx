@@ -183,7 +183,9 @@ Scope {
         id: stateResetTimer
         interval: 150
         repeat: true
-        running: true
+        // Only while the condition it repairs can hold. It ran from shell start
+        // forever, waking every 150 ms with no OSD on screen.
+        running: osdLoader.item !== null && !GlobalStates.osdVolumeOpen && !root.isClosing
         onTriggered: {
             // If the OSD Loader has a live item but the shell-level flags say it
             // should be fully closed, force-reset the expansion state. This catches

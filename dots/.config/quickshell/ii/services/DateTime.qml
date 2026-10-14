@@ -70,9 +70,12 @@ Singleton {
     property string uptime: "0h, 0m"
 
     Timer {
-        interval: 10000
+        // The string has minute resolution; once a minute is enough. It used to follow
+        // the resource-monitor interval (3 s) for no visible gain.
+        interval: 60000
         running: true
         repeat: true
+        triggeredOnStart: true
         onTriggered: {
             fileUptime.reload();
             const textUptime = fileUptime.text();
@@ -92,7 +95,6 @@ Singleton {
             if (minutes > 0 || !formatted)
                 formatted += `${formatted ? ", " : ""}${minutes}m`;
             uptime = formatted;
-            interval = Config.options?.resources?.updateInterval ?? 3000;
         }
     }
 

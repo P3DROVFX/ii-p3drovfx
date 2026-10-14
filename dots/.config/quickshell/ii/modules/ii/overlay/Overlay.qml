@@ -30,11 +30,20 @@ Scope {
             visible: true
             color: "transparent"
 
+            Instantiator {
+                id: clickableRegions
+                model: OverlayContext.clickableWidgets
+                delegate: Region {
+                    required property var modelData
+                    item: modelData
+                }
+            }
+
             mask: Region {
                 item: GlobalStates.overlayOpen ? overlayContent : null
-                regions: OverlayContext.clickableWidgets.map((widget) => regionComponent.createObject(this, {
-                    item: widget
-                }));
+                // Owned by the Instantiator, so regions for widgets that went away are
+                // destroyed; createObject() in this binding leaked one set per change.
+                regions: Array.from({ length: clickableRegions.count }, (_, i) => clickableRegions.objectAt(i))
             }
 
             anchors {
