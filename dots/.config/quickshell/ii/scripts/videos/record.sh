@@ -6,6 +6,7 @@ unset LD_PRELOAD
 
 # Resolved up front: the recording branches cd into the save directory later.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SHELL_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 CONFIG_FILE="$HOME/.config/illogical-impulse/config.json"
 JSON_PATH=".screenRecord.savePath"
@@ -452,7 +453,7 @@ fi
 
 # If toolbar is enabled, open the toolbar instead of recording directly
 if [[ "$REC_USE_TOOLBAR" == "true" && $FORCE_RECORD_FLAG -eq 0 ]]; then
-    qs -c ii ipc call recordingToolbar open
+    qs -p "$SHELL_DIR" ipc call recordingToolbar open
     exit 0
 fi
 
@@ -608,7 +609,7 @@ if [[ -n "$OBS_CMD" ]]; then
     LATEST_FILE=$(ls -1t | grep -E '\.(mp4|mkv|flv|mov)$' | head -1)
     if [[ -n "$LATEST_FILE" ]]; then
         notify-send "Recording Finished" "Saved to: $PWD/$LATEST_FILE" -a 'Recorder' &
-        qs -c ii ipc call launchVideoEditor handle "$PWD/$LATEST_FILE"
+        qs -p "$SHELL_DIR" ipc call launchVideoEditor handle "$PWD/$LATEST_FILE"
     fi
 
     updatestate false
@@ -705,7 +706,7 @@ else
     # Post recording action (launch video editor)
     if [[ -f "$FILENAME" ]]; then
         notify-send "Recording Finished" "Saved to: $PWD/$FILENAME" -a 'Recorder' &
-        qs -c ii ipc call launchVideoEditor handle "$PWD/$FILENAME"
+        qs -p "$SHELL_DIR" ipc call launchVideoEditor handle "$PWD/$FILENAME"
     fi
     updatestate false
 fi
