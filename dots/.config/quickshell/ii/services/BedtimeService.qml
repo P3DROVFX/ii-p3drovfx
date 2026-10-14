@@ -283,7 +283,9 @@ Singleton {
 
     Timer {
         id: tickTimer
-        interval: 30000
+        // A minute, as the header describes: each tick past the target rewrites
+        // states.json (and every reader reloads it). Late time adds this interval.
+        interval: 60000
         repeat: true
         running: Config.ready && Persistent.ready
         triggeredOnStart: true
