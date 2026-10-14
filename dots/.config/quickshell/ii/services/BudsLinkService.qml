@@ -76,6 +76,13 @@ Singleton {
         if (mac.length > 0 && root._devicesByMac[mac])
             return true;
 
+        // BudsLink cannot manage Apple buds (BudsService reads those over AAP). Counting
+        // them made the "unclaimed device" recovery restart BudsLink every time the
+        // AirPods' audio link flapped, reconnecting their profile every ~1.5 min.
+        const name = (device.name || "").toLowerCase();
+        if (name.includes("airpods") || name.includes("beats"))
+            return false;
+
         // Generic BlueZ / Quickshell device icon metadata
         const icon = (device.icon || "").toLowerCase();
         if (icon.length > 0) {
