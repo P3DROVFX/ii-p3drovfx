@@ -648,7 +648,10 @@ Singleton {
         id: alarmCheckTimer
         interval: 1000
         repeat: true
-        running: true
+        // Only while there is an alarm to check. With none it woke the CPU every second
+        // and rewrote states.json every minute. The check is gap-based, so starting it
+        // when an alarm is added misses nothing.
+        running: root.alarms.length > 0
         onTriggered: checkAlarms()
     }
 
