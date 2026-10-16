@@ -691,24 +691,25 @@ Item {
                             }
                         }
 
+                        ConfigSwitch {
+                            buttonIcon: "visibility_off"
+                            text: Translation.tr("Hide MangoHud's own HUD")
+                            checked: subPageRoot.hud.mangohudHideHud
+                            onCheckedChanged: {
+                                if (Config.options.overlay.perfMonitor.mangohudHideHud === checked)
+                                    return;
+                                subPageRoot.setOption("mangohudHideHud", checked);
+                                if (subPageRoot.mango.configured)
+                                    stats.setMangoHudLogging(true);
+                            }
+                            StyledToolTip {
+                                text: Translation.tr("MangoHud keeps logging but draws nothing, so only this HUD shows.")
+                            }
+                        }
+
                         ConfigRow {
                             uniform: true
 
-                            ConfigSwitch {
-                                buttonIcon: "visibility_off"
-                                text: Translation.tr("Hide MangoHud's own HUD")
-                                checked: subPageRoot.hud.mangohudHideHud
-                                onCheckedChanged: {
-                                    if (Config.options.overlay.perfMonitor.mangohudHideHud === checked)
-                                        return;
-                                    subPageRoot.setOption("mangohudHideHud", checked);
-                                    if (subPageRoot.mango.configured)
-                                        stats.setMangoHudLogging(true);
-                                }
-                                StyledToolTip {
-                                    text: Translation.tr("MangoHud keeps logging but draws nothing, so only this HUD shows.")
-                                }
-                            }
                             ConfigSpinBox {
                                 icon: "local_fire_department"
                                 text: Translation.tr("Hot at (°C)")
@@ -760,6 +761,17 @@ Item {
                             tooltip: Translation.tr("A host or IP to ping for the Network block, like a game server. Empty pings your router, so nothing leaves your network.")
                             inputText: subPageRoot.hud.pingTarget
                             textField.onEditingFinished: subPageRoot.setOption("pingTarget", textField.text.trim())
+                        }
+
+                        ConfigSwitch {
+                            Layout.fillWidth: true
+                            buttonIcon: "push_pin"
+                            text: Translation.tr("Pin while a game is running")
+                            checked: subPageRoot.hud.autoPin
+                            onCheckedChanged: subPageRoot.setOption("autoPin", checked)
+                            StyledToolTip {
+                                text: Translation.tr("The HUD pins itself when a game is detected and goes away when it closes. Turn this off to keep it pinned yourself.")
+                            }
                         }
 
                         NoticeBox {

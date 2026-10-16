@@ -1544,6 +1544,34 @@ def run(args):
         time.sleep(max(0.05, interval - elapsed))
 
 
+def watch(args):
+    """Report the game MangoHud is logging, and nothing when none is.
+
+    MangoHud only logs while autostart_log is armed, which the HUD does just
+    for its own samplers, so the watcher registers as one: otherwise a game
+    only shows up here once the HUD is already on screen.
+    """
+    register_sampler()
+    set_armed(True)
+
+    def leave():
+        unregister_sampler()
+        disarm_if_idle()
+
+    atexit.register(leave)
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    parent = os.getppid()
+    mango = MangoLog(log_dirs(args.mangohud_dir), window=30, stale_after=2.0)
+    last = None
+    while os.getppid() == parent:
+        state = mango.poll()
+        process = state.get("process", "") if state.get("active") else ""
+        if process != last:
+            last = process
+            emit({"t": "game", "process": process})
+        time.sleep(max(0.25, args.interval / 1000))
+
+
 def main():
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -1563,6 +1591,9 @@ def main():
     p_unsetup.add_argument("--dir", default="")
     p_status = sub.add_parser("status")
     p_status.add_argument("--dir", required=True)
+    p_watch = sub.add_parser("watch")
+    p_watch.add_argument("--mangohud-dir", default="")
+    p_watch.add_argument("--interval", type=int, default=500)
     p_games = sub.add_parser("games")
     p_games.add_argument("--dir", default="")
     for name in ("enable", "disable", "launch"):
@@ -1584,6 +1615,8 @@ def main():
             emit(mangohud_status(args.dir))
         elif args.cmd == "status":
             emit(mangohud_status(args.dir))
+        elif args.cmd == "watch":
+            watch(args)
         elif args.cmd in ("games", "enable", "disable", "launch"):
             error = ""
             try:

@@ -612,6 +612,8 @@ Singleton {
                 property list<string> open: ["crosshair", "recorder", "media", "volumeMixer", "resources"]
                 property JsonObject crosshair: JsonObject {
                     property bool pinned: false
+                    // Pinned by the auto pin, which only takes back its own pins
+                    property bool autoPinned: false
                     property bool clickthrough: true
                     property real x: 827
                     property real y: 441
@@ -679,6 +681,8 @@ Singleton {
                 }
                 property JsonObject discordVoice: JsonObject {
                     property bool pinned: false
+                    // Pinned by the auto pin, which only takes back its own pins
+                    property bool autoPinned: false
                     property bool clickthrough: false
                     property real x: 80
                     property real y: 600
@@ -687,6 +691,8 @@ Singleton {
                 }
                 property JsonObject perfMonitor: JsonObject {
                     property bool pinned: true
+                    // Pinned by the auto pin, which only takes back its own pins
+                    property bool autoPinned: false
                     property bool clickthrough: true
                     property real x: 24
                     property real y: 80

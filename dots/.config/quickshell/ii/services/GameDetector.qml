@@ -1,9 +1,11 @@
 pragma Singleton
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Hyprland
 import qs.modules.common
+import qs.modules.common.functions
 import qs.services
 import "modes/ModeSchema.js" as ModeSchema
 
@@ -11,12 +13,14 @@ import "modes/ModeSchema.js" as ModeSchema
  * Combined "a game is running / focused" signal for Modes, the Game Mode
  * toggle and anything else that wants it.
  *
- * Four signals, by confidence:
+ * Five signals, by confidence:
  *  1. launcher classes (steam_app_*, gamescope, heroic/lutris/bottles,
- *     minecraft/prism, fullscreen wine .exe) — instant
+ *     minecraft/prism/modrinth, omikuji, orion, bedrock, mcpelauncher,
+ *     fullscreen wine .exe) — instant
  *  2. desktop entry category "Game" — instant
  *  3. user list Config.options.modes.game.extraClasses — instant
  *  4. focused window fullscreen with GPU above `gpuThreshold` % for `holdSec`
+ *  5. MangoHud log while a game is running (opt-in, useMangoHudLog) — instant
  *
  * `reason` says which one fired ("Steam app", "fullscreen + GPU 62 %") so a
  * false positive can be diagnosed from the trigger chip.
@@ -69,6 +73,26 @@ Singleton {
     readonly property var launcherRegexes: ModeSchema.GAME_LAUNCHER_PATTERNS.map(p => new RegExp(p, "i"))
     readonly property var extraRegexes: ModeSchema.classRegexes(root.settings?.extraClasses)
     readonly property var wineRegex: /\.exe$/i
+
+    // MangoHud writes a log only while it is injected into a game.
+    property string mangoHudGame: ""
+
+    property Process mangoHudWatch: Process {
+        command: ["python3", `${Directories.scriptPath}/perfOverlay/perf_monitor.py`,
+            "watch", "--mangohud-dir", FileUtils.trimFileProtocol(`${Directories.cache}/perf-overlay/mangohud`)]
+        running: root.settings?.useMangoHudLog ?? false
+        onRunningChanged: if (!running) root.mangoHudGame = ""
+        onExited: root.mangoHudGame = ""
+        stdout: SplitParser {
+            onRead: line => {
+                try {
+                    const message = JSON.parse(line);
+                    if (message.t === "game")
+                        root.mangoHudGame = String(message.process ?? "");
+                } catch (e) {}
+            }
+        }
+    }
 
     // Desktop-entry lookups are not free; remember the verdict per class.
     property var categoryCache: ({})
@@ -180,11 +204,16 @@ Singleton {
                 reason: `fullscreen + GPU ${root.gpuGamePercent} %`
             });
         }
+        if (root.mangoHudGame.length > 0 && (root.settings?.useMangoHudLog ?? false))
+            list.push({ address: "", cls: root.mangoHudGame, reason: "MangoHud log" });
         return list;
     }
     readonly property bool rawRunning: root.matches.length > 0
-    readonly property bool rawFocused: root.matches.some(m => m.address === root.focusedAddress)
-    readonly property var primaryMatch: root.matches.find(m => m.address === root.focusedAddress)
+    // The MangoHud match has no window: an empty focus must not match it.
+    readonly property bool rawFocused: root.focusedAddress.length > 0
+        && root.matches.some(m => m.address === root.focusedAddress)
+    readonly property var primaryMatch: (root.focusedAddress.length > 0
+        ? root.matches.find(m => m.address === root.focusedAddress) : undefined)
         ?? root.matches[0] ?? null
 
     property bool gameRunning: false
@@ -258,7 +287,7 @@ Singleton {
     function statusText() {
         const lines = [];
         lines.push(`running=${root.gameRunning} focused=${root.gameFocused} users=${root.users} `
-            + `gpuPolling=${root.gpuRequested} gpu=${root.gpuPercent}% `
+            + `mangohud=${root.mangoHudGame || "-"} gpuPolling=${root.gpuRequested} gpu=${root.gpuPercent}% `
             + `focusedFullscreen=${root.focusedFullscreen}`);
         for (const m of root.matches) {
             const focused = m.address === root.focusedAddress ? " (focused)" : "";

@@ -185,7 +185,11 @@ var GAME_LAUNCHER_PATTERNS = [
     "^steam_app_\\d+$",
     "^gamescope",
     "^(heroic|lutris|bottles|net\\.lutris\\.)",
-    "^(minecraft|prism)"
+    "^(minecraft|prism|modrinth)",
+    "^omikuji",
+    "^bedrock[- ]?on[- ]?linux",
+    "^mcpelauncher",
+    "^orion"
 ];
 
 // The exact option set the Game Mode quick toggle writes

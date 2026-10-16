@@ -3322,6 +3322,8 @@ Singleton {
                     property bool useLauncherClasses: true
                     property bool useDesktopCategory: true
                     property bool useGpuHeuristic: true
+                    // MangoHud's log as a game signal; keeps its logging armed
+                    property bool useMangoHudLog: false
                     property int gpuThreshold: 45
                     property int holdSec: 20
                     property list<string> extraClasses: []
@@ -5741,6 +5743,8 @@ Singleton {
             property JsonObject crosshair: JsonObject {
                 // Valorant crosshair format. Use https://www.vcrdb.net/builder
                 property string code: "0;P;d;1;0l;10;0o;2;1b;0"
+                // Pin it over the game while one is running
+                property bool autoPin: false
             }
 
             // Speech typed into the focused window, through voxtype. Off by
@@ -6687,9 +6691,13 @@ Singleton {
                     property bool blurEnabled: true
                     property bool autoResize: true
                     property bool speakingPulseContinuous: true
+                    // Pin the overlay on screen while the bridge sees a call
+                    property bool autoPin: false
                 }
                 // Performance HUD (RivaTuner style). Frame rate comes from MangoHud's logger.
                 property JsonObject perfMonitor: JsonObject {
+                    // Pin the HUD on screen while a game is detected
+                    property bool autoPin: false
                     property string style: "bars" // bars | graph | text
                     property string palette: "accent" // accent | container | mono
                     property bool fpsOnly: false

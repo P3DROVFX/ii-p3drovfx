@@ -238,6 +238,19 @@ Rectangle {
                 }
 
                 ClockSettingsRow {
+                    symbol: "monitoring"
+                    title: Translation.tr("Games logged by MangoHud")
+                    description: Translation.tr("Catches games launched with MangoHud whose window says nothing. Needs the performance HUD's MangoHud setup and keeps its logging on while the shell runs")
+                    clickable: true
+                    onClicked: root.opts.game.useMangoHudLog = !root.opts.game.useMangoHudLog
+
+                    Toggle {
+                        target: root.opts.game
+                        key: "useMangoHudLog"
+                    }
+                }
+
+                ClockSettingsRow {
                     symbol: "memory"
                     title: Translation.tr("Fullscreen window keeping the GPU busy")
                     description: Translation.tr("Catches games nothing else recognises. Also catches a fullscreen video that decodes on the GPU — raise the threshold if that happens")
