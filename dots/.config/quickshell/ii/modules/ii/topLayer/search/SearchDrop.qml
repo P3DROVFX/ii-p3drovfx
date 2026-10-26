@@ -169,20 +169,23 @@ Item {
      *
      * The widget no longer eases its own size (`hostDrivesSize`), so this is the one
      * animator. A spring keeps its velocity when the target moves again mid-flight, which
-     * is what typing does - every eased restart was a visible kink. About 2% overshoot,
-     * settled in ~0.4 s. While the drop is still opening the morph owns the motion, and
+     * is what typing does - every eased restart was a visible kink. No visible overshoot;
+     * at multiplier 0.75, 90% of the way in ~150 ms and settled in ~0.35 s. While the drop is still opening the morph owns the motion, and
      * a late first measurement is taken as is.
      */
     property real dropW: dropState.targetW
     property real dropH: dropState.targetH
     readonly property bool _springSizes: root.animStyle !== "none" && root.isOpen && dropSurface.clock > 0.3
+    // Time scale of the spring: stiffness goes with its square and damping with it, so
+    // the overshoot stays the same and the animation multiplier applies here as well.
+    readonly property real _springSpeed: 1.5 / Math.max(0.1, Appearance.animMultiplier)
     Behavior on dropW {
         enabled: root._springSizes
-        SpringAnimation { spring: 1.5; damping: 0.25; epsilon: 0.25 }
+        SpringAnimation { spring: 1.5 * root._springSpeed * root._springSpeed; damping: 0.25 * root._springSpeed; epsilon: 0.25 }
     }
     Behavior on dropH {
         enabled: root._springSizes
-        SpringAnimation { spring: 1.5; damping: 0.25; epsilon: 0.25 }
+        SpringAnimation { spring: 1.5 * root._springSpeed * root._springSpeed; damping: 0.25 * root._springSpeed; epsilon: 0.25 }
     }
 
     SearchDropState {
@@ -435,12 +438,17 @@ Item {
         id: overviewBubble
         anchors.fill: parent
         readonly property var overview: overviewLoader.item
-        open: root.isOpen && root.overviewShown && overview !== null
+        searchOpen: root.isOpen
+        wanted: root.overviewShown && overview !== null
         held: root.heldByGesture && root.overviewShown
         heldProgress: GlobalStates.gestureDragProgress
         animationsEnabled: root.animStyle !== "none"
-        openDuration: Math.round(700 * Appearance.animMultiplier)
+        // Coming back out of a search that is already open (the query was cleared) is a
+        // smaller move than leaving the bar with it, and waiting on the full opening read
+        // as a slow collapse.
+        openDuration: Math.round((dropSurface.clock >= 1 ? 440 : 700) * Appearance.animMultiplier)
         closeDuration: Math.round(240 * Appearance.animMultiplier)
+        tuckDuration: Math.round(460 * Appearance.animMultiplier)
 
         barEdgeY: root.barEdgeY
         away: root.isBottomBar ? -1 : 1

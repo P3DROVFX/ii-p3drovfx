@@ -31,14 +31,23 @@ Item {
 
     default property alias contents: contentHost.data
 
-    /** Out and settled beside the search, or tucked back into it. */
-    property bool open: false
+    /** The search is open, and the overview is wanted beside it. */
+    property bool searchOpen: false
+    property bool wanted: false
+    /**
+     * Out and settled beside the search, or tucked back into it. Derived here, so a
+     * change reads `searchOpen` already updated: a tuck (a query took the drop, the
+     * search stays) is told apart from the search closing.
+     */
+    readonly property bool open: root.searchOpen && root.wanted
     /** A gesture owns the clock: it follows the search's while the fingers hold it. */
     property bool held: false
     property real heldProgress: 0
     property bool animationsEnabled: true
     property int openDuration: 700
     property int closeDuration: 340
+    /** A tuck while the search stays open: slower, so the recall reads as liquid. */
+    property int tuckDuration: 440
 
     // The search drop: the body the overview hangs from.
     property real barEdgeY: 0
@@ -74,6 +83,7 @@ Item {
     property real _fromCenterX: 0
     property real _fromReveal: 0
     property real _fromRelease: 1
+    property bool _tucking: false
 
     onOpenChanged: root._restart()
     onHeldChanged: {
@@ -108,6 +118,7 @@ Item {
         // The mode and the snapshot change before the clock does, so no binding ever
         // reads the new clock against the old pose.
         root.opening = root.open;
+        root._tucking = !root.open && root.searchOpen;
         root._fromClock = fromClock;
         root._fromWidth = pose[0];
         root._fromHeight = pose[1];
@@ -120,7 +131,7 @@ Item {
         clockAnim.to = root.open ? 1 : 0;
         clockAnim.duration = Math.max(1, Math.round(root.open
             ? root.openDuration * (1 - root.clock)
-            : root.closeDuration * Math.min(1, root.clock / 0.6)));
+            : (root._tucking ? root.tuckDuration : root.closeDuration) * Math.min(1, root.clock / 0.6)));
         clockAnim.start();
     }
 
@@ -210,8 +221,16 @@ Item {
      * search and the neck forms again on the way.
      */
     readonly property real closeAmount: root.opening ? 0 : 1 - root.clock / Math.max(0.001, root._fromClock)
-    readonly property real closeShrink: root.easeOut(root.closeAmount / 0.55)
-    readonly property real closeBack: root.smoothstep((root.closeAmount - 0.3) / 0.6)
+    // A tuck keeps every stage long enough to be seen: the contents close with the
+    // card instead of ahead of it, and the neck forms while the pill is still on its
+    // way back, so the search drinks it in rather than it blinking out.
+    readonly property real closeShrink: root.easeOut(root.closeAmount / (root._tucking ? 0.62 : 0.55))
+    readonly property real closeBack: root._tucking
+        ? root.smoothstep((root.closeAmount - 0.2) / 0.65)
+        : root.smoothstep((root.closeAmount - 0.3) / 0.6)
+    readonly property real closeVanish: root._tucking
+        ? root.smoothstep((root.closeAmount - 0.7) / 0.3)
+        : root.smoothstep((root.closeAmount - 0.75) / 0.25)
 
     readonly property real liveTop: root.opening
         ? root.mix(root._fromTop, root.mix(root.startTop, root.restTop, root.openTravel), root.reopenBlend)
@@ -221,10 +240,10 @@ Item {
         : root.mix(root._fromCenterX, root.searchCenterX, root.closeBack)
     readonly property real liveWidth: Math.max(0, root.opening
         ? root.mix(root._fromWidth, root.mix(root.seedWidth, root.overviewWidth, root.openSpread) * root.openAppear, root.reopenBlend)
-        : root.mix(root._fromWidth, root.seedWidth, root.closeShrink) * (1 - root.smoothstep((root.closeAmount - 0.75) / 0.25)))
+        : root.mix(root._fromWidth, root.seedWidth, root.closeShrink) * (1 - root.closeVanish))
     readonly property real liveHeight: Math.max(0, root.opening
         ? root.mix(root._fromHeight, root.mix(root.seedHeight, root.overviewHeight, root.openSpread) * root.openAppear, root.reopenBlend)
-        : root.mix(root._fromHeight, root.seedHeight, root.closeShrink) * (1 - root.smoothstep((root.closeAmount - 0.75) / 0.25)))
+        : root.mix(root._fromHeight, root.seedHeight, root.closeShrink) * (1 - root.closeVanish))
     readonly property real liveRadius: Math.max(0, Math.min(root.opening
         ? root.mix(root._fromRadius, root.mix(root.seedHeight / 2, root.overviewRadius, root.openSpread), root.reopenBlend)
         : root.mix(root._fromRadius, root.seedHeight / 2, root.closeShrink),
@@ -233,7 +252,9 @@ Item {
     /** The neck lets go as the drop arrives, and forms again as it is called back. */
     readonly property real release: root.opening
         ? root.mix(root._fromRelease, root.stageAt(root.clock, 0.3, 0.5), root.reopenBlend)
-        : root._fromRelease * (1 - root.smoothstep((root.closeAmount - 0.45) / 0.3))
+        : root._fromRelease * (1 - (root._tucking
+            ? root.smoothstep((root.closeAmount - 0.3) / 0.3)
+            : root.smoothstep((root.closeAmount - 0.45) / 0.3)))
 
     /**
      * The contents open from the drop's middle as it spreads: a slice of the grid in
@@ -241,7 +262,9 @@ Item {
      */
     readonly property real contentReveal: root.opening
         ? root.mix(root._fromReveal, root.stageAt(root.clock, 0.26, 0.62), root.reopenBlend)
-        : root._fromReveal * (1 - root.easeOut(root.closeAmount / 0.35))
+        : root._fromReveal * (1 - (root._tucking
+            ? root.smoothstep(root.closeAmount / 0.55)
+            : root.easeOut(root.closeAmount / 0.35)))
     readonly property real contentInset: (1 - root.contentReveal) * Math.max(root.liveWidth, root.liveHeight) / 2
 
     readonly property real neckBlend: {
