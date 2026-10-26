@@ -23,6 +23,7 @@ import qs.modules.ii.background.depth
 import qs.modules.ii.lock
 import qs.modules.common.panels.lock
 import qs.modules.ii.editMode
+import qs.modules.ii.oledSaver
 
 import qs.modules.ii.background.shortcuts
 PanelWindow {
@@ -594,10 +595,13 @@ PanelWindow {
     // The window blur stays on through the launcher and the overview - the overview composes its
     // own dim on top of the blurred wallpaper rather than replacing it.
     // Always On Display over the lock on this screen (see OledSaver.qml).
-    property real aodProgress: GlobalStates.screenLocked && GlobalStates.oledSaverMonitors.includes(bgWidgetsWindow.editScreenName) ? 1 : 0
-    Behavior on aodProgress {
+    property real lockAodProgress: GlobalStates.screenLocked && GlobalStates.oledSaverMonitors.includes(bgWidgetsWindow.editScreenName) ? 1 : 0
+    Behavior on lockAodProgress {
         animation: Appearance.animation.elementMoveSlow.numberAnimation.createObject(bgWidgetsWindow)
     }
+    // Edit Mode's AOD tab drains the card the same way, at the tab's own pace.
+    readonly property real aodProgress: Math.max(bgWidgetsWindow.lockAodProgress,
+        bgWidgetsWindow.isEditMonitor ? GlobalStates.editAodProgress : 0)
     // Same gate as WindowBlur: the widgets live in their own layer surface, so the wallpaper's
     // capture never reaches them and they are blurred here instead. The edit card stays sharp.
     readonly property bool windowBlurActive: !videoEffectsDisabled && Config.options.background.blurWhenWindowsOpen && hasWindowsInActiveWorkspace && !GlobalStates.screenLocked && !GlobalStates.editMode
@@ -743,6 +747,20 @@ PanelWindow {
             }
         }
 
+        // Edit Mode's AOD tab with one of the AOD's own clocks: drawn here, inside the
+        // shrunk desktop, where the lock draws it in LockSurface. The widgets fade out
+        // under it (widgetCanvas' opacity).
+        Loader {
+            anchors.fill: parent
+            z: 5
+            active: GlobalStates.aodUsesClockFace && bgWidgetsWindow.isEditMonitor && GlobalStates.editAodProgress > 0.001
+            visible: active
+            sourceComponent: AodClockFace {
+                running: GlobalStates.editAodPreview
+                opacity: GlobalStates.editAodProgress
+            }
+        }
+
         // The wallpaper's subject over the widgets (services/DepthEffect.qml),
         // painted only where the canvas has pixels: above every widget and
         // icon, under the lock preview and the framing overlay. Built only
@@ -821,7 +839,11 @@ PanelWindow {
             // The widgets step back while the wallpaper is being framed: still
             // there to frame the picture around, not in the way of it.
             // The window blur's sharp half is desktopStack's opacity.
-            opacity: 1 - 0.75 * bgWidgetsWindow.wallpaperFramingProgress
+            // An AOD drawing its own clock (LockSurface) fades the widgets out instead.
+            opacity: (1 - 0.75 * bgWidgetsWindow.wallpaperFramingProgress)
+                * (GlobalStates.aodUsesClockFace ? 1 - bgWidgetsWindow.aodProgress : 1)
+            // Faded out under an AOD clock on the AOD tab: nothing left to drag there.
+            enabled: !(GlobalStates.aodUsesClockFace && GlobalStates.editAodPreview && bgWidgetsWindow.isEditMonitor)
             // The canvas STAYS visible under the lock preview. The preview's
             // LockSurface only draws the islands over a transparent surface -
             // the lock wallpaper lives in the background window, and the

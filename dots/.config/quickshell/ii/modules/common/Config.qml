@@ -6342,6 +6342,7 @@ Singleton {
                 property bool antiBurnIn: false // periodically shift widgets to prevent OLED burn-in
                 property int cursorHideDelay: 5 // seconds of no mouse movement before the cursor hides again
                 property int lockTimeout: 10 // minutes without input on the lock screen before it turns into the Always On Display; 0 = never
+                property string clockStyle: "widgets" // "widgets" (the lock's widgets in grey) | "flip" | "dial" | "expressive" | "dots" | "analog" | "info" (AodClockFace)
             }
 
             property JsonObject osd: JsonObject {

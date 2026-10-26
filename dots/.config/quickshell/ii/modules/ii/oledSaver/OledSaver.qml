@@ -157,17 +157,31 @@ Scope {
         }
 
         // The widgets the lock keeps, where the lock keeps them, in grey.
-        LockWidgetLayer {
+        Loader {
             anchors.fill: parent
-            monitorName: window.screenName
-            atLock: window.shown
-            burnInShiftX: GlobalStates.aodBurnInShiftX
-            burnInShiftY: GlobalStates.aodBurnInShiftY
-            opacity: window.progress
-            visible: opacity > 0
-            layer.enabled: true
-            layer.effect: MultiEffect {
-                saturation: -window.progress
+            active: !GlobalStates.aodUsesClockFace
+            sourceComponent: LockWidgetLayer {
+                monitorName: window.screenName
+                atLock: window.shown
+                burnInShiftX: GlobalStates.aodBurnInShiftX
+                burnInShiftY: GlobalStates.aodBurnInShiftY
+                opacity: window.progress
+                visible: opacity > 0
+                layer.enabled: true
+                layer.effect: MultiEffect {
+                    saturation: -window.progress
+                }
+            }
+        }
+
+        // Or one of the AOD's own clocks in their place.
+        Loader {
+            anchors.fill: parent
+            active: GlobalStates.aodUsesClockFace
+            sourceComponent: AodClockFace {
+                running: window.shown
+                opacity: window.progress
+                visible: opacity > 0
             }
         }
 

@@ -7,6 +7,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
+import qs.modules.settings.configs.bar
 
 /**
  * An expressive Material 3 card configuring the Always On Display (OLED Saver).
@@ -20,6 +21,18 @@ Rectangle {
     readonly property bool antiBurnIn: Config.options.oledSaver?.antiBurnIn ?? true
     readonly property int lockTimeout: Config.options.oledSaver?.lockTimeout ?? 10
     readonly property int cursorHideDelay: Config.options.oledSaver?.cursorHideDelay ?? 5
+    readonly property string clockStyle: Config.options.oledSaver?.clockStyle ?? "widgets"
+
+    readonly property var styleOptions: [
+        { "value": "widgets", "label": Translation.tr("Widgets"), "description": Translation.tr("The lock's widgets, in grey"), "icon": "widgets", "shape": MaterialShape.Shape.Cookie4Sided },
+        { "value": "flip", "label": Translation.tr("Flip"), "description": Translation.tr("Big split-flap cards"), "icon": "view_agenda", "shape": MaterialShape.Shape.Cookie6Sided },
+        { "value": "dial", "label": Translation.tr("Dial"), "description": Translation.tr("Turning dials on the left edge"), "icon": "timelapse", "shape": MaterialShape.Shape.Cookie12Sided },
+        { "value": "expressive", "label": Translation.tr("Expressive"), "description": Translation.tr("One line, with now playing"), "icon": "music_note", "shape": MaterialShape.Shape.Flower },
+        { "value": "dots", "label": Translation.tr("Dot matrix"), "description": Translation.tr("Time in lit dots, seconds walking"), "icon": "grid_on", "shape": MaterialShape.Shape.Cookie7Sided },
+        { "value": "analog", "label": Translation.tr("Analog"), "description": Translation.tr("Hands on a shape that changes hourly"), "icon": "schedule", "shape": MaterialShape.Shape.Sunny },
+        { "value": "info", "label": Translation.tr("Info"), "description": Translation.tr("Battery, alarm, weather, notifications"), "icon": "notifications", "shape": MaterialShape.Shape.Clover4Leaf }
+    ]
+    readonly property string clockStyleLabel: (root.styleOptions.find(o => o.value === root.clockStyle) ?? root.styleOptions[0]).label
 
     readonly property int padding: 20
     radius: Appearance.rounding.verylarge
@@ -75,8 +88,8 @@ Rectangle {
                     text: !root.enabledAod
                         ? Translation.tr("Disabled")
                         : (root.lockTimeout > 0
-                            ? Translation.tr("Active · Idle timeout %1m · Grayscale widgets").arg(root.lockTimeout)
-                            : Translation.tr("Active · Shortcut only · Grayscale widgets"))
+                            ? Translation.tr("Active · Idle timeout %1m · %2").arg(root.lockTimeout).arg(root.clockStyleLabel)
+                            : Translation.tr("Active · Shortcut only · %1").arg(root.clockStyleLabel))
                     font.pixelSize: Appearance.font.pixelSize.small
                     color: Appearance.colors.colSubtext
                     elide: Text.ElideRight
@@ -185,6 +198,17 @@ Rectangle {
 
             Behavior on opacity {
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+
+            // Clock style
+            BarChoiceCards {
+                Layout.fillWidth: true
+                options: root.styleOptions
+                currentValue: root.clockStyle
+                onSelected: value => {
+                    if (Config.ready && Config.options.oledSaver)
+                        Config.options.oledSaver.clockStyle = value;
+                }
             }
 
             // Anti Burn-in (Pixel shift) Row

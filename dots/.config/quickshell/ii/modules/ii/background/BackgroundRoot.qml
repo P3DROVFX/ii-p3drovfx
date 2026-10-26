@@ -841,9 +841,13 @@ PanelWindow {
             anchors.fill: parent
             z: 2
             color: "black"
-            opacity: GlobalStates.screenLocked && GlobalStates.oledSaverMonitors.includes(bgRoot.editScreenName) ? 1 : 0
+            // Edit Mode's AOD tab shows the same black on the card, at the tab's pace.
+            opacity: Math.max(GlobalStates.screenLocked && GlobalStates.oledSaverMonitors.includes(bgRoot.editScreenName) ? 1 : 0,
+                bgRoot.isEditMonitor ? GlobalStates.editAodProgress : 0)
             visible: opacity > 0
+            // The tab's scalar is already animated.
             Behavior on opacity {
+                enabled: !GlobalStates.editMode
                 animation: Appearance.animation.elementMoveSlow.numberAnimation.createObject(this)
             }
         }

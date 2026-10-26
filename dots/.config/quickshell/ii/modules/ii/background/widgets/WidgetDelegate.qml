@@ -1837,7 +1837,7 @@ Item {
         // it is the ones the lock shows. Without the tab named here a
         // lock-only widget added from it is written to the config and never
         // built, so the tab looks like it ignored the click.
-        readonly property bool lockLayout: delegateRoot.lockAnimationActive || GlobalStates.editLockPreview
+        readonly property bool lockLayout: delegateRoot.lockAnimationActive || GlobalStates.editLockLayout
         shown: !widgetLoader.lockLayout ? (delegateRoot.lockBehavior !== "lockOnly")
             : (delegateRoot.lockBehavior === "center" || delegateRoot.lockBehavior === "keep" || delegateRoot.lockBehavior === "custom"
                 || delegateRoot.lockBehavior === "lockOnly")

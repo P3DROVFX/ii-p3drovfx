@@ -33,7 +33,11 @@ var LOCKSCREEN_TAB = "lockscreen";
 // exactly that reason. Unknown input lands on the Desktop tab both ways: a
 // bad index or a stale stored string must not strand the bar pointing at
 // nothing.
-var TABS = [DESKTOP_TAB, LOCKSCREEN_TAB];
+// The Always On Display tab: the lock's widgets (or the AOD's own clock) on
+// black, in grey - the same lock layout, filtered once more.
+var AOD_TAB = "aod";
+
+var TABS = [DESKTOP_TAB, LOCKSCREEN_TAB, AOD_TAB];
 
 function tabIndex(tab) {
     const index = TABS.indexOf(tab);

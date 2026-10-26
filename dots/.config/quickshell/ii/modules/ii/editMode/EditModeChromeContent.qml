@@ -298,7 +298,7 @@ Item {
                 colSymbol: Appearance.colors.colPrimary
             }
 
-            // Desktop | Lockscreen. Indices are the tab list's own order; the
+            // Desktop | Lockscreen | AOD. Indices are the tab list's own order; the
             // names come back through EditModeLogic so this bar and the state
             // agree on one spelling.
             // On the same group surface as the catalogues and the history.
@@ -318,7 +318,8 @@ Item {
                 implicitHeight: root.chipHeight
                 tabButtonList: [
                     { "name": Translation.tr("Desktop"), "icon": "desktop_windows" },
-                    { "name": Translation.tr("Lock screen"), "icon": "lock" }
+                    { "name": Translation.tr("Lock screen"), "icon": "lock" },
+                    { "name": Translation.tr("AOD"), "icon": "dark_mode" }
                 ]
                 requestOnly: true
                 currentIndex: EditModeLogic.tabIndex(GlobalStates.editTab)
@@ -410,7 +411,7 @@ Item {
                 spacing: 2
 
                 SectionChip {
-                    visible: PanelFamily.touchFirst && !GlobalStates.editLockPreview
+                    visible: PanelFamily.touchFirst && !GlobalStates.editLockLayout
                     section: "apps"
                     iconText: "apps"
                     text: Translation.tr("Apps")
@@ -420,12 +421,12 @@ Item {
                     section: "widgets"
                     iconText: "widgets"
                     text: Translation.tr("Widgets")
-                    tooltip: GlobalStates.editLockPreview
-                        ? Translation.tr("Widgets on the lock screen")
+                    tooltip: GlobalStates.editLockLayout
+                        ? Translation.tr("Widgets on the lock screen and the AOD")
                         : Translation.tr("Desktop widgets")
                 }
                 SectionChip {
-                    visible: !GlobalStates.editLockPreview
+                    visible: !GlobalStates.editLockLayout
                     section: "bar"
                     page: "appearance"
                     iconText: "dock_to_bottom"
@@ -433,7 +434,7 @@ Item {
                     tooltip: Translation.tr("Bar appearance and widgets")
                 }
                 SectionChip {
-                    visible: !GlobalStates.editLockPreview
+                    visible: !GlobalStates.editLockLayout
                     section: "dock"
                     page: "appearance"
                     iconText: PanelFamily.touchFirst ? "dock_to_bottom" : "dock"
@@ -449,11 +450,19 @@ Item {
                     text: Translation.tr("Lock screen")
                     tooltip: Translation.tr("What the lock screen shows")
                 }
+                SectionChip {
+                    visible: GlobalStates.editAodPreview
+                    section: "aod"
+                    iconText: "dark_mode"
+                    text: Translation.tr("Always On")
+                    tooltip: Translation.tr("Clock style and Always On Display behaviour")
+                }
                 // The wallpaper on its own: which picture each screen shows,
                 // which one the colours come from, and - on the Desktop tab -
                 // the card itself turns into the picture, to move, zoom and
                 // turn by hand.
                 SectionChip {
+                    visible: !GlobalStates.editAodPreview
                     section: "wallpaper"
                     iconText: "wallpaper"
                     text: Translation.tr("Wallpaper")
@@ -462,6 +471,7 @@ Item {
                         : Translation.tr("Wallpaper, position and screens")
                 }
                 SectionChip {
+                    visible: !GlobalStates.editAodPreview
                     section: "style"
                     iconText: "palette"
                     text: Translation.tr("Style")

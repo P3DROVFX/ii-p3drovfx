@@ -149,7 +149,7 @@ Item {
     // The dock's catalogue alone runs to two hundred rows. A query FLATTENS the
     // catalogue it filters, pages and all: someone typing is after one row, not
     // after where it lives. The lock screen's switches are not worth a box.
-    readonly property bool searchable: root.section !== "lock" && root.section !== "style" && root.section !== "wallpaper"
+    readonly property bool searchable: root.section !== "lock" && root.section !== "aod" && root.section !== "style" && root.section !== "wallpaper"
     property string query: ""
     readonly property string needle: root.query.trim().toLowerCase()
     readonly property bool searching: root.searchable && root.needle !== ""
@@ -550,11 +550,23 @@ Item {
         DesktopShortcuts.addDockApps(root.screenName, [appId], 20, 80);
     }
 
-    readonly property bool lockTab: GlobalStates.editLockPreview
-    onLockTabChanged: {
-        if (root.lockTab ? (root.section === "bar" || root.section === "dock" || root.section === "apps") : root.section === "lock")
-            GlobalStates.editDrawerSection = "widgets";
+    // The lock's widget layout: the Lockscreen tab and the AOD tab both edit it.
+    readonly property bool lockTab: GlobalStates.editLockLayout
+    readonly property bool aodTab: GlobalStates.editAodPreview
+    function sectionFitsTab(section) {
+        if (root.aodTab)
+            return section === "widgets" || section === "aod";
+        if (root.lockTab)
+            return section !== "bar" && section !== "dock" && section !== "apps" && section !== "aod";
+        return section !== "lock" && section !== "aod";
     }
+    function dropMisplacedSection() {
+        if (!root.sectionFitsTab(root.section))
+            GlobalStates.editDrawerSection = root.aodTab ? "aod" : "widgets";
+    }
+    onLockTabChanged: root.dropMisplacedSection()
+    onAodTabChanged: root.dropMisplacedSection()
+
     readonly property bool anyLockFork: root.activeWidgets.some(entry =>
         WidgetPlacement.fork(entry, root.screenName, true) !== null)
 
@@ -616,6 +628,8 @@ Item {
                 return PanelFamily.touchFirst ? Translation.tr("Taskbar") : Translation.tr("Dock");
             if (root.section === "lock")
                 return Translation.tr("Lock screen");
+            if (root.section === "aod")
+                return Translation.tr("Always On Display");
             if (root.section === "style")
                 return Translation.tr("Style");
             if (root.section === "wallpaper")
@@ -673,6 +687,8 @@ Item {
             return PanelFamily.touchFirst ? "dock_to_bottom" : "dock";
         if (root.section === "lock")
             return "lock";
+        if (root.section === "aod")
+            return "dark_mode";
         if (root.section === "style")
             return "palette";
         if (root.section === "wallpaper")
@@ -801,9 +817,10 @@ Item {
                     { "section": "bar", "label": Translation.tr("Bar"), "icon": "toolbar", "shown": !root.lockTab },
                     { "section": "dock", "label": PanelFamily.touchFirst ? Translation.tr("Taskbar") : Translation.tr("Dock"),
                       "icon": "dock_to_bottom", "shown": !root.lockTab },
-                    { "section": "lock", "label": Translation.tr("Lock screen"), "icon": "lock", "shown": root.lockTab },
-                    { "section": "wallpaper", "label": Translation.tr("Wallpaper"), "icon": "wallpaper", "shown": true },
-                    { "section": "style", "label": Translation.tr("Style"), "icon": "palette", "shown": true }
+                    { "section": "lock", "label": Translation.tr("Lock screen"), "icon": "lock", "shown": root.lockTab && !root.aodTab },
+                    { "section": "wallpaper", "label": Translation.tr("Wallpaper"), "icon": "wallpaper", "shown": !root.aodTab },
+                    { "section": "style", "label": Translation.tr("Style"), "icon": "palette", "shown": !root.aodTab },
+                    { "section": "aod", "label": Translation.tr("Always On"), "icon": "dark_mode", "shown": root.aodTab }
                 ]
                 readonly property var shownTabs: pickerHost.tabs.filter(tab => tab.shown)
                 // The group with every label: the labels' own widths plus
@@ -857,6 +874,11 @@ Item {
                     CatalogueTab {
                         tab: pickerHost.tabs[6]
                         compact: pickerHost.compact
+                        rightmost: !pickerHost.tabs[7].shown
+                    }
+                    CatalogueTab {
+                        tab: pickerHost.tabs[7]
+                        compact: pickerHost.compact
                         rightmost: true
                     }
                 }
@@ -875,6 +897,8 @@ Item {
                         : Translation.tr("Drag a widget onto the desktop to place it, or click to add one. Drag one back here to remove it."))
                     : root.section === "lock"
                         ? Translation.tr("What the lock screen shows besides your widgets.")
+                    : root.section === "aod"
+                        ? Translation.tr("What the screen shows when it goes dark. With Widgets, drag them on the card: the AOD keeps the lock screen's layout.")
                     : root.section === "style"
                         ? Translation.tr("Presets, light or dark, and the colours everything is drawn in. Changes apply at once; undo takes them back.")
                     : root.section === "wallpaper"
@@ -1035,6 +1059,8 @@ Item {
                                 : root.page.startsWith("category:") ? widgetListPage : widgetCategoriesPage;
                         if (root.section === "lock")
                             return lockPage;
+                        if (root.section === "aod")
+                            return aodPage;
                         if (root.section === "style")
                             return root.page === "colours" ? colourPage : stylePage;
                         if (root.section === "wallpaper")
@@ -1999,6 +2025,14 @@ Item {
                 }
             }
         }
+    }
+
+    // The Always On Display: which clock it draws, and how it behaves. Written
+    // straight to config like the lock's switches: preferences, not layout edits.
+    Component {
+        id: aodPage
+
+        EditAodPage {}
     }
 
     // The drag ghost: the row's name carried under the pointer, parented

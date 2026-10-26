@@ -57,7 +57,7 @@ AbstractWidget {
     property bool visibleWhenLocked: lockBehavior === "keep" || lockBehavior === "custom" || lockBehavior === "center" || lockBehavior === "lockOnly"
     // The lock layout: the real lock once its wallpaper has centred, or Edit
     // Mode's Lockscreen tab, which previews it without a lock session.
-    readonly property bool lockLayoutActive: GlobalStates.lockScreenCentered || GlobalStates.editLockPreview
+    readonly property bool lockLayoutActive: GlobalStates.lockScreenCentered || GlobalStates.editLockLayout
     property bool forceCenter: (lockLayoutActive || GlobalStates.workspaceRestoreInProgress) && lockBehavior === "center"
 
     function getCenteredWidgetsList() {

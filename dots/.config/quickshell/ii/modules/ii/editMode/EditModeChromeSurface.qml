@@ -221,7 +221,7 @@ PanelWindow {
             "screenWidth": root.width,
             "screenHeight": root.height
         });
-        if (GlobalStates.editLockPreview) {
+        if (GlobalStates.editLockLayout) {
             root.placeOnLock(widgetId, placed.x, placed.y);
             return;
         }
@@ -252,7 +252,7 @@ PanelWindow {
     // copy they mean.
     function addWidgetInstance(widgetId) {
         Config.addWidgetToDesktop(widgetId, undefined, undefined, root.screenName,
-            GlobalStates.editLockPreview ? "lockOnly" : "hide");
+            GlobalStates.editLockLayout ? "lockOnly" : "hide");
     }
 
     function addAppAt(appId, dropX, dropY) {

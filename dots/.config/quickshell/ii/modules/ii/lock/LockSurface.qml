@@ -14,6 +14,7 @@ import qs.modules.ii.bar.widgets.tray
 import Quickshell
 import Quickshell.Services.SystemTray
 import qs.modules.ii.editMode
+import qs.modules.ii.oledSaver
 import "../../common/functions/lock_islands.js" as LockIslands
 import "../../common/functions/aod.js" as Aod
 
@@ -1653,6 +1654,17 @@ MouseArea {
         function onScreenLockedChanged() {
             layoutDialog.close();
             lockContextMenu.close();
+        }
+    }
+
+    // The AOD's own clock, when one replaces the widgets (the widgets window hides them).
+    Loader {
+        anchors.fill: parent
+        z: 55
+        active: GlobalStates.aodUsesClockFace && root.aodProgress > 0
+        sourceComponent: AodClockFace {
+            running: root.aodActive
+            opacity: root.aodProgress
         }
     }
 

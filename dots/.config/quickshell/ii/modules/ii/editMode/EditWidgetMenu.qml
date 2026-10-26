@@ -177,11 +177,11 @@ Item {
         {
             "id": "remove",
             "symbol": "delete",
-            "title": GlobalStates.editLockPreview && !root.lockOnly
+            "title": GlobalStates.editLockLayout && !root.lockOnly
                 ? Translation.tr("Hide on lock screen") : Translation.tr("Remove from desktop"),
             "destructive": true,
             "enabled": root.multiSelect ? root.targetWidgets.length > 0 : (root.instance !== null
-                && !(GlobalStates.editLockPreview && root.lockBehavior === "hide"))
+                && !(GlobalStates.editLockLayout && root.lockBehavior === "hide"))
         }
     ].filter(entry => entry.shown !== false)
     readonly property var arranged: ContextMenus.arrange("editWidget", root.liveEntries)
@@ -240,7 +240,7 @@ Item {
         case "remove": {
             root.dismissRequested();
             if (root.multiSelect) {
-                if (GlobalStates.editLockPreview) {
+                if (GlobalStates.editLockLayout) {
                     GlobalStates.editHistoryBeginBatch();
                     for (const w of root.targetWidgets) {
                         if (!w || !w.widgetInstance) continue;
@@ -255,7 +255,7 @@ Item {
                 }
             } else {
                 const instanceId = root.instanceId;
-                if (GlobalStates.editLockPreview && !root.lockOnly)
+                if (GlobalStates.editLockLayout && !root.lockOnly)
                     Config.updateWidgetLockBehavior(instanceId, "hide");
                 else
                     Config.removeWidgetInstance(instanceId);
