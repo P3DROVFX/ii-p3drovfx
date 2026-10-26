@@ -165,7 +165,20 @@ PopupWindow {
     // Closing stops any pending swap. The committed front page is kept so a
     // re-hover of the same app re-opens without rebuilding anything; the back
     // page is dropped with its captures.
+    // A popup is blurred with its parent layer's ignore_alpha, which on the
+    // frame band sits at 0.99 (the dock paints no tray there): the card never
+    // clears it. Ask for the card's threshold while this popup is on screen.
+    property bool _holdsPopupBlur: false
+    function _setPopupBlur(on) {
+        if (on === _holdsPopupBlur)
+            return
+        _holdsPopupBlur = on
+        Appearance.dockPopupsOpen += on ? 1 : -1
+    }
+    Component.onDestruction: _setPopupBlur(false)
+
     onActiveChanged: {
+        _setPopupBlur(active && Config.options.appearance.transparency.popups)
         if (active) {
             everShown = true
             return

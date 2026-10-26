@@ -408,7 +408,10 @@ Singleton {
     // dock paints no tray at all - the band below already carries the blur - so only
     // opaque pixels pass. Set by the dock (Dock.qml), which knows when it is on the band.
     property bool dockOnFrameBand: false
-    readonly property real dockIgnoreAlpha: root.dockOnFrameBand ? 0.99 : Math.max(0, 1 - root.backgroundTransparency - 0.01)
+    // Dock popups (window preview) are blurred with the dock layer's ignore_alpha, so while
+    // one is open the band drops to the card's threshold instead of 0.99.
+    property int dockPopupsOpen: 0
+    readonly property real dockIgnoreAlpha: root.dockOnFrameBand && root.dockPopupsOpen <= 0 ? 0.99 : Math.max(0, 1 - root.backgroundTransparency - 0.01)
 
     // Popups only need compositor blur when transparency is enabled; for opaque popups,
     // compositor blur behind a 100% opaque surface is completely invisible and causes
