@@ -230,6 +230,22 @@ Singleton {
     /// A countdown reached zero (Modes' "A timer finishes" event).
     signal countdownFinished(var countdown)
 
+    /// What the full-screen timer popup shows: { kind: "focus" | "break" | "longBreak" | "countdown",
+    /// label, minutes }. Null while none is up.
+    property var alert: null
+
+    function dismissAlert() {
+        root.alert = null;
+    }
+
+    onCountdownFinished: countdown => {
+        root.alert = {
+            kind: "countdown",
+            label: String(countdown?.label ?? "") || Translation.tr("Timer"),
+            minutes: Math.round(Number(countdown?.durationSeconds ?? 0) / 60)
+        };
+    }
+
     function refreshCountdowns() {
         const current = Array.from(Persistent.states.timer.countdowns ?? []);
         let changed = false;
@@ -283,6 +299,13 @@ Singleton {
             if (Config.options.time.pomodoro.notify ?? true)
                 Quickshell.execDetached(["notify-send", "Pomodoro", notificationMessage, "-a", "Shell", "--hint=boolean:suppress-sound:true"]);
             SoundService.playEvent("pomodoro", "alarm-clock-elapsed");
+
+            const long = pomodoroBreak && (pomodoroCycle + 1 == cyclesBeforeLongBreak);
+            root.alert = {
+                kind: long ? "longBreak" : pomodoroBreak ? "break" : "focus",
+                label: "Pomodoro",
+                minutes: Math.floor((long ? longBreakTime : pomodoroBreak ? breakTime : focusTime) / 60)
+            };
 
             if (!pomodoroBreak) {
                 Persistent.states.timer.pomodoro.cycle = (Persistent.states.timer.pomodoro.cycle + 1) % root.cyclesBeforeLongBreak;

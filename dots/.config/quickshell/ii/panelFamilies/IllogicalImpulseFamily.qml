@@ -325,6 +325,11 @@ Scope {
         panelUrl: Qt.resolvedUrl("../modules/ii/bedtimeOverlay/BedtimeOverlay.qml")
     }
     PanelUrlLoader {
+        // Pomodoro phase change or a finished timer: the bedtime-style card, no sound.
+        extraCondition: TimerService.alert !== null
+        panelUrl: Qt.resolvedUrl("../modules/ii/timerAlertPopup/TimerAlertPopup.qml")
+    }
+    PanelUrlLoader {
         extraCondition: GlobalStates.screenshotOverlayOpen
         panelUrl: Qt.resolvedUrl("../modules/ii/screenshotOverlay/ScreenshotOverlay.qml")
     }
