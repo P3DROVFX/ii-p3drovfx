@@ -175,6 +175,8 @@ Singleton {
             "icon": "apps",
             "description": "Right-click on an app in the dock",
             "entries": [
+                { "id": "appNotifications", "symbol": "notifications", "title": "Notifications", "block": true },
+                { "id": "separator-n", "separator": true },
                 { "id": "appActions", "symbol": "arrow_outward", "title": "App actions", "block": true },
                 { "id": "separator", "separator": true },
                 { "id": "launch", "symbol": "launch", "title": "Launch", "bar": true },

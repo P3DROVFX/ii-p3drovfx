@@ -16,6 +16,10 @@ DockContextMenuBase {
     readonly property int windowCount: root.appToplevel?.toplevels?.length ?? 0
     readonly property bool pinned: !!root.appToplevel && TaskbarApps.isPinned(root.appToplevel.appId)
 
+    // The app's notifications, newest first: the three on show, the rest as a count.
+    readonly property var appNotifications: root.menuOpen
+        ? Notifications.notificationsForApp(root.appToplevel?.appId ?? "", root.desktopEntry?.name ?? "") : []
+
     menuId: "dockApp"
     customTarget: root.appToplevel?.appId ?? ""
     headerText: root.desktopEntry?.name ?? (root.appToplevel ? root.appToplevel.appId : "")
@@ -32,6 +36,18 @@ DockContextMenuBase {
 
     // Only built while the menu is open: a closed menu holds no rows.
     menuGroups: root.menuOpen ? [
+        root.appNotifications.slice(0, 3).map(notif => ({
+            id: "notification:" + notif.notificationId,
+            block: "appNotifications",
+            icon: "notifications",
+            text: notif.summary || notif.body,
+            subtitle: notif.summary ? notif.body : ""
+        })).concat(root.appNotifications.length > 3 ? [{
+            id: "notificationsClear",
+            block: "appNotifications",
+            icon: "clear_all",
+            text: Translation.tr("%1 more - clear all").arg(root.appNotifications.length - 3)
+        }] : []),
         (root.desktopEntry?.actions ?? []).map((action, index) => ({
             id: "desktopAction:" + index,
             // The app's own actions move and hide as one entry.
@@ -73,7 +89,12 @@ DockContextMenuBase {
     ] : []
 
     onActionTriggered: actionId => {
-        if (actionId.startsWith("desktopAction:")) {
+        if (actionId.startsWith("notification:")) {
+            // Reading a notification from here dismisses it, as in the sidebar.
+            Notifications.discardNotification(parseInt(actionId.substring(13)));
+        } else if (actionId === "notificationsClear") {
+            Notifications.discardMultipleNotifications(root.appNotifications.map(n => n.notificationId));
+        } else if (actionId.startsWith("desktopAction:")) {
             const action = (root.desktopEntry?.actions ?? [])[parseInt(actionId.substring(14))];
             action?.execute();
         } else if (actionId === "launch") {

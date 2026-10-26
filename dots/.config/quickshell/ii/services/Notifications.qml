@@ -281,6 +281,26 @@ Singleton {
         return groups;
     }
 
+    // Whether a notification's app name is this dock app: the same loose match
+    // the dock button uses to ring when one arrives.
+    function appNameMatches(notifAppName, ...targets) {
+        const appName = String(notifAppName || "").toLowerCase();
+        if (appName === "")
+            return false;
+        return targets.some(target => {
+            const name = String(target || "").toLowerCase();
+            return name !== "" && (appName === name || name.includes(appName) || appName.includes(name));
+        });
+    }
+
+    // The tracked notifications of one app, newest first, for its dock menu.
+    function notificationsForApp(appId, appName) {
+        return (root.list ?? [])
+            .filter(notif => notif && root.appNameMatches(notif.appName, appName, appId)
+                && (String(notif.summary || "").trim() || String(notif.body || "").trim()))
+            .sort((a, b) => b.time - a.time);
+    }
+
     // Computed group bindings - automatically cached by the QML engine and re-evaluated reactively.
     property var groupsByAppName: groupsForList(root.list)
     property var popupGroupsByAppName: groupsForList(root.popupList)
