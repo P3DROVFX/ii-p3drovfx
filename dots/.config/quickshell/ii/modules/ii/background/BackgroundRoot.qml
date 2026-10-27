@@ -339,12 +339,13 @@ PanelWindow {
     readonly property real wallpaperBoxHeight: bgRoot.wallpaperFramed ? bgRoot.screen.height : bgRoot.wallpaperHeight
     // The geometry Edit Mode's overlay turns a drag into a position with: the
     // plane a framed picture gets (the screen at the workspace zoom) and the
-    // picture's own size, once the probe has measured it.
+    // picture's own size in logical pixels (the unit the centred fit draws it
+    // in), once the probe has measured it.
     readonly property var framingGeometry: ({
         "planeWidth": bgRoot.screen ? bgRoot.screen.width * bgRoot.baseWallpaperScale : 0,
         "planeHeight": bgRoot.screen ? bgRoot.screen.height * bgRoot.baseWallpaperScale : 0,
-        "imageWidth": bgRoot.wallpaperSizeKnown ? bgRoot.wallpaperWidth : 0,
-        "imageHeight": bgRoot.wallpaperSizeKnown ? bgRoot.wallpaperHeight : 0
+        "imageWidth": bgRoot.wallpaperSizeKnown ? wallpaperImage.logicalFileWidth : 0,
+        "imageHeight": bgRoot.wallpaperSizeKnown ? wallpaperImage.logicalFileHeight : 0
     })
     onFramingGeometryChanged: bgRoot.publishFramingGeometry()
     function publishFramingGeometry() {

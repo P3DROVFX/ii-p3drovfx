@@ -68,6 +68,31 @@ TestCase {
         verify(covers(1920, 1080, frame));
     }
 
+    function test_centered_keeps_the_picture_at_its_own_size() {
+        // Smaller than the plane: drawn 1:1, in the middle, edges left open.
+        const small = Framing.layout(1920, 1080, 1280, 720, { "centered": true });
+        compare(small.width, 1280);
+        compare(small.height, 720);
+        compare(small.x, 0);
+        compare(small.y, 0);
+        verify(!covers(1920, 1080, small));
+        // Larger: the biggest the plane holds, same proportions, never cropped.
+        const big = Framing.layout(1920, 1080, 3840, 1920, { "centered": true });
+        fuzzyCompare(big.width, 1920, 1e-6);
+        fuzzyCompare(big.height, 960, 1e-6);
+        // Off, and half-way through the switch, it is the cover fit as ever.
+        verify(covers(1920, 1080, Framing.layout(1920, 1080, 1280, 720, {})));
+        const half = Framing.layout(1920, 1080, 1280, 720, { "centered": true }, undefined, 0.5);
+        verify(half.width > 1280 && half.width < 1920);
+    }
+
+    function test_centered_is_part_of_the_framing() {
+        verify(!Framing.isIdentity({ "centered": true }));
+        verify(!Framing.equal({ "centered": true }, {}));
+        compare(Framing.normalize({ "centered": "yes" }).centered, false);
+        compare(Framing.normalize({ "centered": true }).centered, true);
+    }
+
     function test_zoom_and_pan_always_cover() {
         const planes = [[1920, 1080], [2560, 1440], [1080, 1920], [3440, 1440]];
         const images = [[3840, 2160], [1600, 1200], [1080, 1920], [6000, 1000]];

@@ -23,6 +23,12 @@
 //             never ask for more room than there is.
 //   rotation  0, 90, 180 or 270, clockwise.
 //   flipH/V   mirrored horizontally / vertically.
+//   centered  the picture at its own size (one picture pixel per logical
+//             pixel, so the caller passes the file's size divided by the
+//             screen's pixel ratio), never larger than the plane and never
+//             stretched, with the rest of the plane left to the backdrop.
+//             The one framing that does not cover the plane; zoom 1 is that
+//             size and the zoom above it works as it does anywhere else.
 //
 // `layout()` also takes a continuous angle, which is what makes a quarter turn
 // animatable: half-way through, a rectangle that covered the plane square-on
@@ -34,7 +40,7 @@ var ZOOM_MAX = 4.0;
 var EPSILON = 0.0005;
 
 function defaults() {
-    return { "zoom": 1, "x": 0, "y": 0, "rotation": 0, "flipH": false, "flipV": false };
+    return { "zoom": 1, "x": 0, "y": 0, "rotation": 0, "flipH": false, "flipV": false, "centered": false };
 }
 
 function clamp(value, lo, hi) {
@@ -63,7 +69,8 @@ function normalize(raw) {
         "y": clamp(finite(source.y, 0), -1, 1),
         "rotation": snapRotation(source.rotation),
         "flipH": source.flipH === true,
-        "flipV": source.flipV === true
+        "flipV": source.flipV === true,
+        "centered": source.centered === true
     };
 }
 
@@ -74,7 +81,8 @@ function isIdentity(raw) {
         && Math.abs(f.y) < EPSILON
         && f.rotation === 0
         && !f.flipH
-        && !f.flipV;
+        && !f.flipV
+        && !f.centered;
 }
 
 function equal(a, b) {
@@ -85,7 +93,8 @@ function equal(a, b) {
         && Math.abs(p.y - q.y) < EPSILON
         && p.rotation === q.rotation
         && p.flipH === q.flipH
-        && p.flipV === q.flipV;
+        && p.flipV === q.flipV
+        && p.centered === q.centered;
 }
 
 // Whether a quarter turn swaps the picture's width and height on screen.
@@ -143,8 +152,10 @@ function coverCorrection(planeWidth, planeHeight, width, height, angle, cx, cy) 
 //   scale           drawn size / the image's own pixel size
 //
 // `angle` overrides the framing's own rotation, for the frames of an animated
-// turn; leave it undefined otherwise.
-function layout(planeWidth, planeHeight, imageWidth, imageHeight, raw, angle) {
+// turn; leave it undefined otherwise. `centering` (0..1) does the same for
+// `centered`, for the frames of the switch between the two fits: 0 covers the
+// plane, 1 shows the picture at its own size.
+function layout(planeWidth, planeHeight, imageWidth, imageHeight, raw, angle, centering) {
     const f = normalize(raw);
     const turn = angle === undefined || angle === null ? f.rotation : finite(angle, f.rotation);
     const result = {
@@ -164,12 +175,18 @@ function layout(planeWidth, planeHeight, imageWidth, imageHeight, raw, angle) {
 
     const bounds = rotatedBounds(imageWidth, imageHeight, turn);
     const cover = Math.max(planeWidth / bounds.width, planeHeight / bounds.height);
-    let scale = cover * f.zoom;
+    const t = centering === undefined || centering === null ? (f.centered ? 1 : 0) : clamp(finite(centering, 0), 0, 1);
+    // Its own size, or the largest the plane holds when the picture is bigger.
+    const own = Math.min(1, Math.min(planeWidth / bounds.width, planeHeight / bounds.height));
+    let scale = (cover + (own - cover) * t) * f.zoom;
     const rangeX = Math.max(0, (bounds.width * scale - planeWidth) / 2);
     const rangeY = Math.max(0, (bounds.height * scale - planeHeight) / 2);
     const cx = -f.x * rangeX;
     const cy = -f.y * rangeY;
-    scale *= coverCorrection(planeWidth, planeHeight, imageWidth * scale, imageHeight * scale, turn, cx, cy);
+    // A picture meant to leave the plane's edges showing is not pulled back
+    // over them; this is the only fit that skips the correction.
+    if (t === 0)
+        scale *= coverCorrection(planeWidth, planeHeight, imageWidth * scale, imageHeight * scale, turn, cx, cy);
 
     result.width = imageWidth * scale;
     result.height = imageHeight * scale;

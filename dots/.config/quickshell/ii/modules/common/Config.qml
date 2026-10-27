@@ -4520,6 +4520,9 @@ Singleton {
                 }
                 property list<var> activeWidgets: []
                 property bool scaleLargeWallpapers: false
+                // What a wallpaper framed as Centered (Edit Mode's wallpaper
+                // dock) leaves uncovered around the picture.
+                property string centeredBackground: "#000000"
                 property bool animateWallpaperChanges: true
                 property string wallpaperAnimation: ""
                 property bool zoomOutEnabled: true  // master toggle for zoom-out animations
@@ -4594,7 +4597,7 @@ Singleton {
                 // Per screen, written by Edit Mode's Wallpaper catalogue
                 // (services/WallpaperLayout.qml): a screen's own wallpaper and
                 // how it frames each picture it has shown.
-                //   [{ monitor, key, path, framings: [{ path, zoom, x, y, rotation, flipH, flipV }] }]
+                //   [{ monitor, key, path, framings: [{ path, zoom, x, y, rotation, flipH, flipV, centered }] }]
                 // `key` = the monitor's "model/serial" ("" when it cannot be
                 // told apart), so an entry follows the monitor across ports.
                 // `path` "" = the shared wallpaper above, which is also the

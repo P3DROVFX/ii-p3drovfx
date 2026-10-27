@@ -99,7 +99,7 @@ Item {
     readonly property var frame: root.ready
         ? WallpaperFraming.layout(root.geometry.planeWidth, root.geometry.planeHeight,
             root.geometry.imageWidth, root.geometry.imageHeight,
-            WallpaperLayout.liveFraming, WallpaperLayout.liveAngle)
+            WallpaperLayout.liveFraming, WallpaperLayout.liveAngle, WallpaperLayout.liveCentering)
         : null
     readonly property var target: WallpaperLayout.gestureTarget()
     readonly property bool canMoveX: root.frame !== null && root.frame.rangeX > 0.5
@@ -786,6 +786,21 @@ Item {
                     }
                 }
 
+                // ── Fit ──────────────────────────────────────────────────
+                // The picture at its own size, centred, with the rest of the
+                // screen left to the backdrop colour; off covers the screen.
+                Segment {
+                    position: "single"
+                    tonal: false
+                    symbol: "aspect_ratio"
+                    activeShape: MaterialShape.Shape.Square
+                    toggled: root.target.centered
+                    tooltip: root.target.centered
+                        ? Translation.tr("Centered at its own size (click to fill the screen)")
+                        : Translation.tr("Centered: show at its own size")
+                    onClicked: WallpaperLayout.setCentered(root.screenName, !root.target.centered)
+                }
+
                 // ── Position ─────────────────────────────────────────────
                 RippleButton {
                     id: centreButton
@@ -865,7 +880,7 @@ Item {
 
                         StyledToolTip {
                             requireOverlay: false
-                            text: Translation.tr("Reset position, zoom and orientation")
+                            text: Translation.tr("Reset position, zoom, orientation and fit")
                         }
                     }
                 }
@@ -912,7 +927,7 @@ Item {
     // morphs from a plain circle into the segment's own shape.
     component Segment: RippleButton {
         id: segment
-        property string position: "middle"   // "first", "middle" or "last"
+        property string position: "middle"   // "first", "middle", "last", or "single" for a group of one
         // Tonal segments sit on the secondary container (the zoom stepper);
         // the others are quiet until toggled (the orientation group).
         property bool tonal: true
@@ -927,8 +942,8 @@ Item {
             enabled: !Appearance.reducedMotion
             animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(this)
         }
-        readonly property bool openLeft: segment.position !== "first"
-        readonly property bool openRight: segment.position !== "last"
+        readonly property bool openLeft: segment.position !== "first" && segment.position !== "single"
+        readonly property bool openRight: segment.position !== "last" && segment.position !== "single"
 
         implicitWidth: root.controlHeight + (segment.position === "middle" ? 0 : 4)
         implicitHeight: root.controlHeight

@@ -68,9 +68,19 @@ Item {
     property string committedFramingKey: ""
     readonly property var framing: WallpaperLayout.framingFor(wallpaperImageRoot.screenName, wallpaperImageRoot.committedFramingKey)
     readonly property real framingAngle: WallpaperLayout.angleFor(wallpaperImageRoot.screenName, wallpaperImageRoot.committedFramingKey)
+    // 0 covers the plane, 1 shows the picture at its own size (continuous while
+    // the switch animates).
+    readonly property real framingCentering: WallpaperLayout.centeringFor(wallpaperImageRoot.screenName, wallpaperImageRoot.committedFramingKey)
+    // The picture's size in logical pixels: what the centred fit draws it at
+    // when it fits the plane. Covering only reads its proportions.
+    readonly property real logicalFileWidth: wallpaperImageRoot.fileWidth / wallpaperImageRoot.devicePixelRatio
+    readonly property real logicalFileHeight: wallpaperImageRoot.fileHeight / wallpaperImageRoot.devicePixelRatio
+    // The backdrop of whatever the centred picture leaves uncovered.
+    readonly property color centeredBackdrop: Config.options.background.centeredBackground ?? "#000000"
     // Read by the surface: a framed plane takes the screen's proportions.
     readonly property bool framed: !CF.WallpaperFraming.isIdentity(wallpaperImageRoot.framing)
         || Math.abs(wallpaperImageRoot.framingAngle % 360) > 0.001
+        || wallpaperImageRoot.framingCentering > 0.001
     readonly property var savedFraming: WallpaperLayout.savedFramingFor(wallpaperImageRoot.screenName, wallpaperImageRoot.framingKey)
 
     // A maximized or fullscreen window hides the plane: freeze the frame
@@ -184,6 +194,8 @@ Item {
         const sh = screen ? screen.height : 0;
         const fw = wallpaperImageRoot.fileWidth;
         const fh = wallpaperImageRoot.fileHeight;
+        const lw = wallpaperImageRoot.logicalFileWidth;
+        const lh = wallpaperImageRoot.logicalFileHeight;
         if (!(sw > 0) || !(sh > 0) || !(fw > 0) || !(fh > 0))
             return { "width": wallpaperContent.width, "height": wallpaperContent.height };
         const base = baseWallpaperScale > 0 ? baseWallpaperScale : 1;
@@ -191,7 +203,7 @@ Item {
             const ratio = Math.min(fw / sw, fh / sh);
             return { "width": fw / ratio * base, "height": fh / ratio * base };
         }
-        return CF.WallpaperFraming.layout(sw * base, sh * base, fw, fh, wallpaperImageRoot.savedFraming);
+        return CF.WallpaperFraming.layout(sw * base, sh * base, lw, lh, wallpaperImageRoot.savedFraming);
     }
     readonly property size rawDecodeSize: decodeSizeFor(decodeFrame.width, decodeFrame.height)
     property size stableDecodeSize: Qt.size(-1, -1)
@@ -200,6 +212,7 @@ Item {
     property bool framingRedecodePending: false
     readonly property string savedFramingScaleKey: wallpaperImageRoot.savedFraming.zoom.toFixed(3)
         + "/" + String(wallpaperImageRoot.savedFraming.rotation)
+        + "/" + String(wallpaperImageRoot.savedFraming.centered)
     onSavedFramingScaleKeyChanged: wallpaperImageRoot.framingRedecodePending = true
     // Settles with the debounce below. TransitionImage freezes the decode at
     // source-set and never re-decodes, so the source is only committed to the
@@ -920,12 +933,23 @@ Item {
                     // The desktop's own picture, framed (see `framing` above). The
                     // lock screen's separate picture below stays outside it: the
                     // framing belongs to the desktop wallpaper.
+                    // What the centred picture leaves uncovered. Inside the container
+                    // with the picture, so the blurs, the lock's treatments and Edit
+                    // Mode's card sample the letterboxed picture, not a hole.
+                    Rectangle {
+                        anchors.fill: parent
+                        color: wallpaperImageRoot.centeredBackdrop
+                        opacity: wallpaperImageRoot.framingCentering
+                        visible: opacity > 0
+                    }
+
                     Item {
                         id: framedContent
                         readonly property var frame: CF.WallpaperFraming.layout(
                             wallpaperVisualContainer.width, wallpaperVisualContainer.height,
-                            wallpaperImageRoot.fileWidth, wallpaperImageRoot.fileHeight,
-                            wallpaperImageRoot.framing, wallpaperImageRoot.framingAngle)
+                            wallpaperImageRoot.logicalFileWidth, wallpaperImageRoot.logicalFileHeight,
+                            wallpaperImageRoot.framing, wallpaperImageRoot.framingAngle,
+                            wallpaperImageRoot.framingCentering)
                         // Untouched, exactly the plane - not a layout that comes to the
                         // same numbers give or take a rounding.
                         width: wallpaperImageRoot.framed ? framedContent.frame.width : wallpaperVisualContainer.width

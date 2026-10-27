@@ -211,6 +211,22 @@ ColumnLayout {
                 text: Translation.tr("When enabled, decodes large wallpapers at screen resolution to save VRAM. When disabled (default, like upstream end-4), loads wallpapers at full native resolution for maximum sharpness.")
             }
         }
+
+        ConfigTextField {
+            Layout.fillWidth: true
+            icon: "format_color_fill"
+            text: Translation.tr("Centered wallpaper backdrop")
+            placeholderText: "#000000"
+            inputText: Config.options.background.centeredBackground
+            tooltip: Translation.tr("The colour around a wallpaper shown Centered at its own size (Edit Mode > Wallpaper). A hex colour such as #101418.")
+            textField.onEditingFinished: {
+                const value = textField.text.trim();
+                if (/^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(value))
+                    Config.options.background.centeredBackground = value;
+                else
+                    textField.text = Config.options.background.centeredBackground;
+            }
+        }
     }
 
     ContentSection {

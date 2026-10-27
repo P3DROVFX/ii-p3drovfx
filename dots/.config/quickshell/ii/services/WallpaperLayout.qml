@@ -186,6 +186,14 @@ Singleton {
         return root.savedFramingFor(name, path).rotation;
     }
 
+    // How far the picture is into the centred fit (0 covers the plane, 1 shows
+    // it at its own size): continuous while the switch animates.
+    function centeringFor(name, path) {
+        if (root.isLive(name, path))
+            return root.liveCentering;
+        return root.savedFramingFor(name, path).centered ? 1 : 0;
+    }
+
     // The wallpaper plane's geometry, published by each screen's wallpaper
     // surface: the plane a framed picture is laid out in (the screen at the
     // workspace zoom) and the picture's own pixel size. The overlay and the
@@ -230,6 +238,7 @@ Singleton {
     property real liveAngle: 0
     property bool liveFlipH: false
     property bool liveFlipV: false
+    property real liveCentering: 0
     // A gesture owns the live values: a config change arriving meanwhile (the
     // release's own write) must not animate them out from under the pointer.
     property bool interacting: false
@@ -240,7 +249,8 @@ Singleton {
         "y": root.liveY,
         "rotation": WallpaperFraming.snapRotation(root.liveAngle),
         "flipH": root.liveFlipH,
-        "flipV": root.liveFlipV
+        "flipV": root.liveFlipV,
+        "centered": root.liveCentering >= 0.5
     })
 
     onFramingScreenChanged: root.restartLive()
@@ -323,6 +333,7 @@ Singleton {
         root.liveAngle = angle === undefined ? f.rotation : angle;
         root.liveFlipH = f.flipH;
         root.liveFlipV = f.flipV;
+        root.liveCentering = f.centered ? 1 : 0;
     }
 
     function restartLive() {
@@ -377,6 +388,7 @@ Singleton {
         xAnim.to = target.x;
         yAnim.to = target.y;
         angleAnim.to = angle;
+        centeringAnim.to = target.centered ? 1 : 0;
         liveAnimation.start();
     }
 
@@ -410,6 +422,14 @@ Singleton {
             easing.bezierCurve: liveAnimation.tier.bezierCurve
         }
         NumberAnimation {
+            id: centeringAnim
+            target: root
+            property: "liveCentering"
+            duration: liveAnimation.tier.duration
+            easing.type: liveAnimation.tier.type
+            easing.bezierCurve: liveAnimation.tier.bezierCurve
+        }
+        NumberAnimation {
             id: angleAnim
             target: root
             property: "liveAngle"
@@ -432,8 +452,10 @@ Singleton {
         if (!liveAnimation.running)
             return;
         const angle = angleAnim.to;
+        const centering = centeringAnim.to;
         liveAnimation.stop();
         root.liveAngle = WallpaperFraming.snapRotation(angle);
+        root.liveCentering = centering;
     }
 
     function beginGesture() {
@@ -496,7 +518,8 @@ Singleton {
             "y": yAnim.to,
             "rotation": angleAnim.to,
             "flipH": root.liveFlipH,
-            "flipV": root.liveFlipV
+            "flipV": root.liveFlipV,
+            "centered": centeringAnim.to >= 0.5
         });
     }
 
@@ -625,6 +648,15 @@ Singleton {
     function flip(name, axis) {
         root.flushGesture();
         root.commitFraming(name, root.sourcePathFor(name), WallpaperFraming.flip(root.currentFraming(name), axis));
+    }
+
+    // Switches between covering the plane and the picture at its own size.
+    // The offset stays: it is relative to the room the fit leaves, which the
+    // next layout recomputes.
+    function setCentered(name, centered) {
+        root.flushGesture();
+        const next = Object.assign({}, root.currentFraming(name), { "centered": centered === true });
+        root.commitFraming(name, root.sourcePathFor(name), next);
     }
 
     function centre(name) {
