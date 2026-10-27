@@ -474,7 +474,10 @@ Item {
                 // Every other word it shows: its tooltip, description and
                 // option names ("Islands" on Dock style).
                 let extra = [];
-                for (const m of b.inner.matchAll(/Translation\.tr\(\s*"((?:\\.|[^"\\])*)"\s*\)/g))
+                // exec(), not matchAll(): the QML engine has no matchAll.
+                const trRe = /Translation\.tr\(\s*"((?:\\.|[^"\\])*)"\s*\)/g;
+                let m;
+                while ((m = trRe.exec(b.inner)) !== null)
                     if (m[1] !== textProp && extra.indexOf(m[1]) === -1)
                         extra.push(m[1]);
                 items.push({
