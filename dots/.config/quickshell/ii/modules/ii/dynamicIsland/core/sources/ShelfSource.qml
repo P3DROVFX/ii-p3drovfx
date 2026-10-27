@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import qs.modules.common
+import qs.services
 
 /**
  * Drop shelf source: active whenever files are stored in the shelf.
@@ -11,7 +11,7 @@ ContinuousSource {
 
     activityId: "shelf"
 
-    readonly property int itemCount: Persistent.ready ? (Persistent.states.dockUtilities.shelf ?? []).length : 0
+    readonly property int itemCount: FileShelf.count
 
     condition: source.itemCount > 0
 }

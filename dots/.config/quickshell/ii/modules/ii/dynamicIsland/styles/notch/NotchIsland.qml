@@ -16,7 +16,6 @@ import qs.modules.ii.dynamicIsland.core
 import qs.modules.ii.dynamicIsland.dashboard
 import qs.modules.ii.dynamicIsland.bubble
 import qs.modules.ii.overview
-import "../../../dock/utilities/UtilityFiles.js" as UtilityFiles
 
 /**
  * The notch: one surface hanging from the top edge, driven by the engine.
@@ -2613,9 +2612,7 @@ Scope {
                     source.dragOnRight = false;
 
                     if (targetCol === 1) {
-                        const rawUrls = drop.urls.map(url => url.toString());
-                        const currentShelf = Persistent.ready ? Array.from(Persistent.states.dockUtilities.shelf ?? []) : [];
-                        Persistent.states.dockUtilities.shelf = UtilityFiles.dedupe(currentShelf.concat(rawUrls));
+                        FileShelf.add(drop.urls.map(url => url.toString()));
                         source.dragHovering = false;
                         source.serviceChoice = 0;
                         drop.accept(Qt.CopyAction);

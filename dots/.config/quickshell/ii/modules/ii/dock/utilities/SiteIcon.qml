@@ -18,6 +18,8 @@ Item {
     property real renderScale: 1
     // How much of the plate the favicon fills; small cells want it larger.
     property real iconScale: 0.62
+    // The plate behind a favicon; desktop widgets pass their colour scheme's.
+    property color colPlate: ClockStyle.colSurfaceHighest
 
     readonly property string host: {
         const match = String(icon.url).match(/^[a-z]+:\/\/([^\/:?#]+)/i);
@@ -44,7 +46,7 @@ Item {
     Rectangle {
         anchors.fill: parent
         radius: icon.radius
-        color: faviconImage.status === Image.Ready ? ClockStyle.colSurfaceHighest : icon.tint
+        color: faviconImage.status === Image.Ready ? icon.colPlate : icon.tint
 
         Image {
             id: faviconImage

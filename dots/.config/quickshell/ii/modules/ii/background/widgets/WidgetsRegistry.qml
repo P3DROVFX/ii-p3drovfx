@@ -894,6 +894,78 @@ Singleton {
             "configPage": "widgets/DesktopSearchPillConfig.qml"
         },
         {
+            "widgetId": "converter_2x1",
+            "name": Translation.tr("Converter (2x1)"),
+            "category": "Utility",
+            "qmlPath": Qt.resolvedUrl("utility/ConverterWidget.qml"),
+            "icon": "swap_horiz",
+            "description": Translation.tr("2x1 unit converter: length, weight, temperature, data, area, volume, speed and time, with a connected category group, a typed value and a swap key."),
+            "configPage": "widgets/DesktopConverterWidgetConfig.qml"
+        },
+        {
+            "widgetId": "shelf_1x1",
+            "name": Translation.tr("Drop Shelf (1x1)"),
+            "category": "Utility",
+            "qmlPath": Qt.resolvedUrl("utility/ShelfWidget1x1.qml"),
+            "icon": "shelves",
+            "description": Translation.tr("1x1 drop shelf: leave files here mid-drag, then drag the stack into any app. Shares its files with the dock's Shelf."),
+            "configPage": "widgets/DesktopShelfWidgetsConfig.qml"
+        },
+        {
+            "widgetId": "shelf_2x1",
+            "name": Translation.tr("Drop Shelf (2x1)"),
+            "category": "Utility",
+            "qmlPath": Qt.resolvedUrl("utility/ShelfWidget2x1.qml"),
+            "icon": "shelves",
+            "description": Translation.tr("2x1 drop shelf: the stack beside a grid of the files, each dragged out on its own. Shares its files with the dock's Shelf."),
+            "configPage": "widgets/DesktopShelfWidgetsConfig.qml"
+        },
+        {
+            "widgetId": "shelf_1x2",
+            "name": Translation.tr("Drop Shelf (1x2)"),
+            "category": "Utility",
+            "qmlPath": Qt.resolvedUrl("utility/ShelfWidget1x2.qml"),
+            "icon": "shelves",
+            "description": Translation.tr("1x2 drop shelf: the stack above a list of the files with their names. Shares its files with the dock's Shelf."),
+            "configPage": "widgets/DesktopShelfWidgetsConfig.qml"
+        },
+        {
+            "widgetId": "favorites_1x1",
+            "name": Translation.tr("Favorites (1x1)"),
+            "category": "Utility",
+            "qmlPath": Qt.resolvedUrl("utility/FavoritesGridWidget.qml"),
+            "icon": "bookmarks",
+            "description": Translation.tr("1x1 grid of four favorite sites with their icons, the dock's Favorites list. Drop a link on it to add one."),
+            "configPage": "widgets/DesktopFavoritesWidgetsConfig.qml"
+        },
+        {
+            "widgetId": "favorites_row",
+            "name": Translation.tr("Favorites (1x0.5)"),
+            "category": "Utility",
+            "qmlPath": Qt.resolvedUrl("utility/FavoritesRowWidget.qml"),
+            "icon": "bookmarks",
+            "description": Translation.tr("1x0.5 row of four favorite sites with their icons, the dock's Favorites list. Drop a link on it to add one."),
+            "configPage": "widgets/DesktopFavoritesWidgetsConfig.qml"
+        },
+        {
+            "widgetId": "search_pixel",
+            "name": Translation.tr("Pixel Search Bar"),
+            "category": "Utility",
+            "qmlPath": Qt.resolvedUrl("utility/PixelSearchBarWidget.qml"),
+            "icon": "search",
+            "description": Translation.tr("2x0.5 Pixel-style search pill with the logo, two keys inside and an accent circle beside it."),
+            "configPage": "widgets/DesktopSearchBarsConfig.qml"
+        },
+        {
+            "widgetId": "search_shortcuts",
+            "name": Translation.tr("Search with Shortcuts"),
+            "category": "Utility",
+            "qmlPath": Qt.resolvedUrl("utility/SearchShortcutsWidget.qml"),
+            "icon": "manage_search",
+            "description": Translation.tr("2x0.5 search bar on a card with an accent key and a row of four shortcut buttons under it."),
+            "configPage": "widgets/DesktopSearchBarsConfig.qml"
+        },
+        {
             "widgetId": "quote",
             "name": Translation.tr("Quote"),
             "category": "Utility",

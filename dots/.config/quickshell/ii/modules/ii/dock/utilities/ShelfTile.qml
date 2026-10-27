@@ -19,18 +19,19 @@ import "UtilityFiles.js" as UtilityFiles
 UtilityTile {
     id: tile
 
-    readonly property var items: Persistent.ready ? Array.from(Persistent.states.dockUtilities.shelf ?? []) : []
-    readonly property int count: tile.items.length
-    readonly property string newest: tile.count > 0 ? tile.items[tile.count - 1] : ""
+    // The store is FileShelf, shared with the desktop Drop Shelf widgets and the island.
+    readonly property var items: FileShelf.items
+    readonly property int count: FileShelf.count
+    readonly property string newest: FileShelf.newest
 
     function dropFiles(urls) {
-        Persistent.states.dockUtilities.shelf = UtilityFiles.dedupe(tile.items.concat(urls));
+        FileShelf.add(urls);
     }
     function remove(path) {
-        Persistent.states.dockUtilities.shelf = tile.items.filter(item => item !== path);
+        FileShelf.remove(path);
     }
     function clear() {
-        Persistent.states.dockUtilities.shelf = [];
+        FileShelf.clear();
     }
     function exportPaths() {
         return tile.items;

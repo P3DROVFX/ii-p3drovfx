@@ -106,6 +106,9 @@ ColumnLayout {
                         }
                         StyledText {
                             visible: segment.chosen
+                            // Eight categories share the row: a long name elides.
+                            Layout.maximumWidth: Math.max(0, segment.width - 46)
+                            elide: Text.ElideRight
                             text: Translation.tr(segment.modelData.title)
                             color: ClockStyle.colOnPrimary
                             font.pixelSize: ClockStyle.textNormal

@@ -931,7 +931,7 @@ Item {
 
         Item {
             id: shelfItem
-            readonly property var items: Persistent.ready ? Array.from(Persistent.states.dockUtilities.shelf ?? []) : []
+            readonly property var items: FileShelf.items
             readonly property real preferredWidth: root.diameter
 
             MaterialSymbol {

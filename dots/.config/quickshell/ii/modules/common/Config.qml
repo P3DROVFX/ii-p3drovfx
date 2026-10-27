@@ -4487,6 +4487,79 @@ Singleton {
                         property string localsendIp: ""
                         property string localsendAlias: ""
                     }
+                    property JsonObject converter_2x1: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 120
+                        property int widgetSize: 100
+                        property string category: "length"
+                        property string from: "cm"
+                        property string to: "in"
+                        property real value: 1
+                    }
+                    property JsonObject shelf_1x1: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 120
+                        property int widgetSize: 100
+                    }
+                    property JsonObject shelf_2x1: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 120
+                        property int widgetSize: 100
+                    }
+                    property JsonObject shelf_1x2: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 120
+                        property int widgetSize: 100
+                    }
+                    property JsonObject favorites_1x1: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 120
+                        property int widgetSize: 100
+                        property bool showLabels: true
+                    }
+                    property JsonObject favorites_row: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 120
+                        property int widgetSize: 100
+                        property bool showLabels: true
+                    }
+                    property JsonObject search_pixel: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 120
+                        property int widgetSize: 100
+                        property string logo: "google" // google | distro | spark
+                        property string hint: ""
+                        property string action1: "lens"
+                        property string action2: "music_rec"
+                        property string action3: "ai_chat"
+                    }
+                    property JsonObject search_shortcuts: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 120
+                        property int widgetSize: 100
+                        property string hint: ""
+                        property string barAction: "ai_chat"
+                        property string shortcut1: "clipboard"
+                        property string shortcut2: "emojis"
+                        property string shortcut3: "files"
+                        property string shortcut4: "lens"
+                    }
                     property JsonObject session_grid: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free"

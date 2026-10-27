@@ -92,6 +92,14 @@ Item {
         "phone_tower": component_phone_tower,
         "send_drop": component_send_drop,
         "session_grid": component_session_grid,
+        "converter_2x1": component_converter_2x1,
+        "shelf_1x1": component_shelf_1x1,
+        "shelf_2x1": component_shelf_2x1,
+        "shelf_1x2": component_shelf_1x2,
+        "favorites_1x1": component_favorites_1x1,
+        "favorites_row": component_favorites_row,
+        "search_pixel": component_search_pixel,
+        "search_shortcuts": component_search_shortcuts,
         "clock_type_weight": component_clock_type_weight,
         "clock_type_width": component_clock_type_width,
         "clock_type_stack": component_clock_type_stack,
@@ -1787,6 +1795,110 @@ Item {
         id: component_resource_nothing_disk
 
         NothingDiskWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_converter_2x1
+
+        ConverterWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_shelf_1x1
+
+        ShelfWidget1x1 {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_shelf_2x1
+
+        ShelfWidget2x1 {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_shelf_1x2
+
+        ShelfWidget1x2 {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_favorites_1x1
+
+        FavoritesGridWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_favorites_row
+
+        FavoritesRowWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_search_pixel
+
+        PixelSearchBarWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_search_shortcuts
+
+        SearchShortcutsWidget {
             screenWidth: delegateRoot.screenWidth
             screenHeight: delegateRoot.screenHeight
             scaledScreenWidth: delegateRoot.screenWidth

@@ -23,22 +23,22 @@ Item {
     property bool inBubbleCard: false
     property bool isExpanded: false
 
-    readonly property var items: Persistent.ready ? Array.from(Persistent.states.dockUtilities.shelf ?? []) : []
-    readonly property int count: root.items.length
+    readonly property var items: FileShelf.items
+    readonly property int count: FileShelf.count
 
     // Adapter for ShelfPanel host contract
     readonly property var tile: QtObject {
         readonly property var items: root.items
         readonly property int count: root.count
-        readonly property string newest: root.count > 0 ? root.items[root.count - 1] : ""
+        readonly property string newest: FileShelf.newest
         function dropFiles(urls) {
-            Persistent.states.dockUtilities.shelf = UtilityFiles.dedupe(root.items.concat(urls));
+            FileShelf.add(urls);
         }
         function remove(path) {
-            Persistent.states.dockUtilities.shelf = root.items.filter(item => item !== path);
+            FileShelf.remove(path);
         }
         function clear() {
-            Persistent.states.dockUtilities.shelf = [];
+            FileShelf.clear();
         }
         function exportPaths() {
             return root.items;
