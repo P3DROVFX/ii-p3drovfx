@@ -194,7 +194,7 @@ Singleton {
         const avoidPath = root.activePath;
         const targetPath = Array.from(root.baseShaderPaths).find(path => path !== avoidPath) ?? root.baseShaderPaths[0];
         baseRefreshProc.targetPath = targetPath;
-        baseRefreshProc.command = ["hyprctl", "keyword", "decoration:screen_shader", targetPath];
+        baseRefreshProc.command = ["hyprctl", "eval", `hl.config({ decoration = { screen_shader = ${JSON.stringify(targetPath)} } })`];
         baseRefreshProc.running = true;
     }
 

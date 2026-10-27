@@ -52,8 +52,7 @@ Singleton {
         return true;
     }
     function _applyKeyboardLayoutRuntime(layout: string, variant: string) {
-        Quickshell.execDetached(["hyprctl", "keyword", "input:kb_layout", layout]);
-        Quickshell.execDetached(["hyprctl", "keyword", "input:kb_variant", variant]);
+        Quickshell.execDetached(["hyprctl", "eval", `hl.config({ input = { kb_layout = ${JSON.stringify(layout)}, kb_variant = ${JSON.stringify(variant)} } })`]);
     }
     function _queueShellOverridesCommand(command: string) {
         root._queueConfigWrite({
