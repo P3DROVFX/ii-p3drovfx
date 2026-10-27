@@ -38,6 +38,22 @@ Item {
     property string _memoQuery: ""
     property var _memoResults: null
 
+    // Every indexed text split once, by text: a keystroke only looks words up.
+    // Scoring used to re-normalize and re-split ~5000 texts on every query,
+    // which is what kept search off the keystroke (cf. the launcher's
+    // AiSettingsIntegration.scoreIndex).
+    property var _textCache: ({})
+    // Every word the index holds. Typo and synonym matching run once per
+    // query word over this, not once per indexed text.
+    property var _vocabulary: null
+    // Query word -> { indexed word: score }, for the index in hand.
+    property var _wordHits: ({})
+    property var _synonymIndex: null
+
+    // What the results page shows. Separate from currentSearch, which also
+    // means "flash this heading" and is cleared by whatever it flashed.
+    property string query: ""
+
     property string currentSearch: ""
     onCurrentSearchChanged: {
         console.log("Current found search result string:", currentSearch);
@@ -53,6 +69,8 @@ Item {
         landmarks = [];
         landmarkBlocks = ({});
         root._memoResults = null;
+        root._vocabulary = null;
+        root._wordHits = ({});
         root.indexed = false;
         root.indexing = true;
         root._sectionsDone = false;
@@ -114,6 +132,8 @@ Item {
         root.indexing = false;
         root.indexed = true;
         root._memoResults = null;
+        root._vocabulary = null;
+        root._wordHits = ({});
         root.indexReady();
     }
 
@@ -140,6 +160,10 @@ Item {
         root.landmarkBlocks = ({});
         root._memoResults = null;
         root._memoQuery = "";
+        root._textCache = ({});
+        root._vocabulary = null;
+        root._wordHits = ({});
+        root.query = "";
         root.currentSearch = "";
         pageFile.cancel();
         landmarkCrawler.cancel();
@@ -325,6 +349,8 @@ Item {
 
     function addDynamicPresetName(name) {
         root._memoResults = null;
+        root._vocabulary = null;
+        root._wordHits = ({});
         for (let i = 0; i < sections.length; i++) {
             let section = sections[i];
             if (section.pageId === "presets") {
@@ -615,22 +641,212 @@ Item {
         return "";
     }
 
-    function tokenize(text) {
-        if (!text || typeof text !== "string") return [];
-        return text.toLowerCase().replace(/[^a-z0-9\sğüşöçıİ_\-\.]/g, " ").split(/[\s_\-\.]+/).filter(function (t) {
-            return t.length > 1;
-        });
+    // Lower case without accents: "Réseau" used to lose its "é" and split in two.
+    function normalize(text) {
+        let s = String(text ?? "").toLowerCase();
+        if (typeof s.normalize === "function")
+            s = s.normalize("NFKD").replace(/[̀-ͯ]/g, "");
+        return s;
     }
 
-    function fuzzyMatch(word, query) {
-        let wi = 0; let qi = 0; let score = 0;
-        word = word.toLowerCase(); query = query.toLowerCase();
-        while (wi < word.length && qi < query.length) {
-            if (word[wi] === query[qi]) { score += 10; qi++; }
-            wi++;
+    /*
+     * The words of a text, each joined word also whole: "Wi-Fi" is wi, fi and
+     * wifi, so "wifi" finds it. With `adjacent`, neighbouring words are also
+     * joined, so "lockscreen" finds "Lock screen".
+     */
+    function tokenize(text, adjacent) {
+        if (!text || typeof text !== "string") return [];
+        let tokens = [];
+        let previous = "";
+        for (const chunk of root.normalize(text).split(/[^a-z0-9ı_\-.\/']+/)) {
+            const parts = chunk.split(/[_\-.\/']+/).filter(p => p.length > 0);
+            if (parts.length === 0)
+                continue;
+            const joined = parts.join("");
+            for (const p of parts)
+                if (p.length > 1)
+                    tokens.push(p);
+            if (parts.length > 1 && joined.length > 1)
+                tokens.push(joined);
+            if (adjacent && previous !== "")
+                tokens.push(previous + joined);
+            previous = joined;
         }
-        if (qi === query.length) return score;
-        return 0;
+        return tokens;
+    }
+
+    // A query keeps joined words whole: "wi-fi" must not need a word "fi".
+    function queryWords(query) {
+        let words = [];
+        for (const chunk of root.normalize(query).split(/[^a-z0-9ı_\-.\/']+/)) {
+            const joined = chunk.split(/[_\-.\/']+/).join("");
+            if (joined.length > 1)
+                words.push(joined);
+        }
+        return words;
+    }
+
+    function textRecord(text) {
+        let rec = root._textCache[text];
+        if (rec !== undefined)
+            return rec;
+        const tokens = root.tokenize(text, true);
+        let set = {};
+        for (const t of tokens)
+            set[t] = true;
+        rec = { norm: root.normalize(text), tokens: tokens, set: set };
+        root._textCache[text] = rec;
+        return rec;
+    }
+
+    function vocabulary() {
+        if (root._vocabulary !== null)
+            return root._vocabulary;
+        let seen = {};
+        const add = text => {
+            if (text)
+                for (const t of root.textRecord(text).tokens)
+                    seen[t] = true;
+        };
+        for (const section of root.sections) {
+            add(section.title);
+            section.searchStrings.forEach(add);
+            for (const item of section.items)
+                add(item.text);
+            for (const sub of section.subsections) {
+                add(sub.title);
+                for (const item of sub.items)
+                    add(item.text);
+            }
+        }
+        for (const l of root.landmarks) {
+            add(l.text);
+            add(l.key);
+            add(l.subPageTitle);
+        }
+        for (const page of SettingsPageRegistry.pages) {
+            add(Translation.tr(page.name ?? ""));
+            add(page.name);
+            (page.aliases ?? []).forEach(add);
+        }
+        root._vocabulary = Object.keys(seen);
+        return root._vocabulary;
+    }
+
+    /*
+     * What people type for what the pages call something else. A word answers
+     * for every other word of its group, a little below the word itself.
+     */
+    function synonymsOf(word) {
+        if (root._synonymIndex === null) {
+            const groups = [
+                ["sleep", "suspend", "hibernate"],
+                ["dnd", "disturb"],
+                ["hotkey", "hotkeys", "shortcut", "shortcuts", "keybind", "keybinds", "keybinding", "keybindings", "binds"],
+                ["audio", "sound"],
+                ["wifi", "wireless", "wlan"],
+                ["bt", "bluetooth"],
+                ["display", "displays", "monitor", "monitors"],
+                ["opacity", "transparency", "transparent", "translucent"],
+                ["brightness", "backlight"],
+                ["rounding", "radius", "corner", "corners", "roundness"],
+                ["theme", "scheme"],
+                ["font", "fonts", "typeface"],
+                ["animation", "animations", "motion"],
+                ["mouse", "pointer", "cursor"],
+                ["touchpad", "trackpad"],
+                ["mic", "microphone"],
+                ["language", "locale"],
+                ["update", "updates", "upgrade"],
+                ["osk", "keyboard"],
+                ["screenshot", "screengrab", "printscreen"]
+            ];
+            let index = {};
+            for (const group of groups)
+                for (const w of group)
+                    index[w] = (index[w] ?? []).concat(group.filter(other => other !== w));
+            root._synonymIndex = index;
+        }
+        return root._synonymIndex[word] ?? [];
+    }
+
+    // Whether `a` is at most `max` edits from `b`; a swap of two letters is one.
+    function editDistanceWithin(a, b, max) {
+        const n = a.length;
+        const m = b.length;
+        if (Math.abs(n - m) > max)
+            return false;
+        let before = null;
+        let prev = [];
+        for (let j = 0; j <= m; j++)
+            prev.push(j);
+        for (let i = 1; i <= n; i++) {
+            let cur = [i];
+            let rowMin = i;
+            for (let j = 1; j <= m; j++) {
+                let v = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+                if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1])
+                    v = Math.min(v, before[j - 2] + 1);
+                cur.push(v);
+                rowMin = Math.min(rowMin, v);
+            }
+            if (rowMin > max)
+                return false;
+            before = prev;
+            prev = cur;
+        }
+        return prev[m] <= max;
+    }
+
+    /*
+     * Every indexed word a query word answers to, with how well: itself 500,
+     * a word it starts 200, a synonym 300 (250 for a word the synonym starts),
+     * a typo 120 (100 for the start of a longer word still being typed).
+     * Typos only count for a word that names nothing as typed, so "dock"
+     * never also finds "deck".
+     */
+    function wordHits(word) {
+        const cached = root._wordHits[word];
+        if (cached !== undefined)
+            return cached;
+        const words = root.vocabulary();
+        let hits = {};
+        let direct = false;
+        for (const t of words) {
+            if (t === word) {
+                hits[t] = 500;
+                direct = true;
+            } else if (t.startsWith(word)) {
+                hits[t] = 200;
+                direct = true;
+            }
+        }
+        for (const s of root.synonymsOf(word)) {
+            for (const t of words) {
+                const score = t === s ? 300 : (s.length >= 4 && t.startsWith(s) ? 250 : 0);
+                if (score > (hits[t] ?? 0))
+                    hits[t] = score;
+            }
+        }
+        if (!direct && word.length >= 4) {
+            const budget = word.length >= 8 ? 2 : 1;
+            for (const t of words) {
+                if (hits[t] !== undefined || t[0] !== word[0] || t.length < word.length - budget)
+                    continue;
+                if (root.editDistanceWithin(word, t, budget))
+                    hits[t] = 120;
+                else if (t.length > word.length && root.editDistanceWithin(word, t.substring(0, word.length), budget))
+                    hits[t] = 100;
+            }
+        }
+        root._wordHits[word] = hits;
+        return hits;
+    }
+
+    // The query as scoring reads it: its normalized text and, per word, the
+    // indexed words that answer it.
+    function prepareQuery(query) {
+        return root.queryWords(query).map(w => ({ word: w, hits: root.wordHits(w) }));
     }
 
     function registerSection(data) {
@@ -641,42 +857,116 @@ Item {
         data.searchStrings = searchStringsKeys.map(s => Translation.tr(s));
 
         root._memoResults = null;
+        root._vocabulary = null;
+        root._wordHits = ({});
         sections.push(data);
     }
 
+    // `query` is normalized, `queryTokens` from prepareQuery().
     function getMatchScore(text, query, queryTokens) {
         if (!text) return 0;
+        const rec = root.textRecord(text);
         let score = 0;
-        let lower = text.toLowerCase();
-        let tokens = tokenize(lower);
 
         // Multi-word queries are conjunctive. Previously any one token was
         // enough, so "bar popups" returned every setting containing "bar".
-        // Exact/prefix matching remains accent-agnostic and predictable.
-        for (let qToken of queryTokens) {
+        for (let i = 0; i < queryTokens.length; i++) {
+            const q = queryTokens[i];
+            // "time zone" in a text that writes it "Timezone".
+            const next = queryTokens[i + 1];
+            if (next !== undefined && rec.set[q.word + next.word] === true) {
+                score += 1000;
+                i++;
+                continue;
+            }
             let tokenScore = 0;
-            for (let sToken of tokens) {
-                if (sToken === qToken) {
-                    tokenScore = Math.max(tokenScore, 500);
-                } else if (sToken.startsWith(qToken)) {
-                    tokenScore = Math.max(tokenScore, 200);
-                }
+            for (const t of rec.tokens) {
+                const s = q.hits[t];
+                if (s !== undefined && s > tokenScore)
+                    tokenScore = s;
             }
             if (tokenScore === 0)
                 return 0;
             score += tokenScore;
         }
-        if (lower.indexOf(query) !== -1)
+        if (rec.norm.indexOf(query) !== -1)
             score += 1000;
         return score;
     }
 
+    // A control's own words count for more than the headings it sits under,
+    // and its very label most of all. Context alone still finds it.
+    function itemMatchScore(text, context, query, queryTokens) {
+        const own = getMatchScore(text, query, queryTokens);
+        if (own > 0)
+            return own + 500 + (root.textRecord(text).norm === query ? 4000 : 0);
+        return getMatchScore(context + " " + text, query, queryTokens);
+    }
+
+    // A section ranks by its best control. Summing them let the biggest
+    // section win: twenty switches under "Dock" beat the Dock page.
+    function groupScore(scores) {
+        if (scores.length === 0)
+            return 0;
+        let best = 0;
+        let total = 0;
+        for (const s of scores) {
+            best = Math.max(best, s);
+            total += s;
+        }
+        return best + Math.round(Math.min((total - best) * 0.1, best * 0.5));
+    }
+
+    /*
+     * A query that names a page offers the page itself, a few at most:
+     * "network" opens Network even where no control on it says the word.
+     */
+    function matchPages(query, queryTokens) {
+        let out = [];
+        for (const page of SettingsPageRegistry.pages) {
+            if (page.id === "search")
+                continue;
+            const names = [Translation.tr(page.name ?? ""), page.name ?? ""];
+            let nameScore = 0;
+            for (const n of names)
+                nameScore = Math.max(nameScore, getMatchScore(n, query, queryTokens));
+            let aliasScore = 0;
+            for (const n of (page.aliases ?? []))
+                aliasScore = Math.max(aliasScore, getMatchScore(n, query, queryTokens));
+            if (nameScore === 0 && aliasScore === 0)
+                continue;
+            // Its name tops the list; an alias ("Automation" for Modes) ranks
+            // below a heading that shows the word.
+            const exact = names.some(n => n !== "" && root.normalize(n) === query);
+            // Every word of the name, typed short or misspelled: "notif",
+            // "notifcations" still mean the page.
+            // A synonym is not the name: "color scheme" is not "Colors & Themes".
+            const nameTokens = root.textRecord(names[0]).tokens;
+            const whole = nameScore > 0 && root.queryWords(names[0]).length === queryTokens.length
+                && queryTokens.every(q => nameTokens.some(t => q.hits[t] !== undefined && q.hits[t] !== 300 && q.hits[t] !== 250));
+            const best = Math.max(nameScore * 2 + (whole ? 4000 : 0), Math.round(aliasScore / 2));
+            out.push({
+                page: true,
+                pageId: page.id,
+                subPage: "",
+                title: Translation.tr(page.name ?? page.id),
+                icon: page.icon ?? "",
+                items: [],
+                subsections: [],
+                score: exact ? 100000 : best
+            });
+        }
+        out.sort((a, b) => b.score - a.score);
+        return out.slice(0, 3);
+    }
+
     function getDynamicSearchResults(query) {
         if (!query || query.trim() === "") return [];
-        query = query.toLowerCase().trim();
+        query = root.normalize(query.trim());
         if (root._memoResults !== null && root._memoQuery === query)
             return root._memoResults;
-        let queryTokens = tokenize(query);
+        let queryTokens = prepareQuery(query);
+        if (queryTokens.length === 0) return [];
         let results = [];
 
         for (let section of sections) {
@@ -684,6 +974,8 @@ Item {
 
             let matchedItems = [];
             let matchedSubsections = [];
+            let itemScores = [];
+            let subTitleBest = 0;
 
             let sectionTitleScore = getMatchScore(section.title, query, queryTokens);
             let searchStringScore = 0;
@@ -702,13 +994,12 @@ Item {
                 sectionScore += sectionTitleScore;
             }
 
+            // Context string: section.title + " " + item.text
             for (let item of section.items) {
-                let itemScore = getMatchScore(item.text, query, queryTokens);
-                let contextualItemScore = getMatchScore(
-                    section.title + " " + item.text, query, queryTokens);
-                if (itemScore > 0 || contextualItemScore > 0 || sectionTitleMatched) {
+                const itemScore = itemMatchScore(item.text, section.title, query, queryTokens);
+                if (itemScore > 0 || sectionTitleMatched) {
                     matchedItems.push(item);
-                    sectionScore += Math.max(itemScore, contextualItemScore);
+                    itemScores.push(itemScore);
                 }
             }
 
@@ -717,19 +1008,13 @@ Item {
                 let subMatchedItems = [];
                 let subMatches = false;
 
-                if (subTitleScore > 0) {
-                    sectionScore += subTitleScore;
-                }
+                subTitleBest = Math.max(subTitleBest, subTitleScore);
 
                 for (let item of sub.items) {
-                    let itemScore = getMatchScore(item.text, query, queryTokens);
-                    let contextualItemScore = getMatchScore(
-                        section.title + " " + sub.title + " " + item.text,
-                        query, queryTokens);
-                    if (itemScore > 0 || contextualItemScore > 0
-                            || subTitleScore > 0 || sectionTitleMatched) {
+                    const itemScore = itemMatchScore(item.text, section.title + " " + sub.title, query, queryTokens);
+                    if (itemScore > 0 || subTitleScore > 0 || sectionTitleMatched) {
                         subMatchedItems.push(item);
-                        sectionScore += Math.max(itemScore, contextualItemScore);
+                        itemScores.push(itemScore);
                         subMatches = true;
                     }
                 }
@@ -746,6 +1031,7 @@ Item {
             const hasRenderableItems = matchedItems.length > 0
                 || matchedSubsections.some(sub => sub.items.length > 0);
             if (hasRenderableItems) {
+                sectionScore += subTitleBest + root.groupScore(itemScores);
                 // Context can break ties once the control proved its own
                 // relevance, but it can never create a result by itself.
                 if (!sectionTitleMatched && searchStringScore > 0)
@@ -765,12 +1051,15 @@ Item {
         }
         
         results.push(...matchLandmarks(query, queryTokens, results));
+        results.push(...matchPages(query, queryTokens));
         // A query that names a page ("lock screen") wants that page first, not
         // the same words drawn on another one.
         for (let r of results) {
+            if (r.page)
+                continue;
             const page = SettingsPageRegistry.pageById(r.pageId);
             const names = [page?.name ?? "", ...(page?.aliases ?? [])];
-            if (names.some(n => n !== "" && (Translation.tr(n).toLowerCase() === query || n.toLowerCase() === query)))
+            if (names.some(n => n !== "" && (root.normalize(Translation.tr(n)) === query || root.normalize(n) === query)))
                 r.score += 5000;
         }
         results.sort((a, b) => b.score - a.score);
@@ -781,8 +1070,8 @@ Item {
     }
     
     function sharesToken(text, queryTokens) {
-        const tokens = tokenize(text);
-        return queryTokens.some(q => tokens.some(t => t.startsWith(q)));
+        const tokens = root.textRecord(text).tokens;
+        return queryTokens.some(q => tokens.some(t => q.hits[t] !== undefined));
     }
 
     /*
@@ -827,7 +1116,7 @@ Item {
                 score = Math.round(contextScore / 2);
             }
             // The very words of a heading: what the user is looking at.
-            if (lower === query || l.key.toLowerCase() === query)
+            if (root.textRecord(l.text).norm === query || root.textRecord(l.key).norm === query)
                 score += 4000;
 
             const groupKey = l.pageId + "|" + l.subPage;

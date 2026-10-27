@@ -30,6 +30,27 @@ FloatingWindow {
     property int resultsCount: 0
     property string activeSearchQuery: ""
     property string pendingSearchText: ""
+    // Enter was pressed for pendingSearchText: a miss shakes the bar.
+    property bool pendingSearchAccepted: false
+    property string typedSearch: ""
+
+    // Results follow typing, like the launcher; a burst of keystrokes scores
+    // and builds once.
+    Timer {
+        id: liveSearchTimer
+        interval: 120
+        onTriggered: {
+            if (root.typedSearch.trim() === "")
+                return;
+            if (!SearchRegistry.indexed) {
+                root.pendingSearchText = root.typedSearch;
+                root.pendingSearchAccepted = false;
+                SearchRegistry.ensureIndexing();
+                return;
+            }
+            root.acceptSearch(root.typedSearch, false);
+        }
+    }
 
     readonly property bool settingsPerformanceMode: Config.options?.appearance?.settingsPerformanceMode ?? false
 
@@ -651,8 +672,10 @@ FloatingWindow {
                 return;
             }
             const query = root.pendingSearchText;
+            const accepted = root.pendingSearchAccepted;
             root.pendingSearchText = "";
-            root.acceptSearch(query);
+            root.pendingSearchAccepted = false;
+            root.acceptSearch(query, accepted);
         }
     }
 
@@ -700,23 +723,35 @@ FloatingWindow {
             SearchRegistry.setSettingsActive(false);
     }
 
-    function acceptSearch(text) {
+    // `accepted`: Enter, not typing. Only Enter shakes the bar on a miss and
+    // flashes the result that names the query.
+    function acceptSearch(text, accepted = true) {
         const result = SearchRegistry.getDynamicSearchResults(text);
 
         if (result == null || result.length === 0) {
-            settingsSearchBar.shakeNoResults();
-            root.activeSearchQuery = "";
+            if (accepted)
+                settingsSearchBar.shakeNoResults();
             root.resultsCount = 0;
             root.lastSearchIndex = -1;
-            if (root.currentPage === root.pageIndexById("search")) {
-                root.currentPage = root.previousPage;
+            if (text.trim() === "") {
+                root.activeSearchQuery = "";
+                if (root.currentPage === root.pageIndexById("search"))
+                    root.currentPage = root.previousPage;
+                return;
             }
+            // Typing on through a miss keeps the results page, saying so,
+            // rather than jumping back and forth between pages.
+            if (root.currentPage !== root.pageIndexById("search"))
+                root.previousPage = root.currentPage;
+            root.activeSearchQuery = text;
+            SearchRegistry.query = text;
+            root.currentPage = root.pageIndexById("search");
             return;
         }
 
         let totalWidgets = 0;
         for (let s of result) {
-            totalWidgets += s.items.length + (s.landmarks?.length ?? 0) + (s.components?.length ?? 0);
+            totalWidgets += s.items.length + (s.landmarks?.length ?? 0) + (s.components?.length ?? 0) + (s.page ? 1 : 0);
             for (let sub of s.subsections) {
                 totalWidgets += sub.items.length;
             }
@@ -729,7 +764,9 @@ FloatingWindow {
             root.previousPage = root.currentPage;
         }
         root.activeSearchQuery = text;
-        SearchRegistry.currentSearch = text;
+        SearchRegistry.query = text;
+        if (accepted)
+            SearchRegistry.currentSearch = text;
         root.currentPage = root.pageIndexById("search");
     }
 
@@ -804,14 +841,18 @@ FloatingWindow {
                 resultsCount: root.resultsCount
 
                 onTextChanged: text => {
+                    root.typedSearch = text;
                     // Index while the query is being typed: the index is
                     // dropped whenever Settings closes, and rebuilding it on
                     // Enter added its whole cost to the first search.
-                    if (text !== "")
+                    if (text !== "") {
                         SearchRegistry.ensureIndexing();
-                    if (text === "")
-                        root.pendingSearchText = "";
+                        liveSearchTimer.restart();
+                    }
                     if (text === "") {
+                        liveSearchTimer.stop();
+                        root.pendingSearchText = "";
+                        root.pendingSearchAccepted = false;
                         if (root.currentPage === root.pageIndexById("search")) {
                             root.currentPage = root.previousPage;
                         }
@@ -823,12 +864,14 @@ FloatingWindow {
                 }
 
                 onAccepted: text => {
+                    liveSearchTimer.stop();
                     if (text.trim() === "") {
                         root.acceptSearch(text);
                         return;
                     }
                     if (!SearchRegistry.indexed) {
                         root.pendingSearchText = text;
+                        root.pendingSearchAccepted = true;
                         SearchRegistry.ensureIndexing();
                         return;
                     }

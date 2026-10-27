@@ -7,14 +7,18 @@ import qs.modules.common.widgets
 ContentPage {
     id: searchPageRoot
 
-    property string queryString: SearchRegistry.currentSearch
+    property string queryString: SearchRegistry.query
     property var results: []
-    // Next result section to build. Sections are live QML compiled from source,
-    // so a broad query ("show": 69 sections, 156 controls) blocked the window
-    // for ~1 s when built in one pass. They are built best-first in slices of
-    // at most `buildBudgetMs`, letting frames render between slices.
-    property int buildIndex: 0
+    // Sections are live QML compiled from source, so a broad query ("show":
+    // 69 sections, 156 controls) blocked the window for ~1 s when built in one
+    // pass. They are built best-first in slices of at most `buildBudgetMs`,
+    // letting frames render between slices.
     readonly property int buildBudgetMs: 12
+    // One slot per result, in rank order, and the slots by result key. Results
+    // follow typing, and one more letter mostly re-ranks the same cards: a
+    // slot whose result is still there is moved, not compiled again.
+    property var slots: []
+    property var slotsByKey: ({})
 
     onQueryStringChanged: {
         results = SearchRegistry.getDynamicSearchResults(queryString);
@@ -25,6 +29,41 @@ ContentPage {
         id: dynamicContainer
         Layout.fillWidth: true
         spacing: 12
+    }
+
+    // Slots wait here while the container is put back in rank order.
+    Item {
+        id: slotParking
+        visible: false
+    }
+
+    Component {
+        id: slotComponent
+        ColumnLayout {
+            property string resultKey: ""
+            property var result: null
+            property bool built: false
+            // An empty slot would still take the container's spacing.
+            visible: built
+            Layout.fillWidth: true
+            spacing: 0
+        }
+    }
+
+    // A page the query names, as one row that opens it.
+    Component {
+        id: pageLinkComponent
+
+        ContentSection {
+            id: pageLink
+            searchResult: true
+            Layout.fillWidth: true
+
+            ConfigSubpageRow {
+                title: Translation.tr("Open %1").arg(pageLink.title)
+                onOpenSubPage: pageLink.navigateToPage("")
+            }
+        }
     }
 
     Item {
@@ -47,31 +86,59 @@ ContentPage {
         onTriggered: searchPageRoot.buildSlice()
     }
 
+    function resultKey(r) {
+        if (r.page)
+            return "page|" + r.pageId;
+        const base = r.pageId + "|" + (r.subPage || "") + "|" + r.title + "|" + (r.sourceKey || "") + "|";
+        if (r.landmarks)
+            return base + "L|" + (r.components || []).join(",") + "|" + r.landmarks.map(l => l.text).join(",");
+        return base + "S|" + r.items.map(i => i.sourceStart).join(",") + "|"
+            + r.subsections.map(s => s.title + ":" + s.items.map(i => i.sourceStart).join(",")).join(";");
+    }
+
     function buildResults() {
         buildSliceTimer.stop();
-        buildIndex = 0;
-        for (var i = dynamicContainer.children.length - 1; i >= 0; i--) {
-            dynamicContainer.children[i].destroy();
+        let next = [];
+        let nextByKey = {};
+        for (let r of results) {
+            const key = resultKey(r);
+            if (nextByKey[key])
+                continue;
+            let slot = slotsByKey[key];
+            if (!slot)
+                slot = slotComponent.createObject(slotParking, { resultKey: key, result: r });
+            nextByKey[key] = slot;
+            next.push(slot);
         }
+        for (let slot of slots)
+            if (nextByKey[slot.resultKey] !== slot)
+                slot.destroy();
+        // Re-adding every slot in order is what orders a layout's children.
+        for (let slot of next)
+            slot.parent = slotParking;
+        for (let slot of next)
+            slot.parent = dynamicContainer;
+        slots = next;
+        slotsByKey = nextByKey;
 
-        if (results.length === 0) {
-            return;
-        }
-
-        // Let deferred destroy() calls finish before compiling replacement
-        // results; otherwise both queries coexist at peak memory.
-        buildSliceTimer.restart();
+        // Let deferred destroy() calls finish before compiling new results;
+        // otherwise both queries coexist at peak memory.
+        if (next.some(slot => !slot.built))
+            buildSliceTimer.restart();
     }
 
     function buildSlice() {
         const deadline = Date.now() + buildBudgetMs;
-        while (buildIndex < results.length) {
-            buildSection(results[buildIndex], buildIndex);
-            buildIndex++;
+        for (let i = 0; i < slots.length; i++) {
+            const slot = slots[i];
+            if (slot.built)
+                continue;
+            buildSection(slot.result, i, slot);
+            slot.built = true;
             if (Date.now() >= deadline)
                 break;
         }
-        if (buildIndex < results.length)
+        if (slots.some(slot => !slot.built))
             buildSliceTimer.restart();
     }
 
@@ -101,7 +168,7 @@ ContentPage {
     // page source, with its imports and from its directory, like the controls
     // below. A page-root id the block names (`page.activeSubPage = …`) gets a
     // stand-in that opens that sub-page instead.
-    function buildComponentGroup(section, i) {
+    function buildComponentGroup(section, i, slot) {
         const blocks = section.components.map(id => SearchRegistry.landmarkBlocks[id]).filter(b => !!b);
         let imports = [];
         for (let b of blocks)
@@ -129,11 +196,11 @@ ContentPage {
         qmlStr += "}";
 
         try {
-            Qt.createQmlObject(qmlStr, dynamicContainer, "file://" + blocks[0].dir + "landmarkSection_" + i);
+            Qt.createQmlObject(qmlStr, slot, "file://" + blocks[0].dir + "landmarkSection_" + i);
         } catch (e) {
             console.warn("[SearchPage] Failed to build landmark component:", section.title, e, "\nQML String:", qmlStr);
             // The links still lead there.
-            landmarkGroupComponent.createObject(dynamicContainer, {
+            landmarkGroupComponent.createObject(slot, {
                 title: section.title,
                 icon: section.icon,
                 pageId: section.pageId,
@@ -143,14 +210,22 @@ ContentPage {
         }
     }
 
-    function buildSection(section, i) {
+    function buildSection(section, i, slot) {
+        if (section.page) {
+            pageLinkComponent.createObject(slot, {
+                title: section.title,
+                icon: section.icon,
+                pageId: section.pageId
+            });
+            return;
+        }
         if (section.components && section.components.length > 0
                 && section.components.some(id => !!SearchRegistry.landmarkBlocks[id])) {
-            buildComponentGroup(section, i);
+            buildComponentGroup(section, i, slot);
             return;
         }
         if (section.landmarks) {
-            landmarkGroupComponent.createObject(dynamicContainer, {
+            landmarkGroupComponent.createObject(slot, {
                 title: section.title,
                 icon: section.icon,
                 pageId: section.pageId,
@@ -186,7 +261,7 @@ ContentPage {
         const cloneUrl = "file://" + sourceDir + "dynamicSection_" + i;
 
         try {
-            Qt.createQmlObject(qmlStr, dynamicContainer, cloneUrl);
+            Qt.createQmlObject(qmlStr, slot, cloneUrl);
         } catch (e) {
             console.log("[SearchPage] Failed to build section:", section.title, e, "\nQML String:", qmlStr);
         }

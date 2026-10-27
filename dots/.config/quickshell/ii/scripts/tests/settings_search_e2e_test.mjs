@@ -24,8 +24,9 @@ function liftFunction(src, name) {
 
 const names = ["extractImports", "extractDeclaredIds", "executableSource", "usesExternalId",
     "extractWidgetsWithOffset", "indexQmlFile", "extractBlocks", "getBlockSource", "extractProperty",
-    "tokenize", "registerSection", "getMatchScore", "getDynamicSearchResults", "sharesToken", "matchLandmarks",
-    "assignLandmarkComponents"];
+    "normalize", "tokenize", "queryWords", "textRecord", "vocabulary", "synonymsOf", "editDistanceWithin",
+    "wordHits", "prepareQuery", "registerSection", "getMatchScore", "itemMatchScore", "groupScore", "matchPages",
+    "getDynamicSearchResults", "sharesToken", "matchLandmarks", "assignLandmarkComponents"];
 const registrySrc = fs.readFileSync(ROOT + "modules/common/SettingsPageRegistry.qml", "utf8");
 const pages = vm.runInNewContext("(" + registrySrc.split("readonly property var pages:")[1].split(/\n    \]\n/)[0] + "])");
 
@@ -38,6 +39,7 @@ const ctx = {
 vm.createContext(ctx);
 vm.runInContext(`var root = { sections: [], fileSources: {}, fileImportsBySource: {}, landmarks: [],
     _memoQuery: "", _memoResults: null, maxLandmarksPerGroup: 6,
+    _textCache: {}, _vocabulary: null, _wordHits: {}, _synonymIndex: null,
     landmarkBlocks: {}, maxComponentsPerQuery: 3 };
     ${names.map(n => liftFunction(registryQml, n)).join("\n")}
     Object.assign(root, { ${names.join(", ")} });
@@ -141,6 +143,33 @@ for (const q of ["dark", "show", "color", "lock screen", "wallpaper"])
 // A landmark inside a shown component is not repeated as a row.
 for (const r of search("color scheme").filter(r => r.components?.length))
     for (const l of r.landmarks) assert.ok(!r.components.includes(l.block), l.text);
+
+// Typos, joined words and synonyms find what the page calls it; a query that
+// names a page offers the page first, typed short or misspelled.
+const found = (q, pageId, text) => search(q).some(r => r.pageId === pageId
+    && (text === null || [...labels(r), ...r.items.map(i => i.text), ...r.subsections.flatMap(s => s.items.map(i => i.text))]
+        .some(t => (t || "").toLowerCase().includes(text))));
+for (const [q, pageId, text] of [
+    ["transparancy", "windows", "transparency"],
+    ["notifcations", "notifications", null],
+    ["bluetoth", "network", "bluetooth"],
+    ["wallpaer", "wallpaper", "wallpaper"],
+    ["wifi", "network", "wi-fi"],
+    ["autohide", "bar", "auto-hide"],
+    ["lockscreen", "lockScreen", null],
+    ["time zone", "languageTime", "timezone"],
+    ["sleep", "power", "suspend"],
+    ["dnd", "notifications", "do not disturb"],
+    ["hotkeys", "launcher", "keybinds"],
+]) assert.ok(found(q, pageId, text), `"${q}" misses ${pageId}${text ? ": " + text : ""}`);
+for (const [q, pageId] of [["network", "network"], ["dock", "dock"], ["notif", "notifications"],
+        ["notifcations", "notifications"], ["netw", "network"], ["lock scr", "lockScreen"]]) {
+    const top = search(q)[0];
+    assert.ok(top?.page && top.pageId === pageId, `"${q}" top is not the ${pageId} page: ${top?.pageId}`);
+}
+// A typo pass never runs for a word the index holds as typed.
+assert.ok(!search("dock").some(r => labels(r).concat(r.items.map(i => i.text)).some(t => /\bdeck\b/i.test(t || "") && !/dock/i.test(t || ""))), "dock finds deck");
+assert.equal(search("a").length, 0, "one letter finds nothing");
 
 // Noise stays bounded: no group lists more than the cap, nonsense finds nothing.
 for (const r of search("on")) if (r.landmarks) assert.ok(r.landmarks.length <= 6);
