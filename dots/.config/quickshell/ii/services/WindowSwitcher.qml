@@ -40,8 +40,9 @@ import "windowSwitcher/WindowSwitcherLogic.js" as Logic
  *
  * Alt coming up is the subtle one. Hyprland matches a release against the submap the key was
  * *pressed* in, and Alt went down before the submap was entered, so the release bind lives in
- * the root submap (transparent, so nothing else loses the key) and acts only while ours is
- * current. It decides inside the compositor: nothing typed, it leaves the submap and commits;
+ * the root submap and acts only while ours is current. It is non-consuming: a release bind
+ * otherwise swallows its key's press as well, so no app would ever see Alt go down or up -
+ * games reading key events rather than modifier state lose Alt altogether. It decides inside the compositor: nothing typed, it leaves the submap and commits;
  * a search typed, it moves to the typing submap. The binds count what has been typed
  * themselves (`__ii_alt_tab_q`), so a release straight after a key can never race the shell.
  * Escape and Enter in the typing submap leave it inside the compositor too, so a shell that
@@ -866,7 +867,7 @@ if __ii_alt_tab_v ~= 2 then
     end
   end
   for _, k in ipairs({ "ALT_L", "ALT_R" }) do
-    hl.bind(k, release, { release = true, ignore_mods = true, transparent = true, description = "${root.bindTag}" })
+    hl.bind(k, release, { release = true, ignore_mods = true, transparent = true, non_consuming = true, description = "${root.bindTag}" })
   end
   local function common()
     hl.bind("Return", finish("Commit"), { ignore_mods = true })
