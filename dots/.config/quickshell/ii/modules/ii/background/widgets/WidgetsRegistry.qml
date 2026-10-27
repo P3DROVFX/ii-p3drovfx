@@ -489,6 +489,87 @@ Singleton {
             "configPage": "widgets/DesktopWeatherHourlyConfig.qml"
         },
         {
+            "widgetId": "weather_monolith",
+            "name": Translation.tr("Weather Monolith"),
+            "category": "Weather",
+            "qmlPath": Qt.resolvedUrl("weather/WeatherMonolithWidget.qml"),
+            "icon": "partly_cloudy_day",
+            "description": Translation.tr("1x1 weather card where the temperature is the card: tall condensed square-cut digits, the sky in a slanted light line and its shape in the corner."),
+            "configPage": "widgets/DesktopExpressiveWeatherConfig.qml"
+        },
+        {
+            "widgetId": "weather_daylight",
+            "name": Translation.tr("Weather Daylight"),
+            "category": "Weather",
+            "qmlPath": Qt.resolvedUrl("weather/WeatherDaylightWidget.qml"),
+            "icon": "partly_cloudy_day",
+            "description": Translation.tr("2x1 weather card with the day as an arc from sunrise to sunset and the sun (or the moon) at this minute's point on it."),
+            "configPage": "widgets/DesktopExpressiveWeatherConfig.qml"
+        },
+        {
+            "widgetId": "weather_ranges",
+            "name": Translation.tr("Weather Ranges"),
+            "category": "Weather",
+            "qmlPath": Qt.resolvedUrl("weather/WeatherRangesWidget.qml"),
+            "icon": "partly_cloudy_day",
+            "description": Translation.tr("1x2 weather card: now in an accent block, then five days as low-to-high bars on a scale shared by the week."),
+            "configPage": "widgets/DesktopExpressiveWeatherConfig.qml"
+        },
+        {
+            "widgetId": "weather_ribbon",
+            "name": Translation.tr("Weather Ribbon"),
+            "category": "Weather",
+            "qmlPath": Qt.resolvedUrl("weather/WeatherRibbonWidget.qml"),
+            "icon": "partly_cloudy_day",
+            "description": Translation.tr("2x1 weather card with the next hours drawn as a temperature ridge, hairline and heavy type in contrast above it."),
+            "configPage": "widgets/DesktopExpressiveWeatherConfig.qml"
+        },
+        {
+            "widgetId": "weather_collage",
+            "name": Translation.tr("Weather Collage"),
+            "category": "Weather",
+            "qmlPath": Qt.resolvedUrl("weather/WeatherCollageWidget.qml"),
+            "icon": "partly_cloudy_day",
+            "description": Translation.tr("1x1 weather collage of overlapping shapes: the sky with the temperature, humidity, wind pointing downwind and UV."),
+            "configPage": "widgets/DesktopExpressiveWeatherConfig.qml"
+        },
+        {
+            "widgetId": "weather_pattern",
+            "name": Translation.tr("Weather Pattern"),
+            "category": "Weather",
+            "qmlPath": Qt.resolvedUrl("weather/WeatherPatternWidget.qml"),
+            "icon": "partly_cloudy_day",
+            "description": Translation.tr("1x1 minimal weather: the sky as a halftone of dots, streaks or specks drawn by the condition, and only the temperature."),
+            "configPage": "widgets/DesktopExpressiveWeatherConfig.qml"
+        },
+        {
+            "widgetId": "weather_silhouette",
+            "name": Translation.tr("Weather Silhouette"),
+            "category": "Weather",
+            "qmlPath": Qt.resolvedUrl("weather/WeatherSilhouetteWidget.qml"),
+            "icon": "partly_cloudy_day",
+            "description": Translation.tr("1x2 minimal weather: the next two days as stacked pills as wide as they are warm, coloured by their sky."),
+            "configPage": "widgets/DesktopExpressiveWeatherConfig.qml"
+        },
+        {
+            "widgetId": "weather_strip",
+            "name": Translation.tr("Weather Strip"),
+            "category": "Weather",
+            "qmlPath": Qt.resolvedUrl("weather/WeatherStripWidget.qml"),
+            "icon": "partly_cloudy_day",
+            "description": Translation.tr("2x1 five-day forecast in columns, each day's sky shape floating at the height of its high."),
+            "configPage": "widgets/DesktopExpressiveWeatherConfig.qml"
+        },
+        {
+            "widgetId": "weather_dial",
+            "name": Translation.tr("Weather Dial"),
+            "category": "Weather",
+            "qmlPath": Qt.resolvedUrl("weather/WeatherDialWidget.qml"),
+            "icon": "partly_cloudy_day",
+            "description": Translation.tr("1x1 forecast of the next 24 hours on a 24-hour face: segments coloured by the sky and as thick as they are warm."),
+            "configPage": "widgets/DesktopExpressiveWeatherConfig.qml"
+        },
+        {
             "widgetId": "date_default",
             "name": Translation.tr("Date Card"),
             "category": "Date",

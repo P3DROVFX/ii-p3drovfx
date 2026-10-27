@@ -495,6 +495,7 @@ AbstractWidget {
     readonly property var _widgetSizeConsumers: ({
         "android_search_bar": true, "at_a_glance": true,
         "todo_focus": true, "todo_board": true, "todo_column": true, "timer_pomodoro": true, "timer_stopwatch": true, "timer_countdown": true, "translator_widget": true, "water_glass": true, "phone_key": true, "phone_deck": true, "phone_tower": true, "send_drop": true, "session_grid": true,
+        "weather_pattern": true, "weather_silhouette": true, "weather_strip": true, "weather_dial": true, "weather_monolith": true, "weather_daylight": true, "weather_ranges": true, "weather_ribbon": true, "weather_collage": true,
         "converter_2x1": true, "shelf_1x1": true, "shelf_2x1": true, "shelf_1x2": true, "favorites_1x1": true, "favorites_row": true, "search_pixel": true, "search_shortcuts": true,
         "calendar_date_banner": true, "calendar_date_shapes": true, "calendar_date_stack": true,
         "calendar_date_type": true,
