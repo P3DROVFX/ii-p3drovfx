@@ -137,6 +137,29 @@ Item {
         root.indexReady();
     }
 
+    /*
+     * Sub-pages the landmark crawl found through the row that opens them, which
+     * no page registers (Themed icons, the Hyprland icon pack picker, ...):
+     * their controls are indexed like a registered sub-page's, before the
+     * index counts as ready.
+     */
+    function indexDiscoveredSubPages(found) {
+        if (!root.indexing || found.length === 0)
+            return;
+        const basePath = FileUtils.trimFileProtocol(Directories.config) + "/quickshell/ii/modules/settings/configs/";
+        const files = found.map(s => basePath + s.subPage);
+        const ids = found.map(s => s.pageId);
+        const subs = found.map(s => s.subPage);
+        if (!root._sectionsDone && pageFile.currentIndex < pageFile.files.length) {
+            pageFile.files = pageFile.files.concat(files);
+            pageFile.pageIds = pageFile.pageIds.concat(ids);
+            pageFile.subPages = pageFile.subPages.concat(subs);
+            return;
+        }
+        root._sectionsDone = false;
+        pageFile.start(files, ids, subs);
+    }
+
     function setSettingsActive(active) {
         root.settingsActive = active;
         if (!active) {
@@ -260,6 +283,8 @@ Item {
                 id: p.id,
                 component: p.component,
                 subPages: p.subPages ?? [],
+                searchSources: p.searchSources ?? [],
+                searchSubPages: p.searchSubPages ?? ({}),
                 searchable: p.searchable !== false
             }));
             landmarkReader.command = ["python3", Directories.scriptPath + "/settings/search_landmarks.py",
@@ -294,6 +319,7 @@ Item {
                 subPageTitle: l.subPageTitle ? Translation.tr(l.subPageTitle) : ""
             }));
             cancel();
+            root.indexDiscoveredSubPages(payload.subPages ?? []);
             root.partIndexed("landmarks");
         }
 
@@ -445,9 +471,16 @@ Item {
                             || extractProperty(b.inner, "placeholderText")
                             || extractProperty(b.inner, "description")
                             || extractProperty(b.inner, "summary");
+                // Every other word it shows: its tooltip, description and
+                // option names ("Islands" on Dock style).
+                let extra = [];
+                for (const m of b.inner.matchAll(/Translation\.tr\(\s*"((?:\\.|[^"\\])*)"\s*\)/g))
+                    if (m[1] !== textProp && extra.indexOf(m[1]) === -1)
+                        extra.push(m[1]);
                 items.push({
                     type: t,
                     text: textProp,
+                    extra: extra.join(" · "),
                     sourceKey: sourceKey,
                     sourceStart: b.start + baseOffset,
                     sourceEnd: b.end + baseOffset
@@ -711,12 +744,16 @@ Item {
         for (const section of root.sections) {
             add(section.title);
             section.searchStrings.forEach(add);
-            for (const item of section.items)
+            for (const item of section.items) {
                 add(item.text);
+                add(item.extra);
+            }
             for (const sub of section.subsections) {
                 add(sub.title);
-                for (const item of sub.items)
+                for (const item of sub.items) {
                     add(item.text);
+                    add(item.extra);
+                }
             }
         }
         for (const l of root.landmarks) {
@@ -750,7 +787,7 @@ Item {
                 ["opacity", "transparency", "transparent", "translucent"],
                 ["brightness", "backlight"],
                 ["rounding", "radius", "corner", "corners", "roundness"],
-                ["theme", "scheme"],
+                ["theme", "scheme", "pack"],
                 ["font", "fonts", "typeface"],
                 ["animation", "animations", "motion"],
                 ["mouse", "pointer", "cursor"],
@@ -823,7 +860,8 @@ Item {
         }
         for (const s of root.synonymsOf(word)) {
             for (const t of words) {
-                const score = t === s ? 300 : (s.length >= 4 && t.startsWith(s) ? 250 : 0);
+                // Plurals only: "pack" is not "package".
+                const score = t === s ? 300 : (s.length >= 4 && t.length <= s.length + 2 && t.startsWith(s) ? 250 : 0);
                 if (score > (hits[t] ?? 0))
                     hits[t] = score;
             }
@@ -895,12 +933,17 @@ Item {
     }
 
     // A control's own words count for more than the headings it sits under,
-    // and its very label most of all. Context alone still finds it.
-    function itemMatchScore(text, context, query, queryTokens) {
+    // and its very label most of all; what it shows besides (tooltip, options)
+    // counts half. Context alone still finds it.
+    function itemMatchScore(item, context, query, queryTokens) {
+        const text = item.text;
         const own = getMatchScore(text, query, queryTokens);
         if (own > 0)
             return own + 500 + (root.textRecord(text).norm === query ? 4000 : 0);
-        return getMatchScore(context + " " + text, query, queryTokens);
+        // Not for two-letter words: "on" is in half the tooltips.
+        const described = item.extra && queryTokens.every(q => q.word.length >= 3)
+            ? Math.round(getMatchScore(text + " " + item.extra, query, queryTokens) / 2) : 0;
+        return Math.max(described, getMatchScore(context + " " + text, query, queryTokens));
     }
 
     // A section ranks by its best control. Summing them let the biggest
@@ -996,7 +1039,7 @@ Item {
 
             // Context string: section.title + " " + item.text
             for (let item of section.items) {
-                const itemScore = itemMatchScore(item.text, section.title, query, queryTokens);
+                const itemScore = itemMatchScore(item, section.title, query, queryTokens);
                 if (itemScore > 0 || sectionTitleMatched) {
                     matchedItems.push(item);
                     itemScores.push(itemScore);
@@ -1011,7 +1054,7 @@ Item {
                 subTitleBest = Math.max(subTitleBest, subTitleScore);
 
                 for (let item of sub.items) {
-                    const itemScore = itemMatchScore(item.text, section.title + " " + sub.title, query, queryTokens);
+                    const itemScore = itemMatchScore(item, section.title + " " + sub.title, query, queryTokens);
                     if (itemScore > 0 || subTitleScore > 0 || sectionTitleMatched) {
                         subMatchedItems.push(item);
                         itemScores.push(itemScore);

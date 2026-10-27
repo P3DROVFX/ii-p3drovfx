@@ -44,7 +44,8 @@ ROW_RE = re.compile(r"ConfigSubpageRow\s*\{")
 STRING_RE = re.compile(r""""(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`""")
 COMMENT_OR_STRING_RE = re.compile(
     r"""//[^\n]*|/\*.*?\*/|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`""", re.S)
-PROP_RE = re.compile(r"([A-Za-z_]\w*)\s*:\s*[^:]*$")
+# A quoted key too: option chips are object literals ({ "displayName": ... }).
+PROP_RE = re.compile(r"""["']?([A-Za-z_]\w*)["']?\s*:\s*[^:]*$""")
 LINE_PROP_RE = re.compile(r"^\s*([A-Za-z_][\w.]*)\s*:")
 
 
@@ -153,6 +154,43 @@ def child_files(text: str, file_path: str, shell_root: str, file_set: set[str]) 
                     files.append(candidate)
                 break
     return files
+
+
+# A sub-page a file opens: a row's `configPage`, an `openSubPage(...)`, an
+# `activeSubPage = ...`, by a file name written out.
+SUB_PAGE_REF_RE = re.compile(
+    r"""(?:configPage\s*:|openSubPage\(|activeSubPage\s*=)\s*(?:Qt\.resolvedUrl\(\s*)?["']([\w./-]+\.qml)["']""")
+
+
+def needs_opener(path: str, text: str | None) -> bool:
+    """A sub-page that only works for what its opener hands it - a bind to edit, a
+    network, the app being picked for - is no place for a search result to land."""
+    # The root object's own: a delegate's `required property var modelData` is not.
+    return (text is None or bool(re.search(r"^    required property\b", text, re.M))
+            or bool(re.search(r"(Editor|Picker)(Page)?$", Path(path).stem)))
+
+
+OPENER_LABEL_RE = re.compile(r"""\b(?:title|text|mainText)\s*:\s*Translation\.tr\(\s*("(?:\\.|[^"\\])*")""")
+
+
+def sub_page_refs(text: str, file_path: str, configs: str, file_set: set[str]) -> list[tuple[str, str]]:
+    """Files under configs/ this file opens as sub-pages, each with the label of the
+    row that opens it ("" if none is near). A page's own helper often adds the folder
+    (`openSubPage("ThemedIconsConfig.qml")` opens widgets/...), so the name is looked
+    for next to the file, then in its widgets/, then from configs/."""
+    here = os.path.dirname(file_path) + "/"
+    code = strip_comments(text)
+    found: list[tuple[str, str]] = []
+    for m in SUB_PAGE_REF_RE.finditer(code):
+        ref = m.group(1)
+        for base in (here, here + "widgets/", configs, configs + "widgets/"):
+            candidate = os.path.normpath(base + ref)
+            if candidate in file_set:
+                if candidate != os.path.normpath(file_path) and all(candidate != f for f, _ in found):
+                    labels = OPENER_LABEL_RE.findall(code[max(0, m.start() - 400):m.start()])
+                    found.append((candidate, unquote(labels[-1]) if labels else ""))
+                break
+    return found
 
 
 def block_after(code: str, start: int) -> str:
@@ -388,15 +426,23 @@ def presentable_block(root: RootFile, block, read, shell_root: str, file_set: se
     }
 
 
-def crawl(shell_root: str, pages: list[dict], blocks: dict | None = None) -> list[dict]:
+def crawl(shell_root: str, pages: list[dict], blocks: dict | None = None,
+          discovered: list[dict] | None = None) -> list[dict]:
     """Landmarks of every page. With `blocks`, each landmark a settings component
-    draws also names (`block`) the clone source stored there."""
+    draws also names (`block`) the clone source stored there. With `discovered`,
+    the sub-pages found by their opener and registered nowhere ({pageId, subPage})
+    are listed there, for their controls to be indexed too."""
     shell_root = shell_root.rstrip("/") + "/"
     configs = shell_root + CONFIGS
     file_set = {os.path.join(d, f) for d, _, fs in os.walk(configs) for f in fs if f.endswith(".qml")}
     texts: dict[str, str] = {}
     titles: dict[str, str] = {}
     landmarks: list[dict] = []
+    # Every file a page already names; a row linking to one is not a sub-page of its own.
+    registered = {os.path.normpath(shell_root + p["component"]) for p in pages}
+    for p in pages:
+        registered.update(os.path.normpath(configs + f) for f in (p.get("subPages") or []) + (p.get("searchSources") or [])
+                          + list((p.get("searchSubPages") or {}).values()))
 
     def read(path: str) -> str | None:
         if path not in texts:
@@ -436,6 +482,10 @@ def crawl(shell_root: str, pages: list[dict], blocks: dict | None = None) -> lis
         # (file, sub-page, depth, root file, the root's child type it was reached through)
         queue = [(shell_root + page["component"], "", 0, shell_root + page["component"], "")]
         queue += [(configs + sub, sub, 0, configs + sub, "") for sub in page.get("subPages") or []]
+        # Sections drawn outside the page file (tabs, progressive sections) show on
+        # the page, or on the sub-page they stand in for.
+        queue += [(configs + src, (page.get("searchSubPages") or {}).get(src, ""), 0, configs + src, "")
+                  for src in page.get("searchSources") or []]
         visited: set[tuple[str, str]] = set()
         while queue:
             path, sub_page, depth, root_path, via = queue.pop(0)
@@ -446,6 +496,18 @@ def crawl(shell_root: str, pages: list[dict], blocks: dict | None = None) -> lis
             if text is None:
                 continue
             titles.update(sub_page_titles(text, path))
+            for ref, label in sub_page_refs(text, path, configs, file_set):
+                if ref in registered:
+                    continue
+                registered.add(ref)
+                if needs_opener(ref, read(ref)):
+                    continue
+                if label:
+                    titles.setdefault(ref, label)
+                sub = os.path.relpath(ref, configs)
+                queue.append((ref, sub, 0, ref, ""))
+                if discovered is not None:
+                    discovered.append({"pageId": page["id"], "subPage": sub})
             for key in extract_landmarks(text):
                 if (sub_page, key) in seen:
                     continue
@@ -472,8 +534,9 @@ def main(argv: list[str]) -> int:
         return 2
     pages = [p for p in json.loads(argv[2]) if p.get("searchable") is not False]
     blocks: dict = {}
-    landmarks = crawl(argv[1], pages, blocks)
-    json.dump({"landmarks": landmarks, "blocks": blocks}, sys.stdout, ensure_ascii=False)
+    discovered: list[dict] = []
+    landmarks = crawl(argv[1], pages, blocks, discovered)
+    json.dump({"landmarks": landmarks, "blocks": blocks, "subPages": discovered}, sys.stdout, ensure_ascii=False)
     return 0
 
 
