@@ -64,6 +64,12 @@ ExpressiveCardWidget {
         Config.options.dock.utilities.favorites.sites = list;
     }
 
+    onCardTapped: at => {
+        const slot = slots.childAt(at.x - slots.x, at.y - slots.y);
+        if (slot && slot.empty !== undefined)
+            slot.empty ? root.editFavorites() : root.open(slot.site);
+    }
+
     DropArea {
         anchors.fill: parent
         enabled: root.actionsEnabled
@@ -94,11 +100,6 @@ ExpressiveCardWidget {
             id: slotHover
             cursorShape: Qt.PointingHandCursor
         }
-        TapHandler {
-            id: slotTap
-            enabled: root.actionsEnabled
-            onTapped: slot.empty ? root.editFavorites() : root.open(slot.site)
-        }
 
         Item {
             id: plate
@@ -106,7 +107,7 @@ ExpressiveCardWidget {
             y: root.showLabels ? 0 : (slot.height - height) / 2
             width: slot.plateSize
             height: slot.plateSize
-            scale: slotTap.pressed ? 0.92 : 1
+            scale: slot.hovered && root.pressed ? 0.92 : 1
             Behavior on scale {
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
             }

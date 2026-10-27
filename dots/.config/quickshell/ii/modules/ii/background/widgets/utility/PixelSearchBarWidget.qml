@@ -33,20 +33,13 @@ ExpressiveCardWidget {
         id: actions
     }
 
-    // The bar searches through the widget's own pointer area: a button there
-    // would take the press, and the widget could no longer be moved by it.
-    property bool _moved: false
-    onIsDraggingChanged: {
-        if (root.isDragging)
-            root._moved = true;
-        else
-            Qt.callLater(() => root._moved = false);
-    }
-    onClicked: mouse => {
-        if (mouse.button !== Qt.LeftButton || root._moved || !root.actionsEnabled)
-            return;
-        if (pill.contains(pill.mapFromItem(root, mouse.x, mouse.y)))
+    // The bar searches through the widget's own pointer area (cardTapped): a
+    // button there would take the press, and the widget could not be moved.
+    onCardTapped: at => {
+        if (pill.contains(pill.mapFromItem(root.contentItem, at.x, at.y)))
             actions.run("search");
+        else if (side.contains(side.mapFromItem(root.contentItem, at.x, at.y)))
+            actions.run(root.sideKey);
     }
 
     StyledRectangularShadow {
@@ -148,7 +141,7 @@ ExpressiveCardWidget {
         x: root.designWidth - width
         width: root.designHeight
         height: root.designHeight
-        scale: sideTap.pressed ? 0.92 : 1
+        scale: sideHover.hovered && root.pressed ? 0.92 : 1
         Behavior on scale {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
         }
@@ -181,11 +174,6 @@ ExpressiveCardWidget {
         HoverHandler {
             id: sideHover
             cursorShape: Qt.PointingHandCursor
-        }
-        TapHandler {
-            id: sideTap
-            enabled: root.actionsEnabled
-            onTapped: actions.run(root.sideKey)
         }
         StyledToolTip {
             text: actions.details(root.sideKey).displayName

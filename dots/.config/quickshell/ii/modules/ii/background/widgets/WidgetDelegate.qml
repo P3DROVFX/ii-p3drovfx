@@ -13,6 +13,8 @@ import qs.modules.ii.background.widgets.productivity
 import qs.modules.ii.background.widgets.system
 import qs.modules.ii.background.widgets.utility
 import qs.modules.ii.background.widgets.weather
+import qs.modules.ii.background.widgets.wellbeing
+import qs.modules.ii.background.widgets.people
 import qs
 import qs.services
 
@@ -96,6 +98,17 @@ Item {
         "weather_silhouette": component_weather_silhouette,
         "weather_strip": component_weather_strip,
         "weather_dial": component_weather_dial,
+        "wellbeing_screen_ring": component_wellbeing_screen_ring,
+        "wellbeing_limits": component_wellbeing_limits,
+        "wellbeing_bedtime": component_wellbeing_bedtime,
+        "wellbeing_break": component_wellbeing_break,
+        "wellbeing_day": component_wellbeing_day,
+        "people_birthday": component_people_birthday,
+        "people_birthdays": component_people_birthdays,
+        "people_holiday": component_people_holiday,
+        "people_countdowns": component_people_countdowns,
+        "people_favorites": component_people_favorites,
+        "home_devices": component_home_devices,
         "weather_monolith": component_weather_monolith,
         "weather_daylight": component_weather_daylight,
         "weather_ranges": component_weather_ranges,
@@ -1856,6 +1869,149 @@ Item {
         id: component_weather_dial
 
         WeatherDialWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_wellbeing_screen_ring
+
+        ScreenTimeRingWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_wellbeing_limits
+
+        ScreenTimeLimitsWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_wellbeing_bedtime
+
+        BedtimeWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_wellbeing_break
+
+        BreakWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_wellbeing_day
+
+        DayBalanceWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_people_birthday
+
+        NextBirthdayWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_people_birthdays
+
+        BirthdayTimelineWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_people_holiday
+
+        HolidayWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_people_countdowns
+
+        CountdownsWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_people_favorites
+
+        FavoritePeopleWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_home_devices
+
+        HomeDevicesWidget {
             screenWidth: delegateRoot.screenWidth
             screenHeight: delegateRoot.screenHeight
             scaledScreenWidth: delegateRoot.screenWidth

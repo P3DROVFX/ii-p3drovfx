@@ -50,6 +50,25 @@ AbstractBackgroundWidget {
         return Math.abs(lum(a) - lum(fill)) >= Math.abs(lum(b) - lum(fill)) ? a : b;
     }
 
+    // A left click that did not become a move, at a point in design units
+    // (`contentItem` coordinates). Widgets act on it instead of covering the
+    // card with a TapHandler or MouseArea, which would take the press and
+    // leave the widget impossible to drag from there.
+    signal cardTapped(point at)
+    property bool _movedSincePress: false
+    onIsDraggingChanged: {
+        if (root.isDragging)
+            root._movedSincePress = true;
+        else
+            Qt.callLater(() => root._movedSincePress = false);
+    }
+    onClicked: mouse => {
+        // In Edit Mode a click selects the widget; it never runs its action.
+        if (mouse.button !== Qt.LeftButton || root._movedSincePress || !root.actionsEnabled || root.editModeActive)
+            return;
+        root.cardTapped(contentBox.mapFromItem(root, mouse.x, mouse.y));
+    }
+
     // A pill's corner that still respects sharp mode (rounding scale 0).
     function pill(height) {
         return Appearance.rounding.scale === 0 ? 0 : height / 2;

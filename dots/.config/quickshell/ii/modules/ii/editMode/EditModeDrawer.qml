@@ -329,7 +329,9 @@ Item {
         { "key": "Devices", "title": Translation.tr("Devices & Bluetooth"), "icon": "earbuds", "merge": ["Bluetooth"] },
         { "key": "Utility", "title": Translation.tr("Utility"), "icon": "build" },
         { "key": "System", "title": Translation.tr("System"), "icon": "tune" },
-        { "key": "Resources", "title": Translation.tr("Resources"), "icon": "monitor_heart" }
+        { "key": "Resources", "title": Translation.tr("Resources"), "icon": "monitor_heart" },
+        { "key": "Wellbeing", "title": Translation.tr("Wellbeing"), "icon": "self_improvement" },
+        { "key": "People", "title": Translation.tr("People & dates"), "icon": "cake" }
     ]
 
     readonly property var widgetGroups: {

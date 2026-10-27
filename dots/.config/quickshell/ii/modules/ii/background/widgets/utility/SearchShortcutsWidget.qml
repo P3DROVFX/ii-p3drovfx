@@ -38,19 +38,10 @@ ExpressiveCardWidget {
         id: actions
     }
 
-    // The bar searches through the widget's own pointer area: a button there
-    // would take the press, and the widget could no longer be moved by it.
-    property bool _moved: false
-    onIsDraggingChanged: {
-        if (root.isDragging)
-            root._moved = true;
-        else
-            Qt.callLater(() => root._moved = false);
-    }
-    onClicked: mouse => {
-        if (mouse.button !== Qt.LeftButton || root._moved || !root.actionsEnabled)
-            return;
-        if (bar.contains(bar.mapFromItem(root, mouse.x, mouse.y)))
+    // The bar searches through the widget's own pointer area (cardTapped): a
+    // button there would take the press, and the widget could not be moved.
+    onCardTapped: at => {
+        if (bar.contains(bar.mapFromItem(root.contentItem, at.x, at.y)))
             actions.run("search");
     }
 

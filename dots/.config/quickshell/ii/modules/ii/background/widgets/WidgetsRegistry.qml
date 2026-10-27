@@ -1271,6 +1271,105 @@ Singleton {
             "description": Translation.tr("Nothing OS styled 1x0.5 RAM memory widget with segmented progress bar and Ndot font."),
             "configPage": ""
         },
+        {
+            "widgetId": "wellbeing_screen_ring",
+            "name": Translation.tr("Screen Time"),
+            "category": "Wellbeing",
+            "qmlPath": Qt.resolvedUrl("wellbeing/ScreenTimeRingWidget.qml"),
+            "icon": "donut_large",
+            "description": Translation.tr("1x1 ring of today's screen time cut into the apps that took it, the total in the middle."),
+            "configPage": "widgets/DesktopWellbeingWidgetsConfig.qml"
+        },
+        {
+            "widgetId": "wellbeing_limits",
+            "name": Translation.tr("Daily Limits"),
+            "category": "Wellbeing",
+            "qmlPath": Qt.resolvedUrl("wellbeing/ScreenTimeLimitsWidget.qml"),
+            "icon": "hourglass_top",
+            "description": Translation.tr("2x1 time left on each daily limit set in Usage, with bars that warn in the last minutes."),
+            "configPage": "widgets/DesktopWellbeingWidgetsConfig.qml"
+        },
+        {
+            "widgetId": "wellbeing_bedtime",
+            "name": Translation.tr("Bedtime"),
+            "category": "Wellbeing",
+            "qmlPath": Qt.resolvedUrl("wellbeing/BedtimeWidget.qml"),
+            "icon": "bedtime",
+            "description": Translation.tr("2x1 tonight's bedtime with a crescent moon, and the last seven nights hanging early or late from the target line."),
+            "configPage": "widgets/DesktopWellbeingWidgetsConfig.qml"
+        },
+        {
+            "widgetId": "wellbeing_break",
+            "name": Translation.tr("Take a Break"),
+            "category": "Wellbeing",
+            "qmlPath": Qt.resolvedUrl("wellbeing/BreakWidget.qml"),
+            "icon": "self_improvement",
+            "description": Translation.tr("1x1 minutes at the screen since your last pause, filling five cells until it is time for a break."),
+            "configPage": "widgets/DesktopWellbeingWidgetsConfig.qml"
+        },
+        {
+            "widgetId": "wellbeing_day",
+            "name": Translation.tr("Your Day"),
+            "category": "Wellbeing",
+            "qmlPath": Qt.resolvedUrl("wellbeing/DayBalanceWidget.qml"),
+            "icon": "view_day",
+            "description": Translation.tr("1x2 day at a glance: screen time by hour, today against the week, water and tonight's bedtime."),
+            "configPage": "widgets/DesktopWellbeingWidgetsConfig.qml"
+        },
+        {
+            "widgetId": "people_birthday",
+            "name": Translation.tr("Next Birthday"),
+            "category": "People",
+            "qmlPath": Qt.resolvedUrl("people/NextBirthdayWidget.qml"),
+            "icon": "cake",
+            "description": Translation.tr("1x1 whose birthday comes next from your phone's contacts, with their photo and the days to go."),
+            "configPage": "widgets/DesktopPeopleWidgetsConfig.qml"
+        },
+        {
+            "widgetId": "people_birthdays",
+            "name": Translation.tr("Birthdays"),
+            "category": "People",
+            "qmlPath": Qt.resolvedUrl("people/BirthdayTimelineWidget.qml"),
+            "icon": "timeline",
+            "description": Translation.tr("2x1 the next five birthdays on a timeline, each photo as far along as its day."),
+            "configPage": "widgets/DesktopPeopleWidgetsConfig.qml"
+        },
+        {
+            "widgetId": "people_holiday",
+            "name": Translation.tr("Next Holiday"),
+            "category": "People",
+            "qmlPath": Qt.resolvedUrl("people/HolidayWidget.qml"),
+            "icon": "celebration",
+            "description": Translation.tr("1x1 the next public holiday as a tear-off calendar page, with the days to wait."),
+            "configPage": "widgets/DesktopPeopleWidgetsConfig.qml"
+        },
+        {
+            "widgetId": "people_countdowns",
+            "name": Translation.tr("Countdowns"),
+            "category": "People",
+            "qmlPath": Qt.resolvedUrl("people/CountdownsWidget.qml"),
+            "icon": "event_upcoming",
+            "description": Translation.tr("2x1 countdowns to your own dates, once or every year, the nearest with a dot per week left."),
+            "configPage": "widgets/DesktopPeopleWidgetsConfig.qml"
+        },
+        {
+            "widgetId": "people_favorites",
+            "name": Translation.tr("Favorite People"),
+            "category": "People",
+            "qmlPath": Qt.resolvedUrl("people/FavoritePeopleWidget.qml"),
+            "icon": "group",
+            "description": Translation.tr("1x2 your starred contacts as faces: click to call, hover to message, through your phone."),
+            "configPage": "widgets/DesktopPeopleWidgetsConfig.qml"
+        },
+        {
+            "widgetId": "home_devices",
+            "name": Translation.tr("Home"),
+            "category": "Utility",
+            "qmlPath": Qt.resolvedUrl("utility/HomeDevicesWidget.qml"),
+            "icon": "home_iot_device",
+            "description": Translation.tr("1x2 your smart lights as tiles filled to their brightness in their own colour: click to switch, wheel to dim."),
+            "configPage": "widgets/DesktopHomeWidgetConfig.qml"
+        },
     ]
 
     // Extension widgets from WidgetExtensionManager

@@ -4124,6 +4124,85 @@ Singleton {
                         property real y: 200
                         property int widgetSize: 100
                     }
+                    property JsonObject wellbeing_screen_ring: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                    }
+                    property JsonObject wellbeing_limits: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                    }
+                    property JsonObject wellbeing_bedtime: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                    }
+                    property JsonObject wellbeing_break: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                        property int breakEveryMinutes: 50
+                    }
+                    property JsonObject wellbeing_day: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                    }
+                    property JsonObject people_birthday: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                    }
+                    property JsonObject people_birthdays: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                    }
+                    property JsonObject people_holiday: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                    }
+                    property JsonObject people_countdowns: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                        property list<var> events: []
+                    }
+                    property JsonObject people_favorites: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                    }
+                    property JsonObject home_devices: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                    }
                     property JsonObject weather_hourly: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free"
