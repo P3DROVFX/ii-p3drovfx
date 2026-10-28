@@ -3527,6 +3527,10 @@ Singleton {
         name: "workspaceNumber"
         description: "Hold to show workspace numbers, release to show icons"
         onPressed: {
+            // searchToggleRelease is a release bind and never sees this press, so
+            // re-arm it here: Super+V and friends clear the flag, and Hyprland skips
+            // the release that would have consumed it.
+            root.superReleaseMightTrigger = true;
             if (!PanelFamily.touchFirst)
                 root.superDown = true;
         }
