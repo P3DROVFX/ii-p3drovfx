@@ -85,8 +85,12 @@
   --ii-r-xl: 32px;
   --ii-r-2xl: 44px;
   --ii-r-full: 999px;
+  /* List rows: the hover/playing radius. A finite value, because mixing 999px with the 23px edge corners makes the browser scale every radius down to fit. */
+  --ii-r-row: 32px;
   --ii-ease-spatial: cubic-bezier(.38, 1.21, .22, 1);
   --ii-ease-spatial-fast: cubic-bezier(.42, 1.67, .21, .9);
+  /* Radius morphs run from 999px (full) down to a few px: an overshooting curve dips below the target, clamps to 0 and snaps back. */
+  --ii-ease-radius: cubic-bezier(.22, 1, .36, 1);
   --ii-ease-effects: cubic-bezier(.34, .8, .34, 1);
   --ii-ease-decel: cubic-bezier(.05, .7, .1, 1);
   --ii-d-fast: 200ms;
@@ -108,6 +112,10 @@
   --ii-type-title: "ROND" 100, "wdth" 104;
   --ii-type-display: "ROND" 100, "wdth" 38;
   --ii-type-digits: "ROND" 100, "wdth" 30;
+  --ii-icon-queue: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z'/%3E%3C/svg%3E");
+  --ii-icon-lyrics: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 18h12v-2H3v2zM3 6v2h18V6H3zm0 7h18v-2H3v2z'/%3E%3C/svg%3E");
+  --ii-icon-comments: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M21.99 4c0-1.1-.89-2-1.99-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14l4 4-.01-18zM18 14H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z'/%3E%3C/svg%3E");
+  --ii-icon-related: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12l-5.5-2.5zM19 15l-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25L19 15z'/%3E%3C/svg%3E");
   --ii-icon-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M9.55 17.575q-.2 0-.375-.062T8.85 17.3L4.55 13q-.275-.275-.262-.712T4.575 11.575q.275-.275.7-.275t.7.275L9.55 15.15l8.475-8.475q.275-.275.713-.275t.712.275q.275.275.275.713t-.275.712l-9.2 9.2q-.15.15-.325.213t-.375.062'/%3E%3C/svg%3E");
 
   /* Kept for the side panel rules, which predate the redesign. */
@@ -389,7 +397,7 @@ ytmusic-nav-bar #guide-button {
   color: var(--m3-on-surface-variant) !important;
   background-color: var(--ii-field) !important;
   border-radius: var(--ii-r-full) !important;
-  transition: border-radius var(--ii-d-med) var(--ii-ease-spatial),
+  transition: border-radius var(--ii-d-med) var(--ii-ease-radius),
               background-color var(--ii-d-fast) var(--ii-ease-effects),
               color var(--ii-d-fast) var(--ii-ease-effects) !important;
 }
@@ -495,7 +503,7 @@ ytmusic-search-box[is-bauhaus-sidenav-enabled] .search-box.ytmusic-search-box {
   border: 0 !important;
   border-radius: var(--ii-r-full) !important;
   transition: background-color var(--ii-d-fast) var(--ii-ease-effects),
-              border-radius var(--ii-d-med) var(--ii-ease-spatial) !important;
+              border-radius var(--ii-d-med) var(--ii-ease-radius) !important;
 }
 
 ytmusic-search-box .search-box:hover {
@@ -562,7 +570,7 @@ ytmusic-search-suggestions-section ytmusic-responsive-list-item-renderer {
   background-color: transparent !important;
   border-radius: var(--ii-r-sm) !important;
   transition: background-color var(--ii-d-fast) var(--ii-ease-effects),
-              border-radius var(--ii-d-med) var(--ii-ease-spatial) !important;
+              border-radius var(--ii-d-med) var(--ii-ease-radius) !important;
 }
 
 ytmusic-search-suggestion-renderer:hover,
@@ -587,7 +595,7 @@ ytmusic-nav-bar .right-content mdui-button-icon {
   color: var(--m3-on-surface) !important;
   background-color: var(--ii-field) !important;
   border-radius: var(--ii-r-full) var(--ii-r-xs) var(--ii-r-xs) var(--ii-r-full) !important;
-  transition: border-radius var(--ii-d-med) var(--ii-ease-spatial),
+  transition: border-radius var(--ii-d-med) var(--ii-ease-radius),
               background-color var(--ii-d-fast) var(--ii-ease-effects) !important;
 }
 
@@ -639,7 +647,7 @@ ytmusic-nav-bar ytmusic-settings-button.settings-button {
   box-sizing: border-box !important;
   background-color: var(--m3-primary-container) !important;
   border-radius: var(--ii-r-full) !important;
-  transition: border-radius var(--ii-d-med) var(--ii-ease-spatial) !important;
+  transition: border-radius var(--ii-d-med) var(--ii-ease-radius) !important;
 }
 
 ytmusic-nav-bar ytmusic-settings-button.settings-button:hover {
@@ -660,7 +668,7 @@ ytmusic-nav-bar ytmusic-settings-button.settings-button #img {
 ytmusic-nav-bar ytmusic-settings-button.settings-button yt-img-shadow,
 ytmusic-nav-bar ytmusic-settings-button.settings-button #img {
   border-radius: var(--ii-r-full) !important;
-  transition: border-radius var(--ii-d-med) var(--ii-ease-spatial) !important;
+  transition: border-radius var(--ii-d-med) var(--ii-ease-radius) !important;
 }
 
 ytmusic-nav-bar ytmusic-settings-button.settings-button:hover yt-img-shadow,
@@ -735,7 +743,7 @@ ytmusic-guide-renderer,
   margin: 0 !important;
   border-radius: var(--ii-r-full) !important;
   transition: background-color var(--ii-d-fast) var(--ii-ease-effects),
-              border-radius var(--ii-d-med) var(--ii-ease-spatial),
+              border-radius var(--ii-d-med) var(--ii-ease-radius),
               width var(--ii-d-med) var(--ii-ease-spatial) !important;
 }
 
@@ -840,7 +848,7 @@ ytmusic-guide-entry-renderer:not([is-collapsed]) tp-yt-paper-item.ytmusic-guide-
   border-radius: var(--ii-r-xs) !important;
   transition: background-color var(--ii-d-fast) var(--ii-ease-effects),
               color var(--ii-d-fast) var(--ii-ease-effects),
-              border-radius var(--ii-d-med) var(--ii-ease-spatial) !important;
+              border-radius var(--ii-d-med) var(--ii-ease-radius) !important;
 }
 
 ytmusic-guide-section-renderer #items > ytmusic-guide-entry-renderer:first-child:not([is-collapsed]) tp-yt-paper-item.ytmusic-guide-entry-renderer {
@@ -1064,7 +1072,7 @@ ytmusic-carousel-shelf-renderer:where(:not(#side-panel *)) #header-group > .butt
   padding: 0 !important;
   color: var(--m3-on-surface) !important;
   background-color: var(--ii-field) !important;
-  transition: border-radius var(--ii-d-med) var(--ii-ease-spatial),
+  transition: border-radius var(--ii-d-med) var(--ii-ease-radius),
               background-color var(--ii-d-fast) var(--ii-ease-effects),
               opacity var(--ii-d-fast) var(--ii-ease-effects) !important;
 }
@@ -1156,7 +1164,7 @@ ytmusic-chip-cloud-chip-renderer:where(:not(#side-panel *)) a.yt-simple-endpoint
   transition: background-color var(--ii-d-fast) var(--ii-ease-effects),
               border-color var(--ii-d-fast) var(--ii-ease-effects),
               color var(--ii-d-fast) var(--ii-ease-effects),
-              border-radius var(--ii-d-med) var(--ii-ease-spatial),
+              border-radius var(--ii-d-med) var(--ii-ease-radius),
               padding var(--ii-d-med) var(--ii-ease-spatial) !important;
 }
 
@@ -1237,7 +1245,7 @@ ytmusic-tabs:where(:not(#side-panel *)) tp-yt-paper-tab {
   text-transform: none !important;
   transition: background-color var(--ii-d-fast) var(--ii-ease-effects),
               color var(--ii-d-fast) var(--ii-ease-effects),
-              border-radius var(--ii-d-med) var(--ii-ease-spatial) !important;
+              border-radius var(--ii-d-med) var(--ii-ease-radius) !important;
 }
 
 ytmusic-tabs:where(:not(#side-panel *)) .tab:first-child,
@@ -1287,7 +1295,7 @@ ytmusic-play-button-renderer:where(:not(#side-panel *)) {
   --ytmusic-play-button-active-icon-color: var(--m3-on-primary) !important;
   color: var(--m3-on-primary) !important;
   border-radius: var(--ii-r-full) !important;
-  transition: border-radius var(--ii-d-med) var(--ii-ease-spatial),
+  transition: border-radius var(--ii-d-med) var(--ii-ease-radius),
               transform var(--ii-d-fast) var(--ii-ease-spatial-fast) !important;
 }
 
@@ -1313,7 +1321,7 @@ ytmusic-add-to-playlist-renderer tp-yt-paper-button,
 ytmusic-button-renderer:where(:not(#side-panel *)) tp-yt-paper-button,
 tp-yt-paper-button.ytmusic-button-renderer:where(:not(#side-panel *)),
 ytmusic-toggle-button-renderer:where(:not(#side-panel *)):not([is-icon-button]) tp-yt-paper-button,
-yt-button-renderer:where(:not(#side-panel *)):not(.ytmusic-responsive-header-renderer) button.ytSpecButtonShapeNextHost:not(.ytSpecButtonShapeNextIconButton),
+yt-button-renderer:where(:not(#side-panel *)):not(.ytmusic-responsive-header-renderer, .ytmusic-download-playlist-button-renderer) button.ytSpecButtonShapeNextHost:not(.ytSpecButtonShapeNextIconButton),
 #more-content-button button.ytSpecButtonShapeNextHost,
 #more-content-button a.yt-simple-endpoint {
   height: 40px !important;
@@ -1330,7 +1338,7 @@ yt-button-renderer:where(:not(#side-panel *)):not(.ytmusic-responsive-header-ren
   letter-spacing: .01em !important;
   text-transform: none !important;
   transition: background-color var(--ii-d-fast) var(--ii-ease-effects),
-              border-radius var(--ii-d-med) var(--ii-ease-spatial) !important;
+              border-radius var(--ii-d-med) var(--ii-ease-radius) !important;
 }
 
 tp-yt-paper-button.ytmusic-subscribe-button-renderer yt-formatted-string,
@@ -1350,7 +1358,7 @@ tp-yt-paper-button.ytmusic-subscribe-button-renderer:where(:not(#side-panel *)):
 ytmusic-add-to-playlist-renderer tp-yt-paper-button:hover,
 ytmusic-button-renderer:where(:not(#side-panel *)) tp-yt-paper-button:hover,
 ytmusic-toggle-button-renderer:where(:not(#side-panel *)):not([is-icon-button]) tp-yt-paper-button:hover,
-yt-button-renderer:where(:not(#side-panel *)):not(.ytmusic-responsive-header-renderer) button.ytSpecButtonShapeNextHost:not(.ytSpecButtonShapeNextIconButton):hover,
+yt-button-renderer:where(:not(#side-panel *)):not(.ytmusic-responsive-header-renderer, .ytmusic-download-playlist-button-renderer) button.ytSpecButtonShapeNextHost:not(.ytSpecButtonShapeNextIconButton):hover,
 #more-content-button button.ytSpecButtonShapeNextHost:hover,
 #more-content-button a.yt-simple-endpoint:hover {
   background-color: color-mix(in srgb, var(--m3-on-secondary-container) 10%, var(--m3-secondary-container)) !important;
@@ -1375,7 +1383,7 @@ ytmusic-like-button-renderer:where(:not(#side-panel *)) yt-button-shape button {
   border-radius: var(--ii-r-full) !important;
   transition: background-color var(--ii-d-fast) var(--ii-ease-effects),
               color var(--ii-d-fast) var(--ii-ease-effects),
-              border-radius var(--ii-d-med) var(--ii-ease-spatial) !important;
+              border-radius var(--ii-d-med) var(--ii-ease-radius) !important;
 }
 
 tp-yt-paper-icon-button:where(:not(#side-panel *)):hover,
@@ -1420,7 +1428,7 @@ ytmusic-two-row-item-renderer:where(:not(#side-panel *)) ytmusic-item-thumbnail-
 ytmusic-two-row-item-renderer:where(:not(#side-panel *)) tp-yt-paper-ripple {
   border-radius: var(--ii-r-lg) !important;
   overflow: hidden !important;
-  transition: border-radius var(--ii-d-med) var(--ii-ease-spatial) !important;
+  transition: border-radius var(--ii-d-med) var(--ii-ease-radius) !important;
 }
 
 ytmusic-two-row-item-renderer:where(:not(#side-panel *)):hover .image-wrapper,
@@ -1516,7 +1524,7 @@ ytmusic-responsive-list-item-renderer:where(:not(#side-panel *)):where(:not(ytmu
   border: 0 !important;
   border-radius: var(--ii-r-xs) !important;
   transition: background-color var(--ii-d-fast) var(--ii-ease-effects),
-              border-radius var(--ii-d-med) var(--ii-ease-spatial) !important;
+              border-radius var(--ii-d-med) var(--ii-ease-radius) !important;
 }
 
 :is(ytmusic-shelf-renderer, ytmusic-playlist-shelf-renderer):where(:not(#side-panel *)) #contents > ytmusic-responsive-list-item-renderer:first-child {
@@ -1542,7 +1550,7 @@ ytmusic-responsive-list-item-renderer:where(:not(#side-panel *)):where(:not(ytmu
 
 ytmusic-responsive-list-item-renderer:where(:not(#side-panel *)):where(:not(ytmusic-search-suggestions-section *)):hover {
   background-color: var(--m3-surface-container-high) !important;
-  border-radius: var(--ii-r-full) !important;
+  border-radius: var(--ii-r-row) !important;
 }
 
 ytmusic-responsive-list-item-renderer:where(:not(#side-panel *))[play-button-state="playing"],
@@ -1550,7 +1558,12 @@ ytmusic-responsive-list-item-renderer:where(:not(#side-panel *))[play-button-sta
 ytmusic-responsive-list-item-renderer:where(:not(#side-panel *))[selected] {
   color: var(--m3-on-secondary-container) !important;
   background-color: var(--m3-secondary-container) !important;
-  border-radius: var(--ii-r-full) !important;
+  border-radius: var(--ii-r-row) !important;
+}
+
+/* The first and last row keep their large outer corners at rest; hovered or playing, they round like any other row. */
+:is(ytmusic-shelf-renderer, ytmusic-playlist-shelf-renderer):where(:not(#side-panel *)) #contents > ytmusic-responsive-list-item-renderer:is(:first-child, :last-of-type):is(:hover, [play-button-state="playing"], [play-button-state="paused"], [selected]) {
+  border-radius: var(--ii-r-row) !important;
 }
 
 ytmusic-responsive-list-item-renderer:where(:not(#side-panel *))[play-button-state="playing"] .title,
@@ -1645,8 +1658,8 @@ ytmusic-carousel-shelf-renderer:where(:not(#side-panel *)) ytmusic-carousel ytmu
   border-bottom-right-radius: var(--ii-r-lg) !important;
 }
 
-ytmusic-carousel-shelf-renderer:where(:not(#side-panel *)) ytmusic-carousel ytmusic-responsive-list-item-renderer:hover {
-  border-radius: var(--ii-r-full) !important;
+ytmusic-carousel-shelf-renderer:not(#side-panel *) ytmusic-carousel ytmusic-responsive-list-item-renderer:is(:hover, [play-button-state="playing"], [play-button-state="paused"], [selected]) {
+  border-radius: var(--ii-r-row) !important;
 }
 
 /* ─── Album and playlist pages ───────────────────────────────────────────── */
@@ -1866,7 +1879,7 @@ ytmusic-responsive-header-renderer .action-buttons ytmusic-toggle-button-rendere
   background-color: var(--m3-surface-container-high) !important;
   border-radius: var(--ii-r-full) !important;
   transition: background-color var(--ii-d-fast) var(--ii-ease-effects),
-              border-radius var(--ii-d-med) var(--ii-ease-spatial) !important;
+              border-radius var(--ii-d-med) var(--ii-ease-radius) !important;
 }
 
 ytmusic-responsive-header-renderer .action-buttons ytmusic-toggle-button-renderer,
@@ -1957,6 +1970,12 @@ ytmusic-browse-response #header.ytmusic-browse-response:has(> ytmusic-immersive-
   box-sizing: border-box !important;
 }
 
+/* Plain page headers (Trending songs, Mixes…) sit outside the content column, under the rail; give them its inset. */
+ytmusic-browse-response #header.ytmusic-browse-response:has(> ytmusic-header-renderer) {
+  padding-inline: calc(var(--ytmusic-guide-width, 72px) + var(--ii-gutter)) var(--ii-gutter) !important;
+  box-sizing: border-box !important;
+}
+
 ytmusic-immersive-header-renderer {
   position: relative !important;
   display: block !important;
@@ -2027,6 +2046,20 @@ ytmusic-immersive-header-renderer h1 yt-formatted-string {
   text-transform: uppercase !important;
 }
 
+/* The artist bio: two lines at the size YouTube budgets for 14px, so the clamp has to follow the font. */
+ytmusic-immersive-header-renderer .description.ytmusic-immersive-header-renderer {
+  --ii-bio-line: 22px;
+  font-size: 15px !important;
+  line-height: var(--ii-bio-line) !important;
+  max-height: calc(2 * var(--ii-bio-line)) !important;
+  -webkit-line-clamp: 2 !important;
+}
+
+ytmusic-immersive-header-renderer[is-description-expanded] .description.ytmusic-immersive-header-renderer {
+  max-height: calc(var(--ytmusic-header-description-lines-max) * var(--ii-bio-line)) !important;
+  -webkit-line-clamp: var(--ytmusic-header-description-lines-max) !important;
+}
+
 ytmusic-immersive-header-renderer .subtitle-container {
   margin: 14px 0 0 !important;
 }
@@ -2053,6 +2086,16 @@ ytmusic-immersive-header-renderer .play-buttons {
   gap: 8px !important;
 }
 
+/* YouTube sizes the hosts for its own 36px buttons and clips them; ours are 48px. */
+ytmusic-immersive-header-renderer .actions :is(yt-button-renderer, ytmusic-subscribe-button-renderer, ytmusic-menu-renderer, yt-button-shape) {
+  height: 48px !important;
+  overflow: visible !important;
+}
+
+ytmusic-immersive-header-renderer .actions .play-buttons {
+  height: auto !important;
+}
+
 ytmusic-immersive-header-renderer .actions yt-button-renderer,
 ytmusic-immersive-header-renderer .actions ytmusic-subscribe-button-renderer {
   margin: 0 !important;
@@ -2068,7 +2111,7 @@ ytmusic-immersive-header-renderer .actions button.ytSpecButtonShapeNextHost {
   font-size: 15px !important;
   font-weight: 700 !important;
   transition: background-color var(--ii-d-fast) var(--ii-ease-effects),
-              border-radius var(--ii-d-med) var(--ii-ease-spatial) !important;
+              border-radius var(--ii-d-med) var(--ii-ease-radius) !important;
 }
 
 ytmusic-immersive-header-renderer .actions .play-button button.ytSpecButtonShapeNextHost {
@@ -2180,7 +2223,7 @@ ytmusic-navigation-button-renderer[button-style="STYLE_ICON"] button {
   border: 0 !important;
   border-radius: var(--ii-r-xl) !important;
   text-align: left !important;
-  transition: border-radius var(--ii-d-med) var(--ii-ease-spatial),
+  transition: border-radius var(--ii-d-med) var(--ii-ease-radius),
               filter var(--ii-d-fast) var(--ii-ease-effects) !important;
 }
 
@@ -2239,7 +2282,7 @@ ytmusic-navigation-button-renderer:not([button-style="STYLE_ICON"]) button {
   border-radius: var(--ii-r-md) !important;
   font-weight: 700 !important;
   transition: background-color var(--ii-d-fast) var(--ii-ease-effects),
-              border-radius var(--ii-d-med) var(--ii-ease-spatial) !important;
+              border-radius var(--ii-d-med) var(--ii-ease-radius) !important;
 }
 
 ytmusic-navigation-button-renderer:not([button-style="STYLE_ICON"]) button:hover {
@@ -2389,7 +2432,7 @@ ytmusic-card-shelf-renderer .actions-container button.ytSpecButtonShapeNextHost 
   border: 0 !important;
   border-radius: var(--ii-r-full) !important;
   font-weight: 700 !important;
-  transition: border-radius var(--ii-d-med) var(--ii-ease-spatial) !important;
+  transition: border-radius var(--ii-d-med) var(--ii-ease-radius) !important;
 }
 
 ytmusic-card-shelf-renderer .actions-container yt-button-renderer + yt-button-renderer button.ytSpecButtonShapeNextHost {
@@ -2438,8 +2481,8 @@ ytmusic-card-shelf-renderer #undercards > ytmusic-responsive-list-item-renderer:
   border-bottom-right-radius: var(--ii-r-lg) !important;
 }
 
-ytmusic-card-shelf-renderer #undercards > ytmusic-responsive-list-item-renderer:hover {
-  border-radius: var(--ii-r-full) !important;
+ytmusic-card-shelf-renderer #undercards > ytmusic-responsive-list-item-renderer:is(:hover, [play-button-state="playing"], [play-button-state="paused"], [selected]) {
+  border-radius: var(--ii-r-row) !important;
 }
 
 /* ─── Library ────────────────────────────────────────────────────────────── */
@@ -2501,7 +2544,7 @@ ytmusic-multi-page-menu-renderer ytd-compact-link-renderer #endpoint {
   font-size: 14px !important;
   font-weight: 600 !important;
   transition: background-color var(--ii-d-fast) var(--ii-ease-effects),
-              border-radius var(--ii-d-med) var(--ii-ease-spatial) !important;
+              border-radius var(--ii-d-med) var(--ii-ease-radius) !important;
 }
 
 ytmusic-menu-popup-renderer tp-yt-paper-item:hover,
@@ -2643,7 +2686,7 @@ ytmusic-app-layout[player-visible] > [slot="player-bar"] {
   max-width: none !important;
   height: var(--ii-bar-h) !important;
   margin: 0 !important;
-  padding: 8px 20px 8px 12px !important;
+  padding: 8px 12px 8px 12px !important;
   box-sizing: border-box !important;
   color: var(--m3-on-surface) !important;
   background: var(--ii-bar-surface) !important;
@@ -2729,7 +2772,7 @@ ytmusic-player-bar[slot="player-bar"] .thumbnail-image-wrapper.ytmusic-player-ba
   height: 56px !important;
   margin: 0 !important;
   overflow: hidden !important;
-  border-radius: var(--ii-r-md) !important;
+  border-radius: var(--ii-r-full) !important;
 }
 
 ytmusic-player-bar[slot="player-bar"] .thumbnail-image-wrapper img.image {
@@ -2805,6 +2848,7 @@ ytmusic-player-bar[slot="player-bar"] .right-controls.ytmusic-player-bar {
   width: auto !important;
   min-width: 0 !important;
   height: 100% !important;
+  margin: 0 !important;
 }
 
 ytmusic-player-bar[slot="player-bar"] .right-controls-buttons {
@@ -2825,7 +2869,7 @@ ytmusic-player-bar[slot="player-bar"] .right-controls yt-icon-button:not(.toggle
   box-sizing: border-box !important;
   border-radius: var(--ii-r-full) !important;
   transition: background-color var(--ii-d-fast) var(--ii-ease-effects),
-              border-radius var(--ii-d-med) var(--ii-ease-spatial) !important;
+              border-radius var(--ii-d-med) var(--ii-ease-radius) !important;
 }
 
 ytmusic-player-bar[slot="player-bar"] .right-controls yt-icon-button:not(.toggle-player-page-button):hover {
@@ -2855,7 +2899,7 @@ ytmusic-player-bar[slot="player-bar"] .toggle-player-page-button {
   color: var(--m3-on-secondary-container) !important;
   background-color: var(--m3-secondary-container) !important;
   border-radius: var(--ii-r-full) !important;
-  transition: border-radius var(--ii-d-med) var(--ii-ease-spatial) !important;
+  transition: border-radius var(--ii-d-med) var(--ii-ease-radius) !important;
 }
 
 ytmusic-player-bar[slot="player-bar"] .toggle-player-page-button:hover {
@@ -2887,7 +2931,7 @@ ytmusic-player-bar[slot="player-bar"] .fast-forward-button.ytmusic-player-bar {
   background-color: var(--m3-surface-container-highest) !important;
   border-radius: var(--ii-r-full) !important;
   transition: background-color var(--ii-d-fast) var(--ii-ease-effects),
-              border-radius var(--ii-d-med) var(--ii-ease-spatial),
+              border-radius var(--ii-d-med) var(--ii-ease-radius),
               transform var(--ii-d-fast) var(--ii-ease-spatial-fast) !important;
 }
 
@@ -2925,7 +2969,7 @@ ytmusic-player-bar[slot="player-bar"] .play-pause-button.ytmusic-player-bar {
   border-radius: var(--ii-r-full) !important;
   transition: background-color var(--ii-d-fast) var(--ii-ease-effects),
               color var(--ii-d-fast) var(--ii-ease-effects),
-              border-radius var(--ii-d-med) var(--ii-ease-spatial),
+              border-radius var(--ii-d-med) var(--ii-ease-radius),
               width var(--ii-d-med) var(--ii-ease-spatial),
               transform var(--ii-d-fast) var(--ii-ease-spatial-fast) !important;
 }
@@ -3251,7 +3295,7 @@ ytmusic-player-page #song-media-window {
     font-weight: 700 !important;
     transition: background-color var(--ii-d-fast) var(--ii-ease-effects),
                 color var(--ii-d-fast) var(--ii-ease-effects),
-                border-radius var(--ii-d-med) var(--ii-ease-spatial) !important;
+                border-radius var(--ii-d-med) var(--ii-ease-radius) !important;
   }
 
   ytmusic-player-page #av-id .song-button.ytmusic-av-toggle {
@@ -3908,6 +3952,10 @@ ytmusic-player-page[player-page-open] #tab-renderer ytmusic-carousel-shelf-rende
 }
 
 ytmusic-player-page[player-page-open] #tab-renderer ytmusic-carousel-shelf-renderer #header-group {
+  min-height: 0 !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
   display: grid !important;
   grid-template-columns: minmax(0, 1fr) auto !important;
   align-items: center !important;
@@ -3958,8 +4006,49 @@ ytmusic-player-page[player-page-open] #tab-renderer ytmusic-carousel-shelf-rende
   height: 36px !important;
   min-height: 36px !important;
   margin: 0 !important;
+  padding: 0 !important;
   box-sizing: border-box !important;
-  border-radius: var(--m3-shape-full) !important;
+  border: 0 !important;
+  border-radius: var(--ii-r-full) !important;
+}
+
+/* YouTube pads the inner button and strokes the host; the arrow drifted out of its circle. */
+ytmusic-player-page[player-page-open] #tab-renderer ytmusic-carousel-shelf-renderer .button-group yt-icon-button {
+  display: grid !important;
+  place-items: center !important;
+  color: var(--m3-on-surface) !important;
+  background-color: var(--m3-surface-container-high) !important;
+  transition: background-color var(--ii-d-fast) var(--ii-ease-effects),
+              border-radius var(--ii-d-med) var(--ii-ease-radius) !important;
+}
+
+ytmusic-player-page[player-page-open] #tab-renderer ytmusic-carousel-shelf-renderer .button-group yt-icon-button:not([disabled]):hover {
+  background-color: var(--m3-surface-container-highest) !important;
+  border-radius: var(--ii-r-md) !important;
+}
+
+ytmusic-player-page[player-page-open] #tab-renderer ytmusic-carousel-shelf-renderer .button-group yt-icon-button[disabled] {
+  opacity: .38 !important;
+}
+
+ytmusic-player-page[player-page-open] #tab-renderer ytmusic-carousel-shelf-renderer .button-group yt-icon-button button#button {
+  position: static !important;
+  display: grid !important;
+  place-items: center !important;
+  color: inherit !important;
+  background: transparent !important;
+}
+
+ytmusic-player-page[player-page-open] #tab-renderer ytmusic-carousel-shelf-renderer .button-group yt-icon-button yt-icon {
+  display: block !important;
+  width: 24px !important;
+  height: 24px !important;
+  margin: 0 !important;
+  color: inherit !important;
+}
+
+ytmusic-player-page[player-page-open] #tab-renderer ytmusic-carousel-shelf-renderer .button-group yt-interaction {
+  display: none !important;
 }
 
 ytmusic-player-page[player-page-open] #tab-renderer ytmusic-carousel {
@@ -4128,6 +4217,402 @@ ytmusic-player-page[player-page-open] ytmusic-player-queue #contents.ytmusic-pla
   border-top-right-radius: var(--m3-shape-lg) !important;
 }
 
+
+/* ─── Full player side panel: compact and expressive ─────────────────────── */
+/* Tabs: icon-only pills; the open one widens to icon + label. */
+ytmusic-player-page[player-page-open] #side-panel.side-panel.ytmusic-player-page {
+  padding: 6px !important;
+}
+
+ytmusic-player-page[player-page-open] #side-panel tp-yt-paper-tabs,
+ytmusic-player-page[player-page-open] #side-panel .tab-header-container.ytmusic-player-page {
+  width: fit-content !important;
+  max-width: 100% !important;
+  margin-inline: auto !important;
+  height: 48px !important;
+  min-height: 48px !important;
+  padding: 4px !important;
+  border: 0 !important;
+}
+
+ytmusic-player-page[player-page-open] #side-panel tp-yt-paper-tabs #tabsContainer.tp-yt-paper-tabs {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  height: 40px !important;
+}
+
+/* Polymer pins the tab strip with position: absolute; unpin it so the bar can size to its tabs. */
+ytmusic-player-page[player-page-open] #side-panel tp-yt-paper-tabs #tabsContent {
+  position: static !important;
+  display: flex !important;
+  width: auto !important;
+  height: 40px !important;
+  gap: 2px !important;
+}
+
+ytmusic-player-page[player-page-open] #side-panel tp-yt-paper-tabs tp-yt-paper-tab {
+  flex: 0 0 auto !important;
+  min-width: 0 !important;
+  min-height: 40px !important;
+  height: 40px !important;
+  padding-inline: 10px !important;
+  color: var(--m3-on-surface-variant) !important;
+  font-family: var(--ii-font) !important;
+  transition: padding var(--ii-d-med) var(--ii-ease-spatial),
+              background-color var(--ii-d-fast) var(--ii-ease-effects),
+              color var(--ii-d-fast) var(--ii-ease-effects),
+              border-radius var(--ii-d-med) var(--ii-ease-radius) !important;
+}
+
+ytmusic-player-page[player-page-open] #side-panel tp-yt-paper-tabs tp-yt-paper-tab .tab-content {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: auto !important;
+  font-size: 0 !important;
+  font-weight: 850 !important;
+  font-variation-settings: "ROND" 100, "wdth" 125 !important;
+  letter-spacing: .07em !important;
+  text-transform: uppercase !important;
+  white-space: nowrap !important;
+  transition: font-size var(--ii-d-med) var(--ii-ease-effects) !important;
+}
+
+ytmusic-player-page[player-page-open] #side-panel tp-yt-paper-tabs tp-yt-paper-tab .tab-content::before {
+  content: "" !important;
+  flex: 0 0 22px !important;
+  width: 22px !important;
+  height: 22px !important;
+  margin-right: 0 !important;
+  background-color: currentColor !important;
+  -webkit-mask: var(--ii-tab-icon) center / contain no-repeat !important;
+  mask: var(--ii-tab-icon) center / contain no-repeat !important;
+  transition: margin-right var(--ii-d-med) var(--ii-ease-effects) !important;
+}
+
+ytmusic-player-page[player-page-open] #side-panel tp-yt-paper-tabs tp-yt-paper-tab:nth-of-type(1) { --ii-tab-icon: var(--ii-icon-queue); }
+ytmusic-player-page[player-page-open] #side-panel tp-yt-paper-tabs tp-yt-paper-tab:nth-of-type(2) { --ii-tab-icon: var(--ii-icon-lyrics); }
+ytmusic-player-page[player-page-open] #side-panel tp-yt-paper-tabs tp-yt-paper-tab:nth-of-type(3) { --ii-tab-icon: var(--ii-icon-comments); }
+ytmusic-player-page[player-page-open] #side-panel tp-yt-paper-tabs tp-yt-paper-tab:nth-of-type(4) { --ii-tab-icon: var(--ii-icon-related); }
+
+ytmusic-player-page[player-page-open] #side-panel tp-yt-paper-tabs tp-yt-paper-tab:hover {
+  color: var(--m3-on-surface) !important;
+  background-color: var(--ii-hover) !important;
+  border-radius: var(--ii-r-md) !important;
+}
+
+ytmusic-player-page[player-page-open] #side-panel tp-yt-paper-tabs tp-yt-paper-tab.iron-selected {
+  padding-inline: 14px 18px !important;
+  color: var(--m3-on-secondary-container) !important;
+  background-color: var(--m3-secondary-container) !important;
+  border-radius: var(--ii-r-full) !important;
+}
+
+ytmusic-player-page[player-page-open] #side-panel tp-yt-paper-tabs tp-yt-paper-tab.iron-selected .tab-content {
+  font-size: 13px !important;
+}
+
+ytmusic-player-page[player-page-open] #side-panel tp-yt-paper-tabs tp-yt-paper-tab.iron-selected .tab-content::before {
+  margin-right: 8px !important;
+}
+
+/* Queue header: the playlist name is the headline, the helper copy goes. */
+ytmusic-player-page[player-page-open] ytmusic-queue-header-renderer {
+  align-items: center !important;
+  min-height: 48px !important;
+  margin: 6px 0 2px !important;
+  padding: 0 8px 0 12px !important;
+  background-color: transparent !important;
+}
+
+ytmusic-player-page[player-page-open] ytmusic-queue-header-renderer .container-name {
+  display: flex !important;
+  align-items: center !important;
+  height: 40px !important;
+  padding-right: 12px !important;
+}
+
+ytmusic-player-page[player-page-open] ytmusic-queue-header-renderer .title,
+ytmusic-player-page[player-page-open] ytmusic-tab-renderer .autoplay .subtitle {
+  display: none !important;
+}
+
+ytmusic-player-page[player-page-open] ytmusic-queue-header-renderer .subtitle {
+  color: var(--m3-on-surface) !important;
+  font-family: var(--ii-font) !important;
+  font-size: 22px !important;
+  font-weight: 820 !important;
+  font-variation-settings: "ROND" 100, "wdth" 112 !important;
+  letter-spacing: -.015em !important;
+  line-height: 26px !important;
+  max-height: 52px !important;
+  margin: 0 !important;
+}
+
+/* Save: a tonal tile with an accent icon that squares up on hover. */
+ytmusic-player-page[player-page-open] ytmusic-queue-header-renderer #buttons ytmusic-chip-cloud-chip-renderer {
+  height: 40px !important;
+  min-height: 40px !important;
+  margin: 0 !important;
+}
+
+ytmusic-player-page[player-page-open] ytmusic-queue-header-renderer #buttons .gradient-box.ytmusic-chip-cloud-chip-renderer {
+  height: 40px !important;
+  background: transparent !important;
+}
+
+ytmusic-player-page[player-page-open] ytmusic-queue-header-renderer #buttons a.yt-simple-endpoint.ytmusic-chip-cloud-chip-renderer {
+  gap: 8px !important;
+  height: 40px !important;
+  min-height: 40px !important;
+  padding-inline: 14px 18px !important;
+  box-sizing: border-box !important;
+  color: var(--m3-on-secondary-container) !important;
+  background-color: var(--m3-secondary-container) !important;
+  border-radius: var(--ii-r-full) !important;
+  font-family: var(--ii-font) !important;
+  font-size: 14px !important;
+  font-weight: 800 !important;
+  font-variation-settings: "ROND" 100, "wdth" 112 !important;
+  letter-spacing: .01em !important;
+  transition: background-color var(--ii-d-fast) var(--ii-ease-effects),
+              border-radius var(--ii-d-med) var(--ii-ease-radius) !important;
+}
+
+ytmusic-player-page[player-page-open] ytmusic-queue-header-renderer #buttons a.yt-simple-endpoint.ytmusic-chip-cloud-chip-renderer:hover {
+  background-color: color-mix(in srgb, var(--m3-on-secondary-container) 12%, var(--m3-secondary-container)) !important;
+  border-radius: var(--ii-r-md) !important;
+}
+
+ytmusic-player-page[player-page-open] ytmusic-queue-header-renderer #buttons ytmusic-chip-cloud-chip-renderer yt-icon {
+  color: var(--m3-primary) !important;
+  fill: var(--m3-primary) !important;
+}
+
+/* Autoplay: Material 3 Expressive switch (52×32 track, 16→24 px handle with a check). */
+ytmusic-player-page[player-page-open] ytmusic-tab-renderer .autoplay {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  min-height: 44px !important;
+  margin: 0 0 4px !important;
+  padding: 0 8px 0 12px !important;
+}
+
+ytmusic-player-page[player-page-open] ytmusic-tab-renderer .autoplay > div {
+  display: flex !important;
+  align-items: center !important;
+}
+
+ytmusic-player-page[player-page-open] ytmusic-tab-renderer .autoplay .title {
+  color: var(--m3-on-surface) !important;
+  font-family: var(--ii-font) !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  font-variation-settings: "ROND" 100, "wdth" 108 !important;
+  letter-spacing: -.005em !important;
+  transform: translateY(1px) !important;
+}
+
+ytmusic-player-page[player-page-open] ytmusic-tab-renderer tp-yt-paper-toggle-button#automix {
+  position: relative !important;
+  flex: 0 0 52px !important;
+  display: block !important;
+  width: 52px !important;
+  height: 32px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+ytmusic-player-page[player-page-open] #automix .toggle-container {
+  position: absolute !important;
+  inset: 0 !important;
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+ytmusic-player-page[player-page-open] #automix #toggleBar {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+  background-color: var(--m3-surface-container-highest) !important;
+  border: 2px solid var(--m3-outline) !important;
+  border-radius: var(--ii-r-full) !important;
+  opacity: 1 !important;
+  transition: background-color var(--ii-d-fast) var(--ii-ease-effects),
+              border-color var(--ii-d-fast) var(--ii-ease-effects) !important;
+}
+
+ytmusic-player-page[player-page-open] #automix #toggleButton {
+  position: absolute !important;
+  top: 50% !important;
+  left: 6px !important;
+  width: 16px !important;
+  height: 16px !important;
+  margin: 0 !important;
+  background-color: var(--m3-outline) !important;
+  border-radius: var(--ii-r-full) !important;
+  box-shadow: none !important;
+  transform: translateY(-50%) !important;
+  transition: left var(--ii-d-med) var(--ii-ease-spatial),
+              width var(--ii-d-med) var(--ii-ease-spatial),
+              height var(--ii-d-med) var(--ii-ease-spatial),
+              background-color var(--ii-d-fast) var(--ii-ease-effects) !important;
+}
+
+ytmusic-player-page[player-page-open] #automix #toggleButton::after {
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  background-color: var(--m3-primary) !important;
+  opacity: 0 !important;
+  transition: opacity var(--ii-d-fast) var(--ii-ease-effects) !important;
+  -webkit-mask: var(--ii-icon-check) center / 16px 16px no-repeat !important;
+  mask: var(--ii-icon-check) center / 16px 16px no-repeat !important;
+}
+
+ytmusic-player-page[player-page-open] #automix[checked] #toggleBar {
+  background-color: var(--m3-primary) !important;
+  border-color: var(--m3-primary) !important;
+}
+
+ytmusic-player-page[player-page-open] #automix[checked] #toggleButton {
+  left: 24px !important;
+  width: 24px !important;
+  height: 24px !important;
+  background-color: var(--m3-on-primary) !important;
+  transform: translateY(-50%) !important;
+}
+
+ytmusic-player-page[player-page-open] #automix[checked] #toggleButton::after {
+  opacity: 1 !important;
+}
+
+ytmusic-player-page[player-page-open] #automix:hover:not([checked]) #toggleButton {
+  background-color: var(--m3-on-surface-variant) !important;
+}
+
+ytmusic-player-page[player-page-open] #automix:active #toggleButton {
+  left: 4px !important;
+  width: 28px !important;
+  height: 28px !important;
+}
+
+ytmusic-player-page[player-page-open] #automix[checked]:active #toggleButton {
+  left: 22px !important;
+}
+
+/* Queue rows: no divider line, a quiet row for the rest and a loud one for what plays. */
+ytmusic-player-page[player-page-open] ytmusic-player-queue ytmusic-player-queue-item {
+  height: 56px !important;
+  min-height: 56px !important;
+  margin-block: 1px !important;
+  padding-inline: 8px 12px !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+ytmusic-player-page[player-page-open] ytmusic-player-queue ytmusic-player-queue-item .left-items {
+  flex: 0 0 40px !important;
+  width: 40px !important;
+  height: 40px !important;
+  margin-right: 12px !important;
+  border-radius: var(--ii-r-full) !important;
+  overflow: hidden !important;
+}
+
+ytmusic-player-page[player-page-open] ytmusic-player-queue ytmusic-player-queue-item yt-img-shadow {
+  width: 40px !important;
+  height: 40px !important;
+  border-radius: var(--ii-r-full) !important;
+  overflow: hidden !important;
+}
+
+ytmusic-player-page[player-page-open] ytmusic-player-queue ytmusic-player-queue-item .thumbnail-overlay,
+ytmusic-player-page[player-page-open] ytmusic-player-queue ytmusic-player-queue-item .thumbnail-overlay #content {
+  width: 40px !important;
+  height: 40px !important;
+  border-radius: var(--ii-r-full) !important;
+}
+
+/* The play icon floats straight on the cover: no disc behind it, a scrim on the art keeps it legible. */
+ytmusic-player-page[player-page-open] ytmusic-player-queue ytmusic-player-queue-item ytmusic-play-button-renderer {
+  --ytmusic-play-button-background-color: transparent !important;
+  --ytmusic-play-button-icon-color: #fff !important;
+  width: 40px !important;
+  height: 40px !important;
+  color: #fff !important;
+  background: transparent !important;
+}
+
+ytmusic-player-page[player-page-open] ytmusic-player-queue ytmusic-player-queue-item ytmusic-play-button-renderer .content-wrapper {
+  width: 40px !important;
+  height: 40px !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+ytmusic-player-page[player-page-open] ytmusic-player-queue ytmusic-player-queue-item ytmusic-play-button-renderer yt-icon {
+  color: #fff !important;
+  fill: #fff !important;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .55)) !important;
+}
+
+ytmusic-player-page[player-page-open] ytmusic-player-queue ytmusic-player-queue-item[selected] yt-img-shadow img,
+ytmusic-player-page[player-page-open] ytmusic-player-queue ytmusic-player-queue-item:hover yt-img-shadow img {
+  filter: brightness(.55) !important;
+}
+
+ytmusic-player-page[player-page-open] ytmusic-player-queue ytmusic-player-queue-item .song-title {
+  color: var(--m3-on-surface) !important;
+  font-size: 15px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0 !important;
+  line-height: 20px !important;
+}
+
+ytmusic-player-page[player-page-open] ytmusic-player-queue ytmusic-player-queue-item .byline {
+  color: var(--m3-on-surface-variant) !important;
+  font-size: 13px !important;
+  font-weight: 400 !important;
+  line-height: 18px !important;
+}
+
+ytmusic-player-page[player-page-open] ytmusic-player-queue ytmusic-player-queue-item .duration {
+  color: var(--m3-on-surface-variant) !important;
+  font-family: var(--ii-font) !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  font-variation-settings: "ROND" 100, "wdth" 100 !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+ytmusic-player-page[player-page-open] ytmusic-player-queue ytmusic-player-queue-item[selected] .song-title {
+  color: var(--m3-on-secondary-container) !important;
+  font-size: 17px !important;
+  font-weight: 850 !important;
+  font-variation-settings: "ROND" 100, "wdth" 112 !important;
+  letter-spacing: -.01em !important;
+  line-height: 22px !important;
+}
+
+ytmusic-player-page[player-page-open] ytmusic-player-queue ytmusic-player-queue-item[selected] .byline {
+  color: color-mix(in srgb, var(--m3-on-secondary-container) 80%, transparent) !important;
+  font-weight: 600 !important;
+}
+
+ytmusic-player-page[player-page-open] ytmusic-player-queue ytmusic-player-queue-item[selected] .duration {
+  color: var(--m3-on-secondary-container) !important;
+  font-size: 16px !important;
+  font-weight: 850 !important;
+  font-variation-settings: "ROND" 100, "wdth" 125 !important;
+}
 
 /* ─── Responsive layers ──────────────────────────────────────────────────── */
 /* Breakpoints follow YouTube Music's own shell so nothing fights it:
@@ -4447,7 +4932,7 @@ ytmusic-player-page[player-page-open] ytmusic-player-queue #contents.ytmusic-pla
     text-align: center !important;
   }
 
-  ytmusic-browse-response #header.ytmusic-browse-response:has(> ytmusic-immersive-header-renderer) {
+  ytmusic-browse-response #header.ytmusic-browse-response:has(> ytmusic-immersive-header-renderer, > ytmusic-header-renderer) {
     padding-inline: var(--ii-gutter) !important;
   }
 
@@ -4570,7 +5055,7 @@ ytmusic-player-page[player-page-open] ytmusic-player-queue #contents.ytmusic-pla
     color: var(--m3-on-primary) !important;
     background-color: var(--m3-primary) !important;
     border-radius: var(--ii-r-full) !important;
-    transition: border-radius var(--ii-d-med) var(--ii-ease-spatial),
+    transition: border-radius var(--ii-d-med) var(--ii-ease-radius),
                 background-color var(--ii-d-fast) var(--ii-ease-effects) !important;
   }
 
