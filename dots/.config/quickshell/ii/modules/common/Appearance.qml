@@ -501,6 +501,9 @@ Singleton {
         script += "hl.layer_rule({ name = 'ii:appearance:bar', match = { namespace = 'quickshell:bar' }, blur = true, xray = " + xray + ", ignore_alpha = " + barA + " }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:dock', match = { namespace = 'quickshell:dock' }, blur = true, xray = " + xray + ", ignore_alpha = " + root.dockIgnoreAlpha + " }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:island', match = { namespace = 'quickshell:floatingNotch' }, blur = true, xray = " + xray + ", ignore_alpha = " + root.islandIgnoreAlpha + " }) ";
+        // The sidebars' body is colLayer0 too: the island's threshold keeps their
+        // antialiased edges from blurring into a 1px ring.
+        script += "hl.layer_rule({ name = 'ii:appearance:sidebars', match = { namespace = '^quickshell:sidebar(Left|Right)$' }, blur = true, xray = " + xray + ", ignore_alpha = " + root.islandIgnoreAlpha + " }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:background', match = { namespace = 'quickshell:background' }, blur = false }) ";
         // See backgroundWidgetsRules. Re-declared on every change; rules.lua keeps them off
         // until the shell has pushed these.
