@@ -405,7 +405,7 @@ Singleton {
     // The island always paints colLayer0 (background transparency), whatever the
     // bar style: tying it to the transparent bar's pill opacity put the threshold
     // above the island's own alpha and dropped its blur.
-    readonly property real islandIgnoreAlpha: Math.min(root.layerIgnoreAlpha,Math.max(0, 1 - root.backgroundTransparency - 0.01))
+    readonly property real islandIgnoreAlpha: Math.min(root.layerIgnoreAlpha, Math.max(0, 1 - root.backgroundTransparency - 0.01))
 
     // The dock's tray is colLayer0 (background transparency): hold the threshold just
     // under it, as for the bar, or every antialiased edge of its widgets blurs too and
@@ -422,7 +422,7 @@ Singleton {
     // compositor blur behind a 100% opaque surface is completely invisible and causes
     // Hyprland to blur the drop shadow pixels into a thick frosted halo when ignore_alpha is low.
     readonly property bool popupBlurEnabled: (Config.options?.appearance?.transparency?.enable ?? false) && (Config.options?.appearance?.transparency?.popups ?? false)
-    readonly property real popupIgnoreAlpha: Math.min(root.layerIgnoreAlpha,Math.max(0, 1 - root.backgroundTransparency - 0.01))
+    readonly property real popupIgnoreAlpha: Math.min(root.layerIgnoreAlpha, Math.max(0, 1 - root.backgroundTransparency - 0.01))
 
     // Desktop widgets: compositor blur behind a see-through widget background.
     // Their background alpha (the scheme surface times the tint, set by
