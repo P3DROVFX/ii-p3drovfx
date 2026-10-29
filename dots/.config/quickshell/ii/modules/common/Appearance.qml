@@ -404,8 +404,10 @@ Singleton {
         : root.islandIgnoreAlpha
     // The island always paints colLayer0 (background transparency), whatever the
     // bar style: tying it to the transparent bar's pill opacity put the threshold
-    // above the island's own alpha and dropped its blur.
-    readonly property real islandIgnoreAlpha: Math.min(root.layerIgnoreAlpha, Math.max(0, 1 - root.backgroundTransparency - 0.01))
+    // above the island's own alpha and dropped its blur. Held just under that alpha,
+    // as for the dock: any lower and the body's antialiased edge pixels blur too,
+    // a 1px ring of the bright backdrop around the island.
+    readonly property real islandIgnoreAlpha: Math.max(0, 1 - root.backgroundTransparency - 0.01)
 
     // The dock's tray is colLayer0 (background transparency): hold the threshold just
     // under it, as for the bar, or every antialiased edge of its widgets blurs too and
