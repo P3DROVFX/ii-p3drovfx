@@ -231,7 +231,8 @@ var GAME_MODE_OPTIONS = {
     "general:gaps_out": 0,
     "general:border_size": 1,
     "decoration:rounding": 0,
-    "decoration:rounding_power": 0,
+    // Irrelevant with rounding 0, but 0 is out of range (min 1, 2 before 0.57)
+    "decoration:rounding_power": 2,
     "general:allow_tearing": 1
 };
 var GAME_MODE_RULE_MARKER = "shell:game-mode-opaque";
@@ -244,7 +245,7 @@ var HYPRLAND_PRESETS = {
     blur: { "decoration:blur:enabled": 0 },
     shadows: { "decoration:shadow:enabled": 0 },
     gaps: { "general:gaps_in": 0, "general:gaps_out": 0 },
-    rounding: { "decoration:rounding": 0, "decoration:rounding_power": 0 },
+    rounding: { "decoration:rounding": 0, "decoration:rounding_power": 2 },
     tearing: { "general:allow_tearing": 1 },
     // A window rule rather than options: see HYPRLAND_PRESET_RULES.
     transparency: {}
