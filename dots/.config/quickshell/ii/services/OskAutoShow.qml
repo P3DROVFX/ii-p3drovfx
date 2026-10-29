@@ -203,8 +203,10 @@ Singleton {
         GlobalStates.oskOpen = false;
     }
 
+    readonly property bool isDesktop: !PanelFamily.touchFirst
+
     function pointerAllowed(kind) {
-        return OskProtocol.pointerAllowed(kind, root.opts);
+        return OskProtocol.pointerAllowed(kind, root.opts, root.isDesktop);
     }
 
     function outsideKeyboard(x, y) {

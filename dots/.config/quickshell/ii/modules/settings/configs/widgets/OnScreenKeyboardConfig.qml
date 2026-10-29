@@ -207,6 +207,20 @@ Item {
                     }
                 }
 
+                ConfigSwitch {
+                    Layout.leftMargin: 16
+                    visible: Config.options.osk.autoShow.allowMouse
+                    buttonIcon: "desktop_windows"
+                    text: Translation.tr("Allow mouse trigger in desktop mode")
+                    enabled: Config.options.osk.autoShow.enable && Config.options.osk.autoShow.allowMouse
+                    checked: Config.options.osk.autoShow.allowMouseInDesktop
+                    onCheckedChanged: Config.options.osk.autoShow.allowMouseInDesktop = checked
+
+                    StyledToolTip {
+                        text: Translation.tr("Allow mouse clicks to raise the keyboard in desktop mode. Keep disabled to prevent the keyboard from popping up while clicking text fields with a mouse.")
+                    }
+                }
+
                 // The last of the four ways this could silently do nothing. The helper is
                 // built, the switch is on, permissions are fine — and there is simply no
                 // device on this machine that can fire the trigger.

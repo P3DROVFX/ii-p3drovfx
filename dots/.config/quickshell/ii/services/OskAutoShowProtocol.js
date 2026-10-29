@@ -87,12 +87,19 @@ function intOr(value, fallback) {
 ///
 /// Touch and pen default on; the mouse defaults off and should stay off wherever there
 /// is a touchscreen. See Config.options.osk.autoShow.allowMouse for why it exists.
-function pointerAllowed(kind, opts) {
+/// In desktop mode, mouse triggers are disabled unless allowMouseInDesktop is explicitly true.
+function pointerAllowed(kind, opts, isDesktop) {
     var o = opts || {};
     if (kind === "touch")
         return o.allowTouch === undefined ? true : Boolean(o.allowTouch);
-    if (kind === "mouse")
-        return o.allowMouse === undefined ? false : Boolean(o.allowMouse);
+    if (kind === "mouse") {
+        if (o.allowMouse === undefined ? false : Boolean(o.allowMouse)) {
+            if (isDesktop && !Boolean(o.allowMouseInDesktop))
+                return false;
+            return true;
+        }
+        return false;
+    }
     if (kind === "pen")
         return o.allowPen === undefined ? true : Boolean(o.allowPen);
     return false;
@@ -101,9 +108,9 @@ function pointerAllowed(kind, opts) {
 /// Whether anything on this machine can fire the trigger, given what the daemon found
 /// and which kinds the user left switched on. False here is the difference between
 /// "broken" and "there is no touchscreen".
-function anyTriggerDevice(inventory, opts) {
+function anyTriggerDevice(inventory, opts, isDesktop) {
     var i = inventory || {};
-    return ((i.touch || 0) > 0 && pointerAllowed("touch", opts))
-        || ((i.pen || 0) > 0 && pointerAllowed("pen", opts))
-        || ((i.mouse || 0) > 0 && pointerAllowed("mouse", opts));
+    return ((i.touch || 0) > 0 && pointerAllowed("touch", opts, isDesktop))
+        || ((i.pen || 0) > 0 && pointerAllowed("pen", opts, isDesktop))
+        || ((i.mouse || 0) > 0 && pointerAllowed("mouse", opts, isDesktop));
 }
