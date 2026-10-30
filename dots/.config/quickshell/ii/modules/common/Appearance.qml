@@ -511,6 +511,10 @@ Singleton {
         // antialiased edges from blurring into a 1px ring.
         script += "hl.layer_rule({ name = 'ii:appearance:sidebars', match = { namespace = '^quickshell:sidebar(Left|Right)$' }, blur = true, xray = " + xray + ", ignore_alpha = " + root.islandIgnoreAlpha + " }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:background', match = { namespace = 'quickshell:background' }, blur = false }) ";
+        // The idle dim scrim's 50% black sits above every ignore_alpha, so the
+        // quickshell.* rule above would blur the screen behind it (with xray: down
+        // to the bare wallpaper) instead of just darkening it.
+        script += "hl.layer_rule({ name = 'ii:appearance:idle-dim', match = { namespace = '^quickshell:idleDim$' }, blur = false }) ";
         // See backgroundWidgetsRules. Re-declared on every change; rules.lua keeps them off
         // until the shell has pushed these.
         script += root.backgroundWidgetsRules;
