@@ -107,6 +107,11 @@ Singleton {
      * toplevel - it flips the instant the window goes fullscreen - and only the workspace
      * it sits on is read from the client list.
      */
+    /** Position of a monitor in the workspace map (see `monitors` ordering); 0 if unknown. */
+    function workspaceMapIndex(monitorName) {
+        return Math.max(0, root.monitors.findIndex(mon => mon.name === monitorName));
+    }
+
     function monitorHasFullscreenWindow(monitorName) {
         if (!monitorName) return false;
         const monitor = root.monitors.find(candidate => candidate?.name === monitorName);
@@ -374,7 +379,10 @@ Singleton {
         stdout: StdioCollector {
             id: monitorsCollector
             onStreamFinished: {
-                root.monitors = JSON.parse(monitorsCollector.text);
+                // Ordered by Hyprland's monitor id, not by `hyprctl` order: a monitor that
+                // reconnects (e.g. HDMI on resume) keeps its id but is listed last, and the
+                // workspace map is indexed by this position.
+                root.monitors = JSON.parse(monitorsCollector.text).sort((a, b) => a.id - b.id);
 
                 if (root._monitorsNeedsUpdate) {
                     root._monitorsNeedsUpdate = false;
@@ -445,8 +453,20 @@ Singleton {
         id: syncWorkspaceMapProcess
     }
 
+    // Set by the lock while the screen is locked: the sync moves the mapped workspaces onto
+    // their monitors, which would bring windows back over the lock when a monitor reconnects
+    // on resume. Synced once on release instead.
+    property bool holdWorkspaceMapSync: false
+    property bool _workspaceMapSyncPending: false
+    onHoldWorkspaceMapSyncChanged: {
+        if (!root.holdWorkspaceMapSync && root._workspaceMapSyncPending)
+            root.syncWorkspaceMap();
+    }
+
     function syncWorkspaceMap() {
         if (!Config.ready || !Config.options.bar.workspaces.useWorkspaceMap) return;
+        root._workspaceMapSyncPending = root.holdWorkspaceMapSync;
+        if (root.holdWorkspaceMapSync) return;
         const map = Config.options.bar.workspaces.workspaceMap;
         if (!map || map.length === 0) return;
         const monitorNames = root.monitors.map(m => m.name);

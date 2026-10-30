@@ -390,7 +390,7 @@ PanelWindow {
     }
     readonly property bool useWorkspaceMap: Config.options.bar.workspaces.useWorkspaceMap
     readonly property var workspaceMap: Config.options.bar.workspaces.workspaceMap
-    readonly property int monitorIndex: Quickshell.screens.indexOf(modelData)
+    readonly property int monitorIndex: HyprlandData.workspaceMapIndex(modelData.name)
     readonly property int workspaceOffset: useWorkspaceMap ? workspaceMap[monitorIndex] : 0
     readonly property int workspaceGroup: {
         if (!loopEnabled)

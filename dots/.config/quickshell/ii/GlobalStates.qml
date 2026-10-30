@@ -1171,7 +1171,7 @@ Singleton {
                     monitors: [{
                         name: mon,
                         activeWorkspaceId: ws,
-                        index: Quickshell.screens.findIndex(s => s.name === mon)
+                        index: HyprlandData.workspaceMapIndex(mon)
                     }],
                     windowList: HyprlandData.windowList || [],
                     allMonitors: HyprlandData.monitors || [],
@@ -1976,7 +1976,7 @@ Singleton {
             monitors: [{
                 name: mon,
                 activeWorkspaceId: ws,
-                index: Quickshell.screens.findIndex(screen => screen.name === mon)
+                index: HyprlandData.workspaceMapIndex(mon)
             }],
             windowList: HyprlandData.windowList || [],
             allMonitors: HyprlandData.monitors || [],
