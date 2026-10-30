@@ -45,7 +45,7 @@ Singleton {
             "name": "Colors & Themes",
             "icon": "palette",
             "component": "modules/settings/configs/ColorsThemesConfig.qml",
-            "subPages": ["widgets/OpenRGBConfig.qml", "widgets/WallpaperEngineConfig.qml"],
+            "subPages": ["widgets/OpenRGBConfig.qml", "widgets/WallpaperEngineConfig.qml", "widgets/MatugenTemplatesConfig.qml"],
             "searchSources": ["sections/ColorsPreviewSection.qml", "sections/ColorsSchedulingSection.qml", "sections/ColorsWallpaperThemingSection.qml", "sections/ColorsWallpaperVariantsSection.qml", "sections/ColorsPickerSection.qml"],
             "aliases": []
         },

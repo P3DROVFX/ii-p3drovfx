@@ -1,0 +1,84 @@
+{
+  "themes": [
+    {
+      "id": "btop",
+      "name": "btop",
+      "app": "btop",
+      "symbol": "monitor_heart",
+      "description": "System monitor gradients and boxes",
+      "template": "btop.theme",
+      "output": "~/.config/btop/themes/matugen.theme",
+      "postHook": "pkill -USR2 btop || true",
+      "setup": "In btop, open Options and pick the \"matugen\" color theme."
+    },
+    {
+      "id": "kitty",
+      "name": "Kitty",
+      "app": "kitty",
+      "symbol": "terminal",
+      "description": "Terminal colors, tabs and borders",
+      "template": "kitty.conf",
+      "output": "~/.config/kitty/matugen.conf",
+      "postHook": "pkill -USR1 -x kitty || true",
+      "setup": "Add `include matugen.conf` to ~/.config/kitty/kitty.conf.",
+      "customColors": {"code_red": "#E53935", "code_green": "#43A047", "code_yellow": "#FDD835", "code_blue": "#1E88E5", "code_magenta": "#AB47BC", "code_cyan": "#00ACC1"}
+    },
+    {
+      "id": "alacritty",
+      "name": "Alacritty",
+      "app": "alacritty",
+      "symbol": "terminal",
+      "description": "Terminal colors, reloaded live",
+      "template": "alacritty.toml",
+      "output": "~/.config/alacritty/matugen.toml",
+      "postHook": "",
+      "setup": "Add `import = [\"~/.config/alacritty/matugen.toml\"]` under [general] in alacritty.toml.",
+      "customColors": {"code_red": "#E53935", "code_green": "#43A047", "code_yellow": "#FDD835", "code_blue": "#1E88E5", "code_magenta": "#AB47BC", "code_cyan": "#00ACC1"}
+    },
+    {
+      "id": "ghostty",
+      "name": "Ghostty",
+      "app": "ghostty",
+      "symbol": "terminal",
+      "description": "Terminal colors as a Ghostty theme",
+      "template": "ghostty.conf",
+      "output": "~/.config/ghostty/themes/matugen",
+      "postHook": "pkill -USR2 -x ghostty || true",
+      "setup": "Set `theme = matugen` in ~/.config/ghostty/config.",
+      "customColors": {"code_red": "#E53935", "code_green": "#43A047", "code_yellow": "#FDD835", "code_blue": "#1E88E5", "code_magenta": "#AB47BC", "code_cyan": "#00ACC1"}
+    },
+    {
+      "id": "rofi",
+      "name": "Rofi",
+      "app": "rofi",
+      "symbol": "menu_open",
+      "description": "Color variables for any rofi theme",
+      "template": "rofi.rasi",
+      "output": "~/.config/rofi/matugen.rasi",
+      "postHook": "",
+      "setup": "Add `@import \"matugen.rasi\"` to your rofi theme and use its variables."
+    },
+    {
+      "id": "tmux",
+      "name": "tmux",
+      "app": "tmux",
+      "symbol": "view_quilt",
+      "description": "Status bar, panes and messages",
+      "template": "tmux.conf",
+      "output": "~/.config/tmux/matugen.conf",
+      "postHook": "tmux source-file ~/.config/tmux/matugen.conf >/dev/null 2>&1 || true",
+      "setup": "Add `source-file ~/.config/tmux/matugen.conf` to tmux.conf."
+    },
+    {
+      "id": "zathura",
+      "name": "Zathura",
+      "app": "zathura",
+      "symbol": "picture_as_pdf",
+      "description": "Document viewer and recolor mode",
+      "template": "zathura.conf",
+      "output": "~/.config/zathura/matugen-colors",
+      "postHook": "",
+      "setup": "Add `include matugen-colors` to ~/.config/zathura/zathurarc."
+    }
+  ]
+}

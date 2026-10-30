@@ -143,7 +143,7 @@ Rectangle {
                 Layout.alignment: Qt.AlignRight
                 sourceComponent: RippleButton {
                     implicitHeight: 36
-                    implicitWidth: configureRow.implicitWidth + 28
+                    implicitWidth: configureLabel.visible ? configureRow.implicitWidth + 28 : implicitHeight
                     buttonRadius: height / 2
                     buttonRadiusPressed: Appearance.rounding.small
                     colBackground: ColorUtils.applyAlpha(root.colContent, 0.1)
@@ -164,6 +164,9 @@ Rectangle {
                                 color: root.colContent
                             }
                             StyledText {
+                                id: configureLabel
+                                // Beside footer chips a narrow tile keeps only the icon.
+                                visible: footerRow.children.length === 0 || root.width >= 400
                                 text: Translation.tr("Configure")
                                 font.pixelSize: Appearance.font.pixelSize.smaller
                                 font.weight: Font.DemiBold

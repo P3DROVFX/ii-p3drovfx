@@ -93,6 +93,8 @@ Item {
                             title: Translation.tr("App theming")
                             summary: Translation.tr("Wallpaper colors for the shell and utilities, Qt apps and terminals")
                             checked: Config.options.appearance.wallpaperTheming.enableAppsAndShell
+                            configurable: true
+                            onConfigureRequested: colorsThemesRoot.activeSubPage = Qt.resolvedUrl("widgets/MatugenTemplatesConfig.qml")
                             onToggled: value => Config.options.appearance.wallpaperTheming.enableAppsAndShell = value
 
                             ColorsChip {
