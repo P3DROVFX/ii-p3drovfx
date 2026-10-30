@@ -406,10 +406,14 @@ Singleton {
         : root.islandIgnoreAlpha
     // The island always paints colLayer0 (background transparency), whatever the
     // bar style: tying it to the transparent bar's pill opacity put the threshold
-    // above the island's own alpha and dropped its blur. An opaque shell holds it just
-    // under that alpha (0.99), as for the dock: any lower and the body's antialiased
-    // edge pixels blur too, a 1px ring of the bright backdrop around the island.
-    readonly property real islandIgnoreAlpha: Math.min(root.shellTransparent ? root.ignoreAlpha : 1, Math.max(0, 1 - root.backgroundTransparency - 0.01))
+    // above the island's own alpha and dropped its blur. Its drop shadow and the body's
+    // antialiased edge pixels (measured at 0.55-0.65 of the body's alpha) blur into a
+    // bright ring under a lower threshold. An opaque shell holds it just under the body
+    // (0.99), as for the dock. A transparent one goes no lower than 0.65 of the body's
+    // alpha: a threshold right under it drops the whole island's blur, so the margin
+    // stays wide. A higher configured threshold still wins.
+    readonly property real bodyAlpha: Math.max(0, 1 - root.backgroundTransparency)
+    readonly property real islandIgnoreAlpha: Math.min(root.shellTransparent ? Math.max(root.ignoreAlpha, 0.65 * root.bodyAlpha) : 1, Math.max(0, root.bodyAlpha - 0.01))
 
     // The dock's tray is colLayer0 (background transparency): hold the threshold just
     // under it, as for the bar, or every antialiased edge of its widgets blurs too and
@@ -504,8 +508,8 @@ Singleton {
         script += "hl.layer_rule({ name = 'ii:appearance:dock', match = { namespace = 'quickshell:dock' }, blur = true, xray = " + xray + ", ignore_alpha = " + root.dockIgnoreAlpha + " }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:island', match = { namespace = 'quickshell:floatingNotch' }, blur = true, xray = " + xray + ", ignore_alpha = " + root.islandIgnoreAlpha + " }) ";
         // The sidebars' body is colLayer0 too: the island's threshold keeps their
-        // antialiased edges from blurring into a 1px ring. A transparent shell keeps a.
-        script += "hl.layer_rule({ name = 'ii:appearance:sidebars', match = { namespace = '^quickshell:sidebar(Left|Right)$' }, blur = true, xray = " + xray + ", ignore_alpha = " + (root.shellTransparent ? a : root.islandIgnoreAlpha) + " }) ";
+        // antialiased edges from blurring into a 1px ring.
+        script += "hl.layer_rule({ name = 'ii:appearance:sidebars', match = { namespace = '^quickshell:sidebar(Left|Right)$' }, blur = true, xray = " + xray + ", ignore_alpha = " + root.islandIgnoreAlpha + " }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:background', match = { namespace = 'quickshell:background' }, blur = false }) ";
         // See backgroundWidgetsRules. Re-declared on every change; rules.lua keeps them off
         // until the shell has pushed these.
