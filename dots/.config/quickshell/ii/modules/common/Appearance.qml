@@ -382,11 +382,13 @@ Singleton {
     }
 
     property real ignoreAlpha: Config.options.appearance.ignoreAlpha ?? 0.2
-    // Drop shadows (colShadow, the island's NotchShadow) reach ~0.3 alpha. A threshold
-    // below that blurs the shadow margin into a hard-edged frosted ring around every
-    // shadowed shell surface, so the layer rules never go under it - unless the panel
-    // itself is fainter than its shadow, where keeping the panel's blur wins.
-    readonly property real layerIgnoreAlpha: Math.max(root.ignoreAlpha, Math.min(0.31, Math.max(0, 1 - root.backgroundTransparency - 0.01)))
+    // Opaque shell (transparency off): drop shadows are drawn (colShadow, the island's
+    // NotchShadow, ~0.3 alpha) and the blur behind opaque panels is invisible anyway.
+    // A threshold below the shadows blurs their margin into a hard-edged frosted ring
+    // around every shadowed surface, so the layer rules never go under 0.31 then.
+    // A transparent shell keeps the configured threshold untouched.
+    readonly property bool shellTransparent: Config.options?.appearance?.transparency?.enable ?? false
+    readonly property real layerIgnoreAlpha: root.shellTransparent ? root.ignoreAlpha : Math.max(root.ignoreAlpha, 0.31)
 
     // Hyprland ignores pixels with opacity <= ignore_alpha. The bar and both
     // Dynamic Island variants use colLayer0, whose opacity follows the
@@ -404,10 +406,10 @@ Singleton {
         : root.islandIgnoreAlpha
     // The island always paints colLayer0 (background transparency), whatever the
     // bar style: tying it to the transparent bar's pill opacity put the threshold
-    // above the island's own alpha and dropped its blur. Held just under that alpha,
-    // as for the dock: any lower and the body's antialiased edge pixels blur too,
-    // a 1px ring of the bright backdrop around the island.
-    readonly property real islandIgnoreAlpha: Math.max(0, 1 - root.backgroundTransparency - 0.01)
+    // above the island's own alpha and dropped its blur. An opaque shell holds it just
+    // under that alpha (0.99), as for the dock: any lower and the body's antialiased
+    // edge pixels blur too, a 1px ring of the bright backdrop around the island.
+    readonly property real islandIgnoreAlpha: Math.min(root.shellTransparent ? root.ignoreAlpha : 1, Math.max(0, 1 - root.backgroundTransparency - 0.01))
 
     // The dock's tray is colLayer0 (background transparency): hold the threshold just
     // under it, as for the bar, or every antialiased edge of its widgets blurs too and
@@ -502,8 +504,8 @@ Singleton {
         script += "hl.layer_rule({ name = 'ii:appearance:dock', match = { namespace = 'quickshell:dock' }, blur = true, xray = " + xray + ", ignore_alpha = " + root.dockIgnoreAlpha + " }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:island', match = { namespace = 'quickshell:floatingNotch' }, blur = true, xray = " + xray + ", ignore_alpha = " + root.islandIgnoreAlpha + " }) ";
         // The sidebars' body is colLayer0 too: the island's threshold keeps their
-        // antialiased edges from blurring into a 1px ring.
-        script += "hl.layer_rule({ name = 'ii:appearance:sidebars', match = { namespace = '^quickshell:sidebar(Left|Right)$' }, blur = true, xray = " + xray + ", ignore_alpha = " + root.islandIgnoreAlpha + " }) ";
+        // antialiased edges from blurring into a 1px ring. A transparent shell keeps a.
+        script += "hl.layer_rule({ name = 'ii:appearance:sidebars', match = { namespace = '^quickshell:sidebar(Left|Right)$' }, blur = true, xray = " + xray + ", ignore_alpha = " + (root.shellTransparent ? a : root.islandIgnoreAlpha) + " }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:background', match = { namespace = 'quickshell:background' }, blur = false }) ";
         // See backgroundWidgetsRules. Re-declared on every change; rules.lua keeps them off
         // until the shell has pushed these.
