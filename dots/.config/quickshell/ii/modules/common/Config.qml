@@ -6655,6 +6655,13 @@ Singleton {
                      * people develop on.
                      */
                     property bool allowMouse: false
+                    /**
+                     * Whether mouse clicks can raise the keyboard while in desktop mode.
+                     *
+                     * Off by default so that mouse clicks on text fields in desktop mode
+                     * never raise the keyboard even if allowMouse is enabled.
+                     */
+                    property bool allowMouseInDesktop: false
                     // How long after a touch a text field may claim focus and still count as touch-driven.
                     property int touchWindowMs: 1200
                     property bool hideOnPhysicalKey: true
