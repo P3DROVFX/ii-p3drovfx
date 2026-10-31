@@ -268,6 +268,12 @@ Singleton {
             implicitWidth: 0
             implicitHeight: 0
             color: "transparent"
+            // Hyprland only counts a layer surface's inhibitor while its alpha is non-zero, and
+            // re-evaluates that only on window map/unmap and fullscreen changes. A fullscreen
+            // window fades the Top layer to 0, so leaving fullscreen re-checked a still-faded
+            // surface and dropped Keep awake until the next window event. Overlay isn't faded.
+            WlrLayershell.layer: WlrLayer.Overlay
+            WlrLayershell.namespace: "quickshell:idleInhibitor"
             // Just in case...
             anchors {
                 right: true
