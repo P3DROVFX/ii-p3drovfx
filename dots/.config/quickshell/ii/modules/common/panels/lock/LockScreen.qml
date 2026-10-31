@@ -68,6 +68,30 @@ Scope {
 
     // True between `lock sleep` (hypridle before_sleep_cmd) and wake/unlock
     property bool sleepShade: false
+    function clearSleepShade(reason: string): void {
+        if (!root.sleepShade)
+            return;
+        console.info(`[Lock] sleep shade lowered: ${reason}`);
+        root.sleepShade = false;
+    }
+
+    // The wake hook is a compositor round trip that can go missing, and a shade left up is a
+    // black screen over a lock that still takes input. Timers stop while the system sleeps and
+    // the wall clock does not, so a tick that finds it far ahead means we just woke up.
+    Timer {
+        id: resumeWatch
+        property real lastTick: 0
+        interval: 1000
+        repeat: true
+        running: root.sleepShade
+        onRunningChanged: lastTick = Date.now()
+        onTriggered: {
+            const now = Date.now();
+            if (now - lastTick > 4000)
+                root.clearSleepShade(`resume detected (${Math.round((now - lastTick) / 1000)} s gap)`);
+            lastTick = now;
+        }
+    }
 
     // Second privacy shade, on the Overlay layer. The lock surface's first buffer can come in at
     // scale 1 on fractionally scaled outputs, covering only part of the screen; with
@@ -129,6 +153,12 @@ Scope {
     LockContext {
         id: lockContext
 
+        // Typing means the screen is awake, whatever happened to the wake hook
+        onCurrentTextChanged: {
+            if (lockContext.currentText.length > 0)
+                root.clearSleepShade("typing");
+        }
+
         Connections {
             target: GlobalStates
             function onScreenLockedChanged() {
@@ -162,7 +192,7 @@ Scope {
             // temporary lock workspace ID cannot flash during unlock.
             GlobalStates.workspaceRestoreInProgress = true;
             GlobalStates.screenLocked = false;
-            root.sleepShade = false;
+            root.clearSleepShade("unlock");
 
             // Reset
             lockContext.reset();
@@ -197,6 +227,7 @@ Scope {
     // the shade covers the wallpaper.
     property bool sleepLockPending: false
     function lockForSleep() {
+        console.info("[Lock] sleep shade raised");
         root.sleepShade = true;
         // Latches the inhibit, so the deferred lock won't re-arm the reader
         lockContext.suspendFingerUnlock();
@@ -232,7 +263,7 @@ Scope {
             root.lockForSleep();
         }
         function focus(): void {
-            root.sleepShade = false;
+            root.clearSleepShade("lock focus IPC");
             lockContext.shouldReFocus();
         }
         function fingerStop(): void {
@@ -263,7 +294,7 @@ Scope {
         description: "Re-focuses the lock screen. This is because Hyprland after waking up for whatever reason" + "decides to keyboard-unfocus the lock screen"
 
         onPressed: {
-            root.sleepShade = false;
+            root.clearSleepShade("lockFocus wake hook");
             lockContext.shouldReFocus();
         }
     }
