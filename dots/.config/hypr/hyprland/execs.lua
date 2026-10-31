@@ -26,7 +26,10 @@ hl.on("hyprland.start", function()
 
     -- Core components (authentication, lock screen, notification daemon)
     hl.exec_cmd("gnome-keyring-daemon --start --components=secrets")
-    hl.exec_cmd("hypridle")
+    -- An enabled hypridle.service is started by hyprland-session.target below. A second
+    -- daemon runs every hook twice, and a duplicate `lock sleep` landing after a quick
+    -- wake puts the sleep shade back up and blocks the fingerprint reader for 20 s.
+    hl.exec_cmd("systemctl --user -q is-enabled hypridle.service || hypridle")
     hl.exec_cmd("dbus-update-activation-environment --all")
     hl.exec_cmd("sleep 1 && dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP HYPRLAND_INSTANCE_SIGNATURE && systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP HYPRLAND_INSTANCE_SIGNATURE && systemctl --user start hyprland-session.target")
 
