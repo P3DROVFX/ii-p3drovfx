@@ -167,18 +167,35 @@ Singleton {
             : (Hyprland.focusedMonitor?.name ?? "");
 
         let lowest = -1;
+        const used = {};
         for (const workspace of (Hyprland.workspaces?.values ?? [])) {
             const id = Number(workspace?.id ?? -1);
             if (id <= 0)
                 continue;
-            if (name.length > 0 && (workspace.monitor?.name ?? "") !== name)
+            const onThisMonitor = name.length === 0 || (workspace.monitor?.name ?? "") === name;
+            used[id] = onThisMonitor ? "here" : "elsewhere";
+            if (!onThisMonitor)
                 continue;
             if (lowest === -1 || id < lowest)
                 lowest = id;
         }
         // Nothing to read yet on a session that has only just come up. Workspace 1 is the
         // one Hyprland creates first, so it is the right guess rather than a made-up one.
-        return lowest === -1 ? 1 : lowest;
+        if (lowest === -1)
+            return 1;
+
+        // An app opened on the home workspace covers the launcher, so Home there was a
+        // button that switched to an app — or did nothing at all when that app was the one
+        // on screen. Auto stays the lowest workspace while it is a home screen, and only
+        // steps to the lowest free one while something is sitting on it.
+        if (HyprlandData.hyprlandClientsForWorkspace(lowest).length === 0)
+            return lowest;
+        for (let id = lowest + 1; id < lowest + 100; id++) {
+            if (!used[id] || (used[id] === "here"
+                    && HyprlandData.hyprlandClientsForWorkspace(id).length === 0))
+                return id;
+        }
+        return lowest;
     }
 
     /// Close everything and land on the home screen — the same one every time.

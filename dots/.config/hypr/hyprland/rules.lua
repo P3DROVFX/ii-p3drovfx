@@ -263,6 +263,12 @@ hl.layer_rule({ match = { namespace = "quickshell:tabletShade" }, no_anim = true
 -- threshold, so it snapped in part-way through the open animation instead of ramping. The
 -- drawer blurs its own frozen screencopy so the strength can follow the gesture.
 hl.layer_rule({ match = { namespace = "quickshell:tabletAppDrawer" }, blur = false})
+-- Recents animates itself: the app shrinks into its card and grows back into its window.
+-- Without this the compositor ran its own close animation on the unmap, over a last frame
+-- that is the app at full size — so every exit ended looking like the app had closed.
+-- Blur is off for the same reason as the drawer: the surface draws its own backdrop.
+hl.layer_rule({ match = { namespace = "quickshell:tabletRecents" }, blur = false})
+hl.layer_rule({ match = { namespace = "quickshell:tabletRecents" }, no_anim = true})
 -- Live draw is ink on transparency: there is no surface of its own for a blur to sit
 -- behind, and the strokes that are opaque cover whatever it would have blurred. The
 -- blanket `quickshell.*` rule above would otherwise run a full-screen blur pass for as

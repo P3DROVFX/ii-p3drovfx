@@ -61,6 +61,12 @@ Item {
     /// difference as decoration.
     property bool isCurrent: false
 
+    /// Hidden while Recents' hero transition stands in for this card: the window shrinking
+    /// into the row *is* this card on its way in, and two of it would read as a duplicate.
+    property bool heroHidden: false
+    /// The window picture, for the hero transition to aim at.
+    readonly property Item snapshotItem: snapshot
+
     readonly property real windowWidth: Number(root.client?.size?.[0] ?? 0)
     readonly property real windowHeight: Number(root.client?.size?.[1] ?? 0)
     /// Clamped so a freakish window — a 40px-tall notification shell, a very wide terminal —
@@ -84,7 +90,7 @@ Item {
     transform: Translate {
         y: -root.dragOffset
     }
-    opacity: Math.max(0, 1 - (root.dragOffset / (root.dismissDistance * 1.6)))
+    opacity: root.heroHidden ? 0 : Math.max(0, 1 - (root.dragOffset / (root.dismissDistance * 1.6)))
 
     // ── Screenshot ──────────────────────────────────────────────────────────
     /**

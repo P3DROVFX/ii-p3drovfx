@@ -381,6 +381,11 @@ PanelWindow {
     // is visibly there and not there at the same time. With no background the strip stays
     // transparent and keeps handing every miss straight back to the application.
     //
+    // Every region is additive. A hidden control contributes an empty rectangle, never a
+    // Subtract: the hidden workspace arrows sit at the two ends of the row, under the home
+    // button and the start of the search bar, and subtracting them punched holes in the
+    // dock there — clicks on those spots went straight through to the window behind.
+    //
     // Every region points at a hit proxy below, never at the control itself. The controls
     // carry `transform: Translate` (their own reveal slide, and the column's lift with the
     // drawer), and a transformed item handed to a Region publishes the wrong hitbox. They
@@ -392,37 +397,31 @@ PanelWindow {
     Region {
         id: dockSurfaceRegion
         item: dockSurfaceHit
-        intersection: root.dockHasBackground ? Intersection.Combine : Intersection.Subtract
     }
 
     Region {
         id: workspacePrevRegion
         item: workspacePrevHit
-        intersection: root.workspaceArrowsRevealed ? Intersection.Combine : Intersection.Subtract
     }
 
     Region {
         id: workspaceNextRegion
         item: workspaceNextHit
-        intersection: root.workspaceArrowsRevealed ? Intersection.Combine : Intersection.Subtract
     }
 
     Region {
         id: searchRegion
         item: searchHit
-        intersection: root.searchRevealed ? Intersection.Combine : Intersection.Subtract
     }
 
     Region {
         id: navigationRegion
         item: navigationHit
-        intersection: root.navigationRevealed ? Intersection.Combine : Intersection.Subtract
     }
 
     Region {
         id: appsRegion
         item: appsHit
-        intersection: root.appsRevealed ? Intersection.Combine : Intersection.Subtract
     }
 
     // ── Hit proxies: geometry only, nothing drawn, no transform ─────────────
@@ -430,48 +429,48 @@ PanelWindow {
         id: dockSurfaceHit
         x: dockBackground.x
         y: dockBackground.y
-        width: dockBackground.width
-        height: dockBackground.height
+        width: root.dockHasBackground ? dockBackground.width : 0
+        height: root.dockHasBackground ? dockBackground.height : 0
     }
 
     Item {
         id: workspacePrevHit
         x: dockColumn.x + appRowArea.x + workspacePrevButton.x
         y: dockColumn.y + appRowArea.y + workspacePrevButton.y
-        width: workspacePrevButton.width
-        height: workspacePrevButton.height
+        width: root.workspaceArrowsRevealed ? workspacePrevButton.width : 0
+        height: root.workspaceArrowsRevealed ? workspacePrevButton.height : 0
     }
 
     Item {
         id: workspaceNextHit
         x: dockColumn.x + appRowArea.x + workspaceNextButton.x
         y: dockColumn.y + appRowArea.y + workspaceNextButton.y
-        width: workspaceNextButton.width
-        height: workspaceNextButton.height
+        width: root.workspaceArrowsRevealed ? workspaceNextButton.width : 0
+        height: root.workspaceArrowsRevealed ? workspaceNextButton.height : 0
     }
 
     Item {
         id: searchHit
         x: dockColumn.x + appRowArea.x + searchBar.x
         y: dockColumn.y + appRowArea.y + searchBar.y
-        width: searchBar.width
-        height: searchBar.height
+        width: root.searchRevealed ? searchBar.width : 0
+        height: root.searchRevealed ? searchBar.height : 0
     }
 
     Item {
         id: navigationHit
         x: dockColumn.x + appRowArea.x + navigationPill.x
         y: dockColumn.y + appRowArea.y + navigationPill.y
-        width: navigationPill.width
-        height: navigationPill.height
+        width: root.navigationRevealed ? navigationPill.width : 0
+        height: root.navigationRevealed ? navigationPill.height : 0
     }
 
     Item {
         id: appsHit
         x: dockColumn.x + appRowArea.x + appRow.x
         y: dockColumn.y + appRowArea.y + appRow.y
-        width: appRow.width
-        height: appRow.height
+        width: root.appsRevealed ? appRow.width : 0
+        height: root.appsRevealed ? appRow.height : 0
     }
 
     /**

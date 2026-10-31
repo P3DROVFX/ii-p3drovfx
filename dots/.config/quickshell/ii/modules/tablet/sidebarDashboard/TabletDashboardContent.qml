@@ -92,6 +92,29 @@ Item {
         return 1 - Math.pow(1 - t, 3);
     }
 
+    /**
+     * Whether a vertical drag that starts at (x, y) of `item` belongs to the content rather
+     * than to the shade.
+     *
+     * Everything else hands the drag to the shade, which follows the finger up and closes —
+     * the Android shade closes from wherever you swipe it. Only what has its own vertical
+     * motion keeps it: a list with more than fits, the tile grid while it is being arranged,
+     * and any dialog on top.
+     */
+    function ownsVerticalDragAt(item, x, y) {
+        if (root.anyDialogVisible || root.editMode)
+            return true;
+        const over = target => {
+            if (!target || !target.visible)
+                return false;
+            const p = item.mapToItem(target, x, y);
+            return p.x >= 0 && p.y >= 0 && p.x <= target.width && p.y <= target.height;
+        };
+        if (quickTogglesScroll.interactive && over(quickTogglesScroll))
+            return true;
+        return notificationList.scrollable && over(notificationList);
+    }
+
     function sectionReveal(delay) {
         const span = Math.max(0.001, 1 - delay);
         return Math.max(0, Math.min(1, (root.revealProgress - delay) / span));
@@ -288,6 +311,7 @@ Item {
                         }
 
                         NotificationList {
+                            id: notificationList
                             anchors.fill: parent
                             anchors.margins: Math.round(root.gridSpacing * 0.8)
                             zoom: root.notificationZoom

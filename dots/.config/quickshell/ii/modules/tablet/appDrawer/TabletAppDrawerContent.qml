@@ -636,6 +636,37 @@ Item {
             root.openTool(root.matchingTools[0].id);
     }
 
+    /**
+     * Who a vertical drag that starts at (x, y) of `item` belongs to.
+     *
+     *   "content"  — something here moves vertically on its own: a tool panel, the A–Z
+     *                rail, a menu, or a scroller that is not at its top.
+     *   a Flickable — a scroller resting at its top. Pulling down there closes the drawer,
+     *                as it does on Android; pushing up has to scroll it, and the drawer
+     *                forwards that to the Flickable returned here.
+     *   null       — nothing claims it; the drawer follows the finger.
+     */
+    function verticalDragOwnerAt(item, x, y) {
+        if (inlineMenu.visible)
+            return "content";
+        const over = target => {
+            if (!target || !target.visible)
+                return false;
+            const p = item.mapToItem(target, x, y);
+            return p.x >= 0 && p.y >= 0 && p.x <= target.width && p.y <= target.height;
+        };
+        if (root.activeToolId.length > 0)
+            return over(body) ? "content" : null;
+        if (over(letterRail))
+            return "content";
+        const atTop = flick => flick.contentY <= flick.originY - flick.topMargin + 1;
+        for (const flick of [sideColumn, appGrid]) {
+            if (over(flick))
+                return atTop(flick) ? flick : "content";
+        }
+        return null;
+    }
+
     function reset() {
         root.activeToolId = "";
         root.categoryFilter = "";

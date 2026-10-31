@@ -26,6 +26,10 @@ Item {
     property real _entranceScale: 1
     property bool _entranceDone: true
     readonly property real listStatusSpacing: 5
+    /// Whether the list has more than fits, so a vertical drag on it is a scroll. A host
+    /// that also takes vertical drags (the tablet shade, which closes on one) yields to the
+    /// list only then.
+    readonly property bool scrollable: listview.visible && listview.contentHeight > listview.height + 1
     property real _measuredNotificationHeight: 0
     readonly property real representativeNotificationHeight: _measuredNotificationHeight > 0
         ? _measuredNotificationHeight

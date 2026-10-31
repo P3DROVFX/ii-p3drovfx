@@ -15,11 +15,6 @@ import qs.modules.common
 QtObject {
     id: handler
 
-    // A full pull covers most of the screen, matching Android's shade. Sixty percent
-    // rather than the whole height so a determined swipe reaches 1.0 without the finger
-    // running off the bottom bezel.
-    readonly property real fullPullFraction: 0.60
-
     function claims(origin) {
         return origin === "topEdge";
     }
@@ -34,7 +29,9 @@ QtObject {
 
     function update(origin, screenName, travel, velocity) {
         const screen = Quickshell.screens.find(s => s.name === screenName) ?? Quickshell.primaryScreen;
-        const targetDistance = Math.max(1, (screen ? screen.height : 1000) * handler.fullPullFraction);
+        // The controller's distance, the one the pointer strips use, so a finger and a pen
+        // move the shade at the same rate.
+        const targetDistance = TabletDashboardGestureController.dragDistance(screen ? screen.height : 1000);
         TabletDashboardGestureController.updateProgress(
             Math.max(0, Math.min(1, travel / targetDistance)), velocity);
     }

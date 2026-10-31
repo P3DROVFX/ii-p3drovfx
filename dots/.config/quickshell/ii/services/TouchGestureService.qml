@@ -983,13 +983,19 @@ Singleton {
         primaryTravel = travel.primary;
         offAxisTravel = travel.offAxis;
 
-        if (primaryTravel < -8) {
+        // A family drag follows the finger both ways: pulling the shade down and then back up
+        // past where it started, or wandering sideways on the way, is the finger saying
+        // "less", not a different gesture. The release decides; cancelling here snapped the
+        // surface back under a finger that was still on it.
+        var followsFinger = TouchGestureDragRegistry.claims(activeOrigin);
+
+        if (!followsFinger && primaryTravel < -8) {
             cancelActiveGesture("reverse-direction");
             return;
         }
 
         // Direction lock check after 16px
-        if (primaryTravel > 16) {
+        if (!followsFinger && primaryTravel > 16) {
             var angle = Math.atan2(travel.offAxis, Math.max(travel.primary, 0.001)) * 180 / Math.PI;
             var tol = (root.opts && root.opts.directionTolerance) ? root.opts.directionTolerance : 35;
             if (angle > tol) {
