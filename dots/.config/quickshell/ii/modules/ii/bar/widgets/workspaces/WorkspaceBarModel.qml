@@ -217,12 +217,23 @@ QtObject {
         Hyprland.dispatch("hl.dsp.focus({ workspace = '" + id + "' })");
     }
 
-    // Wheel down moves forward, staying inside this bar's range. The target is
-    // absolute on purpose: one notch can arrive as several wheel events, and a
-    // relative `r+1` per event skipped a workspace for each extra one.
+    // Wheel down moves forward, staying inside this bar's range. One notch
+    // arrives as several events (seen: +12 then +108). If activeId updated
+    // between them, each stepped and the notch skipped a workspace, so sum
+    // them and step once per full notch (120).
+    property real _wheelAcc: 0
+    property real _wheelLastMs: 0
     function scroll(angleDelta) {
         if (angleDelta === 0)
             return;
+        const now = Date.now();
+        if (now - model._wheelLastMs > 300 || Math.sign(angleDelta) !== Math.sign(model._wheelAcc))
+            model._wheelAcc = 0;
+        model._wheelLastMs = now;
+        model._wheelAcc += angleDelta;
+        if (Math.abs(model._wheelAcc) < 120)
+            return;
+        model._wheelAcc = 0;
         const forward = angleDelta < 0;
         const next = model.activeId + (forward ? 1 : -1);
         if (next >= 1 && model.inRange(next))
