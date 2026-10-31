@@ -10,6 +10,7 @@ import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.functions
+import qs.modules.common.dock
 import qs.modules.common.widgets
 
 Item {
@@ -1907,23 +1908,20 @@ Item {
                             sourceComponent: tile.span > 1 ? largeGroupIcon
                                 : tile.entry.type === "group" ? groupIcon : singleIcon
                         }
-                        // Running: the dock's own dot, under the icon.
-                        Rectangle {
+                        // Running: the dock's own indicator, under the icon.
+                        Item {
                             anchors.horizontalCenter: parent.horizontalCenter
                             anchors.top: parent.bottom
                             anchors.topMargin: -2
-                            readonly property bool shown: (root.options.runningBadges ?? true) && DesktopShortcuts.isRunning(tile.entry)
-                            width: shown ? 12 * Math.max(0.75, root.iconScale) : 4
-                            height: 4
-                            radius: 2
-                            color: Appearance.colors.colPrimary
-                            opacity: shown ? 1 : 0
-                            visible: opacity > 0.001
-                            Behavior on opacity {
-                                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                            }
-                            Behavior on width {
-                                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                            width: parent.width
+                            height: runningIndicator.height
+                            DockRunningIndicator {
+                                id: runningIndicator
+                                toplevels: (root.options.runningBadges ?? true) ? DesktopShortcuts.toplevelsFor(tile.entry) : []
+                                edge: "top"
+                                edgeExtent: plate.size * 0.8
+                                scaleFactor: Math.max(0.75, root.iconScale)
+                                margin: 0
                             }
                         }
                         // A link (every dropped file or folder): the shortcut
@@ -1950,30 +1948,8 @@ Item {
                             }
                         }
                         // Unread notifications from the app.
-                        Rectangle {
-                            id: unreadBadge
-                            readonly property int count: (root.options.notificationBadges ?? true) ? DesktopShortcuts.unreadCount(tile.entry) : 0
-                            anchors.right: parent.right
-                            anchors.top: parent.top
-                            anchors.rightMargin: -4
-                            anchors.topMargin: -4
-                            height: 18
-                            width: Math.max(height, unreadText.implicitWidth + 10)
-                            radius: height / 2
-                            color: Appearance.m3colors.m3error
-                            scale: unreadBadge.count > 0 ? 1 : 0
-                            visible: scale > 0.01
-                            Behavior on scale {
-                                NumberAnimation { duration: 260; easing.type: Easing.OutBack; easing.overshoot: 2 }
-                            }
-                            StyledText {
-                                id: unreadText
-                                anchors.centerIn: parent
-                                text: unreadBadge.count > 99 ? "99+" : String(unreadBadge.count)
-                                font.pixelSize: Appearance.font.pixelSize.smallest
-                                font.weight: Font.DemiBold
-                                color: Appearance.m3colors.m3onError
-                            }
+                        AppNotificationBadge {
+                            count: (root.options.notificationBadges ?? true) ? DesktopShortcuts.unreadCount(tile.entry) : 0
                         }
                     }
                     Item {

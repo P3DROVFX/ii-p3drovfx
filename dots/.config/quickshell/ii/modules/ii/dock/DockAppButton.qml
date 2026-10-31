@@ -2,6 +2,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
+import qs.modules.common.dock
 import qs.modules.ii.editMode
 import qs
 import QtQuick
@@ -348,10 +349,18 @@ DockButton {
             dockContent.registerContextMenuClose();
     }
 
-    DockAppIndicator {
+    DockRunningIndicator {
         // Above the plate: the shape mask covers the bottom of the slot and used
         // to cut the indicator in half.
         z: 1
+        toplevels: root.appToplevel?.toplevels ?? []
+        // Reuses the dock's filter for a window Hyprland left activated after
+        // a silent move to another workspace.
+        focusedIndex: root.focusedWindowIndex
+        edge: root.dockPos
+        edgeExtent: (root.isVertical ? root.slotHeight : root.slotWidth) * 0.8
+        scaleFactor: root.dockHeight / 56
+        margin: Math.max(1, (root.dockContent?.dotMarginV ?? 1) * 0.35)
     }
     DockAppIcon {
         z: 0

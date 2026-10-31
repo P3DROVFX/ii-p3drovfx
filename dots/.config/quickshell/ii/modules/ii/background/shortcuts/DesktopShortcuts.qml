@@ -1604,15 +1604,17 @@ Singleton {
     }
 
     // ── Badges ─────────────────────────────────────────────────────────────
-    // Running apps, by the dock's own normalized id, and unread counts by
+    // Running windows, by the dock's own normalized id, and unread counts by
     // app name. Built once per change of the sources, looked up per icon.
-    readonly property var runningIds: {
-        const ids = new Set();
+    readonly property var runningToplevels: {
+        const map = {};
         for (const app of TaskbarApps.apps) {
-            if (app.toplevels.length > 0)
-                ids.add(TaskbarApps.normalizeAppId(app.appId));
+            if (app.toplevels.length === 0)
+                continue;
+            const k = TaskbarApps.normalizeAppId(app.appId);
+            map[k] = (map[k] ?? []).concat(app.toplevels);
         }
-        return ids;
+        return map;
     }
     readonly property var notificationCounts: {
         const counts = {};
@@ -1628,11 +1630,12 @@ Singleton {
             return TaskbarApps.normalizeAppId(item.path.substring(item.path.lastIndexOf("/") + 1));
         return TaskbarApps.normalizeAppId(item.id);
     }
-    function isRunning(item) {
+    // A group's windows are its apps' windows, in member order.
+    function toplevelsFor(item) {
         if (item.type === "group")
-            return (item.apps ?? []).some(app => root.runningIds.has(root.appKey(app)));
+            return (item.apps ?? []).reduce((all, app) => all.concat(root.toplevelsFor(app)), []);
         const k = root.appKey(item);
-        return k !== "" && root.runningIds.has(k);
+        return k !== "" ? (root.runningToplevels[k] ?? []) : [];
     }
     function unreadCount(item) {
         if (item.type === "group")

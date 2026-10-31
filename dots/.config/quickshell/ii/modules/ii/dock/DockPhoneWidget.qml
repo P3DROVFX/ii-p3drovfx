@@ -205,7 +205,7 @@ Item {
         height: width
         anchors.margins: Math.max(1, root.dotMarginV * 0.35)
         state: root.dockContent?.dockPos ?? "bottom"
-        // Swap anchors atomically, as DockAppIndicator does on orientation changes.
+        // Swap anchors atomically, as DockRunningIndicator does on orientation changes.
         states: [
             State {
                 name: "top"
