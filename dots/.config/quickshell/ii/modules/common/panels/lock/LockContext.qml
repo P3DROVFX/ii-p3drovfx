@@ -126,12 +126,19 @@ Scope {
         Fingerprint.probeDevice();
         if (!root.fingerprintsConfigured || !GlobalStates.screenLocked)
             return;
+        // A verify aborted here needs time to tear down before the reader is
+        // opened again (egismoc asserts otherwise). After a wake there is none:
+        // it was stopped before sleep, so arm now instead of a second later.
+        const wasArmed = fingerPam.active;
         stopFingerPam();
-        scheduleFingerRetry();
+        if (wasArmed)
+            scheduleFingerRetry();
+        else
+            tryFingerUnlock();
     }
 
-    // The reader USB-resets a second or two after "PM: suspend exit" and fprintd
-    // may still be coming back, so a single fixed delay races them. Back off
+    // The reader USB-resets on every open (the driver's doing, resume or not), and
+    // a start that lands while fprintd is still coming back fails. Back off
     // instead, and give up rather than hammering a reader that is really gone.
     function scheduleFingerRetry() {
         if (!root.fingerprintsConfigured || !GlobalStates.screenLocked)
