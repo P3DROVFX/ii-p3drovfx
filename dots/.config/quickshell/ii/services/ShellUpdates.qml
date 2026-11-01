@@ -288,6 +288,10 @@ Singleton {
 
     Process {
         id: remoteHeadProc
+        // git aborts before touching the network when its cwd is gone, which
+        // the shell's own may be if it was started from a since-deleted temp
+        // dir; an empty answer would then read as an unreachable remote.
+        workingDirectory: root.stateDir
         command: ["bash", "-c", 'git ls-remote --heads "$1" "$2" 2>/dev/null | awk \'{print $1; exit}\'', "ii-remote-head", root.activeRemote, root.activeBranch]
         stdout: StdioCollector {
             onStreamFinished: {

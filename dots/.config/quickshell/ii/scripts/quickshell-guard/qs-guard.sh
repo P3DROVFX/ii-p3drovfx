@@ -28,6 +28,11 @@ set -u
 dir="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 args=("$@")
 ((${#args[@]} > 0)) || args=(-c ii)
+# The shell and every process it spawns inherit this directory. A launcher's
+# temp dir gets deleted under it, and git then refuses to run at all
+# ("Unable to read current working directory"), which the update check
+# reported as "Remote unreachable" for the whole session.
+cd "$HOME" 2>/dev/null || cd /
 # The allocator setting every other shell start uses (see hyprland/execs.lua).
 export MALLOC_CONF="${MALLOC_CONF:-narenas:1}"
 
