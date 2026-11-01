@@ -65,6 +65,13 @@ Item {
             shape: MaterialShape.Shape.Cookie4Sided,
             title: Translation.tr("Phone"),
             summaries: [root.hidden, Translation.tr("Mirror and control your connected phone")]
+        },
+        {
+            key: "anki",
+            symbol: "school",
+            shape: MaterialShape.Shape.Sunny,
+            title: Translation.tr("Anki"),
+            summaries: [root.hidden, Translation.tr("Review your Anki cards, synced with AnkiWeb")]
         }
     ]
 
@@ -74,15 +81,25 @@ Item {
         "wallpapers": Config.options.policies.wallpapers,
         "translator": Config.options.policies.translator,
         "player": Config.options.policies.player,
-        "phone": Config.options.policies.phone
+        "phone": Config.options.policies.phone,
+        "anki": Config.options.policies.anki
     })
     readonly property int total: root.policies.length
     readonly property int shown: root.policies.filter(policy => root.levels[policy.key] !== 0).length
 
-    // Six tiles: three across, two across or a column, never a lone straggler.
+    // Three across, two across or a column; a short last row shares its width, so an
+    // odd count never leaves a lone narrow straggler.
     readonly property int fits: Math.max(1, Math.floor((width + root.gap) / (root.tileMin + root.gap)))
     readonly property int columns: root.fits >= 3 ? 3 : root.fits >= 2 ? 2 : 1
     readonly property int tileWidth: Math.floor((width - root.gap * (root.columns - 1)) / root.columns)
+    readonly property int lastRowStart: Math.floor(root.total / root.columns) * root.columns
+    readonly property int lastRowCount: root.total - root.lastRowStart
+
+    function widthFor(index: int): int {
+        if (index < root.lastRowStart || root.lastRowCount === 0)
+            return root.tileWidth;
+        return Math.floor((width - root.gap * (root.lastRowCount - 1)) / root.lastRowCount);
+    }
 
     Layout.fillWidth: true
     Layout.topMargin: root.gap - root.sectionSpacing
@@ -100,9 +117,10 @@ Item {
                 id: tile
 
                 required property var modelData
+                required property int index
                 readonly property int level: root.levels[tile.modelData.key] ?? 0
 
-                width: root.tileWidth
+                width: root.widthFor(tile.index)
                 height: root.tileHeight
                 symbol: tile.modelData.symbol
                 shapeOn: tile.modelData.shape

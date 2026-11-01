@@ -29,7 +29,8 @@ ColumnLayout {
                     "wallpapers": Config.options.policies.wallpapers,
                     "translator": Config.options.policies.translator,
                     "player": Config.options.policies.player,
-                    "phone": Config.options.policies.phone
+                    "phone": Config.options.policies.phone,
+                    "anki": Config.options.policies.anki
                 };
             }
             model: [{
@@ -109,6 +110,19 @@ ColumnLayout {
                 "key": "phone",
                 "name": Translation.tr("Phone"),
                 "icon": "smartphone",
+                "options": [{
+                    "displayName": Translation.tr("No"),
+                    "icon": "close",
+                    "value": 0
+                }, {
+                    "displayName": Translation.tr("Yes"),
+                    "icon": "check",
+                    "value": 1
+                }]
+            }, {
+                "key": "anki",
+                "name": Translation.tr("Anki"),
+                "icon": "school",
                 "options": [{
                     "displayName": Translation.tr("No"),
                     "icon": "close",

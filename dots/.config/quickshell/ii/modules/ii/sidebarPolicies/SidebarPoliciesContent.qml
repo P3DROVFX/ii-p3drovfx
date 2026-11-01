@@ -131,6 +131,7 @@ Item {
     property bool wallpapersEnabled: Config.options.policies.wallpapers !== 0
     property bool animeEnabled: Config.options.policies.weeb !== 0
     property bool animeCloset: Config.options.policies.weeb === 2
+    property bool ankiEnabled: Config.options.policies.anki !== 0
 
     // Tab and Page mapping
     property var tabs: [
@@ -163,6 +164,12 @@ Item {
             name: Translation.tr("Anime"),
             enabled: root.animeEnabled && !root.animeCloset,
             component: anime
+        },
+        {
+            icon: "school",
+            name: Translation.tr("Anki"),
+            enabled: root.ankiEnabled,
+            component: ankiStudy
         },
         {
             icon: "smartphone",
@@ -415,6 +422,15 @@ Item {
                 x: 0
             }
 
+            // The fully labelled bar's width, measured off-screen so the real bar can
+            // decide to fold without feeding its own width back into the decision.
+            ToolbarTabBar {
+                id: tabBarMeasure
+                visible: false
+                requestOnly: true
+                tabButtonList: root.tabButtonList
+            }
+
             Toolbar {
                 id: mainToolbar
                 anchors.fill: parent
@@ -424,6 +440,9 @@ Item {
                     id: tabBar
                     Layout.alignment: Qt.AlignHCenter
                     tabButtonList: root.tabButtonList
+                    // Every label at once only while they fit; past that the inactive
+                    // tabs fold to their icon and the current one keeps its name.
+                    collapseInactiveLabels: tabBarMeasure.implicitWidth + mainToolbar.padding * 2 > toolbarContainer.Layout.maximumWidth
                     currentIndex: Persistent.states.sidebar.policies.tab
 
                     transform: Translate {
@@ -615,6 +634,10 @@ Item {
         Component {
             id: anime
             Anime {}
+        }
+        Component {
+            id: ankiStudy
+            AnkiStudy {}
         }
         Component {
             id: phonePlaceholder
