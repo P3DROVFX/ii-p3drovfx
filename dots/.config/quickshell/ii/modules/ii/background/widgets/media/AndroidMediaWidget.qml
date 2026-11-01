@@ -59,6 +59,37 @@ AbstractBackgroundWidget {
     property real lyricOpacity: 1.0
     property real lyricYOffset: 0.0
 
+    // Held while the host pauses the widget (windows cover the desktop): LyricsService
+    // and the bar keep moving the shared player's position, and each lyric line or
+    // progress step re-rendered the full-screen widget layer (scroll + fade bursts
+    // every ~2 s, seek bar 4x/s). Resuming jumps straight to the live values.
+    readonly property real liveProgress: MprisController.trackProgressOf(root.player)
+    readonly property int liveLyricIndex: LyricsService.currentIndex
+    property real shownProgress: 0
+    property int shownLyricIndex: -1
+    property bool lyricJump: false
+    function syncPlayback() {
+        if (!root.live)
+            return;
+        root.shownProgress = root.liveProgress;
+        root.shownLyricIndex = root.liveLyricIndex;
+    }
+    onLiveProgressChanged: root.syncPlayback()
+    onLiveLyricIndexChanged: root.syncPlayback()
+    onLiveChanged: {
+        if (!root.live)
+            return;
+        root.lyricJump = true;
+        root.syncPlayback();
+        root.lyricJump = false;
+        if (root.activeLyricText !== root.displaySongText) {
+            lyricTransitionAnimation.stop();
+            root.lyricOpacity = 1.0;
+            root.lyricYOffset = 0.0;
+            root.activeLyricText = root.displaySongText;
+        }
+    }
+
     property string displayArtist: root.trackArtist
     property real titleOpacity: 1.0
     property real titleYOffset: 0.0
@@ -104,6 +135,8 @@ AbstractBackgroundWidget {
     }
 
     onDisplaySongTextChanged: {
+        if (!root.live)
+            return;
         lyricTransitionAnimation.stop();
         lyricTransitionAnimation.start();
     }
@@ -167,6 +200,8 @@ AbstractBackgroundWidget {
     Component.onCompleted: {
         LyricsService.initiliazeLyrics();
         root.activeLyricText = root.displaySongText;
+        root.shownProgress = root.liveProgress;
+        root.shownLyricIndex = root.liveLyricIndex;
     }
 
     Item {
@@ -353,7 +388,7 @@ AbstractBackgroundWidget {
 
                                 readonly property int rowHeight: Math.floor(parent.height / 2.5)
                                 readonly property real baseY: (parent.height - rowHeight) / 2
-                                readonly property int targetCurrentIndex: LyricsService.hasSyncedLines ? LyricsService.currentIndex : -1
+                                readonly property int targetCurrentIndex: LyricsService.hasSyncedLines ? root.shownLyricIndex : -1
                                 property int lastIndex: -1
                                 property bool isMovingForward: true
                                 property real scrollOffset: 0
@@ -364,6 +399,10 @@ AbstractBackgroundWidget {
                                         isMovingForward = targetCurrentIndex > lastIndex;
                                         lastIndex = targetCurrentIndex;
                                         scrollAnim.stop();
+                                        if (root.lyricJump) {
+                                            scrollOffset = 0;
+                                            return;
+                                        }
                                         scrollOffset = isMovingForward ? -rowHeight : rowHeight;
                                         scrollAnim.start();
                                     }
@@ -595,11 +634,11 @@ AbstractBackgroundWidget {
                             active: root.player?.canSeek ?? false
                             sourceComponent: StyledSlider {
                                 configuration: StyledSlider.Configuration.Wavy
-                                animateWave: root.playing && root.visible && (!root.hasActiveWindows || GlobalStates.mediaControlsOpen)
+                                animateWave: root.playing && root.live && (!root.hasActiveWindows || GlobalStates.mediaControlsOpen)
                                 highlightColor: root.accentColor
                                 trackColor: Qt.rgba(1, 1, 1, 0.2)
                                 handleColor: root.accentColor
-                                value: MprisController.trackProgressOf(root.player)
+                                value: root.shownProgress
                                 // Nothing to seek to while the player publishes no length.
                                 enabled: MprisController.hasTrackLength(root.player)
                                 onMoved: MprisController.seekFraction(root.player, value)
@@ -607,7 +646,7 @@ AbstractBackgroundWidget {
                                 // the binding below it. Without this the bar froze where the drag left it
                                 // and never followed the track again.
                                 onPressedChanged: if (!pressed)
-                                    value = Qt.binding(() => MprisController.trackProgressOf(root.player))
+                                    value = Qt.binding(() => root.shownProgress)
                             }
                         }
 
@@ -621,10 +660,10 @@ AbstractBackgroundWidget {
                             active: !!root.player && !sliderLoader.active
                             sourceComponent: StyledProgressBar {
                                 wavy: root.player ? root.playing : false
-                                animateWave: root.playing && root.visible && (!root.hasActiveWindows || GlobalStates.mediaControlsOpen)
+                                animateWave: root.playing && root.live && (!root.hasActiveWindows || GlobalStates.mediaControlsOpen)
                                 highlightColor: root.accentColor
                                 trackColor: Qt.rgba(1, 1, 1, 0.2)
-                                value: MprisController.trackProgressOf(root.player)
+                                value: root.shownProgress
                             }
                         }
                     }

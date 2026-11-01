@@ -150,9 +150,14 @@ ClippingRectangle {
     // re-rendered its whole full-screen window on each tick while hidden. Hidden, the
     // value holds; the first visible frame reads the live one, and the seekbar and the
     // ring draw that jump without animating.
+    // `visible` alone is not enough: the sidebar unmaps its window when it closes, but
+    // the items inside stay visible, so the lyric motion and the position clock kept
+    // running there. Every animation that starts, even in an unmapped window, makes
+    // Qt's threaded render loop repaint every exposed shell window once.
+    readonly property bool shownInWindow: root.visible && (root.Window.window?.visible ?? false)
     property real heldTrackProgress: 0
-    readonly property real trackProgress: root.visible ? MprisController.trackProgressOf(root.player) : root.heldTrackProgress
-    onTrackProgressChanged: if (root.visible) root.heldTrackProgress = root.trackProgress
+    readonly property real trackProgress: root.shownInWindow ? MprisController.trackProgressOf(root.player) : root.heldTrackProgress
+    onTrackProgressChanged: if (root.shownInWindow) root.heldTrackProgress = root.trackProgress
     // Lyrics belong to the active player; a pinned player (phone) shows none.
     readonly property bool hasLyrics: !root.playerOverride && LyricsService.hasSyncedLines && LyricsService.statusText !== ""
     // Read this player's metadata directly: the controller's artUrl fallback
@@ -298,7 +303,7 @@ ClippingRectangle {
                 // driven by the text-change Behavior itself — no timer here.
                 // Hidden, a line just replaces the last one: the motion is for eyes,
                 // and a resident panel otherwise animated every line off screen.
-                animateChange: root.visible
+                animateChange: root.shownInWindow
                 animationDistanceY: root.tile.scaled(8)
                 wrapMode: Text.WordWrap
                 maximumLineCount: 2
@@ -667,7 +672,7 @@ ClippingRectangle {
     // Mpris only emits position on demand for most players, so the ring's sweep and
     // the seekbar both need a ticking clock while their face is on screen.
     Timer {
-        running: root.playing && root.visible && (root.portrait > 0.5 || root.seekReveal > 0.5)
+        running: root.playing && root.shownInWindow && (root.portrait > 0.5 || root.seekReveal > 0.5)
         interval: Config.options.resources.updateInterval
         repeat: true
         onTriggered: root.player?.positionChanged()
