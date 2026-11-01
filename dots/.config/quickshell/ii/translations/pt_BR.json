@@ -15034,5 +15034,11 @@
     "Set `theme = matugen` in ~/.config/ghostty/config.": "Defina `theme = matugen` no ~/.config/ghostty/config.",
     "Add `@import \"matugen.rasi\"` to your rofi theme and use its variables.": "Adicione `@import \"matugen.rasi\"` ao seu tema do rofi e use as variáveis dele.",
     "Add `source-file ~/.config/tmux/matugen.conf` to tmux.conf.": "Adicione `source-file ~/.config/tmux/matugen.conf` ao tmux.conf.",
-    "Add `include matugen-colors` to ~/.config/zathura/zathurarc.": "Adicione `include matugen-colors` ao ~/.config/zathura/zathurarc."
+    "Add `include matugen-colors` to ~/.config/zathura/zathurarc.": "Adicione `include matugen-colors` ao ~/.config/zathura/zathurarc.",
+    "Multi-output": "Multissaída",
+    "Play on several devices at once": "Tocar em vários dispositivos ao mesmo tempo",
+    "Playing on %1 devices. Tap the check to remove one.": "Tocando em %1 dispositivos. Toque no check para remover um.",
+    "Pick the devices that should play together": "Escolha os dispositivos que devem tocar juntos",
+    "Choose where this app plays": "Escolha onde este app toca",
+    "If the choice doesn’t stick, EasyEffects is pulling the app back: close it or turn off its “Process all output streams”.": "Se a escolha não se mantiver, o EasyEffects está puxando o app de volta: feche-o ou desligue nele “Processar todos os fluxos de saída”."
 }

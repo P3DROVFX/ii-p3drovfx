@@ -15027,5 +15027,11 @@
     "Set `theme = matugen` in ~/.config/ghostty/config.": "Set `theme = matugen` in ~/.config/ghostty/config.",
     "Add `@import \"matugen.rasi\"` to your rofi theme and use its variables.": "Add `@import \"matugen.rasi\"` to your rofi theme and use its variables.",
     "Add `source-file ~/.config/tmux/matugen.conf` to tmux.conf.": "Add `source-file ~/.config/tmux/matugen.conf` to tmux.conf.",
-    "Add `include matugen-colors` to ~/.config/zathura/zathurarc.": "Add `include matugen-colors` to ~/.config/zathura/zathurarc."
+    "Add `include matugen-colors` to ~/.config/zathura/zathurarc.": "Add `include matugen-colors` to ~/.config/zathura/zathurarc.",
+    "Multi-output": "Multi-output",
+    "Play on several devices at once": "Play on several devices at once",
+    "Playing on %1 devices. Tap the check to remove one.": "Playing on %1 devices. Tap the check to remove one.",
+    "Pick the devices that should play together": "Pick the devices that should play together",
+    "Choose where this app plays": "Choose where this app plays",
+    "If the choice doesn’t stick, EasyEffects is pulling the app back: close it or turn off its “Process all output streams”.": "If the choice doesn’t stick, EasyEffects is pulling the app back: close it or turn off its “Process all output streams”."
 }

@@ -18,13 +18,76 @@ StyledFlickable {
     property int activePlaybackDragIndex: -1
     property int activeRecordingDragIndex: -1
 
-    readonly property int activeDeviceIndex: {
+    // Multi-output: several sinks play together, each keeps its own volume.
+    // Asking for it changes nothing until a second device is picked.
+    property bool multiOutputRequested: false
+    readonly property bool multiOutputMode: isSink && (Audio.multiOutputActive || multiOutputRequested)
+    readonly property var activeDeviceNames: {
+        if (isSink && Audio.multiOutputActive)
+            return Audio.multiOutputSinks;
         const activeNode = isSink ? Pipewire.defaultAudioSink : Pipewire.defaultAudioSource;
-        if (!activeNode) return -1;
-        for (let i = 0; i < devices.length; i++) {
-            if (devices[i].id === activeNode.id) return i;
+        return activeNode ? [activeNode.name] : [];
+    }
+
+    // Where a single app can be sent: every output device, plus the combined
+    // sink while multi-output is on (one app on both headphones, the rest on one)
+    readonly property var routeTargets: {
+        if (!isSink) return [];
+        const combined = Audio.multiOutputActive ? Pipewire.nodes.values.find(n => n.name === Audio.multiOutputSinkName) : null;
+        return combined ? [combined, ...Audio.outputDevices] : Audio.outputDevices;
+    }
+
+    // Where each app plays now, read off the links (a move shows up only once
+    // PipeWire relinks the stream, so the chips never lie). A stream's own
+    // PwNodeLinkTracker stays empty; the sink side sees who feeds it.
+    property var streamTargets: ({})
+    Instantiator {
+        id: targetLinkTrackers
+        model: root.routeTargets
+        delegate: PwNodeLinkTracker {
+            required property var modelData
+            node: modelData
+            onLinkGroupsChanged: root.refreshStreamTargets()
         }
-        return -1;
+        onObjectAdded: root.refreshStreamTargets()
+        onObjectRemoved: root.refreshStreamTargets()
+    }
+    function refreshStreamTargets() {
+        const map = {};
+        for (let i = 0; i < targetLinkTrackers.count; i++) {
+            const tracker = targetLinkTrackers.objectAt(i);
+            if (!tracker) continue;
+            for (const group of tracker.linkGroups) {
+                if (group.source && group.target === tracker.node)
+                    map[group.source.id] = tracker.node;
+            }
+        }
+        root.streamTargets = map;
+    }
+
+    function deviceActiveAt(i) {
+        return i >= 0 && i < devices.length && activeDeviceNames.indexOf(devices[i].name) !== -1;
+    }
+
+    function toggleMultiOutputMember(node) {
+        const names = root.activeDeviceNames.slice();
+        const i = names.indexOf(node.name);
+        if (i === -1) {
+            names.push(node.name);
+        } else {
+            if (names.length <= 1) return;
+            names.splice(i, 1);
+        }
+        Audio.setMultiOutputSinks(names);
+    }
+
+    function setMultiOutputMode(on) {
+        root.multiOutputRequested = on;
+        if (on || !Audio.multiOutputActive) return;
+        // Fall back to a member that is still connected
+        const names = Audio.multiOutputSinks;
+        const present = names.find(n => root.devices.some(d => d.name === n)) ?? names[0];
+        Audio.setMultiOutputSinks([present]);
     }
 
     Process {
@@ -154,12 +217,42 @@ StyledFlickable {
             spacing: 6
             visible: root.hasDevices
 
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                StyledText {
+                    Layout.fillWidth: true
+                    font.pixelSize: Appearance.font.pixelSize.normal
+                    font.bold: true
+                    color: Appearance.colors.colSubtext
+                    text: root.isSink ? Translation.tr("Device Output") : Translation.tr("Device Input")
+                }
+
+                SelectionGroupButton {
+                    visible: root.isSink && (root.devices.length >= 2 || Audio.multiOutputActive)
+                    leftmost: true
+                    rightmost: true
+                    buttonIcon: "speaker_group"
+                    buttonText: Translation.tr("Multi-output")
+                    toggled: root.multiOutputMode
+                    onClicked: root.setMultiOutputMode(!root.multiOutputMode)
+
+                    StyledToolTip {
+                        text: Translation.tr("Play on several devices at once")
+                    }
+                }
+            }
+
             StyledText {
                 Layout.fillWidth: true
-                font.pixelSize: Appearance.font.pixelSize.normal
-                font.bold: true
+                visible: root.multiOutputMode
+                wrapMode: Text.WordWrap
+                font.pixelSize: Appearance.font.pixelSize.smaller
                 color: Appearance.colors.colSubtext
-                text: root.isSink ? Translation.tr("Device Output") : Translation.tr("Device Input")
+                text: Audio.multiOutputActive
+                    ? Translation.tr("Playing on %1 devices. Tap the check to remove one.").arg(Audio.multiOutputSinks.length)
+                    : Translation.tr("Pick the devices that should play together")
             }
 
             ColumnLayout {
@@ -264,20 +357,12 @@ StyledFlickable {
             }
         }
 
-        readonly property bool isActive: {
-            if (!node)
-                return false;
-            if (isSink) {
-                return node.id === Pipewire.defaultAudioSink?.id;
-            } else {
-                return node.id === Pipewire.defaultAudioSource?.id;
-            }
-        }
+        readonly property bool isActive: node ? root.activeDeviceNames.indexOf(node.name) !== -1 : false
 
         readonly property bool isFirst: index === 0
         readonly property bool isLast: index === totalCount - 1
-        readonly property bool isPrevActive: index === root.activeDeviceIndex - 1
-        readonly property bool isNextActive: index === root.activeDeviceIndex + 1
+        readonly property bool isPrevActive: root.deviceActiveAt(index + 1)
+        readonly property bool isNextActive: root.deviceActiveAt(index - 1)
 
         readonly property real rFull: height / 2
         readonly property real rOuter: Appearance?.rounding?.large ?? 23
@@ -327,6 +412,13 @@ StyledFlickable {
                 text: "check"
                 iconSize: 32
                 color: Appearance.colors.colPrimary
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                enabled: root.multiOutputMode && root.activeDeviceNames.length > 1
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.toggleMultiOutputMember(devEntry.node)
             }
         }
 
@@ -570,7 +662,9 @@ StyledFlickable {
         function activateDevice() {
             if (!node)
                 return;
-            if (isSink) {
+            if (root.multiOutputMode) {
+                root.toggleMultiOutputMember(devEntry.node);
+            } else if (isSink) {
                 Audio.setDefaultSink(devEntry.node);
             } else {
                 Audio.setDefaultSource(devEntry.node);
@@ -589,8 +683,16 @@ StyledFlickable {
             objects: [progEntry.node]
         }
 
-        implicitHeight: 56
+        readonly property PwNode outputTarget: progEntry.node ? (root.streamTargets[progEntry.node.id] ?? null) : null
+        readonly property bool canRoute: progEntry.isSink && root.routeTargets.length >= 2
+        property bool routing: false
+
+        readonly property real rowHeight: 56
+        implicitHeight: rowHeight + (routing && canRoute ? routeChooser.implicitHeight + 8 : 0)
         height: implicitHeight
+        Behavior on implicitHeight {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        }
 
         readonly property bool isFirst: index === 0
         readonly property bool isLast: index === totalCount - 1
@@ -600,7 +702,7 @@ StyledFlickable {
         readonly property bool isPrevDragged: activeDragIndex === progEntry.index + 1
         readonly property bool isNextDragged: activeDragIndex === progEntry.index - 1
 
-        readonly property real rFull: height / 2
+        readonly property real rFull: rowHeight / 2
         readonly property real rOuter: Appearance?.rounding?.large ?? 23
         readonly property real rInner: Appearance?.rounding?.verysmall ?? 4
 
@@ -611,7 +713,10 @@ StyledFlickable {
 
         Rectangle {
             id: mainRect
-            anchors.fill: parent
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            height: progEntry.rowHeight
             
             topLeftRadius: progEntry.topLeftRadius
             topRightRadius: progEntry.topRightRadius
@@ -767,6 +872,47 @@ StyledFlickable {
                         }
                     }
                 }
+
+                RippleButton {
+                    id: routeButton
+                    visible: progEntry.canRoute
+                    Layout.alignment: Qt.AlignVCenter
+                    Layout.maximumWidth: 132
+                    implicitHeight: 32
+                    implicitWidth: routeRow.implicitWidth + 20
+                    buttonRadius: Appearance.rounding.full
+                    toggled: progEntry.routing
+                    colBackground: ColorUtils.transparentize(Appearance.colors.colSurfaceContainerHighest, 0.25)
+                    colBackgroundHover: Appearance.colors.colSurfaceContainerHighest
+                    colBackgroundToggled: Appearance.colors.colPrimary
+                    colBackgroundToggledHover: Appearance.colors.colPrimaryHover
+                    opacity: progMouseArea.pressed ? 0.0 : 1.0
+                    onClicked: progEntry.routing = !progEntry.routing
+
+                    contentItem: RowLayout {
+                        id: routeRow
+                        anchors.centerIn: parent
+                        width: Math.min(implicitWidth, routeButton.width - 20)
+                        spacing: 4
+
+                        MaterialSymbol {
+                            text: Audio.outputDeviceIcon(progEntry.outputTarget)
+                            iconSize: Appearance.font.pixelSize.large
+                            color: routeButton.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                        }
+                        StyledText {
+                            Layout.fillWidth: true
+                            elide: Text.ElideRight
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            color: routeButton.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                            text: progEntry.outputTarget ? Audio.friendlyDeviceName(progEntry.outputTarget) : Translation.tr("Output")
+                        }
+                    }
+
+                    StyledToolTip {
+                        text: Translation.tr("Choose where this app plays")
+                    }
+                }
             }
 
             StyledText {
@@ -844,6 +990,51 @@ StyledFlickable {
                         }
                     }
                 }
+            }
+        }
+
+        // A Column, not a ColumnLayout: a layout hidden while closed never placed
+        // the notice on reopening (both children stayed at y 0)
+        Column {
+            id: routeChooser
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: mainRect.bottom
+            anchors.topMargin: 8
+            spacing: 6
+            visible: opacity > 0
+            opacity: progEntry.routing && progEntry.canRoute ? 1 : 0
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+
+            Flow {
+                width: parent.width
+                spacing: 4
+
+                Repeater {
+                    model: ScriptModel {
+                        values: root.routeTargets
+                    }
+                    delegate: SelectionGroupButton {
+                        required property var modelData
+                        leftmost: true
+                        rightmost: true
+                        buttonIcon: Audio.outputDeviceIcon(modelData)
+                        buttonText: Audio.friendlyDeviceName(modelData)
+                        toggled: progEntry.outputTarget?.id === modelData.id
+                        onClicked: Audio.routeStream(progEntry.node, modelData)
+                    }
+                }
+            }
+
+            // EasyEffects processing every app pulls a moved stream straight back
+            // into its sink. The shell never changes EasyEffects; it only says so.
+            NoticeBox {
+                width: parent.width
+                visible: EasyEffects.running
+                materialIcon: "graphic_eq"
+                text: Translation.tr("If the choice doesn’t stick, EasyEffects is pulling the app back: close it or turn off its “Process all output streams”.")
             }
         }
     }
