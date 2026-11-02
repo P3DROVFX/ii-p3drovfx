@@ -203,7 +203,7 @@ PanelWindow {
             activeId = GlobalStates._editSavedWorkspace;
         else if (activeId > 1000000)
             activeId = 2147483647 - activeId;
-        return HyprlandData.windowList.some(function (w) {
+        return HyprlandData.specialWindowsShown(monName) || HyprlandData.windowList.some(function (w) {
             return HyprlandData.sameWorkspace(w.workspace.id, activeId);
         });
     }

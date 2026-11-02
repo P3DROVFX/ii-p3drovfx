@@ -300,7 +300,8 @@ Singleton {
         const monitors = HyprlandData.monitors;
         if (!monitors)
             return false;
-        return monitors.some(mon => mon.specialWorkspace && mon.specialWorkspace.name !== "" && (mon.specialWorkspace.id ?? 0) !== 0);
+        // Name only: since Hyprland 0.57 a special workspace carries no numeric id.
+        return monitors.some(mon => mon.specialWorkspace && mon.specialWorkspace.name !== "");
     }
     property bool scratchpadEmptyOverlayActive: false
     readonly property bool overviewBackgroundActive: {
@@ -1156,7 +1157,7 @@ Singleton {
         // A special workspace is summoned over the desktop; close it first,
         // as the lock does.
         const specName = mData.specialWorkspace?.name ?? "";
-        if (specName !== "" && (mData.specialWorkspace?.id ?? 0) !== 0) {
+        if (specName !== "") {
             let clean = specName.startsWith("special:") ? specName.substring(8) : specName;
             if (!clean)
                 clean = "special";

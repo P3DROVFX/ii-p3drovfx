@@ -189,7 +189,21 @@ Singleton {
     // "no windows" for one refresh and dropped and restarted, flashing the
     // sharp wallpaper).
     property var workspaceIdRenames: ({})
+    // A special workspace (the scratchpad) comes with no id at all, so a or b can be undefined:
+    // renames[b] === a would then hold for any b without a pending rename, and a scratchpad
+    // window - shown or not - would count as being on every workspace.
+    // A shown special workspace (the scratchpad) on that monitor that holds windows. Matched by
+    // name: since Hyprland 0.57 a special workspace carries no numeric id.
+    function specialWindowsShown(monitorName) {
+        const mon = (root.monitors ?? []).find(m => m.name === monitorName);
+        const name = mon?.specialWorkspace?.name ?? "";
+        if (name === "")
+            return false;
+        return root.windowList.some(w => w.workspace?.name === name);
+    }
     function sameWorkspace(a, b) {
+        if (a === undefined || a === null || b === undefined || b === null)
+            return false;
         const renames = root.workspaceIdRenames;
         return a === b || renames[a] === b || renames[b] === a;
     }
