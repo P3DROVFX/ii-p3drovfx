@@ -39,7 +39,8 @@ Singleton {
     }
 
     function hibernate() {
-        Quickshell.execDetached(["bash", "-c", `systemctl hibernate || loginctl hibernate`]);
+        // Fails silently when the kernel refuses (Secure Boot lockdown, no disk swap) — surface it
+        Quickshell.execDetached(["bash", "-c", `err=$(systemctl hibernate 2>&1 || loginctl hibernate 2>&1) || notify-send -a Shell -i system-suspend-hibernate "Hibernate unavailable" "$err"`]);
     }
 
     function poweroff() {
