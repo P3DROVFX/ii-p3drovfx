@@ -15,7 +15,8 @@ Canvas { // High-performance silky-smooth liquid wave visualizer
 
     // Frame animation loop for continuous time & LERP interpolation
     FrameAnimation {
-        running: root.live
+        // A hidden canvas still repaints on the CPU: never animate one nobody sees.
+        running: root.live && root.visible
         onTriggered: {
             root.animTime += 0.04;
             var n = root.points.length;

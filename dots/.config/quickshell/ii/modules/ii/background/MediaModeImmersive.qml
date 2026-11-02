@@ -37,6 +37,23 @@ Item {
     }
     readonly property color subtleForeground: ColorUtils.applyAlpha(foreground, 0.64)
     readonly property color tint: context.videoActive ? context.extractedColor : context.albumArtExtractedColor
+
+    // Read as root.* by the visualizers and kinetic lyrics: they must live on the root.
+    // Declared on a child they read undefined, a canvas's `live` kept its default
+    // `true`, and the hidden full-screen waves repainted on the CPU every frame.
+    readonly property int visualizerMode: context.visualizerMode
+    readonly property bool visualizerPlaying: context.player?.isPlaying ?? false
+    // Light fringes over the always-dark artwork, whatever the shell theme is.
+    readonly property color visualizerColorA: ColorUtils.colorWithLightness(tint, 0.72)
+    readonly property color visualizerColorB: ColorUtils.colorWithLightness(Appearance.m3colors.m3tertiary, 0.72)
+    // Kinetic lyrics' second ink. A colourless cover (black, grey, a dark photo) gave a
+    // grey or near-black accent, so those fall back to the theme's primary.
+    readonly property color kineticAccent: {
+        const c = Qt.color(root.tint);
+        const base = c.a < 0.5 || c.hslSaturation < 0.15 || c.hslLightness < 0.06 ? Appearance.m3colors.m3primary : c;
+        const q = Qt.color(base);
+        return Qt.hsla(Math.max(0, q.hslHue), q.hslSaturation, 0.74, 1);
+    }
     // Mid-grey material, like Apple's: it lifts dark covers and dims light ones, so
     // glass reads as a surface on any artwork. A pure scrim tint vanished on dark art.
     readonly property color glass: ColorUtils.applyAlpha(ColorUtils.mix(ColorUtils.mix(Appearance.m3colors.m3scrim,
@@ -297,10 +314,7 @@ Item {
         }
 
         // Visualizers over the artwork, under the glass and controls. Same mode as the
-        // classic frontend (0 off, 1 waves, 2 bars, 3 radial).
-        readonly property int visualizerMode: context.visualizerMode
-        readonly property bool visualizerPlaying: context.player?.isPlaying ?? false
-
+        // classic frontend (0 off, 1 waves, 2 bars, 3 radial); see root.visualizerMode.
         WaveVisualizer {
             anchors.fill: parent
             visible: root.visualizerMode === 1
@@ -333,18 +347,6 @@ Item {
                 }
             }
         }
-
-        // Light fringes over the always-dark artwork, whatever the shell theme is.
-        readonly property color visualizerColorA: ColorUtils.colorWithLightness(tint, 0.72)
-        readonly property color visualizerColorB: ColorUtils.colorWithLightness(Appearance.m3colors.m3tertiary, 0.72)
-    // Kinetic lyrics' second ink. A colourless cover (black, grey, a dark photo) gave a
-    // grey or near-black accent, so those fall back to the theme's primary.
-    readonly property color kineticAccent: {
-        const c = Qt.color(root.tint);
-        const base = c.a < 0.5 || c.hslSaturation < 0.15 || c.hslLightness < 0.06 ? Appearance.m3colors.m3primary : c;
-        const q = Qt.color(base);
-        return Qt.hsla(Math.max(0, q.hslHue), q.hslSaturation, 0.74, 1);
-    }
 
         HaloVisualizer {
             anchors.fill: parent
