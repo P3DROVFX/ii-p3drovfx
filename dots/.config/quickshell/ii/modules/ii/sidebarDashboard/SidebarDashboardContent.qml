@@ -876,19 +876,40 @@ Item {
                 AnimatedImage {
                     id: bannerAnimatedImage
                     anchors.fill: parent
-                    source: (wallpaperArea.isBannerAnimated && wallpaperArea.animatedDecodeBox.width > 0)
+                    source: (wallpaperArea.isBannerAnimated && wallpaperArea.animatedDecodeBox.width > 0
+                             && bannerAnimatedImage.keepMovie)
                         ? wallpaperArea.cleanBannerSource
                         : ""
                     sourceSize: wallpaperArea.animatedDecodeBox
                     fillMode: Image.PreserveAspectCrop
                     playing: wallpaperArea.shouldPlayBanner
-                    paused: !wallpaperArea.shouldPlayBanner
-                    // QMovie::CacheAll (cache: true) keeps every decoded frame in RAM —
-                    // valuable while playing (avoids per-loop re-decode) but wasteful while
-                    // the sidebar is closed. Tie cache to shouldPlayBanner so frames are
-                    // released when the dashboard is hidden and rebuilt on next open.
-                    cache: wallpaperArea.shouldPlayBanner && wallpaperArea.animatedDecodeBox.width > 0
+                    // Never toggle `cache` on a live movie: turning it off runs
+                    // QQuickAnimatedImage::clearCache() (qDeleteAll of the frame
+                    // pixmaps) mid-playback, and from then on every frame deletes
+                    // and recreates its pixmap through the global pixmap cache.
+                    // Under Qt 6.12 that path segfaults (memcpy in QtGui) when the
+                    // dashboard closes for the overview/lock screen. Frames are
+                    // released instead by unloading the movie once it is closed.
+                    cache: true
                     asynchronous: true
+                    property bool keepMovie: wallpaperArea.shouldPlayBanner
+                    Connections {
+                        target: wallpaperArea
+                        function onShouldPlayBannerChanged() {
+                            if (wallpaperArea.shouldPlayBanner) {
+                                bannerMovieRelease.stop();
+                                bannerAnimatedImage.keepMovie = true;
+                            } else {
+                                bannerMovieRelease.restart();
+                            }
+                        }
+                    }
+                    // Keep the paused last frame through the close animation.
+                    Timer {
+                        id: bannerMovieRelease
+                        interval: 2000
+                        onTriggered: bannerAnimatedImage.keepMovie = false
+                    }
                     visible: wallpaperArea.isBannerAnimated && status === Image.Ready
                     layer.enabled: true
                     layer.effect: OpacityMask {
