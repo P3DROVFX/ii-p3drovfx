@@ -91,4 +91,25 @@ TestCase {
         verify(!OskProtocol.anyTriggerDevice({ touch: 0, pen: 0, mouse: 0 }, { allowMouse: true }));
         verify(!OskProtocol.anyTriggerDevice(null, {}));
     }
+
+    function test_mouse_in_desktop_mode() {
+        const desktopMode = true;
+        const tabletMode = false;
+        const opts = { allowMouse: true, allowMouseInDesktop: false };
+
+        // Disallowed in desktop mode by default when allowMouseInDesktop is false
+        verify(!OskProtocol.pointerAllowed("mouse", opts, desktopMode));
+        // Allowed in tablet mode
+        verify(OskProtocol.pointerAllowed("mouse", opts, tabletMode));
+
+        // Allowed in desktop mode when explicitly enabled
+        const optsAllowed = { allowMouse: true, allowMouseInDesktop: true };
+        verify(OskProtocol.pointerAllowed("mouse", optsAllowed, desktopMode));
+        verify(OskProtocol.pointerAllowed("mouse", optsAllowed, tabletMode));
+
+        // When allowMouse is false, allowMouseInDesktop has no effect
+        const optsOff = { allowMouse: false, allowMouseInDesktop: true };
+        verify(!OskProtocol.pointerAllowed("mouse", optsOff, desktopMode));
+        verify(!OskProtocol.pointerAllowed("mouse", optsOff, tabletMode));
+    }
 }
