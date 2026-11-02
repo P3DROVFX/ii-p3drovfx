@@ -137,6 +137,25 @@ PanelWindow {
         GlobalStates.setTabletOverlayOnScreen(root.overlayName, false);
     }
 
+    /// An action that needs the keyboard grab gone (raising an already open window). The
+    /// surface stays mapped, so this runs on the close animation releasing the grab, not on
+    /// an unmap that never comes.
+    property var pendingAction: null
+
+    function runAfterClose(action) {
+        root.pendingAction = action;
+        root.dismiss();
+        root.flushPendingAction();
+    }
+
+    function flushPendingAction() {
+        if (!root.pendingAction || root.wantOpen || root.openProgress > 0.5)
+            return;
+        const action = root.pendingAction;
+        root.pendingAction = null;
+        action();
+    }
+
     /// GlobalFocusGrab dismisses by calling this on the registered window.
     function dismiss() {
         GlobalStates.appDrawerOpen = false;
@@ -169,6 +188,7 @@ PanelWindow {
     Component.onCompleted: GlobalStates.setTabletOverlayOnScreen(root.overlayName, root.paintsBackdrop)
 
     onOpenProgressChanged: {
+        root.flushPendingAction();
         // The field is focused only once the drawer has settled, for the same reason the
         // surface takes keyboard focus only then.
         if (root.openProgress > 0.99)
@@ -345,6 +365,7 @@ PanelWindow {
                     return;
                 contentLoader.item.revealProgress = Qt.binding(() => root.openProgress);
                 contentLoader.item.dismissRequested.connect(root.dismiss);
+                contentLoader.item.deferredRequested.connect(root.runAfterClose);
                 contentLoader.item.appHeld.connect(root.appHeld);
                 contentLoader.item.appDragStarted.connect(dragLaunch.begin);
                 contentLoader.item.appDragMoved.connect(dragLaunch.move);

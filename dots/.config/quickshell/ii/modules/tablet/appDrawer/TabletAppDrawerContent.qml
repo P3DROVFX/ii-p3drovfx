@@ -6,6 +6,7 @@ import QtQuick.Layouts
 
 import Quickshell
 import Quickshell.Hyprland
+import Quickshell.Wayland
 
 import qs
 import qs.services
@@ -41,6 +42,9 @@ Item {
     property real revealProgress: 1
 
     signal dismissRequested
+    /// Work that has to wait until the drawer has let go of the keyboard, i.e. raising a
+    /// window that is already open. The host runs it once the close is under way.
+    signal deferredRequested(var action)
     /// Long-pressed an app: the host decides what "add to home" means, because the home
     /// screen is a different module and the drawer must not reach into it.
     signal appHeld(string appId)
@@ -619,6 +623,41 @@ Item {
         return false;
     }
 
+    /**
+     * Open an app, or go to it if it is already open.
+     *
+     * `entry.execute()` on a running single-instance app (every Electron app, most browsers)
+     * only asks the first copy to open a window, and the compositor does not raise it — the
+     * tap looked dead. Most used is made of exactly those apps, since they stay running. A
+     * taskbar tap has always meant "raise it", so that is what a tap does here too.
+     * Raising waits for the drawer to release its keyboard grab, which would otherwise keep
+     * the window from taking focus.
+     */
+    function runningWindowFor(entry) {
+        const wanted = [entry?.id, entry?.startupClass]
+            .map(id => TaskbarApps.normalizeAppId(String(id ?? "")))
+            .filter(id => id.length > 0);
+        if (wanted.length === 0)
+            return null;
+        for (const toplevel of (ToplevelManager.toplevels?.values ?? [])) {
+            if (wanted.indexOf(TaskbarApps.normalizeAppId(toplevel?.appId ?? "")) !== -1)
+                return toplevel;
+        }
+        return null;
+    }
+
+    function launchApp(entry) {
+        if (!entry)
+            return;
+        const running = root.runningWindowFor(entry);
+        if (running) {
+            AppUsage.recordLaunch(entry.id);
+            root.deferredRequested(() => running.activate());
+            return;
+        }
+        LauncherSearch.launchApplication(entry);
+    }
+
     function activateTopResult() {
         if (root.activeToolId.length > 0)
             return;
@@ -628,7 +667,7 @@ Item {
             return;
         }
         if (root.apps.length > 0) {
-            root.apps[0].execute();
+            root.launchApp(root.apps[0]);
             root.dismissRequested();
             return;
         }
@@ -661,10 +700,31 @@ Item {
             return "content";
         const atTop = flick => flick.contentY <= flick.originY - flick.topMargin + 1;
         for (const flick of [sideColumn, appGrid]) {
-            if (over(flick))
+            if (over(flick)) {
+                // A tile is a tap, a hold and a drag-to-launch of its own. The drag layer
+                // above the drawer cannot sit over one without swallowing the press, so a
+                // tile is never "the grid at its top" — only the space around it is.
+                if (flick === appGrid && root.tileAt(item, x, y))
+                    return "content";
                 return atTop(flick) ? flick : "content";
+            }
         }
         return null;
+    }
+
+    /// Whether (x, y) of `item` lands on an app tile of the grid or of the predicted row.
+    function tileAt(item, x, y) {
+        if (root.activeToolId.length > 0)
+            return false;
+        const inContent = item.mapToItem(appGrid.contentItem, x, y);
+        if (appGrid.itemAt(inContent.x, inContent.y))
+            return true;
+        if (suggestionsBand.visible) {
+            const inRow = item.mapToItem(suggestionsRow, x, y);
+            if (inRow.x >= 0 && inRow.y >= 0 && suggestionsRow.childAt(inRow.x, inRow.y))
+                return true;
+        }
+        return false;
     }
 
     function reset() {
@@ -735,7 +795,7 @@ Item {
             symbol: "launch",
             label: Translation.tr("Open"),
             trigger: () => {
-                entry.execute();
+                root.launchApp(entry);
                 root.dismissRequested();
             }
         });
@@ -1194,7 +1254,7 @@ Item {
                                     if (appCell.isSystemApp)
                                         TabletSystemApps.launch(String(cell.systemAppId));
                                     else
-                                        cell.entry.execute();
+                                        LauncherSearch.launchApplication(cell.entry);
                                 }
                             }, sceneX, sceneY);
                         }
@@ -1212,7 +1272,7 @@ Item {
                                 }
                                 TabletSystemApps.launch(id);
                             } else
-                                appCell.modelData.entry.execute();
+                                root.launchApp(appCell.modelData.entry);
                             root.dismissRequested();
                         }
                         onHeld: {
@@ -1274,6 +1334,7 @@ Item {
                 }
 
                 Row {
+                    id: suggestionsRow
                     anchors.left: parent.left
                     anchors.top: suggestionsLabel.bottom
                     anchors.topMargin: 6
@@ -1292,7 +1353,7 @@ Item {
                             iconSize: root.appIconSize
 
                             onActivated: {
-                                suggestionTile.modelData.execute();
+                                root.launchApp(suggestionTile.modelData);
                                 root.dismissRequested();
                             }
                             onHeld: {
@@ -1666,5 +1727,6 @@ Item {
     TabletInlineMenu {
         id: inlineMenu
         anchors.fill: parent
+        blurSource: body
     }
 }
