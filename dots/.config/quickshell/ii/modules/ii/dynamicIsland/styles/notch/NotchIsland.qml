@@ -2057,7 +2057,10 @@ Scope {
         }
 
         HyprlandFocusGrab {
-            windows: [win]
+            // Popups opened from inside the island (e.g. a tray item's menu in Active
+            // apps) are separate Wayland windows registered in GlobalFocusGrab; without
+            // them here, every click on such a menu counted as a click outside.
+            windows: [win, ...GlobalFocusGrab.persistent]
             // The dashboard joins the two that already grabbed: it is as much an open
             // surface as they are, and having the session menu inside it close on a
             // click away while the dashboard holding it would not was the tell.
