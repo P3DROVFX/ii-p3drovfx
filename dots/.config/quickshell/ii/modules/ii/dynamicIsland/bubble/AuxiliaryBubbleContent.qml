@@ -175,6 +175,19 @@ Item {
             readonly property real maxWidth: Math.round(root.diameter * 4.6)
             readonly property string title: StringUtils.cleanMusicTitle(MprisController.activePlayer?.trackTitle ?? "")
             /**
+             * Pinned open (Settings > Dynamic Island > Media): the pill never folds back to
+             * the ring. It stays at one fixed width - a width that followed each lyric line
+             * would shove the bar beside it on every verse - and says the current lyric, or
+             * the track name where there are none (and for a few seconds after a track change).
+             */
+            readonly property bool pinned: (Config.options.bar.floatingNotch.pinMediaBubble ?? false) && !root.glanceOnly
+            readonly property real pinnedWidth: Math.round(root.diameter * 5.4)
+            readonly property bool lyricsOn: media.pinned && !media.showTitle && !media.paused
+                && (Config.options.lyricsService.enable ?? false) && LyricsService.hasSyncedLines
+            readonly property string lyricLine: media.lyricsOn
+                ? (LyricsService.syncedLines[LyricsService.currentIndex]?.text ?? "") : ""
+            readonly property string shownText: media.lyricLine.trim() !== "" ? media.lyricLine.trim() : media.title
+            /**
              * Paused, the ring opens into a pill with a play button beside it, so
              * resuming is one click away without opening anything.
              */
@@ -185,6 +198,8 @@ Item {
             readonly property real preferredWidth: {
                 if (root.glanceOnly)
                     return root.diameter;
+                if (media.pinned)
+                    return media.pinnedWidth;
                 if (media.paused)
                     return root.diameter + media.buttonWidth + 4;
                 if (media.showTitle && media.title !== "")
@@ -196,7 +211,11 @@ Item {
              * the pills it opens into while paused or on a new track. Weighed live, every
              * pause and every track change moved some other bubble across the island.
              */
-            readonly property real balanceWidth: 2 * root.diameter
+            readonly property real balanceWidth: media.pinned ? media.pinnedWidth : 2 * root.diameter
+
+            // Only a pinned pill shows lyrics, so only then does the service need to fetch them.
+            onPinnedChanged: if (media.pinned) LyricsService.initiliazeLyrics()
+            Component.onCompleted: if (media.pinned) LyricsService.initiliazeLyrics()
 
             // Measured apart from the label: the label is laid out at the width this
             // decides, and measuring the label itself would loop.
@@ -246,15 +265,17 @@ Item {
                 id: titleText
                 anchors.left: ringSlot.right
                 anchors.right: parent.right
-                anchors.rightMargin: root.endPadding
+                // A pinned, paused pill keeps the play button at its end.
+                anchors.rightMargin: root.endPadding + (media.pinned && media.paused ? media.buttonWidth + 4 : 0)
                 anchors.verticalCenter: parent.verticalCenter
-                text: media.title
+                text: media.pinned ? media.shownText : media.title
+                animateChange: media.pinned
                 elide: Text.ElideRight
                 maximumLineCount: 1
                 font.pixelSize: Appearance.font.pixelSize.smaller
                 font.weight: Font.DemiBold
                 color: root.colText
-                opacity: media.showTitle && !media.paused && !root.glanceOnly ? 1 : 0
+                opacity: media.pinned ? 1 : (media.showTitle && !media.paused && !root.glanceOnly ? 1 : 0)
                 Behavior on opacity {
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(titleText)
                 }
@@ -263,7 +284,7 @@ Item {
             // Resume: a full-radius button in the island's accent, beside the ring.
             RippleButton {
                 id: playButton
-                x: root.diameter
+                x: media.pinned ? media.pinnedWidth - media.buttonWidth - 4 : root.diameter
                 anchors.verticalCenter: parent.verticalCenter
                 width: media.buttonWidth
                 height: root.diameter - 8

@@ -5398,6 +5398,8 @@ Singleton {
                     property bool disableWifi: false
                     property bool disableBluetooth: false
                     property bool disableMedia: false
+                    // Media bubble stays open as a wide pill with the lyric / track name.
+                    property bool pinMediaBubble: false
                     property bool disableNotification: false
                     property bool disableOsd: false
                     property bool disableRecording: false

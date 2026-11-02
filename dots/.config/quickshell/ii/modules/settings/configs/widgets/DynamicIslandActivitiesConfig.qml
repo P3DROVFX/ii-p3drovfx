@@ -573,9 +573,11 @@ Item {
                                         return root.whereOf(tile.modelData);
                                     }
                                     chipLabel: tile.modelData.id === "workspaces" ? Translation.tr("Bubble")
-                                        : tile.modelData.id === "notification" ? Translation.tr("One line") : ""
+                                        : tile.modelData.id === "notification" ? Translation.tr("One line")
+                                        : tile.modelData.id === "media" ? Translation.tr("Expanded") : ""
                                     chipChosen: tile.modelData.id === "workspaces" ? root.fn.disableWorkspacesBubble !== true
                                         : tile.modelData.id === "notification" ? Config.options.dynamicIsland.widgets.notification.oneLine === true
+                                        : tile.modelData.id === "media" ? Config.options.bar.floatingNotch.pinMediaBubble === true
                                         : false
                                     onClicked: root.select(tile.modelData.id)
                                     onHoveredChanged: root.tileHovered(tile.modelData.id, tile.hovered)
@@ -585,6 +587,8 @@ Item {
                                             root.fn.disableWorkspacesBubble = !value;
                                         else if (tile.modelData.id === "notification")
                                             Config.options.dynamicIsland.widgets.notification.oneLine = value;
+                                        else if (tile.modelData.id === "media")
+                                            Config.options.bar.floatingNotch.pinMediaBubble = value;
                                     }
 
                                     StaggeredEntrance {

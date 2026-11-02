@@ -103,6 +103,16 @@ ColumnLayout {
             }
 
             ConfigSwitch {
+                buttonIcon: "lyrics"
+                text: Translation.tr("Keep media bubble expanded")
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
+                    && !Config.options.bar.floatingNotch.disableMedia
+                checked: Config.options.bar.floatingNotch.pinMediaBubble ?? false
+                onCheckedChanged: Config.options.bar.floatingNotch.pinMediaBubble = checked
+                StyledToolTip { text: Translation.tr("The media bubble stays open as a wide pill showing the current lyric, or the track name when there are none, instead of folding to the cover after a track change") }
+            }
+
+            ConfigSwitch {
                 buttonIcon: "bubble_chart"
                 text: Translation.tr("Workspace bubble")
                 visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar) && !Config.options.bar.floatingNotch.disableWorkspaces

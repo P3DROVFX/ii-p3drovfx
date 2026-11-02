@@ -13637,6 +13637,8 @@
     "Show the device and its battery when Bluetooth connects. Off hands the connection popup back to the bar": "Show the device and its battery when Bluetooth connects. Off hands the connection popup back to the bar",
     "Show the layout switcher when the keyboard layout changes": "Show the layout switcher when the keyboard layout changes",
     "Show the network name when Wi-Fi connects": "Show the network name when Wi-Fi connects",
+    "Keep media bubble expanded": "Keep media bubble expanded",
+    "The media bubble stays open as a wide pill showing the current lyric, or the track name when there are none, instead of folding to the cover after a track change": "The media bubble stays open as a wide pill showing the current lyric, or the track name when there are none, instead of folding to the cover after a track change",
     "Show the playing track, its cover and the visualizer": "Show the playing track, its cover and the visualizer",
     "Show the recording indicator while the screen is captured": "Show the recording indicator while the screen is captured",
     "Show the waveform while dictating": "Show the waveform while dictating",

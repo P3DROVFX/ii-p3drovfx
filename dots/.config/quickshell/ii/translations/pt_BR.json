@@ -13644,6 +13644,8 @@
     "Show the device and its battery when Bluetooth connects. Off hands the connection popup back to the bar": "Mostra o dispositivo e a bateria quando o Bluetooth conecta. Desligado devolve o popup de conexão para a barra",
     "Show the layout switcher when the keyboard layout changes": "Mostra o seletor de layout quando o layout do teclado muda",
     "Show the network name when Wi-Fi connects": "Mostra o nome da rede quando o Wi-Fi conecta",
+    "Keep media bubble expanded": "Manter a bolha de mídia expandida",
+    "The media bubble stays open as a wide pill showing the current lyric, or the track name when there are none, instead of folding to the cover after a track change": "A bolha de mídia fica aberta como uma pílula larga com a letra atual, ou o nome da faixa quando não há letra, em vez de recolher para a capa depois da troca de faixa",
     "Show the playing track, its cover and the visualizer": "Mostra a faixa tocando, a capa e o visualizador",
     "Show the recording indicator while the screen is captured": "Mostra o indicador de gravação enquanto a tela é capturada",
     "Show the waveform while dictating": "Mostra a forma de onda durante o ditado",
