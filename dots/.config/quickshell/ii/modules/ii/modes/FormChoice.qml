@@ -21,12 +21,19 @@ Flow {
 
     signal picked(var value)
 
+    // Read from the children, not repeater.itemAt(): in an asynchronously built tree the
+    // chips arrive after the count changes, and itemAt() gives null then with nothing to
+    // re-run the binding, so the width stuck at 0 and the chips stacked over the row's
+    // buttons. `children` notifies as each chip lands.
     readonly property real oneLineWidth: {
         let w = 0;
-        for (let i = 0; i < repeater.count; ++i) {
-            const chip = repeater.itemAt(i);
-            if (chip)
-                w += chip.implicitWidth + (i > 0 ? root.spacing : 0);
+        let n = 0;
+        const kids = root.children;
+        for (let i = 0; i < kids.length; ++i) {
+            const chip = kids[i];
+            if (chip === repeater)
+                continue;
+            w += chip.implicitWidth + (n++ > 0 ? root.spacing : 0);
         }
         return w;
     }

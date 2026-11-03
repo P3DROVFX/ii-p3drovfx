@@ -60,6 +60,14 @@ Rectangle {
         return Modes.routineLoop(root.ownerId, [root.action]);
     }
 
+    // Whether a segmented choice fits beside the full label. The room is the label
+    // column plus the inline chips' slot when they are shown, so it reads the same in
+    // both placements and the choice does not flip back and forth.
+    readonly property bool choiceFits: {
+        const room = labelColumn.width + (inlineChoice.visible ? inlineChoice.width + header.spacing : 0);
+        return room >= Math.ceil(titleRow.implicitWidth) + header.spacing + inlineChoice.oneLineWidth;
+    }
+
     onExpandedChanged: formLoader.sync()
 
     signal changed(var action)
@@ -246,10 +254,12 @@ Rectangle {
             }
 
             ColumnLayout {
+                id: labelColumn
                 Layout.fillWidth: true
                 spacing: 0
 
                 RowLayout {
+                    id: titleRow
                     Layout.fillWidth: true
                     spacing: ClockStyle.gapSmall - 2
 
@@ -348,8 +358,10 @@ Rectangle {
                 onClicked: root.setValue(checked)
             }
 
+            // Beside the label when both fit, else on a line of its own under it (below).
             FormChoice {
-                visible: root.editor === "segmented"
+                id: inlineChoice
+                visible: root.editor === "segmented" && root.choiceFits
                 Layout.fillWidth: false
                 current: root.value ?? ""
                 options: root.editor === "segmented" ? root.choiceOptions() : []
@@ -417,6 +429,17 @@ Rectangle {
                 tooltip: Translation.tr("Remove action")
                 onClicked: root.removeRequested()
             }
+        }
+
+        // The segmented choice when the label and its chips do not fit on one line.
+        FormChoice {
+            Layout.leftMargin: root.formIndent
+            Layout.rightMargin: ClockStyle.gapSmall
+            Layout.bottomMargin: ClockStyle.gapTiny
+            visible: root.editor === "segmented" && !root.choiceFits
+            current: root.value ?? ""
+            options: inlineChoice.options
+            onPicked: v => root.setValue(v)
         }
 
         // A URL is short enough to live on the row itself.
