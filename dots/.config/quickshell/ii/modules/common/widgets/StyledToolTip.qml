@@ -14,7 +14,7 @@ ToolTip {
     // screen, opt out of that gate.
     property bool requireOverlay: true
 
-    readonly property bool sidebarOpen: !GlobalStates || GlobalStates.sidebarRightOpen || GlobalStates.sidebarLeftOpen || GlobalStates.settingsOpen || GlobalStates.osdVolumeOpen || GlobalStates.wallpaperSelectorOpen || GlobalStates.cheatsheetOpen || GlobalStates.notesAppOpen || GlobalStates.clockAppOpen || GlobalStates.healthAppOpen || GlobalStates.sessionOpen || GlobalStates.usageOpen || GlobalStates.overviewOpen || GlobalStates.modesOpen || GlobalStates.editMode || GlobalStates.islandDashboardOpen
+    readonly property bool sidebarOpen: !GlobalStates || GlobalStates.sidebarRightOpen || GlobalStates.sidebarLeftOpen || GlobalStates.settingsOpen || GlobalStates.osdVolumeOpen || GlobalStates.wallpaperSelectorOpen || GlobalStates.cheatsheetOpen || GlobalStates.notesAppOpen || GlobalStates.clockAppOpen || GlobalStates.healthAppOpen || GlobalStates.sessionOpen || GlobalStates.usageOpen || GlobalStates.overviewOpen || GlobalStates.modesOpen || GlobalStates.editMode || GlobalStates.islandDashboardOpen || GlobalStates.overlayOpen
     readonly property bool parentHovered: {
         if (!parent)
             return false;
