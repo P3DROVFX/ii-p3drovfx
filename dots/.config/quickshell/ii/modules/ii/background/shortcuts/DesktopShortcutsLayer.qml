@@ -2027,6 +2027,15 @@ Item {
                         readonly property bool thumbnailShown: thumbnailImage.status === Image.Ready
                         source: glyphIcon.thumbnailShown ? ""
                             : DesktopShortcuts.iconSource(tile.entry.icon, tile.entry.type === "file" ? "text-x-generic" : "folder")
+                        // An icon theme recoloured in place (folders that
+                        // follow the wallpaper) keeps every icon's name, so
+                        // the URL never changes: the revision's 1 px nudge is
+                        // what asks again, and the cache is off so the nudge
+                        // back cannot hand out the colours from before. Same
+                        // as the dock's folder buttons.
+                        backer.cache: false
+                        backer.sourceSize: Qt.size(glyphIcon.actualSize + TaskbarApps.iconThemeRevision,
+                            glyphIcon.actualSize + TaskbarApps.iconThemeRevision)
                         Image {
                             id: thumbnailImage
                             anchors.fill: parent

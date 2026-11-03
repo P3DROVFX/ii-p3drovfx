@@ -1,5 +1,6 @@
 pragma Singleton
 import qs.modules.common
+import qs.modules.common.functions
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -224,6 +225,30 @@ Singleton {
             if (!root.iconPackApplying)
                 iconRedrawTimer.restart()
         }
+    }
+
+    // Any other tool that rewrites an icon theme in place - a wallpaper-driven folder tint for
+    // a theme that is not DynamicTheme, say - keeps the theme's name, so nothing above fires.
+    // KIconLoader's iconChanged signal is the desktop-wide "icons changed" announcement: the
+    // shell's own loader drops its cache on it, and this redraws what is on screen once that
+    // is done. A burst (one per icon group) restarts the timer, so it is still one redraw.
+    Process {
+        id: iconChangedWatch
+        running: true
+        command: ProcUtils.pdeath(["dbus-monitor", "--session",
+            "type='signal',interface='org.kde.KIconLoader',member='iconChanged'"])
+        stdout: SplitParser {
+            onRead: data => {
+                if (String(data).includes("member=iconChanged") && !root.iconPackApplying)
+                    iconRedrawTimer.restart()
+            }
+        }
+        onExited: iconChangedWatchRestart.restart()
+    }
+    Timer {
+        id: iconChangedWatchRestart
+        interval: 5000
+        onTriggered: iconChangedWatch.running = true
     }
 
     // A single bounded toggle invalidates the icon bindings without making sourceSize grow

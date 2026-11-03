@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell.Widgets
 import Qt5Compat.GraphicalEffects as GE
 import qs.modules.common
+import qs.services
 
 /**
  * One member's icon inside an app group, clipped to `mask` so a full-bleed
@@ -16,10 +17,15 @@ Item {
     property string mask: "none"
 
     IconImage {
+        id: icon
         anchors.fill: parent
         visible: root.app !== null
         mipmap: true
         source: root.app ? DesktopShortcuts.iconSource(root.app.icon, "image-missing") : ""
+        // Redrawn when the icon theme is recoloured in place (see the desktop tile).
+        backer.cache: false
+        backer.sourceSize: Qt.size(icon.actualSize + TaskbarApps.iconThemeRevision,
+            icon.actualSize + TaskbarApps.iconThemeRevision)
         layer.enabled: root.mask !== "none" && root.app !== null
         layer.smooth: true
         layer.effect: GE.OpacityMask {
