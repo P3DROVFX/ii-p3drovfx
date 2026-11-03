@@ -41,7 +41,8 @@ class Bridge:
         self.pending: dict[str, str] = {}
         self.users: dict[str, dict[str, Any]] = {}
         self.channel: dict[str, Any] | None = None
-        self.settings = {"mute": False, "deaf": False}
+        self.settings: dict[str, Any] = {"mute": False, "deaf": False}
+        self.user_id = ""
         self.current_path = ""
         self.authorization_failed_paths: set[str] = set()
         self.authorization_tasks: dict[str, asyncio.Task[None]] = {}
@@ -206,6 +207,9 @@ class Bridge:
                 except (json.JSONDecodeError, ValueError):
                     # One malformed frame must not tear down a working session.
                     continue
+                if message.get("type") == "event":
+                    self.forward_vencord_event(message.get("event"))
+                    continue
                 data = message.get("state") if message.get("type") == "state" else None
                 if isinstance(data, dict) and data.get("version") == 1 \
                         and data.get("backend") == "vencord":
@@ -222,6 +226,18 @@ class Bridge:
                     await self.connect()
             await self.shutdown_writer(writer)
 
+    @staticmethod
+    def forward_vencord_event(event: Any) -> None:
+        """Pass a DM/mention notice on, reduced to plain bounded strings."""
+        if not isinstance(event, dict) or event.get("kind") not in ("dm", "mention", "message"):
+            return
+        author = event.get("author") if isinstance(event.get("author"), dict) else {}
+        clip = lambda value, limit: str(value or "")[:limit]
+        emit("message_notice", kind=event["kind"], context=clip(event.get("context"), 100),
+             text=clip(event.get("text"), 200),
+             author={"id": clip(author.get("id"), 24), "username": clip(author.get("username"), 64),
+                     "nick": clip(author.get("nick"), 64), "avatar": clip(author.get("avatar"), 64)})
+
     def apply_vencord_state(self, data: dict[str, Any], force: bool = False) -> None:
         stable = {key: value for key, value in data.items() if key != "timestamp"}
         signature = json.dumps(stable, sort_keys=True, separators=(",", ":"))
@@ -235,12 +251,13 @@ class Bridge:
         self.pending.clear()
         self.vencord_active = True
         self.vencord_signature = signature
-        emit("backend", backend="vencord")
+        emit("backend", backend="vencord", features=data.get("features") or [])
         emit("authenticated", user=data.get("user") or {})
         emit("voice_channel", channel=data.get("channel"), users=data.get("users") or [])
-        emit("voice_settings", mute=bool(data.get("mute")), deaf=bool(data.get("deaf")))
+        emit("voice_settings", mute=bool(data.get("mute")), deaf=bool(data.get("deaf")),
+             mode=str(data.get("inputMode") or ""), shortcut=str(data.get("pttShortcut") or ""))
 
-    async def send_vencord_command(self, **command: bool) -> None:
+    async def send_vencord_command(self, **command: Any) -> None:
         if not self.vencord_writer or self.vencord_writer.is_closing():
             return
         payload = {"type": "command", **command}
@@ -376,6 +393,7 @@ class Bridge:
             except Exception:
                 emit("error", message="Discord token exchange failed")
         elif command == "AUTHENTICATE":
+            self.user_id = str((data.get("user") or {}).get("id", ""))
             emit("authenticated", user=data.get("user", {}))
             await self.subscribe("VOICE_CHANNEL_SELECT")
             await self.subscribe("VOICE_SETTINGS_UPDATE")
@@ -383,16 +401,37 @@ class Bridge:
         elif command == "GET_SELECTED_VOICE_CHANNEL":
             await self.select_channel(data if data and data.get("id") else None)
         elif command in ("GET_VOICE_SETTINGS", "SET_VOICE_SETTINGS"):
-            self.settings = {"mute": bool(data.get("mute")), "deaf": bool(data.get("deaf"))}
-            emit("voice_settings", **self.settings)
+            self.apply_settings(data)
+        elif command == "SET_USER_VOICE_SETTINGS":
+            # The reply is the authoritative per-user state; Discord does not
+            # always follow a local volume change with VOICE_STATE_UPDATE.
+            uid = str(data.get("user_id", ""))
+            if uid in self.users:
+                if "volume" in data:
+                    self.users[uid]["volume"] = round(float(data["volume"]))
+                if "mute" in data:
+                    self.users[uid]["localMute"] = bool(data["mute"])
+                emit("voice_state", users=list(self.users.values()))
+
+    def apply_settings(self, data: dict[str, Any]) -> None:
+        mode = data.get("mode") or {}
+        shortcut = " + ".join(str(key.get("name", "")) for key in mode.get("shortcut") or []
+                              if isinstance(key, dict) and key.get("name"))
+        self.settings = {"mute": bool(data.get("mute")), "deaf": bool(data.get("deaf")),
+                         "mode": str(mode.get("type", "") or self.settings.get("mode", "")),
+                         "shortcut": shortcut or str(self.settings.get("shortcut", ""))}
+        emit("voice_settings", **self.settings)
 
     @staticmethod
     def voice_user(data: dict[str, Any]) -> dict[str, Any]:
         user, voice = data.get("user", {}), data.get("voice_state", {})
+        # Top-level `mute`/`volume` are this client's local settings for that
+        # user (volume 0-200, 100 = unchanged); the server state is in voice_state.
         return {"id": user.get("id", ""), "username": user.get("username", ""),
             "nick": data.get("nick") or user.get("global_name") or user.get("username", ""),
             "avatar": user.get("avatar", ""), "mute": bool(voice.get("mute") or voice.get("self_mute")),
-            "deaf": bool(voice.get("deaf") or voice.get("self_deaf")), "speaking": False}
+            "deaf": bool(voice.get("deaf") or voice.get("self_deaf")), "speaking": False,
+            "volume": round(float(data.get("volume", 100) or 0)), "localMute": bool(data.get("mute"))}
 
     async def select_channel(self, data: dict[str, Any] | None) -> None:
         self.users.clear()
@@ -431,8 +470,7 @@ class Bridge:
                 self.users[uid]["speaking"] = event == "SPEAKING_START"
             emit("voice_state", users=list(self.users.values()))
         elif event == "VOICE_SETTINGS_UPDATE":
-            self.settings = {"mute": bool(data.get("mute")), "deaf": bool(data.get("deaf"))}
-            emit("voice_settings", **self.settings)
+            self.apply_settings(data)
 
     async def input_loop(self) -> None:
         loop = asyncio.get_running_loop()
@@ -453,9 +491,30 @@ class Bridge:
                         await self.send_vencord_command(**args)
                     elif self.writer:
                         await self.command("SET_VOICE_SETTINGS", args)
+                elif command == "set_user_voice":
+                    uid = str(message.get("user_id", ""))
+                    args: dict[str, Any] = {}
+                    if "volume" in message:
+                        args["volume"] = max(0, min(200, round(float(message["volume"]))))
+                    if "mute" in message:
+                        args["mute"] = bool(message["mute"])
+                    if not uid or not args:
+                        continue
+                    if self.vencord_active:
+                        await self.send_vencord_command(userVoice={"userId": uid, **args})
+                    elif self.writer:
+                        await self.command("SET_USER_VOICE_SETTINGS", {"user_id": uid, **args})
+                elif command == "set_input_mode":
+                    mode = message.get("mode")
+                    if mode not in ("PUSH_TO_TALK", "VOICE_ACTIVITY"):
+                        continue
+                    if self.vencord_active:
+                        await self.send_vencord_command(inputMode=mode)
+                    elif self.writer:
+                        await self.command("SET_VOICE_SETTINGS", {"mode": {"type": mode}})
                 elif command == "disconnect":
                     self.close()
-            except (json.JSONDecodeError, OSError):
+            except (json.JSONDecodeError, OSError, TypeError, ValueError):
                 emit("error", message="Invalid bridge command")
 
 

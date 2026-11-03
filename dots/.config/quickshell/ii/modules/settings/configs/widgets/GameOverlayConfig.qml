@@ -314,6 +314,51 @@ ContentPage {
                 }
             }
             ConfigSwitch {
+                buttonIcon: "group_add"
+                text: Translation.tr("Join and leave notices")
+                checked: Config.options.overlay.discordVoice.joinLeaveNotices
+                onCheckedChanged: {
+                    Config.options.overlay.discordVoice.joinLeaveNotices = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Shows a short notice in the overlay when someone joins or leaves your voice channel.")
+                }
+            }
+            ConfigSwitch {
+                buttonIcon: "chat"
+                text: Translation.tr("DM and mention notices")
+                checked: Config.options.overlay.discordVoice.messageNotices
+                onCheckedChanged: {
+                    Config.options.overlay.discordVoice.messageNotices = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Shows direct messages and mentions in the overlay, following your Discord notification settings. Needs the Vesktop companion.")
+                }
+            }
+            ConfigSwitch {
+                buttonIcon: "visibility"
+                enabled: Config.options.overlay.discordVoice.messageNotices
+                text: Translation.tr("Show message text")
+                checked: Config.options.overlay.discordVoice.messagePreview
+                onCheckedChanged: {
+                    Config.options.overlay.discordVoice.messagePreview = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Turn off to show only who wrote, e.g. while streaming.")
+                }
+            }
+            ConfigSwitch {
+                buttonIcon: "touch_app"
+                text: Translation.tr("Push-to-talk indicator")
+                checked: Config.options.overlay.discordVoice.pttIndicator
+                onCheckedChanged: {
+                    Config.options.overlay.discordVoice.pttIndicator = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("While Discord is set to push to talk, shows a bar that lights up as you transmit.")
+                }
+            }
+            ConfigSwitch {
                 buttonIcon: "push_pin"
                 text: Translation.tr("Pin while a call is running")
                 checked: Config.options.overlay.discordVoice.autoPin

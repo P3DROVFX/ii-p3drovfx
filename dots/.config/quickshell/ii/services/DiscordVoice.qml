@@ -25,6 +25,36 @@ Singleton {
     readonly property int participantCount: participantsModel.count
     property bool muted: false
     property bool deafened: false
+    // "PUSH_TO_TALK" | "VOICE_ACTIVITY", or "" while the backend has not said
+    // (an old companion build never does, which hides the switch).
+    property string inputMode: ""
+    property string pttShortcut: ""
+    readonly property bool pushToTalk: inputMode === "PUSH_TO_TALK"
+    readonly property bool supportsInputMode: inputMode !== ""
+    // The companion announces what it can do; Discord's own RPC can do all of it.
+    property var backendFeatures: []
+    readonly property bool supportsUserVoice: backend === "discord"
+        || backendFeatures.indexOf("userVoice") !== -1
+    // Installed and running, but built before per-user volume and the mode switch.
+    readonly property bool companionOutdated: backend === "vencord"
+        && backendFeatures.indexOf("userVoice") === -1
+    readonly property string selfId: String(currentUser?.id ?? "")
+    readonly property bool selfSpeaking: selfId !== ""
+        && participants.some(user => String(user?.id ?? "") === selfId && user?.speaking === true)
+
+    /**
+     * Join/leave toasts. Kept here rather than in a view so every surface that
+     * shows them (overlay widget, pinned or not) agrees on what is on screen, and
+     * so the diff is taken once per bridge frame. Entries age out on `noticeClock`;
+     * `leaving` gives the view a beat to animate out before the row is removed.
+     */
+    readonly property alias noticeModel: noticesModel
+    readonly property int noticeLifetime: 4000
+    readonly property int messageNoticeLifetime: 7000
+    readonly property int noticeExitDuration: 260
+    readonly property int maxNotices: 4
+    property string _noticeChannelId: ""
+    property int _noticeSerial: 0
     property int restartAttempts: 0
     property var pendingMessages: []
     readonly property bool authenticated: status === "authenticated" || channel !== null
@@ -60,6 +90,111 @@ Singleton {
     ListModel {
         id: participantsModel
         dynamicRoles: true
+    }
+
+    ListModel {
+        id: noticesModel
+    }
+
+    // Every row carries every role: a ListModel fixes its roles on the first
+    // append, so a join notice first would otherwise drop a message's text.
+    function pushNotice(kind, user, context, text) {
+        const name = user?.nick || user?.username || "Someone";
+        const message = kind === "dm" || kind === "mention" || kind === "message";
+        noticesModel.append({
+            key: ++_noticeSerial, kind: kind, userId: String(user?.id ?? ""),
+            name: name, avatar: avatarUrl(user, 64), born: Date.now(), leaving: false,
+            context: String(context ?? ""), text: String(text ?? ""),
+            lifetime: message ? messageNoticeLifetime : noticeLifetime
+        });
+        while (noticesModel.count > maxNotices)
+            noticesModel.remove(0);
+        noticeClock.start();
+    }
+
+    // Compares one bridge frame with the roster on screen. A frame for another
+    // channel (or the first one after joining) only resets the baseline: the
+    // whole room "joining" the moment you do is not news. Your own entry never
+    // produces a notice.
+    function diffMembers(incoming, channelId) {
+        const sameChannel = channelId !== "" && channelId === _noticeChannelId;
+        _noticeChannelId = channelId;
+        if (!sameChannel || !Config.options.overlay.discordVoice.joinLeaveNotices)
+            return;
+        const before = new Map(participants.map(user => [String(user?.id ?? ""), user]));
+        const after = new Set();
+        for (const user of incoming || []) {
+            const id = String(user?.id ?? "");
+            after.add(id);
+            if (id && id !== selfId && !before.has(id))
+                pushNotice("join", user);
+        }
+        for (const [id, user] of before)
+            if (id && id !== selfId && !after.has(id))
+                pushNotice("leave", user);
+    }
+
+    function clearNotices() {
+        noticesModel.clear();
+        noticeClock.stop();
+    }
+
+    // Volume uses Discord's slider scale: 0-200, 100 = unchanged. The roster is
+    // patched right away so a released slider does not snap back to the old
+    // value while the echo is in flight; drags are coalesced into one command
+    // per frame-ish tick instead of one per pointer event.
+    property var _pendingUserVoice: ({})
+    function setUserVolume(userId, volume) { _queueUserVoice(userId, {volume: Math.round(volume)}); }
+    function setUserLocalMute(userId, value) { _queueUserVoice(userId, {mute: value === true}); }
+    function _queueUserVoice(userId, change) {
+        const id = String(userId ?? "");
+        if (!id || id === selfId) return;
+        const pending = Object.assign({}, _pendingUserVoice);
+        pending[id] = Object.assign({}, pending[id] || {}, change);
+        _pendingUserVoice = pending;
+        _patchParticipant(id, change.volume !== undefined ? {volume: change.volume} : {localMute: change.mute});
+        if (!userVoiceFlush.running) userVoiceFlush.start();
+    }
+    function _patchParticipant(id, fields) {
+        const next = participants.map(user => String(user?.id ?? "") === id
+            ? Object.assign({}, user, fields) : user);
+        updateParticipants(next);
+    }
+    function setInputMode(mode) {
+        if (mode !== "PUSH_TO_TALK" && mode !== "VOICE_ACTIVITY") return;
+        inputMode = mode;
+        send({cmd: "set_input_mode", mode: mode});
+    }
+    function togglePushToTalk() { setInputMode(pushToTalk ? "VOICE_ACTIVITY" : "PUSH_TO_TALK"); }
+
+    Timer {
+        id: userVoiceFlush
+        interval: 60
+        onTriggered: {
+            const pending = root._pendingUserVoice;
+            root._pendingUserVoice = ({});
+            for (const id of Object.keys(pending))
+                root.send(Object.assign({cmd: "set_user_voice", user_id: id}, pending[id]));
+        }
+    }
+
+    Timer {
+        id: noticeClock
+        interval: 250
+        repeat: true
+        onTriggered: {
+            const now = Date.now();
+            for (let index = noticesModel.count - 1; index >= 0; --index) {
+                const entry = noticesModel.get(index);
+                const age = now - entry.born;
+                if (age >= entry.lifetime + root.noticeExitDuration)
+                    noticesModel.remove(index);
+                else if (age >= entry.lifetime && !entry.leaving)
+                    noticesModel.setProperty(index, "leaving", true);
+            }
+            if (noticesModel.count === 0)
+                stop();
+        }
     }
 
     function updateParticipants(users) {
@@ -137,7 +272,10 @@ Singleton {
         try { message = JSON.parse(line); } catch (error) { return; }
         switch (message.type) {
         case "ready": connect(); break;
-        case "backend": backend = message.backend || ""; break;
+        case "backend":
+            backend = message.backend || "";
+            backendFeatures = Array.isArray(message.features) ? message.features : [];
+            break;
         case "connected": status = "connected"; reconnectTimer.stop(); parkTimer.stop(); break;
         case "auth_required": status = "auth_required"; break;
         case "authorizing":
@@ -149,13 +287,27 @@ Singleton {
             restartAttempts = 0;
             break;
         case "voice_channel":
+            diffMembers(message.users, String(message.channel?.id ?? ""));
+            if (!message.channel) clearNotices();
             channel = message.channel || null;
             updateParticipants(message.users);
             break;
-        case "voice_state": updateParticipants(message.users); break;
+        case "voice_state":
+            diffMembers(message.users, String(channel?.id ?? ""));
+            updateParticipants(message.users);
+            break;
+        // DMs and mentions, Vesktop companion only (Discord's RPC would need
+        // the rpc.notifications.read scope, which the StreamKit client lacks).
+        case "message_notice":
+            if (Config.options.overlay.discordVoice.messageNotices)
+                pushNotice(message.kind, message.author, message.context,
+                    Config.options.overlay.discordVoice.messagePreview ? message.text : "");
+            break;
         case "voice_settings":
             muted = message.mute === true;
             deafened = message.deaf === true;
+            if (message.mode !== undefined) inputMode = String(message.mode || "");
+            if (message.shortcut !== undefined) pttShortcut = String(message.shortcut || "");
             break;
         case "unavailable":
             status = "unavailable";
@@ -169,7 +321,11 @@ Singleton {
         // own RPC usable, so this reports the reason without moving `status`
         // into an authorization state the user cannot act on.
         case "companion_error": errorMessage = message.message || ""; break;
-        case "disconnected": status = "disconnected"; backend = ""; channel = null; updateParticipants([]); reconnectTimer.restart(); break;
+        case "disconnected":
+            status = "disconnected"; backend = ""; backendFeatures = []; inputMode = "";
+            channel = null; _noticeChannelId = ""; clearNotices(); updateParticipants([]);
+            reconnectTimer.restart();
+            break;
         case "error":
             status = "auth_required";
             errorMessage = message.message || "Discord RPC error";
@@ -256,6 +412,8 @@ Singleton {
         stderr: SplitParser { onRead: data => console.warn("[DiscordVoice]", data) }
         onExited: (code, status) => {
             root.channel = null;
+            root._noticeChannelId = "";
+            root.clearNotices();
             root.updateParticipants([]);
             if (root.parked)
                 return;

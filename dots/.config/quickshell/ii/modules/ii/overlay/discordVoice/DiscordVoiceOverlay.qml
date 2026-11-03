@@ -15,6 +15,8 @@ StyledOverlayWidget {
     }
     minimumWidth: overlayContent.implicitWidth
     minimumHeight: overlayContent.implicitHeight
+    // A per-user volume drag must not move the widget.
+    dragLocked: overlayContent.sliderActive
 
     contentItem: Widget {
         id: overlayContent

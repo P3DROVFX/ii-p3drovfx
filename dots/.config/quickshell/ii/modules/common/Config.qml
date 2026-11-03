@@ -6971,6 +6971,14 @@ Singleton {
                     property bool blurEnabled: true
                     property bool autoResize: true
                     property bool speakingPulseContinuous: true
+                    // Toast in the widget when someone joins or leaves your channel
+                    property bool joinLeaveNotices: true
+                    // Push-to-talk chip (lit while transmitting) when Discord is in PTT mode
+                    property bool pttIndicator: true
+                    // DM and mention toasts in the widget (Vesktop companion only)
+                    property bool messageNotices: true
+                    // Show the message text in those toasts, not only who sent it
+                    property bool messagePreview: true
                     // Pin the overlay on screen while the bridge sees a call
                     property bool autoPin: false
                 }

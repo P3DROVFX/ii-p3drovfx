@@ -25,6 +25,18 @@ Rectangle {
     readonly property bool companionReady: DiscordVoice.backend === "vencord"
     // Detected by the service, which also decides whether the bridge runs at all.
     readonly property bool isVencordClient: DiscordVoice.isVencordClient
+    readonly property bool showPttIndicator: Config.options.overlay.discordVoice.pttIndicator
+
+    // Per-user volume: tapping someone opens their card. It lives only while the
+    // overlay is open (a pinned overlay over a game takes no clicks anyway) and
+    // closes by itself when that person leaves.
+    property string selectedUserId: ""
+    readonly property var selectedParticipant: selectedUserId === "" ? null
+        : (DiscordVoice.participants.find(user => String(user?.id ?? "") === selectedUserId) ?? null)
+    readonly property bool canAdjustUsers: GlobalStates.overlayOpen && DiscordVoice.supportsUserVoice
+    readonly property bool sliderActive: volumeCard.sliderPressed
+    onSelectedParticipantChanged: if (selectedParticipant === null) selectedUserId = ""
+    onCanAdjustUsersChanged: if (!canAdjustUsers) selectedUserId = ""
 
     readonly property real maxContentWidth: 720
     readonly property int visibleParticipants: Math.min(avatarLimit, DiscordVoice.participantCount)
@@ -191,6 +203,74 @@ Rectangle {
                     }
                     StyledToolTip { text: DiscordVoice.deafened ? "Undeafen" : "Deafen" }
                 }
+
+                RippleButton {
+                    visible: DiscordVoice.supportsInputMode
+                    implicitWidth: 48
+                    implicitHeight: 48
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: "transparent"
+                    colBackgroundHover: Appearance.colors.colLayer1Hover
+                    onClicked: DiscordVoice.togglePushToTalk()
+                    contentItem: MaterialShapeWrappedMaterialSymbol {
+                        anchors.centerIn: parent
+                        text: DiscordVoice.pushToTalk ? "touch_app" : "graphic_eq"
+                        shape: DiscordVoice.pushToTalk ? MaterialShape.Shape.Pill : MaterialShape.Shape.Cookie6Sided
+                        implicitSize: 46
+                        iconSize: 21
+                        fill: DiscordVoice.pushToTalk ? 1 : 0
+                        color: DiscordVoice.pushToTalk ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSecondaryContainer
+                        colSymbol: DiscordVoice.pushToTalk ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSecondaryContainer
+                        scale: parent?.down ? 0.88 : (parent?.hovered ? 1.08 : 1)
+                        Behavior on scale { NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Easing.OutBack } }
+                    }
+                    StyledToolTip {
+                        text: DiscordVoice.pushToTalk
+                            ? Translation.tr("Push to talk is on · switch to voice activity")
+                            : Translation.tr("Voice activity is on · switch to push to talk")
+                    }
+                }
+            }
+        }
+
+        // Push-to-talk state for a pinned overlay over a game: lit while your
+        // key is held and Discord is sending your voice.
+        Rectangle {
+            id: pttChip
+            readonly property bool transmitting: DiscordVoice.selfSpeaking && !DiscordVoice.muted
+            visible: root.showPttIndicator && DiscordVoice.inVoice && DiscordVoice.pushToTalk
+            Layout.fillWidth: true
+            implicitHeight: pttRow.implicitHeight + 12
+            radius: Appearance.rounding.full
+            color: transmitting ? Appearance.colors.colPrimary
+                : (DiscordVoice.muted ? Appearance.colors.colErrorContainer : Appearance.colors.colLayer2)
+            Behavior on color { ColorAnimation { duration: Appearance.animation.elementMoveFast.duration } }
+            readonly property color contentColor: transmitting ? Appearance.colors.colOnPrimary
+                : (DiscordVoice.muted ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnLayer2)
+
+            RowLayout {
+                id: pttRow
+                anchors.centerIn: parent
+                width: Math.min(implicitWidth, parent.width - 24)
+                spacing: 6
+                MaterialSymbol {
+                    text: DiscordVoice.muted ? "mic_off" : (pttChip.transmitting ? "mic" : "touch_app")
+                    iconSize: Appearance.font.pixelSize.large
+                    fill: pttChip.transmitting ? 1 : 0
+                    color: pttChip.contentColor
+                }
+                StyledText {
+                    Layout.fillWidth: true
+                    text: DiscordVoice.muted ? Translation.tr("Push to talk · muted")
+                        : (pttChip.transmitting ? Translation.tr("Transmitting")
+                        : (DiscordVoice.pttShortcut !== ""
+                            ? Translation.tr("Hold %1 to talk").arg(DiscordVoice.pttShortcut)
+                            : Translation.tr("Push to talk")))
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    font.weight: pttChip.transmitting ? Font.DemiBold : Font.Normal
+                    color: pttChip.contentColor
+                    elide: Text.ElideRight
+                }
             }
         }
 
@@ -204,6 +284,7 @@ Rectangle {
             Repeater {
                 model: DiscordVoice.participantModel
                 ParticipantAvatar {
+                    id: participantDelegate
                     required property int index
                     visible: index < root.avatarLimit
                     avatarSize: root.effectiveAvatarSize
@@ -215,7 +296,79 @@ Rectangle {
                     nameOnLeft: root.namesOnLeft
                     Layout.fillWidth: root.columnMode || root.gridMode
                     Layout.fillHeight: root.gridMode
+
+                    readonly property string userId: String(participant?.id ?? "")
+                    readonly property bool adjustable: root.canAdjustUsers && userId !== "" && userId !== DiscordVoice.selfId
+                    readonly property bool selected: userId !== "" && userId === root.selectedUserId
+
+                    Rectangle {
+                        z: -1
+                        anchors.fill: parent
+                        radius: Appearance.rounding.large
+                        color: participantDelegate.selected ? Appearance.colors.colSecondaryContainer
+                            : (participantHover.hovered && participantDelegate.adjustable
+                                ? ColorUtils.transparentize(Appearance.colors.colSecondaryContainer, 0.6) : "transparent")
+                        Behavior on color { ColorAnimation { duration: Appearance.animation.elementMoveFast.duration } }
+                    }
+                    HoverHandler {
+                        id: participantHover
+                        enabled: participantDelegate.adjustable
+                        cursorShape: Qt.PointingHandCursor
+                    }
+                    TapHandler {
+                        enabled: participantDelegate.adjustable
+                        onTapped: root.selectedUserId = participantDelegate.selected ? "" : participantDelegate.userId
+                    }
                 }
+            }
+        }
+
+        ParticipantVolumeCard {
+            id: volumeCard
+            Layout.fillWidth: true
+            participant: root.selectedParticipant
+            visible: root.selectedParticipant !== null
+            onCloseRequested: root.selectedUserId = ""
+        }
+
+        // Join/leave and DM/mention notices, newest last, like Discord's own
+        // overlay. Which kinds get queued is decided by the service's options.
+        ColumnLayout {
+            visible: DiscordVoice.noticeModel.count > 0
+            Layout.fillWidth: true
+            spacing: 4
+            Repeater {
+                model: DiscordVoice.noticeModel
+                VoiceNotice {
+                    Layout.fillWidth: true
+                }
+            }
+        }
+
+        RippleButton {
+            // The running companion is proof enough: the install-time client
+            // check can miss a Vesktop outside PATH (e.g. /opt/Vesktop).
+            visible: DiscordVoice.companionOutdated
+            enabled: !installProcess.running
+            Layout.fillWidth: true
+            implicitHeight: 40
+            buttonRadius: Appearance.rounding.full
+            colBackground: Appearance.colors.colSecondaryContainer
+            onClicked: {
+                root.installMessage = "Installing...";
+                installProcess.running = true;
+            }
+            StyledText {
+                anchors.centerIn: parent
+                width: Math.min(implicitWidth, parent.width - 24)
+                text: installProcess.running ? Translation.tr("Updating Companion…")
+                    : (root.installMessage !== "" ? root.installMessage : Translation.tr("Update Companion"))
+                color: Appearance.colors.colOnSecondaryContainer
+                font.weight: Font.DemiBold
+                elide: Text.ElideRight
+            }
+            StyledToolTip {
+                text: Translation.tr("Per-user volume and the push-to-talk switch need the newer companion build. Close Vesktop while it installs.")
             }
         }
 
