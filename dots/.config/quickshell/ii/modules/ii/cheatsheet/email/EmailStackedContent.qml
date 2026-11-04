@@ -270,7 +270,7 @@ Item {
                                     }
 
                                     function updateDetections() {
-                                        var res = EmailDetections.detectAll(model.body);
+                                        var res = EmailDetections.detectAll(model.body, model.subject);
                                         detectedMeetings = res.meetings;
                                         detectedPhones = res.phones;
                                         detectedCodes = res.codes;

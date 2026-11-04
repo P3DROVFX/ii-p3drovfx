@@ -73,7 +73,7 @@ Item {
     readonly property string processedBody: root.displayBody
 
     function updateDetections() {
-        var res = EmailDetections.detectAll(root.body);
+        var res = EmailDetections.detectAll(root.body, root.subject);
         root.detectedMeetings = res.meetings;
         root.detectedPhones = res.phones;
         root.detectedCodes = res.codes;
