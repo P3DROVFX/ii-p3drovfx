@@ -309,7 +309,9 @@ Singleton {
         const allowOverviewBg = Config.options && Config.options.overview && Config.options.overview.animationStyle !== "none";
         return Boolean(background && (background.useBackgroundOverviewAlways
             || (background.zoomOutEnabled
-                && ((root.classicOverviewOpen && allowOverviewBg) || root.cheatsheetOpen))));
+                // The scrolling layout's overview zooms its own windows, like the
+                // scrolloverview plugin, and leaves the wallpaper where it is.
+                && ((root.classicOverviewOpen && allowOverviewBg && !root.scrollingLayoutActive) || root.cheatsheetOpen))));
     }
 
     // BackgroundRoot owns one controller per monitor. Other background surfaces
@@ -1492,7 +1494,7 @@ Singleton {
     readonly property bool realGnomeMirrored: Quickshell.screens.length > 1
         && (Config.options?.background?.overviewBackgroundStyle ?? "") === "real-gnome"
         && (Config.options?.background?.realGnomeAllMonitors ?? false)
-        && Persistent.states.hyprland.layout !== "scrolling"
+        && !root.scrollingLayoutActive
         && !(Config.options?.background?.useBackgroundOverviewAlways ?? false)
     function realGnomeAreaFor(screenName) {
         const own = root.realGnomeAreas[screenName];
@@ -2338,12 +2340,22 @@ Singleton {
     }
 
     /**
+     * Hyprland's native scrolling layout and zscroll (`lua:zscroll`, rows of
+     * windows on a vertical tape) both keep a workspace larger than the screen.
+     * Everything that lays itself out for "the scrolling layout" - the scrolling
+     * overview, the wallpaper, the search - asks this, not the raw layout name.
+     */
+    readonly property bool scrollingLayoutActive: Persistent.states.hyprland.layout === "scrolling"
+        || root.zscrollLayoutActive
+    readonly property bool zscrollLayoutActive: Persistent.states.hyprland.layout === "lua:zscroll"
+
+    /**
      * The scrolling overview is the search's idle face with Hyprland's scrolling
      * layout, so the search options that replace or hide it are locked off
      * there: centred search, always listing apps and suggestions. Settings shows
      * them disabled with the reason.
      */
-    readonly property bool scrollingSearchLock: Persistent.states.hyprland.layout === "scrolling"
+    readonly property bool scrollingSearchLock: root.scrollingLayoutActive
     onScrollingSearchLockChanged: Qt.callLater(root.enforceScrollingSearchLock)
     function enforceScrollingSearchLock() {
         if (!Config.ready || !root.scrollingSearchLock)

@@ -584,7 +584,13 @@ PanelWindow {
 
     readonly property bool zoomInStyle: !videoEffectsDisabled && Config.options.overview.scrollingStyle.zoomStyle === "in"
     readonly property bool showOpeningAnimation: Config.options.overview.showOpeningAnimation && Config.options.overview.animationStyle !== "none"
-    readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
+    readonly property bool isScrollingLayout: GlobalStates.scrollingLayoutActive
+    // The scrolling overview copies the scrolloverview plugin, which draws only the
+    // windows over the wallpaper: the desktop widgets step out while it is open.
+    property real scrollingOverviewHide: overviewOpen && isScrollingLayout ? 1 : 0
+    Behavior on scrollingOverviewHide {
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(bgWidgetsWindow)
+    }
     readonly property var zoomLevels: ({
         "in": { default: 1.04, zoomed: 1 },
         "out": { default: 1, zoomed: 1.01 }
@@ -791,7 +797,7 @@ PanelWindow {
         Item {
             id: desktopStack
             anchors.fill: parent
-            opacity: 1 - bgWidgetsWindow.windowBlurProgress
+            opacity: (1 - bgWidgetsWindow.windowBlurProgress) * (1 - bgWidgetsWindow.scrollingOverviewHide)
         }
 
         Loader {
@@ -1075,7 +1081,7 @@ PanelWindow {
             id: widgetBlurLoader
             anchors.fill: parent
             active: widgetCanvas.visible && bgWidgetsWindow.windowBlurProgress > 0
-            opacity: bgWidgetsWindow.windowBlurProgress
+            opacity: bgWidgetsWindow.windowBlurProgress * (1 - bgWidgetsWindow.scrollingOverviewHide)
             sourceComponent: Item {
                 id: widgetBlurRoot
                 readonly property Item subject: depthCutoutLoader.item && depthCutoutLoader.item.opacity > 0.01

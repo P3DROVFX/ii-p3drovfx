@@ -77,7 +77,7 @@ Scope {
                     // (unmapped while closed, so it draws nothing): rebuilding the
                     // search and every workspace row on each open is what stalled
                     // the first frames, worst after the shell had been idle.
-                    readonly property bool residentForScrolling: Persistent.states.hyprland.layout === "scrolling"
+                    readonly property bool residentForScrolling: GlobalStates.scrollingLayoutActive
                         && (Config.options.overview.enable ?? true)
                     active: monitorIsFocused && (contentKeepAlive || GlobalStates.overviewOpen || visualActive || residentForScrolling)
 
@@ -97,7 +97,7 @@ Scope {
                         readonly property bool keepAlive: searchWidget.keepAlive
                         readonly property bool isBottomBar: !BarPlacement.vertical && BarPlacement.bottom
 
-                        readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
+                        readonly property bool isScrollingLayout: GlobalStates.scrollingLayoutActive
                         readonly property var backgroundController: GlobalStates.overviewBackgroundControllerFor(root.screen?.name ?? "")
                         // Real Gnome: compact thumbnails on top, the window picker
                         // in the free area under them.
@@ -578,7 +578,16 @@ Scope {
                                 property real slideY: initialYOffset
                                 property real slideOpacity: 0.0
 
-                                opacity: isNotchMode ? 0.0 : slideOpacity
+                                // The scrolling overview copies the scrolloverview plugin, which has
+                                // no search bar: the field stays focused but unseen until a query
+                                // (or a panel) needs it. Opacity only - hidden items lose focus.
+                                readonly property bool scrollingIdle: scrollingOverviewLoader.active
+                                    && searchWidget.searchingText === "" && !root.searchPanelOwned
+                                property real scrollingReveal: scrollingIdle ? 0 : 1
+                                Behavior on scrollingReveal {
+                                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                                }
+                                opacity: isNotchMode ? 0.0 : slideOpacity * scrollingReveal
                                 transform: [
                                     Translate {
                                         y: searchWidgetWrapper.slideY
@@ -810,7 +819,8 @@ Scope {
                                 active: (root.visible || realOverviewLoader.residentForScrolling) && !GlobalStates.searchOnlyMode && !GlobalStates.searchCenterMode && !Config.options.search.suggestions.enable && (Config?.options.overview.enable ?? true) && root.isScrollingLayout && !root.searchPanelOwned
                                 // The rows play their own entrance and exit; the window
                                 // only shows the layer while the search is on screen.
-                                visible: searchWidgetWrapper.slideOpacity > 0.001
+                                // ...or while its windows zoom back to full size after a close.
+                                visible: searchWidgetWrapper.slideOpacity > 0.001 || (item?.drawing ?? false)
 
                                 sourceComponent: ScrollingOverviewWidget {
                                     id: scrollingOverview

@@ -115,7 +115,11 @@ Item {
         if (root.settled && !preview.live)
             root.requestRecapture();
     }
-    readonly property bool animate: root.settled && !root.overview.animationsDisabled
+    // The open/close zoom moves every tile through layoutScale; a Behavior here
+    // would trail it.
+    readonly property bool animate: root.settled && !root.overview.animationsDisabled && !root.overview.zooming
+    /** A first frame to show (or nothing to capture): the real window may be hidden under it. */
+    readonly property bool ready: !preview.captureSource || preview.hasContent
 
     Behavior on x {
         enabled: root.animate
@@ -142,7 +146,7 @@ Item {
         target: surface
         radius: root.cornerRadius
         blur: root.selected ? 28 : 16
-        opacity: root.selected ? 0.45 : 0.28
+        opacity: (root.selected ? 0.45 : 0.28) * root.overview.zoomT
         offset: Qt.vector2d(0, root.selected ? 6 : 3)
     }
 
@@ -161,9 +165,13 @@ Item {
             cornerRadius: root.cornerRadius
         }
 
+        // Only until a frame arrives: under the capture it would turn a translucent
+        // window (a terminal) opaque. Without it the window's own alpha shows the
+        // overview layer's compositor blur, exactly like the real window.
         Rectangle {
             anchors.fill: parent
             color: Appearance.colors.colLayer2
+            visible: !preview.hasContent
         }
 
         // Shown until the first frame arrives, and for good with previews off.
@@ -195,11 +203,12 @@ Item {
             }
         }
 
-        // Sits the unfocused windows back without letting the wallpaper through.
+        // The plugin never dims a window; only a faint step back once fully out,
+        // so at the start of the zoom the tile is exactly the real window.
         Rectangle {
             anchors.fill: parent
             color: Appearance.colors.colLayer0
-            opacity: root.dimmed ? 0.38 : 0
+            opacity: root.dimmed ? 0.12 * root.overview.zoomT : 0
             Behavior on opacity {
                 enabled: root.animate
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)

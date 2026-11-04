@@ -63,6 +63,14 @@ ColumnLayout {
 
     readonly property real columnWidth: root.numberOption("scrolling:column_width", 0.5)
     readonly property string scrollDirection: root.stringOption("scrolling:direction", "right")
+
+    // zscroll's settings are Lua globals, not options.
+    readonly property int zscrollPerRow: Math.max(1, Math.min(8,
+        Math.round(Number(HyprlandGui.globalValue("zscroll_windows_per_row", 2)) || 2)))
+    readonly property bool zscrollCenter: {
+        const value = HyprlandGui.globalValue("zscroll_center_incomplete_rows", false);
+        return value === true || value === 1 || value === "true";
+    }
     readonly property bool fullscreenOnOneColumn:
         root.flagOption("scrolling:fullscreen_on_one_column", true)
 
@@ -170,7 +178,28 @@ ColumnLayout {
         return out;
     }
 
+    /// Rows of `zscrollPerRow` in Z order; the newest window's row is the one on screen, the
+    /// rows before it sit above.
+    function zscrollWindows(): var {
+        const perRow = root.zscrollPerRow;
+        const lastRow = Math.floor((root.windowCount - 1) / perRow);
+        const out = [];
+        for (let index = 0; index < root.windowCount; index++) {
+            const row = Math.floor(index / perRow);
+            const inRow = Math.min(perRow, root.windowCount - row * perRow);
+            const offset = root.zscrollCenter ? (1 - inRow / perRow) / 2 : 0;
+            out.push({
+                "x": offset + (index % perRow) / perRow,
+                "y": row - lastRow, "w": 1 / perRow, "h": 1,
+                "label": String(index + 1),
+                "isNew": index === root.windowCount - 1
+            });
+        }
+        return out;
+    }
+
     readonly property var windows: {
+        if (root.engine === "lua:zscroll") return root.zscrollWindows();
         if (root.engine === "dwindle") return root.dwindleWindows();
         if (root.engine === "master") return root.masterWindows();
         if (root.engine === "scrolling") return root.scrollingWindows();
@@ -239,6 +268,14 @@ ColumnLayout {
                 out.push(Translation.tr("A single column on its own fills the whole screen."));
             return out;
         }
+        if (root.engine === "lua:zscroll") {
+            out.push(root.zscrollPerRow === 1
+                ? Translation.tr("Each window fills a full-height row; the tape scrolls up and down to keep the focused one on screen.")
+                : Translation.tr("Windows fill rows of %1 from left to right, then start the next row down. The tape scrolls up and down to keep the focused row on screen.").arg(root.zscrollPerRow));
+            if (root.zscrollCenter && root.windowCount % root.zscrollPerRow !== 0)
+                out.push(Translation.tr("A row that is not full is centred."));
+            return out;
+        }
         out.push(Translation.tr("Every window fills the screen and only the focused one is visible. There is nothing to tune."));
         return out;
     }
@@ -259,6 +296,8 @@ ColumnLayout {
     /// on both sides and dims what falls outside. Without it a four-column row would draw as two
     /// windows side by side, which is exactly what it does not look like in use.
     readonly property real overhang: root.engine === "scrolling" ? 0.25 : 0
+    /// zscroll's tape runs off the top and bottom instead.
+    readonly property real verticalOverhang: root.engine === "lua:zscroll" ? 0.3 : 0
 
     Item {
         id: stage
@@ -266,7 +305,7 @@ ColumnLayout {
         Layout.alignment: Qt.AlignHCenter
         Layout.fillWidth: true
         Layout.maximumWidth: 380 * (1 + 2 * root.overhang)
-        implicitHeight: screenRect.height
+        implicitHeight: Math.round(screenRect.height * (1 + root.verticalOverhang))
         clip: true
 
         Rectangle {
@@ -274,10 +313,11 @@ ColumnLayout {
 
             x: Math.round(stage.width * root.overhang / (1 + 2 * root.overhang))
             width: Math.round(stage.width / (1 + 2 * root.overhang))
+            y: Math.round(height * root.verticalOverhang)
             height: Math.round(width / Math.max(0.2, root.screenAspect))
             radius: Appearance.rounding.small
             color: Appearance.colors.colLayer3
-            border.width: root.overhang > 0 ? 1 : 0
+            border.width: root.overhang > 0 || root.verticalOverhang > 0 ? 1 : 0
             border.color: Appearance.colors.colOutlineVariant
 
             Behavior on x { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(screenRect) }
@@ -298,6 +338,7 @@ ColumnLayout {
                     ?? ({ "x": 0, "y": 0, "w": 1, "h": 1, "label": "", "isNew": false })
                 readonly property bool offScreen:
                     windowRect.slot.x < -0.001 || windowRect.slot.x + windowRect.slot.w > 1.001
+                    || windowRect.slot.y < -0.001 || windowRect.slot.y + windowRect.slot.h > 1.001
 
                 x: screenRect.x + Math.round(windowRect.slot.x * screenRect.width) + 3
                 y: screenRect.y + Math.round(windowRect.slot.y * screenRect.height) + 3

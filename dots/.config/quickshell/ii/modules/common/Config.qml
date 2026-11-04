@@ -7117,6 +7117,10 @@ Singleton {
                 property bool enableManualScale: false
                 property real autoScaleFactor: 1.0 // Multiplier for automatic scaling (0.5 to 1.5)
                 property real scale: 0.18 // Relative to screen size (used when enableManualScale is true)
+                // Scrolling layout overview, drawn like the scrolloverview plugin: each
+                // workspace card is the monitor at this scale, cards this far apart (px).
+                property real scrollingScale: 0.6
+                property int scrollingWorkspaceGap: 60
                 property string animationStyle: "zoom" // Options: "bounce", "smooth", "zoom", "none"
                 property bool enableCascadeAnimation: true
                 property real rows: 2

@@ -444,7 +444,7 @@ PanelWindow {
         animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
     }
 
-    readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
+    readonly property bool isScrollingLayout: GlobalStates.scrollingLayoutActive
 
     property var zoomLevels: ({
         "in": {

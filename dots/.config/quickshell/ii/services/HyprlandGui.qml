@@ -352,6 +352,14 @@ Singleton {
         return live === undefined ? fallback : live.value;
     }
 
+    /// A Lua global as a control should show it: what this page set, else the last hand-written
+    /// assignment, else `fallback`. Globals have no hyprctl answer, so there is no live layer.
+    function globalValue(name: string, fallback: var): var {
+        if (root.managedGlobals.hasOwnProperty(name)) return root.managedGlobals[name];
+        const inherited = root.inheritedGlobals[name];
+        return inherited === undefined ? fallback : inherited.value;
+    }
+
     /// The managed block of one file exactly as it sits on disk, for the review dialog.
     function regionText(target: string): string {
         return root.files[target]?.regionText ?? "";

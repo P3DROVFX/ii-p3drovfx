@@ -33,7 +33,18 @@ ContentPage {
     readonly property string engine:
         String(HyprlandGui.displayValue("general:layout", "dwindle") ?? "dwindle")
     readonly property bool knownEngine:
-        ["dwindle", "master", "scrolling", "monocle"].includes(tab.engine)
+        ["dwindle", "master", "scrolling", "lua:zscroll", "monocle"].includes(tab.engine)
+
+    /// zscroll's settings are Lua globals (custom/variables.lua) that its layout reads on every
+    /// pass, not Hyprland options - there is nothing for hyprctl to report.
+    function zscrollOn(name: string, fallback: bool): bool {
+        const value = HyprlandGui.globalValue(name, fallback);
+        return value === true || value === 1 || value === "true";
+    }
+    function zscrollNumber(name: string, fallback: real): real {
+        const value = Number(HyprlandGui.globalValue(name, fallback));
+        return isNaN(value) ? fallback : value;
+    }
 
     /// A bool option as the hub shows it: what this page set, else what Hyprland reports.
     function isOn(key: string, fallback: bool): bool {
@@ -54,6 +65,7 @@ ContentPage {
                 { "displayName": Translation.tr("Dwindle"), "icon": "splitscreen", "value": "dwindle" },
                 { "displayName": Translation.tr("Master"), "icon": "view_sidebar", "value": "master" },
                 { "displayName": Translation.tr("Scrolling"), "icon": "view_carousel", "value": "scrolling" },
+                { "displayName": Translation.tr("Rows (zscroll)"), "icon": "view_agenda", "value": "lua:zscroll" },
                 { "displayName": Translation.tr("Monocle"), "icon": "crop_square", "value": "monocle" }
             ]
         }
@@ -295,6 +307,163 @@ ContentPage {
             HyprOptionNote {
                 keys: ["scrolling:column_width", "scrolling:direction", "scrolling:wrap_focus",
                     "scrolling:wrap_swapcol"]
+            }
+        }
+    }
+
+    Loader {
+        active: tab.engine === "lua:zscroll"
+        visible: active
+        Layout.fillWidth: true
+
+        sourceComponent: ContentSection {
+            title: Translation.tr("Rows (zscroll)")
+            icon: "view_agenda"
+
+            ZscrollPluginCard {}
+
+            HyprSelect {
+                title: Translation.tr("Windows in a row")
+                icon: "view_column"
+                keys: []
+                currentOverride: Math.round(tab.zscrollNumber("zscroll_windows_per_row", 2))
+                options: [1, 2, 3, 4].map(count => ({ "displayName": String(count), "value": count }))
+                onSelected: newValue => HyprlandGui.setGlobal("zscroll_windows_per_row", newValue)
+            }
+
+            HyprSelect {
+                title: Translation.tr("Width change per Super + [ or ]")
+                icon: "width_normal"
+                keys: []
+                currentOverride: tab.zscrollNumber("zscroll_resize_step", 0.05)
+                options: [0.03, 0.05, 0.1].map(step => ({
+                    "displayName": `${Math.round(step * 100)}%`, "value": step
+                }))
+                onSelected: newValue => HyprlandGui.setGlobal("zscroll_resize_step", newValue)
+            }
+
+            HyprToggle {
+                buttonIcon: "fullscreen"
+                text: Translation.tr("A window alone on its workspace fills the screen")
+                switchOn: tab.zscrollOn("zscroll_single_window_fills", true)
+                textOn: Translation.tr("The only tiled window takes the whole row; the second one splits it.")
+                textOff: Translation.tr("The only window keeps its slot width.")
+                onRequested: wanted => HyprlandGui.setGlobal("zscroll_single_window_fills", wanted)
+            }
+
+            HyprToggle {
+                buttonIcon: "format_align_center"
+                text: Translation.tr("Centre a row that is not full")
+                switchOn: tab.zscrollOn("zscroll_center_incomplete_rows", false)
+                textOn: Translation.tr("A row with free slots sits in the middle of the screen.")
+                textOff: Translation.tr("A row with free slots starts at the left edge.")
+                onRequested: wanted => HyprlandGui.setGlobal("zscroll_center_incomplete_rows", wanted)
+            }
+
+            HyprToggle {
+                buttonIcon: "open_in_new"
+                text: Translation.tr("A new window takes focus and brings its row")
+                switchOn: tab.zscrollOn("zscroll_focus_new_windows", true)
+                textOn: Translation.tr("Opening an app on this workspace scrolls to its row.")
+                textOff: Translation.tr("New windows join the end of the tape; the view stays where it is.")
+                onRequested: wanted => HyprlandGui.setGlobal("zscroll_focus_new_windows", wanted)
+            }
+
+            HyprToggle {
+                buttonIcon: "mouse"
+                text: Translation.tr("Pointer follows keyboard navigation")
+                switchOn: tab.zscrollOn("zscroll_pointer_follows", true)
+                textOn: Translation.tr("Moving focus with the keyboard or wheel centres the pointer on the new window.")
+                textOff: Translation.tr("The pointer stays where it is.")
+                onRequested: wanted => HyprlandGui.setGlobal("zscroll_pointer_follows", wanted)
+            }
+
+            HyprToggle {
+                buttonIcon: "swap_vert"
+                text: Translation.tr("Super + scroll moves between rows")
+                switchOn: tab.zscrollOn("zscroll_wheel_rows", true)
+                textOn: Translation.tr("On a zscroll workspace the wheel walks rows; elsewhere it still switches workspaces.")
+                textOff: Translation.tr("Super + scroll always switches workspaces.")
+                onRequested: wanted => HyprlandGui.setGlobal("zscroll_wheel_rows", wanted)
+            }
+
+            HyprToggle {
+                buttonIcon: "keyboard"
+                text: Translation.tr("zscroll shortcuts")
+                alwaysExplain: true
+                switchOn: tab.zscrollOn("zscroll_keybinds", false)
+                textOn: Translation.tr("Super + arrows focus, Super + Shift + arrows swap, Super + [ ] resize, Super + ; ' change windows per row, Super + Shift + PgUp/PgDn move the row. Outside zscroll they do what they did before.")
+                textOff: Translation.tr("Off by default, so no default shortcut is replaced. Turn it on to navigate zscroll from the keyboard.")
+                onRequested: wanted => HyprlandGui.setGlobal("zscroll_keybinds", wanted)
+            }
+
+            HyprToggle {
+                buttonIcon: "overview_key"
+                text: Translation.tr("Super opens the zscroll overview")
+                alwaysExplain: true
+                switchOn: tab.zscrollOn("zscroll_super_overview", true)
+                textOn: Translation.tr("On a zscroll workspace, tapping Super zooms out over every workspace and its rows (scrolloverview plugin). Without the plugin loaded, Super opens the shell's search as before.")
+                textOff: Translation.tr("Super always opens the shell's search and overview.")
+                onRequested: wanted => HyprlandGui.setGlobal("zscroll_super_overview", wanted)
+            }
+
+            HyprSelect {
+                visible: tab.zscrollOn("zscroll_super_overview", true)
+                title: Translation.tr("Overview zoom")
+                icon: "zoom_out"
+                keys: []
+                currentOverride: tab.zscrollNumber("zscroll_overview_scale", 0.6)
+                options: [0.4, 0.5, 0.6, 0.7].map(scale => ({
+                    "displayName": `${Math.round(scale * 100)}%`, "value": scale
+                }))
+                onSelected: newValue => HyprlandGui.setGlobal("zscroll_overview_scale", newValue)
+            }
+
+            HyprSelect {
+                visible: tab.zscrollOn("zscroll_super_overview", true)
+                title: Translation.tr("Overview lays workspaces out")
+                icon: "view_stream"
+                keys: []
+                currentOverride: String(HyprlandGui.globalValue("zscroll_overview_layout", "vertical"))
+                options: [
+                    { "displayName": Translation.tr("Top to bottom"), "value": "vertical" },
+                    { "displayName": Translation.tr("Side by side"), "value": "horizontal" }
+                ]
+                onSelected: newValue => HyprlandGui.setGlobal("zscroll_overview_layout", newValue)
+            }
+
+            ConfigTextField {
+                id: zscrollFullWidth
+
+                readonly property string optionValue:
+                    String(HyprlandGui.globalValue("zscroll_full_width_classes", "") ?? "")
+
+                Layout.fillWidth: true
+                icon: "fit_screen"
+                text: Translation.tr("Apps that always get a whole row")
+                placeholderText: Translation.tr("Window classes, comma separated (e.g. firefox, steam)")
+                onOptionValueChanged: {
+                    if (!zscrollFullWidth.textField.activeFocus)
+                        zscrollFullWidth.inputText = zscrollFullWidth.optionValue;
+                }
+                Component.onCompleted: zscrollFullWidth.inputText = zscrollFullWidth.optionValue
+
+                Connections {
+                    target: zscrollFullWidth.textField
+
+                    function onEditingFinished() {
+                        const cleaned = zscrollFullWidth.inputText.split(",")
+                            .map(name => name.trim()).filter(name => name !== "").join(", ");
+                        if (cleaned !== zscrollFullWidth.optionValue)
+                            HyprlandGui.setGlobal("zscroll_full_width_classes", cleaned);
+                    }
+                }
+            }
+
+            NoticeBox {
+                Layout.fillWidth: true
+                materialIcon: "info"
+                text: Translation.tr("Windows fill rows left to right, then the next row down. The focused row fills the screen; the rows above and below peek through the outer gaps and can be clicked. The overview shows a workspace's rows side by side.")
             }
         }
     }

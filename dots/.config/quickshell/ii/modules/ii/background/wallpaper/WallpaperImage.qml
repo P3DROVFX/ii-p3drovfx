@@ -438,7 +438,7 @@ Item {
 
     // Keep the legacy opening scale available for Gnome-like while the modern
     // presets remain driven exclusively by OverviewBackgroundController.
-    readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
+    readonly property bool isScrollingLayout: GlobalStates.scrollingLayoutActive
     readonly property bool zoomInStyle: !videoEffectsDisabled && Config.options.overview.scrollingStyle.zoomStyle === "in"
     readonly property bool showOpeningAnimation: Config.options.overview.showOpeningAnimation && Config.options.overview.animationStyle !== "none"
     readonly property var zoomLevels: ({
@@ -584,7 +584,11 @@ Item {
             Rectangle {
                 anchors.fill: parent
                 color: wallpaperImageRoot.overviewController.isGnomeLike ? "#000000" : Appearance.colors.colLayer0
-                opacity: wallpaperImageRoot.overviewController.isGnomeLike ? 0.24 : wallpaperImageRoot.overviewController.dimAmount
+                // The scrolling overview copies the scrolloverview plugin, whose cards
+                // sit on a dark field: the backing sinks much further there.
+                opacity: wallpaperImageRoot.overviewController.isGnomeLike
+                    ? (wallpaperImageRoot.isScrollingLayout ? 0.62 : 0.24)
+                    : wallpaperImageRoot.overviewController.dimAmount
             }
         }
     }

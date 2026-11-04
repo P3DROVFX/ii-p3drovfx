@@ -44,7 +44,9 @@ Scope {
     readonly property bool featureEnabled:
         !GlobalStates.overviewUsesAppDrawer &&
         Config.options.background.zoomOutEnabled &&
-        Config.options.background.windowZoomOnOverview
+        Config.options.background.windowZoomOnOverview &&
+        // The scrolling overview animates its own tiles and hides the real windows itself.
+        !GlobalStates.scrollingLayoutActive
 
     // Hyprland window rules are cumulative. The old handoff created one
     // anonymous no_anim rule on open and a different opacity rule on close,
@@ -1767,8 +1769,10 @@ Scope {
         // Ready means a frame to show. A tile hidden only by its ancestors
         // (the slot's visibility settles a binding later) is not ready: it
         // let the open hide the real windows before any capture had a frame.
+        // A tile hidden on purpose (off the monitor) never captures, so it must not
+        // hold the handoff: waiting on it kept the real windows on screen.
         readonly property bool captureReady: tile.windowData !== null
-            && (tile.width <= 0 || tile.height <= 0 || capture.hasContent)
+            && (tile.width <= 0 || tile.height <= 0 || tile.hiddenOffMonitor || capture.hasContent)
 
         function updateWindowData() {
             if (tile.freezeGeometry && tile.windowData)
@@ -1796,6 +1800,14 @@ Scope {
         readonly property real realY: Math.max((windowData?.at[1] ?? 0) - monitorOffsetY, 0)
         readonly property real realWidth: windowData?.size[0] ?? 0
         readonly property real realHeight: windowData?.size[1] ?? 0
+        // Scrolling layouts keep columns (native) or rows (zscroll) off screen.
+        // Clamped to the edge above, they would be drawn over the visible ones
+        // while the plane zooms; the overview's rows show them instead.
+        readonly property bool offMonitor: {
+            const x = (windowData?.at[0] ?? 0) - monitorOffsetX;
+            const y = (windowData?.at[1] ?? 0) - monitorOffsetY;
+            return x + realWidth <= 0 || y + realHeight <= 0 || x >= screenWidth || y >= screenHeight;
+        }
 
         // A relayout while the picker is open (a window opened or closed)
         // glides from the old slot instead of jumping.
@@ -1834,7 +1846,9 @@ Scope {
         width: realWidth + (slotWidth - realWidth) * pickT
         height: realHeight + (slotHeight - realHeight) * pickT
 
-        visible: width > 0 && height > 0
+        readonly property bool hiddenOffMonitor: tile.offMonitor && !tRoot.isRealGnome && !!tRoot.overviewController
+            && tRoot.overviewController.scrollingLayout
+        visible: width > 0 && height > 0 && !tile.hiddenOffMonitor
 
         // Real Gnome: the hovered window lifts toward the pointer.
         readonly property bool hovered: tRoot.isRealGnome && tile.address !== ""

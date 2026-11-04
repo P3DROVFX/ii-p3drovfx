@@ -142,7 +142,7 @@ Item {
         root.overviewShown = root.overviewWanted;
     }
 
-    readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
+    readonly property bool isScrollingLayout: GlobalStates.scrollingLayoutActive
     readonly property real launcherContentWidth: searchWidgetRef ? searchWidgetRef.implicitWidth : 0
     readonly property real launcherContentHeight: searchWidgetRef ? searchWidgetRef.implicitHeight : 0
 
@@ -361,6 +361,8 @@ Item {
         shoulderRadius: Appearance.rounding.windowRounding
         cornerRadius: Appearance.rounding.windowRounding
         surfaceColor: root.themeBgColor
+        // Hidden with the field it holds while the scrolling overview is idle.
+        opacity: dropContainer.opacity
         transform: Scale {
             yScale: root.isBottomBar ? -1 : 1
             origin.y: dropSurface.height / 2
@@ -376,6 +378,15 @@ Item {
         width: Math.min(root.dropW, dropSurface.visibleWidth)
         height: dropSurface.visibleHeight
         visible: dropSurface.visible
+        // The scrolling overview copies the scrolloverview plugin, which has no
+        // search bar: the field stays focused but unseen until a query or a mode
+        // needs it. Opacity only - a hidden item would lose the keyboard.
+        readonly property bool scrollingIdle: root.isScrollingLayout && scrollingOverviewLoader.active
+            && (root.searchWidgetRef ? (root.searchWidgetRef.searchingText === "" && !root.searchWidgetRef.isAnySpecialMode) : true)
+        opacity: scrollingIdle ? 0 : 1
+        Behavior on opacity {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        }
 
         onXChanged: root._updateBlurExclusion()
         onYChanged: root._updateBlurExclusion()
@@ -533,9 +544,9 @@ Item {
         // above the collapsed search instead of riding the drop as it grows.
         anchors.fill: parent
         active: (loadedOnce || root.isWidgetActive) && root.isScrollingLayout && !Config.options.search.suggestions.enable
-        // The rows play their own entrance and exit (staggered in, quick out);
-        // the drop only shows and hides the layer they live on.
-        visible: root.isWidgetActive
+        // The overview zooms its windows back to full size after a close, so the
+        // layer stays shown while it is still drawing.
+        visible: root.isWidgetActive || (item?.drawing ?? false)
 
         sourceComponent: ScrollingOverviewWidget {
             anchors.fill: parent

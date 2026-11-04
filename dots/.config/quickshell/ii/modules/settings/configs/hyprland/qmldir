@@ -44,3 +44,4 @@ DefaultAppsTab 1.0 DefaultAppsTab.qml
 RulesTab 1.0 RulesTab.qml
 EnvironmentTab 1.0 EnvironmentTab.qml
 AllOptionsTab 1.0 AllOptionsTab.qml
+ZscrollPluginCard 1.0 ZscrollPluginCard.qml

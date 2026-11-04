@@ -1,4 +1,5 @@
 import QtQuick
+import qs
 import qs.modules.common
 
 // One instance belongs to one monitor.  All overview background consumers read
@@ -111,7 +112,7 @@ Item {
      * draws the same wallpaper and windows. Published by the overview through
      * GlobalStates; empty until it has laid its rows out once.
      */
-    readonly property bool scrollingLayout: Persistent.states.hyprland.layout === "scrolling"
+    readonly property bool scrollingLayout: GlobalStates.scrollingLayoutActive
     property rect scrollingTarget: Qt.rect(0, 0, 0, 0)
     /** On-screen corner radius of the scrolling overview's frames. */
     property real scrollingFrameRadius: Appearance.rounding.normal + 4
@@ -356,7 +357,8 @@ Item {
         let amount = 0.0;
         switch (effectiveStyle) {
         case "gnome":
-            amount = 0.24;
+            // The scrolling overview's cards sit on a dark field, as in the plugin.
+            amount = scrollingLayout ? 0.62 : 0.24;
             break;
         case "soft-focus":
             amount = 0.18;

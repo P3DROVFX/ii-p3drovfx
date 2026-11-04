@@ -11,14 +11,14 @@ import QtQuick.Layouts
 import Quickshell
 
 /**
- * One workspace of the scrolling overview: its label chip in the left gutter,
- * and the strip its columns scroll along.
+ * One workspace of the scrolling overview, drawn the way the scrolloverview
+ * plugin draws it: no card, just the workspace's windows over the real
+ * wallpaper, each where Hyprland really has it (scaled) - so columns that are
+ * off screen sit beside the visible ones, unclipped, the tape end to end.
  *
- * The strip keeps the monitor's own viewport as a frame in its middle and lays
- * every window where Hyprland really has it, so columns that are off screen
- * are off the frame here too. The strip pans sideways on its own (Shift+wheel,
- * a horizontal swipe, or the keyboard selection walking off the frame); that
- * pan is a view of the row, never a change to the workspace.
+ * The row pans sideways on its own (Shift+wheel, a horizontal swipe, or the
+ * keyboard selection walking off the screen); that pan is a view of the row,
+ * never a change to the workspace.
  */
 Item {
     id: root
@@ -44,45 +44,12 @@ Item {
 
     height: root.frameHeight
 
-    // ── Entrance and exit, played by the overview ──────────────────────────
-    /** 0 = gone (faded, a little lower), 1 = in place. */
-    property real reveal: 0
+    // ── Entrance and exit ───────────────────────────────────────────────
+    /** 0 = gone (faded, a little lower), 1 = in place; bound by the overview to its zoom. */
+    property real reveal: 1
     opacity: root.reveal
     transform: Translate {
         y: (1 - root.reveal) * 28
-    }
-
-    SequentialAnimation {
-        id: revealAnimation
-        PauseAnimation {
-            id: revealPause
-        }
-        NumberAnimation {
-            id: revealNumber
-            target: root
-            property: "reveal"
-        }
-    }
-
-    /**
-     * Arrivals decelerate in, later the further the row is from the active
-     * one, so the list unfolds from the middle; departures are quick and all
-     * at once, so nothing lingers over whatever is taking the screen.
-     */
-    function playReveal(show, delay) {
-        revealAnimation.stop();
-        if (root.overview.animationsDisabled) {
-            root.reveal = show ? 1 : 0;
-            return;
-        }
-        const motion = show ? Appearance.animation.elementMoveEnter : Appearance.animation.elementMoveExit;
-        revealPause.duration = show ? delay : 0;
-        revealNumber.from = root.reveal;
-        revealNumber.to = show ? 1 : 0;
-        revealNumber.duration = show ? motion.duration : Math.round(motion.duration * 0.6);
-        revealNumber.easing.type = motion.type;
-        revealNumber.easing.bezierCurve = motion.bezierCurve;
-        revealAnimation.start();
     }
 
     readonly property rect frameRect: Qt.rect(root.x + root.frameRestX + root.pan, root.y, root.frameWidth, root.frameHeight)
@@ -97,6 +64,16 @@ Item {
     Component.onCompleted: {
         if (root.active)
             root.overview.publishTarget(root.frameRect);
+    }
+
+    /** Every tile has a frame to show, so the real windows can be hidden under them. */
+    function tilesReady() {
+        for (let i = 0; i < tileRepeater.count; i++) {
+            const tile = tileRepeater.itemAt(i);
+            if (tile && !tile.ready)
+                return false;
+        }
+        return true;
     }
 
     // ── Horizontal pan ──────────────────────────────────────────────────────
@@ -117,10 +94,9 @@ Item {
         }
         return right;
     }
-    /** The chip's column on the left; content panned right stops beside it. */
-    readonly property real chipInset: 16
-    readonly property real leftPadding: root.chipInset + chip.width + 20
-    readonly property real rightPadding: 56
+    /** How close panned content may come to the screen's edges. */
+    readonly property real leftPadding: 48
+    readonly property real rightPadding: 48
     readonly property real panMax: Math.max(0, -(root.frameRestX + root.contentLeft) + root.leftPadding)
     readonly property real panMin: Math.min(0, root.stripWidth - root.rightPadding - (root.frameRestX + root.contentRight))
     readonly property bool overflowing: root.panMax > 0.5 || root.panMin < -0.5
@@ -155,106 +131,12 @@ Item {
             root.pan = root.clampPan(root.pan - (right - (root.stripWidth - root.rightPadding)));
     }
 
-    // ── Workspace chip ──────────────────────────────────────────────────────
-    Rectangle {
-        id: chip
-        readonly property bool hovered: chipMouse.containsMouse
-        anchors.verticalCenter: parent.verticalCenter
-        // Hugs the row's leftmost window, and stays on screen when the row runs past the edge.
-        x: Math.max(root.chipInset, root.frameRestX + root.pan + root.contentLeft - width - 20)
-        z: 2
-        width: 60
-        height: chipColumn.implicitHeight + 28
-        radius: Math.min(Appearance.rounding.large, width / 2)
-        color: root.active ? Appearance.colors.colPrimary
-            : (root.dropTarget || root.holdsSelection) ? Appearance.colors.colSecondaryContainer
-            : chip.hovered ? Appearance.colors.colSurfaceContainerHighestHover
-            : Appearance.colors.colSurfaceContainerHigh
-        scale: chipMouse.pressed ? 0.95 : 1
-        Behavior on color {
-            enabled: !root.overview.animationsDisabled
-            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-        }
-        Behavior on scale {
-            enabled: !root.overview.animationsDisabled
-            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-        }
-
-        readonly property color contentColor: root.active ? Appearance.colors.colOnPrimary
-            : (root.dropTarget || root.holdsSelection) ? Appearance.colors.colOnSecondaryContainer
-            : Appearance.colors.colOnSurface
-
-        ColumnLayout {
-            id: chipColumn
-            anchors.centerIn: parent
-            spacing: 2
-
-            StyledText {
-                Layout.alignment: Qt.AlignHCenter
-                text: String(root.workspaceId - root.overview.workspaceOffset)
-                color: chip.contentColor
-                font.family: Appearance.font.family.main
-                font.pixelSize: Appearance.font.pixelSize.hugeass + 8
-                font.variableAxes: ({ "wght": root.active ? 760 : 600, "wdth": 60, "ROND": 100 })
-            }
-            MaterialSymbol {
-                Layout.alignment: Qt.AlignHCenter
-                visible: root.empty
-                text: "add"
-                iconSize: Appearance.font.pixelSize.normal
-                color: chip.contentColor
-            }
-            StyledText {
-                Layout.alignment: Qt.AlignHCenter
-                visible: !root.empty
-                text: String(root.addresses.length)
-                color: chip.contentColor
-                opacity: 0.8
-                font.pixelSize: Appearance.font.pixelSize.smaller
-                font.weight: Font.Bold
-            }
-        }
-
-        MouseArea {
-            id: chipMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: root.overview.focusWorkspace(root.workspaceId)
-        }
-
-        DropArea {
-            anchors.fill: parent
-            onEntered: root.overview.setDropTarget("workspace", root.workspaceId, "")
-            onExited: root.overview.clearDropTarget("workspace", "")
-        }
-
-        StyledToolTip {
-            extraVisibleCondition: false
-            alternativeVisibleCondition: chip.hovered && !root.overview.dragging
-            text: root.empty ? Translation.tr("New workspace")
-                : (root.addresses.length === 1 ? Translation.tr("Workspace %1 · 1 window").arg(String(root.workspaceId - root.overview.workspaceOffset))
-                    : Translation.tr("Workspace %1 · %2 windows").arg(String(root.workspaceId - root.overview.workspaceOffset)).arg(String(root.addresses.length)))
-        }
-    }
-
     // ── Strip ───────────────────────────────────────────────────────────────
     Item {
         id: strip
         width: parent.width
         height: parent.height
-        clip: true
-
-        // The strip's ends fade rather than cut, but only when something runs past them.
-        layer.enabled: root.overflowing && root.shown
-        layer.effect: EdgeFadeMask {
-            readonly property real edge: Math.min(0.45, 56 / Math.max(1, strip.width))
-            verticalAxis: false
-            startClear: 0
-            startSolid: edge
-            endSolid: 1 - edge
-            endClear: 1
-        }
+        // Not clipped: like the plugin, the tape runs past the card to the screen's edges.
 
         DropArea {
             anchors.fill: parent
@@ -278,37 +160,25 @@ Item {
                 // the two are identical and hand over in one frame.
                 visible: !root.carriedByBackground
 
+                // No card: as in the scrolloverview plugin, the windows float over the
+                // real wallpaper, which never moves. Only an empty workspace gets a
+                // faint outline, so there is something to drop a window on.
                 Rectangle {
                     anchors.fill: parent
                     radius: root.overview.frameRadius
-                    color: Appearance.colors.colLayer1
-                    visible: wallpaper.status !== Image.Ready
+                    // The plugin shows nothing there; only while a window is being dragged.
+                    visible: root.empty && root.overview.dragging
+                    color: ColorUtils.transparentize(Appearance.colors.colLayer0, 0.6)
+                    border.width: 1
+                    border.color: ColorUtils.transparentize(Appearance.colors.colOnLayer0, 0.75)
                 }
-                Image {
-                    id: wallpaper
-                    anchors.fill: parent
-                    visible: false
-                    source: root.overview.wallpaperSource
-                    fillMode: Image.PreserveAspectCrop
-                    // Fixed, never derived from the frame: any change in it decodes and
-                    // rescales the whole wallpaper again, on every row, as it opens.
-                    sourceSize: root.overview.wallpaperDecodeSize
-                    asynchronous: true
-                    cache: true
-                    retainWhileLoading: true
-                }
-                OverviewRoundedMask {
-                    anchors.fill: parent
-                    source: wallpaper
-                    cornerRadius: root.overview.frameRadius
-                    visible: wallpaper.status === Image.Ready
-                }
-                // Other workspaces sit a step back; the active one matches the zoom exactly.
+                // Every card shows its wallpaper as is, as in the plugin; only a drop
+                // target or a keyboard-picked empty workspace is tinted.
                 Rectangle {
                     anchors.fill: parent
                     radius: root.overview.frameRadius
-                    color: root.dropTarget || root.selected ? Appearance.colors.colSecondaryContainer : Appearance.colors.colLayer0
-                    opacity: root.dropTarget ? 0.7 : root.selected ? 0.5 : root.active ? 0 : 0.3
+                    color: Appearance.colors.colSecondaryContainer
+                    opacity: root.dropTarget ? 0.7 : root.selected ? 0.5 : 0
                     Behavior on opacity {
                         enabled: !root.overview.animationsDisabled
                         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
@@ -324,7 +194,7 @@ Item {
 
                 ColumnLayout {
                     anchors.centerIn: parent
-                    visible: root.empty
+                    visible: root.empty && root.overview.dragging
                     spacing: 8
 
                     MaterialShapeWrappedMaterialSymbol {
@@ -347,6 +217,7 @@ Item {
             }
 
             Repeater {
+                id: tileRepeater
                 model: ScriptModel {
                     values: root.addresses
                 }
@@ -363,7 +234,8 @@ Item {
                     readonly property bool insideMonitor: rect.x < root.frameWidth && rect.x + rect.width > 0
                         && rect.y < root.frameHeight && rect.y + rect.height > 0
                     carried: root.carriedByBackground && insideMonitor
-                    chipsShown: !carried
+                    // The app chip only on the window being pointed at or picked.
+                    chipsShown: !carried && root.overview.selectedAddress === modelData
                     targetX: rect.x
                     targetY: rect.y
                     targetWidth: rect.width

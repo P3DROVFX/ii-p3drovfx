@@ -778,7 +778,7 @@ Scope {
     property real overviewReveal: root.overviewVisible ? 1.0 : 0.0
     property real overviewFade: root.overviewVisible ? 1.0 : 0.0
     readonly property bool overviewAnimating: root.searchActive || root.overviewReveal > 0.001 || root.overviewFade > 0.001
-    readonly property bool scrollingLayout: Persistent.states.hyprland.layout === "scrolling"
+    readonly property bool scrollingLayout: GlobalStates.scrollingLayoutActive
 
     /**
      * The workspace grid is built once and then kept.

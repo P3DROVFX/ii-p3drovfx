@@ -13,11 +13,12 @@ import Quickshell.Hyprland
 import Quickshell.Widgets
 
 /**
- * The overview for Hyprland's scrolling layout.
- *
- * Workspaces are rows stacked down the middle of the screen, the active one
- * centred; each row is a strip of the workspace's columns laid out where
- * Hyprland really has them, around a frame that stands for the monitor. Only
+ * The overview for Hyprland's scrolling layout, the shell's own take on the
+ * scrolloverview plugin zscroll uses: the desktop zoomed out to
+ * `overview.scrollingScale`, workspaces stacked as cards `scrollingWorkspaceGap`
+ * apart, the active one centred, each card the monitor with its wallpaper and
+ * the workspace's whole tape of columns where Hyprland really has them -
+ * running past the card, unclipped, rather than cut at it. Only
  * workspaces with windows are listed, plus the active one and a trailing empty
  * row to drop a window on — a new workspace, the way Niri does it.
  *
@@ -42,18 +43,136 @@ Item {
      * hosts only show and hide the whole item.
      */
     property bool presented: true
-    readonly property bool showing: root.presented && GlobalStates.overviewOpen
-    onShowingChanged: root.playReveal(root.showing)
+    /**
+     * The zoom follows the overview being open; `presented` (false while a query's
+     * results or a panel own the surface) only fades the windows, so typing never
+     * sends them back to full size.
+     */
+    // Starts only when the overview itself is presented (not a clipboard or emoji
+    // panel opened straight away); once zoomed out it holds until the close.
+    readonly property bool showing: GlobalStates.overviewOpen && (root.presented || root.realWindowsHidden)
+    onShowingChanged: root.showing ? root.beginOpen() : root.beginClose()
 
-    function playReveal(show) {
-        const active = root.rowIds.indexOf(root.activeWorkspaceId);
-        for (let i = 0; i < rowRepeater.count; i++) {
-            const row = rowRepeater.itemAt(i);
-            if (!row)
-                continue;
-            const distance = active === -1 ? 0 : Math.abs(i - active);
-            row.playReveal(show, 40 + Math.min(distance, 3) * 60);
+    // ── Zoom, the plugin's way ─────────────────────────────────────────────
+    /**
+     * 0: the active workspace's tiles sit exactly on its real windows, at full
+     * size; 1: the overview, every workspace at `overviewScale`. The wallpaper
+     * never moves - only the windows shrink - and the real windows are hidden
+     * (a Hyprland opacity rule) for as long as the tiles stand in for them.
+     */
+    property real zoomT: 0
+    readonly property bool zooming: zoomAnimation.running
+    /** Content stays drawn while it zooms back out after the overview closed. */
+    readonly property bool drawing: root.showing || root.zoomT > 0.001 || root.realWindowsHidden
+
+    NumberAnimation {
+        id: zoomAnimation
+        target: root
+        property: "zoomT"
+        duration: Appearance.animation.elementMove.duration
+        easing.type: Appearance.animation.elementMove.type
+        easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+        onFinished: {
+            if (root.zoomT < 0.001 && !root.showing)
+                root.setRealWindowsHidden(false);
         }
+    }
+
+    function zoomTo(target) {
+        zoomAnimation.stop();
+        if (root.animationsDisabled) {
+            root.zoomT = target;
+            if (target === 0 && !root.showing)
+                root.setRealWindowsHidden(false);
+            return;
+        }
+        zoomAnimation.from = root.zoomT;
+        zoomAnimation.to = target;
+        zoomAnimation.start();
+    }
+
+    /**
+     * Opening: tiles start on the real windows; once they have frames the real
+     * windows are hidden under them and the zoom runs. Waiting a little even
+     * when ready lets a tile kept from the last open replace its old frame.
+     */
+    property int openWaited: 0
+    function beginOpen() {
+        zoomAnimation.stop();
+        if (!root.realWindowsHidden)
+            root.zoomT = 0;
+        root.openWaited = 0;
+        openReadyPoll.restart();
+    }
+    function beginClose() {
+        openReadyPoll.stop();
+        openStart.stop();
+        root.zoomTo(0);
+    }
+    function activeRowReady() {
+        const row = rowRepeater.itemAt(root.rowIds.indexOf(root.activeWorkspaceId));
+        return !row || row.tilesReady();
+    }
+    Timer {
+        id: openReadyPoll
+        interval: 16
+        repeat: true
+        onTriggered: {
+            root.openWaited += interval;
+            if (!root.showing) {
+                stop();
+                return;
+            }
+            if ((root.openWaited >= 48 && root.activeRowReady()) || root.openWaited >= 220) {
+                stop();
+                root.setRealWindowsHidden(true);
+                // One compositor frame for the rule to take before anything moves.
+                openStart.restart();
+            }
+        }
+    }
+    Timer {
+        id: openStart
+        interval: 24
+        onTriggered: {
+            if (root.showing)
+                root.zoomTo(1);
+        }
+    }
+
+    // Hyprland hides this monitor's windows while the tiles stand in for them:
+    // one named rule per monitor, created once and toggled. Restoring turns on a
+    // no_anim rule for a moment, or the windows would fade back over 800 ms.
+    property bool realWindowsHidden: false
+    function luaString(text) {
+        return "'" + String(text).replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "'";
+    }
+    function setRealWindowsHidden(hidden) {
+        const name = root.monitor?.name ?? "";
+        if (name === "" || root.realWindowsHidden === hidden)
+            return;
+        root.realWindowsHidden = hidden;
+        const ref = "_G.__ii_scrolling_overview_hide";
+        let script = ref + " = " + ref + " or {}; local rules = " + ref + "; local name = " + root.luaString(name) + "; ";
+        if (hidden) {
+            script += "local rule = rules[name]; local ok = false; "
+                + "if rule ~= nil then ok = pcall(function() rule:set_enabled(true) end) end; "
+                + "if not ok then rules[name] = hl.window_rule({ name = 'quickshell-scrolling-overview-hide-' .. name, enabled = true, "
+                + "match = { workspace = 'm[' .. name .. ']' }, opacity = '0.0 0.0', no_anim = true }) end";
+        } else {
+            script += "local warp = rules.__restore; local warpOk = false; "
+                + "if warp ~= nil then warpOk = pcall(function() warp:set_enabled(true) end) end; "
+                + "if not warpOk then rules.__restore = hl.window_rule({ name = 'quickshell-scrolling-overview-restore', enabled = true, match = { class = '.*' }, no_anim = true }) end; "
+                + "local rule = rules[name]; if rule ~= nil then pcall(function() rule:set_enabled(false) end) end";
+            restoreRuleOff.restart();
+        }
+        Quickshell.execDetached(["hyprctl", "eval", script]);
+    }
+    Timer {
+        id: restoreRuleOff
+        interval: 150
+        onTriggered: Quickshell.execDetached(["hyprctl", "eval",
+            "local r = _G.__ii_scrolling_overview_hide; if r ~= nil and r.__restore ~= nil then pcall(function() r.__restore:set_enabled(false) end) end"])
     }
 
     /** Room kept free at the bottom (a bottom bar's search, or just a margin). */
@@ -125,22 +244,85 @@ Item {
     }
 
     // ── Layout ──────────────────────────────────────────────────────────────
-    readonly property real gutter: 112
-    readonly property real rowGap: 28
+    readonly property real gutter: 48
+    /** The plugin's workspace_gap: screen pixels between two workspace cards. */
+    readonly property real rowGap: Math.max(8, Config.options.overview.scrollingWorkspaceGap ?? 60)
     readonly property real regionTop: root.topInset
     readonly property real regionBottom: root.height - root.bottomInset
     readonly property real regionHeight: Math.max(1, root.regionBottom - root.regionTop)
-    readonly property real viewCenterY: (root.regionTop + root.regionBottom) / 2
-    readonly property real layoutScale: {
-        if (Config.options.overview.enableManualScale ?? false)
-            return Config.options.overview.scale * 1.25;
-        const byHeight = root.regionHeight * 0.36 / root.screenHeight;
-        const byWidth = (root.width - root.gutter * 2) * 0.5 / root.screenWidth;
-        return Math.max(0.05, Math.min(byHeight, byWidth) * (Config.options.overview.autoScaleFactor ?? 1));
+    // The plugin centres the active workspace on the screen; at zoom 0 that is
+    // exactly the screen, so the tiles start on the real windows.
+    readonly property real viewCenterY: root.height / 2
+    /**
+     * The plugin's `scale`: a card is the monitor at this size. Capped so the
+     * active card still fits between the search and the bottom edge.
+     */
+    readonly property real overviewScale: {
+        const wanted = Math.max(0.2, Math.min(0.9, Config.options.overview.scrollingScale ?? 0.6));
+        const byWidth = (root.width - root.gutter * 2) / root.screenWidth;
+        return Math.max(0.05, Math.min(wanted, byWidth));
     }
+    /** From the real size (zoom 0) to the overview's (zoom 1). */
+    readonly property real layoutScale: 1 + (root.overviewScale - 1) * root.zoomT
     readonly property real frameWidth: Math.round(root.screenWidth * root.layoutScale)
     readonly property real frameHeight: Math.round(root.screenHeight * root.layoutScale)
-    readonly property real pitch: root.frameHeight + root.rowGap
+    readonly property real pitch: root.frameHeight + root.rowGap * root.zoomT
+
+    /**
+     * zscroll stacks a workspace's rows on a vertical tape: the focused row on
+     * screen, the others above and below it. The overview's rows already stack
+     * workspaces vertically, so each workspace's tape is unrolled sideways
+     * instead - row k sits k screens to the right of the focused one, and the
+     * strip pans through them like native scrolling's columns.
+     *
+     * Per workspace: the distinct tiled row tops (sorted) and which of them is
+     * on screen. Windows of one row share their top; 24 px absorbs the odd
+     * gap difference Hyprland gives off-screen rows.
+     */
+    readonly property var zscrollTapes: {
+        if (!GlobalStates.zscrollLayoutActive)
+            return ({});
+        const monitorId = root.monitor?.id;
+        const tapes = {};
+        const windows = HyprlandData.windowList;
+        for (let i = 0; i < windows.length; i++) {
+            const w = windows[i];
+            const id = w.workspace?.id ?? 0;
+            if (w.monitor !== monitorId || id <= 0 || w.floating || !w.at)
+                continue;
+            const tops = tapes[id] ?? (tapes[id] = { tops: [], active: 0 });
+            if (!tops.tops.some(top => Math.abs(top - w.at[1]) < 24))
+                tops.tops.push(w.at[1]);
+        }
+        for (const id in tapes) {
+            const tape = tapes[id];
+            tape.tops.sort((a, b) => a - b);
+            let best = 0;
+            for (let k = 1; k < tape.tops.length; k++)
+                if (Math.abs(tape.tops[k] - root.originY) < Math.abs(tape.tops[best] - root.originY))
+                    best = k;
+            tape.active = best;
+        }
+        return tapes;
+    }
+
+    /** Where a window sits on its workspace's (unrolled, for zscroll) tape, unscaled. */
+    function tapePosition(w) {
+        let x = w.at[0] - root.originX;
+        let y = w.at[1] - root.originY;
+        const tape = w.floating ? null : root.zscrollTapes[w.workspace?.id ?? 0];
+        if (tape && tape.tops.length > 1) {
+            let rank = tape.active;
+            for (let k = 0; k < tape.tops.length; k++)
+                if (Math.abs(tape.tops[k] - w.at[1]) < 24) {
+                    rank = k;
+                    break;
+                }
+            x += (rank - tape.active) * root.screenWidth;
+            y += tape.tops[tape.active] - tape.tops[rank];
+        }
+        return Qt.point(x, y);
+    }
 
     /** A window's rectangle relative to its workspace's frame, scaled. */
     function tileRect(address) {
@@ -148,7 +330,8 @@ Item {
         if (!w || !w.at || !w.size)
             return Qt.rect(0, 0, 0, 0);
         const s = root.layoutScale;
-        return Qt.rect(Math.round((w.at[0] - root.originX) * s), Math.round((w.at[1] - root.originY) * s),
+        const at = root.tapePosition(w);
+        return Qt.rect(Math.round(at.x * s), Math.round(at.y * s),
             Math.round(w.size[0] * s), Math.round(w.size[1] * s));
     }
 
@@ -176,8 +359,9 @@ Item {
         const monitorId = root.monitor?.id;
         return HyprlandData.windowList
             .filter(w => w.workspace?.id === workspaceId && w.monitor === monitorId)
-            .sort((a, b) => (a.floating - b.floating) || (a.at[0] - b.at[0]) || (a.at[1] - b.at[1]))
-            .map(w => w.address);
+            .map(w => ({ w: w, at: root.tapePosition(w) }))
+            .sort((a, b) => (a.w.floating - b.w.floating) || (a.at.x - b.at.x) || (a.at.y - b.at.y))
+            .map(e => e.w.address);
     }
 
     /** The window the active workspace would give focus back to. */
@@ -366,6 +550,9 @@ Item {
     Component.onDestruction: {
         if (GlobalStates.scrollingOverviewNavigator === root)
             GlobalStates.scrollingOverviewNavigator = null;
+        // A reload mid-overview must never leave the monitor's windows invisible.
+        if (root.realWindowsHidden)
+            root.setRealWindowsHidden(false);
     }
 
     /**
@@ -624,15 +811,14 @@ Item {
         id: rows
         anchors.fill: parent
 
-        // Rows fade out before they reach the search, and towards the bottom edge.
-        layer.enabled: true
-        layer.effect: EdgeFadeMask {
-            readonly property real extent: Math.max(1, rows.height)
-            startClear: Math.max(0, Math.min(1, root.regionTop / extent))
-            startSolid: Math.max(startClear, Math.min(1, (root.regionTop + root.fadeSize) / extent))
-            endClear: Math.max(startSolid, Math.min(1, root.regionBottom / extent))
-            endSolid: Math.max(startSolid, Math.min(endClear, (root.regionBottom - root.fadeSize) / extent))
+        visible: root.drawing
+        opacity: root.presented || !root.showing ? 1 : 0
+        Behavior on opacity {
+            enabled: !root.animationsDisabled
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
         }
+        // No edge fade: like the plugin, neighbouring workspaces are simply cut by
+        // the screen's edges, and a query's results cover them from above.
 
         Repeater {
             id: rowRepeater
@@ -657,15 +843,12 @@ Item {
                     animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
                 }
                 onIndexChanged: row.slotPosition = index
-                // A row that appears while the overview is up just arrives.
-                Component.onCompleted: {
-                    Qt.callLater(() => row.slotSettled = true);
-                    if (root.showing)
-                        row.playReveal(true, 60);
-                }
+                Component.onCompleted: Qt.callLater(() => row.slotSettled = true)
+                // The active workspace is the real screen at zoom 0; the others come in with the zoom.
+                reveal: row.workspaceId === root.activeWorkspaceId ? 1 : root.zoomT
 
                 y: root.rowTop(row.slotPosition)
-                shown: y + height > root.regionTop - root.pitch * 0.25 && y < root.regionBottom + root.pitch * 0.25
+                shown: root.drawing && y + height > -root.pitch * 0.25 && y < root.height + root.pitch * 0.25
                 visible: row.shown
             }
         }
