@@ -71,7 +71,10 @@ impl Bucket {
         // The network fields trail the rest and readers default anything missing to
         // zero, so a row that never touched the network keeps its old 11-field
         // shape — most headless rows, and every file a machine offline all day writes.
-        let net = [self.net_rx, self.net_tx, self.net_bg].map(|b| (b + 512) / 1024);
+        let mut net = [self.net_rx, self.net_tx, self.net_bg].map(|b| (b + 512) / 1024);
+        // Rounded one by one, two sub-KiB directions can both come out 0 while their
+        // background sum rounds to 1; background is never more than the whole.
+        net[2] = net[2].min(net[0] + net[1]);
         if net.iter().any(|&k| k > 0) {
             t.extend(net);
         }
