@@ -1311,11 +1311,20 @@ QtObject {
             id: "shell", category: "advanced", label: "Shell command", icon: "terminal",
             editor: "shell", volatile: false,
             available: () => true,
-            // value: { start: "cmd", end: "cmd" } — `end` runs when the mode ends
+            // value: { start: "cmd", end: "cmd", track: bool } — `end` runs when
+            // the mode ends. With `track`, `start` runs through ModeTasks: its
+            // output, exit status and ::ii-report land in the Activity tab and
+            // a notification when it finishes.
             apply: v => {
                 const start = (v && typeof v === "object") ? v.start : v;
-                if (root.nonEmpty(start))
-                    Quickshell.execDetached(["sh", "-c", start]);
+                if (!root.nonEmpty(start))
+                    return;
+                if (v && typeof v === "object" && v.track === true && root.engine?.tasks) {
+                    const owner = root.engine.applyingOwner ?? { kind: "routine", id: "shell", name: "Shell command" };
+                    root.engine.tasks.start(owner.id, owner.kind, owner.name, start);
+                    return;
+                }
+                Quickshell.execDetached(["sh", "-c", start]);
             },
             revert: (was, action) => {
                 const v = action?.value;

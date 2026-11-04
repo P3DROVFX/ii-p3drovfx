@@ -588,6 +588,7 @@ function normalizeModes(rawList) {
 // Routines share the trigger/action vocabulary but are not exclusive.
 //  - kind "while": applies on true, reverts on false (same grace as modes)
 //  - kind "once":  fires on the false→true edge, never reverts, honours cooldownSec
+//                   (and, with catchUp, on a schedule window it missed)
 function normalizeRoutine(raw) {
     var r = (raw && typeof raw === "object") ? clone(raw) : {};
     r.id = typeof r.id === "string" && r.id.length ? r.id : slugify(r.name);
@@ -600,6 +601,9 @@ function normalizeRoutine(raw) {
     r.kind = r.kind === "once" ? "once" : "while";
     r.match = r.match === "all" ? "all" : "any";
     r.cooldownSec = Math.max(0, Number(r.cooldownSec) || 0);
+    // `once` routines on a schedule: run when the shell finds the window
+    // already open and the routine has not run in it (off or asleep at its start).
+    r.catchUp = r.kind === "once" && r.catchUp === true;
     r.notify = r.notify !== false;
     r.triggers = toArray(r.triggers).map(normalizeTrigger).filter(function (t) { return t.type.length > 0; });
     r.actions = toArray(r.actions).map(normalizeAction).filter(function (a) { return a.type.length > 0; });
@@ -682,6 +686,19 @@ function scheduleSatisfied(trigger, date, sun) {
         return days.indexOf(isoDay(yesterday)) !== -1;
     }
     return false;
+}
+
+// Epoch ms of the moment the currently satisfied window began, 0 if not inside one.
+function scheduleStartedAt(trigger, date, sun) {
+    if (!scheduleSatisfied(trigger, date, sun))
+        return 0;
+    var from = timeToMinutes(trigger.from, sun);
+    var start = new Date(date.getTime());
+    start.setHours(Math.floor(from / 60), from % 60, 0, 0);
+    // Past midnight inside an overnight window: it began yesterday.
+    if (start.getTime() > date.getTime())
+        start.setTime(start.getTime() - 86400000);
+    return start.getTime();
 }
 
 // Epoch ms of the moment the currently satisfied window ends, 0 if not inside one.

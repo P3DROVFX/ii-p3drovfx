@@ -546,6 +546,8 @@ Singleton {
             return Translation.tr("Ended");
         case "run":
             return Translation.tr("Ran");
+        case "result":
+            return Translation.tr("Finished");
         }
         return root.capitalize(h?.event ?? "");
     }
@@ -557,6 +559,74 @@ Singleton {
         if (h.event === "end")
             return Modes.reasonText(h.why);
         return root.capitalize(Modes.sourceText(h.why));
+    }
+
+    // ── Tracked-command results (services/modes/ModeTasks.qml) ──────────
+    // `status` is ok | warn | error | running.
+
+    function statusLabel(status) {
+        switch (status) {
+        case "ok":
+            return Translation.tr("OK");
+        case "warn":
+            return Translation.tr("Warnings");
+        case "error":
+            return Translation.tr("Failed");
+        case "running":
+            return Translation.tr("Running");
+        }
+        return "";
+    }
+
+    function statusIcon(status) {
+        switch (status) {
+        case "ok":
+            return "check_circle";
+        case "warn":
+            return "warning";
+        case "error":
+            return "error";
+        case "running":
+            return "progress_activity";
+        }
+        return "info";
+    }
+
+    function statusContainer(status) {
+        switch (status) {
+        case "error":
+            return Appearance.colors.colErrorContainer;
+        case "warn":
+            return Appearance.colors.colTertiaryContainer;
+        case "running":
+            return Appearance.colors.colSecondaryContainer;
+        }
+        return Appearance.colors.colPrimaryContainer;
+    }
+
+    function statusOnContainer(status) {
+        switch (status) {
+        case "error":
+            return Appearance.colors.colOnErrorContainer;
+        case "warn":
+            return Appearance.colors.colOnTertiaryContainer;
+        case "running":
+            return Appearance.colors.colOnSecondaryContainer;
+        }
+        return Appearance.colors.colOnPrimaryContainer;
+    }
+
+    // The tracked run an Activity entry belongs to: a result names it; a
+    // routine's "ran" entry is the one that started within a few seconds of it.
+    function historyRun(h) {
+        if (!h)
+            return null;
+        const runs = Modes.tasks.runs;
+        if (h.task)
+            return runs.find(r => r.runId === h.task) ?? null;
+        if (h.event !== "run" && h.event !== "start")
+            return null;
+        return runs.find(r => r.owner === h.id && Math.abs(r.startedAt - h.t) < 5000) ?? null;
     }
 
     function historyName(h) {

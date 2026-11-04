@@ -71,8 +71,15 @@ Rectangle {
                 parts.push(Translation.tr("ends %1").arg(ModeUi.clock(Modes.activeEndsAt)));
             return parts.join(" · ");
         }
-        if (root.routine)
+        if (root.routine) {
+            // A tracked command is the closest thing a `once` routine has to "running".
+            const task = Modes.tasks.openRuns[0] ?? Modes.tasks.runs[0] ?? null;
+            if (task?.state === "running")
+                return Translation.tr("%1 is running since %2").arg(task.label).arg(ModeUi.clock(task.startedAt));
+            if (task)
+                return Translation.tr("Last result: %1 · %2").arg(Modes.tasks.titleOf(task)).arg(ModeUi.dayLabel(task.endedAt) + " " + ModeUi.clock(task.endedAt));
             return Translation.tr("Armed routines run on their own when their conditions hold");
+        }
         return root.lastUsed ? Translation.tr("Start it again, or let a mode start on its own")
             : Translation.tr("Turn one on below, or let one start on its own");
     }

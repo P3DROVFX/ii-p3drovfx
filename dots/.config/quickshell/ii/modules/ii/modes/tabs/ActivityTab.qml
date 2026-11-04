@@ -70,7 +70,18 @@ Item {
     property var unfolded: ({})
 
     readonly property var history: Modes.history
-    readonly property int failureCount: root.history.filter(h => h.failed && h.failed.length).length
+    readonly property int failureCount: root.history.filter(h => root.isProblem(h)).length
+
+    // Skipped actions, or a tracked command that failed.
+    function isProblem(h): bool {
+        return (h.failed && h.failed.length > 0) || h.status === "error";
+    }
+
+    function openRun(runId: string): void {
+        if (!runId)
+            return;
+        sidePanel.show(runSheet, { runId: runId });
+    }
     readonly property var filters: [
         { id: "all", symbol: "history", label: Translation.tr("All"), count: root.history.length },
         { id: "modes", symbol: "tune", label: Translation.tr("Modes"), count: root.history.filter(h => h.kind === "mode").length },
@@ -86,7 +97,7 @@ Item {
         case "routines":
             return all.filter(h => h.kind === "routine");
         case "failures":
-            return all.filter(h => h.failed && h.failed.length);
+            return all.filter(h => root.isProblem(h));
         }
         return all;
     }
@@ -162,6 +173,29 @@ Item {
         id: confirmSheet
         ModesConfirmSheet {}
     }
+
+    Component {
+        id: runSheet
+        TaskRunSheet {}
+    }
+
+    // A run asked for from outside (IPC `modes openTask`): taken once.
+    function takeTaskReveal(): void {
+        const runId = Modes.taskRevealRequest;
+        if (!runId)
+            return;
+        Modes.taskRevealRequest = "";
+        root.openRun(runId);
+    }
+
+    Connections {
+        target: Modes
+        function onTaskRevealRequested(runId) {
+            Qt.callLater(root.takeTaskReveal);
+        }
+    }
+
+    Component.onCompleted: Qt.callLater(root.takeTaskReveal)
 
     // The closed sheet took the keyboard with it; hand the keys back to the page. A
     // timer rather than Qt.callLater, so nothing runs if the page is gone by then.
@@ -263,6 +297,15 @@ Item {
                             readonly property bool hasFailed: row.failed.length > 0
                             readonly property bool expanded: row.hasFailed && root.unfolded[row.modelData.key] === true
                             readonly property bool started: row.entry?.event === "start" || row.entry?.event === "run"
+                            // A tracked command behind this entry (its result, or the run it started).
+                            readonly property var run: {
+                                Modes.tasks.revision;
+                                return ModeUi.historyRun(row.entry);
+                            }
+                            readonly property string runStatus: row.entry?.event === "result" ? String(row.entry?.status ?? "")
+                                : (row.run?.state === "running" ? "running" : "")
+                            readonly property bool opensRun: row.run !== null && row.runStatus.length > 0
+                            readonly property bool clickable: row.hasFailed || row.opensRun
 
                             width: list.width
                             implicitHeight: row.header
@@ -314,7 +357,7 @@ Item {
                                 topRightRadius: topLeftRadius
                                 bottomLeftRadius: row.modelData.last ? ClockStyle.radiusLarge : ClockStyle.radiusSmall / 2
                                 bottomRightRadius: bottomLeftRadius
-                                color: cardArea.containsMouse && row.hasFailed ? ClockStyle.colIdleCardHover : ClockStyle.colPane
+                                color: cardArea.containsMouse && row.clickable ? ClockStyle.colIdleCardHover : ClockStyle.colPane
 
                                 Behavior on implicitHeight {
                                     enabled: !ClockStyle.reducedMotion
@@ -328,9 +371,14 @@ Item {
                                     id: cardArea
                                     anchors.fill: parent
                                     hoverEnabled: true
-                                    enabled: row.hasFailed
+                                    enabled: row.clickable
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.toggleUnfold(row.modelData.key)
+                                    onClicked: {
+                                        if (row.opensRun)
+                                            root.openRun(row.run.runId);
+                                        else
+                                            root.toggleUnfold(row.modelData.key);
+                                    }
                                 }
 
                                 ColumnLayout {
@@ -355,7 +403,7 @@ Item {
                                             padding: 9
                                             // The log's own badge: a pixel circle, a pixel
                                             // triangle when actions were skipped.
-                                            shape: row.hasFailed ? MaterialShape.Shape.PixelTriangle : MaterialShape.Shape.PixelCircle
+                                            shape: row.hasFailed || row.runStatus === "error" ? MaterialShape.Shape.PixelTriangle : MaterialShape.Shape.PixelCircle
                                             fill: row.started ? 1 : 0
                                             color: row.def ? (row.started ? ModeUi.accent(row.colorKey) : ModeUi.container(row.colorKey)) : ClockStyle.colSurfaceHigh
                                             colSymbol: row.def ? (row.started ? ModeUi.onAccent(row.colorKey) : ModeUi.onContainer(row.colorKey)) : ClockStyle.colOnSurfaceVariant
@@ -421,6 +469,49 @@ Item {
                                                 StyledToolTip {
                                                     extraVisibleCondition: whyHover.hovered && whyText.truncated
                                                     text: whyText.text
+                                                }
+                                            }
+                                        }
+
+                                        // How a tracked command went; opens its run sheet.
+                                        Rectangle {
+                                            visible: row.runStatus.length > 0
+                                            implicitWidth: statusRow.implicitWidth + ClockStyle.gap + 4
+                                            implicitHeight: 28
+                                            radius: ClockStyle.radiusSmall
+                                            color: ModeUi.statusContainer(row.runStatus)
+
+                                            RowLayout {
+                                                id: statusRow
+                                                anchors.centerIn: parent
+                                                spacing: ClockStyle.gapTiny
+
+                                                MaterialSymbol {
+                                                    text: ModeUi.statusIcon(row.runStatus)
+                                                    iconSize: ClockStyle.iconSmall - 1
+                                                    color: ModeUi.statusOnContainer(row.runStatus)
+
+                                                    RotationAnimation on rotation {
+                                                        running: row.runStatus === "running" && !ClockStyle.reducedMotion
+                                                        loops: Animation.Infinite
+                                                        from: 0
+                                                        to: 360
+                                                        duration: 1200
+                                                    }
+                                                }
+
+                                                StyledText {
+                                                    text: ModeUi.statusLabel(row.runStatus)
+                                                    font.pixelSize: ClockStyle.textSmall
+                                                    font.weight: Font.DemiBold
+                                                    color: ModeUi.statusOnContainer(row.runStatus)
+                                                }
+
+                                                MaterialSymbol {
+                                                    visible: row.opensRun
+                                                    text: "chevron_right"
+                                                    iconSize: ClockStyle.iconSmall - 1
+                                                    color: ModeUi.statusOnContainer(row.runStatus)
                                                 }
                                             }
                                         }
@@ -539,14 +630,14 @@ Item {
                                 if (Modes.history.length === 0)
                                     return Translation.tr("Nothing has happened yet");
                                 if (root.filter === "failures")
-                                    return Translation.tr("No action was skipped");
+                                    return Translation.tr("No problems");
                                 return Translation.tr("Nothing here for this filter");
                             }
                             subtitle: {
                                 if (Modes.history.length === 0)
                                     return Translation.tr("Every time a mode starts or ends, or a routine runs, it is listed here with what caused it.");
                                 if (root.filter === "failures")
-                                    return Translation.tr("Entries whose actions could not all be applied would show up here.");
+                                    return Translation.tr("Entries whose actions could not all be applied, or whose command failed, would show up here.");
                                 return Translation.tr("Try another filter above.");
                             }
                         }

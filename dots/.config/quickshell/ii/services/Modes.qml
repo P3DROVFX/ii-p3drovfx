@@ -101,6 +101,15 @@ Singleton {
         engine: root
     }
 
+    // Tracked shell commands and their results (shell action with `track`).
+    readonly property ModeTasks tasks: ModeTasks {
+        engine: root
+    }
+
+    // The mode or routine whose actions are being applied right now, for
+    // actions that need to know who they run for: {kind, id, name}.
+    property var applyingOwner: null
+
     // Guards routine→routine / routine→mode→routine chains.
     property int runDepth: 0
     readonly property int maxRunDepth: 4
@@ -143,6 +152,20 @@ Singleton {
             Config.options.modes.lastModeId = wanted;
         GlobalStates.modesOpen = true;
         root.revealRequested(root.revealRequest);
+        return true;
+    }
+
+    // Opens the app on Activity with a tracked run's sheet ("last" = newest run).
+    property string taskRevealRequest: ""
+    signal taskRevealRequested(string runId)
+
+    function revealTask(runId) {
+        const run = runId === "last" ? (root.tasks.runs[0] ?? null) : root.tasks.runById(runId);
+        if (!run)
+            return false;
+        root.taskRevealRequest = run.runId;
+        GlobalStates.openModesApp("activity");
+        root.taskRevealRequested(run.runId);
         return true;
     }
 
@@ -417,10 +440,14 @@ Singleton {
 
     // ---------------------------------------------------------------- history
 
-    function appendHistory(kind, id, event, why, failed) {
+    // `extra` adds fields of its own kind of entry (a task result's `task`
+    // and `status`).
+    function appendHistory(kind, id, event, why, failed, extra) {
         const entry = { t: Date.now(), kind: kind, id: id, event: event, why: why ?? "" };
         if (failed && failed.length)
             entry.failed = ModeSchema.toArray(failed);
+        if (extra && typeof extra === "object")
+            Object.assign(entry, extra);
         const list = ModeSchema.toArray(root.state.history);
         list.unshift(entry);
         if (list.length > ModeSchema.HISTORY_MAX)
@@ -492,7 +519,15 @@ Singleton {
                 const was = entry.read ? entry.read(action) : null;
                 const extra = entry.extra ? entry.extra(action) : null;
                 const set = entry.normalize ? entry.normalize(action.value, action) : action.value;
-                entry.apply(action.value, action);
+                const routineDef = root.routineById(ownerId);
+                const owner = routineDef ? { kind: "routine", id: ownerId, name: routineDef.name }
+                    : { kind: "mode", id: ownerId, name: root.modeById(ownerId)?.name ?? ownerId };
+                root.applyingOwner = owner;
+                try {
+                    entry.apply(action.value, action);
+                } finally {
+                    root.applyingOwner = null;
+                }
                 snapshot.push({ type: action.type, was: was, set: set, extra: extra, action: action });
                 if (persist)
                     persist(ModeSchema.clone(snapshot));
@@ -662,6 +697,8 @@ Singleton {
             return Translation.tr("by you");
         case "routine":
             return Translation.tr("by a routine");
+        case "catch-up":
+            return Translation.tr("to catch up on a missed schedule");
         case "auto":
         case "":
         case undefined:
@@ -924,9 +961,10 @@ Singleton {
             return;
         const w = root.routineWatcherFor(id);
         if (def.kind === "once") {
-            // Edge-triggered: the state at startup is not an edge.
-            if (satisfied && !initial)
-                root.runRoutine(id, w?.source ?? "auto");
+            // Edge-triggered: the state at startup is not an edge, unless the
+            // routine catches up on a schedule window it has not run in.
+            if (satisfied && (!initial || root.missedWindow(def)))
+                root.runRoutine(id, initial ? "catch-up" : (w?.source ?? "auto"));
             return;
         }
         const run = root.routineRun(id);
@@ -946,6 +984,49 @@ Singleton {
         }
         w.grace.interval = w.endGraceMs(Math.max(0, root.graceSec) * 1000);
         w.grace.restart();
+    }
+
+    // A `once` routine with `catchUp` whose schedule window is open and that
+    // has not run since it opened: the shell was off, or the laptop asleep,
+    // when the window began. A run cut short by a shutdown counts as not run.
+    function missedWindow(def) {
+        if (!def || def.kind !== "once" || !def.catchUp || !def.enabled || !root.enabled)
+            return false;
+        const now = new Date();
+        const sun = { sunrise: Weather.data?.sunrise ?? "", sunset: Weather.data?.sunset ?? "" };
+        let windowStart = 0;
+        for (const t of ModeSchema.toArray(def.triggers)) {
+            if (t.type !== "schedule" || t.not)
+                continue;
+            windowStart = Math.max(windowStart, ModeSchema.scheduleStartedAt(t, now, sun));
+        }
+        if (windowStart === 0)
+            return false;
+        const fired = root.routineLastFired(def.id);
+        if (fired < windowStart)
+            return true;
+        const last = root.tasks.lastRun(def.id);
+        if (last === null || last.lost !== true || last.startedAt < windowStart || root.tasks.isRunning(def.id))
+            return false;
+        // A command that keeps dying is not retried forever: three cut runs per window.
+        const cut = root.tasks.runs.filter(r => r.owner === def.id && r.lost === true && r.startedAt >= windowStart);
+        return cut.length < 3;
+    }
+
+    // Runs every catch-up routine that missed its window. Called on the clock
+    // tick, which also covers a resume: timers do not tick through suspend.
+    function catchUpRoutines() {
+        if (!root.ready || !root.enabled)
+            return;
+        for (const def of root.routines) {
+            if (!def.catchUp || def.kind !== "once")
+                continue;
+            const w = root.routineWatcherFor(def.id);
+            if (!w || !w.evaluatedOnce || !w.satisfied)
+                continue;
+            if (root.missedWindow(def))
+                root.runRoutine(def.id, "catch-up");
+        }
     }
 
     // ---------------------------------------------------------------- steps
@@ -1226,6 +1307,7 @@ Singleton {
         function onDateChanged() {
             root.checkAutoOff();
             root.runDueSteps();
+            root.catchUpRoutines();
         }
     }
 
@@ -1268,6 +1350,8 @@ Singleton {
             flags.push("disabled");
         if (root.isRoutineSuppressed(r.id))
             flags.push("suppressed");
+        if (r.catchUp)
+            flags.push("catch-up");
         if (r.cooldownSec > 0)
             flags.push(`cooldown ${r.cooldownSec}s`);
         const w = root.routineWatcherFor(r.id);
@@ -1442,6 +1526,35 @@ Singleton {
         function removeGameClass(cls: string): string {
             GameDetector.removeExtraClass(cls);
             return `removed ${cls}`;
+        }
+
+        // ---- tracked commands
+        function tasks(): string {
+            return root.tasks.runs.map(r => {
+                const took = r.endedAt > 0 ? ` ${Math.round((r.endedAt - r.startedAt) / 1000)}s` : "";
+                return `${r.runId} [${r.state}${took}] ${r.kind}:${r.owner} — ${root.tasks.titleOf(r)}`
+                    + (r.report?.summary ? `\n    ${r.report.summary}` : "")
+                    + ModeSchema.toArray(r.report?.details).map(d => `\n    ${d.label}: ${d.value}`).join("");
+            }).join("\n") || "no tracked runs";
+        }
+
+        function task(runId: string): string {
+            const r = root.tasks.runById(runId);
+            return r ? JSON.stringify(r, null, 2) : `unknown run "${runId}"`;
+        }
+
+        function openTask(runId: string): string {
+            return root.revealTask(runId) ? `opening ${runId}` : `unknown run "${runId}"`;
+        }
+
+        // Forgets finished runs (and their output) of one owner, or all with "".
+        function forgetTasks(owner: string): string {
+            const n = root.tasks.forget(owner);
+            return `forgot ${n} run(s)`;
+        }
+
+        function stopTask(runId: string): string {
+            return root.tasks.stop(runId) ? `stopping ${runId}` : `"${runId}" is not running`;
         }
 
         // ---- routines

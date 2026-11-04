@@ -854,6 +854,16 @@ Rectangle {
                 }
 
                 ToggleRow {
+                    visible: root.isOnce
+                    symbol: "update"
+                    shapeKind: MaterialShape.Shape.Cookie4Sided
+                    label: Translation.tr("Catch up on a missed schedule")
+                    description: Translation.tr("If the computer was off or asleep when the schedule began, run as soon as it is back, once per window")
+                    checked: root.def?.catchUp ?? false
+                    onToggled: value => root.patch({ catchUp: value })
+                }
+
+                ToggleRow {
                     visible: !root.isOnce
                     symbol: "settings_backup_restore"
                     shapeKind: MaterialShape.Shape.Cookie4Sided
