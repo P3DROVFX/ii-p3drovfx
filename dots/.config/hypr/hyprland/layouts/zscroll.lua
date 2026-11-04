@@ -33,7 +33,7 @@
 --   Super + [ / ]              shrink / grow the focused window's width
 --   Super + ; / '              fewer / more windows per row (until the next reload)
 --   Super + Shift + PgUp/PgDn  move the whole row up / down
---   Super + wheel              previous / next row
+--   Super + wheel              previous / next row (own toggle, zscroll_wheel_rows)
 local NAME = "lua:zscroll"
 local M = { name = NAME }
 
@@ -531,6 +531,10 @@ local function toggle_overview()
         scale = math.max(0.2, math.min(0.9, scale)),
         workspace_gap = 60,
         layout = layout,
+        -- The vertical wheel always walks workspaces (and tilt/horizontal scroll
+        -- the tape), whichever way they are stacked. The plugin's default turns
+        -- the vertical wheel into column stepping when they sit side by side.
+        input = { scrolling_mode = 2 },
         shadow = { enabled = false },
     } } })
     -- Inside a Lua keybind the plugin runs the toggle right away and returns
@@ -574,6 +578,12 @@ if bool_option("zscroll_keybinds", false) then
     -- they move the whole row instead.
     rebind("SUPER + SHIFT + Page_up", M.guarded("swaprow u", hl.dsp.window.move({ workspace = "-1" }), true))
     rebind("SUPER + SHIFT + Page_down", M.guarded("swaprow d", hl.dsp.window.move({ workspace = "+1" }), true))
+end
+
+-- Super+wheel walks rows on zscroll. It has its own toggle, so it is not tied to
+-- the shortcuts above; the guarded bind switches workspaces exactly like the
+-- default everywhere else (and on zscroll with the toggle off, read per scroll).
+if bool_option("zscroll_wheel_rows", true) then
     rebind("SUPER + mouse_up", M.wheel("u", hl.dsp.focus({ workspace = "-1" })))
     rebind("SUPER + mouse_down", M.wheel("d", hl.dsp.focus({ workspace = "+1" })))
 end
