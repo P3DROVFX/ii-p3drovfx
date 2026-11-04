@@ -1474,6 +1474,7 @@ Singleton {
     // Real Gnome opens on every monitor, not only the one under the pointer.
     readonly property bool realGnomeMirrored: Quickshell.screens.length > 1
         && (Config.options?.background?.overviewBackgroundStyle ?? "") === "real-gnome"
+        && (Config.options?.background?.realGnomeAllMonitors ?? false)
         && Persistent.states.hyprland.layout !== "scrolling"
         && !(Config.options?.background?.useBackgroundOverviewAlways ?? false)
     function realGnomeAreaFor(screenName) {

@@ -523,6 +523,18 @@ ContentPage {
         }
 
         ConfigSwitch {
+            visible: Config.options.background.zoomOutEnabled && page.overviewBackgroundStyle === "real-gnome" && !page.scrollingLayout
+                && !(Config.options.background.useBackgroundOverviewAlways ?? false)
+            buttonIcon: "desktop_windows"
+            text: Translation.tr("Real Gnome on every monitor")
+            checked: Config.options.background.realGnomeAllMonitors === true
+            onCheckedChanged: Config.options.background.realGnomeAllMonitors = checked
+            StyledToolTip {
+                text: Translation.tr("Also zoom the wallpaper and show a window picker on the other monitors. Off, only the monitor where the overview opens animates.")
+            }
+        }
+
+        ConfigSwitch {
             visible: Config.options.background.zoomOutEnabled && page.overviewBackgroundStyle === "material-shape" && !page.videoWallpaper && !page.scrollingLayout
             enabled: !page.videoWallpaper
             buttonIcon: "wb_twilight"

@@ -4805,6 +4805,9 @@ Singleton {
                 // Semantic style name. Empty keeps the legacy numeric setting
                 // active until the user chooses a new preset in Settings.
                 property string overviewBackgroundStyle: ""
+                // Real Gnome: also zoom the wallpaper (and offer a window picker) on
+                // the monitors the overview did not open on. Off = only the focused one.
+                property bool realGnomeAllMonitors: false
                 property bool materialShapeShadow: false
                 property real materialShapeScale: 1.0
                 property bool cheatsheetZoomOut: true

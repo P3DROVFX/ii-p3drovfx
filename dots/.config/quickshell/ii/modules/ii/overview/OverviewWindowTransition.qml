@@ -53,13 +53,36 @@ Scope {
     property bool windowHandoffDesiredActive: false
     property bool windowHandoffCommandQueued: false
 
+    // The windows hidden under the captures are only those of the monitors the
+    // overview animates on: one `class = '.*'` rule hid every monitor's apps,
+    // so the monitor the overview did not open on lost its windows meanwhile.
+    // One named rule per monitor (workspace selector m[name]), created once and
+    // toggled, kept in a Lua table.
+    readonly property string handoffRulesRef: "_G.__ii_overview_window_handoff_rules"
+    function handoffMonitorNames() {
+        return transitionScope.layers()
+            .filter(layer => layer.isGnomeLike && layer.monitorFocused && layer.screenName !== "")
+            .map(layer => layer.screenName);
+    }
+    function luaString(text) {
+        return "'" + String(text).replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "'";
+    }
+
     function windowHandoffScript(active) {
-        const globalRef = "_G.__ii_overview_window_handoff_rule";
-        let script = "local rule = " + globalRef + "; ";
+        // The old single global rule: never on again, but turn it off if a
+        // previous build left it enabled in the running compositor.
+        const legacyRef = "_G.__ii_overview_window_handoff_rule";
+        let script = "if " + legacyRef + " ~= nil then pcall(function() " + legacyRef + ":set_enabled(false) end) end; ";
+        script += transitionScope.handoffRulesRef + " = " + transitionScope.handoffRulesRef + " or {}; ";
+        script += "local rules = " + transitionScope.handoffRulesRef + "; ";
         if (active) {
+            const names = transitionScope.handoffMonitorNames();
             script += transitionScope.restoreRuleOffScript + "; ";
-            script += "local ok = false; if rule ~= nil then ok = pcall(function() rule:set_enabled(true) end) end; ";
-            script += "if not ok then local createdOk, created = pcall(function() return hl.window_rule({ name = 'quickshell-overview-window-handoff', enabled = true, match = { class = '.*' }, opacity = '0.0 0.0', no_anim = true }) end); if createdOk and created ~= nil then " + globalRef + " = created else error(tostring(created)) end end";
+            script += "local want = {" + names.map(n => "[" + transitionScope.luaString(n) + "] = true").join(", ") + "}; ";
+            script += "for name, rule in pairs(rules) do if not want[name] then pcall(function() rule:set_enabled(false) end) end end; ";
+            script += "for name, _ in pairs(want) do local rule = rules[name]; local ok = false; ";
+            script += "if rule ~= nil then ok = pcall(function() rule:set_enabled(true) end) end; ";
+            script += "if not ok then local createdOk, created = pcall(function() return hl.window_rule({ name = 'quickshell-overview-window-handoff-' .. name, enabled = true, match = { workspace = 'm[' .. name .. ']' }, opacity = '0.0 0.0', no_anim = true }) end); if createdOk and created ~= nil then rules[name] = created else error(tostring(created)) end end end";
         } else {
             // Restoring: a second named rule with only no_anim is on while the
             // hiding rule goes away, so the windows' alpha returns at once.
@@ -68,7 +91,7 @@ Scope {
             script += "local warp = " + transitionScope.restoreRuleRef + "; local warpOk = false; ";
             script += "if warp ~= nil then warpOk = pcall(function() warp:set_enabled(true) end) end; ";
             script += "if not warpOk then local createdOk, created = pcall(function() return hl.window_rule({ name = 'quickshell-overview-window-restore', enabled = true, match = { class = '.*' }, no_anim = true }) end); if createdOk and created ~= nil then " + transitionScope.restoreRuleRef + " = created end end; ";
-            script += "if rule ~= nil then local ok = pcall(function() rule:set_enabled(false) end); if not ok then " + globalRef + " = nil end end";
+            script += "for name, rule in pairs(rules) do local ok = pcall(function() rule:set_enabled(false) end); if not ok then rules[name] = nil end end";
         }
         return script;
     }
