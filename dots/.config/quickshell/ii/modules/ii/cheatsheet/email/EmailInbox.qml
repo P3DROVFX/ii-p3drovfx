@@ -58,6 +58,43 @@ Item {
             root.isPullRefreshing = false;
     }
 
+    // Gmail's category tabs. The inbox mixes them with personal mail, so each
+    // row carries a chip naming its category (unless a user label wins).
+    readonly property var categoryInfo: ({
+        "CATEGORY_SOCIAL": { key: "social", name: Translation.tr("Social"), icon: "group", tone: "primary" },
+        "CATEGORY_PROMOTIONS": { key: "promotions", name: Translation.tr("Promotions"), icon: "sell", tone: "secondary" },
+        "CATEGORY_UPDATES": { key: "updates", name: Translation.tr("Updates"), icon: "info", tone: "neutral" },
+        "CATEGORY_FORUMS": { key: "forums", name: Translation.tr("Forums"), icon: "forum", tone: "neutral" },
+        "CATEGORY_PURCHASES": { key: "purchases", name: Translation.tr("Purchases"), icon: "shopping_bag", tone: "neutral" }
+    })
+
+    // The row's chip: the user's own label first (it says more than Gmail's
+    // automatic category), then the category.
+    function categoryOf(labelsString) {
+        if (!labelsString)
+            return null;
+        var ids = labelsString.split(",");
+        var tab = root.activeTab || "";
+        for (var k = 0; k < ids.length; k++) {
+            var id = ids[k].trim();
+            // Inside that label's own tab the chip says nothing new.
+            if (!id || tab === "label_" + id)
+                continue;
+            for (var j = 0; j < EmailService.labels.count; j++) {
+                var l = EmailService.labels.get(j);
+                if (l.id === id)
+                    return { key: "label_" + id, name: l.name, icon: "label", tone: "primary" };
+            }
+        }
+        for (var i = 0; i < ids.length; i++) {
+            var info = root.categoryInfo[ids[i].trim()];
+            // Inside that category's own tab the chip says nothing new.
+            if (info && info.key !== (root.activeTab || "").toLowerCase())
+                return info;
+        }
+        return null;
+    }
+
     function getCustomLabels(labelsList) {
         if (!labelsList)
             return [];
@@ -792,6 +829,50 @@ Item {
                                                 color: Appearance.colors.colOnSurface
                                                 elide: Text.ElideRight
                                                 maximumLineCount: 1
+                                            }
+
+                                            // Label chip: user label, else category (Social, Promotions...)
+                                            Rectangle {
+                                                id: categoryChip
+                                                readonly property var category: root.categoryOf(model.labelsString)
+                                                readonly property bool iconOnly: EmailService.compactMode
+                                                visible: category !== null
+                                                Layout.alignment: Qt.AlignVCenter
+                                                Layout.preferredHeight: dateText.implicitHeight + 4
+                                                Layout.preferredWidth: iconOnly ? Layout.preferredHeight : categoryChipRow.implicitWidth + 16
+                                                radius: Appearance.rounding.full
+                                                antialiasing: true
+                                                color: !category ? "transparent"
+                                                    : category.tone === "primary" ? Appearance.colors.colPrimaryContainer
+                                                    : category.tone === "secondary" ? Appearance.colors.colSecondaryContainer
+                                                    : Appearance.colors.colSurfaceContainerHighest
+                                                readonly property color contentColor: !category ? "transparent"
+                                                    : category.tone === "primary" ? Appearance.colors.colOnPrimaryContainer
+                                                    : category.tone === "secondary" ? Appearance.colors.colOnSecondaryContainer
+                                                    : Appearance.colors.colOnSurfaceVariant
+
+                                                RowLayout {
+                                                    id: categoryChipRow
+                                                    anchors.centerIn: parent
+                                                    spacing: 4
+
+                                                    MaterialSymbol {
+                                                        Layout.alignment: Qt.AlignVCenter
+                                                        text: categoryChip.category ? categoryChip.category.icon : ""
+                                                        iconSize: Appearance.font.pixelSize.small
+                                                        color: categoryChip.contentColor
+                                                        fill: 1
+                                                    }
+
+                                                    StyledText {
+                                                        Layout.alignment: Qt.AlignVCenter
+                                                        visible: !categoryChip.iconOnly
+                                                        text: categoryChip.category ? categoryChip.category.name : ""
+                                                        font.pixelSize: Appearance.font.pixelSize.small
+                                                        font.weight: Font.Medium
+                                                        color: categoryChip.contentColor
+                                                    }
+                                                }
                                             }
 
                                             MaterialSymbol {
