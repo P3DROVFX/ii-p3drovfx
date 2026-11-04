@@ -2610,6 +2610,7 @@ PanelWindow {
         EditorActionBar {
             id: actionBar
             z: 9999
+            menuParent: editorOverlay
             physW: Math.round(root.editorRegionW * root.captureScale)
             physH: Math.round(root.editorRegionH * root.captureScale)
             visible: root.inlineEditorActive && !root.exporting && root.currentTool !== "recrop" && root.editingTextId === null && root.editorRegionW > 0 && root.editorRegionH > 0

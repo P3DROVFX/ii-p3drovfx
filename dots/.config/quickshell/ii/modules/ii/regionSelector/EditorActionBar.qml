@@ -23,6 +23,11 @@ Toolbar {
     property int physH: 0
     readonly property bool sharp: Appearance.rounding.scale === 0
     property bool exportMenuOpen: false
+    // Surface that hosts the Export menu. The menu sits outside the bar's own
+    // bounds, so it is reparented here (above every sibling of the bar) and
+    // placed by the Export button's position instead of living in the bar's
+    // layout subtree, where it could not out-rank the editor's hit areas.
+    property Item menuParent: null
 
     signal copyRequested()
     signal saveRequested()
@@ -177,13 +182,25 @@ Toolbar {
 
         Item {
             id: exportMenu
+            parent: actionBar.menuParent ?? exportContainer
+            z: 10000
             readonly property bool openBelow: actionBar.y < height + 16
-            readonly property real restY: openBelow ? (parent.height + 10) : (-height - 10)
+            // Export button in the host's coordinates; the extra reads make
+            // it re-evaluate when the bar moves or the menu opens.
+            readonly property point btnPos: {
+                actionBar.x; actionBar.y; actionBar.width; actionBar.exportMenuOpen;
+                return exportBtn.mapToItem(exportMenu.parent, 0, 0);
+            }
+            readonly property real restY: openBelow ? (btnPos.y + exportBtn.height + 10) : (btnPos.y - height - 10)
             width: exportCol.implicitWidth + 12
             height: exportCol.implicitHeight + 12
-            anchors.horizontalCenter: parent.horizontalCenter
+            x: {
+                var cx = btnPos.x + exportBtn.width / 2 - width / 2;
+                var host = exportMenu.parent;
+                return host && host.width > 0 ? Math.max(8, Math.min(cx, host.width - width - 8)) : cx;
+            }
             visible: opacity > 0
-            opacity: actionBar.exportMenuOpen ? 1 : 0
+            opacity: actionBar.exportMenuOpen && actionBar.visible ? 1 : 0
             y: restY + (actionBar.exportMenuOpen ? 0 : (openBelow ? -8 : 8))
 
             Behavior on opacity {
