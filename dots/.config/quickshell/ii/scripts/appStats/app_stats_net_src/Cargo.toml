@@ -1,0 +1,21 @@
+[package]
+name = "app_stats_net"
+version = "0.1.0"
+edition = "2021"
+
+# Linked against the system libbpf (no default features), not a vendored copy: the crate stays
+# small and needs no elfutils/zlib sources to build.
+[dependencies]
+libbpf-rs = { version = "0.27", default-features = false }
+libbpf-sys = { version = "1.7", default-features = false }
+libc = "0.2"
+
+[build-dependencies]
+libbpf-cargo = { version = "0.27", default-features = false }
+libbpf-sys = { version = "1.7", default-features = false }
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
+codegen-units = 1

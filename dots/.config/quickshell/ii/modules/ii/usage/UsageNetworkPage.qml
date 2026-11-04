@@ -310,6 +310,10 @@ Item {
     /// The sampler running is one built before it counted data — nothing recorded and
     /// nothing coming until it is rebuilt.
     readonly property bool needsRebuild: AppStats.running && !AppStats.samplerCountsNetwork
+    /// Every packet counted in the kernel, against TCP socket counters sampled every
+    /// few seconds. The two are different enough to say which one is on screen.
+    readonly property bool exact: AppStats.netMode === "exact"
+    readonly property bool approximate: AppStats.netMode === "sockets" && !root.needsRebuild
 
     readonly property var periodTiles: [
         {
@@ -407,8 +411,12 @@ Item {
                     StyledText {
                         id: heroDetail
                         Layout.fillWidth: true
-                        text: isNaN(root.matchedShare) ? Translation.tr("Data over TCP, per app")
-                            : Translation.tr("%1 % matched to an app").arg(Math.round(root.matchedShare * 100))
+                        text: {
+                            const mode = root.exact ? Translation.tr("Exact") : root.approximate ? Translation.tr("Approximate") : "";
+                            const matched = isNaN(root.matchedShare) ? ""
+                                : Translation.tr("%1 % matched to an app").arg(Math.round(root.matchedShare * 100));
+                            return [mode, matched].filter(part => part.length > 0).join(" · ") || Translation.tr("Data per app");
+                        }
                         font.pixelSize: ClockStyle.textNormal
                         font.weight: Font.DemiBold
                         color: hero.colContent
@@ -698,6 +706,67 @@ Item {
         }
     }
 
+    /// On the socket counters, what is missing and the one command that fixes it.
+    component ExactCard: Rectangle {
+        implicitHeight: exactColumn.implicitHeight + ClockStyle.cardPadding * 2
+        radius: ClockStyle.radiusCard
+        color: ClockStyle.colPane
+        visible: root.approximate
+
+        ColumnLayout {
+            id: exactColumn
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.margins: ClockStyle.cardPadding
+            spacing: ClockStyle.gap
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: ClockStyle.gap
+
+                MaterialShapeWrappedMaterialSymbol {
+                    text: "troubleshoot"
+                    iconSize: 20
+                    padding: 10
+                    shape: MaterialShape.Shape.Cookie9Sided
+                    color: ClockStyle.colTertiaryContainer
+                    colSymbol: ClockStyle.colOnTertiaryContainer
+                    fill: 1
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 0
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: AppStats.netHelperInstalled ? Translation.tr("The exact counter could not start")
+                            : Translation.tr("These figures are approximate")
+                        font.pixelSize: ClockStyle.textNormal + 1
+                        font.weight: Font.Bold
+                        color: ClockStyle.colOnSurface
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: AppStats.netHelperInstalled && AppStats.netError.length > 0
+                            ? Translation.tr("%1. Reinstall it with the command below.").arg(AppStats.netError)
+                            : Translation.tr("Only TCP connections that stay open across a sample are matched to an app, so QUIC and short requests land in Unattributed. A small kernel helper counts every packet instead; installing it asks for your password once.")
+                        wrapMode: Text.WordWrap
+                        font.pixelSize: ClockStyle.textSmall
+                        color: ClockStyle.colSubtext
+                    }
+                }
+            }
+
+            UsageCodeSnippet {
+                Layout.fillWidth: true
+                snippet: AppStats.netHelperScript.replace(FileUtils.trimFileProtocol(Directories.home), "~")
+            }
+        }
+    }
+
     /// The apps the period's data went to, and the part no app could be credited with.
     component AppsPane: Rectangle {
         implicitHeight: appsColumn.implicitHeight + ClockStyle.cardPadding * 2
@@ -715,7 +784,9 @@ Item {
             SectionTitle {
                 Layout.fillWidth: true
                 title: Translation.tr("Where the data went")
-                subtitle: Translation.tr("TCP traffic matched to the process that held the connection. Unattributed is everything else the network cards carried: QUIC, connections shorter than one sample, other users' services and packet headers.")
+                subtitle: root.exact
+                    ? Translation.tr("Every packet counted in the kernel and credited to the process that owned its socket, or to the app that started it once it has exited. Unattributed is traffic of no socket at all (ARP, DHCP, ICMP) and link-layer framing.")
+                    : Translation.tr("TCP traffic matched to the process that held the connection. Unattributed is everything else the network cards carried: QUIC, connections shorter than one sample, other users' services and packet headers.")
             }
 
             Repeater {
@@ -1078,6 +1149,10 @@ Item {
 
                     PeriodTiles {}
 
+                    ExactCard {
+                        Layout.fillWidth: true
+                    }
+
                     AppsPane {
                         Layout.fillWidth: true
                     }
@@ -1112,6 +1187,10 @@ Item {
                 }
 
                 PeriodTiles {}
+
+                ExactCard {
+                    Layout.fillWidth: true
+                }
 
                 AppsPane {
                     Layout.fillWidth: true

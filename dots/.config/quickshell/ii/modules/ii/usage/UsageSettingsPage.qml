@@ -480,14 +480,36 @@ Rectangle {
                     }
                 }
                 ClockSettingsRow {
-                    last: true
                     symbol: "swap_vert"
                     title: Translation.tr("Record network data")
-                    description: Translation.tr("TCP data per app, read from the kernel's own socket counters. QUIC and connections shorter than one sample stay unattributed")
+                    description: Translation.tr("Data per app. Exact with the kernel helper below; without it, TCP only and missing connections shorter than one sample")
                     clickable: true
                     onClicked: root.opts.trackNetwork = !root.opts.trackNetwork
                     Toggle {
                         key: "trackNetwork"
+                    }
+                }
+                ClockSettingsRow {
+                    last: true
+                    symbol: "troubleshoot"
+                    title: Translation.tr("Exact network counter")
+                    description: {
+                        if (AppStats.netMode === "exact")
+                            return Translation.tr("In use: every packet is counted in the kernel and credited to the process that owned its socket.");
+                        if (AppStats.netHelperInstalled)
+                            return Translation.tr("Installed but not in use: %1. Reinstall it with scripts/appStats/install-net-helper.sh.")
+                                .arg(AppStats.netError.length > 0 ? AppStats.netError : Translation.tr("network data is off or the sampler is not running"));
+                        return Translation.tr("Not installed. Run scripts/appStats/install-net-helper.sh once; it asks for your password to grant the helper its kernel capabilities.");
+                    }
+
+                    MaterialShapeWrappedMaterialSymbol {
+                        text: AppStats.netMode === "exact" ? "check" : "remove"
+                        iconSize: 18
+                        padding: 8
+                        shape: MaterialShape.Shape.Cookie7Sided
+                        color: AppStats.netMode === "exact" ? ClockStyle.colPrimaryContainer : ClockStyle.colSurfaceHigh
+                        colSymbol: AppStats.netMode === "exact" ? ClockStyle.colOnPrimaryContainer : ClockStyle.colOnSurfaceVariant
+                        fill: 1
                     }
                 }
             }

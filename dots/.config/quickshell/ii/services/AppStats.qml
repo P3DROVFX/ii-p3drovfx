@@ -96,6 +96,16 @@ Singleton {
     /// Whether the running sampler reports data at all; true until a sample says
     /// otherwise, so the Network page does not flash its rebuild notice on open.
     property bool samplerCountsNetwork: true
+    /// How the running sampler counts data: "exact" through the eBPF helper (every
+    /// packet, per socket owner), "sockets" on the TCP socket counters (no UDP, no
+    /// connection shorter than a sample), "off", or "" before it has said.
+    property string netMode: ""
+    /// Why the helper is installed but not in use, when it is.
+    property string netError: ""
+    /// Whether the helper binary exists, from the install probe.
+    property bool netHelperInstalled: false
+    readonly property string netHelperPath: "/usr/local/lib/ii/app_stats_net"
+    readonly property string netHelperScript: `${Directories.scriptPath}/appStats/install-net-helper.sh`
 
     /// "YYYY-MM-DD" -> parsed day document, or null for a day with no data. The null
     /// matters: it is what stops a missing day from being requested forever.
@@ -391,6 +401,8 @@ Singleton {
         switch (msg.t) {
         case "ready":
             root.source = msg.src ?? "";
+            root.netMode = msg.netMode ?? "";
+            root.netError = msg.netError ?? "";
             root.running = true;
             root.pushState();
             break;
@@ -399,6 +411,10 @@ Singleton {
             // A sampler built before it counted data never sends these, which is the
             // only way to tell "no traffic" apart from "not looking".
             root.samplerCountsNetwork = msg.sysRx !== undefined;
+            if (msg.netMode !== undefined) {
+                root.netMode = msg.netMode;
+                root.netError = msg.netError ?? "";
+            }
             break;
         case "flush":
             todayView.reload();
@@ -1013,7 +1029,7 @@ Singleton {
 
     Process {
         id: installProbe
-        command: ["sh", "-c", `b=0; [ -x "${root.binaryPath}" ] && b=1; r=2; for f in /sys/class/powercap/intel-rapl:*/energy_uj; do [ -e "$f" ] || continue; if head -c1 "$f" >/dev/null 2>&1; then r=1; else r=0; fi; break; done; printf '%s %s' "$b" "$r"`]
+        command: ["sh", "-c", `b=0; [ -x "${root.binaryPath}" ] && b=1; r=2; for f in /sys/class/powercap/intel-rapl:*/energy_uj; do [ -e "$f" ] || continue; if head -c1 "$f" >/dev/null 2>&1; then r=1; else r=0; fi; break; done; n=0; [ -e "${root.netHelperPath}" ] && n=1; printf '%s %s %s' "$b" "$r" "$n"`]
 
         stdout: StdioCollector {
             onStreamFinished: {
@@ -1022,6 +1038,7 @@ Singleton {
                 // shell was up — one just built — starts collecting on its own.
                 root.binaryPresent = parts[0] === "1";
                 root.raplState = parseInt(parts[1]);
+                root.netHelperInstalled = parts[2] === "1";
                 root.probed = true;
             }
         }
@@ -1080,7 +1097,9 @@ Singleton {
         }
     }
 
-    readonly property string launchKey: [root.intervalMs, root.flushMs, root.retentionDays, root.retentionMode, root.energySource, root.gpuFullEvery, root.trackHeadless, root.trackNetwork].join("|")
+    // The helper is looked for once per sampler start, so installing or removing it
+    // relaunches the sampler; the install probe runs each time App usage opens.
+    readonly property string launchKey: [root.intervalMs, root.flushMs, root.retentionDays, root.retentionMode, root.energySource, root.gpuFullEvery, root.trackHeadless, root.trackNetwork, root.netHelperInstalled].join("|")
     onLaunchKeyChanged: root.restart()
 
     Process {
@@ -1105,6 +1124,7 @@ Singleton {
         onExited: (code, status) => {
             root.running = false;
             root.lastSample = null;
+            root.netMode = "";
             if (code !== 0 && !root.restarting) console.warn(`[AppStats] sampler exited with code ${code}`);
         }
     }

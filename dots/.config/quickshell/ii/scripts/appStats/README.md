@@ -161,6 +161,7 @@ It is a normal program: run it in a terminal and watch the NDJSON.
 | `--gpu-full-every` | `30`                                        | intervals between full GPU rescans (a new window forces one)                                                      |
 | `--no-headless`    | —                                           | skip processes that own no window                                                                                 |
 | `--no-network`     | —                                           | skip the socket dump, the fd walk and the close listener; no data is recorded                                     |
+| `--net-helper`     | `/usr/local/lib/ii/app_stats_net`           | the eBPF helper to try before falling back on the socket counters                                                 |
 | `--quiet`          | —                                           | write day files, print nothing                                                                                    |
 
 ## Protocol
@@ -264,33 +265,81 @@ weight the per-app numbers can bear.
 
 ## Network data
 
-Per-app data is read without privileges from the kernel's own TCP counters:
+Two ways to count it. The sampler uses the first when it is installed and falls back on
+the second on its own — at startup, or the moment the helper stops answering. The
+overlay says which one is on screen ("Exact" / "Approximate").
+
+### Exact: the eBPF helper (`app_stats_net`)
+
+A small helper loads two kinds of eBPF program
+(`app_stats_net_src/src/bpf/net.bpf.c`), the way Android counts per-app data:
+
+- **Counting** — `cgroup_skb` ingress/egress programs on the root cgroup see every IP
+  packet any socket sends or receives, TCP and UDP alike, and add its length at IP level
+  to that socket's cookie. QUIC, connections lasting milliseconds and other users'
+  traffic are all counted. A buffer the kernel coalesced (GRO on receive, GSO/TSO on
+  send) arrives as one with a single header; the headers of its other segments are added
+  back from `gso_segs` (IPv4 20 / IPv6 40 bytes, plus TCP 32 or UDP 8), so the figures
+  add up to what the network cards carried rather than ~4 % under it.
+- **Ownership** — `fentry` programs on `tcp_sendmsg`/`tcp_recvmsg`/`udp(v6)_sendmsg`/
+  `udp(v6)_recvmsg` run in the process doing the I/O and tag the socket with its tgid,
+  parent tgid and process name (the thread-group leader's, not the I/O thread's), once. Bytes counted before a socket is tagged wait on its cookie.
+- The sampler folds each process onto its app. One that exited before the sampler looked
+  is placed through its recorded parent — a half-second `curl` belongs to the terminal it
+  ran in — and failing that under its own name, as a background row.
+
+Unattributed is then only traffic of no socket at all (ARP, DHCP, ICMP, forwarding) and
+link-layer framing the interfaces count. With a VPN (Tailscale, WireGuard), tunnelled
+traffic is counted twice — for the app inside the tunnel and for the tunnel daemon
+carrying it — so the rows can add up to more than the interfaces carried. Both are real.
+
+**Install, once:**
+
+```bash
+~/.config/quickshell/ii/scripts/appStats/install-net-helper.sh            # build + install
+~/.config/quickshell/ii/scripts/appStats/install-net-helper.sh status
+~/.config/quickshell/ii/scripts/appStats/install-net-helper.sh uninstall
+```
+
+Needs `clang` and `libbpf` (headers and library) to build. It installs a root-owned
+copy at `/usr/local/lib/ii/app_stats_net`, mode `0750` group `wheel`, with file
+capabilities — the helper never runs as root:
+
+| Capability      | Why                                                              |
+| --------------- | ---------------------------------------------------------------- |
+| `CAP_BPF`       | load the programs and create their maps                          |
+| `CAP_PERFMON`   | the `fentry` programs, and reading the parent of the current task |
+| `CAP_NET_ADMIN` | attach the packet counters to the root cgroup                    |
+
+Only `wheel` may run it, because it sees every user's per-process traffic. Every program
+is attached through a BPF link the helper owns, so all of them detach when it exits —
+it exits with the sampler (stdin closes, and a parent-death signal backs that up).
+Nothing is pinned or left behind. Replacing the file drops its capabilities, so a
+rebuild goes through the script again; that is also why it is not one of the helpers
+`rust-helpers.sh` rebuilds unattended. Opening App usage after installing restarts the
+sampler onto it.
+
+### Approximate: the socket counters (no privileges)
 
 - Each sample dumps every TCP socket through `NETLINK_SOCK_DIAG` — the request
   `ss -ti` makes — and reads `tcpi_bytes_received` and `tcpi_bytes_acked` (sent,
   retransmissions excluded) from its `tcp_info`.
 - A new socket is matched to its process once, through `/proc/<pid>/fd/*` pointing at
-  `socket:[<inode>]`. Sockets are then followed by their kernel cookie, which survives
-  the application closing the socket while the kernel still flushes it.
+  `socket:[<inode>]`, then followed by its kernel cookie.
 - When the kernel frees a socket it broadcasts its final counters on the sock_diag
-  destroy group, which any user may join. The bytes moved since the last sample are
-  credited to the app already matched to that socket, so a connection's tail is not lost.
-- The device total is the physical interfaces' `rx_bytes`/`tx_bytes` (those with a
-  `device` link — Wi-Fi, Ethernet, a USB tether; never a VPN tunnel, bridge or loopback,
-  which would count tunnelled traffic twice). Connections to the machine itself are left out.
+  destroy group, which any user may join; the tail since the last sample goes to the
+  app already matched to that socket.
 
-What no app is credited with goes into `__system`, shown as **Unattributed**:
+What this cannot match lands in Unattributed: **UDP** (QUIC/HTTP/3, a large share of
+browser traffic, has no counters there), **connections that open and close between two
+samples** (a 10 MiB download finished in half a second lands there whole), other users'
+sockets, and TCP/IP headers. In daily use that left about three quarters of the traffic
+unattributed, which is why the helper exists.
 
-- **UDP**, which has no byte counters there — so QUIC/HTTP/3, a large share of browser
-  traffic, is invisible per app.
-- **Connections that open and close between two samples.** A 10 MiB download that takes
-  half a second over a fast link is never seen open, and lands here whole.
-- **Other users' sockets** (root daemons), and **TCP/IP headers**, which the interfaces
-  count and the payload counters do not (≈ 3–4 % of bulk traffic).
-
-As with energy, the residual is shown rather than spread over the apps: its size says how
-far the per-app figures can be trusted. Exact UDP and short-connection attribution would
-need eBPF, which on a kernel with `unprivileged_bpf_disabled` means a root helper.
+In both modes the device total is the physical interfaces' `rx_bytes`/`tx_bytes` (those
+with a `device` link — Wi-Fi, Ethernet, a USB tether; never a tunnel, bridge or
+loopback), connections to the machine itself are left out, and the residual is shown as
+its own row rather than spread over the apps.
 
 ## Requirements
 
@@ -316,10 +365,12 @@ rather than stopping the daemon.
 Measured on this machine at the default 10 s interval, ~450 processes, Brave and
 Discord running: **6.8 ms of CPU per sample — 0.07 % of one core**, 3.5 MB RSS.
 
-Network data adds about **3 ms per sample** (A/B against `--no-network` at a 2 s
-interval with a browser open, 2026-11-04): one netlink dump, an fd walk only on samples
-where a new socket appeared, and a listener that sleeps until a socket closes. At the
-default interval that is about 0.03 % of one core.
+Network data on the socket counters adds about **3 ms per sample** (A/B against
+`--no-network` at a 2 s interval with a browser open, 2026-11-04): one netlink dump, an
+fd walk only on samples where a new socket appeared, and a listener that sleeps until a
+socket closes. At the default interval that is about 0.03 % of one core. The eBPF helper
+replaces all three with one map read per sample; its kernel side costs a map update per
+packet and a lookup per send/receive call.
 
 Most of the rest is the `/proc` sweep. The GPU scan is kept cheap by remembering which
 fds of which processes are DRM fds: a full sweep opens every fd of every process,

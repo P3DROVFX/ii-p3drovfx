@@ -185,7 +185,7 @@ impl Sweep {
 /// Hyprland session shares one session id, so `getsid` cannot find this boundary.
 /// The list only matters when the sampler is started outside the session (a systemd
 /// unit, say); launched from the shell, its own ancestry already covers these.
-fn is_session_leader(comm: &str) -> bool {
+pub fn is_session_leader(comm: &str) -> bool {
     matches!(
         comm,
         "systemd"
