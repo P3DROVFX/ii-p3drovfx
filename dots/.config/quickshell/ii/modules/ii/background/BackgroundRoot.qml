@@ -167,7 +167,7 @@ PanelWindow {
         id: overviewController
         active: (Config.options.background.useBackgroundOverviewAlways ?? false)
             || bgRoot.lockEffectRequested
-            || (GlobalStates.overviewBackgroundActive && (bgRoot.isMonitorFocused || bgRoot.mirroredOverview))
+            || (GlobalStates.overviewBackgroundActive && (bgRoot.isOverviewMonitor || bgRoot.mirroredOverview))
             || (Boolean(Config.options.background?.zoomOutEnabled) && bgRoot.scratchpadOpenOnMonitor)
         // Only where the overview is what would zoom this wallpaper in the first place.
         held: GlobalStates.overviewDragging && bgRoot.isMonitorFocused && !bgRoot.lockEffectRequested
@@ -177,7 +177,7 @@ PanelWindow {
         heldProgress: GlobalStates.gestureDragProgress
         style: bgRoot.lockEffectActive ? bgRoot.lockEffectStyle : Config.options.background.overviewBackgroundStyle
         lockDriven: bgRoot.lockEffectActive
-        openHold: GlobalStates.overviewZoomHeld && (bgRoot.isMonitorFocused || bgRoot.mirroredOverview) && !bgRoot.lockEffectActive
+        openHold: GlobalStates.overviewZoomHeld && (bgRoot.isOverviewMonitor || bgRoot.mirroredOverview) && !bgRoot.lockEffectActive
         legacyStyle: Config.options.background.zoomOutStyle
         videoEffectsDisabled: bgRoot.videoEffectsDisabled
         screenWidth: bgRoot.screen.width
@@ -206,24 +206,24 @@ PanelWindow {
 
     readonly property bool isGnomeLikeOverview: overviewController.isGnomeLike
 
-    // Publish the overview background transform for the focused monitor.
+    // Publish the overview background transform for the overview's monitor.
     Binding {
         target: GlobalStates
         property: "overviewZoomScale"
         value: bgRoot.isGnomeLikeOverview ? overviewController.scale : 1.0
-        when: bgRoot.isMonitorFocused
+        when: bgRoot.isOverviewMonitor
     }
     Binding {
         target: GlobalStates
         property: "overviewZoomOriginX"
         value: bgRoot.isGnomeLikeOverview ? overviewController.scaleOriginX : 0.5
-        when: bgRoot.isMonitorFocused
+        when: bgRoot.isOverviewMonitor
     }
     Binding {
         target: GlobalStates
         property: "overviewZoomOriginY"
         value: bgRoot.isGnomeLikeOverview ? overviewController.scaleOriginY : 0.5
-        when: bgRoot.isMonitorFocused
+        when: bgRoot.isOverviewMonitor
     }
 
     // Expose properties from controllers for internal bindings
@@ -279,6 +279,8 @@ PanelWindow {
     // Real Gnome shows the overview on every monitor, not just the focused one.
     readonly property bool mirroredOverview: GlobalStates.realGnomeMirrored && overviewController.isRealGnome
     readonly property bool isMonitorFocused: Quickshell.screens.length <= 1 || ((Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "") == (monitor ? monitor.name : ""))
+    // The overview's monitor stays the one it opened on while the pointer roams.
+    readonly property bool isOverviewMonitor: Quickshell.screens.length <= 1 || GlobalStates.overviewMonitor === (monitor ? monitor.name : "")
     readonly property bool loopEnabled: !videoEffectsDisabled && Config.options.background.parallax.loop
     readonly property var intensitySpans: [20, 15, 12, 10, 8, 7, 5, 4, 3, 2]
     readonly property int chunkSize: {

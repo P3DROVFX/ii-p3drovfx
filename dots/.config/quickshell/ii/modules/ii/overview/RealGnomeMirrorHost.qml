@@ -30,7 +30,7 @@ Scope {
 
             screen: modelData
             readonly property string screenName: modelData ? modelData.name : ""
-            readonly property string focusedName: Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""
+            readonly property string focusedName: GlobalStates.overviewMonitor
             readonly property var controller: GlobalStates.overviewBackgroundControllerFor(win.screenName)
             // Not the monitor holding the search.
             readonly property bool hosting: GlobalStates.realGnomeMirrored && GlobalStates.overviewOpen

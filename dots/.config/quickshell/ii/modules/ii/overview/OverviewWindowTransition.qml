@@ -313,7 +313,8 @@ Scope {
             // screen hotplug/reload `monitorFor()` can be null, and
             // `undefined == undefined` would activate every transition layer.
             readonly property string screenName: modelData ? modelData.name : ""
-            readonly property string focusedMonitorName: Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""
+            // The overview's monitor, held from open to close (not the pointer's).
+            readonly property string focusedMonitorName: GlobalStates.overviewMonitor
             // Real Gnome opens on every monitor (GlobalStates.realGnomeMirrored), so
             // the "focused" gate is open everywhere there.
             readonly property bool monitorFocused: Quickshell.screens.length <= 1
@@ -1143,6 +1144,16 @@ Scope {
                 && (tRoot.isGnomeLike || (overviewController && overviewController.windowTransitionMode !== "none"))
             visible: transitionAvailable
             mask: Region {}
+
+            // A Real Gnome window dragged out of the overview's monitor: this
+            // resident layer draws it on the others (with Real Gnome on every
+            // monitor, their mirror pickers do).
+            RealGnomeDragProxy {
+                z: 1000
+                screenName: tRoot.screenName
+                enabledHere: tRoot.isRealGnome && !GlobalStates.realGnomeMirrored
+                    && tRoot.screenName !== GlobalStates.overviewMonitor
+            }
 
             // ── Workspace switch animation ──────────────────────────────────
             // We detect workspace switches while overview is open and animate

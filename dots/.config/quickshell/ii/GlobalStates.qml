@@ -1447,6 +1447,23 @@ Singleton {
         }
     }
     property string activeSearchMonitor: ""
+    // The monitor the overview opened on, held while it is open and through its
+    // close. The zoom, the window captures and the Real Gnome picker belong to
+    // it, not to whichever monitor the pointer is over: following Hyprland's
+    // focus moved the overview mid-gesture as soon as a dragged window crossed
+    // to another monitor. Empty while nothing holds it; then the focused one.
+    property string overviewMonitorLatch: ""
+    readonly property string overviewMonitor: root.overviewMonitorLatch !== ""
+        ? root.overviewMonitorLatch : (Hyprland.focusedMonitor?.name ?? "")
+    Timer {
+        id: overviewMonitorReleaseTimer
+        // Outlives the close animation, so the closing zoom stays where it opened.
+        interval: 1500
+        onTriggered: {
+            if (!root.overviewOpen)
+                root.overviewMonitorLatch = "";
+        }
+    }
     property real activeSearchHeight: 0
     property real activeSearchWidth: 0
     property string activeSearchQuery: ""
@@ -3305,8 +3322,11 @@ Singleton {
             if (root.activeSearchMonitor === "") {
                 root.activeSearchMonitor = Hyprland.focusedMonitor?.name ?? "";
             }
+            overviewMonitorReleaseTimer.stop();
+            root.overviewMonitorLatch = root.activeSearchMonitor;
         } else {
             root.activeSearchMonitor = "";
+            overviewMonitorReleaseTimer.restart();
             // A panel cannot outlive the surface that hosted it, and a flag
             // left set would make the next Super press try to leave a panel
             // that is not there instead of opening the launcher.

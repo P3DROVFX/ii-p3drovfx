@@ -1521,22 +1521,22 @@ PanelWindow {
         id: searchDropMaskItem
         visible: searchDropLoader.active && searchDropLoader.item && searchDropLoader.item.isWidgetActive
         x: {
-            if (searchDropLoader.item && searchDropLoader.item.isOverviewVisible)
+            if (searchDropLoader.item && searchDropLoader.item.coversScreen)
                 return 0;
             return searchDropLoader.item ? searchDropLoader.item.x + (searchDropLoader.item.maskItem ? searchDropLoader.item.maskItem.x : 0) : 0;
         }
         y: {
-            if (searchDropLoader.item && searchDropLoader.item.isOverviewVisible)
+            if (searchDropLoader.item && searchDropLoader.item.coversScreen)
                 return 0;
             return searchDropLoader.item ? searchDropLoader.item.y + (searchDropLoader.item.maskItem ? searchDropLoader.item.maskItem.y : 0) : 0;
         }
         width: {
-            if (searchDropLoader.item && searchDropLoader.item.isOverviewVisible)
+            if (searchDropLoader.item && searchDropLoader.item.coversScreen)
                 return topPanel.width;
             return searchDropLoader.item ? (searchDropLoader.item.maskItem ? searchDropLoader.item.maskItem.width : 0) : 0;
         }
         height: {
-            if (searchDropLoader.item && searchDropLoader.item.isOverviewVisible)
+            if (searchDropLoader.item && searchDropLoader.item.coversScreen)
                 return topPanel.height;
             return searchDropLoader.item ? (searchDropLoader.item.maskItem ? searchDropLoader.item.maskItem.height : 0) : 0;
         }

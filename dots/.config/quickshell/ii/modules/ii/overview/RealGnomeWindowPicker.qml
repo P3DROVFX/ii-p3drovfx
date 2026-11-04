@@ -120,17 +120,6 @@ Item {
             GlobalStates.realGnomeDragOpacity = 1 - root.dropT;
     }
 
-    readonly property var heldToplevel: {
-        const address = GlobalStates.realGnomeDraggedWindow;
-        if (address === "" || GlobalStates.realGnomeDragPhase === "")
-            return null;
-        return (ToplevelManager.toplevels.values ?? []).find(toplevel => {
-            const raw = String(toplevel?.HyprlandToplevel?.address ?? "");
-            const key = raw.toLowerCase().indexOf("0x") === 0 ? "0x" + raw.slice(2) : "0x" + raw;
-            return key === address;
-        }) ?? null;
-    }
-
     readonly property int animDuration: Math.round(Math.max(1, Math.min(10, Number(Config.options.appearance.appLaunchAnimation.speed) || 4))
         * 55 * Appearance.animMultiplier)
 
@@ -492,37 +481,9 @@ Item {
     }
 
     // The held window under the pointer, on whichever monitor it is over.
-    Item {
-        id: dragProxy
-        readonly property rect g: GlobalStates.realGnomeDragRect
-        visible: GlobalStates.realGnomeDragPhase !== "" && root.heldToplevel !== null
-            && g.x < root.screenX + (root.screenObj ? root.screenObj.width : 0) && g.x + g.width > root.screenX
-            && g.y < root.screenY + (root.screenObj ? root.screenObj.height : 0) && g.y + g.height > root.screenY
-        x: g.x - root.screenX + root.offsetX
-        y: g.y - root.screenY + root.offsetY
-        width: g.width
-        height: g.height
-        opacity: GlobalStates.realGnomeDragOpacity
-
-        StyledRectangularShadow {
-            target: dragCapture
-            blur: 28
-            opacity: 0.45
-            offset: Qt.vector2d(0, 6)
-        }
-        Item {
-            id: dragCapture
-            anchors.fill: parent
-            layer.enabled: true
-            layer.effect: OverviewRoundedMask {
-                cornerRadius: Appearance.rounding.windowRounding
-            }
-            ScreencopyView {
-                anchors.fill: parent
-                captureSource: dragProxy.visible ? root.heldToplevel : null
-                live: true
-                paintCursor: false
-            }
-        }
+    RealGnomeDragProxy {
+        screenName: root.screenName
+        offsetX: root.offsetX
+        offsetY: root.offsetY
     }
 }

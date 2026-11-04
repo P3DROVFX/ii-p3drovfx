@@ -43,7 +43,7 @@ Scope {
                     // the stable ShellScreen name and require a real focused
                     // monitor so only one surface can be active.
                     readonly property string screenName: modelData ? modelData.name : ""
-                    readonly property string focusedMonitorName: Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""
+                    readonly property string focusedMonitorName: GlobalStates.overviewMonitor
                     property bool monitorIsFocused: Quickshell.screens.length <= 1
                         || (screenName !== "" && focusedMonitorName !== "" && screenName === focusedMonitorName)
                     property bool contentKeepAlive: false
