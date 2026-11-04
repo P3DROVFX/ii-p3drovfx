@@ -363,8 +363,9 @@ Item {
         /// A fixed-height chart for the stacked page instead of one filling the pane.
         property bool stacked: false
 
-        readonly property color colPane: ClockStyle.colPrimaryContainer
-        readonly property color colContent: ClockStyle.colOnPrimaryContainer
+        // The same pair as the App usage and Battery heroes: the tabs read as one app.
+        readonly property color colPane: ClockStyle.colPrimary
+        readonly property color colContent: ClockStyle.colOnPrimary
 
         readonly property int totalSize: Math.round(Math.max(48, Math.min(112, root.heroContentWidth * 0.2)))
         readonly property int splitSize: Math.round(Math.max(20, Math.min(28, root.heroContentWidth * 0.05)))
