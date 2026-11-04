@@ -11,6 +11,7 @@ UsageCodeSnippet 1.0 UsageCodeSnippet.qml
 UsageColumnChart 1.0 UsageColumnChart.qml
 UsageFigure 1.0 UsageFigure.qml
 UsageHistogram 1.0 UsageHistogram.qml
+UsageNetworkPage 1.0 UsageNetworkPage.qml
 UsagePeriodControls 1.0 UsagePeriodControls.qml
 UsageSemiDonut 1.0 UsageSemiDonut.qml
 UsageSettingsPage 1.0 UsageSettingsPage.qml

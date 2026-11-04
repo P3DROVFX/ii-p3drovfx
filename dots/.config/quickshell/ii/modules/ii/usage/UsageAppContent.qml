@@ -46,10 +46,12 @@ FocusScope {
     // ── Tabs ────────────────────────────────────────────────────────────
     readonly property var opts: Config.options.appStats
     /// The battery page exists only on a machine that has one; limits only while on.
+    /// Network is always listed: switched off, its page is where it is turned on.
     readonly property var tabs: {
         const list = [{ id: "apps", icon: "query_stats", label: Translation.tr("App usage") }];
         if (Battery.available)
             list.push({ id: "battery", icon: "battery_full", label: Translation.tr("Battery") });
+        list.push({ id: "network", icon: "swap_vert", label: Translation.tr("Network") });
         if (Config.options.screenTime?.enable ?? true)
             list.push({ id: "limits", icon: "hourglass_top", label: Translation.tr("Daily limits") });
         return list;
@@ -58,11 +60,13 @@ FocusScope {
     readonly property var tabComponents: ({
         apps: appsComponent,
         battery: batteryComponent,
+        network: networkComponent,
         limits: limitsComponent
     })
     readonly property var badges: ({
         apps: "",
         battery: Battery.available && Battery.isCharging ? "•" : "",
+        network: "",
         limits: ScreenTimeLimits.paused ? "•" : ""
     })
 
@@ -437,6 +441,15 @@ FocusScope {
     Component {
         id: batteryComponent
         UsageBatteryPage {
+            layoutWidth: root.pageLayoutWidth
+            compact: root.compact
+            viewState: viewState
+        }
+    }
+
+    Component {
+        id: networkComponent
+        UsageNetworkPage {
             layoutWidth: root.pageLayoutWidth
             compact: root.compact
             viewState: viewState

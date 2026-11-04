@@ -470,7 +470,6 @@ Rectangle {
                     }
                 }
                 ClockSettingsRow {
-                    last: true
                     symbol: "terminal"
                     title: Translation.tr("Record background services")
                     description: Translation.tr("Off means processes with no window are never written down, and cannot be shown later")
@@ -478,6 +477,17 @@ Rectangle {
                     onClicked: root.opts.trackHeadless = !root.opts.trackHeadless
                     Toggle {
                         key: "trackHeadless"
+                    }
+                }
+                ClockSettingsRow {
+                    last: true
+                    symbol: "swap_vert"
+                    title: Translation.tr("Record network data")
+                    description: Translation.tr("TCP data per app, read from the kernel's own socket counters. QUIC and connections shorter than one sample stay unattributed")
+                    clickable: true
+                    onClicked: root.opts.trackNetwork = !root.opts.trackNetwork
+                    Toggle {
+                        key: "trackNetwork"
                     }
                 }
             }

@@ -11,7 +11,7 @@ import qs.modules.common.functions
 
 /**
  * Per-app usage and energy history: screen time, watt-hours, CPU and GPU time,
- * memory, launches and sessions.
+ * memory, launches, sessions and TCP data.
  *
  * Runs the `app_stats` sampler and reads back what it writes. The daemon owns every
  * measurement — /proc, DRM fdinfo, RAPL and Hyprland's event socket — and knows only
@@ -47,7 +47,12 @@ Singleton {
             mjFg: 7,
             mjBg: 8,
             launches: 9,
-            sessions: 10
+            sessions: 10,
+            // KiB of TCP payload. Absent from rows that moved none, and from every file
+            // written before the sampler counted it; both read as zero.
+            netRx: 11,
+            netTx: 12,
+            netBg: 13
         })
 
     readonly property var opts: Config.options?.appStats ?? null
@@ -63,6 +68,7 @@ Singleton {
     readonly property string retentionMode: root.opts?.retentionMode ?? "previousMonth"
     readonly property string energySource: root.opts?.energySource ?? "auto"
     readonly property int gpuFullEvery: root.opts?.gpuFullEvery ?? 30
+    readonly property bool trackNetwork: root.opts?.trackNetwork ?? true
     readonly property bool weekStartsMonday: root.opts?.weekStartsMonday ?? true
     /// Seconds of no input before foreground time is paused. 0 disables the monitor.
     readonly property int idleTimeout: root.opts?.idleTimeoutSec ?? 300
@@ -87,6 +93,9 @@ Singleton {
     /// Energy source actually in use: "rapl", "battery" or "none".
     property string source: ""
     property var lastSample: null
+    /// Whether the running sampler reports data at all; true until a sample says
+    /// otherwise, so the Network page does not flash its rebuild notice on open.
+    property bool samplerCountsNetwork: true
 
     /// "YYYY-MM-DD" -> parsed day document, or null for a day with no data. The null
     /// matters: it is what stops a missing day from being requested forever.
@@ -387,6 +396,9 @@ Singleton {
             break;
         case "sample":
             root.lastSample = msg;
+            // A sampler built before it counted data never sends these, which is the
+            // only way to tell "no traffic" apart from "not looking".
+            root.samplerCountsNetwork = msg.sysRx !== undefined;
             break;
         case "flush":
             todayView.reload();
@@ -410,6 +422,9 @@ Singleton {
             mjBg: 0,
             launches: 0,
             sessions: 0,
+            netRx: 0,
+            netTx: 0,
+            netBg: 0,
             hourCount: 0
         };
     }
@@ -425,6 +440,9 @@ Singleton {
         rec.mjBg += t[f.mjBg] ?? 0;
         rec.launches += t[f.launches] ?? 0;
         rec.sessions += t[f.sessions] ?? 0;
+        rec.netRx += t[f.netRx] ?? 0;
+        rec.netTx += t[f.netTx] ?? 0;
+        rec.netBg += t[f.netBg] ?? 0;
         rec.ramPeak = Math.max(rec.ramPeak, t[f.ramPeak] ?? 0);
         // Each stored hour already holds a mean; averaging those means weights every
         // hour equally, so a partial hour counts as much as a full one. Close enough
@@ -497,6 +515,9 @@ Singleton {
                 // of the rows on screen.
                 system.mjFg += rec.mjFg;
                 system.mjBg += rec.mjBg;
+                // Their data likewise, so the device total does not shrink with the filter.
+                system.netRx += rec.netRx;
+                system.netTx += rec.netTx;
                 continue;
             }
             list.push(rec);
@@ -523,6 +544,9 @@ Singleton {
         totals.mjBg += rec.mjBg;
         totals.launches += rec.launches;
         totals.sessions += rec.sessions;
+        totals.netRx += rec.netRx;
+        totals.netTx += rec.netTx;
+        totals.netBg += rec.netBg;
         totals.ramPeak = Math.max(totals.ramPeak, rec.ramPeak);
         totals.wh = root.wh(totals.mjFg + totals.mjBg);
     }
@@ -615,6 +639,62 @@ Singleton {
             cache.table[cacheKey] = hours;
         }
         return hours;
+    }
+
+    /**
+     * The device's TCP data per hour of `date` in KiB: `{ rx, tx, matched }`, 24
+     * entries each. `rx`/`tx` are every row together — apps, hidden services and the
+     * unattributed remainder — which is what the physical interfaces carried;
+     * `matched` is the part (both directions) some process was credited with.
+     * Shares `deviceHoursCache`.
+     */
+    function networkHours(date) {
+        const history = root.history;
+        const cacheKey = `${date}|net`;
+        const cache = root.deviceHoursCache;
+        if (cache.owner !== history) {
+            cache.owner = history;
+            cache.table = ({});
+        }
+        let hours = cache.table[cacheKey];
+        if (!hours) {
+            hours = {
+                rx: new Array(24).fill(0),
+                tx: new Array(24).fill(0),
+                matched: new Array(24).fill(0)
+            };
+            const apps = history[date]?.apps;
+            const f = root.field;
+            for (const appKey in apps ?? {}) {
+                const rec = apps[appKey];
+                const isSystem = appKey === root.systemKey;
+                for (const hour in rec.h) {
+                    const t = rec.h[hour];
+                    const rx = t[f.netRx] ?? 0;
+                    const tx = t[f.netTx] ?? 0;
+                    if (rx + tx === 0) continue;
+                    const index = parseInt(hour);
+                    hours.rx[index] += rx;
+                    hours.tx[index] += tx;
+                    if (!isSystem) hours.matched[index] += rx + tx;
+                }
+            }
+            cache.table[cacheKey] = hours;
+        }
+        return hours;
+    }
+
+    /// `networkHours` rolled into one `{ rx, tx, matched }` per date, parallel to `dates`.
+    function networkDaily(dates) {
+        return dates.map(date => {
+            const hours = root.networkHours(date);
+            const sum = values => values.reduce((total, value) => total + value, 0);
+            return {
+                rx: sum(hours.rx),
+                tx: sum(hours.tx),
+                matched: sum(hours.matched)
+            };
+        });
     }
 
     /// One field summed per hour of day (24 entries) across `dates`.
@@ -1000,7 +1080,7 @@ Singleton {
         }
     }
 
-    readonly property string launchKey: [root.intervalMs, root.flushMs, root.retentionDays, root.retentionMode, root.energySource, root.gpuFullEvery, root.trackHeadless].join("|")
+    readonly property string launchKey: [root.intervalMs, root.flushMs, root.retentionDays, root.retentionMode, root.energySource, root.gpuFullEvery, root.trackHeadless, root.trackNetwork].join("|")
     onLaunchKeyChanged: root.restart()
 
     Process {
@@ -1010,6 +1090,7 @@ Singleton {
         command: {
             const args = [root.binaryPath, "--state-dir", root.stateDir, "--interval-ms", `${root.intervalMs}`, "--flush-ms", `${root.flushMs}`, "--retention-days", `${root.retentionDays}`, "--retention-mode", root.retentionMode === "previousMonth" ? "previous-month" : "fixed", "--energy", root.energySource, "--gpu-full-every", `${root.gpuFullEvery}`];
             if (!root.trackHeadless) args.push("--no-headless");
+            if (!root.trackNetwork) args.push("--no-network");
             return args;
         }
 

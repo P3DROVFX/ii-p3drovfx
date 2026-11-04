@@ -3258,6 +3258,10 @@ Singleton {
                 // Sample intervals between full /proc sweeps for new GPU clients.
                 // Only a backstop; a new window forces one immediately.
                 property int gpuFullEvery: 30
+                // Per-app TCP data from the kernel's socket counters, no privilege
+                // needed. UDP (QUIC) and connections shorter than one sample are not
+                // matched to an app and land in the device's unattributed row.
+                property bool trackNetwork: true
                 // Seconds without input before foreground time stops accruing.
                 // 0 turns the idle monitor off, and time keeps running.
                 property int idleTimeoutSec: 300

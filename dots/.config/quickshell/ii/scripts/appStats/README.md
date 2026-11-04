@@ -122,6 +122,7 @@ startup, so changing one relaunches it.
 | `gpuFullEvery`     | `30`              | samples between full GPU rescans                                                                                                                                          |
 | `idleTimeoutSec`   | `300`             | seconds without input before foreground time stops; `0` disables the idle monitor                                                                                         |
 | `trackHeadless`    | `true`            | record processes that own no window                                                                                                                                       |
+| `trackNetwork`     | `true`            | record TCP data per app from the kernel's socket counters (see [Network data](#network-data))                                                                            |
 
 The rest are read live by the overlay.
 
@@ -132,7 +133,7 @@ The rest are read live by the overlay.
 | `defaultGranularity` | `"day"` | `day`, `week` or `month`                                                                                                       |
 | `defaultMetric`      | `"fg"`  | `fg`, `focus`, `energy`, `cpu` or `gpu`                                                                                        |
 | `rememberLastView`   | `true`  | reopen on the last granularity, metric and view instead of the defaults above                                                  |
-| `lastView`           | `"apps"`| which half of the overlay reopens: `apps` or `battery`. Ignored on a machine with no battery                                   |
+| `lastView`           | `"apps"`| which page reopens: `apps`, `battery`, `network` or `limits`. A page that is not there falls back to `apps`                    |
 | `weekStartsMonday`   | `true`  | which day a calendar week runs from                                                                                            |
 | `keepSelection`      | `false` | keep the picked app across openings                                                                                            |
 | `showComparison`     | `false` | percent change against the period before. Off by default: it parses that period as well, doubling the files a month view reads |
@@ -159,6 +160,7 @@ It is a normal program: run it in a terminal and watch the NDJSON.
 | `--energy`         | `auto`                                      | `rapl`, `battery`, `auto` or `off`                                                                                |
 | `--gpu-full-every` | `30`                                        | intervals between full GPU rescans (a new window forces one)                                                      |
 | `--no-headless`    | —                                           | skip processes that own no window                                                                                 |
+| `--no-network`     | —                                           | skip the socket dump, the fd walk and the close listener; no data is recorded                                     |
 | `--quiet`          | —                                           | write day files, print nothing                                                                                    |
 
 ## Protocol
@@ -193,7 +195,14 @@ a month of history and retention is an unlink. Each app maps hours to a fixed tu
 | 2   | `focus`  | s    |     | 8   | `mJbg`     | mJ    |
 | 3   | `cpu`    | s    |     | 9   | `launches` | count |
 | 4   | `gpu`    | s    |     | 10  | `sessions` | count |
-| 5   | `ramAvg` | MiB  |     |     |            |       |
+| 5   | `ramAvg` | MiB  |     | 11  | `netRx`    | KiB   |
+|     |          |      |     | 12  | `netTx`    | KiB   |
+|     |          |      |     | 13  | `netBg`    | KiB   |
+
+`netRx`/`netTx` are TCP payload received and sent; `netBg` is the part of both that
+moved while the app was in the background, split by time within each sample the way
+energy is. The three are written only when one of them is non-zero, so a row that
+never touched the network keeps the 11-field shape and older files read unchanged.
 
 `focus` is a subset of `fg`: on a tiling WM every mapped window on the active
 workspace is "foreground", which inflates screen time, so focused time is recorded
@@ -205,7 +214,8 @@ of them adds three. The overlay shows the latter as "Appearances" for that reaso
 
 The `__system` row is the device, not an app. Its `fg` is screen time counted once
 however many windows were up, its `bg` the time the machine was awake with nothing
-on screen, and `mJbg` the energy no app accounts for.
+on screen, `mJbg` the energy no app accounts for, and `netRx`/`netTx` the data the
+physical interfaces carried that no app accounts for.
 
 On a machine with a battery the file carries one more section, `bat`, holding the
 pack's full capacity in mWh and its own hour tuple. It sits beside `apps` rather than
@@ -252,6 +262,36 @@ into an explicit `__system` bucket instead of being normalised away. On this mac
 that residual is **50–60 %** at light load, which is the honest measure of how much
 weight the per-app numbers can bear.
 
+## Network data
+
+Per-app data is read without privileges from the kernel's own TCP counters:
+
+- Each sample dumps every TCP socket through `NETLINK_SOCK_DIAG` — the request
+  `ss -ti` makes — and reads `tcpi_bytes_received` and `tcpi_bytes_acked` (sent,
+  retransmissions excluded) from its `tcp_info`.
+- A new socket is matched to its process once, through `/proc/<pid>/fd/*` pointing at
+  `socket:[<inode>]`. Sockets are then followed by their kernel cookie, which survives
+  the application closing the socket while the kernel still flushes it.
+- When the kernel frees a socket it broadcasts its final counters on the sock_diag
+  destroy group, which any user may join. The bytes moved since the last sample are
+  credited to the app already matched to that socket, so a connection's tail is not lost.
+- The device total is the physical interfaces' `rx_bytes`/`tx_bytes` (those with a
+  `device` link — Wi-Fi, Ethernet, a USB tether; never a VPN tunnel, bridge or loopback,
+  which would count tunnelled traffic twice). Connections to the machine itself are left out.
+
+What no app is credited with goes into `__system`, shown as **Unattributed**:
+
+- **UDP**, which has no byte counters there — so QUIC/HTTP/3, a large share of browser
+  traffic, is invisible per app.
+- **Connections that open and close between two samples.** A 10 MiB download that takes
+  half a second over a fast link is never seen open, and lands here whole.
+- **Other users' sockets** (root daemons), and **TCP/IP headers**, which the interfaces
+  count and the payload counters do not (≈ 3–4 % of bulk traffic).
+
+As with energy, the residual is shown rather than spread over the apps: its size says how
+far the per-app figures can be trusted. Exact UDP and short-connection attribution would
+need eBPF, which on a kernel with `unprivileged_bpf_disabled` means a root helper.
+
 ## Requirements
 
 None of these are checked at startup; each one missing costs a category of data
@@ -276,7 +316,12 @@ rather than stopping the daemon.
 Measured on this machine at the default 10 s interval, ~450 processes, Brave and
 Discord running: **6.8 ms of CPU per sample — 0.07 % of one core**, 3.5 MB RSS.
 
-Most of that is the `/proc` sweep. The GPU scan is kept cheap by remembering which
+Network data adds about **3 ms per sample** (A/B against `--no-network` at a 2 s
+interval with a browser open, 2026-11-04): one netlink dump, an fd walk only on samples
+where a new socket appeared, and a listener that sleeps until a socket closes. At the
+default interval that is about 0.03 % of one core.
+
+Most of the rest is the `/proc` sweep. The GPU scan is kept cheap by remembering which
 fds of which processes are DRM fds: a full sweep opens every fd of every process,
 while the scans in between reopen only the handful that matter. Removing that cache
 roughly doubles the cost.
