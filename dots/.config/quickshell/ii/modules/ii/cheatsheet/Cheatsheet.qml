@@ -711,7 +711,7 @@ Scope {
                             Layout.preferredHeight: Math.min(850, calculatedHeight)
                             Layout.maximumHeight: calculatedHeight
                             spacing: 10
-                            readonly property bool currentPageLocksHorizontalSwipe: currentItem && currentItem.status === Loader.Ready && currentItem.item && currentItem.item.timetableDragActive === true
+                            readonly property bool currentPageLocksHorizontalSwipe: currentItem && currentItem.status === Loader.Ready && currentItem.item && (currentItem.item.timetableDragActive === true || currentItem.item.horizontalSwipeLocked === true)
                             interactive: !swipeView.currentPageLocksHorizontalSwipe
                             onCurrentIndexChanged: {
                                 if (selectionReady && count === root.tabButtonList.length && cheatsheetRoot.selectedTab !== currentIndex)

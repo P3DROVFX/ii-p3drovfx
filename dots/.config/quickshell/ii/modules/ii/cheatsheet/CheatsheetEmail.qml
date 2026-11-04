@@ -63,6 +63,11 @@ Item {
     property bool selectedUnread: false
     property string selectedLabelsString: ""
     property bool selectedIsStack: false
+    // Cheatsheet.qml stops the tab swipe while this is true, so a horizontal
+    // drag inside an open email selects text instead of changing tabs.
+    readonly property bool horizontalSwipeLocked: root.emailOpen
+        && ((emailContent.visible && emailContent.locksHorizontalSwipe)
+            || (emailStackedContent.visible && emailStackedContent.locksHorizontalSwipe))
 
     property real emailOpenStartX: 0
     property real emailOpenStartY: 0
