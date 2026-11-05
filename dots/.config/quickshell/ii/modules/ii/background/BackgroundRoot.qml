@@ -68,6 +68,10 @@ PanelWindow {
     // would freeze the PREVIOUS wallpaper's decode size (native on boot, or the wrong size after
     // a preset switch). The wallpaper source is committed to the plane only while this is true.
     property bool wallpaperSizeFresh: false
+    // The file revision (WallpaperLayout.fileRevisions) the probe last answered
+    // for: a file rewritten in place keeps its path, so `wallpaperSizeFresh`
+    // alone cannot tell the old answer from the new one.
+    property int probedRevision: 0
 
     // State controllers
     WallpaperSizeProbe {
@@ -79,12 +83,14 @@ PanelWindow {
             bgRoot.recalcWallpaperScale();
             bgRoot.wallpaperSizeKnown = true;
             bgRoot.wallpaperSizeFresh = true;
+            bgRoot.probedRevision = WallpaperLayout.revisionOf(bgRoot.wallpaperPath);
         }
         // A missing or failing `magick` must never keep the wallpaper effects switched off for the
         // whole session - let them capture the screen-sized guess instead.
         onExited: (exitCode, exitStatus) => {
             bgRoot.wallpaperSizeKnown = true;
             bgRoot.wallpaperSizeFresh = true;
+            bgRoot.probedRevision = WallpaperLayout.revisionOf(bgRoot.wallpaperPath);
         }
     }
 
@@ -95,6 +101,7 @@ PanelWindow {
         onTriggered: {
             bgRoot.wallpaperSizeKnown = true;
             bgRoot.wallpaperSizeFresh = true;
+            bgRoot.probedRevision = WallpaperLayout.revisionOf(bgRoot.wallpaperPath);
         }
     }
 
@@ -505,6 +512,12 @@ PanelWindow {
         bgRoot.wallpaperSizeFresh = false;
         bgRoot.updateZoomScale();
     }
+    // The same file rewritten (a quarter turn written into it): new dimensions.
+    readonly property int wallpaperRevision: WallpaperLayout.revisionOf(bgRoot.wallpaperPath)
+    onWallpaperRevisionChanged: {
+        bgRoot.wallpaperSizeFresh = false;
+        bgRoot.updateZoomScale();
+    }
     onPreferredWallpaperScaleChanged: bgRoot.recalcWallpaperScale()
 
     function recalcWallpaperScale() {
@@ -749,6 +762,7 @@ PanelWindow {
             framingKey: bgRoot.framingSourcePath
             wallpaperSizeKnown: bgRoot.wallpaperSizeKnown
             wallpaperSizeFresh: bgRoot.wallpaperSizeFresh
+            probedRevision: bgRoot.probedRevision
             wallpaperToScreenRatio: bgRoot.wallpaperToScreenRatio
             movableXSpace: bgRoot.movableXSpace
             movableYSpace: bgRoot.movableYSpace

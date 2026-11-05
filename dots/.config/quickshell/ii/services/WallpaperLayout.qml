@@ -577,13 +577,15 @@ Singleton {
         return entry;
     }
 
-    function writeList(next) {
+    function writeList(next, skipHistory) {
         const before = root.listCopy();
         // An entry with nothing in it is the default and is not kept.
         const after = next.filter(entry => entry.path !== "" || entry.framings.length > 0);
         if (JSON.stringify(before) === JSON.stringify(after))
             return false;
         Config.options.background.monitorWallpapers = after;
+        if (skipHistory === true)
+            return true;
         GlobalStates.editHistoryPush({
             "undo": () => {
                 Config.options.background.monitorWallpapers = before;
@@ -606,13 +608,13 @@ Singleton {
         entry.framings = entry.framings.slice(0, root.framingMemory);
     }
 
-    function commitFraming(name, path, framing) {
+    function commitFraming(name, path, framing, skipHistory) {
         const clean = root.cleanPath(path);
         if (!root.available || !name || clean === "")
             return;
         const list = root.listCopy();
         root.setFramingIn(root.entryIn(list, name), clean, framing);
-        root.writeList(list);
+        root.writeList(list, skipHistory);
     }
 
     // The framing a button starts from: the gesture's destination while one
@@ -642,7 +644,122 @@ Singleton {
         const next = g
             ? WallpaperFraming.rotateBy(g.planeWidth, g.planeHeight, g.imageWidth, g.imageHeight, current, turns)
             : Object.assign({}, current, { "rotation": WallpaperFraming.snapRotation(current.rotation + turns * 90) });
-        root.commitFraming(name, root.sourcePathFor(name), next);
+        const path = root.sourcePathFor(name);
+        const bakes = root.canBake(path);
+        // A turn that ends up in the file is not undoable from the mode's
+        // history: undoing the framing would turn the rewritten file back.
+        root.commitFraming(name, path, next, bakes);
+        if (bakes)
+            root.scheduleBake(name);
+    }
+
+    // ── Quarter turns written into the file ──────────────────────────────────
+    // A turn plays at once on the plane (the framing's rotation), and once the
+    // clicks stop the file itself is rewritten turned and the framing's
+    // rotation given back: the shell then draws an upright picture with no
+    // rotation at all. The rewrite bumps the file's revision, which every
+    // wallpaper surface appends to its source (`?r=N`) so the decode cache and
+    // the size probe see a new picture; the surface holds the old one on
+    // screen where it is until the new one has decoded. The framing's offsets,
+    // zoom and mirrors are in screen space and stay as they are: an upright
+    // file at rotation r-90k looks exactly like the old file at rotation r.
+    property var fileRevisions: ({})
+
+    function revisionOf(path) {
+        return root.fileRevisions[root.cleanPath(path)] ?? 0;
+    }
+
+    // The source to load for a path: unchanged until the file is rewritten.
+    function revisionSource(path) {
+        const rev = root.revisionOf(path);
+        if (rev === 0)
+            return path;
+        return "file://" + root.cleanPath(path) + "?r=" + rev;
+    }
+
+    function canBake(path) {
+        const clean = root.cleanPath(path);
+        return root.isImagePath(clean) && !clean.startsWith(root.cleanPath(Directories.assetsPath) + "/");
+    }
+
+    property string bakeScreen: ""
+
+    function scheduleBake(name) {
+        root.bakeScreen = name;
+        bakeTimer.restart();
+    }
+
+    Timer {
+        id: bakeTimer
+        // A run of clicks is one rewrite; a turn still landing retries.
+        interval: 500
+        repeat: false
+        onTriggered: root.startBake()
+    }
+
+    function startBake() {
+        const name = root.bakeScreen;
+        if (name === "")
+            return;
+        // Busy (a rewrite, a gesture, a landing turn): try again shortly.
+        if (bakeProcess.running || root.interacting || liveAnimation.running || commitTimer.running) {
+            bakeTimer.restart();
+            return;
+        }
+        const path = root.cleanPath(root.sourcePathFor(name));
+        if (!root.canBake(path))
+            return;
+        const turns = Math.round(root.savedFramingFor(name, path).rotation / 90) % 4;
+        if (turns === 0)
+            return;
+        bakeProcess.screen = name;
+        bakeProcess.path = path;
+        bakeProcess.turns = turns;
+        bakeProcess.running = true;
+    }
+
+    Process {
+        id: bakeProcess
+        property string screen: ""
+        property string path: ""
+        property int turns: 0
+        // Written beside the file and moved over it, so nothing ever reads a
+        // half-written picture.
+        command: ["bash", "-c", `f="$1"; deg="$2"
+[ -f "$f" ] && [ -w "$f" ] && [ -w "$(dirname "$f")" ] || exit 3
+base="$(basename "$f")"; tmp="$(dirname "$f")/.\${base%.*}.rotating.\${base##*.}"
+magick "$f" -rotate "$deg" "$tmp" && mv -f "$tmp" "$f" || { rm -f "$tmp"; exit 4; }`,
+            "rotate", bakeProcess.path, String(bakeProcess.turns * 90)]
+        onExited: (exitCode, exitStatus) => {
+            if (exitCode !== 0) {
+                // The framing keeps the turn: the shell goes on drawing it.
+                console.warn(`[WallpaperLayout] Could not rotate ${bakeProcess.path} (exit ${exitCode}); keeping the turn in the framing`);
+                return;
+            }
+            root.finishBake(bakeProcess.screen, bakeProcess.path, bakeProcess.turns);
+        }
+    }
+
+    function finishBake(name, path, turns) {
+        // The new revision first: each surface holds the picture it shows at
+        // the moment the revision moves, before the framing below changes.
+        const next = Object.assign({}, root.fileRevisions);
+        next[path] = (next[path] ?? 0) + 1;
+        root.fileRevisions = next;
+
+        const live = root.isLive(name, path);
+        if (live) {
+            // The preview takes the given-back rotation without a turn back.
+            root.settleLive();
+            root.liveAngle = WallpaperFraming.snapRotation(root.liveAngle - turns * 90);
+        }
+        const saved = root.savedFramingFor(name, path);
+        root.commitFraming(name, path, Object.assign({}, saved, {
+            "rotation": WallpaperFraming.snapRotation(saved.rotation - turns * 90)
+        }), true);
+        // Clicks during the rewrite left a turn of their own.
+        if (WallpaperFraming.snapRotation(root.savedFramingFor(name, path).rotation) !== 0)
+            root.scheduleBake(name);
     }
 
     function flip(name, axis) {

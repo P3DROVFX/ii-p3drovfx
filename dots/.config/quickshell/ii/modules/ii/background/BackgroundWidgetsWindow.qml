@@ -474,6 +474,9 @@ PanelWindow {
         getWallpaperSizeProc.running = true;
     }
     onWallpaperPathChanged: updateWallpaperSize()
+    // The same file rewritten in place (a quarter turn written into it).
+    readonly property int wallpaperRevision: WallpaperLayout.revisionOf(bgWidgetsWindow.wallpaperPath)
+    onWallpaperRevisionChanged: updateWallpaperSize()
 
     property bool wallpaperSafetyTriggered: {
         const enabled = Config.options.workSafety.enable.wallpaper;

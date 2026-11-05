@@ -41,6 +41,9 @@ Item {
     Component.onCompleted: imgA.source = imageSource
 
     function fadeTo(newSrc) {
+        // quietChange describes this change only, whichever path it takes.
+        root._quietPending = root.quietChange;
+        root.quietChange = false;
         var back = imgAIsBack ? imgA : imgB;
         var front = imgAIsBack ? imgB : imgA;
 
@@ -80,6 +83,7 @@ Item {
             front = root.imgAIsBack ? imgB : imgA;
         }
 
+        front.pinned = false;
         front.source = newSrc;
         front.z = 1;
         back.z = 0;
@@ -178,7 +182,21 @@ Item {
         }
     }
 
+    // The next change shows the same picture (a file rewritten in place):
+    // swapped as soon as it has decoded, with no transition to play.
+    property bool quietChange: false
+    property bool _quietPending: false
+
     function startTransition() {
+        if (root._quietPending) {
+            root._quietPending = false;
+            const shown = root.toImage;
+            const old = root.fromImage;
+            shown.opacity = 1;
+            old.source = "";
+            root.imgAIsBack = !root.imgAIsBack;
+            return;
+        }
         if (root.animated && GlobalStates.presetHoldMotion) {
             root.pendingTransition = true;
             return;
@@ -255,10 +273,9 @@ Item {
 
             ShaderEffectSource {
                 id: fromSource
-                sourceItem: root.imgAIsBack ? imgA : imgB
-                // A held picture is smaller/offset inside this item: capture
-                // this item's rect from it, so the shader sees it in place.
-                sourceRect: Qt.rect(-sourceItem.x, -sourceItem.y, root.width, root.height)
+                // The slot, not the Image: a held picture is moved/turned
+                // inside it, and only the slot's capture includes that.
+                sourceItem: root.imgAIsBack ? slotA : slotB
                 hideSource: shaderProgressAnim.running
                 live: shaderProgressAnim.running
                 visible: false
@@ -266,8 +283,7 @@ Item {
 
             ShaderEffectSource {
                 id: toSource
-                sourceItem: root.imgAIsBack ? imgB : imgA
-                sourceRect: Qt.rect(-sourceItem.x, -sourceItem.y, root.width, root.height)
+                sourceItem: root.imgAIsBack ? slotB : slotA
                 hideSource: shaderProgressAnim.running
                 live: shaderProgressAnim.running
                 visible: false
@@ -342,8 +358,10 @@ Item {
     function _pin(img) {
         if (img.pinned || String(img.source) === "")
             return;
-        img.pinTL = img.mapToItem(root.pinReference, 0, 0);
-        img.pinBR = img.mapToItem(root.pinReference, img.width, img.height);
+        // Three corners: enough for any move, scale, turn or mirror.
+        img.pinO = img.mapToItem(root.pinReference, 0, 0);
+        img.pinU = img.mapToItem(root.pinReference, img.width, 0);
+        img.pinV = img.mapToItem(root.pinReference, 0, img.height);
         img.pinned = true;
     }
 
@@ -353,12 +371,24 @@ Item {
     // a frame render between the plane's change and the correction (flicker).
     property var pinDependencies: null
 
-    function _mapPin(tl, br, deps) {
+    // The held corners in this item's coordinates, as a size and the matrix
+    // that lays a picture of that size onto them.
+    function _mapPin(img, deps) {
         if (!root.pinReference)
-            return Qt.rect(0, 0, root.width, root.height);
-        const a = root.pinReference.mapToItem(root, tl.x, tl.y);
-        const b = root.pinReference.mapToItem(root, br.x, br.y);
-        return Qt.rect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+            return { "w": root.width, "h": root.height, "m": Qt.matrix4x4() };
+        const o = root.pinReference.mapToItem(root, img.pinO.x, img.pinO.y);
+        const u = root.pinReference.mapToItem(root, img.pinU.x, img.pinU.y);
+        const v = root.pinReference.mapToItem(root, img.pinV.x, img.pinV.y);
+        const w = Math.max(1e-3, Math.hypot(u.x - o.x, u.y - o.y));
+        const h = Math.max(1e-3, Math.hypot(v.x - o.x, v.y - o.y));
+        return {
+            "w": w,
+            "h": h,
+            "m": Qt.matrix4x4((u.x - o.x) / w, (v.x - o.x) / h, 0, o.x,
+                              (u.y - o.y) / w, (v.y - o.y) / h, 0, o.y,
+                              0, 0, 1, 0,
+                              0, 0, 0, 1)
+        };
     }
 
     // A path change that never becomes a change of picture (same file, a video
@@ -375,64 +405,80 @@ Item {
         }
     }
 
-    Image {
-        id: imgA
-        property bool pinned: false
-        property point pinTL
-        property point pinBR
-        readonly property rect pinRect: pinned
-            ? root._mapPin(pinTL, pinBR, [root.pinDependencies, root.width, root.height])
-            : Qt.rect(0, 0, 0, 0)
-        x: pinned ? pinRect.x : 0
-        y: pinned ? pinRect.y : 0
-        width: pinned ? pinRect.width : root.width
-        height: pinned ? pinRect.height : root.height
-        fillMode: root.fillMode
-        property size frozenSize: Qt.size(-1, -1)
-        property bool frozenMipmap: root.mipmap
-        sourceSize: frozenSize
-        mipmap: frozenMipmap
-        onSourceChanged: {
-            if (String(imgA.source) === "")
-                imgA.pinned = false;
-            imgA.frozenSize = root._captureDecodeSize()
-            imgA.frozenMipmap = root.mipmap
+    // Each picture in a slot of its own: the shader captures the slot, so a
+    // held picture is captured where it is drawn.
+    Item {
+        id: slotA
+        anchors.fill: parent
+        z: imgA.z
+        Image {
+            id: imgA
+            property bool pinned: false
+            property point pinO
+            property point pinU
+            property point pinV
+            readonly property var pin: pinned
+                ? root._mapPin(imgA, [root.pinDependencies, root.width, root.height])
+                : null
+            width: pin ? pin.w : root.width
+            height: pin ? pin.h : root.height
+            transform: Matrix4x4 {
+                matrix: imgA.pin ? imgA.pin.m : Qt.matrix4x4()
+            }
+            fillMode: root.fillMode
+            property size frozenSize: Qt.size(-1, -1)
+            property bool frozenMipmap: root.mipmap
+            sourceSize: frozenSize
+            mipmap: frozenMipmap
+            onSourceChanged: {
+                if (String(imgA.source) === "")
+                    imgA.pinned = false;
+                imgA.frozenSize = root._captureDecodeSize()
+                imgA.frozenMipmap = root.mipmap
+            }
+            cache: root.cache
+            antialiasing: root.antialiasing
+            asynchronous: root.asynchronous
+            smooth: root.smooth
+            onStatusChanged: root.onFrontStatusChanged(imgA)
         }
-        cache: root.cache
-        antialiasing: root.antialiasing
-        asynchronous: root.asynchronous
-        smooth: root.smooth
-        onStatusChanged: root.onFrontStatusChanged(imgA)
     }
 
-    Image {
-        id: imgB
-        property bool pinned: false
-        property point pinTL
-        property point pinBR
-        readonly property rect pinRect: pinned
-            ? root._mapPin(pinTL, pinBR, [root.pinDependencies, root.width, root.height])
-            : Qt.rect(0, 0, 0, 0)
-        x: pinned ? pinRect.x : 0
-        y: pinned ? pinRect.y : 0
-        width: pinned ? pinRect.width : root.width
-        height: pinned ? pinRect.height : root.height
-        opacity: 0
-        fillMode: root.fillMode
-        property size frozenSize: Qt.size(-1, -1)
-        property bool frozenMipmap: root.mipmap
-        sourceSize: frozenSize
-        mipmap: frozenMipmap
-        onSourceChanged: {
-            if (String(imgB.source) === "")
-                imgB.pinned = false;
-            imgB.frozenSize = root._captureDecodeSize()
-            imgB.frozenMipmap = root.mipmap
+    Item {
+        id: slotB
+        anchors.fill: parent
+        z: imgB.z
+        Image {
+            id: imgB
+            property bool pinned: false
+            property point pinO
+            property point pinU
+            property point pinV
+            readonly property var pin: pinned
+                ? root._mapPin(imgB, [root.pinDependencies, root.width, root.height])
+                : null
+            width: pin ? pin.w : root.width
+            height: pin ? pin.h : root.height
+            transform: Matrix4x4 {
+                matrix: imgB.pin ? imgB.pin.m : Qt.matrix4x4()
+            }
+            opacity: 0
+            fillMode: root.fillMode
+            property size frozenSize: Qt.size(-1, -1)
+            property bool frozenMipmap: root.mipmap
+            sourceSize: frozenSize
+            mipmap: frozenMipmap
+            onSourceChanged: {
+                if (String(imgB.source) === "")
+                    imgB.pinned = false;
+                imgB.frozenSize = root._captureDecodeSize()
+                imgB.frozenMipmap = root.mipmap
+            }
+            cache: root.cache
+            antialiasing: root.antialiasing
+            asynchronous: root.asynchronous
+            smooth: root.smooth
+            onStatusChanged: root.onFrontStatusChanged(imgB)
         }
-        cache: root.cache
-        antialiasing: root.antialiasing
-        asynchronous: root.asynchronous
-        smooth: root.smooth
-        onStatusChanged: root.onFrontStatusChanged(imgB)
     }
 }
