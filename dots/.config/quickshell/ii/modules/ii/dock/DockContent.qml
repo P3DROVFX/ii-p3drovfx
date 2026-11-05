@@ -3150,6 +3150,15 @@ Item {
 
                     Item {
                         id: islandDragStrip
+                        // Edit Mode only. The strip lies on the slots' outer
+                        // padding, which is inside every button's hit area (and
+                        // a magnified icon grows across it), and a DragHandler
+                        // swallows any press under it, even one that never
+                        // moves: outside the mode it showed a grab cursor over
+                        // the icons and ate their clicks. Disabled, presses go
+                        // straight to the buttons; in Edit Mode clicks are
+                        // inert anyway, so arranging islands loses nothing.
+                        enabled: GlobalStates.editMode
                         width: root.isVertical
                             ? Math.max(root.dotMargin, root.sepThickness * 2)
                             : parent.width
@@ -3169,7 +3178,7 @@ Item {
 
                         DragHandler {
                             id: islandDragHandler
-                            enabled: parent.parent.enabled
+                            enabled: parent.enabled && parent.parent.enabled
                                 && !root.dragging
                                 && !root.anyContextMenuOpen
                             target: null
