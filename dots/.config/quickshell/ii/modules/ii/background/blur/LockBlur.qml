@@ -16,6 +16,10 @@ Item {
     required property real baseScale
     required property bool lockAnimationActive
 
+    // Set while the overview-style lock animation owns the look: the effects then
+    // belong to the backing wallpaper, and the zooming plane stays clean.
+    property bool suppressed: false
+
     property bool wallpaperIsVideo: false
     // The blur radius is animated independently from the layer opacity. This keeps the lock
     // entrance progressive even though the Gaussian effect is created lazily.
@@ -110,6 +114,7 @@ Item {
         id: blurLoader
         active: (Config.options.lock.blur.enable || GlobalStates.scratchpadEmptyOverlayActive) && lockBlurRoot.sourceReady && !lockBlurRoot.reloadRequested
             && (lockBlurRoot.blurWanted || opacityAnim.running) && !lockBlurRoot.wallpaperIsVideo
+            && !lockBlurRoot.suppressed
         anchors.fill: parent
         opacity: lockBlurRoot.blurWanted ? 1.0 : 0.0
         Behavior on opacity {

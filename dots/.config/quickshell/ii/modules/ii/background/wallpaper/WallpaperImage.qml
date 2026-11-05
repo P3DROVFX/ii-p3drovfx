@@ -640,6 +640,41 @@ Item {
         opacity: wallpaperImageRoot.overviewController.dimAmount
     }
 
+    // The overview-style lock animation (Gnome Like / Material Shape) puts the
+    // lock's look on the backing wallpaper; the zooming plane stays clean.
+    LockBlur {
+        id: backingLockBlur
+        anchors.fill: overviewBackingImage
+        suppressed: !wallpaperImageRoot.overviewController.lockDriven
+        sourceItem: overviewBackingImage
+        sourceReady: wallpaperImageRoot.wallpaperSourceReady && overviewBackingImage.status === Image.Ready
+        baseScale: wallpaperImageRoot.baseWallpaperScale
+        lockAnimationActive: wallpaperImageRoot.lockAnimationActive
+        wallpaperIsVideo: wallpaperImageRoot.wallpaperIsVideo || Config.options.background.useWallpaperEngine
+    }
+    LockDesaturate {
+        anchors.fill: overviewBackingImage
+        suppressed: !wallpaperImageRoot.overviewController.lockDriven
+        sourceItem: Config.options.lock.blur.enable ? backingLockBlur : overviewBackingImage
+        sourceReady: wallpaperImageRoot.wallpaperSourceReady && overviewBackingImage.status === Image.Ready
+        baseScale: wallpaperImageRoot.baseWallpaperScale
+        lockAnimationActive: wallpaperImageRoot.lockAnimationActive
+    }
+    LockColorWash {
+        anchors.fill: overviewBackingImage
+        suppressed: !wallpaperImageRoot.overviewController.lockDriven
+        sourceItem: overviewBackingImage
+        baseScale: wallpaperImageRoot.baseWallpaperScale
+        lockAnimationActive: wallpaperImageRoot.lockAnimationActive
+    }
+    LockVignette {
+        anchors.fill: overviewBackingImage
+        suppressed: !wallpaperImageRoot.overviewController.lockDriven
+        sourceItem: overviewBackingImage
+        baseScale: wallpaperImageRoot.baseWallpaperScale
+        lockAnimationActive: wallpaperImageRoot.lockAnimationActive
+    }
+
     // Real Gnome: GNOME Shell's radial shade over the blurred backing - the
     // centre stays readable, the edges sink away from the workspace.
     Shape {
@@ -1197,6 +1232,7 @@ Item {
                 LockBlur {
                     id: lockBlur
                     anchors.fill: parent
+                    suppressed: wallpaperImageRoot.overviewController.lockDriven
                     sourceItem: wallpaperVisualContainer
                     sourceReady: wallpaperImageRoot.wallpaperSourceReady
                     baseScale: wallpaperImageRoot.baseWallpaperScale
@@ -1206,6 +1242,7 @@ Item {
 
                 LockDesaturate {
                     anchors.fill: parent
+                    suppressed: wallpaperImageRoot.overviewController.lockDriven
                     sourceItem: Config.options.lock.blur.enable ? lockBlur : wallpaperVisualContainer
                     sourceReady: wallpaperImageRoot.wallpaperSourceReady
                     baseScale: wallpaperImageRoot.baseWallpaperScale
@@ -1214,6 +1251,7 @@ Item {
 
                 LockColorWash {
                     anchors.fill: parent
+                    suppressed: wallpaperImageRoot.overviewController.lockDriven
                     sourceItem: wallpaperVisualContainer
                     baseScale: wallpaperImageRoot.baseWallpaperScale
                     lockAnimationActive: wallpaperImageRoot.lockAnimationActive
@@ -1221,6 +1259,7 @@ Item {
 
                 LockVignette {
                     anchors.fill: parent
+                    suppressed: wallpaperImageRoot.overviewController.lockDriven
                     sourceItem: wallpaperVisualContainer
                     baseScale: wallpaperImageRoot.baseWallpaperScale
                     lockAnimationActive: wallpaperImageRoot.lockAnimationActive

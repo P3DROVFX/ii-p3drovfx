@@ -14,6 +14,10 @@ Item {
     required property real baseScale
     required property bool lockAnimationActive
 
+    // Set while the overview-style lock animation owns the look: the effects then
+    // belong to the backing wallpaper, and the zooming plane stays clean.
+    property bool suppressed: false
+
     readonly property real targetSaturation: -Config.options.lock.desaturate.amount
     // Keep the effect mounted while the lock look is on, and just long enough after it goes
     // off for the unlock desaturation animation to finish. Only the handlers below write this:
@@ -46,6 +50,7 @@ Item {
     Loader {
         id: desatLoader
         active: Config.options.lock.desaturate.enable && lockDesatRoot.sourceReady && lockDesatRoot.holdLoaded
+            && !lockDesatRoot.suppressed
         anchors.fill: parent
         sourceComponent: MultiEffect {
             source: lockDesatRoot.sourceItem
