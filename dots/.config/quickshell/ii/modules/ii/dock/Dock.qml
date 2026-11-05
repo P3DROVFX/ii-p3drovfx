@@ -501,8 +501,16 @@ Scope {
             // pointer resting on the screen edge (below a floating tray, in
             // its margin) outside the hover area - the dock hid, the reveal
             // strip took the pointer again, and it showed: a loop at that spot.
+            //
+            // An unpinned magnifying dock keeps the whole envelope while shown:
+            // the lens grows with how far the pointer is into the band above
+            // the tray (DockContent cross-reach), and a tray-only mask never
+            // delivers those samples on the way in, so the lens only started
+            // inside the tray. A pinned dock has windows tiled up to the tray,
+            // so it keeps the band click-through and magnifies from the tray.
             readonly property bool fullInputMask: !dockRoot.reveal
                 || dockContent.dragging
+                || (dockRoot.enableMagnification && !dockRoot.pinnedShown)
                 || (dockMouseArea.containsMouse && (dockRoot.enableMagnification || !dockRoot.pinnedShown))
             mask: Region {
                 item: dockRoot.fullInputMask ? dockMouseArea : trayInputArea
