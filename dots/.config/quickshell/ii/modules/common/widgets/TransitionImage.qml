@@ -50,8 +50,10 @@ Item {
             front.source = "";
         }
 
-        if (newSrc === back.source)
+        if (newSrc === back.source) {
+            root.releasePins();
             return;
+        }
 
         // No previous wallpaper loaded — load directly onto the back image
         // instead of crossfading, which would swap an empty image on top.
@@ -115,7 +117,7 @@ Item {
     property bool refreshing: false
 
     function refreshDecode() {
-        if (root.refreshing || root.pendingTransition || fadeAnim.running || shaderProgressAnim.running)
+        if (root.refreshing || root.pendingTransition || fadeAnim.running || shaderProgressAnim.running || root.pinActive)
             return;
         const back = root.imgAIsBack ? imgA : imgB;
         const front = root.imgAIsBack ? imgB : imgA;
@@ -254,6 +256,9 @@ Item {
             ShaderEffectSource {
                 id: fromSource
                 sourceItem: root.imgAIsBack ? imgA : imgB
+                // A held picture is smaller/offset inside this item: capture
+                // this item's rect from it, so the shader sees it in place.
+                sourceRect: Qt.rect(-sourceItem.x, -sourceItem.y, root.width, root.height)
                 hideSource: shaderProgressAnim.running
                 live: shaderProgressAnim.running
                 visible: false
@@ -262,6 +267,7 @@ Item {
             ShaderEffectSource {
                 id: toSource
                 sourceItem: root.imgAIsBack ? imgB : imgA
+                sourceRect: Qt.rect(-sourceItem.x, -sourceItem.y, root.width, root.height)
                 hideSource: shaderProgressAnim.running
                 live: shaderProgressAnim.running
                 visible: false
@@ -306,15 +312,89 @@ Item {
         return (s && s.width !== 0 && s.height !== 0) ? s : Qt.size(-1, -1);
     }
 
+    // ── Holding the outgoing picture where it is ─────────────────────────────
+    // The plane this item fills is laid out from the wallpaper FILE's
+    // dimensions, and those change the moment the new file's size is known -
+    // before the new picture has decoded, and for the whole transition. Filling
+    // the new plane, the old picture was re-cropped, zoomed and re-centred at
+    // the click. pinOutgoing() records where each shown picture sits in
+    // `pinReference`'s coordinates; until its source is cleared (the transition
+    // that replaces it finishes) it is laid out back onto that spot, whatever
+    // the plane does around it.
+    property Item pinReference: null
+    readonly property bool pinActive: imgA.pinned || imgB.pinned
+
+    function pinOutgoing() {
+        if (!root.pinReference)
+            return;
+        root._pin(imgA);
+        root._pin(imgB);
+        if (root.pinActive)
+            pinSafety.restart();
+    }
+
+    function releasePins() {
+        imgA.pinned = false;
+        imgB.pinned = false;
+        pinSafety.stop();
+    }
+
+    function _pin(img) {
+        if (img.pinned || String(img.source) === "")
+            return;
+        img.pinTL = img.mapToItem(root.pinReference, 0, 0);
+        img.pinBR = img.mapToItem(root.pinReference, img.width, img.height);
+        img.pinned = true;
+    }
+
+    // Everything between `pinReference` and this item that can move it: the
+    // owner lists those values here so the held rect is re-mapped in the same
+    // binding pass that moves the plane. Following them per frame instead let
+    // a frame render between the plane's change and the correction (flicker).
+    property var pinDependencies: null
+
+    function _mapPin(tl, br, deps) {
+        if (!root.pinReference)
+            return Qt.rect(0, 0, root.width, root.height);
+        const a = root.pinReference.mapToItem(root, tl.x, tl.y);
+        const b = root.pinReference.mapToItem(root, br.x, br.y);
+        return Qt.rect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+    }
+
+    // A path change that never becomes a change of picture (same file, a video
+    // painted elsewhere) must not leave the old picture held forever.
+    Timer {
+        id: pinSafety
+        interval: 4000
+        repeat: false
+        onTriggered: {
+            if (root.transitioning)
+                restart();
+            else
+                root.releasePins();
+        }
+    }
+
     Image {
         id: imgA
-        anchors.fill: parent
+        property bool pinned: false
+        property point pinTL
+        property point pinBR
+        readonly property rect pinRect: pinned
+            ? root._mapPin(pinTL, pinBR, [root.pinDependencies, root.width, root.height])
+            : Qt.rect(0, 0, 0, 0)
+        x: pinned ? pinRect.x : 0
+        y: pinned ? pinRect.y : 0
+        width: pinned ? pinRect.width : root.width
+        height: pinned ? pinRect.height : root.height
         fillMode: root.fillMode
         property size frozenSize: Qt.size(-1, -1)
         property bool frozenMipmap: root.mipmap
         sourceSize: frozenSize
         mipmap: frozenMipmap
         onSourceChanged: {
+            if (String(imgA.source) === "")
+                imgA.pinned = false;
             imgA.frozenSize = root._captureDecodeSize()
             imgA.frozenMipmap = root.mipmap
         }
@@ -327,7 +407,16 @@ Item {
 
     Image {
         id: imgB
-        anchors.fill: parent
+        property bool pinned: false
+        property point pinTL
+        property point pinBR
+        readonly property rect pinRect: pinned
+            ? root._mapPin(pinTL, pinBR, [root.pinDependencies, root.width, root.height])
+            : Qt.rect(0, 0, 0, 0)
+        x: pinned ? pinRect.x : 0
+        y: pinned ? pinRect.y : 0
+        width: pinned ? pinRect.width : root.width
+        height: pinned ? pinRect.height : root.height
         opacity: 0
         fillMode: root.fillMode
         property size frozenSize: Qt.size(-1, -1)
@@ -335,6 +424,8 @@ Item {
         sourceSize: frozenSize
         mipmap: frozenMipmap
         onSourceChanged: {
+            if (String(imgB.source) === "")
+                imgB.pinned = false;
             imgB.frozenSize = root._captureDecodeSize()
             imgB.frozenMipmap = root.mipmap
         }

@@ -127,6 +127,10 @@ Item {
     // ordinary parallax (workspace / cursor) keeps its animation.
     property bool wallpaperSettling: false
     onWallpaperPathChanged: {
+        // The plane is about to take the new file's proportions (as soon as its
+        // size probe answers), well before the new picture decodes: hold the
+        // picture on screen where it is until the transition replaces it.
+        wallpaper.pinOutgoing();
         wallpaperImageRoot.wallpaperSettling = true;
         wallpaperImageRoot.backingBlurFrozen = false;
         wallpaperSettleTimer.restart();
@@ -882,6 +886,7 @@ Item {
 
                 transform: [
                     Scale {
+                        id: contentScaleTransform
                         origin.x: wallpaperContent.width / 2
                         origin.y: wallpaperContent.height / 2
                         xScale: wallpaperContent.contentScale
@@ -967,6 +972,7 @@ Item {
                         // screen's axis whatever the orientation.
                         rotation: wallpaperImageRoot.framed ? framedContent.frame.angle : 0
                         transform: Scale {
+                            id: framedScaleTransform
                             origin.x: framedContent.width / 2
                             origin.y: framedContent.height / 2
                             xScale: wallpaperImageRoot.framed ? framedContent.frame.scaleX : 1
@@ -990,6 +996,20 @@ Item {
                             sourceSize: wallpaperImageRoot.stableDecodeSize
 
                             imageSource: wallpaperImageRoot.committedWallpaperSource
+                            pinReference: wallpaperPlanes
+                            // Every value between the planes and this image that moves it.
+                            pinDependencies: [
+                                wallpaperContent.x, wallpaperContent.y,
+                                wallpaperContent.width, wallpaperContent.height,
+                                contentScaleTransform.origin.x, contentScaleTransform.origin.y,
+                                contentScaleTransform.xScale, contentScaleTransform.yScale,
+                                parallaxTranslate.x, parallaxTranslate.y,
+                                wallpaperVisualContainer.width, wallpaperVisualContainer.height,
+                                framedContent.x, framedContent.y,
+                                framedContent.width, framedContent.height, framedContent.rotation,
+                                framedScaleTransform.origin.x, framedScaleTransform.origin.y,
+                                framedScaleTransform.xScale, framedScaleTransform.yScale
+                            ]
                             animated: Config.options.background.animateWallpaperChanges
                             transitionShader: Config.options.background.wallpaperAnimation
                             shadersPath: Qt.resolvedUrl("../shaders")
