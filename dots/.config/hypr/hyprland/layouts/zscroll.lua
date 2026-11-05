@@ -68,8 +68,8 @@ local function full_width_classes()
     local raw = _G.zscroll_full_width_classes
     local set = {}
     if type(raw) ~= "string" then return set end
-    for class in raw:gmatch("[^,]+") do
-        class = class:match("^%s*(.-)%s*$"):lower()
+    for entry in raw:gmatch("[^,]+") do
+        local class = entry:match("^%s*(.-)%s*$"):lower()
         if class ~= "" then set[class] = true end
     end
     return set
