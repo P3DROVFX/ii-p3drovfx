@@ -399,11 +399,11 @@ ContentPage {
 
             HyprToggle {
                 buttonIcon: "overview_key"
-                text: Translation.tr("Super opens the zscroll overview")
+                text: Translation.tr("Search opens over the zscroll overview")
                 alwaysExplain: true
                 switchOn: tab.zscrollOn("zscroll_super_overview", true)
-                textOn: Translation.tr("On a zscroll workspace, tapping Super zooms out over every workspace and its rows (scrolloverview plugin). Without the plugin loaded, Super opens the shell's search as before.")
-                textOff: Translation.tr("Super always opens the shell's search and overview.")
+                textOn: Translation.tr("On a zscroll workspace, the search opens with the scrolloverview plugin zoomed out behind its bar; typing searches and puts the plugin away. Without the plugin loaded, the shell's own overview is used.")
+                textOff: Translation.tr("The search opens with the shell's own overview.")
                 onRequested: wanted => HyprlandGui.setGlobal("zscroll_super_overview", wanted)
             }
 

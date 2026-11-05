@@ -102,7 +102,20 @@ Item {
     // (Commands, Tools, Email, AI…) owns the drop's surface the same way it
     // owns the classic overview's: while one is open the grid stays out, even
     // though opening it clears the query.
-    readonly property bool overviewWanted: (root.searchWidgetRef ? (root.searchWidgetRef.searchingText === "" && !root.searchWidgetRef.isAnySpecialMode) : true) && !GlobalStates.searchOnlyMode && !Config.options.search.alwaysListApps && !Config.options.search.suggestions.enable && (Config?.options.overview.enable ?? true)
+    readonly property bool queryIdle: root.searchWidgetRef ? (root.searchWidgetRef.searchingText === "" && !root.searchWidgetRef.isAnySpecialMode) : true
+    // On zscroll the scrolloverview plugin's overview stands behind the bar in place of this one.
+    readonly property bool overviewWanted: root.queryIdle && !GlobalStates.searchOnlyMode && !Config.options.search.alwaysListApps && !Config.options.search.suggestions.enable && (Config?.options.overview.enable ?? true)
+        && !ZscrollPluginOverview.hosting
+    // The plugin's overview stays up behind the search for as long as it is open,
+    // query or not: it goes with the search (an app launched, Esc, Super again).
+    readonly property bool pluginOverviewWanted: root.isOpen && GlobalStates.zscrollLayoutActive
+        && !GlobalStates.searchOnlyMode && !GlobalStates.panelOpenedDirectly
+    onPluginOverviewWantedChanged: {
+        if (root.pluginOverviewWanted)
+            ZscrollPluginOverview.open();
+        else
+            ZscrollPluginOverview.close();
+    }
     /**
      * The grid's visibility, decided only while the drop is open.
      *
@@ -361,8 +374,6 @@ Item {
         shoulderRadius: Appearance.rounding.windowRounding
         cornerRadius: Appearance.rounding.windowRounding
         surfaceColor: root.themeBgColor
-        // Hidden with the field it holds while the scrolling overview is idle.
-        opacity: dropContainer.opacity
         transform: Scale {
             yScale: root.isBottomBar ? -1 : 1
             origin.y: dropSurface.height / 2
@@ -378,15 +389,6 @@ Item {
         width: Math.min(root.dropW, dropSurface.visibleWidth)
         height: dropSurface.visibleHeight
         visible: dropSurface.visible
-        // The scrolling overview copies the scrolloverview plugin, which has no
-        // search bar: the field stays focused but unseen until a query or a mode
-        // needs it. Opacity only - a hidden item would lose the keyboard.
-        readonly property bool scrollingIdle: root.isScrollingLayout && scrollingOverviewLoader.active
-            && (root.searchWidgetRef ? (root.searchWidgetRef.searchingText === "" && !root.searchWidgetRef.isAnySpecialMode) : true)
-        opacity: scrollingIdle ? 0 : 1
-        Behavior on opacity {
-            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-        }
 
         onXChanged: root._updateBlurExclusion()
         onYChanged: root._updateBlurExclusion()

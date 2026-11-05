@@ -21,7 +21,7 @@
 --                                  nobody off zscroll has a default bind replaced)
 --   zscroll_full_width_classes     comma-separated window classes that take a whole row ("")
 --   zscroll_single_window_fills    a workspace's only tiled window fills the screen (true)
---   zscroll_super_overview         Super opens the scrolloverview plugin on zscroll (true)
+--   zscroll_super_overview         the search opens over the scrolloverview plugin on zscroll (true)
 --   zscroll_overview_scale         scrolloverview zoom, 0.2-0.9 (0.6)
 --   zscroll_overview_layout        "vertical" or "horizontal" workspaces (vertical)
 --
@@ -455,15 +455,6 @@ local function center_pointer_after_navigation()
     end, { timeout = 1, type = "oneshot" })
 end
 
---- hl.version() is "0.56.2"-style; true when the running Hyprland is at least major.minor.
-local function version_at_least(major, minor)
-    local ok, version = pcall(hl.version)
-    local a, b = tostring(ok and version or ""):match("^v?(%d+)%.(%d+)")
-    a, b = tonumber(a), tonumber(b)
-    if not a then return false end
-    return a > major or (a == major and b >= minor)
-end
-
 local function in_zscroll()
     local workspace = active_workspace()
     local win = hl.get_active_window()
@@ -522,7 +513,29 @@ function M.overview_available()
     return scrolloverview() ~= nil
 end
 
-local function toggle_overview()
+-- What the plugin sets while one of its overviews exists (applyInputConfigOverrides).
+local OVERVIEW_OVERRIDES = {
+    ["input:follow_mouse"] = 0,
+    ["cursor:no_warps"] = 1,
+    ["cursor:warp_on_change_workspace"] = 0,
+}
+local overrides_were_set = false
+
+local function config_number(name)
+    local ok, value = pcall(hl.get_config, name)
+    if not ok then return nil end
+    if type(value) == "boolean" then return value and 1 or 0 end
+    return tonumber(value)
+end
+
+local function overview_overrides_applied()
+    for name, value in pairs(OVERVIEW_OVERRIDES) do
+        if config_number(name) ~= value then return false end
+    end
+    return true
+end
+
+local function run_overview(action)
     local plugin = scrolloverview()
     if not plugin then return false end
     local scale = tonumber(_G.zscroll_overview_scale) or 0.6
@@ -537,11 +550,11 @@ local function toggle_overview()
         input = { scrolling_mode = 2 },
         shadow = { enabled = false },
     } } })
-    -- Inside a Lua keybind the plugin runs the toggle right away and returns
-    -- nothing; anywhere else it returns a plain function to call (never an
-    -- hl.dsp descriptor, so it must not go through hl.dispatch()).
-    local action = plugin.overview("toggle")
-    if type(action) == "function" then action() end
+    -- Inside a Lua keybind the plugin runs the action right away and returns
+    -- nothing; anywhere else (hyprctl eval) it returns a plain function to call
+    -- (never an hl.dsp descriptor, so it must not go through hl.dispatch()).
+    local run = plugin.overview(action)
+    if type(run) == "function" then run() end
     return true
 end
 
@@ -550,11 +563,30 @@ function M.plugin_overview_wanted()
         and scrolloverview() ~= nil
 end
 
---- The shell's Super press bind, skipped where the plugin's overview takes Super.
-function M.super_pressed(fallback)
-    return function()
-        if not M.plugin_overview_wanted() then hl.dispatch(fallback) end
+--- Called by the shell (hyprctl eval) as its search opens and closes. Super keeps
+--- the shell's own bind, so the search always opens; on a zscroll workspace with
+--- the plugin loaded the shell stands its overview aside and the plugin's opens
+--- behind the search bar (the plugin hands keys to a focused top layer). Opening
+--- returns false where the plugin is not wanted; the shell then draws its own.
+function M.shell_overview(open)
+    if open then
+        if not M.plugin_overview_wanted() then return false end
+        overrides_were_set = overview_overrides_applied()
+        return run_overview("open")
     end
+    run_overview("close")
+    return true
+end
+
+--- Whether the plugin's overview is still up. It has no query for that, but while
+--- an overview exists it pins these options (restored when it is torn down, after
+--- its close animation); the shell polls this after a workspace or window change
+--- to tell "walked to another workspace inside the overview" from "picked one and
+--- left". If the user's own config already had those values, it cannot tell and
+--- answers true, so the search is never closed under them.
+function M.plugin_overview_open()
+    if not scrolloverview() then return false end
+    return overrides_were_set or overview_overrides_applied()
 end
 
 -- ── Shortcuts ────────────────────────────────────────────────────────────────
@@ -588,38 +620,9 @@ if bool_option("zscroll_wheel_rows", true) then
     rebind("SUPER + mouse_down", M.wheel("d", hl.dsp.focus({ workspace = "+1" })))
 end
 
--- Super on its own opens the plugin's overview on zscroll. Installed only once
--- Settings has built the plugin on this machine (scrolloverview.sh stamps the
--- build), so on a setup that never used zscroll the default Super binds are
--- left exactly as hyprland/keybinds.lua made them.
-local plugin_stamp = HOME .. "/.config/hypr/plugins/hyprland-scroll-overview/.ii-built-for"
-if bool_option("zscroll_super_overview", true) and is_file_exists(plugin_stamp) then
-    -- Super on its own. The defaults in hyprland/keybinds.lua are press binds up to
-    -- 0.56 and release binds from 0.57 (there a press bind fires on every Super+key
-    -- and always delivers its release); they are recreated in the same mode, with
-    -- the same description, so only the zscroll case changes: with the plugin
-    -- loaded, its overview opens on the release and the shell's search stands aside.
-    -- The fuzzel fallback for a dead shell stays as it was.
-    local releaseTaps = version_at_least(0, 57)
-    local qsAlive = "qs -c $qsConfig ipc call TEST_ALIVE"
-    for _, key in ipairs({ "SUPER + SUPER_L", "SUPER + SUPER_R" }) do
-        local opts = { release = releaseTaps or nil }
-        if key == "SUPER + SUPER_L" then opts.description = "Shell: Toggle search" end
-        local shell = hl.dsp.global("quickshell:searchToggleRelease")
-        pcall(hl.unbind, key)
-        if releaseTaps then
-            -- One release bind decides: the plugin on zscroll, the shell elsewhere.
-            hl.bind(key, function()
-                if M.plugin_overview_wanted() then toggle_overview() else hl.dispatch(shell) end
-            end, opts)
-        else
-            hl.bind(key, M.super_pressed(shell), opts)
-            hl.bind(key, function()
-                if M.plugin_overview_wanted() then toggle_overview() end
-            end, { release = true })
-        end
-        hl.bind(key, hl.dsp.exec_cmd(qsAlive .. " || pkill fuzzel || fuzzel"), { release = releaseTaps or nil })
-    end
-end
+-- Super is left exactly as hyprland/keybinds.lua binds it: it always opens the
+-- shell's search, which calls M.shell_overview() to bring the plugin's overview
+-- up behind its bar. Taking Super for the plugin alone left zscroll with no way
+-- to search, and wrapping the shell's global in a Lua bind lost its release.
 
 return M

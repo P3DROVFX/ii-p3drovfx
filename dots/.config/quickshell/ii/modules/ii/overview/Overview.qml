@@ -190,8 +190,20 @@ Scope {
                          * revealed it underneath the results. Recomputing from the
                          * primitives cannot be stale, whoever calls it.
                          */
+                        // On zscroll the scrolloverview plugin's overview stands behind
+                        // the search in place of the shell's, from open to close.
+                        readonly property bool pluginOverviewWanted: root.monitorIsFocused && GlobalStates.overviewOpen
+                            && !GlobalStates.searchConnectActive && GlobalStates.zscrollLayoutActive
+                            && !GlobalStates.searchOnlyMode && !GlobalStates.panelOpenedDirectly
+                        onPluginOverviewWantedChanged: {
+                            if (root.pluginOverviewWanted)
+                                ZscrollPluginOverview.open();
+                            else
+                                ZscrollPluginOverview.close();
+                        }
                         function evaluateOverviewShouldShow() {
-                            return !root.evaluateSearchSurfaceOwned()
+                            return !ZscrollPluginOverview.hosting
+                                && !root.evaluateSearchSurfaceOwned()
                                 && !GlobalStates.searchOnlyMode
                                 && !GlobalStates.searchCenterMode
                                 && !Config.options.search.suggestions.enable
@@ -433,8 +445,11 @@ Scope {
 
                         // Closed but still mapped (scrolling layout), the window must take
                         // no input at all: an empty item, not a null one, is the empty region.
+                        // With the plugin's overview behind, only the search takes the
+                        // pointer: the rest of the screen is the plugin's to click.
                         mask: Region {
-                            item: root.monitorIsFocused && GlobalStates.overviewOpen ? contentItem : noInputRegion
+                            item: !(root.monitorIsFocused && GlobalStates.overviewOpen) ? noInputRegion
+                                : (ZscrollPluginOverview.hosting ? searchWidgetWrapper : contentItem)
                         }
                         Item {
                             id: noInputRegion
@@ -577,17 +592,7 @@ Scope {
                                 // Driven directly — no Behavior, to avoid QML skipping anim while invisible
                                 property real slideY: initialYOffset
                                 property real slideOpacity: 0.0
-
-                                // The scrolling overview copies the scrolloverview plugin, which has
-                                // no search bar: the field stays focused but unseen until a query
-                                // (or a panel) needs it. Opacity only - hidden items lose focus.
-                                readonly property bool scrollingIdle: scrollingOverviewLoader.active
-                                    && searchWidget.searchingText === "" && !root.searchPanelOwned
-                                property real scrollingReveal: scrollingIdle ? 0 : 1
-                                Behavior on scrollingReveal {
-                                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                                }
-                                opacity: isNotchMode ? 0.0 : slideOpacity * scrollingReveal
+                                opacity: isNotchMode ? 0.0 : slideOpacity
                                 transform: [
                                     Translate {
                                         y: searchWidgetWrapper.slideY
