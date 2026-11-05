@@ -64,7 +64,7 @@ WorkspacesPane {
         checked: root.cfg.autoCloseGaps
         onToggled: root.cfg.autoCloseGaps = checked
         StyledToolTip {
-            text: Translation.tr("Close gaps automatically whenever closing or moving a window leaves one on the focused monitor. The shortcuts below keep working either way.")
+            text: Translation.tr("Close gaps automatically whenever opening, closing or moving a window leaves one on the focused monitor. The shortcuts below keep working either way.")
         }
     }
 

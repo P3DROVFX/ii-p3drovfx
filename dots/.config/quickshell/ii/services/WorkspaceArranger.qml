@@ -10,8 +10,8 @@ import qs.modules.common
 
 /**
  * Auto-close gaps for the workspace arranger: watches Hyprland events and runs the
- * `workspace_arranger` binary (with --auto) whenever a window close/move leaves a gap in the
- * focused monitor's workspace numbering. The keybinds are untouched.
+ * `workspace_arranger` binary (with --auto) whenever a window open/close/move leaves a gap in
+ * the focused monitor's workspace numbering. The keybinds are untouched.
  *
  * A gap on the *current* workspace (the user just emptied the workspace they are standing on)
  * is handled per Config.options.bar.workspaces.arranger.currentGap. The binary spots it from
@@ -76,7 +76,10 @@ Singleton {
 
         function onRawEvent(event) {
             switch (event.name) {
-                // Events that can leave a gap behind.
+                // Events that can leave a gap behind. Opening one counts too: an app started on
+                // a workspace above empty ones (Super+6 with 1-3 occupied, or a silent workspace
+                // rule) is a gap that no close or move would otherwise report until much later.
+                case "openwindow":
                 case "closewindow":
                 case "movewindow":
                 case "movewindowv2":
