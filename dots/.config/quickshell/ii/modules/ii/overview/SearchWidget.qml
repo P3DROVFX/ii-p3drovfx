@@ -271,7 +271,7 @@ Item {
     // A calculator result does: valid math must not be replaced by auto-AI.
     readonly property int realResultCount: LauncherSearch.results.filter(r => {
         const key = String(r?.key ?? "");
-        return r && key !== "cmd:shell" && key !== "web:search" && key !== "ai:ask"
+        return r && key !== "cmd:shell" && key !== "web:search" && key !== "ai:ask" && !key.startsWith("websuggest:")
             && key !== "mpris:now-playing" && !r.isFallback && !key.startsWith("fallback:");
     }).length
     readonly property bool isAnySpecialMode: root.activePanelId.length > 0
@@ -1142,6 +1142,10 @@ Item {
             return "suggested";
         if (item?.isFallback === true)
             return "continue";
+        // Rows that answer the typed text outright: a search-engine trigger
+        // ("yt lofi") or an address.
+        if (key.startsWith("engine:") || key === "url:open")
+            return "best";
         if (item?.isAlias === true)
             return "aliases";
         if (key.startsWith("app:"))
@@ -1178,7 +1182,7 @@ Item {
             return "textSnippets";
         if (key.startsWith("math:"))
             return "tools";
-        if (/^(cmd:shell|web:search|ai:ask|fallback:)/.test(key))
+        if (/^(cmd:shell|web:search|websuggest:|ai:ask|fallback:)/.test(key))
             return "continue";
         if (/^(action:|snippet:|shell:|process:|generator:|sports:)/.test(key))
             return "actions";

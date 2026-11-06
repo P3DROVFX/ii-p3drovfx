@@ -24,6 +24,7 @@ Singleton {
     property bool watchQuickToggleRevision: false
     readonly property int quickToggleRevision: root.watchQuickToggleRevision ? QuickToggleRegistry.revision : 0
     readonly property int browserSitesRevision: BrowserSites.revision
+    readonly property int webSuggestRevision: WebSuggest.revision
     // Persistent owns user-created aliases. Config remains the boot-time
     // fallback and compatibility mirror, but must not be the canonical source
     // once states.json is ready.
@@ -66,6 +67,7 @@ Singleton {
     onSettingsIndexReadyChanged: root._scheduleResultsUpdate()
     onQuickToggleRevisionChanged: root._scheduleResultsUpdate()
     onBrowserSitesRevisionChanged: root._scheduleResultsUpdate()
+    onWebSuggestRevisionChanged: root._scheduleResultsUpdate()
     onConfiguredAliasesChanged: root._scheduleResultsUpdate()
     onBarOpenForSearchChanged: root._scheduleResultsUpdate()
     onAlwaysListAppsEnabledChanged: {
@@ -878,7 +880,7 @@ Singleton {
         if (key.startsWith("suggested:"))
             key = key.slice("suggested:".length);
         // Rows whose value changes with every query cannot be summoned later.
-        if (key.length === 0 || result?.isFallback === true || /^(math:|fallback:|clip:|cmd:shell|web:search|ai:ask)/.test(key))
+        if (key.length === 0 || result?.isFallback === true || /^(math:|fallback:|clip:|cmd:shell|web:search|websuggest:|engine:|url:open|ai:ask)/.test(key))
             return "";
         return key;
     }
@@ -1700,6 +1702,7 @@ Singleton {
 
     onQueryChanged: {
         root.selectedResult = null;
+        WebSuggest.request(root._webSuggestText());
         root.processConfirmKey = "";
         root._fileSearchGeneration++;
         nonAppResultsTimer.stop();
@@ -2390,6 +2393,14 @@ Singleton {
                 execute: () => Quickshell.clipboardText = title
             })
         ];
+        if (siteSource === "open") {
+            actions.unshift(resultComp.createObject(null, {
+                name: Translation.tr("Open in a new tab"),
+                iconName: "open_in_new",
+                iconType: LauncherSearchResult.IconType.Material,
+                execute: () => Qt.openUrlExternally(url)
+            }));
+        }
         if (BrowserSites.privateBrowsingSupported) {
             actions.push(resultComp.createObject(null, {
                 name: Translation.tr("Open in private window"),
@@ -2407,7 +2418,9 @@ Singleton {
                 : (siteSource === "favorite"
                     ? Translation.tr("Favorite")
                     : Translation.tr("Suggested")),
-            verb: Translation.tr("Open"),
+            verb: siteSource === "open" && root.windowForOpenTab(title) !== null
+                ? Translation.tr("Switch")
+                : Translation.tr("Open"),
             iconName: favicon.length > 0 ? favicon : "public",
             iconType: favicon.length > 0
                 ? LauncherSearchResult.IconType.Image
@@ -2417,9 +2430,41 @@ Singleton {
                 : (siteSource === "favorite" ? "bookmark" : "history"),
             siteSource: siteSource,
             pinnable: false,
-            execute: () => Qt.openUrlExternally(url),
+            execute: () => siteSource === "open" ? root.focusOpenTab(title, url) : Qt.openUrlExternally(url),
             actions: actions
         });
+    }
+
+    // Firefox-family window classes: "zen", "firefox", "app.zen_browser.zen"…
+    // Word-bounded so "zenity" is not a browser.
+    readonly property var _mozillaClassPattern: /(^|[._-])(zen|firefox|librewolf|floorp|waterfox|mullvadbrowser)([._-]|$)/i
+
+    /**
+     * The live browser window showing this tab, or null. A window title is the
+     * page title of its *selected* tab plus the browser's name, so this finds
+     * only tabs that are on top; a background tab has no window to name.
+     */
+    function windowForOpenTab(title: string): var {
+        const wanted = String(title ?? "").trim().toLowerCase();
+        if (wanted.length < 3)
+            return null;
+        const hits = (HyprlandData.windowList ?? []).filter(w =>
+            root._mozillaClassPattern.test(String(w?.class ?? ""))
+            && String(w?.title ?? "").toLowerCase().startsWith(wanted));
+        if (hits.length === 0)
+            return null;
+        hits.sort((a, b) => Number(a.focusHistoryID ?? 99) - Number(b.focusHistoryID ?? 99));
+        return hits[0];
+    }
+
+    /** Focus the window already showing the tab; otherwise open the URL as before. */
+    function focusOpenTab(title: string, url: string) {
+        const win = Config.options.search.browserSites.focusOpenTabs !== false
+            ? root.windowForOpenTab(title) : null;
+        if (win && String(win.address ?? "").length > 0)
+            Hyprland.dispatch(`hl.dsp.focus({window = "address:${win.address}"})`);
+        else
+            Qt.openUrlExternally(url);
     }
 
     // Continuation rows. Built at the point of use: all three used to be
@@ -2449,6 +2494,164 @@ Singleton {
             iconName: 'travel_explore',
             iconType: LauncherSearchResult.IconType.Material,
             execute: () => root.openWebSearch(query)
+        });
+    }
+
+    /**
+     * The text worth sending to the engine's autocomplete, or "" for none.
+     * Typed text leaves the machine, so only an explicit web query or a
+     * free-form sentence qualifies: never another mode's prefix, a sum, or
+     * (by default) something an installed application already answers.
+     */
+    function _webSuggestText(): string {
+        if (!Config.options.search.modules.webSearch || !WebSuggest.enabled)
+            return "";
+        const webPrefix = Config.options.search.prefix.webSearch;
+        const explicit = webPrefix.length > 0 && root.query.startsWith(webPrefix);
+        if (!explicit) {
+            if (!Config.options.search.prefix.showDefaultActionsWithoutPrefix
+                    || root.queryUsesPrefix(root.query) || root.isMathQuery(root.query))
+                return "";
+        }
+        const text = StringUtils.cleanPrefix(root.query, explicit ? webPrefix : "").trim();
+        if (text.length === 0)
+            return "";
+        if (!explicit && (root.engineShortcutMatch(root.query) !== null || root.addressFromQuery(text).length > 0))
+            return "";
+        if (!explicit && WebSuggest.onlyWithoutLocalMatch && root.matchApplications(text).length > 0)
+            return "";
+        return text;
+    }
+
+    function createWebSuggestionResults(): var {
+        const text = root._webSuggestText();
+        if (text.length === 0)
+            return [];
+        return WebSuggest.suggestionsFor(text).map(suggestion => resultComp.createObject(null, {
+            key: "websuggest:" + suggestion,
+            name: suggestion,
+            verb: Translation.tr("Search"),
+            type: Translation.tr("Web suggestion"),
+            iconName: 'search',
+            iconType: LauncherSearchResult.IconType.Material,
+            execute: () => root.openWebSearch(suggestion)
+        }));
+    }
+
+    /** "yt lofi" → { entry, terms } when `yt` is a configured trigger followed by text. */
+    function engineShortcutMatch(queryText: string): var {
+        const cfg = Config.options.search.engineShortcuts;
+        if (!cfg.enable)
+            return null;
+        const parts = /^\s*(\S+)\s+(\S[\s\S]*)$/.exec(String(queryText ?? ""));
+        if (!parts)
+            return null;
+        const trigger = parts[1].toLowerCase();
+        const entry = Array.from(cfg.entries ?? []).find(e => String(e?.trigger ?? "").trim().toLowerCase() === trigger);
+        if (!entry)
+            return null;
+        const url = root.engineShortcutUrl({ entry: entry, terms: parts[2].trim() });
+        return url.length > 0 ? { entry: entry, terms: parts[2].trim() } : null;
+    }
+
+    /** `%s` marks where the terms go; a template without it gets them appended. */
+    function engineShortcutUrl(match: var): string {
+        const template = String(match?.entry?.url ?? "").trim();
+        if (!/^https?:\/\//i.test(template))
+            return "";
+        const encoded = encodeURIComponent(String(match?.terms ?? ""));
+        return template.indexOf("%s") !== -1 ? template.split("%s").join(encoded) : template + encoded;
+    }
+
+    function createEngineShortcutResult(match: var): var {
+        const url = root.engineShortcutUrl(match);
+        const favicon = BrowserSites.faviconFor(url);
+        const fallbackIcon = String(match.entry.icon ?? "").trim() || "travel_explore";
+        const engineName = String(match.entry.name ?? match.entry.trigger);
+        return resultComp.createObject(null, {
+            key: "engine:" + String(match.entry.trigger).toLowerCase(),
+            name: match.terms,
+            type: Translation.tr("Search %1").arg(engineName),
+            verb: Translation.tr("Search"),
+            comment: url,
+            iconName: favicon.length > 0 ? favicon : fallbackIcon,
+            iconType: favicon.length > 0
+                ? LauncherSearchResult.IconType.Image
+                : LauncherSearchResult.IconType.Material,
+            fallbackIconName: fallbackIcon,
+            execute: () => Qt.openUrlExternally(url),
+            actions: [resultComp.createObject(null, {
+                    name: Translation.tr("Copy URL"),
+                    iconName: "link",
+                    iconType: LauncherSearchResult.IconType.Material,
+                    execute: () => Quickshell.clipboardText = url
+                })]
+        });
+    }
+
+    // Bare hosts are only addresses under a well-known TLD: `notes.md`,
+    // `main.py` and `run.sh` are files, and `.md`/`.py`/`.sh` are country TLDs.
+    // A scheme, port or path says "address" on its own, so any TLD passes then.
+    readonly property var _commonTlds: new Set(["com", "net", "org", "io", "dev", "app", "ai", "co", "me", "tv", "br", "edu", "gov", "info", "xyz", "gg", "ly", "to", "cc", "us", "uk", "de", "fr", "es", "it", "nl", "pt", "ru", "jp", "cn", "in", "ca", "au", "eu", "fm", "wiki", "blog", "cloud", "tech", "online", "site", "store", "page", "link", "news", "social"])
+
+    /** The URL to open when the text is an address, else "". */
+    function addressFromQuery(queryText: string): string {
+        if (!Config.options.search.openAddress)
+            return "";
+        const text = String(queryText ?? "").trim();
+        if (text.length < 3 || /\s/.test(text))
+            return "";
+        if (/^https?:\/\/[^\s\/?#]+\S*$/i.test(text))
+            return text;
+        const parts = /^((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+([a-z]{2,})|localhost|\d{1,3}(?:\.\d{1,3}){3})(:\d{1,5})?([\/?#]\S*)?$/i.exec(text);
+        if (!parts)
+            return "";
+        const host = parts[1];
+        const isName = parts[2] !== undefined;
+        const strong = parts[3] !== undefined || parts[4] !== undefined;
+        if (isName && !strong && !root._commonTlds.has(parts[2].toLowerCase()))
+            return "";
+        const local = !isName || host.toLowerCase() === "localhost";
+        return (local ? "http://" : "https://") + text;
+    }
+
+    function createAddressResult(url: string, typed: string): var {
+        const favicon = BrowserSites.faviconFor(url);
+        const actions = [
+            resultComp.createObject(null, {
+                name: Translation.tr("Copy URL"),
+                iconName: "link",
+                iconType: LauncherSearchResult.IconType.Material,
+                execute: () => Quickshell.clipboardText = url
+            }),
+            resultComp.createObject(null, {
+                name: Translation.tr("Search the web instead"),
+                iconName: "travel_explore",
+                iconType: LauncherSearchResult.IconType.Material,
+                execute: () => root.openWebSearch(typed)
+            })
+        ];
+        if (BrowserSites.privateBrowsingSupported) {
+            actions.push(resultComp.createObject(null, {
+                name: Translation.tr("Open in private window"),
+                iconName: "visibility_off",
+                iconType: LauncherSearchResult.IconType.Material,
+                execute: () => BrowserSites.openPrivateWindow(url)
+            }));
+        }
+        return resultComp.createObject(null, {
+            key: "url:open",
+            name: typed,
+            comment: url === typed ? "" : url,
+            type: Translation.tr("Open address"),
+            verb: Translation.tr("Open"),
+            iconName: favicon.length > 0 ? favicon : "language",
+            iconType: favicon.length > 0
+                ? LauncherSearchResult.IconType.Image
+                : LauncherSearchResult.IconType.Material,
+            fallbackIconName: "language",
+            execute: () => Qt.openUrlExternally(url),
+            actions: actions
         });
     }
 
@@ -3373,6 +3576,19 @@ Singleton {
         }).filter(Boolean);
         result = result.concat(aliasObjects);
 
+        // An engine trigger or an address leads the list: Enter should do the
+        // one thing the text unmistakably asks for.
+        if (!queryHasPrefix) {
+            const engineMatch = root.engineShortcutMatch(root.query);
+            if (engineMatch) {
+                result.push(root.createEngineShortcutResult(engineMatch));
+            } else {
+                const address = root.addressFromQuery(root.query);
+                if (address.length > 0)
+                    result.push(root.createAddressResult(address, root.query.trim()));
+            }
+        }
+
         const isMath = root.isMathQuery(root.query);
         const startsWithShellCommandPrefix = Config.options.search.modules.shellCommand
             && root.query.startsWith(Config.options.search.prefix.shellCommand);
@@ -3403,6 +3619,7 @@ Singleton {
         } else if (startsWithShellCommandPrefix) {
             result.push(root.createCommandResultObject());
         } else if (startsWithWebSearchPrefix) {
+            result = result.concat(root.createWebSuggestionResults());
             result.push(root.createWebSearchResultObject());
         }
 
@@ -3625,8 +3842,10 @@ Singleton {
             // itself inside the message.
             if (SearchPanelRegistry.aiPolicyEnabled && root.aiPanelMatches(root.query).length === 0)
                 result.push(root.createAiAskResultObject());
-            if (Config.options.search.modules.webSearch && !startsWithWebSearchPrefix)
+            if (Config.options.search.modules.webSearch && !startsWithWebSearchPrefix) {
+                result = result.concat(root.createWebSuggestionResults());
                 result.push(root.createWebSearchResultObject());
+            }
         }
 
         // Filter out duplicate original apps/folders/commands if an alias is shown.

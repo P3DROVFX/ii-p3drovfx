@@ -7282,7 +7282,31 @@ Singleton {
                 property bool alwaysListApps: false
                 property int nonAppResultDelay: 30
                 property string engineBaseUrl: "https://www.google.com/search?q=" //www.google.com/search?q="
-                property list<string> excludedSites: ["quora.com", "facebook.com"]
+                // Text that looks like an address (github.com/foo, localhost:3000)
+                // gets an "Open address" row first instead of a web search.
+                property bool openAddress: true
+                // "yt lofi" searches YouTube. `%s` in a url marks where the terms
+                // go; without it they are appended.
+                property JsonObject engineShortcuts: JsonObject {
+                    property bool enable: true
+                    property list<var> entries: [
+                        { "trigger": "yt", "name": "YouTube", "icon": "smart_display", "url": "https://www.youtube.com/results?search_query=%s" },
+                        { "trigger": "gh", "name": "GitHub", "icon": "code", "url": "https://github.com/search?q=%s" },
+                        { "trigger": "w", "name": "Wikipedia", "icon": "menu_book", "url": "https://en.wikipedia.org/w/index.php?search=%s" },
+                        { "trigger": "wpt", "name": "Wikipédia (pt)", "icon": "menu_book", "url": "https://pt.wikipedia.org/w/index.php?search=%s" },
+                        { "trigger": "g", "name": "Google", "icon": "search", "url": "https://www.google.com/search?q=%s" },
+                        { "trigger": "ddg", "name": "DuckDuckGo", "icon": "search", "url": "https://duckduckgo.com/?q=%s" },
+                        { "trigger": "so", "name": "Stack Overflow", "icon": "forum", "url": "https://stackoverflow.com/search?q=%s" },
+                        { "trigger": "mdn", "name": "MDN", "icon": "article", "url": "https://developer.mozilla.org/en-US/search?q=%s" },
+                        { "trigger": "maps", "name": "Google Maps", "icon": "map", "url": "https://www.google.com/maps/search/%s" },
+                        { "trigger": "r", "name": "Reddit", "icon": "forum", "url": "https://www.reddit.com/search/?q=%s" },
+                        { "trigger": "aw", "name": "Arch Wiki", "icon": "menu_book", "url": "https://wiki.archlinux.org/index.php?search=%s" },
+                        { "trigger": "nix", "name": "Nix packages", "icon": "inventory_2", "url": "https://search.nixos.org/packages?query=%s" },
+                        { "trigger": "npm", "name": "npm", "icon": "deployed_code", "url": "https://www.npmjs.com/search?q=%s" },
+                        { "trigger": "imdb", "name": "IMDb", "icon": "movie", "url": "https://www.imdb.com/find/?q=%s" }
+                    ]
+                }
+                property list<string> excludedSites: []
                 property bool sloppy: false
                 property bool levenshtein: false
                 property bool frecency: true
@@ -7332,9 +7356,24 @@ Singleton {
                     property int maxIndexedSites: 300
                     property int maxResults: 6
                     property bool includeHistory: true
+                    // Enter on an "Open tab" row focuses the browser window already
+                    // showing it (only the selected tab of a window can be found).
+                    property bool focusOpenTabs: true
                     property bool useLocalFavicons: true
                     property bool allowRemoteFavicons: false
                     property int refreshMinutes: 10
+                }
+                // Live autocomplete rows above "Search the web". The engine is
+                // the one in engineBaseUrl; customUrl overrides it (the query
+                // is appended URL-encoded, the answer must be OpenSearch JSON).
+                property JsonObject webSuggestions: JsonObject {
+                    property bool enable: true
+                    property string customUrl: ""
+                    property int maxResults: 5
+                    property int minChars: 2
+                    property int debounceMs: 220
+                    // Typed text leaves the machine: skip it when an installed app matches.
+                    property bool onlyWithoutLocalMatch: true
                 }
                 property list<var> aliases: []
                 // Priority of the result groups, top to bottom. Removing an

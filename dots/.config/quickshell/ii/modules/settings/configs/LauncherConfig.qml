@@ -86,6 +86,13 @@ Item {
                 }
 
                 ConfigSubpageRow {
+                    buttonIcon: "travel_explore"
+                    title: Translation.tr("Web search")
+                    description: Translation.tr("Live suggestions, engine shortcuts, addresses and open tabs")
+                    onClicked: subPageOverlay.open(Qt.resolvedUrl("widgets/LauncherWebSearchConfig.qml"))
+                }
+
+                ConfigSubpageRow {
                     buttonIcon: "content_cut"
                     title: Translation.tr("Text snippets")
                     description: Translation.tr("Reusable text with clipboard and date tokens")

@@ -467,10 +467,10 @@ Rectangle {
                 symbol: "travel_explore"
                 label: Translation.tr("Search")
                 onClicked: {
-                    let url = Config.options.search.engineBaseUrl + encodeURIComponent(root.text);
+                    let terms = root.text;
                     for (let site of Config.options.search.excludedSites)
-                        url += ` -site:${site}`;
-                    Qt.openUrlExternally(url);
+                        terms += ` -site:${site}`;
+                    Qt.openUrlExternally(Config.options.search.engineBaseUrl + encodeURIComponent(terms));
                 }
             }
 

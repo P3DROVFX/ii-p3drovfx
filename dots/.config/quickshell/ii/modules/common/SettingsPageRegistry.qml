@@ -225,13 +225,14 @@ Singleton {
                 "widgets/LauncherAliasesConfig.qml",
                 "widgets/LauncherModulesConfig.qml",
                 "widgets/LauncherQuicklinksConfig.qml",
+                "widgets/LauncherWebSearchConfig.qml",
                 "widgets/LauncherSnippetsConfig.qml",
                 "widgets/LauncherShortcutsConfig.qml",
                 "widgets/LauncherTypeToSearchConfig.qml",
                 "widgets/LauncherAppearanceConfig.qml",
                 "widgets/LauncherDataConfig.qml"
             ],
-            "aliases": ["App Search", "Search Prefixes", "App Aliases", "Search Modules", "Quicklinks", "Search Shortcuts", "Type to search", "Type to run", "KRunner", "Launcher Privacy", "Search matching", "Typo tolerance", "Fuzzy matching", "Best match", "Result priority", "Clipboard", "Clipboard History", "Content detectors"]
+            "aliases": ["App Search", "Search Prefixes", "App Aliases", "Search Modules", "Quicklinks", "Web search", "Engine shortcuts", "Search bangs", "Search suggestions", "Open address", "Search Shortcuts", "Type to search", "Type to run", "KRunner", "Launcher Privacy", "Search matching", "Typo tolerance", "Fuzzy matching", "Best match", "Result priority", "Clipboard", "Clipboard History", "Content detectors"]
         },
         {
             "id": "dictation",
