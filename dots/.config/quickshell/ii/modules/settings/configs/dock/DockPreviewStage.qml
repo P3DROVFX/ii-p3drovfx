@@ -104,6 +104,7 @@ Item {
             return root.slot;
         switch (item.type) {
         case "media":
+            return root.slot * ((Config.options.dock.mediaSquare ?? false) ? 1 : 3);
         case "weather":
         case "tasks":
             return root.slot * 3;

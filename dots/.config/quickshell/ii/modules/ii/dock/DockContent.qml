@@ -908,6 +908,7 @@ Item {
             return buttonSlotSize;
         switch (item.type) {
         case "media":
+            return buttonSlotSize * root.mediaSlots;
         case "weather":
             return buttonSlotSize * 3;
         case "sports":
@@ -1214,6 +1215,9 @@ Item {
         return root.widgetStackMembers.indexOf(type) >= 0;
     }
 
+    // One slot, like a vertical dock draws it; vertical docks are always square.
+    readonly property bool mediaSquare: Config.options?.dock?.mediaSquare ?? false
+    readonly property real mediaSlots: root.mediaSquare ? 1 : 3
     readonly property bool showMedia: (Config.options?.dock?.enableMediaWidget ?? false) && root.showMusicPlayer
         && !root._inWidgetStack("media")
     readonly property bool showWeather: (Config.options?.dock?.enableWeatherWidget ?? false) && !root._inWidgetStack("weather")
@@ -3264,6 +3268,7 @@ Item {
                     return root.buttonSlotSize;
                 switch (itemData.type) {
                 case "media":
+                    return root.buttonSlotSize * root.mediaSlots;
                 case "weather":
                     return root.buttonSlotSize * 3;
                 case "sports":
@@ -3820,7 +3825,7 @@ Item {
         id: mediaItemComponent
         Item {
             id: mediaItemRoot
-            width: root.isVertical ? root.buttonSlotSize : root.buttonSlotSize * 3
+            width: root.isVertical ? root.buttonSlotSize : root.buttonSlotSize * root.mediaSlots
             height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
             readonly property int _index: parent._index
             Loader {
@@ -3829,6 +3834,7 @@ Item {
                 sourceComponent: DockMediaWidget {
                     anchors.centerIn: parent
                     isVertical: root.isVertical
+                    squareMode: root.mediaSquare
                     dockContent: root
                     delegateIndex: mediaItemRoot._index
                 }

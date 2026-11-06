@@ -21,6 +21,9 @@ Item {
     id: root
 
     property bool isVertical: false
+    // Draw one square slot (cover + play/pause badge) on a horizontal dock too.
+    property bool squareMode: false
+    readonly property bool square: root.isVertical || root.squareMode
     property var dockContent: null
     property int delegateIndex: -1
 
@@ -34,7 +37,7 @@ Item {
     readonly property real fixedSlots: isVertical ? 2.5 : 3
     readonly property real fixedLength: fixedSlots * slotSize
 
-    implicitWidth: root.isVertical ? root.slotSize : root.fixedLength
+    implicitWidth: root.square ? root.slotSize : root.fixedLength
     implicitHeight: root.isVertical ? root.slotSize : root.slotHeight
     // Magnified with the icons, at the muted share the dock keeps for a widget
     // body: the delegate wrapper grows the slot by exactly the room this scale
@@ -449,7 +452,13 @@ Item {
                         GlobalStates.mediaControlsOpen = !GlobalStates.mediaControlsOpen;
                     } else if (event.button === Qt.MiddleButton) {
                         MprisController.togglePlaying();
-                    } else if (event.button === Qt.RightButton || event.button === Qt.ForwardButton) {
+                    } else if (event.button === Qt.RightButton) {
+                        if (root.dockContent) {
+                            root.dockContent.buttonHovered = false;
+                            root.dockContent.lastHoveredButton = null;
+                        }
+                        mediaContextMenu.open();
+                    } else if (event.button === Qt.ForwardButton) {
                         MprisController.next();
                     } else if (event.button === Qt.BackButton) {
                         MprisController.previous();
@@ -467,7 +476,7 @@ Item {
             Item {
                 id: horizontalView
                 anchors.fill: parent
-                visible: !root.isVertical
+                visible: !root.square
 
                 RowLayout {
                     anchors.fill: parent
@@ -792,7 +801,7 @@ Item {
             Item {
                 id: verticalView
                 anchors.fill: parent
-                visible: root.isVertical
+                visible: root.square
 
                 Rectangle {
                     id: vertArtWrapper
@@ -866,6 +875,30 @@ Item {
                 }
             }
         }
+    }
+
+    // ── Context menu ───────────────────────────────────────────────────────
+    DockMediaContextMenu {
+        id: mediaContextMenu
+        anchorItem: root
+    }
+
+    Connections {
+        target: mediaContextMenu
+        function onActiveChanged() {
+            if (!root.dockContent)
+                return;
+            if (mediaContextMenu.active)
+                root.dockContent.registerContextMenuOpen();
+            else
+                root.dockContent.registerContextMenuClose();
+        }
+    }
+
+    // If this widget goes away with its menu open, release the dock.
+    Component.onDestruction: {
+        if (root.dockContent && mediaContextMenu.active)
+            root.dockContent.registerContextMenuClose();
     }
 
     // ── Tooltip ────────────────────────────────────────────────────────────

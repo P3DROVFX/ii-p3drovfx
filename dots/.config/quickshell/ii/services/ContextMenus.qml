@@ -219,6 +219,26 @@ Singleton {
             ]
         },
         {
+            "id": "dockMedia",
+            "groups": true,
+            "name": "Dock media",
+            "icon": "play_circle",
+            "description": "Right-click on the media widget in the dock",
+            "entries": [
+                { "id": "playPause", "symbol": "play_arrow", "title": "Play / Pause", "bar": true },
+                { "id": "next", "symbol": "skip_next", "title": "Next", "bar": true },
+                { "id": "previous", "symbol": "skip_previous", "title": "Previous", "bar": true },
+                { "id": "separator", "separator": true },
+                { "id": "controls", "symbol": "queue_music", "title": "Open media controls" },
+                { "id": "separator-2", "separator": true },
+                { "id": "square", "symbol": "crop_square", "title": "Make square" },
+                { "id": "wide", "symbol": "crop_16_9", "title": "Make wide" },
+                { "id": "separator-3", "separator": true },
+                { "id": "settings", "symbol": "settings", "title": "Widget settings" },
+                { "id": "remove", "symbol": "remove_circle", "title": "Remove from dock" }
+            ]
+        },
+        {
             "id": "dockTrash",
             "groups": true,
             "name": "Dock trash",

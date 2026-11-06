@@ -168,7 +168,7 @@ Item {
             DockWidgetCard {
                 context: cardContext
                 itemData: ({ "type": "media" })
-                slots: 3
+                slots: (subPageRoot.dock.mediaSquare ?? false) ? 1 : 3
                 symbol: "play_circle"
                 title: Translation.tr("Media")
                 hasContent: MprisController.activePlayer !== null
@@ -376,6 +376,16 @@ Item {
                     StyledToolTip {
                         text: Translation.tr("Lines between the apps, the widgets and the buttons. The Islands style never draws them")
                     }
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "crop_square"
+                text: Translation.tr("Square media widget")
+                checked: subPageRoot.dock.mediaSquare ?? false
+                onCheckedChanged: Config.options.dock.mediaSquare = checked
+                StyledToolTip {
+                    text: Translation.tr("Draw the media widget as one square slot: the cover with a play/pause badge. Vertical docks always draw it this way")
                 }
             }
         }

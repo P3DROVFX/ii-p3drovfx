@@ -15187,5 +15187,9 @@
     "Vault": "Cofre",
     "Vault locked": "Cofre bloqueado",
     "Wrong master password": "Senha mestra incorreta",
-    "Sign in once from a terminal — US, EU or self-hosted": "Entre uma vez pelo terminal — EUA, UE ou self-hosted"
+    "Sign in once from a terminal — US, EU or self-hosted": "Entre uma vez pelo terminal — EUA, UE ou self-hosted",
+    "Close media controls": "Fechar controles de mídia",
+    "Open media controls": "Abrir controles de mídia",
+    "Square media widget": "Widget de mídia quadrado",
+    "Draw the media widget as one square slot: the cover with a play/pause badge. Vertical docks always draw it this way": "Desenha o widget de mídia em um único espaço quadrado: a capa com um selo de play/pause. Docks verticais sempre o desenham assim"
 }

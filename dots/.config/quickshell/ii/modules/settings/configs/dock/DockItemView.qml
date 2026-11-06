@@ -124,6 +124,7 @@ Loader {
             DockMediaWidget {
                 anchors.centerIn: parent
                 isVertical: root.vertical
+                squareMode: Config.options.dock.mediaSquare ?? false
                 dockContent: root.context
                 delegateIndex: root.itemIndex
             }

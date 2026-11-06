@@ -6118,6 +6118,8 @@ Singleton {
                 property bool hoverToReveal: true
                 property bool blockHoverInFullscreen: true
                 property bool enableMediaWidget: false
+                // The media widget as one square slot (cover + play/pause) instead of three.
+                property bool mediaSquare: false
                 property bool enableWeatherWidget: false
                 property bool enableSportsWidget: false
                 property bool enableLivePreviewWidget: false

@@ -15180,5 +15180,9 @@
     "Vault": "Vault",
     "Vault locked": "Vault locked",
     "Wrong master password": "Wrong master password",
-    "Sign in once from a terminal — US, EU or self-hosted": "Sign in once from a terminal — US, EU or self-hosted"
+    "Sign in once from a terminal — US, EU or self-hosted": "Sign in once from a terminal — US, EU or self-hosted",
+    "Close media controls": "Close media controls",
+    "Open media controls": "Open media controls",
+    "Square media widget": "Square media widget",
+    "Draw the media widget as one square slot: the cover with a play/pause badge. Vertical docks always draw it this way": "Draw the media widget as one square slot: the cover with a play/pause badge. Vertical docks always draw it this way"
 }
