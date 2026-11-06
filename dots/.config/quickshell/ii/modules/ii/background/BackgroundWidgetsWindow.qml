@@ -430,8 +430,24 @@ PanelWindow {
         return !CF.WallpaperFraming.isIdentity(WallpaperLayout.framingFor(name, path))
             || Math.abs(WallpaperLayout.angleFor(name, path) % 360) > 0.001;
     }
+    // Same plane as BackgroundRoot.framedVerticalSweep: vertical parallax on a
+    // framed picture travels the picture's whole height.
+    readonly property real framedPictureAspect: CF.WallpaperFraming.isSideways(WallpaperLayout.angleFor(bgWidgetsWindow.editScreenName, bgWidgetsWindow.framingSourcePath))
+        ? wallpaperWidth / Math.max(1, wallpaperHeight)
+        : wallpaperHeight / Math.max(1, wallpaperWidth)
+    readonly property bool framedVerticalSweep: {
+        if (!bgWidgetsWindow.wallpaperFramed || bgWidgetsWindow.videoEffectsDisabled
+                || WallpaperLayout.centeringFor(bgWidgetsWindow.editScreenName, bgWidgetsWindow.framingSourcePath) > 0.001)
+            return false;
+        const p = Config.options.background.parallax;
+        if (!p.enableWorkspace || wallpaperWidth <= 0 || wallpaperHeight <= 0)
+            return false;
+        return p.vertical || (p.autoVertical && bgWidgetsWindow.framedPictureAspect > 1);
+    }
     readonly property real wallpaperBoxWidth: bgWidgetsWindow.wallpaperFramed ? screen.width : wallpaperWidth
-    readonly property real wallpaperBoxHeight: bgWidgetsWindow.wallpaperFramed ? screen.height : wallpaperHeight
+    readonly property real wallpaperBoxHeight: !bgWidgetsWindow.wallpaperFramed ? wallpaperHeight
+        : bgWidgetsWindow.framedVerticalSweep ? Math.max(screen.height, screen.width * bgWidgetsWindow.framedPictureAspect)
+        : screen.height
     property bool wallpaperIsVideo: {
         if (bgWidgetsWindow.ownWallpaperPath !== "")
             return false;

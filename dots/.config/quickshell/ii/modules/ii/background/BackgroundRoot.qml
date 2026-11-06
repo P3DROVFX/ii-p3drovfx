@@ -345,8 +345,27 @@ PanelWindow {
     // the way they work on any other. Read from the plane itself, so it turns
     // with the picture actually on screen rather than the config.
     readonly property bool wallpaperFramed: wallpaperImage.framed
+    // Vertical workspace parallax sweeps the WHOLE picture: a framed plane of
+    // the screen's proportions would leave it only the workspace zoom's sliver
+    // around the framing's pan, so the plane keeps the picture's on-screen
+    // height instead (the pan along that axis is the parallax's to drive).
+    // A centred picture keeps the screen plane it letterboxes into.
+    readonly property bool framedVerticalSweep: {
+        if (!bgRoot.wallpaperFramed || bgRoot.videoEffectsDisabled || wallpaperImage.framingCentering > 0.001)
+            return false;
+        const p = Config.options.background.parallax;
+        if (!p.enableWorkspace || bgRoot.wallpaperWidth <= 0 || bgRoot.wallpaperHeight <= 0)
+            return false;
+        return p.vertical || (p.autoVertical && bgRoot.framedPictureAspect > 1);
+    }
+    // Height over width of the picture as the framing turns it.
+    readonly property real framedPictureAspect: CF.WallpaperFraming.isSideways(wallpaperImage.framingAngle)
+        ? bgRoot.wallpaperWidth / Math.max(1, bgRoot.wallpaperHeight)
+        : bgRoot.wallpaperHeight / Math.max(1, bgRoot.wallpaperWidth)
     readonly property real wallpaperBoxWidth: bgRoot.wallpaperFramed ? bgRoot.screen.width : bgRoot.wallpaperWidth
-    readonly property real wallpaperBoxHeight: bgRoot.wallpaperFramed ? bgRoot.screen.height : bgRoot.wallpaperHeight
+    readonly property real wallpaperBoxHeight: !bgRoot.wallpaperFramed ? bgRoot.wallpaperHeight
+        : bgRoot.framedVerticalSweep ? Math.max(bgRoot.screen.height, bgRoot.screen.width * bgRoot.framedPictureAspect)
+        : bgRoot.screen.height
     // The geometry Edit Mode's overlay turns a drag into a position with: the
     // plane a framed picture gets (the screen at the workspace zoom) and the
     // picture's own size in logical pixels (the unit the centred fit draws it
