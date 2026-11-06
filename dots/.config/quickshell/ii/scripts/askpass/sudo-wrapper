@@ -11,13 +11,19 @@
 # Anything else, or no graphical session (a TTY, ssh), is stock sudo.
 
 self=$(readlink -f -- "${BASH_SOURCE[0]}")
-real=/usr/bin/sudo
-if [[ ! -x $real || $(readlink -f -- "$real") == "$self" ]]; then
-    real=""
+# envfs (NixOS) answers /usr/bin/sudo with the first sudo in PATH, which is this
+# file, and readlink can't see through it: recognise ourselves by the marker line
+# too. NixOS's setuid sudo (/run/wrappers) is unreadable, so it never matches.
+is_self() { [[ $(readlink -f -- "$1") == "$self" ]] || head -n2 -- "$1" 2>/dev/null | grep -q 'ii-askpass-wrapper'; }
+real=""
+for c in /run/wrappers/bin/sudo /usr/bin/sudo; do
+    [[ -x $c ]] && ! is_self "$c" && { real=$c; break; }
+done
+if [[ -z $real ]]; then
     IFS=: read -ra dirs <<< "$PATH"
     for d in "${dirs[@]}"; do
         c="$d/sudo"
-        [[ -x $c && $(readlink -f -- "$c") != "$self" ]] && { real=$c; break; }
+        [[ -x $c ]] && ! is_self "$c" && { real=$c; break; }
     done
     [[ -n $real ]] || { echo "sudo: no real sudo found in PATH" >&2; exit 1; }
 fi
