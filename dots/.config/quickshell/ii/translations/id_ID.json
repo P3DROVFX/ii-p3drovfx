@@ -1741,7 +1741,7 @@
     "Attachments": "Attachments",
     "Attachments, local file search, OCR and dictation": "Attachments, local file search, OCR and dictation",
     "Attachments: %1 tokens": "Attachments: %1 tokens",
-    "Attempt to remove dupes (the aggregator playerctl one and browsers' native ones when there's plasma browser integration)": "Attempt to remove dupes (the aggregator playerctl one and browsers' native ones when there's plasma browser integration)",
+    "Hide duplicate and empty players: the playerctld aggregator, players with no track and no controls, and native browser players repeating a Plasma Browser Integration one. Electron apps register as \"chromium\" but are only hidden when they repeat it.": "Hide duplicate and empty players: the playerctld aggregator, players with no track and no controls, and native browser players repeating a Plasma Browser Integration one. Electron apps register as \"chromium\" but are only hidden when they repeat it.",
     "Attendance": "Attendance",
     "Audio (MP3)": "Audio (MP3)",
     "Audio (OGG)": "Audio (OGG)",

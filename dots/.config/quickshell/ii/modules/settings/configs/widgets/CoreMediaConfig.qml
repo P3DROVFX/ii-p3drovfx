@@ -58,7 +58,7 @@ ContentPage {
                 Config.options.media.filterDuplicatePlayers = checked;
             }
             StyledToolTip {
-                text: Translation.tr("Attempt to remove dupes (the aggregator playerctl one and browsers' native ones when there's plasma browser integration)")
+                text: Translation.tr("Hide duplicate and empty players: the playerctld aggregator, players with no track and no controls, and native browser players repeating a Plasma Browser Integration one. Electron apps register as \"chromium\" but are only hidden when they repeat it.")
             }
         }
 

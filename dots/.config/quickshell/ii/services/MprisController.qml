@@ -50,7 +50,7 @@ Singleton {
 	property MprisPlayer trackedPlayer: null;
 	property MprisPlayer activePlayer: localPlayerSelected && localPlayer
 		? localPlayer
-		: (trackedPlayer ?? applicationPlayers[0] ?? Mpris.players.values[0] ?? null);
+		: (trackedPlayer ?? applicationPlayers[0] ?? Mpris.players.values.find(player => !isEmptyPlayer(player)) ?? null);
 	signal trackChanged(reverse: bool);
 
     // ── Track length ────────────────────────────────────────────────────────────
@@ -464,27 +464,68 @@ Singleton {
 			root.applySelectionPolicy();
 	}
 
-	property bool hasActivePlasmaIntegration: false
-    Process {
-        id: plasmaIntegrationAvailabilityCheckProc
-        running: true
-        command: ["bash", "-c", "command -v plasma-browser-integration-host"]
-        onExited: (exitCode, exitStatus) => {
-            root.hasActivePlasmaIntegration = (exitCode === 0);
-        }
-    }
+	/**
+	 * Duplicate filtering (`media.filterDuplicatePlayers`).
+	 *
+	 * Native browser buses are dropped only when they repeat what a running
+	 * plasma-browser-integration player already shows. Matching on the bus name
+	 * alone (and on the host binary merely being installed) hid every Electron
+	 * app, since Electron registers as `org.mpris.MediaPlayer2.chromium.instanceN`.
+	 */
+	readonly property string _pbiBusPrefix: "org.mpris.MediaPlayer2.plasma-browser-integration"
+
+	function _normTitle(value): string {
+		const title = String(value ?? "").trim().toLowerCase();
+		return title === "untitled" ? "" : title;
+	}
+
+	function _sameTrack(a: MprisPlayer, b: MprisPlayer): bool {
+		const ta = root._normTitle(a?.trackTitle);
+		const tb = root._normTitle(b?.trackTitle);
+		return ta !== "" && tb !== "" && (ta === tb || ta.includes(tb) || tb.includes(ta));
+	}
+
+	/** A native browser/Electron bus repeating the track a plasma-browser-integration player shows. */
+	function isBrowserDuplicate(player: MprisPlayer): bool {
+		const bus = player?.dbusName ?? "";
+		if (!bus.startsWith("org.mpris.MediaPlayer2.firefox") && !bus.startsWith("org.mpris.MediaPlayer2.chromium"))
+			return false;
+		return Mpris.players.values.some(other => other !== player
+			&& (other.dbusName ?? "").startsWith(root._pbiBusPrefix)
+			&& root._sameTrack(other, player));
+	}
+
+	/** A bus with nothing to show and nothing to control (e.g. GeForce NOW's idle "Untitled" player). */
+	function isEmptyPlayer(player: MprisPlayer): bool {
+		if (!player || root.isLocalPlayer(player))
+			return false;
+		const controllable = player.canControl && (player.canPlay || player.canPause
+			|| player.canTogglePlaying || player.canGoNext || player.canGoPrevious || player.canSeek);
+		return !controllable && !(player.length > 0) && root._normTitle(player.trackTitle) === "";
+	}
+
 	function isRealPlayer(player) {
-        if (!Config.options.media.filterDuplicatePlayers) {
-            return true;
-        }
-        return (
-            // Remove native browser buses only if plasma-browser-integration is actually active on D-Bus
-            !(root.hasActivePlasmaIntegration && player.dbusName.startsWith('org.mpris.MediaPlayer2.firefox')) && !(root.hasActivePlasmaIntegration && player.dbusName.startsWith('org.mpris.MediaPlayer2.chromium')) &&
-            // playerctld just copies other buses and we don't need duplicates
-            !player.dbusName?.startsWith('org.mpris.MediaPlayer2.playerctld') &&
-            // Non-instance mpd bus
-            !(player.dbusName?.endsWith('.mpd') && !player.dbusName.endsWith('MediaPlayer2.mpd')));
-    }
+		if (!Config.options.media.filterDuplicatePlayers)
+			return true;
+		const bus = player?.dbusName ?? "";
+		return !root.isBrowserDuplicate(player)
+			&& !root.isEmptyPlayer(player)
+			// playerctld just copies other buses and we don't need duplicates
+			&& !bus.startsWith('org.mpris.MediaPlayer2.playerctld')
+			// Non-instance mpd bus
+			&& !(bus.endsWith('.mpd') && !bus.endsWith('MediaPlayer2.mpd'));
+	}
+
+	/** Metadata or capabilities changed: the filter above may now answer differently. */
+	function _refreshForPlayerChange(): void {
+		root.updatePlayersList();
+		if (root.localPlayerSelected)
+			return;
+		if (root.trackedPlayer && root.players.indexOf(root.trackedPlayer) === -1 && !root.trackedPlayer.isPlaying)
+			root.trackedPlayer = null;
+		if (root.trackedPlayer == null)
+			root.trackedPlayer = root.bestApplicationPlayer();
+	}
 
 	// Original stuff from fox below
 	Instantiator {
@@ -502,9 +543,16 @@ Singleton {
 				root.updatePlayersList();
 				if (root.isRealPlayer(modelData) && root.mayTakeOver(modelData))
 					root.trackedPlayer = modelData;
-				else if (root.trackedPlayer == null)
+				else if (root.trackedPlayer == null && !root.isEmptyPlayer(modelData))
 					root.trackedPlayer = modelData;
 			}
+
+			// Empty buses often get their metadata a moment after they appear, and a
+			// browser bus only becomes a duplicate once the titles match.
+			function onPostTrackChanged() { Qt.callLater(root._refreshForPlayerChange); }
+			function onCanControlChanged() { Qt.callLater(root._refreshForPlayerChange); }
+			function onCanPlayChanged() { Qt.callLater(root._refreshForPlayerChange); }
+			function onLengthSupportedChanged() { Qt.callLater(root._refreshForPlayerChange); }
 
 			Component.onDestruction: {
 				const removedLocalPlayer = root.isLocalPlayer(modelData);

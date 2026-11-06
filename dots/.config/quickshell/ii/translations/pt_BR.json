@@ -1370,7 +1370,7 @@
     "Format JSON": "Formatar JSON",
     "Circular Media": "Mídia Circular",
     "Invalid service. Use: unsplash or wallhaven": "Serviço inválido. Use: unsplash ou wallhaven",
-    "Attempt to remove dupes (the aggregator playerctl one and browsers' native ones when there's plasma browser integration)": "Tentar remover duplicatas (o agregador playerctl e os nativos dos navegadores quando há integração do navegador Plasma)",
+    "Hide duplicate and empty players: the playerctld aggregator, players with no track and no controls, and native browser players repeating a Plasma Browser Integration one. Electron apps register as \"chromium\" but are only hidden when they repeat it.": "Ocultar players duplicados e vazios: o agregador playerctld, players sem faixa e sem controles, e players nativos do navegador que repetem um do Plasma Browser Integration. Apps Electron aparecem como \"chromium\", mas só são ocultados quando o repetem.",
     "1x1 notes widget with vertical scroll and direct notes editor.": "Widget de notas 1x1 com rolagem vertical e editor de notas direto.",
     "On": "Ligado",
     "Top left": "Superior esquerdo",
