@@ -47,6 +47,8 @@ Singleton {
     // Official localsend-cli binary + PTY bridge (see services/localsend_bridge.py)
     readonly property string bridgeScriptPath: Directories.home.toString().replace(/^file:\/\//, "") + "/.config/quickshell/ii/services/localsend_bridge.py"
     readonly property string installerScriptPath: Directories.home.toString().replace(/^file:\/\//, "") + "/.config/quickshell/ii/scripts/localsend/install_localsend_cli.sh"
+    // Inherited PATH last: on NixOS nothing lives in /usr/bin or /bin.
+    readonly property string envPath: Directories.home.toString().replace(/^file:\/\//, "") + "/.local/bin:/usr/local/bin:/usr/bin:/bin" + (Quickshell.env("PATH") ? ":" + Quickshell.env("PATH") : "")
     property bool _sendWasReceiving: false
     property var _pendingSendCommand: []
 
@@ -254,7 +256,7 @@ Singleton {
         running: true
         command: ["bash", "-c", "BIN=\"$HOME/.local/bin/localsend-cli\"; [ -x \"$BIN\" ] || BIN=\"$(command -v localsend-cli 2>/dev/null)\"; [ -n \"$BIN\" ] && [ -x \"$BIN\" ] && exec \"$BIN\" --version"]
         environment: ({
-            "PATH": Directories.home.toString().replace(/^file:\/\//, "") + "/.local/bin:/usr/local/bin:/usr/bin:/bin"
+            "PATH": root.envPath
         })
         property string versionOutput: ""
         stdout: StdioCollector {
@@ -362,7 +364,7 @@ Singleton {
         stdinEnabled: true
 
         environment: ({
-            "PATH": Directories.home.toString().replace(/^file:\/\//, "") + "/.local/bin:/usr/local/bin:/usr/bin:/bin"
+            "PATH": root.envPath
         })
 
         stdout: SplitParser {
@@ -395,7 +397,7 @@ Singleton {
         running: false
 
         environment: ({
-            "PATH": Directories.home.toString().replace(/^file:\/\//, "") + "/.local/bin:/usr/local/bin:/usr/bin:/bin"
+            "PATH": root.envPath
         })
 
         stdout: SplitParser {

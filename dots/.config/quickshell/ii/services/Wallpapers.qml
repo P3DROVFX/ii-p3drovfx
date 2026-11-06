@@ -28,6 +28,15 @@ Singleton {
 
     property string thumbgenScriptPath: `${FileUtils.trimFileProtocol(Directories.scriptPath)}/thumbnails/thumbgen-venv.sh`
     property string extractColorsScriptPath: FileUtils.trimFileProtocol(Directories.extractColorsScriptPath)
+    // User builds first, then the usual system dirs, then the inherited PATH:
+    // NixOS keeps everything under /run/current-system/sw/bin and
+    // /etc/profiles, so a PATH without the inherited part has no jq, coreutils
+    // or matugen and switchwall.sh dies before it generates any colours.
+    readonly property string envBinPath: {
+        const home = FileUtils.trimFileProtocol(Directories.home);
+        const inherited = Quickshell.env("PATH");
+        return `${home}/.local/bin:${home}/.cargo/bin:/usr/local/bin:/usr/bin:/bin` + (inherited ? `:${inherited}` : "");
+    }
     property alias directory: folderModel.folder
     readonly property string effectiveDirectory: FileUtils.trimFileProtocol(folderModel.folder.toString())
     property url defaultFolder: {
@@ -268,10 +277,9 @@ Singleton {
         const others = (Config.options.background.videoFrameTimes ?? []).filter(e => e?.path !== path);
         Config.options.background.videoFrameTimes = value > 0 ? [...others, { path: path, seconds: value }] : others;
         Config.saveOptionsNow(); // switchwall.sh reads it from disk
-        const envBinPath = `${FileUtils.trimFileProtocol(Directories.home)}/.local/bin:${FileUtils.trimFileProtocol(Directories.home)}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
         Quickshell.execDetached([
             "env", "-u", "LD_LIBRARY_PATH", "-u", "PYTHONHOME", "-u", "PYTHONPATH",
-            `PATH=${envBinPath}`, "bash", Directories.wallpaperSwitchScriptPath,
+            `PATH=${root.envBinPath}`, "bash", Directories.wallpaperSwitchScriptPath,
             "--noswitch", "--refresh-frame", "--mode", Appearance.m3colors.darkmode ? "dark" : "light"
         ]);
     }
@@ -406,10 +414,9 @@ Singleton {
     }
 
     function openFallbackPicker(darkMode = Appearance.m3colors.darkmode, lockscreen = false) {
-        const envBinPath = `${FileUtils.trimFileProtocol(Directories.home)}/.local/bin:${FileUtils.trimFileProtocol(Directories.home)}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
         let args = [
             "env", "-u", "LD_LIBRARY_PATH", "-u", "PYTHONHOME", "-u", "PYTHONPATH",
-            `PATH=${envBinPath}`, "bash", Directories.wallpaperSwitchScriptPath,
+            `PATH=${root.envBinPath}`, "bash", Directories.wallpaperSwitchScriptPath,
             "--mode", darkMode ? "dark" : "light"
         ];
         if (lockscreen) args.push("--lockscreen");
@@ -444,10 +451,9 @@ Singleton {
         }
         if (optionsChanged) Config.saveOptionsNow();
         const requestSeq = ++root._wallpaperRequestSeq;
-        const envBinPath = `${FileUtils.trimFileProtocol(Directories.home)}/.local/bin:${FileUtils.trimFileProtocol(Directories.home)}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
         Quickshell.execDetached([
             "env", "-u", "LD_LIBRARY_PATH", "-u", "PYTHONHOME", "-u", "PYTHONPATH",
-            `PATH=${envBinPath}`, "bash", Directories.wallpaperSwitchScriptPath,
+            `PATH=${root.envBinPath}`, "bash", Directories.wallpaperSwitchScriptPath,
             "--mode", darkMode ? "dark" : "light", "--image", path,
             "--request-seq", String(requestSeq)
         ]);
@@ -465,16 +471,15 @@ Singleton {
         }
         if (optionsChanged) Config.saveOptionsNow();
         const requestSeq = ++root._wallpaperRequestSeq;
-        const envBinPath = `${FileUtils.trimFileProtocol(Directories.home)}/.local/bin:${FileUtils.trimFileProtocol(Directories.home)}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
         Quickshell.execDetached([
             "env", "-u", "LD_LIBRARY_PATH", "-u", "PYTHONHOME", "-u", "PYTHONPATH",
-            `PATH=${envBinPath}`, "bash", Directories.wallpaperSwitchScriptPath,
+            `PATH=${root.envBinPath}`, "bash", Directories.wallpaperSwitchScriptPath,
             "--mode", darkMode ? "dark" : "light", "--image", path, "--lockscreen", "--noswitch",
             "--request-seq", String(requestSeq)
         ]);
         Quickshell.execDetached([
             "env", "-u", "LD_LIBRARY_PATH", "-u", "PYTHONHOME", "-u", "PYTHONPATH",
-            `PATH=${envBinPath}`, "bash", Directories.generateLockscreenColorsScriptPath,
+            `PATH=${root.envBinPath}`, "bash", Directories.generateLockscreenColorsScriptPath,
             "--image", path, "--mode", darkMode ? "dark" : "light"
         ]);
         root.changed();
@@ -491,10 +496,9 @@ Singleton {
         }
         if (optionsChanged) Config.saveOptionsNow();
         const requestSeq = ++root._wallpaperRequestSeq;
-        const envBinPath = `${FileUtils.trimFileProtocol(Directories.home)}/.local/bin:${FileUtils.trimFileProtocol(Directories.home)}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
         Quickshell.execDetached([
             "env", "-u", "LD_LIBRARY_PATH", "-u", "PYTHONHOME", "-u", "PYTHONPATH",
-            `PATH=${envBinPath}`, "bash", Directories.wallpaperSwitchScriptPath,
+            `PATH=${root.envBinPath}`, "bash", Directories.wallpaperSwitchScriptPath,
             "--mode", "light", "--image", path, "--lightmode",
             "--request-seq", String(requestSeq)
         ]);
