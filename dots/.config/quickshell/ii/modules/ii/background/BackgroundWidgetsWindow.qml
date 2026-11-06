@@ -817,6 +817,33 @@ PanelWindow {
             id: desktopStack
             anchors.fill: parent
             opacity: (1 - bgWidgetsWindow.windowBlurProgress) * (1 - bgWidgetsWindow.scrollingOverviewHide)
+
+            // The canvas is a screen-sized MouseArea moved by the widgets'
+            // parallax, so a long travel (a tall picture's vertical sweep) pulls
+            // it off a strip of the screen. Behind it, fixed to the screen,
+            // this keeps the desktop menu reachable on that strip.
+            MouseArea {
+                anchors.fill: parent
+                z: -1
+                visible: widgetCanvas.visible && widgetCanvas.enabled
+                // Filtered by hand: the TapHandler below widens acceptedButtons.
+                acceptedButtons: Qt.RightButton
+                onClicked: mouse => {
+                    if (mouse.button !== Qt.RightButton)
+                        return;
+                    const p = mapToItem(null, mouse.x, mouse.y);
+                    GlobalStates.openDesktopMenu(bgWidgetsWindow.editScreenName, p.x, p.y);
+                }
+                TapHandler {
+                    id: desktopStripLongPress
+                    gesturePolicy: TapHandler.WithinBounds
+                    onLongPressed: {
+                        const pos = desktopStripLongPress.point.position;
+                        const p = desktopStripLongPress.parent.mapToItem(null, pos.x, pos.y);
+                        GlobalStates.openDesktopMenu(bgWidgetsWindow.editScreenName, p.x, p.y);
+                    }
+                }
+            }
         }
 
         Loader {
