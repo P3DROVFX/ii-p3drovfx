@@ -58,6 +58,8 @@ UtilityTile {
         id: deck
         readonly property real card: Math.round(Math.min(deck.width, deck.height) * 0.78)
         readonly property real step: Math.max(2, Math.round(deck.card * 0.1))
+        // Concentric with the dock widget corner, like the other tiles.
+        readonly property real cardRadius: Math.max(4, Math.min(deck.card / 2, tile.radius - (tile.side - deck.card) / 2))
         Repeater {
             model: Math.min(2, tile.count - 1)
             delegate: Rectangle {
@@ -68,7 +70,7 @@ UtilityTile {
                 height: deck.card
                 x: (deck.width - deck.card) / 2 + deck.step * depth
                 y: (deck.height - deck.card) / 2 - deck.step * depth
-                radius: Math.round(deck.card * 0.24)
+                radius: deck.cardRadius
                 color: ColorUtils.applyAlpha(Appearance.colors.colSecondary, 0.35 - depth * 0.12)
             }
         }
@@ -78,7 +80,7 @@ UtilityTile {
             x: (deck.width - deck.card) / 2
             y: (deck.height - deck.card) / 2
             path: tile.newest
-            radius: Math.round(deck.card * 0.24)
+            radius: deck.cardRadius
             renderScale: tile.renderScale
             colPlate: ClockStyle.colSecondaryContainer
             colSymbol: ClockStyle.colOnSecondaryContainer
@@ -86,10 +88,20 @@ UtilityTile {
     }
 
     component EmptyBadge: TileBadge {
+        id: badge
+        // Distance from the tile edge, to keep the plate concentric with the corner.
+        property real inset: tile.pad
         renderScale: tile.renderScale
         // The drop target swells into a burst while files hover over it.
-        shape: tile.dropHovering ? MaterialShape.Shape.SoftBurst : MaterialShape.Shape.Square
-        color: tile.dropHovering ? ClockStyle.colPrimary : ClockStyle.colSecondaryContainer
+        shape: MaterialShape.Shape.SoftBurst
+        color: tile.dropHovering ? ClockStyle.colPrimary : "transparent"
+        Rectangle {
+            z: -1
+            anchors.fill: parent
+            visible: !tile.dropHovering
+            radius: Math.max(4, Math.min(width / 2, tile.radius - badge.inset))
+            color: ClockStyle.colSecondaryContainer
+        }
         colSymbol: tile.dropHovering ? ClockStyle.colOnPrimary : ClockStyle.colOnSecondaryContainer
         text: tile.dropHovering ? "file_download" : "shelves"
         iconScale: 0.5
@@ -105,6 +117,7 @@ UtilityTile {
             visible: tile.count === 0 || tile.dropHovering
             width: Math.round(tile.side * 0.7)
             height: width
+            inset: (tile.side - width) / 2
         }
         Deck {
             anchors.fill: parent

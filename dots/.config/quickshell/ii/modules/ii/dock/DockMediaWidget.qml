@@ -47,6 +47,12 @@ Item {
         ? Config.options.dock.widgetRadius
         : (Appearance.rounding.windowRounding + 12)
 
+    // Radius for a child of `size` px sitting `inset` px inside the card:
+    // concentric with the card corner, never past a circle.
+    function innerRadius(size, inset) {
+        return Math.max(0, Math.min(size / 2, root.widgetRadius - Math.max(0, inset)));
+    }
+
     // ── Media Player State ────────────────────────────────────────────────
     readonly property MprisPlayer currentPlayer: MprisController.activePlayer
     readonly property bool hasPlayer: !!currentPlayer
@@ -477,7 +483,7 @@ Item {
                         Layout.alignment: Qt.AlignVCenter
                         Layout.preferredWidth: Math.max(28, Math.min(38, cardBg.height - 10))
                         Layout.preferredHeight: Layout.preferredWidth
-                        radius: Math.min(Layout.preferredWidth * 0.28, Appearance.rounding.small)
+                        radius: root.innerRadius(Layout.preferredWidth, (cardBg.height - Layout.preferredWidth) / 2)
                         color: root.btnNextBg
 
                         scale: albumArtMouseArea.pressed ? 0.94 : (albumArtMouseArea.containsMouse ? 1.04 : (root.isPlaying ? 1.0 : 0.96))
@@ -606,7 +612,8 @@ Item {
                             Layout.alignment: Qt.AlignVCenter
 
                             // Material 3 Shape as State: Circle when paused ↔ Squircle when playing
-                            property real buttonRadius: root.isPlaying ? Appearance.rounding.small : (height / 2)
+                            property real circleRadius: root.innerRadius(height, (cardBg.height - height) / 2)
+                            property real buttonRadius: root.isPlaying ? Math.min(Appearance.rounding.small, circleRadius) : circleRadius
                             radius: buttonRadius
                             Behavior on buttonRadius {
                                 enabled: !Appearance.reducedMotion
@@ -691,7 +698,7 @@ Item {
                             implicitHeight: targetWidth
                             Layout.alignment: Qt.AlignVCenter
                             Layout.preferredWidth: root.mediaHovered ? targetWidth : 0
-                            radius: targetWidth / 2
+                            radius: root.innerRadius(targetWidth, (cardBg.height - targetWidth) / 2)
                             clip: true
                             opacity: root.mediaHovered ? 1.0 : 0.0
                             visible: Layout.preferredWidth > 0.5 || opacity > 0.01
@@ -730,7 +737,7 @@ Item {
                                 anchors.centerIn: parent
                                 width: nextBtn.targetWidth
                                 height: nextBtn.targetWidth
-                                radius: width / 2
+                                radius: nextBtn.radius
                                 color: root.btnNextIconColor
                                 opacity: 0
                                 visible: opacity > 0.001
@@ -791,7 +798,7 @@ Item {
                     id: vertArtWrapper
                     anchors.fill: parent
                     anchors.margins: 3
-                    radius: Math.min(width * 0.28, Appearance.rounding.small)
+                    radius: root.innerRadius(width, 3)
                     color: root.btnNextBg
 
                     Rectangle {
@@ -833,7 +840,8 @@ Item {
                     anchors.centerIn: parent
                     width: parent.width * 0.60
                     height: width
-                    radius: root.isPlaying ? Appearance.rounding.small : (height / 2)
+                    readonly property real circleRadius: root.innerRadius(width, (cardBg.width - width) / 2)
+                    radius: root.isPlaying ? Math.min(Appearance.rounding.small, circleRadius) : circleRadius
                     color: ColorUtils.transparentize(root.btnPlayBg, root.mediaHovered ? 0.05 : 0.25)
                     scale: root.mediaHovered ? 1.08 : 0.95
 
