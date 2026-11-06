@@ -71,6 +71,9 @@ Singleton {
         && root.now.getTime() >= root.snoozedUntil && root.snoozesLeft <= 0
     /// Epoch ms of the forced shutdown while armed, else 0.
     property real shutdownAt: 0
+    /// The countdown card was closed to save work: the overlay shrinks to a pill, the
+    /// countdown keeps running. Reset each time the countdown re-arms.
+    property bool countdownMinimized: false
 
     function snooze(): bool {
         if (!root.intrusiveDue || root.snoozesLeft <= 0)
@@ -93,6 +96,7 @@ Singleton {
 
     onShutdownArmedChanged: {
         root.shutdownAt = root.shutdownArmed ? Date.now() + root.shutdownGraceSeconds * 1000 : 0;
+        root.countdownMinimized = false;
         if (root.shutdownArmed)
             Quickshell.execDetached(["notify-send", Translation.tr("Shutting down in %1 s").arg(root.shutdownGraceSeconds),
                 Translation.tr("No snoozes left. Save your work and close your apps."),

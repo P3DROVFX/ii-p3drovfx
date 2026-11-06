@@ -38,6 +38,8 @@ Scope {
             readonly property int secondsLeft: window.countingDown
                 ? Math.max(0, Math.ceil((BedtimeService.shutdownAt - window.nowMs) / 1000)) : 0
             property bool shown: false
+            // Countdown card closed to save work: only a pill stays, input passes through.
+            readonly property bool minimized: window.countingDown && BedtimeService.countdownMinimized
 
             readonly property color colHero: window.countingDown ? Appearance.colors.colErrorContainer : Appearance.colors.colTertiaryContainer
             readonly property color colOnHero: window.countingDown ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnTertiaryContainer
@@ -50,7 +52,10 @@ Scope {
             exclusiveZone: 0
             WlrLayershell.namespace: "quickshell:bedtime"
             WlrLayershell.layer: WlrLayer.Overlay
-            WlrLayershell.keyboardFocus: window.primary ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+            WlrLayershell.keyboardFocus: window.primary && !window.minimized ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+            mask: Region {
+                item: !window.minimized ? scrim : window.primary ? pill : null
+            }
 
             anchors {
                 top: true
@@ -70,9 +75,10 @@ Scope {
             }
 
             Rectangle {
+                id: scrim
                 anchors.fill: parent
                 color: ColorUtils.transparentize(Appearance.m3colors.m3scrim, 0.12)
-                opacity: window.shown ? 1 : 0
+                opacity: window.shown && !window.minimized ? 1 : 0
                 Behavior on opacity {
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                 }
@@ -94,7 +100,8 @@ Scope {
                 implicitHeight: cardColumn.implicitHeight + 24
                 radius: Appearance.rounding.verylarge
                 color: Appearance.m3colors.m3surfaceContainerHigh
-                opacity: window.shown ? 1 : 0
+                opacity: window.shown && !window.minimized ? 1 : 0
+                enabled: !window.minimized
                 focus: window.primary
 
                 Behavior on opacity {
@@ -262,6 +269,16 @@ Scope {
                         }
 
                         LimitsTintButton {
+                            visible: window.countingDown
+                            Layout.fillWidth: true
+                            height_: 52
+                            colContent: Appearance.colors.colOnSurface
+                            symbol: "close"
+                            label: Translation.tr("Close to save my work")
+                            onClicked: BedtimeService.countdownMinimized = true
+                        }
+
+                        LimitsTintButton {
                             visible: !window.countingDown && BedtimeService.snoozesLeft > 0
                             Layout.fillWidth: true
                             height_: 52
@@ -281,6 +298,68 @@ Scope {
                         text: Translation.tr("Intrusive bedtime · change it in Clock › Bedtime")
                         font.pixelSize: Appearance.font.pixelSize.smallest
                         color: Appearance.colors.colSubtext
+                    }
+                }
+            }
+
+            // ── Minimized countdown ─────────────────────────────────
+            Rectangle {
+                id: pill
+                visible: window.primary && opacity > 0
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.top: parent.top
+                anchors.topMargin: window.minimized || ClockStyle.reducedMotion ? 12 : -implicitHeight
+                implicitWidth: pillRow.implicitWidth + 16
+                implicitHeight: pillRow.implicitHeight + 12
+                radius: height / 2
+                color: Appearance.colors.colErrorContainer
+                opacity: window.minimized ? 1 : 0
+                enabled: window.minimized
+
+                Behavior on opacity {
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                }
+                Behavior on anchors.topMargin {
+                    animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
+                }
+
+                RowLayout {
+                    id: pillRow
+                    anchors.centerIn: parent
+                    spacing: 8
+
+                    MaterialSymbol {
+                        Layout.leftMargin: 6
+                        text: "power_settings_new"
+                        iconSize: 22
+                        fill: 1
+                        color: Appearance.colors.colOnErrorContainer
+                    }
+
+                    StyledText {
+                        text: Translation.tr("Shutting down in %1 s").arg(window.secondsLeft)
+                        font.family: ClockStyle.fontMain
+                        font.variableAxes: ClockStyle.axesDigitsBold
+                        font.pixelSize: Appearance.font.pixelSize.large
+                        color: Appearance.colors.colOnErrorContainer
+                    }
+
+                    LimitsTintButton {
+                        height_: 40
+                        solid: true
+                        colContent: Appearance.colors.colError
+                        colSolidContent: Appearance.colors.colOnError
+                        symbol: "power_settings_new"
+                        label: Translation.tr("Shut down now")
+                        onClicked: BedtimeService.shutdownNow()
+                    }
+
+                    LimitsTintButton {
+                        height_: 40
+                        colContent: Appearance.colors.colOnErrorContainer
+                        symbol: "open_in_full"
+                        label: Translation.tr("Show")
+                        onClicked: BedtimeService.countdownMinimized = false
                     }
                 }
             }
