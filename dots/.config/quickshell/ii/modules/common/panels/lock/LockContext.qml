@@ -3,6 +3,7 @@ import qs.modules.common
 import qs.services
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import Quickshell.Services.Pam
 
 Scope {
@@ -201,11 +202,24 @@ Scope {
         }
     }
 
+    // Linux-PAM looks a bare module name up only in its own build's directory.
+    // fprintd puts pam_fprintd.so there on Arch and most distros (pam/fprintd.conf),
+    // but NixOS's Linux-PAM sits in the Nix store and fprintd's module is only
+    // linked into the system profile, so the bare name fails to dlopen and the
+    // reader never arms. There, use the profile's absolute path instead.
+    readonly property string nixosPamFprintd: "/run/current-system/sw/lib/security/pam_fprintd.so"
+    property bool nixosPam: false
+    Process {
+        running: true
+        command: ["test", "-e", root.nixosPamFprintd]
+        onExited: code => root.nixosPam = code === 0
+    }
+
     PamContext {
         id: fingerPam
 
         configDirectory: "pam"
-        config: "fprintd.conf"
+        config: root.nixosPam ? "fprintd-nixos.conf" : "fprintd.conf"
 
         // pam_fprintd sends an error-type conversation message per failed
         // scan; timeouts ("Verification timed out") must not count as tries.
