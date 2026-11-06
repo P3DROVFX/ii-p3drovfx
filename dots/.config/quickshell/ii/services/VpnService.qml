@@ -78,7 +78,10 @@ Singleton {
     signal vpnConnected(string profileName)
     signal vpnDisconnected()
     signal errorOccurred(string message)
-    readonly property string envPath: Directories.home.toString().replace(/^file:\/\//, "") + "/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    // The usual FHS dirs first, then the inherited PATH: on NixOS (and Guix) the CLIs live
+    // only in profile dirs such as /run/current-system/sw/bin, so the FHS list alone
+    // can't find them and the service reported itself unavailable.
+    readonly property string envPath: Directories.home.toString().replace(/^file:\/\//, "") + "/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" + (Quickshell.env("PATH") ? ":" + Quickshell.env("PATH") : "")
     property var operationQueue: []
     property var currentOperation: null
     property bool refreshQueued: false
