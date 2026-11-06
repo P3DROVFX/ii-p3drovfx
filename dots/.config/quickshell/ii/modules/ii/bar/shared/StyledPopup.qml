@@ -48,6 +48,10 @@ LazyLoader {
     property bool animate: true
     property bool animateHeight: true
     property bool stickyHover: false
+    // Keeps a sticky-hover popup open while the pointer is away — e.g. while
+    // the user is typing into it. Releasing it re-checks the hover state.
+    property bool holdOpen: false
+    onHoldOpenChanged: if (!holdOpen) _evaluateStickyState()
     property int keyboardFocus: WlrKeyboardFocus.None
 
     property bool customPosition: false
@@ -112,7 +116,7 @@ LazyLoader {
         property Timer grace: Timer {
             interval: 100 + Math.max(0, (Config.options && Config.options.bar && Config.options.bar.tooltips && Config.options.bar.tooltips.closeDelay) ? Config.options.bar.tooltips.closeDelay : 0)
             onTriggered: {
-                if (root._ipcActive)
+                if (root._ipcActive || root.holdOpen)
                     return;
                 root._popupHovered = false;
                 root._stickyActive = false;

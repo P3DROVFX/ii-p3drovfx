@@ -5295,6 +5295,7 @@ Singleton {
                     property string portWatcher: "expressive"
                     property string networkSpeed: "default" // default | expressive
                     property string aiPlanUsage: "expressive"
+                    property string passwordManager: "expressive" // default | expressive
                     property string search: "default" // default | expressive | neural | sculpt
                     property string date: "default"
                     property string timer: "expressive" // default | expressive | sculpt
@@ -5537,6 +5538,19 @@ Singleton {
                     property bool showUnit: true
                     property bool compact: false
                     property bool hideWhenOffline: false
+                }
+
+                property JsonObject passwordManager: JsonObject {
+                    property string colorMode: "primary"
+                    // auto | bitwarden | rbw | pass — auto takes the first CLI found.
+                    property string provider: "auto"
+                    // Seconds before a copied secret leaves the clipboard (0 = never).
+                    property int clipboardClear: 30
+                    // Minutes without use before the vault locks again (0 = never).
+                    property int autoLock: 15
+                    property bool lockWithScreen: true
+                    // Put the login matching the focused window first.
+                    property bool suggestForWindow: true
                 }
 
                 property JsonObject portWatcher: JsonObject {

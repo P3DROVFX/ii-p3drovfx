@@ -30,6 +30,7 @@ import qs.modules.ii.bar.widgets.timer
 import qs.modules.ii.bar.widgets.indicators
 import qs.modules.ii.bar.widgets.dockToPanel
 import qs.modules.ii.bar.widgets.portWatcher
+import qs.modules.ii.bar.widgets.passwordManager
 import qs.modules.ii.bar.widgets.networkSpeed
 import qs.modules.ii.bar.widgets.privacy
 import qs.modules.ii.bar.widgets.aiPlanUsage
@@ -646,6 +647,8 @@ Item {
             return true;
         if (modelData.id === "port_watcher" && Config.options.bar.styles.portWatcher === "expressive")
             return true;
+        if (modelData.id === "password_manager" && Config.options.bar.styles.passwordManager === "expressive")
+            return true;
         if (modelData.id === "ai_plan_usage" && Config.options.bar.styles.aiPlanUsage === "expressive")
             return true;
         if (modelData.id === "network_speed" && Config.options.bar.styles.networkSpeed === "expressive")
@@ -937,6 +940,10 @@ Item {
             if (isExp)
                 return portWatcherCompExpressive;
             return portWatcherComp;
+        case "password_manager":
+            if (isExp)
+                return passwordManagerCompExpressive;
+            return passwordManagerComp;
         case "ai_plan_usage":
             if (isExp)
                 return aiPlanUsageCompExpressive;
@@ -1318,6 +1325,18 @@ Item {
     Component {
         id: portWatcherCompExpressive
         ExpressivePortWatcher {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: passwordManagerComp
+        PasswordManagerWidget {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: passwordManagerCompExpressive
+        ExpressivePasswordManager {
             vertical: rootItem.vertical
         }
     }

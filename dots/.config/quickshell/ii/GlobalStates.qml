@@ -507,6 +507,8 @@ Singleton {
     /// the whole surface instead of revealing the empty overview grid.
     property bool panelOpenedDirectly: false
     property bool wallpaperSelectorOpen: false
+    // A bar popup with a text field is open (Passwords): type-to-search must not bind the letters.
+    property bool barPopupTypingOpen: false
     property string wallpaperSelectorTarget: "desktop" // "desktop", "lockscreen", "lightmode" or "screen:<name>" (one screen's own, WallpaperLayout)
     property bool workspaceShowNumbers: false
     property bool filePickerOpen: false
@@ -3663,6 +3665,7 @@ Singleton {
         "activewindow": "activeWindow", "window": "activeWindow",
         "sports": "sports",
         "portwatcher": "portWatcher", "ports": "portWatcher",
+        "passwords": "passwords", "passwordmanager": "passwords", "bitwarden": "passwords",
         "privacy": "privacy",
         "aiplanusage": "aiPlanUsage", "aiplan": "aiPlanUsage",
         "media": "media", "mediacontrols": "media",

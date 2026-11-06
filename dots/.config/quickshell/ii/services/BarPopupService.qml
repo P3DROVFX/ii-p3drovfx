@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Hyprland
 import qs
 import qs.modules.common
 
@@ -11,7 +12,7 @@ Item {
 
     readonly property var knownPopups: [
         "clock", "weather", "battery", "bluetooth", "resources",
-        "keyboard", "activeWindow", "sports", "portWatcher", "privacy",
+        "keyboard", "activeWindow", "sports", "portWatcher", "passwords", "privacy",
         "aiPlanUsage", "media", "tray", "record", "dictation",
         "mode", "screenShare", "shellUpdate", "easyEffects"
     ]
@@ -243,6 +244,16 @@ Item {
         function openOnMonitor(monitor: string): void { GlobalStates.openBarPopup("portWatcher", monitor); }
         function closeOnMonitor(monitor: string): void { GlobalStates.closeBarPopup("portWatcher", monitor); }
         function status(): bool { return GlobalStates.isBarPopupOpen("portWatcher"); }
+    }
+
+    // Bind a key to `qs -c ii ipc call passwordManager toggle`. Opens on the
+    // focused monitor only: the popup takes the keyboard, two would fight.
+    IpcHandler {
+        target: "passwordManager"
+        function toggle(): void { GlobalStates.toggleBarPopup("passwords", Hyprland.focusedMonitor?.name ?? ""); }
+        function open(): void { GlobalStates.openBarPopup("passwords", Hyprland.focusedMonitor?.name ?? ""); }
+        function close(): void { GlobalStates.closeBarPopup("passwords"); }
+        function status(): bool { return GlobalStates.isBarPopupOpen("passwords"); }
     }
 
     IpcHandler {

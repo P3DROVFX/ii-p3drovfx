@@ -478,6 +478,11 @@ Singleton {
                 property string devToolsCategory: "all"
             }
 
+            property JsonObject passwordManager: JsonObject {
+                // Item ids only, most recent first — never names or secrets.
+                property list<string> recent: []
+            }
+
             property JsonObject clipboard: JsonObject {
                 property list<string> pinnedEntries: []
                 // cliphist exposes stable IDs but no timestamps. These compact

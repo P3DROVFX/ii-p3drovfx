@@ -129,6 +129,8 @@ Singleton {
         // The wallpaper search field takes the keys too, island-hosted or not: an empty
         // desktop would otherwise arm the binds under it and open the launcher instead.
         || GlobalStates.wallpaperSelectorOpen
+        // A bar popup that takes typing (Passwords): hovering it may hand it the keyboard.
+        || GlobalStates.barPopupTypingOpen
 
     // Not under an open Alt+Tab: its typing submap binds the bare letters, and arming or
     // disarming here (hl.unbind reaches into every submap) would take them away mid-search.

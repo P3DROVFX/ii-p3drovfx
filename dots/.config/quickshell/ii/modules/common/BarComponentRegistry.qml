@@ -193,6 +193,14 @@ Singleton {
             configPage: "PrivacyPillConfig.qml"
         },
         {
+            id: "password_manager",
+            icon: "passkey",
+            title: "Passwords",
+            styleConfigKey: "passwordManager",
+            styleOptions: defaultStyleOptions,
+            configPage: "PasswordManagerConfig.qml"
+        },
+        {
             id: "port_watcher",
             icon: "lan",
             title: "Port Watcher",
