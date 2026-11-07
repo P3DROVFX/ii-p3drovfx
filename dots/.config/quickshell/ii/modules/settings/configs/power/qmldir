@@ -1,0 +1,6 @@
+module qs.modules.settings.configs.power
+
+FanControlConfig 1.0 FanControlConfig.qml
+FanCurveGraph 1.0 FanCurveGraph.qml
+FanCurvePane 1.0 FanCurvePane.qml
+ThermalHero 1.0 ThermalHero.qml

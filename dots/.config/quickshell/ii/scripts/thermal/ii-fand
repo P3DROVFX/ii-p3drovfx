@@ -1,0 +1,422 @@
+#!/usr/bin/python3 -I
+"""ii-fand: fan curve, turbo and TCC daemon for the ii shell.
+
+Runs as root (systemd: ii-fand.service). The shell never writes sysfs itself; it
+asks this program, through pkexec, to store a new config, and reads the status file
+the daemon refreshes on every tick.
+
+    ii-fand detect            capabilities as JSON (no root needed)
+    ii-fand daemon            the control loop (root)
+    ii-fand set '<json>'      validate + store config, signal the daemon (root, via pkexec)
+
+Fan backends, best first:
+  alienware_wmi  fanN_boost 0-255, added by the EC on top of its own curve (Dell G-series,
+                 Alienware). The curve here can only push the fans up, never below the EC.
+  hwmon_pwm      pwmN + pwmN_enable=1 (manual) on any hwmon chip: nct67xx/it87 desktop
+                 boards, thinkpad_acpi (fan_control=1), asus-nb-wmi, dell_smm on models
+                 whose BIOS lets go. Full authority, so a safety floor applies.
+Anything else is read-only: temperatures and RPM are still reported.
+
+Safety, regardless of the stored curve: at SAFETY_TEMP the fans are forced to 100 %,
+and on exit pwm_enable is handed back to the firmware (2 = auto).
+"""
+import glob
+import json
+import math
+import os
+import signal
+import sys
+import time
+
+CONFIG_PATH = "/etc/ii-fand/config.json"
+STATUS_DIR = "/run/ii-fand"
+STATUS_PATH = f"{STATUS_DIR}/status.json"
+PID_PATH = f"{STATUS_DIR}/pid"
+SAFETY_TEMP = 92.0
+
+DEFAULT_CONFIG = {
+    "enabled": True,
+    "curve": {"tStart": 60, "tMax": 80, "minPct": 40, "maxPct": 100, "steepness": 2.0},
+    "hysteresis": 4,
+    "interval": 2,
+    "turbo": None,       # None = leave alone, True/False = enforce
+    "tccOffset": None,   # None = leave alone, int = enforce (°C below TjMax)
+}
+
+
+# ── sysfs helpers ──────────────────────────────────────────────────────────────
+
+def read(path, default=None):
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except OSError:
+        return default
+
+
+def read_int(path, default=None):
+    value = read(path)
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def write(path, value):
+    with open(path, "w") as f:
+        f.write(str(value))
+
+
+def hwmons():
+    for path in sorted(glob.glob("/sys/class/hwmon/hwmon*")):
+        yield path, read(f"{path}/name", "")
+
+
+# ── discovery ──────────────────────────────────────────────────────────────────
+
+CPU_SENSORS = ("coretemp", "k10temp", "zenpower", "cpu_thermal")
+GPU_SENSORS = ("amdgpu", "nouveau")
+
+
+def find_temps():
+    """CPU/GPU temperature inputs, labelled. Vendor sensors (alienware/dell) first."""
+    temps = []
+    for path, name in hwmons():
+        if name == "alienware_wmi":
+            for i in (1, 2):
+                if os.path.exists(f"{path}/temp{i}_input"):
+                    temps.append({"id": f"{name}:{i}", "label": read(f"{path}/temp{i}_label", f"temp{i}"),
+                                  "path": f"{path}/temp{i}_input"})
+        elif name in CPU_SENSORS:
+            # Package / Tctl is temp1 on coretemp and k10temp
+            if os.path.exists(f"{path}/temp1_input"):
+                temps.append({"id": f"{name}:1", "label": "CPU", "path": f"{path}/temp1_input"})
+        elif name in GPU_SENSORS:
+            if os.path.exists(f"{path}/temp1_input"):
+                temps.append({"id": f"{name}:1", "label": "GPU", "path": f"{path}/temp1_input"})
+    # one entry per label; the vendor sensor wins because it came first
+    seen, unique = set(), []
+    for t in temps:
+        if t["label"] not in seen:
+            seen.add(t["label"])
+            unique.append(t)
+    return unique
+
+
+def find_fans():
+    """(backend, fans). Each fan: label, rpm path, max rpm, control path."""
+    alien = [p for p, n in hwmons() if n == "alienware_wmi"]
+    if alien:
+        path = alien[0]
+        fans = []
+        for i in range(1, 9):
+            boost = f"{path}/fan{i}_boost"
+            if not os.path.exists(boost):
+                break
+            fans.append({"label": read(f"{path}/fan{i}_label", f"Fan {i}"),
+                         "rpm": f"{path}/fan{i}_input",
+                         "max": read_int(f"{path}/fan{i}_max", 0),
+                         "control": boost})
+        if fans:
+            return "alienware_wmi", fans
+
+    for path, name in hwmons():
+        pwms = sorted(glob.glob(f"{path}/pwm[0-9]"))
+        fans = []
+        for pwm in pwms:
+            n = pwm[-1]
+            if not os.path.exists(f"{pwm}_enable"):
+                continue
+            fans.append({"label": read(f"{path}/fan{n}_label", f"{name} fan {n}"),
+                         "rpm": f"{path}/fan{n}_input",
+                         "max": read_int(f"{path}/fan{n}_max", 0),
+                         "control": pwm,
+                         "enable": f"{pwm}_enable"})
+        if fans and name not in ("dell_smm", "amdgpu", "nouveau"):
+            return "hwmon_pwm", fans
+
+    # read-only: any hwmon with fanN_input
+    fans = []
+    for path, name in hwmons():
+        for rpm in sorted(glob.glob(f"{path}/fan[0-9]_input")):
+            n = rpm.split("/fan")[-1].split("_")[0]
+            fans.append({"label": read(f"{path}/fan{n}_label", f"Fan {n}"), "rpm": rpm,
+                         "max": read_int(f"{path}/fan{n}_max", 0), "control": None})
+        if fans:
+            break
+    return "none", fans
+
+
+def find_tcc():
+    for dev in glob.glob("/sys/class/thermal/cooling_device*"):
+        if read(f"{dev}/type") == "TCC Offset":
+            return dev
+    return None
+
+
+def turbo_node():
+    if os.path.exists("/sys/devices/system/cpu/intel_pstate/no_turbo"):
+        return "/sys/devices/system/cpu/intel_pstate/no_turbo", True   # inverted
+    if os.path.exists("/sys/devices/system/cpu/cpufreq/boost"):
+        return "/sys/devices/system/cpu/cpufreq/boost", False
+    return None, False
+
+
+def tjmax():
+    for path, name in hwmons():
+        if name in ("coretemp", "k10temp"):
+            crit = read_int(f"{path}/temp1_crit")
+            if crit:
+                return crit // 1000
+    return 100
+
+
+def read_turbo():
+    node, inverted = turbo_node()
+    if not node:
+        return None
+    value = read_int(node)
+    if value is None:
+        return None
+    return (value == 0) if inverted else (value == 1)
+
+
+def platform_profiles():
+    out = []
+    for dev in sorted(glob.glob("/sys/class/platform-profile/platform-profile-*")):
+        out.append({"name": read(f"{dev}/name"), "choices": (read(f"{dev}/choices") or "").split(),
+                    "current": read(f"{dev}/profile")})
+    return out
+
+
+def capabilities():
+    backend, fans = find_fans()
+    tcc = find_tcc()
+    node, _ = turbo_node()
+    return {
+        "backend": backend,
+        "fans": [{"label": f["label"], "max": f["max"], "rpm": read_int(f["rpm"], 0),
+                  "controllable": f["control"] is not None} for f in fans],
+        "temps": [{"id": t["id"], "label": t["label"], "c": round(read_int(t["path"], 0) / 1000, 1)}
+                  for t in find_temps()],
+        "turbo": {"available": node is not None, "enabled": read_turbo()},
+        "tcc": {"available": tcc is not None, "max": read_int(f"{tcc}/max_state", 0) if tcc else 0,
+                "current": read_int(f"{tcc}/cur_state") if tcc else None, "tjmax": tjmax()},
+        "platformProfiles": platform_profiles(),
+        "product": read("/sys/class/dmi/id/product_name", ""),
+        "vendor": read("/sys/class/dmi/id/sys_vendor", ""),
+    }
+
+
+# ── config ─────────────────────────────────────────────────────────────────────
+
+def clamp(v, lo, hi):
+    return max(lo, min(hi, v))
+
+
+def validate(cfg):
+    out = json.loads(json.dumps(DEFAULT_CONFIG))
+    out["enabled"] = bool(cfg.get("enabled", True))
+    c = cfg.get("curve", {})
+    t_start = clamp(int(c.get("tStart", 60)), 30, 95)
+    t_max = clamp(int(c.get("tMax", 80)), t_start + 2, 100)
+    min_pct = clamp(int(c.get("minPct", 40)), 0, 100)
+    max_pct = clamp(int(c.get("maxPct", 100)), min_pct, 100)
+    out["curve"] = {"tStart": t_start, "tMax": t_max, "minPct": min_pct, "maxPct": max_pct,
+                    "steepness": round(clamp(float(c.get("steepness", 2.0)), -4.0, 6.0), 2)}
+    out["hysteresis"] = clamp(int(cfg.get("hysteresis", 4)), 0, 15)
+    out["interval"] = clamp(int(cfg.get("interval", 2)), 1, 10)
+    turbo = cfg.get("turbo")
+    out["turbo"] = None if turbo is None else bool(turbo)
+    tcc = cfg.get("tccOffset")
+    out["tccOffset"] = None if tcc is None else clamp(int(tcc), 0, 63)
+    return out
+
+
+def load_config():
+    try:
+        with open(CONFIG_PATH) as f:
+            return validate(json.load(f))
+    except (OSError, ValueError, TypeError):
+        return validate({})
+
+
+def curve_pct(curve, temp):
+    """minPct below tStart, maxPct from tMax, and between them an exponential (steepness > 0),
+    linear (0) or logarithmic (< 0) rise."""
+    span = curve["tMax"] - curve["tStart"]
+    x = clamp((temp - curve["tStart"]) / span, 0.0, 1.0) if span > 0 else (1.0 if temp >= curve["tMax"] else 0.0)
+    k = curve["steepness"]
+    if abs(k) < 1e-3:
+        shaped = x
+    elif k > 0:
+        shaped = math.expm1(k * x) / math.expm1(k)
+    else:
+        shaped = 1 - math.expm1(-k * (1 - x)) / math.expm1(-k)
+    return curve["minPct"] + (curve["maxPct"] - curve["minPct"]) * shaped
+
+
+# ── commands ───────────────────────────────────────────────────────────────────
+
+def cmd_set(raw):
+    cfg = validate(json.loads(raw))
+    os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
+    tmp = CONFIG_PATH + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(cfg, f, indent=2)
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, CONFIG_PATH)
+    pid = read_int(PID_PATH)
+    if pid:
+        try:
+            os.kill(pid, signal.SIGHUP)
+        except OSError:
+            pass
+    print(json.dumps(cfg))
+    return 0
+
+
+def write_status(status):
+    tmp = STATUS_PATH + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(status, f)
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, STATUS_PATH)
+
+
+def cmd_daemon():
+    os.makedirs(STATUS_DIR, exist_ok=True)
+    os.chmod(STATUS_DIR, 0o755)
+    write(PID_PATH, os.getpid())
+
+    backend, fans = find_fans()
+    temps = find_temps()
+    tcc = find_tcc()
+    state = {"cfg": load_config(), "reload": False}
+    print(f"[+] ii-fand: backend={backend} fans={[f['label'] for f in fans]} "
+          f"temps={[t['label'] for t in temps]} tcc={'yes' if tcc else 'no'}", flush=True)
+
+    def to_raw(pct):
+        return round(clamp(pct, 0, 100) * 255 / 100)
+
+    def release(*_):
+        for f in fans:
+            try:
+                if backend == "hwmon_pwm":
+                    write(f["enable"], 2)
+                elif backend == "alienware_wmi":
+                    # leave the curve's floor rather than dropping to the EC's quiet default
+                    write(f["control"], to_raw(state["cfg"]["curve"]["minPct"]) if state["cfg"]["enabled"] else 0)
+            except OSError:
+                pass
+        sys.exit(0)
+
+    def on_hup(*_):
+        state["reload"] = True
+
+    signal.signal(signal.SIGTERM, release)
+    signal.signal(signal.SIGINT, release)
+    signal.signal(signal.SIGHUP, on_hup)
+
+    current = None
+    was_enabled = None
+    while True:
+        if state["reload"]:
+            state["reload"] = False
+            state["cfg"] = load_config()
+            current = None
+            print(f"[+] config reloaded: {json.dumps(state['cfg'])}", flush=True)
+        cfg = state["cfg"]
+
+        readings = []
+        for t in temps:
+            v = read_int(t["path"])
+            if v is not None:
+                readings.append({"label": t["label"], "c": round(v / 1000, 1)})
+        hottest = max((r["c"] for r in readings), default=None)
+
+        # fan curve
+        target = None
+        if hottest is not None and backend != "none":
+            if cfg["enabled"]:
+                target = curve_pct(cfg["curve"], hottest)
+                if current is None or target >= current:
+                    current = target
+                else:
+                    current = min(current, curve_pct(cfg["curve"], hottest + cfg["hysteresis"]))
+                applied = 100.0 if hottest >= SAFETY_TEMP else current
+                raw = to_raw(applied)
+                for f in fans:
+                    try:
+                        if backend == "hwmon_pwm" and read_int(f["enable"]) != 1:
+                            write(f["enable"], 1)
+                        if read_int(f["control"]) != raw:   # rewrite after resume / EC reset
+                            write(f["control"], raw)
+                    except OSError as e:
+                        print(f"[-] {f['control']}: {e}", file=sys.stderr, flush=True)
+            elif was_enabled is not False:
+                # just disabled: hand the fans back to the firmware
+                for f in fans:
+                    try:
+                        write(f["enable"] if backend == "hwmon_pwm" else f["control"],
+                              2 if backend == "hwmon_pwm" else 0)
+                    except OSError:
+                        pass
+                current = None
+            was_enabled = cfg["enabled"]
+
+        # turbo / TCC: enforce only when the user chose a value
+        if cfg["turbo"] is not None:
+            node, inverted = turbo_node()
+            want = (0 if cfg["turbo"] else 1) if inverted else (1 if cfg["turbo"] else 0)
+            if node and read_int(node) != want:
+                try:
+                    write(node, want)
+                except OSError as e:
+                    print(f"[-] turbo: {e}", file=sys.stderr, flush=True)
+        if cfg["tccOffset"] is not None and tcc:
+            want = min(cfg["tccOffset"], read_int(f"{tcc}/max_state", 0))
+            if read_int(f"{tcc}/cur_state") != want:
+                try:
+                    write(f"{tcc}/cur_state", want)
+                except OSError as e:
+                    print(f"[-] tcc: {e}", file=sys.stderr, flush=True)
+
+        try:
+            write_status({
+                "time": int(time.time()),
+                "backend": backend,
+                "enabled": cfg["enabled"],
+                "temps": readings,
+                "hottest": hottest,
+                "targetPct": None if current is None else round(current, 1),
+                "safety": hottest is not None and hottest >= SAFETY_TEMP,
+                "fans": [{"label": f["label"], "rpm": read_int(f["rpm"], 0), "max": f["max"],
+                          "raw": read_int(f["control"]) if f["control"] else None} for f in fans],
+                "turbo": read_turbo(),
+                "tcc": read_int(f"{tcc}/cur_state") if tcc else None,
+                "config": cfg,
+            })
+        except OSError:
+            pass
+        time.sleep(cfg["interval"])
+
+
+def main(argv):
+    if len(argv) < 2 or argv[1] == "detect":
+        print(json.dumps(capabilities()))
+        return 0
+    if argv[1] == "daemon":
+        return cmd_daemon()
+    if argv[1] == "set" and len(argv) == 3:
+        return cmd_set(argv[2])
+    if argv[1] == "curve" and len(argv) == 3:   # debug: print the curve for a config
+        cfg = validate(json.loads(argv[2]))
+        print(json.dumps({t: round(curve_pct(cfg["curve"], t), 1) for t in range(30, 101, 5)}))
+        return 0
+    print(__doc__, file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

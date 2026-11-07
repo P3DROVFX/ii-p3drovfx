@@ -368,8 +368,9 @@ Singleton {
             "name": "Power & Battery",
             "icon": "battery_android_full",
             "component": "modules/settings/configs/PowerConfig.qml",
-            "subPages": [],
-            "aliases": ["Core Services", "Suspend", "Battery warning", "Automatic suspend",
+            "subPages": ["power/FanControlConfig.qml"],
+            "aliases": ["Core Services", "Suspend", "Fan curve", "Fans", "Fan control", "Temperature",
+                "Thermals", "Turbo boost", "TCC offset", "Throttling", "Battery warning", "Automatic suspend",
                 "Charge limit", "Charge threshold", "Battery full notification", "Battery health"]
         },
         {

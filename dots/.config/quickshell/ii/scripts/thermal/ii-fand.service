@@ -1,0 +1,13 @@
+[Unit]
+Description=ii shell fan curve, turbo and TCC daemon
+After=multi-user.target
+Conflicts=g15-fancurve.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/ii-fand daemon
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
