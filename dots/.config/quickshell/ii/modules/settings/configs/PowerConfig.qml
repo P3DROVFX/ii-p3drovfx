@@ -2,13 +2,19 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
-import Quickshell.Io
 import qs.services
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
+import qs.modules.settings.configs.colors
+import qs.modules.settings.configs.power
 import qs.modules.settings.configs.widgets
 
+/**
+ * Power & Battery, Material 3 Expressive: the pack as the hero (level slab + today's chart,
+ * which opens the full battery history), the power mode as the main pane with the thermals
+ * strip under it, the everyday features as tiles, and the fine print on sub-pages.
+ */
 Item {
     id: powerRoot
     anchors.fill: parent
@@ -16,40 +22,186 @@ Item {
     property alias contentY: root.contentY
     property alias activeSubPage: subPageOverlay.activeSubPage
 
+    function open(page) {
+        powerRoot.activeSubPage = Qt.resolvedUrl(page);
+    }
+
+    // Live temperature on the thermals strip, only while the page is on screen
+    Component.onCompleted: FanControl.watchers += 1
+    Component.onDestruction: FanControl.watchers -= 1
+
     ContentPage {
         id: root
         anchors.fill: parent
         forceWidth: false
         opacity: subPageOverlay.slideProgress
 
-        ContentSection {
-            icon: "mode_fan"
-            title: Translation.tr("Thermals & Fans")
+        // ── hero ──
+        BatteryHero {
+            Layout.fillWidth: true
+            visible: Battery.available
+            onDetailsRequested: powerRoot.open("power/BatteryUsageConfig.qml")
+        }
 
-            ConfigSubpageRow {
-                buttonIcon: "thermostat"
-                title: Translation.tr("Fan curve, turbo and TCC")
-                description: Translation.tr("Draw the fan curve, cap the CPU's turbo boost or lower its throttle temperature")
-                summary: FanControl.ready
-                    ? (FanControl.hottest > 0 ? Translation.tr("%1 °C now").arg(Math.round(FanControl.hottest)) : "")
-                    : ""
-                configPage: Qt.resolvedUrl("power/FanControlConfig.qml")
-                Component.onCompleted: FanControl.refresh()
+        // A desktop has no pack: say so in one line instead of an empty hero
+        Rectangle {
+            Layout.fillWidth: true
+            visible: !Battery.available
+            implicitHeight: 96
+            radius: Appearance.rounding.verylarge
+            color: Appearance.colors.colLayer1
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.margins: 20
+                spacing: 16
+                MaterialShapeWrappedMaterialSymbol {
+                    text: "power"
+                    iconSize: 24
+                    padding: 12
+                    shape: MaterialShape.Shape.Cookie7Sided
+                    color: Appearance.colors.colSecondaryContainer
+                    colSymbol: Appearance.colors.colOnSecondaryContainer
+                }
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+                    StyledText {
+                        text: Translation.tr("Mains power")
+                        font.family: Appearance.font.family.title
+                        font.variableAxes: Appearance.font.variableAxes.titleRounded
+                        font.pixelSize: Appearance.font.pixelSize.huge
+                        color: Appearance.colors.colOnLayer1
+                    }
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: Translation.tr("No battery on this machine, so only the power mode and the thermals apply.")
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        color: Appearance.colors.colSubtext
+                        wrapMode: Text.WordWrap
+                    }
+                }
             }
         }
 
+        // ── main pane ──
+        PowerModePane {
+            Layout.fillWidth: true
+            onThermalsRequested: powerRoot.open("power/FanControlConfig.qml")
+        }
+
+        // ── feature tiles ──
+        AppSettingsSection {
+            Layout.topMargin: 12
+            title: Translation.tr("Everyday")
+            symbol: "bolt"
+
+            Grid {
+                id: tiles
+                Layout.fillWidth: true
+                readonly property int tileHeight: 200
+                readonly property int count: (Battery.available ? 2 : 0) + 1 + (KeyboardBacklight.available ? 1 : 0)
+                readonly property int maxCols: Math.max(1, Math.floor((width + spacing) / (300 + spacing)))
+                columns: tiles.maxCols >= tiles.count ? tiles.count : (tiles.maxCols >= 2 ? 2 : 1)
+                spacing: 12
+                readonly property real tileWidth: (width - spacing * (columns - 1)) / columns
+
+                ColorsFeatureTile {
+                    width: tiles.tileWidth
+                    height: tiles.tileHeight
+                    symbol: "coffee"
+                    shapeOn: MaterialShape.Shape.Cookie12Sided
+                    title: Translation.tr("Keep awake")
+                    checked: Idle.inhibit
+                    configurable: true
+                    summary: !Idle.inhibit ? Translation.tr("Off. The screen dims and the system sleeps as usual.")
+                        : (Idle.timed ? Translation.tr("On for %1 more").arg(Idle.remainingText)
+                                      : Translation.tr("On until you turn it off"))
+                    onToggled: value => Idle.toggleInhibit(value)
+                    onConfigureRequested: powerRoot.open("power/KeepAwakeConfig.qml")
+                }
+
+                ColorsFeatureTile {
+                    visible: Battery.available
+                    width: tiles.tileWidth
+                    height: tiles.tileHeight
+                    symbol: "mode_standby"
+                    shapeOn: MaterialShape.Shape.Flower
+                    title: Translation.tr("Automatic suspend")
+                    checked: Config.options.battery.automaticSuspend
+                    configurable: true
+                    summary: Config.options.battery.automaticSuspend
+                        ? Translation.tr("Sleeps at %1 %. Warns at %2 % and %3 %.").arg(Config.options.battery.suspend).arg(Config.options.battery.low).arg(Config.options.battery.critical)
+                        : Translation.tr("Off. Warns at %1 % and %2 %, never suspends.").arg(Config.options.battery.low).arg(Config.options.battery.critical)
+                    onToggled: value => Config.options.battery.automaticSuspend = value
+                    onConfigureRequested: powerRoot.open("power/BatteryAlertsConfig.qml")
+                }
+
+                ColorsFeatureTile {
+                    id: chargeTile
+                    visible: Battery.available
+                    width: tiles.tileWidth
+                    height: tiles.tileHeight
+                    symbol: "battery_status_good"
+                    shapeOn: MaterialShape.Shape.Clover4Leaf
+                    title: Translation.tr("Charge finished")
+                    checked: Config.options.battery.notifyCharged ?? true
+                    summary: {
+                        const end = Battery.chargeLimitActive ? Translation.tr("at the %1 % limit").arg(Battery.chargeLimit) : Translation.tr("at 100 %");
+                        return checked ? Translation.tr("Notifies once per charge, %1.").arg(end)
+                                       : Translation.tr("Off. Charging ends quietly %1.").arg(end);
+                    }
+                    onToggled: value => Config.options.battery.notifyCharged = value
+                }
+
+                ColorsFeatureTile {
+                    id: kbdTile
+                    visible: KeyboardBacklight.available
+                    width: tiles.tileWidth
+                    height: tiles.tileHeight
+                    symbol: "keyboard"
+                    shapeOn: MaterialShape.Shape.SoftBurst
+                    title: Translation.tr("Keyboard light")
+                    checked: Config.options.light.keyboardBacklight.autoOff
+                    summary: checked
+                        ? Translation.tr("Turns off after %1 without input, back on the next key.").arg(kbdTile.timeoutText(Config.options.light.keyboardBacklight.timeout))
+                        : Translation.tr("Off. The backlight stays at your level.")
+                    onToggled: value => Config.options.light.keyboardBacklight.autoOff = value
+
+                    readonly property color colContent: checked ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer1
+                    function timeoutText(secs) {
+                        return secs < 60 ? Translation.tr("%1 s").arg(secs) : Translation.tr("%1 min").arg(Math.round(secs / 60));
+                    }
+
+                    Repeater {
+                        model: [15, 60, 300]
+                        delegate: ColorsChip {
+                            required property int modelData
+                            label: kbdTile.timeoutText(modelData)
+                            enabled: kbdTile.checked
+                            chosen: Config.options.light.keyboardBacklight.timeout === modelData
+                            colContent: kbdTile.colContent
+                            colChosen: Appearance.colors.colPrimary
+                            colOnChosen: Appearance.colors.colOnPrimary
+                            onClicked: Config.options.light.keyboardBacklight.timeout = modelData
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── the bar's power button (plain options, original components) ──
         ContentSection {
-            icon: "style"
-            title: Translation.tr("Power Button Style")
+            Layout.topMargin: 12
+            icon: "power_settings_new"
+            title: Translation.tr("Power button in the bar")
 
             ContentSubsection {
                 title: Translation.tr("Visual style")
                 icon: "palette"
                 ConfigSelectionArray {
                     currentValue: Config.options.bar.styles.power
-                    onSelected: newValue => {
-                        Config.options.bar.styles.power = String(newValue);
-                    }
+                    onSelected: newValue => Config.options.bar.styles.power = String(newValue)
                     options: [
                         { displayName: Translation.tr("Default"),    icon: "style",                 value: "default" },
                         { displayName: Translation.tr("Expressive"), icon: "fluid_med",             value: "expressive" },
@@ -66,220 +218,20 @@ Item {
             }
         }
 
-        ContentSection {
-            icon: "battery_android_full"
-            title: Translation.tr("Power & Battery Management")
+        // ── related ──
+        Flow {
+            Layout.fillWidth: true
+            Layout.topMargin: 4
+            spacing: 8
 
-            BatteryOverview {
-                Layout.fillWidth: true
-                Layout.bottomMargin: 16
+            RelatedChip {
+                pageId: "bar"
+                label: Translation.tr("Battery bar widget")
+                sectionHighlight: Translation.tr("Widgets")
             }
-
-            BatteryUsageChart {
-                Layout.fillWidth: true
-                Layout.bottomMargin: 16
-            }
-
-            ConfigSpinBox {
-                icon: "warning"
-                text: Translation.tr("Low warning (%)")
-                value: Config.options.battery.low
-                from: 0
-                to: 100
-                stepSize: 5
-                onValueChanged: {
-                    Config.options.battery.low = value;
-                }
-            }
-
-            ConfigSpinBox {
-                icon: "dangerous"
-                text: Translation.tr("Critical warning (%)")
-                value: Config.options.battery.critical
-                from: 0
-                to: 100
-                stepSize: 5
-                onValueChanged: {
-                    Config.options.battery.critical = value;
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "pause"
-                text: Translation.tr("Automatic suspend")
-                checked: Config.options.battery.automaticSuspend
-                onCheckedChanged: {
-                    Config.options.battery.automaticSuspend = checked;
-                }
-                StyledToolTip {
-                    text: Translation.tr("Automatically suspends the system when battery is low")
-                }
-            }
-
-            ConfigSpinBox {
-                enabled: Config.options.battery.automaticSuspend
-                icon: "mode_standby"
-                text: Translation.tr("Suspend at (%)")
-                value: Config.options.battery.suspend
-                from: 0
-                to: 100
-                stepSize: 5
-                onValueChanged: {
-                    Config.options.battery.suspend = value;
-                }
-            }
-
-            ConfigSpinBox {
-                icon: "charger"
-                text: Translation.tr("Full battery warning (%)")
-                value: Config.options.battery.full
-                from: 0
-                to: 101
-                stepSize: 5
-                onValueChanged: {
-                    Config.options.battery.full = value;
-                }
-            }
-
-            ContentSubsection {
-                title: Translation.tr("Remember Keep awake")
-                icon: "coffee"
-                tooltip: Translation.tr("Restores the Keep awake toggle after a restart. A forgotten inhibitor can keep the system from sleeping, so this is limited to the current session by default.")
-                Layout.fillWidth: true
-
-                ConfigSelectionArray {
-                    currentValue: Config.options.idle.persistInhibit
-                    onSelected: newValue => {
-                        Config.options.idle.persistInhibit = newValue;
-                    }
-                    options: [
-                        {
-                            "displayName": Translation.tr("Never"),
-                            "icon": "block",
-                            "value": "never"
-                        },
-                        {
-                            "displayName": Translation.tr("Until reboot"),
-                            "icon": "restart_alt",
-                            "value": "session"
-                        },
-                        {
-                            "displayName": Translation.tr("Always"),
-                            "icon": "all_inclusive",
-                            "value": "always"
-                        }
-                    ]
-                }
-            }
-
-            ContentSubsection {
-                title: Translation.tr("Keep awake timers")
-                icon: "hourglass_top"
-                tooltip: Translation.tr("Right-clicking the Keep awake toggle offers these durations, and a timed session turns itself off when the time is up. The list keeps itself up to date: dial a duration the toggle doesn't offer yet and it takes the place of the oldest one.")
-                Layout.fillWidth: true
-
-                ConfigRow {
-                    Layout.fillWidth: true
-
-                    StyledText {
-                        Layout.fillWidth: true
-                        text: Translation.tr("Offered durations: %1").arg(Idle.quickDurations.map(minutes => Idle.formatMinutes(minutes)).join(", "))
-                        color: Appearance.colors.colSubtext
-                        wrapMode: Text.Wrap
-                    }
-
-                    RippleButtonWithIcon {
-                        materialIcon: "restart_alt"
-                        mainText: Translation.tr("Reset")
-                        onClicked: Idle.resetDurations()
-                    }
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "notifications_active"
-                text: Translation.tr("Warn before a timer ends")
-                checked: Config.options.idle.notifyOnExpiry
-                onCheckedChanged: {
-                    Config.options.idle.notifyOnExpiry = checked;
-                }
-                StyledToolTip {
-                    text: Translation.tr("Sends a notification shortly before the system is allowed to sleep again, with a button to add more time")
-                }
-            }
-
-            ConfigSpinBox {
-                enabled: Config.options.idle.notifyOnExpiry
-                icon: "timer"
-                text: Translation.tr("Warn this long before (s)")
-                value: Config.options.idle.warnLeadSec
-                from: 0
-                to: 600
-                stepSize: 15
-                onValueChanged: {
-                    Config.options.idle.warnLeadSec = value;
-                }
-            }
-
-            ConfigSpinBox {
-                icon: "more_time"
-                text: Translation.tr("Extend button adds (min)")
-                value: Config.options.idle.extendMinutes
-                from: 1
-                to: 120
-                stepSize: 5
-                onValueChanged: {
-                    Config.options.idle.extendMinutes = value;
-                }
-            }
-        }
-
-        BatteryChargingSection {}
-
-        ContentSection {
-            icon: "keyboard"
-            title: Translation.tr("Keyboard Backlight")
-            visible: KeyboardBacklight.available
-
-            ConfigSwitch {
-                buttonIcon: "bedtime"
-                text: Translation.tr("Turn off when idle")
-                checked: Config.options.light.keyboardBacklight.autoOff
-                onCheckedChanged: {
-                    Config.options.light.keyboardBacklight.autoOff = checked;
-                }
-                StyledToolTip {
-                    text: Translation.tr("Switches the backlight off after a period without keyboard or pointer input, then restores your level on the next input. Idle inhibitors are ignored, so it still applies during video playback.")
-                }
-            }
-
-            ConfigSpinBox {
-                enabled: Config.options.light.keyboardBacklight.autoOff
-                icon: "timer"
-                text: Translation.tr("Turn off after (s)")
-                value: Config.options.light.keyboardBacklight.timeout
-                from: 5
-                to: 900
-                stepSize: 5
-                onValueChanged: {
-                    Config.options.light.keyboardBacklight.timeout = value;
-                }
-            }
-        }
-
-        ContentSection {
-            icon: "link"
-            title: Translation.tr("Related settings")
-
-            Flow {
-                Layout.fillWidth: true
-                spacing: 8
-
-                RelatedChip {
-                    pageId: "bar"
-                    label: Translation.tr("Battery bar widget")
-                    sectionHighlight: Translation.tr("Widgets")
-                }
+            RelatedChip {
+                pageId: "usageStats"
+                label: Translation.tr("App usage history")
             }
         }
     }

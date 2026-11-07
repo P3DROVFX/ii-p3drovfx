@@ -368,9 +368,12 @@ Singleton {
             "name": "Power & Battery",
             "icon": "battery_android_full",
             "component": "modules/settings/configs/PowerConfig.qml",
-            "subPages": ["power/FanControlConfig.qml"],
+            "subPages": ["power/FanControlConfig.qml", "power/BatteryUsageConfig.qml",
+                "power/BatteryAlertsConfig.qml", "power/KeepAwakeConfig.qml"],
             "aliases": ["Core Services", "Suspend", "Fan curve", "Fans", "Fan control", "Temperature",
-                "Thermals", "Turbo boost", "TCC offset", "Throttling", "Battery warning", "Automatic suspend",
+                "Thermals", "Turbo boost", "TCC offset", "Throttling", "Power mode", "Power profile",
+                "Power saver", "Performance", "Keep awake", "Battery history", "Battery usage by app",
+                "Keyboard backlight", "Low battery", "Critical battery", "Battery warning", "Automatic suspend",
                 "Charge limit", "Charge threshold", "Battery full notification", "Battery health"]
         },
         {

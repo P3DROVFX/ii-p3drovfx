@@ -4,3 +4,10 @@ FanControlConfig 1.0 FanControlConfig.qml
 FanCurveGraph 1.0 FanCurveGraph.qml
 FanCurvePane 1.0 FanCurvePane.qml
 ThermalHero 1.0 ThermalHero.qml
+BatteryAlertsConfig 1.0 BatteryAlertsConfig.qml
+BatteryHero 1.0 BatteryHero.qml
+BatteryTodayCard 1.0 BatteryTodayCard.qml
+BatteryUsageConfig 1.0 BatteryUsageConfig.qml
+KeepAwakeConfig 1.0 KeepAwakeConfig.qml
+PowerModePane 1.0 PowerModePane.qml
+SubPageHeader 1.0 SubPageHeader.qml

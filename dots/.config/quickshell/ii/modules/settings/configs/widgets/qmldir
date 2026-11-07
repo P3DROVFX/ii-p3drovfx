@@ -1,8 +1,6 @@
 module qs.modules.settings.configs.widgets
 
 BatteryChargingSection 1.0 BatteryChargingSection.qml
-BatteryOverview 1.0 BatteryOverview.qml
-BatteryUsageChart 1.0 BatteryUsageChart.qml
 ConfigBannerSelector 1.0 ConfigBannerSelector.qml
 CoreGoogleTasksConfig 1.0 CoreGoogleTasksConfig.qml
 CoreTickTickConfig 1.0 CoreTickTickConfig.qml
