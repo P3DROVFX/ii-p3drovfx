@@ -7383,7 +7383,7 @@ Singleton {
     }
 
     function recoverInterruptedMessages(messages: var, run: var): var {
-        const source = Array.isArray(messages) ? messages : [];
+        const source = Array.from(messages ?? []);
         const hasUnfinishedRun = !!run && !root.runCoordinator.terminalStates.includes(String(run.state ?? ""));
         return source.map(data => {
             const value = Object.assign({}, data ?? ({}));
@@ -7584,7 +7584,7 @@ Singleton {
         root.clearMessages();
         const ids = [];
         const byId = ({});
-        const originalMessages = Array.isArray(session.messages) ? session.messages : [];
+        const originalMessages = Array.from(session?.messages ?? []);
         const messages = root.recoverInterruptedMessages(originalMessages, session.run ?? null);
         const recoveredMessages = messages.some((value, index) => {
             const original = originalMessages[index] ?? ({});
