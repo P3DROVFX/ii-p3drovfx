@@ -75,6 +75,14 @@ Scope {
         // previous build left it enabled in the running compositor.
         const legacyRef = "_G.__ii_overview_window_handoff_rule";
         let script = "if " + legacyRef + " ~= nil then pcall(function() " + legacyRef + ":set_enabled(false) end) end; ";
+        // The deleted QML scrolling overview (before the scrolloverview plugin)
+        // turned its `class = '.*'` no_anim restore rule off from a 150 ms Timer
+        // inside the overview widget. If the widget died first (e.g. the loader
+        // going inactive when focus moved to another monitor), the rule stayed
+        // on and every window opened without animation until Hyprland reloaded.
+        // Clear whatever an older build left in the compositor.
+        const scrollingRef = "_G.__ii_scrolling_overview_hide";
+        script += "if " + scrollingRef + " ~= nil then for _, rule in pairs(" + scrollingRef + ") do pcall(function() rule:set_enabled(false) end) end end; ";
         script += transitionScope.handoffRulesRef + " = " + transitionScope.handoffRulesRef + " or {}; ";
         script += "local rules = " + transitionScope.handoffRulesRef + "; ";
         if (active) {
