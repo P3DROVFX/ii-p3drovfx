@@ -12,6 +12,17 @@
       "setup": "In btop, open Options and pick the \"matugen\" color theme."
     },
     {
+      "id": "fastfetch",
+      "name": "Fastfetch",
+      "app": "fastfetch",
+      "symbol": "info",
+      "description": "System, desktop and hardware groups with a palette row",
+      "template": "fastfetch.jsonc",
+      "output": "~/.config/fastfetch/config.jsonc",
+      "postHook": "",
+      "setup": "Nothing to set up: fastfetch reads ~/.config/fastfetch/config.jsonc on its own."
+    },
+    {
       "id": "kitty",
       "name": "Kitty",
       "app": "kitty",
