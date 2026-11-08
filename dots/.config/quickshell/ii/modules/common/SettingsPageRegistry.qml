@@ -300,6 +300,16 @@ Singleton {
             "aliases": ["Compositor", "Keyboard layout", "Key repeat", "Mouse", "Touchpad", "Cursor", "Dwindle", "Master layout", "Keybinds", "Default apps", "Default applications", "XDG", "MIME types", "File associations", "Window rules", "Layer rules", "Environment variables", "hyprland.conf", "custom lua"]
         },
         {
+            "id": "startup",
+            "name": "Startup & Services",
+            "icon": "rocket_launch",
+            "component": "modules/settings/configs/StartupServicesConfig.qml",
+            "subPages": ["startup/StartupEditConfig.qml"],
+            "aliases": ["Startup apps", "Startup programs", "Autostart", "Start at login", "exec-once", "execs.lua",
+                "Services", "systemd", "Daemons", "Units", "Timers", "Enable service", "Disable service",
+                "Failed services", "journalctl", "Service log", "keyd"]
+        },
+        {
             "id": "touchGestures",
             "name": "Touch & Gestures",
             "icon": "touch_app",
@@ -507,7 +517,7 @@ Singleton {
         {
             "id": "system",
             "name": "System",
-            "pageIds": ["displays", "hyprland", "network", "soundAlerts", "touchGestures", "power", "privacy", "about"]
+            "pageIds": ["displays", "hyprland", "startup", "network", "soundAlerts", "touchGestures", "power", "privacy", "about"]
         }
     ]
 
