@@ -71,12 +71,17 @@ Item {
 
     readonly property string diffSeparator: "\n===DIFF_SPLIT===\n"
     readonly property var categories: DevToolsRegistry.categories
-    readonly property var tools: DevToolsRegistry.search(root.filterText, root.selectedCategory)
+    readonly property var tools: DevToolsRegistry.search(root.filterText, root.selectedCategory, true)
     readonly property var selectedTool: root.selectedIndex >= 0 && root.selectedIndex < root.tools.length
         ? root.tools[root.selectedIndex]
         : null
     readonly property bool isGenerator: root.selectedTool?.type === "generator"
     readonly property bool isDiff: root.selectedTool?.id === "text_diff"
+    /// Page-only image tools own their workspace (DevToolsPhotoCompressor).
+    readonly property bool isImageTool: root.selectedTool?.type === "image"
+    readonly property Item photo: photoLoader.item
+    /// The photo survives tool switches; the workspace (and its textures) does not.
+    property string photoSourcePath: ""
     readonly property var metaEntries: {
         const meta = root.outputMeta ?? {};
         return Object.keys(meta)
@@ -92,10 +97,12 @@ Item {
     readonly property color heroColor: root.selectedTool === null ? ClockStyle.colPane
         : root.isGenerator ? ClockStyle.colTertiaryContainer
         : root.selectedTool.type === "analyzer" ? ClockStyle.colSecondaryContainer
+        : root.isImageTool ? ClockStyle.colTertiary
         : ClockStyle.colPrimary
     readonly property color heroContent: root.selectedTool === null ? ClockStyle.colOnSurfaceVariant
         : root.isGenerator ? ClockStyle.colOnTertiaryContainer
         : root.selectedTool.type === "analyzer" ? ClockStyle.colOnSecondaryContainer
+        : root.isImageTool ? ClockStyle.colOnTertiary
         : ClockStyle.colOnPrimary
 
     /// One Material shape per category, so the rail and the hero do not read
@@ -114,6 +121,8 @@ Item {
             return "Flower";
         case "web":
             return "Cookie7Sided";
+        case "media":
+            return "Pentagon";
         default:
             return "SoftBurst";
         }
@@ -126,6 +135,8 @@ Item {
     function toolTypeLabel(tool) {
         if (tool?.type === "generator")
             return Translation.tr("Generator");
+        if (tool?.type === "image")
+            return Translation.tr("Image");
         return tool?.type === "analyzer" ? Translation.tr("Analyzer") : Translation.tr("Transformer");
     }
 
@@ -201,6 +212,14 @@ Item {
         const tool = root.selectedTool;
         if (!tool)
             return false;
+        if (tool.type === "image") {
+            root.errorText = "";
+            root.outputText = "";
+            root.outputMeta = ({});
+            if (showFeedback)
+                root.photo?.requestEncode();
+            return true;
+        }
         const input = tool.type === "generator"
             ? ""
             : (root.isDiff ? root.inputText + root.diffSeparator + root.modifiedText : root.inputText);
@@ -242,6 +261,8 @@ Item {
     }
 
     function copyOutput() {
+        if (root.isImageTool)
+            return root.photo?.save() ?? false;
         if (root.outputText.length === 0)
             root.execute(false);
         if (root.outputText.length === 0)
@@ -252,6 +273,10 @@ Item {
     }
 
     function pasteIntoInput() {
+        if (root.isImageTool) {
+            root.photo?.pasteFromClipboard();
+            return;
+        }
         const clip = String(Quickshell.clipboardText ?? "");
         if (root.isGenerator || clip.length === 0)
             return;
@@ -278,6 +303,10 @@ Item {
     }
 
     function clearInput() {
+        if (root.isImageTool) {
+            root.photo?.clear();
+            return;
+        }
         if (root.isGenerator)
             return;
         if (root.isDiff)
@@ -348,6 +377,8 @@ Item {
     Shortcut { enabled: root.isTabActive; sequence: "Ctrl+Shift+V"; onActivated: root.pasteIntoInput() }
     Shortcut { enabled: root.isTabActive; sequence: "Ctrl+L"; onActivated: root.clearInput() }
     Shortcut { enabled: root.isTabActive; sequence: "Ctrl+U"; onActivated: root.useOutputAsInput() }
+    Shortcut { enabled: root.isTabActive && root.isImageTool; sequence: "Ctrl+O"; onActivated: root.photo?.pick() }
+    Shortcut { enabled: root.isTabActive && root.isImageTool; sequence: "Ctrl+Shift+C"; onActivated: root.photo?.copy() }
     Shortcut { enabled: root.isTabActive; sequence: "Alt+Up"; onActivated: root.stepTool(-1) }
     Shortcut { enabled: root.isTabActive; sequence: "Alt+Down"; onActivated: root.stepTool(1) }
     Shortcut { enabled: root.isTabActive; sequence: "Alt+Left"; onActivated: root.stepCategory(-1) }
@@ -1135,6 +1166,48 @@ Item {
                         }
 
                         RowLayout {
+                            visible: root.isImageTool
+                            spacing: 6
+
+                            TintAction {
+                                symbol: "add_photo_alternate"
+                                label: root.compact ? "" : Translation.tr("Open")
+                                shortcut: "Ctrl O"
+                                tip: Translation.tr("Choose a photo (Ctrl+O), or drop one on the page")
+                                colContent: root.heroContent
+                                onClicked: root.photo?.pick()
+                            }
+                            TintAction {
+                                enabled: root.photo?.hasImage ?? false
+                                symbol: "clear_all"
+                                tip: Translation.tr("Close the photo (Ctrl+L)")
+                                colContent: root.heroContent
+                                onClicked: root.clearInput()
+                            }
+                            TintAction {
+                                enabled: root.photo?.resultReady ?? false
+                                symbol: "content_copy"
+                                label: root.compact ? "" : Translation.tr("Copy")
+                                shortcut: "Ctrl ⇧ C"
+                                tip: Translation.tr("Copy the compressed image (Ctrl+Shift+C)")
+                                colContent: root.heroContent
+                                onClicked: root.photo?.copy()
+                            }
+                            TintAction {
+                                enabled: root.photo?.resultReady ?? false
+                                symbol: "save"
+                                label: root.compact ? "" : Translation.tr("Save")
+                                shortcut: "Ctrl ↵"
+                                tip: Translation.tr("Save the compressed image (Ctrl+Enter)")
+                                colContent: root.heroContent
+                                solid: true
+                                colSolidContent: root.heroColor
+                                onClicked: root.photo?.save()
+                            }
+                        }
+
+                        RowLayout {
+                            visible: !root.isImageTool
                             spacing: 6
 
                             TintAction {
@@ -1195,6 +1268,32 @@ Item {
 
                     RowLayout {
                         Layout.fillWidth: true
+                        visible: root.isImageTool
+                        spacing: ClockStyle.gapSmall
+
+                        StatTile {
+                            Layout.fillWidth: true
+                            value: root.photo?.hasImage ? root.photo.formatBytes(root.photo.originalSize) : "—"
+                            caption: Translation.tr("Original")
+                            symbol: "image"
+                        }
+                        StatTile {
+                            Layout.fillWidth: true
+                            value: root.photo?.hasImage && root.photo.estimatedSize > 0 ? root.photo.formatBytes(root.photo.estimatedSize) : "—"
+                            caption: root.photo?.busy ? root.photo.progressText : Translation.tr("After saving")
+                            symbol: "compress"
+                        }
+                        StatTile {
+                            Layout.fillWidth: true
+                            value: root.photo?.hasImage ? root.photo.savingsLabel() : "—"
+                            caption: Translation.tr("Change")
+                            symbol: (root.photo?.savedFraction ?? 0) < 0 ? "trending_up" : "trending_down"
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: !root.isImageTool
                         spacing: ClockStyle.gapSmall
 
                         StatTile {
@@ -1294,10 +1393,25 @@ Item {
             }
 
             // ── Editors: input and output, side by side when wide ───────
+            // ── Image tools: their own workspace, built only while shown ──
+            Loader {
+                id: photoLoader
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                visible: root.isImageTool
+                active: root.isImageTool
+                sourceComponent: DevToolsPhotoCompressor {
+                    compact: root.width < 900
+                    sourcePath: root.photoSourcePath
+                    onSourcePathChanged: root.photoSourcePath = sourcePath
+                    onNotice: message => root.showNotice(message)
+                }
+            }
+
             GridLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                visible: root.selectedTool !== null
+                visible: root.selectedTool !== null && !root.isImageTool
                 columns: root.editorsSideBySide && !root.isGenerator ? 2 : 1
                 columnSpacing: ClockStyle.paneGap
                 rowSpacing: ClockStyle.paneGap

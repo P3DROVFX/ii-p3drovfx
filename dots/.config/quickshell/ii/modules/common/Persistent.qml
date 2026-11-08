@@ -476,6 +476,10 @@ Singleton {
                 // Dev tools page: the tool and category shown when it reopens.
                 property string devToolsToolId: ""
                 property string devToolsCategory: "all"
+                property string devToolsImageFormat: "keep"
+                property int devToolsImageQuality: 80
+                property int devToolsImageScale: 100
+                property bool devToolsImageKeepMetadata: false
             }
 
             property JsonObject passwordManager: JsonObject {

@@ -35,10 +35,21 @@ class CheatsheetDevToolsContracts(unittest.TestCase):
         self.assertIn('"CheatsheetDevTools.qml"', source("scripts/tests/run_cheatsheet_tabs_smoke.py"))
 
     def test_page_shares_the_search_registry_instead_of_copying_tools(self):
-        self.assertIn("DevToolsRegistry.search(root.filterText, root.selectedCategory)", self.page)
+        self.assertIn("DevToolsRegistry.search(root.filterText, root.selectedCategory, true)", self.page)
         self.assertIn("DevToolsRegistry.run(tool.id, input, root.activeOptions)", self.page)
         # The engine is reached through the registry, never imported a second time.
         self.assertNotIn('import "', self.page)
+
+    def test_page_only_tools_stay_out_of_search(self):
+        """Photo Compressor has no devtools.js case: Search must never run it."""
+        registry = (ROOT / "modules/common/DevToolsRegistry.qml").read_text(encoding="utf-8")
+        panel = (ROOT / "modules/ii/overview/ToolsPanel.qml").read_text(encoding="utf-8")
+        self.assertIn('id: "image_compress"', registry)
+        self.assertIn("pageOnly: true", registry)
+        self.assertIn("root.searchTools.filter(", registry)
+        self.assertIn("for (const tool of root.searchTools)", registry)
+        self.assertNotIn("DevToolsRegistry.categories", panel)
+        self.assertIn('if (tool.type === "image")', self.page)
 
     def test_button_components_do_not_redeclare_final_properties(self):
         """`icon` and `text` are FINAL on Button; redeclaring one blanks the page."""

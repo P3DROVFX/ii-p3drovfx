@@ -17,8 +17,17 @@ Singleton {
         { id: "converters", label: Translation.tr("Converters"), icon: "sync_alt" },
         { id: "formatters", label: Translation.tr("Formatters"), icon: "code" },
         { id: "text", label: Translation.tr("Text"), icon: "match_case" },
-        { id: "web", label: Translation.tr("Web & system"), icon: "public" }
+        { id: "web", label: Translation.tr("Web & system"), icon: "public" },
+        // Page-only: its tools need files and a preview, so only the
+        // cheatsheet page shows them (search(..., true)).
+        { id: "media", label: Translation.tr("Images"), icon: "image", pageOnly: true }
     ]
+
+    /// Categories the Search Tools panel offers (no page-only ones).
+    readonly property var searchCategories: root.categories.filter(category => !category.pageOnly)
+    /// Tools the Search panel and inline launcher results may run: page-only
+    /// tools have no devtools.js case and are never passed to run().
+    readonly property var searchTools: root.tools.filter(tool => !tool.pageOnly)
 
     readonly property var tools: [
         // ── Generators ──
@@ -718,6 +727,22 @@ Singleton {
             sampleInput: "4755",
             defaultOptions: {},
             options: []
+        },
+
+        // ── Images (cheatsheet page only) ──
+        {
+            id: "image_compress",
+            name: Translation.tr("Photo Compressor"),
+            category: "media",
+            type: "image",
+            pageOnly: true,
+            icon: "photo_size_select_large",
+            description: Translation.tr("Shrink a photo or convert it to JPEG, WebP, AVIF, JPEG XL, PNG and more, with the real size before saving"),
+            keywords: ["compress", "comprimir", "image", "imagem", "photo", "foto", "jpeg", "jpg", "webp", "avif", "jxl", "png", "resize", "optimize"],
+            searchTerms: ["photo compressor", "image compressor", "compress image", "convert image", "image converter", "reduce image size"],
+            sampleInput: "",
+            defaultOptions: {},
+            options: []
         }
     ]
 
@@ -767,18 +792,18 @@ Singleton {
     function _toolsMatchingBrowse(terms: var): var {
         if (terms.length === 0)
             return [];
-        return root.tools.filter(tool => {
+        return root.searchTools.filter(tool => {
             const text = root._toolSearchText(tool);
             const words = text.split(/[^a-z0-9]+/).filter(w => w.length > 0);
             return terms.every(term => root._termMatchesText(term, text, words));
         });
     }
 
-    function search(queryText: string, category = "all"): var {
+    function search(queryText: string, category = "all", includePageOnly = false): var {
         const query = root._normalizeText(queryText).trim();
         const terms = query.split(/\s+/).filter(t => t.length > 0);
 
-        return root.tools.filter(tool => {
+        return (includePageOnly ? root.tools : root.searchTools).filter(tool => {
             if (category !== "all" && tool.category !== category) {
                 return false;
             }
@@ -808,7 +833,7 @@ Singleton {
 
         // Direct tool commands (e.g. "b64 hello", "uuid", "password", "json {...}")
         const results = [];
-        for (const tool of root.tools) {
+        for (const tool of root.searchTools) {
             if (isGeneric) {
                 if (!seen.includes(tool.id)) {
                     seen.push(tool.id);
