@@ -975,7 +975,10 @@ PanelWindow {
             });
         }
         // Trigger screenshot overlay
-        if (!isRecording && (Config.options.regionSelector.enableOverlay ?? true)) {
+        // Lens and text recognition hand the shot off to another tool; a
+        // screenshot preview on top of that is noise.
+        const isHandoff = snipAction === RegionSelection.SnipAction.Search || snipAction === RegionSelection.SnipAction.CharRecognition;
+        if (!isRecording && !isHandoff && (Config.options.regionSelector.enableOverlay ?? true)) {
             GlobalStates.screenshotOverlayMonitor = root.screen?.name ?? ""
             GlobalStates.screenshotOverlayImagePath = root.screenshotPath;
             GlobalStates.screenshotOverlayRegionX = rx * root.monitorScale;
