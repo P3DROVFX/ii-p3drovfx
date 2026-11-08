@@ -1324,7 +1324,7 @@ MouseArea {
         ToolbarButton {
             id: keepAwakeButton
             Layout.fillHeight: true
-            Layout.preferredWidth: Idle.inhibit ? (keepAwakeRow.implicitWidth + 24) : 0
+            Layout.preferredWidth: Idle.inhibit ? (Idle.timed ? (keepAwakeRow.implicitWidth + 24) : height) : 0
             visible: Layout.preferredWidth > 0 && !root.islandHidden("keepAwake")
             clip: true
             pointingHandCursor: false
@@ -1340,23 +1340,37 @@ MouseArea {
                 }
             }
 
-            contentItem: RowLayout {
-                id: keepAwakeRow
-                anchors.centerIn: parent
-                spacing: 6
-
+            contentItem: Item {
+                // Plain: the coffee cup alone, centred in the square button.
                 MaterialSymbol {
-                    text: Idle.timed ? "hourglass_top" : "coffee"
+                    visible: !Idle.timed
+                    anchors.centerIn: parent
+                    text: "coffee"
                     iconSize: 18
                     color: Appearance.colors.colOnSecondaryContainer
                     fill: 1
                 }
 
-                StyledText {
-                    text: Idle.timed ? Idle.remainingText : Translation.tr("Awake")
-                    font.weight: Font.Medium
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    color: Appearance.colors.colOnSecondaryContainer
+                // Timed: hourglass + the remaining time.
+                RowLayout {
+                    id: keepAwakeRow
+                    visible: Idle.timed
+                    anchors.centerIn: parent
+                    spacing: 6
+
+                    MaterialSymbol {
+                        text: "hourglass_top"
+                        iconSize: 18
+                        color: Appearance.colors.colOnSecondaryContainer
+                        fill: 1
+                    }
+
+                    StyledText {
+                        text: Idle.remainingText
+                        font.weight: Font.Medium
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        color: Appearance.colors.colOnSecondaryContainer
+                    }
                 }
             }
         }
