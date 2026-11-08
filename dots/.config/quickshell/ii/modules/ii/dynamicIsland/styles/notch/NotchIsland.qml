@@ -1875,15 +1875,14 @@ Scope {
     /**
      * A second chance at the keyboard for the launcher.
      *
-     * OnDemand is only granted on a *change* of interactivity, and the launcher can
-     * open without one: the surface already asked for the keyboard for the face it
-     * replaces (dashboard, picker, session menu), or the grant landed before the
-     * island had taken its shape. The field then sat focused inside a window the
-     * compositor never gave the keyboard to, until the pointer moved over it.
-     * Shortly after opening, a window that is still not active drops the request for
-     * a moment and asks again, which is the edge the grant waits for.
+     * This window is always mapped, and Hyprland (0.57) never grants the keyboard to a
+     * mapped layer surface for switching to OnDemand - only mapping or switching to
+     * Exclusive does. The keyboard arrives through the focus grab alone (see
+     * `grabWidened` on the window). If it still has not arrived shortly after opening,
+     * the grab is taken again with the island as its only window, which hands the
+     * keyboard to the island whatever the pointer is over. Toggling the interactivity
+     * instead, as this used to, is not a change Hyprland grants on.
      */
-    property bool keyboardNudge: false
     property int keyboardNudgeTries: 0
 
     onSearchActiveChanged: {
@@ -1906,17 +1905,7 @@ Scope {
             if (root.keyboardNudgeTries >= 2)
                 return;
             root.keyboardNudgeTries++;
-            root.keyboardNudge = true;
-            keyboardNudgeRelease.restart();
-        }
-    }
-
-    Timer {
-        id: keyboardNudgeRelease
-        interval: 50
-        repeat: false
-        onTriggered: {
-            root.keyboardNudge = false;
+            win.rearmGrab();
             notchContent.focusSearch();
             keyboardGrantCheck.restart();
         }
@@ -1956,7 +1945,7 @@ Scope {
         // never appeared at all. Every face that types asks OnDemand instead, and a
         // change of face is the change Hyprland grants on.
         WlrLayershell.keyboardFocus: (root.wallpaperActive || root.searchActive || root.sessionActive
-                || root.askpassActive || notchContent.dashboardWantsKeyboard) && !root.keyboardNudge
+                || root.askpassActive || notchContent.dashboardWantsKeyboard)
             ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
         anchors {
@@ -2063,25 +2052,81 @@ Scope {
         Timer {
             id: grabRearm
             interval: 120
-            onTriggered: win.grabSuspended = false
+            onTriggered: {
+                // Taken again on the new monitor with the island alone, like any grab.
+                win.settleGrab();
+                win.grabSuspended = false;
+            }
+        }
+
+        // The dashboard joins the two that already grabbed: it is as much an open
+        // surface as they are, and having the session menu inside it close on a
+        // click away while the dashboard holding it would not was the tell.
+        // Editing the grid is left out on purpose - a grab there would eat every
+        // click outside without anything to close. An open detail page is not
+        // editing: it pins the island against the pointer leaving, not against a click.
+        // The wallpaper browser needs it too: the surface is only OnDemand, so
+        // without the grab it had no keyboard until it was clicked.
+        readonly property bool grabWanted: root.searchActive || root.sessionActive || root.wallpaperActive
+            || (root.dashboardActive && !notchContent.dashboardGridEditing)
+            || (root.askpassActive && root.askpassFocused)
+
+        /**
+         * Whether the grab may take in the shared windows (the bar, its popups, the OSK).
+         *
+         * The grab is what hands this window the keyboard: Hyprland gives it to the first
+         * grab window whose surface holds the cursor, in no fixed order. With the bar in
+         * the grab from the start, a cursor resting over the bar - right where the island
+         * sits - put the keyboard on the bar: the launcher took clicks but no typing.
+         * So the grab starts with the island alone and widens once the keyboard is here;
+         * a later widening does not move the keyboard again.
+         */
+        property bool grabWidened: false
+        readonly property bool keyboardHeld: fullWindow.Window.active
+        onKeyboardHeldChanged: {
+            if (win.keyboardHeld && win.grabWanted && !win.grabSuspended && !grabWidenTimer.running)
+                win.grabWidened = true;
+        }
+        function settleGrab() {
+            win.grabWidened = false;
+            grabWidenTimer.restart();
+        }
+        onGrabWantedChanged: {
+            if (win.grabWanted) {
+                win.settleGrab();
+            } else {
+                grabWidenTimer.stop();
+                win.grabWidened = false;
+            }
+        }
+        // Long enough for the island-only grab to have reached the compositor before the
+        // window's existing focus (from a face shown earlier) is taken as its result.
+        Timer {
+            id: grabWidenTimer
+            interval: 60
+            onTriggered: {
+                if (win.keyboardHeld)
+                    win.grabWidened = true;
+            }
+        }
+        /// Takes the grab again with the island alone, which hands it the keyboard.
+        function rearmGrab() {
+            if (!win.grabWanted)
+                return;
+            win.grabWidened = false;
+            win.grabSuspended = true;
+            Qt.callLater(() => {
+                win.settleGrab();
+                win.grabSuspended = false;
+            });
         }
 
         HyprlandFocusGrab {
             // Popups opened from inside the island (e.g. a tray item's menu in Active
             // apps) are separate Wayland windows registered in GlobalFocusGrab; without
             // them here, every click on such a menu counted as a click outside.
-            windows: [win, ...GlobalFocusGrab.persistent]
-            // The dashboard joins the two that already grabbed: it is as much an open
-            // surface as they are, and having the session menu inside it close on a
-            // click away while the dashboard holding it would not was the tell.
-            // Editing the grid is left out on purpose - a grab there would eat every
-            // click outside without anything to close. An open detail page is not
-            // editing: it pins the island against the pointer leaving, not against a click.
-            // The wallpaper browser needs it too: the surface is only OnDemand, so
-            // without the grab it had no keyboard until it was clicked.
-            active: !win.grabSuspended && (root.searchActive || root.sessionActive || root.wallpaperActive
-                || (root.dashboardActive && !notchContent.dashboardGridEditing)
-                || (root.askpassActive && root.askpassFocused))
+            windows: win.grabWidened ? [win, ...GlobalFocusGrab.persistent] : [win]
+            active: !win.grabSuspended && win.grabWanted
             // A menu is a question put to the pointer, so clicking away is an answer -
             // and so is clicking away from the launcher, as it is everywhere else the
             // launcher is drawn.
