@@ -5443,6 +5443,8 @@ Singleton {
                     property bool disableSongRec: false
                     // Live games of the teams in the bar's sports team filter.
                     property bool disableSports: false
+                    // Phone live notifications relayed by the optional ii tools Android app.
+                    property bool disablePhoneLive: false
                     property bool disableVpn: false
                     // A Discord voice call: the join, then who is talking beside the clock.
                     property bool disableDiscordVoice: false

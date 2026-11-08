@@ -394,6 +394,24 @@ Singleton {
             content: {}
         },
         {
+            // A live notification on the phone (an order, a ride), relayed by the optional
+            // ii tools app; beside the clock while it lasts. Its changes interrupt as
+            // shell notifications (see PhoneLiveSource).
+            id: "phoneLive",
+            legacyContent: "FloatingNotchPhoneLive.qml",
+            tier: "live",
+            interactive: true,         // a click opens the app on the phone
+            icon: "electric_moped",
+            label: "Phone live updates",
+            preferredSide: "right",
+            canDetach: false,
+            settleMs: 0,
+            compact: { width: 420, height: 84 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
             // Listening for a song, then what it was (see SongRecSource). Holds the centre
             // while listening: it is short, and Cancel has to be somewhere.
             id: "songRec",

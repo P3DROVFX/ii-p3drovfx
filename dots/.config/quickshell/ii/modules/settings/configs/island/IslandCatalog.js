@@ -59,6 +59,8 @@ const activities = [
       label: "Song recognition", tip: "Show that a song is being listened for, then the song it found" },
     { id: "sports", key: "disableSports", group: "live", icon: "sports_soccer", shape: "Sunny",
       label: "Live sports", tip: "The score of a live game beside the clock, and a moment in the centre when it changes. Follows the bar's sports team filter" },
+    { id: "phoneLive", key: "disablePhoneLive", group: "live", icon: "electric_moped", shape: "Pentagon",
+      label: "Phone live updates", tip: "Live notifications from the phone - an order on its way, a ride arriving - beside the clock, and a moment in the centre when they change. Needs the ii tools app on the phone" },
     { id: "progress", key: "disableProgress", group: "live", icon: "progress_activity", shape: "Arch",
       label: "Live progress", tip: "Show background transfers and builds while they run" },
     { id: "localSend", key: "disableLocalSend", group: "live", icon: "share", shape: "Arrow",

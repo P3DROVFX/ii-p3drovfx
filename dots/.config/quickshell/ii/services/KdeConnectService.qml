@@ -153,6 +153,216 @@ Singleton {
 
     property var notifications: []
     readonly property int notificationCount: notifications.length
+
+    // ── Live updates relayed by the ii tools Android app ────────────────────
+    // KDE Connect drops ongoing notifications, so Android live notifications
+    // (an order on its way, a ride arriving) never reach the desktop. The
+    // optional ii tools app (~/Projects/ii-tools) re-posts each one as a plain
+    // silent notification whose text is `iilive1:` + base64url(JSON); those
+    // copies are lifted out of `notifications` into `liveUpdates` here and kept
+    // out of the desktop popups by isIgnoredNotification(). Without the app no
+    // notification carries the marker and nothing changes.
+    readonly property string liveRelayMarker: "iilive1:"
+    property var _liveRelays: []
+    /** Newest first: {publicId, id, package, appName, title, text, lines[],
+     *  progress (0..1 or -1), indeterminate, chrono, countdown, color, iconPath,
+     *  posted}. Empty when the phone is unreachable. */
+    readonly property var liveUpdates: (root._enabled && root.activeReachable) ? root._liveRelays : []
+
+    function isLiveRelay(n) {
+        if (!n) return false
+        const body = String(n.body ?? n.text ?? "")
+        return body.indexOf(root.liveRelayMarker) !== -1
+    }
+
+    function _decodeLiveRelay(n) {
+        const body = String(n.body ?? n.text ?? "")
+        const at = body.indexOf(root.liveRelayMarker)
+        const b64 = body.slice(at + root.liveRelayMarker.length).trim().split(/[^A-Za-z0-9_\-+\/=]/)[0]
+        try {
+            const p = JSON.parse(root._base64UrlToUtf8(b64))
+            const max = Number(p.max ?? 0)
+            return {
+                publicId: String(n.publicId ?? n.key ?? ""),
+                id: String(p.id ?? ""),
+                package: String(p.pkg ?? ""),
+                appName: String(p.app ?? p.pkg ?? ""),
+                title: String(p.title ?? ""),
+                text: String(p.text ?? ""),
+                sub: String(p.sub ?? ""),
+                critical: String(p.crit ?? ""),
+                lines: Array.isArray(p.lines) ? p.lines.map(String) : [],
+                progress: max > 0 ? Math.max(0, Math.min(1, Number(p.progress ?? 0) / max)) : -1,
+                indeterminate: p.indeterminate === true,
+                chrono: Number(p.chrono ?? 0),
+                countdown: p.countdown === true,
+                color: String(p.color ?? ""),
+                iconPath: String(n.iconPath ?? ""),
+                posted: Number(p.posted ?? 0),
+            }
+        } catch (e) {
+            console.warn("[KdeConnect] Bad live relay payload:", e)
+            return null
+        }
+    }
+
+    /** base64url → UTF-8 text, without leaning on Qt.atob's Latin-1 string. */
+    function _base64UrlToUtf8(b64) {
+        const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+        const clean = b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
+        let bits = 0, acc = 0, hex = ""
+        for (let i = 0; i < clean.length; i++) {
+            const v = alphabet.indexOf(clean[i])
+            if (v < 0) throw new Error("not base64")
+            acc = (acc << 6) | v
+            bits += 6
+            if (bits >= 8) {
+                bits -= 8
+                hex += "%" + ((acc >> bits) & 0xff).toString(16).padStart(2, "0")
+            }
+        }
+        return decodeURIComponent(hex)
+    }
+
+    // Each live update is one shell notification, kept in step with the phone:
+    // a new status pops it up again; a change of numbers only (an ETA, a
+    // countdown) rewrites it in place; it is withdrawn when the phone's ends.
+    // Dismissing it holds until the status changes. Follows the "phone
+    // notifications on the desktop" switch like any phone notification.
+    property var _livePopups: ({})   // live id → { nid, sig }
+    onLiveUpdatesChanged: root._syncLivePopups()
+    // Live updates seen in the first sync after a start/reload are not news.
+    readonly property double _liveBornAt: Date.now()
+
+    /** Text that only labels a value ("20:46 - 20:56", "5 min", "12h30"). */
+    function _isValueText(s) {
+        return /\d/.test(s) && String(s).replace(/[\d\s:\-–—\/.,]|min|h|s\b/gi, "").length <= 2
+    }
+
+    /** How a live update reads: what is happening (status), its key value as a chip
+     *  ("Previsão de entrega" · "20:46 - 20:56") and one supporting line. Apps put the
+     *  status in different places; a title over a bare value (iFood) is a chip, and the
+     *  status is then the first free line. */
+    function _liveView(u) {
+        const lines = (u.lines ?? []).slice()
+        let status = "", detail = "", chipLabel = "", chipValue = ""
+        if (u.text && root._isValueText(u.text)) {
+            chipLabel = u.title
+            chipValue = u.text
+            status = lines.shift() || u.title
+        } else {
+            status = u.title || lines.shift() || u.text
+            detail = u.title ? u.text : ""
+        }
+        if (!chipValue && u.critical && u.critical !== status) chipValue = u.critical
+        const rest = lines.filter(l => l !== status && l !== detail && l !== chipValue && l !== chipLabel)
+        if (!detail) detail = rest.shift() || u.sub || ""
+        return {
+            publicId: u.publicId,
+            appName: u.appName,
+            iconPath: u.iconPath,
+            status: status,
+            detail: detail,
+            chipLabel: chipValue ? chipLabel : "",
+            chipValue: chipValue,
+            progress: u.progress,
+            indeterminate: u.indeterminate,
+        }
+    }
+
+    function _liveSummary(u) {
+        return root._liveView(u).status || u.appName
+    }
+    function _liveBody(u) {
+        const v = root._liveView(u)
+        const chip = v.chipValue ? (v.chipLabel ? v.chipLabel + ": " : "") + v.chipValue : ""
+        return [chip, v.detail].filter(s => s).join("\n")
+    }
+    function _liveStatusSignature(u) {
+        return (root._liveSummary(u) + "\n" + root._liveBody(u)).replace(/\d+/g, "#")
+    }
+
+    // Each live update is one shell notification (a LiveNotificationCard), kept in
+    // step with the phone: a new status pops it up again; a change of numbers only
+    // (an ETA, a countdown) rewrites it in place; it is withdrawn when the phone's
+    // ends. Dismissing it holds until the status changes; "clear all" keeps it.
+    // Follows the "phone notifications on the desktop" switch.
+    function _syncLivePopups() {
+        const mirror = Config.options?.phone?.mirrorNotificationsToDesktop ?? true
+        const booting = Date.now() - root._liveBornAt < 15000
+        const map = Object.assign({}, root._livePopups)
+        const alive = {}
+        for (const u of root.liveUpdates) {
+            alive[u.id] = true
+            const sig = root._liveStatusSignature(u)
+            const view = root._liveView(u)
+            const summary = root._liveSummary(u)
+            const body = root._liveBody(u)
+            const prev = map[u.id]
+            const existing = prev ? Notifications.findTrackedNotification(prev.nid) : null
+            if (prev && prev.sig === sig) {
+                if (existing) {
+                    existing.summary = summary
+                    existing.body = body
+                    existing.liveData = view
+                }
+                continue
+            }
+            if (existing) Notifications.discardNotification(prev.nid)
+            delete map[u.id]
+            if (!mirror) continue
+            const nid = Notifications.publishInternalNotification({
+                appName: u.appName,
+                summary: summary,
+                body: body,
+                live: true,
+                liveData: view,
+                quiet: booting,
+                actions: [{ identifier: "__qs_phonelive_open", text: Translation.tr("Open on phone") }],
+                actionPayload: { publicId: u.publicId },
+            })
+            if (nid === null || nid === undefined) continue
+            const obj = Notifications.findTrackedNotification(nid)
+            if (obj && u.iconPath) obj.image = "file://" + u.iconPath
+            map[u.id] = { nid: nid, sig: sig }
+        }
+        for (const id of Object.keys(map)) {
+            if (alive[id]) continue
+            if (Notifications.findTrackedNotification(map[id].nid))
+                Notifications.discardNotification(map[id].nid)
+            delete map[id]
+        }
+        root._livePopups = map
+    }
+
+    /** A relay copy as the Phone tab shows it: the source app's name, title and lines;
+     *  opening it opens the source app. Dismissing it dismisses the copy, which the
+     *  app re-posts only when the live notification says something new. */
+    function _liveAsNotification(n) {
+        const u = root._decodeLiveRelay(n)
+        if (!u) return n
+        return Object.assign({}, n, {
+            appName: u.appName,
+            title: root._liveSummary(u),
+            summary: root._liveSummary(u),
+            text: root._liveBody(u),
+            body: root._liveBody(u),
+            ticker: "",
+            package: u.package,
+            time: u.posted || Date.now(),
+            live: true,
+        })
+    }
+
+    function _setLiveRelays(list) {
+        const next = list.filter(n => root.isLiveRelay(n))
+            .map(n => root._decodeLiveRelay(n))
+            .filter(l => l !== null)
+            .sort((a, b) => b.posted - a.posted)
+        // Every sync re-sends the whole list; only a real change may notify.
+        if (JSON.stringify(next) !== JSON.stringify(root._liveRelays))
+            root._liveRelays = next
+    }
     onNotificationsChanged: {
         if (root.ready) cacheSaveTimer.restart()
     }
@@ -318,6 +528,7 @@ Singleton {
             root.scrcpyLaunching = false
             root.devices = []
             root.notifications = []
+            root._liveRelays = []
             root.pendingPairRequests = []
         }
     }
@@ -578,7 +789,10 @@ Singleton {
             }
             break
         case "notif_cleared":
-            if (ev.id === root.activeDeviceId) root.notifications = []
+            if (ev.id === root.activeDeviceId) {
+                root.notifications = []
+                root._liveRelays = []
+            }
             break
         case "notif_posted":
         case "notif_updated":
@@ -794,6 +1008,9 @@ Singleton {
                 }
             }
         }
+        root._setLiveRelays(list)
+        // Relay copies stay in the Phone tab as their decoded selves.
+        list = list.map(n => root.isLiveRelay(n) ? root._liveAsNotification(n) : n)
         return list.filter(n => !root.isIgnoredNotification(n)).map(n => {
             const ticker = n.ticker ?? ""
             const appName = n.appName ?? ""
@@ -838,6 +1055,7 @@ Singleton {
                 replyId: n.replyId ?? "",
                 replyPlaceholder: n.replyPlaceholder ?? Translation.tr("Reply"),
                 package: n.package ?? "",
+                live: n.live === true,
             }
         })
     }
@@ -860,6 +1078,7 @@ Singleton {
     function requestNotificationsRefresh() {
         if (!root.activeDeviceId) {
             root.notifications = []
+            root._liveRelays = []
             return
         }
         // Invoke the Python one-shot fetcher instead of `qdbus-qt6`.
@@ -901,7 +1120,8 @@ Singleton {
     }
 
     function discardAllNotifications() {
-        const list = root.notifications.slice()
+        // Live updates only go when dismissed one by one.
+        const list = root.notifications.filter(n => !n.live)
         for (const notif of list) {
             if (notif.dismissable !== false && notif.publicId) {
                 // Use dismiss() on the per-notification leaf interface so the
@@ -922,7 +1142,7 @@ Singleton {
                 ])
             }
         }
-        root.notifications = []
+        root.notifications = root.notifications.filter(n => n.live)
     }
 
     function discardNotification(publicId) {
@@ -1484,6 +1704,7 @@ Singleton {
      */
     function openNotificationIntent(publicId) {
         const notif = root.notifications.find(n => n.publicId === publicId)
+            ?? root._liveRelays.find(n => n.publicId === publicId)
         if (!notif) return
 
         const pkg = notif.package || ""
@@ -1744,6 +1965,11 @@ Singleton {
         const body = String(notification.body ?? notification.text ?? "").trim();
         const ticker = String(notification.ticker ?? "").trim();
         const pkg = String(notification.package ?? "").trim().toLowerCase();
+
+        // ii tools relay copies live in liveUpdates, never as plain notifications.
+        if (root.isLiveRelay(notification)) {
+            return true;
+        }
 
         // Android System UI package / Android internal framework notifications
         if (pkg === "com.android.systemui" || pkg === "android") {
@@ -2187,7 +2413,8 @@ Singleton {
 
     function _saveNotificationsCache() {
         if (!root.activeDeviceId) return
-        const slim = root.notifications.map(n => ({
+        // A live update is only true while the phone keeps sending it.
+        const slim = root.notifications.filter(n => !n.live).map(n => ({
             publicId: n.publicId,
             appName: n.appName,
             summary: n.summary,

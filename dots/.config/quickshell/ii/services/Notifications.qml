@@ -26,6 +26,10 @@ Singleton {
         // Internal notifications have no freedesktop sender to keep alive.
         // They still use the same cards/actions/popup path as server traffic.
         property bool internal: false
+        // A phone live update (KdeConnectService._syncLivePopups): its own card, kept
+        // through "clear all", only dismissed by hand. `liveData` is the decoded view.
+        property bool live: false
+        property var liveData: null
         property list<var> customActions: []
         property string _qsFilePath: ""
         property var internalActionPayload: ({})
@@ -178,7 +182,8 @@ Singleton {
     }
 
     function stringifyList(list) {
-        return JSON.stringify(list.filter((notif) => notif).map((notif) => notifToJSON(notif)), null, 2);
+        // Live updates are rebuilt from the phone after a restart, never restored.
+        return JSON.stringify(list.filter((notif) => notif && !notif.live).map((notif) => notifToJSON(notif)), null, 2);
     }
 
     function trimHistory(values) {
@@ -237,8 +242,9 @@ Singleton {
 
     function appNameListForGroups(groups) {
         return Object.keys(groups).sort((a, b) => {
-            // Sort by time, descending
-            return groups[b].time - groups[a].time;
+            // Live updates on top, then by time, descending
+            const live = (groups[b].live === true) - (groups[a].live === true);
+            return live !== 0 ? live : groups[b].time - groups[a].time;
         });
     }
 
@@ -263,6 +269,18 @@ Singleton {
             }
 
             if (!String(notif.summary || "").trim() && !String(notif.body || "").trim()) {
+                return;
+            }
+
+            // Each live update is a group of its own, never folded into its app's.
+            if (notif.live) {
+                groups[notif.appName + " · live " + notif.notificationId] = {
+                    appName: notif.appName,
+                    appIcon: notif.appIcon,
+                    notifications: [notif],
+                    time: notif.time,
+                    live: true
+                };
                 return;
             }
 
@@ -441,7 +459,9 @@ Singleton {
      * them through executeShellAction and the caller receives one signal.
      */
     function publishInternalNotification(options: var): var {
-        if (root.effectiveSilent)
+        // Do not disturb drops shell notifications, but a live update still belongs in
+        // the list - it just arrives without a popup.
+        if (root.effectiveSilent && options?.live !== true)
             return null;
         const notificationId = root.nextInternalNotificationId();
         const appName = String(options?.appName ?? "Quickshell");
@@ -463,8 +483,15 @@ Singleton {
                 && String(action?.text ?? "").length > 0;
         });
         notifObject.internalActionPayload = options?.actionPayload ?? ({});
+        notifObject.live = options?.live === true;
+        notifObject.liveData = options?.liveData ?? null;
         root._pendingNotifications.push(notifObject);
         batchNotificationTimer.restart();
+        // `quiet`: into the list without a popup (a live update re-created after a reload).
+        if (options?.quiet === true || root.effectiveSilent) {
+            root.scheduleDiskWrite();
+            return notificationId;
+        }
         if (!root.popupInhibited) {
             root.armNotificationTimeout(notifObject, null);
             root.unread++;
@@ -641,6 +668,10 @@ Singleton {
             root.internalActionInvoked(identifier, notifObj?.notificationId ?? 0, notifObj?.internalActionPayload ?? ({}));
             return;
         }
+        if (identifier === "__qs_phonelive_open") {
+            KdeConnectService.openNotificationIntent(notifObj?.internalActionPayload?.publicId ?? "");
+            return;
+        }
         if (identifier === "__qs_battery_suspend_now") {
             Battery.suspendNow();
             return;
@@ -694,8 +725,15 @@ Singleton {
         root.discard(id); // Emit signal
     }
 
-    function discardMultipleNotifications(ids) {
+    /** `includeLive`: only for a hand gesture on the live card itself. */
+    function discardMultipleNotifications(ids, includeLive) {
         if (!ids || ids.length === 0) return;
+        if (!includeLive) {
+            const liveIds = new Set(Array.from(root.list ?? []).concat(root._pendingNotifications ?? [])
+                .filter(n => n && n.live).map(n => n.notificationId));
+            ids = ids.filter(id => !liveIds.has(id));
+            if (ids.length === 0) return;
+        }
         const idSet = new Set(ids);
         const matchesId = notif => notif && idSet.has(notif.notificationId);
         const targets = Array.from(root.list ?? []).concat(root._pendingNotifications ?? [])
@@ -714,17 +752,18 @@ Singleton {
     }
 
     function discardAllNotifications() {
+        // Live updates survive "clear all"; they only go by hand or when they end.
         const targets = Array.from(root.list ?? []).concat(root._pendingNotifications ?? [])
-            .filter(notif => notif)
+            .filter(notif => notif && !notif.live)
             .filter((notif, index, values) => values.indexOf(notif) === index);
-        root.list = [];
-        root._pendingNotifications = [];
+        root.list = root.list.filter(notif => notif && notif.live);
+        root._pendingNotifications = root._pendingNotifications.filter(notif => notif && notif.live);
         targets.forEach(notif => root.releaseNotificationObject(notif));
         root.scheduleDiskWrite();
         notifServer.trackedNotifications.values.forEach((notif) => {
             notif.dismiss()
         })
-        root.discardAll();
+        targets.forEach(notif => root.discard(notif.notificationId));
     }
 
     function cancelTimeout(id) {

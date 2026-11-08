@@ -1038,6 +1038,7 @@ Item {
             sideIds: content.sideIds
             restHeight: content.restingHeight
             sportsGame: content.controller.sources.sports.liveGame
+            phoneLive: content.controller.sources.phoneLive.current
             visible: !content.hasWidget && !content.isSearch && !content.isOsd && !content.isWallpaper
                 && !content.isSession && !content.isColorPicker && !content.isDisplayModes
                 && !content.isLocalSendRequest && !content.isAskpass

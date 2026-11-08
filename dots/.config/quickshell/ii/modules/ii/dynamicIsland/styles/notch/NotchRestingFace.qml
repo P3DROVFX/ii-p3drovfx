@@ -49,6 +49,8 @@ Item {
     property var sideIds: []
     /** The followed game in play, for the sports glance; from the island's sports source. */
     property var sportsGame: null
+    /** The newest phone live notification, for its glance; from the island's phoneLive source. */
+    property var phoneLive: null
 
 
     /**
@@ -69,7 +71,7 @@ Item {
 
     // ── Balance ──────────────────────────────────────────────────────────────
     /** Who is seated first when several arrive together. */
-    readonly property var sideOrder: ["media", "phoneCall", "privacy", "discordVoice", "phoneMirror", "phoneLink", "sports", "ai", "recording", "timer", "mode", "update", "earbuds", "weather",
+    readonly property var sideOrder: ["media", "phoneCall", "privacy", "discordVoice", "phoneMirror", "phoneLink", "sports", "phoneLive", "ai", "recording", "timer", "mode", "update", "earbuds", "weather",
         "batteryGlance", "reminderSoon", "easyEffects"]  // media brings "mediaViz"
     /** Each end's widgets, from the island's edge inwards. */
     property var leftIds: []
@@ -131,6 +133,7 @@ Item {
         case "privacy": return privacyGlance.implicitWidth;
         case "phoneCall": return callGlance.implicitWidth;
         case "sports": return sportsGlance.implicitWidth;
+        case "phoneLive": return phoneLiveGlance.implicitWidth;
         case "discordVoice": return face.glanceSize;
         case "phoneMirror": return phoneMirrorGlance.preferredWidth;
         case "phoneLink": return phoneLinkGlance.preferredWidth;
@@ -198,6 +201,7 @@ Item {
         case "privacy": return privacySlot;
         case "phoneCall": return callSlot;
         case "sports": return sportsSlot;
+        case "phoneLive": return phoneLiveSlot;
         case "discordVoice": return discordSlot;
         case "phoneMirror": return phoneMirrorSlot;
         case "phoneLink": return phoneLinkSlot;
@@ -796,6 +800,61 @@ Item {
                 color: Appearance.colors.colSubtext
                 font.family: face.clockFamily
                 font.pixelSize: face.clockSize - 3
+                font.weight: Font.Bold
+                font.features: ({ "tnum": 1 })
+            }
+        }
+    }
+
+    // A phone live notification: the app's icon and its shortest news (an ETA, a
+    // status), with a ring for its progress when it has one.
+    SideSlot {
+        id: phoneLiveSlot
+        sideId: "phoneLive"
+        contentWidth: phoneLiveGlance.implicitWidth
+
+        Row {
+            id: phoneLiveGlance
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 6
+            readonly property var live: face.isPresent("phoneLive") ? face.phoneLive : null
+            readonly property int iconSize: Math.round(face.glanceSize * 0.7)
+
+            Item {
+                anchors.verticalCenter: parent.verticalCenter
+                width: phoneLiveGlance.iconSize + 6
+                height: width
+
+                CircularProgress {
+                    anchors.fill: parent
+                    visible: (phoneLiveGlance.live?.progress ?? -1) >= 0
+                    lineWidth: 2
+                    value: Math.max(0, phoneLiveGlance.live?.progress ?? 0)
+                    colPrimary: Appearance.colors.colOnLayer0
+                    colSecondary: Appearance.colors.colLayer2
+                }
+
+                Image {
+                    anchors.centerIn: parent
+                    width: phoneLiveGlance.iconSize
+                    height: width
+                    source: phoneLiveGlance.live?.iconPath ? "file://" + phoneLiveGlance.live.iconPath : ""
+                    sourceSize: Qt.size(width * 2, height * 2)
+                    fillMode: Image.PreserveAspectFit
+                    asynchronous: true
+                }
+            }
+
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                width: Math.min(implicitWidth, 150)
+                elide: Text.ElideRight
+                text: phoneLiveGlance.live
+                    ? (phoneLiveGlance.live.critical || phoneLiveGlance.live.text || phoneLiveGlance.live.title)
+                    : ""
+                color: Appearance.colors.colOnLayer0
+                font.family: face.clockFamily
+                font.pixelSize: face.clockSize - 2
                 font.weight: Font.Bold
                 font.features: ({ "tnum": 1 })
             }

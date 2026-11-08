@@ -16,6 +16,8 @@ MouseArea { // Notification group area
     property var notifications: notificationGroup?.notifications ?? []
     property int notificationCount: notifications.length
     property bool multipleNotifications: notificationCount > 1
+    /** A phone live update: one notification, drawn as LiveNotificationCard. */
+    readonly property bool live: notificationGroup?.live === true
     property bool expanded: false
     property bool popup: false
     property real zoom: 1.0
@@ -217,7 +219,8 @@ MouseArea { // Notification group area
         onFinished: () => {
             const ids = root.notifications.map(n => n.notificationId);
             if (ids.length > 0) {
-                Notifications.discardMultipleNotifications(ids);
+                // A swipe or the close button on a live card is the by-hand dismissal.
+                Notifications.discardMultipleNotifications(ids, root.live);
             }
         }
     }
@@ -272,7 +275,8 @@ MouseArea { // Notification group area
         id: background
         anchors.left: parent.left
         width: parent.width
-        color: popup ? Appearance.colors.colBackgroundSurfaceContainer : Appearance.colors.colLayer2
+        color: root.live ? Appearance.colors.colPrimaryContainer
+            : popup ? Appearance.colors.colBackgroundSurfaceContainer : Appearance.colors.colLayer2
         radius: Appearance.rounding.windowRounding * root.zoom
         anchors.leftMargin: root.xOffset
 
@@ -311,7 +315,7 @@ MouseArea { // Notification group area
         clip: true
         // Reserve the height of every visible preview; expanded groups grow with
         // the full Column + Repeater body as lazy loading adds more delegates.
-        implicitHeight: row.implicitHeight + root.padding * 2
+        implicitHeight: (root.live ? liveCardLoader.implicitHeight : row.implicitHeight) + root.padding * (root.live ? 2.6 : 2)
 
         Behavior on implicitHeight {
             // Only animate implicitHeight when manually expanding/collapsing.
@@ -328,8 +332,25 @@ MouseArea { // Notification group area
             }
         }
 
+        Loader {
+            id: liveCardLoader
+            active: root.live
+            visible: active
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.margins: root.padding * 1.3
+            sourceComponent: LiveNotificationCard {
+                notificationObject: root.notifications[0] ?? null
+                zoom: root.zoom
+                popup: root.popup
+                onDismissRequested: root.destroyWithAnimation()
+            }
+        }
+
         RowLayout { // Left column for icon, right column for content
             id: row
+            visible: !root.live
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
