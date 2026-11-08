@@ -5653,7 +5653,13 @@ Singleton {
                             "sport": "soccer"
                         }
                     ]
+                    // Master switch for sports data: off stops every ESPN request
+                    // (bar, dock, lock, island, timetable, search, AI, football page).
+                    property bool apiEnabled: true
                     property string teamFilter: ""
+                    // Teams picked in Settings → APIs → Sports, kept for their crests;
+                    // teamFilter stays the list the service matches against.
+                    property list<var> followedTeams: []
                     property int updateInterval: 60
                     property int maxCardsPopup: 4
                     property int showBeforeHours: 12

@@ -24,7 +24,7 @@ AndroidWidgetTileBase {
     readonly property bool isLive: hasGame && (game.state === "in")
     readonly property string matchStatus: hasGame
         ? SportsService.compactMatchStatus(game.status ?? "", game.state ?? "")
-        : Translation.tr("No live games")
+        : (SportsService.apiEnabled ? Translation.tr("No live games") : Translation.tr("Sports is off"))
 
     readonly property bool isCompactH: root.surface.height < 76
     readonly property bool isSquare: Math.abs(root.surface.width - root.surface.height) < 40 && root.surface.width < 140
@@ -97,7 +97,7 @@ AndroidWidgetTileBase {
 
             StyledText {
                 Layout.alignment: Qt.AlignHCenter
-                text: Translation.tr("No live games")
+                text: (SportsService.apiEnabled ? Translation.tr("No live games") : Translation.tr("Sports is off"))
                 font.pixelSize: Appearance.font.pixelSize.smallest
                 color: Appearance.colors.colOnLayer3
                 visible: root.surface.height >= 70

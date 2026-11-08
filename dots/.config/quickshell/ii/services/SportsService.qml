@@ -18,7 +18,9 @@ Item {
     readonly property bool lockEnabled: (Config.options?.lock?.sports ?? true)
         && (GlobalStates?.lockLookActive ?? false)
     property int widgetSubscribers: 0
-    readonly property bool enabled: barEnabled || dockEnabled || lockEnabled || widgetSubscribers > 0
+    // Settings → APIs → Sports master switch; off means no ESPN request at all.
+    readonly property bool apiEnabled: Config.options?.bar?.sports?.apiEnabled ?? true
+    readonly property bool enabled: apiEnabled && (barEnabled || dockEnabled || lockEnabled || widgetSubscribers > 0)
     // AI consumers are counted separately from the visual widgets. They may
     // query a league that is not monitored by the bar, but must never cause a
     // visual selection or a Config write as a side effect.
@@ -33,7 +35,7 @@ Item {
     // subscriber keeps a weekly scoreboard warm without making the sports bar
     // a prerequisite for calendar-only users.
     property int timetableSubscribers: 0
-    readonly property bool timetableActive: timetableSubscribers > 0
+    readonly property bool timetableActive: apiEnabled && timetableSubscribers > 0
     property string teamFilter: Config.options.bar.sports.teamFilter
     property int updateInterval: Config.options.bar.sports.updateInterval
 
@@ -103,6 +105,22 @@ Item {
     readonly property int maximumDetailsEntries: 16
     readonly property int maximumDetailsCacheBytes: 2 * 1024 * 1024
     readonly property list<string> apiHosts: ["site.web.api.espn.com", "site.api.espn.com"]
+
+    onApiEnabledChanged: {
+        if (root.apiEnabled)
+            return;
+        root.cancelCompactRequests();
+        root.cancelSearchRequests();
+        root.cancelTimetableRequests();
+        root.allGames = [];
+        root._compactSignature = "";
+        root._scoreMemory = ({});
+        root._cardMemory = ({});
+        root.currentGameIndex = 0;
+        root.currentGame = null;
+        root.searchGames = [];
+        root.timetableGames = [];
+    }
 
     function acquireAiSubscriber() {
         aiSubscribers += 1;
@@ -429,6 +447,11 @@ Item {
 
     function fetchSearchGamesForToday() {
         root.cancelSearchRequests();
+        if (!root.apiEnabled) {
+            root.searchGames = [];
+            root.searchLoading = false;
+            return;
+        }
         const leaguesToFetch = root.searchLeagueEntries();
         root.searchLoading = true;
         root.searchError = "";
@@ -906,6 +929,8 @@ Item {
     }
 
     function startScheduleRequest(key, request) {
+        if (!root.apiEnabled)
+            return;
         const host = root.apiHosts[request.hostIndex] || root.apiHosts[0];
         const url = `https://${host}/apis/site/v2/sports/${encodeURIComponent(request.entry.sport)}/${encodeURIComponent(request.entry.league)}/scoreboard?dates=${root.scheduleRequestMonth(request)}`;
         const xhr = new XMLHttpRequest();
@@ -1334,6 +1359,8 @@ Item {
     }
 
     function requestGameDetails(game, force = false) {
+        if (!root.apiEnabled)
+            return;
         const id = String(game?.id ?? "");
         const sport = String(game?.sport ?? "");
         const league = String(game?.leagueId ?? "");

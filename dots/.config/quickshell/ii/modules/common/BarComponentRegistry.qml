@@ -541,7 +541,8 @@ Singleton {
             title: "Sports",
             styleConfigKey: "sports",
             styleOptions: defaultStyleOptions,
-            configPage: "SportsConfig.qml"
+            // Lives under Settings → APIs → Sports; relative to widgets/.
+            configPage: "../apis/SportsApiConfig.qml"
         },
         {
             id: "power",

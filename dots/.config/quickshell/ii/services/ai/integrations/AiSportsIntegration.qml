@@ -333,6 +333,8 @@ QtObject {
         if (root.pendingRequests[requestKey] !== undefined)
             return { status: "pending" };
 
+        if (!SportsService.apiEnabled)
+            return { status: "error", summary: "Sports data is turned off in Settings → APIs → Sports" };
         const request = { xhr: null, hostIndex: 0, callId: String(callId ?? ""), sessionId: String(sessionId ?? ""), route: route, args: normalizedArgs, cacheKey: cacheKeyValue };
         root.pendingRequests = Object.assign({}, root.pendingRequests, { [requestKey]: request });
         SportsService.acquireAiSubscriber();

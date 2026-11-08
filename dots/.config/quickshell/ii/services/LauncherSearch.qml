@@ -678,7 +678,7 @@ Singleton {
     }
 
     function liveSportsResults(queryText: string): var {
-        if (!Config.options.search.modules.sports.enable)
+        if (!Config.options.search.modules.sports.enable || !SportsService.apiEnabled)
             return [];
         const query = String(queryText ?? "").trim().toLocaleLowerCase();
         const cutoff = Date.now() + 3 * 60 * 60 * 1000;

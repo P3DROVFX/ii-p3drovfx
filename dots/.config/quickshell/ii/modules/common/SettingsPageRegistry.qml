@@ -59,7 +59,7 @@ Singleton {
             "component": "modules/settings/configs/BarConfig.qml",
             "searchComponent": false,
             "searchSources": ["sections/BarPlacementSection.qml", "sections/BarAppearanceSection.qml"],
-            "subPages": ["widgets/BarAppearanceConfig.qml", "widgets/BarLayoutConfig.qml", "widgets/BarWidgetsWaffleConfig.qml", "widgets/ActiveWindowConfig.qml", "widgets/SearchBarWidgetConfig.qml", "widgets/DateBarWidgetConfig.qml", "widgets/ClockBarWidgetConfig.qml", "widgets/WeatherBarWidgetConfig.qml", "widgets/MediaPlayerConfig.qml", "widgets/UtilButtonsConfig.qml", "widgets/KeyboardLayoutConfig.qml", "widgets/SystemMonitorConfig.qml", "widgets/AiPlanUsageConfig.qml", "widgets/PortWatcherConfig.qml", "widgets/PasswordManagerConfig.qml", "widgets/NetworkSpeedConfig.qml", "widgets/PrivacyPillConfig.qml", "widgets/IndicatorsConfig.qml", "widgets/RecordIndicatorConfig.qml", "widgets/SportsConfig.qml", "widgets/BluetoothConfig.qml", "widgets/SystemTrayConfig.qml", "widgets/BatteryConfig.qml", "widgets/DashboardButtonConfig.qml", "widgets/ClockDateWidgetConfig.qml", "widgets/WaffleTweaksConfig.qml", "widgets/DockToPanelConfig.qml", "widgets/BarScrollActionsConfig.qml", "widgets/BarTooltipsConfig.qml", "widgets/BarPopupsConfig.qml"],
+            "subPages": ["widgets/BarAppearanceConfig.qml", "widgets/BarLayoutConfig.qml", "widgets/BarWidgetsWaffleConfig.qml", "widgets/ActiveWindowConfig.qml", "widgets/SearchBarWidgetConfig.qml", "widgets/DateBarWidgetConfig.qml", "widgets/ClockBarWidgetConfig.qml", "widgets/WeatherBarWidgetConfig.qml", "widgets/MediaPlayerConfig.qml", "widgets/UtilButtonsConfig.qml", "widgets/KeyboardLayoutConfig.qml", "widgets/SystemMonitorConfig.qml", "widgets/AiPlanUsageConfig.qml", "widgets/PortWatcherConfig.qml", "widgets/PasswordManagerConfig.qml", "widgets/NetworkSpeedConfig.qml", "widgets/PrivacyPillConfig.qml", "widgets/IndicatorsConfig.qml", "widgets/RecordIndicatorConfig.qml", "widgets/BluetoothConfig.qml", "widgets/SystemTrayConfig.qml", "widgets/BatteryConfig.qml", "widgets/DashboardButtonConfig.qml", "widgets/ClockDateWidgetConfig.qml", "widgets/WaffleTweaksConfig.qml", "widgets/DockToPanelConfig.qml", "widgets/BarScrollActionsConfig.qml", "widgets/BarTooltipsConfig.qml", "widgets/BarPopupsConfig.qml"],
             "aliases": ["Bar & Status Bar", "Status Bar", "Shell mode", "Waffle", "Bar appearance", "Bar layout", "Bar style", "Brand icon", "Bar popups", "Floating popups", "Click bar to open sidebars"]
         },
         {
@@ -338,6 +338,15 @@ Singleton {
             "aliases": ["Core Services", "Language & Translation", "Time & Date", "World Clocks", "Alarms", "Translator", "Date format", "Clock format", "Custom format strings"]
         },
         {
+            "id": "apis",
+            "name": "APIs",
+            "icon": "api",
+            "component": "modules/settings/configs/ApisConfig.qml",
+            "subPages": ["apis/SportsApiConfig.qml"],
+            "aliases": ["Sports", "Sports tracker", "ESPN", "Scores", "Leagues", "Competitions", "Teams", "Football", "Soccer",
+                "Goal celebration", "Card notices", "Data sources", "Integrations"]
+        },
+        {
             "id": "weather",
             "name": "Weather",
             "icon": "cloud",
@@ -512,7 +521,7 @@ Singleton {
         {
             "id": "servicesIntegrations",
             "name": "Services & Integrations",
-            "pageIds": ["mediaMusic", "languageTime", "weather", "aiAssistant", "tasksAccounts", "devicesPhone"]
+            "pageIds": ["mediaMusic", "languageTime", "weather", "apis", "aiAssistant", "tasksAccounts", "devicesPhone"]
         },
         {
             "id": "system",

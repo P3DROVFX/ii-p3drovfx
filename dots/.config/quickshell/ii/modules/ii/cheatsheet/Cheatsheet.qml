@@ -60,7 +60,7 @@ Scope {
                 "name": Translation.tr("Workspaces")
             });
         }
-        if (Config.options.cheatsheet.enableFootball) {
+        if (Config.options.cheatsheet.enableFootball && (Config.options.bar.sports.apiEnabled ?? true)) {
             list.push({
                 "id": "football",
                 "icon": "sports_soccer",

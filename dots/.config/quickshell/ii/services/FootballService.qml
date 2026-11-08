@@ -23,7 +23,8 @@ Singleton {
 
     // ── Consumers ────────────────────────────────────────────────────────────
     property int subscribers: 0
-    readonly property bool active: subscribers > 0
+    readonly property bool apiEnabled: Config.options?.bar?.sports?.apiEnabled ?? true
+    readonly property bool active: apiEnabled && subscribers > 0
 
     function acquire() {
         root.subscribers += 1;
@@ -127,7 +128,7 @@ Singleton {
     property int revision: 0
 
     function request(key, url, onDone) {
-        if (root._inFlight[key])
+        if (root._inFlight[key] || !root.apiEnabled)
             return;
         const flights = Object.assign({}, root._inFlight);
         flights[key] = true;
@@ -412,7 +413,7 @@ Singleton {
         root.searchQuery = text;
         root._searchGeneration += 1;
         const generation = root._searchGeneration;
-        if (text.length < 2) {
+        if (text.length < 2 || !root.apiEnabled) {
             root.searchResults = [];
             root.searchLoading = false;
             return;
