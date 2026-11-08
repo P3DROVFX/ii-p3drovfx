@@ -309,8 +309,8 @@ Singleton {
         const allowOverviewBg = Config.options && Config.options.overview && Config.options.overview.animationStyle !== "none";
         return Boolean(background && (background.useBackgroundOverviewAlways
             || (background.zoomOutEnabled
-                // The scrolling layout's overview zooms its own windows, like the
-                // scrolloverview plugin, and leaves the wallpaper where it is.
+                // On the scrolling layouts the scrolloverview plugin draws the
+                // overview, and the wallpaper stays where it is.
                 && ((root.classicOverviewOpen && allowOverviewBg && !root.scrollingLayoutActive) || root.cheatsheetOpen))));
     }
 
@@ -1471,21 +1471,6 @@ Singleton {
     property real activeSearchHeight: 0
     property real activeSearchWidth: 0
     property string activeSearchQuery: ""
-    // The scrolling overview on the focused monitor, while it is on screen. An
-    // empty search hands it the arrow keys and Enter (handleNavigationKey).
-    property var scrollingOverviewNavigator: null
-    // Screen name -> the active row's frame (screen coordinates) in the scrolling
-    // overview; the background controller zooms the wallpaper onto it. Replaced,
-    // never mutated, so bindings see every change.
-    property var scrollingOverviewTargets: ({})
-    function setScrollingOverviewTarget(screenName, rect) {
-        const current = root.scrollingOverviewTargets[screenName];
-        if (current && current.x === rect.x && current.y === rect.y && current.width === rect.width && current.height === rect.height)
-            return;
-        const next = Object.assign({}, root.scrollingOverviewTargets);
-        next[screenName] = rect;
-        root.scrollingOverviewTargets = next;
-    }
     // Real Gnome overview: screen name -> the free area under the workspace
     // thumbnails (screen coordinates), where the wallpaper plane lands.
     property var realGnomeAreas: ({})
@@ -2334,51 +2319,20 @@ Singleton {
     Connections {
         target: Config
         function onReadyChanged() {
-            if (Config.ready) {
+            if (Config.ready)
                 root.enforceSidebarStyle();
-                root.enforceScrollingSearchLock();
-            }
         }
     }
 
     /**
      * Hyprland's native scrolling layout and zscroll (`lua:zscroll`, rows of
      * windows on a vertical tape) both keep a workspace larger than the screen.
-     * Everything that lays itself out for "the scrolling layout" - the scrolling
-     * overview, the wallpaper, the search - asks this, not the raw layout name.
+     * Everything that lays itself out for "the scrolling layout" - the plugin
+     * overview behind the search, the wallpaper - asks this, not the raw layout name.
      */
     readonly property bool scrollingLayoutActive: Persistent.states.hyprland.layout === "scrolling"
         || root.zscrollLayoutActive
     readonly property bool zscrollLayoutActive: Persistent.states.hyprland.layout === "lua:zscroll"
-
-    /**
-     * The scrolling overview is the search's idle face with Hyprland's scrolling
-     * layout, so the search options that replace or hide it are locked off
-     * there: centred search, always listing apps and suggestions. Settings shows
-     * them disabled with the reason.
-     */
-    readonly property bool scrollingSearchLock: root.scrollingLayoutActive
-    onScrollingSearchLockChanged: Qt.callLater(root.enforceScrollingSearchLock)
-    function enforceScrollingSearchLock() {
-        if (!Config.ready || !root.scrollingSearchLock)
-            return;
-        const search = Config.options.search;
-        if (search.positionStyle === "center")
-            search.positionStyle = "default";
-        if (search.alwaysListApps)
-            search.alwaysListApps = false;
-        if (search.suggestions.enable)
-            search.suggestions.enable = false;
-    }
-    Connections {
-        target: Config.ready ? Config.options.search : null
-        function onPositionStyleChanged() { Qt.callLater(root.enforceScrollingSearchLock); }
-        function onAlwaysListAppsChanged() { Qt.callLater(root.enforceScrollingSearchLock); }
-    }
-    Connections {
-        target: Config.ready ? Config.options.search.suggestions : null
-        function onEnableChanged() { Qt.callLater(root.enforceScrollingSearchLock); }
-    }
 
     Connections {
         target: Config.ready ? Config.options.bar : null

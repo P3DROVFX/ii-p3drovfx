@@ -198,12 +198,6 @@ PanelWindow {
         wallpaperDisplacementY: bgRoot.videoEffectsDisabled ? 0 : (parallax.parallaxY - parallax.centeredY)
         wallpaperPath: bgRoot.wallpaperPath
         wallpaperSafetyTriggered: bgRoot.wallpaperSafetyTriggered
-        // The scrolling overview's row target must not reach the lock: with it,
-        // the plane would hand off (go invisible) at full progress and the
-        // locked screen would lose its wallpaper to an overview that is not
-        // on screen.
-        scrollingTarget: bgRoot.lockEffectActive ? Qt.rect(0, 0, 0, 0)
-            : GlobalStates.scrollingOverviewTargets[bgRoot.screen?.name ?? ""] ?? Qt.rect(0, 0, 0, 0)
         realGnomeArea: {
             const name = bgRoot.screen?.name ?? "";
             const area = GlobalStates.realGnomeAreaFor(name) ?? Persistent.states.overview?.realGnomeAreas?.[name];

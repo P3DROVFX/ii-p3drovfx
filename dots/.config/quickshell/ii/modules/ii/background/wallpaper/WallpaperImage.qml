@@ -611,10 +611,8 @@ Item {
             Rectangle {
                 anchors.fill: parent
                 color: wallpaperImageRoot.overviewController.isGnomeLike ? "#000000" : Appearance.colors.colLayer0
-                // The scrolling overview copies the scrolloverview plugin, whose cards
-                // sit on a dark field: the backing sinks much further there.
                 opacity: wallpaperImageRoot.overviewController.isGnomeLike
-                    ? (wallpaperImageRoot.isScrollingLayout ? 0.62 : 0.24)
+                    ? 0.24
                     : wallpaperImageRoot.overviewController.dimAmount
             }
         }
@@ -730,9 +728,6 @@ Item {
         Item {
             id: wallpaperPlanes
             anchors.fill: parent
-            // Landed on the scrolling overview's row, which draws the same
-            // wallpaper and can scroll away with it.
-            opacity: wallpaperImageRoot.overviewController.scrollingHandedOff ? 0 : 1
 
             readonly property real wallpaperW: wallpaperWidth / wallpaperToScreenRatio * baseWallpaperScale
             readonly property real wallpaperH: wallpaperHeight / wallpaperToScreenRatio * baseWallpaperScale
@@ -861,7 +856,7 @@ Item {
             border.color: wallpaperImageRoot.overviewController.isGnomeLike
                 ? CF.ColorUtils.transparentize(Appearance.colors.colPrimary, 0.35)
                 : "transparent"
-            border.width: wallpaperImageRoot.overviewController.isGnomeLike && !wallpaperImageRoot.overviewController.scrollingLayout
+            border.width: wallpaperImageRoot.overviewController.isGnomeLike
                     && !wallpaperImageRoot.overviewController.isRealGnome
                 ? 1.5 * wallpaperImageRoot.scaleProgress
                 : 0

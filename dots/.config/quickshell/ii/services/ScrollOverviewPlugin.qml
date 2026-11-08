@@ -8,14 +8,16 @@ import Quickshell.Io
 import qs
 
 /**
- * The scrolloverview plugin's overview, opened behind the search on zscroll.
+ * The scrolloverview plugin's overview, opened behind the search on the
+ * scrolling layouts (Hyprland's native `scrolling` and zscroll).
  *
- * Super always opens the shell's search. On a zscroll workspace with the plugin
- * loaded, the search asks zscroll.lua (`shell_overview`, over hyprctl eval) to
- * bring the plugin's overview up behind its bar instead of drawing its own: the
- * plugin hands the keyboard to a focused top layer, so typing still searches.
- * While the answer is pending the search keeps its own overview out, and a
- * refusal (option off, plugin missing, not a zscroll workspace) lets it draw.
+ * Super always opens the shell's search. On a scrolling workspace with the
+ * plugin loaded, the search asks zscroll.lua (`shell_overview`, over hyprctl
+ * eval) to bring the plugin's overview up behind its bar instead of drawing its
+ * own: the plugin hands the keyboard to a focused top layer, so typing still
+ * searches. While the answer is pending the search keeps its own overview out,
+ * and a refusal (option off, plugin missing, not a scrolling workspace) lets the
+ * shell draw its regular overview.
  */
 Singleton {
     id: root

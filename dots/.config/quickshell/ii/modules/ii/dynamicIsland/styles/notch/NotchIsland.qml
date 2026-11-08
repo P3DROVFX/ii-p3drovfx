@@ -715,6 +715,18 @@ Scope {
         && !GlobalStates.searchOnlyMode
         && !Config.options.search.alwaysListApps
         && (Config.options.overview.enable ?? true)
+        // On the scrolling layouts the scrolloverview plugin stands behind the search.
+        && !ScrollOverviewPlugin.hosting
+    // The plugin's overview stays up behind the island's search from open to close.
+    readonly property bool pluginOverviewWanted: root.searchActive && GlobalStates.islandOwnsSearch
+        && GlobalStates.scrollingLayoutActive
+        && !GlobalStates.searchOnlyMode && !GlobalStates.panelOpenedDirectly
+    onPluginOverviewWantedChanged: {
+        if (root.pluginOverviewWanted)
+            ScrollOverviewPlugin.open();
+        else
+            ScrollOverviewPlugin.close();
+    }
     /**
      * The island lays the overview out itself: a small fixed grid, opening and closing
      * with the island rather than playing the desktop overview's own entrance.
@@ -737,7 +749,7 @@ Scope {
      */
     readonly property var realGnomeController: GlobalStates.overviewBackgroundControllerFor(root.targetScreen?.name ?? "")
     readonly property bool realGnome: !!root.realGnomeController && root.realGnomeController.isRealGnome
-        && root.integratedOverview && !root.scrollingLayout
+        && root.integratedOverview
     /** Room the workspace indicator keeps under the plane. */
     readonly property real realGnomeIndicatorRoom: 40
     readonly property bool realGnomeSearchOpen: root.realGnome && root.searchActive
@@ -778,7 +790,6 @@ Scope {
     property real overviewReveal: root.overviewVisible ? 1.0 : 0.0
     property real overviewFade: root.overviewVisible ? 1.0 : 0.0
     readonly property bool overviewAnimating: root.searchActive || root.overviewReveal > 0.001 || root.overviewFade > 0.001
-    readonly property bool scrollingLayout: GlobalStates.scrollingLayoutActive
 
     /**
      * The workspace grid is built once and then kept.
@@ -1964,8 +1975,7 @@ Scope {
                 // A grid that hangs outside the body needs the whole surface to accept
                 // input; the integrated one is inside the island's own shape, which
                 // maskTarget already covers.
-                const outsideGrid = root.overviewVisible
-                    && (root.scrollingLayout || !root.integratedOverview);
+                const outsideGrid = root.overviewVisible && !root.integratedOverview;
                 // Real Gnome's window picker sits under the island and takes the pointer.
                 return outsideGrid || root.realGnomeSearchOpen ? fullWindow : maskTarget;
             }
@@ -2749,7 +2759,7 @@ Scope {
                     // The workspace overview, drawn inside the body under the search
                     // field; see NotchContent.overviewVisible.
                     overviewVisible: root.integratedOverview && root.overviewVisible
-                    overviewBuilt: root.overviewBuilt && !root.scrollingLayout && root.integratedOverview
+                    overviewBuilt: root.overviewBuilt && root.integratedOverview
                     overviewFade: root.integratedOverview ? root.overviewFade : 0
                     overviewRows: root.overviewRows
                     overviewColumns: root.overviewColumns
@@ -2780,7 +2790,7 @@ Scope {
             anchors.horizontalCenter: parent.horizontalCenter
             // Integrated, the grid is drawn inside the body by NotchContent; this
             // panel is what the overview looks like when the island does not hold it.
-            active: root.overviewBuilt && !root.scrollingLayout && !root.integratedOverview
+            active: root.overviewBuilt && !root.integratedOverview
             visible: opacity > 0.01
             opacity: root.overviewFade
 
@@ -2809,35 +2819,6 @@ Scope {
                 gridColumns: root.integratedOverview ? root.overviewColumns : Config.options.overview.columns
                 fixedScale: root.integratedOverview ? root.overviewScale : 0
                 suppressEntrance: root.integratedOverview
-            }
-        }
-
-        Loader { // Scrolling overview
-            id: scrollingOverviewLoader
-            // Built off the UI thread: the workspace grid (previews of every window) is the
-            // heaviest thing search opens, and building it synchronously stalled the
-            // island's morph for its first frames. It fades in after the surface anyway.
-            asynchronous: true
-            // The whole window: the rows fade out above the island's settled search
-            // face instead of hanging from the body and riding its morph.
-            anchors.fill: parent
-            // Only when the island holds search: otherwise a second overview would
-            // live here, recapturing previews and aiming the background zoom.
-            active: root.overviewBuilt && root.scrollingLayout && GlobalStates.islandOwnsSearch
-            visible: root.overviewVisible || root.overviewFade > 0.001
-
-            sourceComponent: ScrollingOverviewWidget {
-                anchors.fill: parent
-                panelWindow: win
-                monitorIndex: Quickshell.screens.indexOf(win.screen)
-                presented: root.overviewVisible
-                // Where the search face settles, held while results grow the body.
-                topInset: 0
-                Binding on topInset {
-                    when: root.overviewVisible
-                    value: container.y + root.targetHeight + Appearance.sizes.elevationMargin * 2
-                    restoreMode: Binding.RestoreNone
-                }
             }
         }
 

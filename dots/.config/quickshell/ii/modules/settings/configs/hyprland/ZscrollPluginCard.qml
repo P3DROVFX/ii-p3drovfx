@@ -7,11 +7,12 @@ import qs.modules.common
 import qs.modules.common.widgets
 
 /**
- * The scrolloverview plugin, as Settings -> Hyprland -> Layout -> zscroll shows it.
+ * The scrolloverview plugin, as Settings -> Hyprland -> Layout -> Overview shows it
+ * for the scrolling and zscroll layouts.
  *
- * zscroll's overview is a Hyprland plugin (yayuuu/hyprland-scroll-overview), not something the
- * shell draws, so without it Super on a zscroll workspace falls back to the shell's overview,
- * which was not made for a vertical tape. While it is missing the card is the loudest thing in
+ * The scrolling layouts' overview is a Hyprland plugin (yayuuu/hyprland-scroll-overview), not
+ * something the shell draws, so without it Super falls back to the shell's regular overview,
+ * which was not made for a tape wider or taller than the screen. While it is missing the card is the loudest thing in
  * the section - primary container, a large shape, one filled button. Once loaded it shrinks to
  * a status line with a Rebuild for when Hyprland is updated.
  *
@@ -106,7 +107,7 @@ Rectangle {
                             return Translation.tr("The overview plugin could not be installed");
                         if (card.stale)
                             return Translation.tr("Rebuild the overview plugin");
-                        return Translation.tr("zscroll needs its overview plugin");
+                        return Translation.tr("Scrolling layouts need the overview plugin");
                     }
                     font.pixelSize: card.compact ? Appearance.font.pixelSize.normal : Appearance.font.pixelSize.larger
                     font.weight: Font.DemiBold
@@ -118,7 +119,7 @@ Rectangle {
                     Layout.fillWidth: true
                     text: {
                         if (card.compact)
-                            return Translation.tr("Tap Super on a zscroll workspace to zoom out over every workspace and its rows.");
+                            return Translation.tr("Tap Super on a scrolling or zscroll workspace to zoom out over every workspace and its whole tape.");
                         if (card.working)
                             return card.progress !== "" ? card.progress : Translation.tr("Starting…");
                         if (card.failure !== "")
@@ -126,14 +127,14 @@ Rectangle {
                         if (!card.known)
                             return Translation.tr("Checking…");
                         if (!card.supported)
-                            return Translation.tr("The plugin has no build for Hyprland %1 yet. Until it does, Super opens the shell's overview.")
+                            return Translation.tr("The plugin has no build for Hyprland %1 yet. Until it does, Super opens the shell's regular overview.")
                                 .arg(card.pluginState.hyprland);
                         if (card.stale)
                             return Translation.tr("It was compiled for another Hyprland version and will not load on %1.")
                                 .arg(card.pluginState.hyprland);
                         if (card.built)
                             return Translation.tr("It is built for Hyprland %1 but not loaded yet.").arg(card.pluginState.hyprland);
-                        return Translation.tr("Tapping Super on a zscroll workspace zooms out over every workspace and its whole tape of rows. That overview is a Hyprland plugin (yayuuu/hyprland-scroll-overview): installing compiles it for Hyprland %1 in about a minute and loads it on every start. It needs git, g++ and the Hyprland headers.")
+                        return Translation.tr("Tapping Super on a scrolling or zscroll workspace zooms out over every workspace and its whole tape of windows. That overview is a Hyprland plugin (yayuuu/hyprland-scroll-overview): installing compiles it for Hyprland %1 in about a minute and loads it on every start. It needs git, g++ and the Hyprland headers.")
                             .arg(card.pluginState.hyprland);
                     }
                     font.pixelSize: Appearance.font.pixelSize.small

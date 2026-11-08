@@ -31,10 +31,9 @@ ContentPage {
         }
     }
 
-    // Hyprland's scrolling layout locks the zoom to Gnome Like: the wallpaper and
-    // windows zoom out onto the scrolling overview's active row.
+    // The scrolling layouts' overview is the scrolloverview plugin: no zoom there.
     readonly property bool scrollingLayout: GlobalStates.scrollingLayoutActive
-    readonly property bool windowTransitionAvailable: scrollingLayout || overviewBackgroundStyle === "gnome" || overviewBackgroundStyle === "real-gnome" || overviewBackgroundStyle === "soft-focus"
+    readonly property bool windowTransitionAvailable: !scrollingLayout && (overviewBackgroundStyle === "gnome" || overviewBackgroundStyle === "real-gnome" || overviewBackgroundStyle === "soft-focus")
 
     /**
      * The Dynamic Island lays the overview out itself when it owns it: a fixed 2x3 grid
@@ -407,32 +406,7 @@ ContentPage {
             Layout.fillWidth: true
             visible: page.scrollingLayout && !(Config.options.background.useBackgroundOverviewAlways ?? false)
             materialIcon: "view_carousel"
-            text: Translation.tr("The scrolling layout always uses the Gnome Like zoom: the wallpaper and windows zoom out onto the active workspace's row.")
-        }
-
-        ConfigSpinBox {
-            visible: page.scrollingLayout
-            icon: "zoom_out_map"
-            text: Translation.tr("Workspace size in the scrolling overview (%)")
-            value: Math.round((Config.options.overview.scrollingScale ?? 0.6) * 100)
-            from: 30
-            to: 85
-            stepSize: 5
-            onValueChanged: Config.options.overview.scrollingScale = value / 100
-            StyledToolTip {
-                text: Translation.tr("Each workspace card is the screen at this size, like the scrolloverview plugin's scale.")
-            }
-        }
-
-        ConfigSpinBox {
-            visible: page.scrollingLayout
-            icon: "height"
-            text: Translation.tr("Gap between workspaces (px)")
-            value: Config.options.overview.scrollingWorkspaceGap ?? 60
-            from: 8
-            to: 200
-            stepSize: 4
-            onValueChanged: Config.options.overview.scrollingWorkspaceGap = value
+            text: Translation.tr("On the scrolling layouts the overview behind the search is the scrolloverview plugin, so the wallpaper never zooms. Install it and set its zoom in Hyprland → Layout → Overview.")
         }
 
         NoticeBox {

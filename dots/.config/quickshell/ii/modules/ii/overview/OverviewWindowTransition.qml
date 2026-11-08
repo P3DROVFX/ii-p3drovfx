@@ -45,7 +45,7 @@ Scope {
         !GlobalStates.overviewUsesAppDrawer &&
         Config.options.background.zoomOutEnabled &&
         Config.options.background.windowZoomOnOverview &&
-        // The scrolling overview animates its own tiles and hides the real windows itself.
+        // On the scrolling layouts the scrolloverview plugin draws the overview.
         !GlobalStates.scrollingLayoutActive
 
     // Hyprland window rules are cumulative. The old handoff created one
@@ -1131,11 +1131,7 @@ Scope {
             readonly property real captureOriginY: overviewController ? overviewController.scaleOriginY : tRoot.scaleOriginY
             readonly property real captureTranslateX: !tRoot.isGnomeLike && overviewController && overviewController.windowTransitionMode === "scale-with-background" ? overviewController.translateX : 0
             readonly property real captureTranslateY: !tRoot.isGnomeLike && overviewController && overviewController.windowTransitionMode === "scale-with-background" ? overviewController.translateY : 0
-            // With the scrolling layout the captures zoom onto the active row
-            // with the wallpaper, then hand over to the overview's own tiles.
-            readonly property real captureOpacity: (overviewController && overviewController.scrollingHandedOff)
-                ? 0.0
-                : (tRoot.isGnomeLike ? 1.0 : (overviewController ? overviewController.progress : 0.0))
+            readonly property real captureOpacity: (tRoot.isGnomeLike ? 1.0 : (overviewController ? overviewController.progress : 0.0))
 
             // Mapping a fresh layer surface stalled the GUI thread for
             // 100-200 ms on the first frame of every open (EGL surface and
@@ -1298,11 +1294,8 @@ Scope {
                     transitionProgress = 1.0
                     return
                 }
-                if (!GlobalStates.classicOverviewOpen || (overviewController && overviewController.scrollingLayout)) {
-                    // Not in overview — just sync, no animation needed. The
-                    // scrolling overview hides these captures while it is open
-                    // and zooms out of the new workspace's row on close, so a
-                    // switch there only has to swap which windows are captured.
+                if (!GlobalStates.classicOverviewOpen) {
+                    // Not in overview — just sync, no animation needed.
                     slideStartTimer.stop()
                     displayedWsId = activeWsId
                     outgoingToplevels = []
@@ -1846,8 +1839,7 @@ Scope {
         width: realWidth + (slotWidth - realWidth) * pickT
         height: realHeight + (slotHeight - realHeight) * pickT
 
-        readonly property bool hiddenOffMonitor: tile.offMonitor && !tRoot.isRealGnome && !!tRoot.overviewController
-            && tRoot.overviewController.scrollingLayout
+        readonly property bool hiddenOffMonitor: tile.offMonitor && !tRoot.isRealGnome && GlobalStates.scrollingLayoutActive
         visible: width > 0 && height > 0 && !tile.hiddenOffMonitor
 
         // Real Gnome: the hovered window lifts toward the pointer.

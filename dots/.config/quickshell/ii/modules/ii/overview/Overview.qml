@@ -73,13 +73,7 @@ Scope {
                         }
                     }
 
-                    // With the scrolling layout the window stays built between opens
-                    // (unmapped while closed, so it draws nothing): rebuilding the
-                    // search and every workspace row on each open is what stalled
-                    // the first frames, worst after the shell had been idle.
-                    readonly property bool residentForScrolling: GlobalStates.scrollingLayoutActive
-                        && (Config.options.overview.enable ?? true)
-                    active: monitorIsFocused && (contentKeepAlive || GlobalStates.overviewOpen || visualActive || residentForScrolling)
+                    active: monitorIsFocused && (contentKeepAlive || GlobalStates.overviewOpen || visualActive)
 
                     onItemChanged: {
                         // Close-time cleanup runs before the exit animation ends.
@@ -97,11 +91,10 @@ Scope {
                         readonly property bool keepAlive: searchWidget.keepAlive
                         readonly property bool isBottomBar: !BarPlacement.vertical && BarPlacement.bottom
 
-                        readonly property bool isScrollingLayout: GlobalStates.scrollingLayoutActive
                         readonly property var backgroundController: GlobalStates.overviewBackgroundControllerFor(root.screen?.name ?? "")
                         // Real Gnome: compact thumbnails on top, the window picker
                         // in the free area under them.
-                        readonly property bool realGnome: !!backgroundController && backgroundController.isRealGnome && !root.isScrollingLayout
+                        readonly property bool realGnome: !!backgroundController && backgroundController.isRealGnome
                         readonly property var monitorReserved: HyprlandData.monitors.find(m => m.name === root.screen?.name)?.reserved ?? [0, 0, 0, 0]
                         // Screen coordinates -> window coordinates (the window
                         // starts at the usable area and reaches past it by 2 margins).
@@ -190,19 +183,21 @@ Scope {
                          * revealed it underneath the results. Recomputing from the
                          * primitives cannot be stale, whoever calls it.
                          */
-                        // On zscroll the scrolloverview plugin's overview stands behind
-                        // the search in place of the shell's, from open to close.
+                        // On the scrolling layouts (native and zscroll) the scrolloverview
+                        // plugin's overview stands behind the search in place of the
+                        // shell's, from open to close. Without the plugin the shell
+                        // draws its usual overview.
                         readonly property bool pluginOverviewWanted: root.monitorIsFocused && GlobalStates.overviewOpen
-                            && !GlobalStates.searchConnectActive && GlobalStates.zscrollLayoutActive
+                            && !GlobalStates.searchConnectActive && GlobalStates.scrollingLayoutActive
                             && !GlobalStates.searchOnlyMode && !GlobalStates.panelOpenedDirectly
                         onPluginOverviewWantedChanged: {
                             if (root.pluginOverviewWanted)
-                                ZscrollPluginOverview.open();
+                                ScrollOverviewPlugin.open();
                             else
-                                ZscrollPluginOverview.close();
+                                ScrollOverviewPlugin.close();
                         }
                         function evaluateOverviewShouldShow() {
-                            return !ZscrollPluginOverview.hosting
+                            return !ScrollOverviewPlugin.hosting
                                 && !root.evaluateSearchSurfaceOwned()
                                 && !GlobalStates.searchOnlyMode
                                 && !GlobalStates.searchCenterMode
@@ -435,7 +430,7 @@ Scope {
                         Component.onDestruction: realOverviewLoader.setContentKeepAliveLater(false)
 
                         visible: root.monitorIsFocused
-                            && (GlobalStates.overviewOpen || searchWidgetWrapper.slideOpacity > 0 || realOverviewLoader.residentForScrolling)
+                            && (GlobalStates.overviewOpen || searchWidgetWrapper.slideOpacity > 0)
                         onVisibleChanged: {
                             if (root.visible)
                                 realOverviewLoader.setVisualActiveLater(true);
@@ -443,13 +438,12 @@ Scope {
                                 realOverviewLoader.setVisualActiveLater(false);
                         }
 
-                        // Closed but still mapped (scrolling layout), the window must take
-                        // no input at all: an empty item, not a null one, is the empty region.
-                        // With the plugin's overview behind, only the search takes the
+                        // Closing, the window must take no input at all: an empty item,
+                        // not a null one, is the empty region. With the plugin's overview behind, only the search takes the
                         // pointer: the rest of the screen is the plugin's to click.
                         mask: Region {
                             item: !(root.monitorIsFocused && GlobalStates.overviewOpen) ? noInputRegion
-                                : (ZscrollPluginOverview.hosting ? searchWidgetWrapper : contentItem)
+                                : (ScrollOverviewPlugin.hosting ? searchWidgetWrapper : contentItem)
                         }
                         Item {
                             id: noInputRegion
@@ -782,7 +776,7 @@ Scope {
                                 // opacity alone is what let the workspaces stay on
                                 // screen behind them.
                                 // Real Gnome has no grid: the plane and its neighbours are the workspaces.
-                                active: root.visible && !root.realGnome && !GlobalStates.searchOnlyMode && !GlobalStates.searchCenterMode && !Config.options.search.suggestions.enable && (Config?.options.overview.enable ?? true) && !root.isScrollingLayout && !root.searchPanelOwned
+                                active: root.visible && !root.realGnome && !GlobalStates.searchOnlyMode && !GlobalStates.searchCenterMode && !Config.options.search.suggestions.enable && (Config?.options.overview.enable ?? true) && !root.searchPanelOwned
                                 // Driven by the reveal progress alone. Gating this on
                                 // `overviewShouldShow` too meant a panel that opened
                                 // without ever changing the query could leave the grid
@@ -808,49 +802,6 @@ Scope {
                                     panelWindow: root
                                     visible: root.overviewFadeProgress > 0.001
                                     monitorIndex: root.monitorIndex
-                                }
-                            }
-
-                            Loader { // Scrolling overview
-                                id: scrollingOverviewLoader
-                                // Exactly the monitor: the window reaches past it on every
-                                // side (negative margins), and the background zoom aims at
-                                // the rows in screen coordinates.
-                                readonly property var reserved: HyprlandData.monitors.find(m => m.name === root.screen?.name)?.reserved ?? [0, 0, 0, 0]
-                                x: root.margin * 2 - reserved[0]
-                                y: root.margin * 2 - reserved[1]
-                                width: root.screen?.width ?? parent.width
-                                height: root.screen?.height ?? parent.height
-                                active: (root.visible || realOverviewLoader.residentForScrolling) && !GlobalStates.searchOnlyMode && !GlobalStates.searchCenterMode && !Config.options.search.suggestions.enable && (Config?.options.overview.enable ?? true) && root.isScrollingLayout && !root.searchPanelOwned
-                                // The rows play their own entrance and exit; the window
-                                // only shows the layer while the search is on screen.
-                                // ...or while its windows zoom back to full size after a close.
-                                visible: searchWidgetWrapper.slideOpacity > 0.001 || (item?.drawing ?? false)
-
-                                sourceComponent: ScrollingOverviewWidget {
-                                    id: scrollingOverview
-                                    anchors.fill: parent
-                                    panelWindow: root
-                                    monitorIndex: root.monitorIndex
-                                    presented: root.overviewShouldShow
-                                    // Measured from the collapsed search, so results
-                                    // growing out of it never move the rows.
-                                    // Only a real measurement is taken: the field reports a
-                                    // few pixels for its first frames of each open, and
-                                    // following that re-laid every row out (and re-aimed the
-                                    // background zoom) right as it began.
-                                    // (A Binding with `when` briefly applied its stale value.)
-                                    property real searchChrome: Appearance.sizes.elevationMargin * 3 + Math.max(56, searchWidget.normalSearchChromeHeight)
-                                    Connections {
-                                        target: searchWidget
-                                        function onNormalSearchChromeHeightChanged() {
-                                            const chrome = searchWidget.normalSearchChromeHeight;
-                                            if (chrome > 24)
-                                                scrollingOverview.searchChrome = Appearance.sizes.elevationMargin * 3 + chrome;
-                                        }
-                                    }
-                                    topInset: root.isBottomBar ? Appearance.sizes.elevationMargin * 2 : scrollingOverviewLoader.reserved[1] + searchChrome
-                                    bottomInset: root.isBottomBar ? scrollingOverviewLoader.reserved[3] + searchChrome : Appearance.sizes.elevationMargin
                                 }
                             }
                         }

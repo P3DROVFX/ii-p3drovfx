@@ -55,15 +55,7 @@ Item {
             icon: "auto_awesome"
             title: Translation.tr("Empty Query Suggestions")
 
-            NoticeBox {
-                Layout.fillWidth: true
-                visible: GlobalStates.scrollingSearchLock
-                materialIcon: "view_carousel"
-                text: Translation.tr("Locked by the scrolling layout: the scrolling overview is Search's idle view, so centred Search, listing apps on an empty query and suggestions are off.")
-            }
-
             ConfigSwitch {
-                enabled: !GlobalStates.scrollingSearchLock
                 buttonIcon: "auto_awesome"
                 text: Translation.tr("Show suggestions when Search opens")
                 checked: Config.options.search.suggestions.enable

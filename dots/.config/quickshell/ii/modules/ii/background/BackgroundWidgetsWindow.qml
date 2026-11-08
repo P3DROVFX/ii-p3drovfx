@@ -604,12 +604,6 @@ PanelWindow {
     readonly property bool zoomInStyle: !videoEffectsDisabled && Config.options.overview.scrollingStyle.zoomStyle === "in"
     readonly property bool showOpeningAnimation: Config.options.overview.showOpeningAnimation && Config.options.overview.animationStyle !== "none"
     readonly property bool isScrollingLayout: GlobalStates.scrollingLayoutActive
-    // The scrolling overview copies the scrolloverview plugin, which draws only the
-    // windows over the wallpaper: the desktop widgets step out while it is open.
-    property real scrollingOverviewHide: overviewOpen && isScrollingLayout ? 1 : 0
-    Behavior on scrollingOverviewHide {
-        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(bgWidgetsWindow)
-    }
     readonly property var zoomLevels: ({
         "in": { default: 1.04, zoomed: 1 },
         "out": { default: 1, zoomed: 1.01 }
@@ -688,14 +682,11 @@ PanelWindow {
             controller: bgWidgetsWindow.overviewController
         }
 
-        // The scrolling overview's rows show the bare wallpaper, so the widgets
-        // leave while it zooms onto the active row instead of landing in it.
         // Real Gnome keeps them on its plane (followWidgetsScale shrinks them with it,
         // as Edit Mode does) and steps them out only while a workspace slide hands the
         // plane to the strip's cards, which carry the wallpaper and windows alone:
         // per-workspace widgets would otherwise swap in place under the slide.
         opacity: GlobalStates.isMediaModeActiveForScreen(bgWidgetsWindow.screen ? bgWidgetsWindow.screen.name : "")
-                || (bgWidgetsWindow.overviewController && bgWidgetsWindow.overviewController.scrollingAimed && bgWidgetsWindow.overviewController.active)
                 || (bgWidgetsWindow.overviewController && bgWidgetsWindow.overviewController.isRealGnome && bgWidgetsWindow.overviewController.active
                     && Boolean(GlobalStates.realGnomePlaneHiddenScreens[bgWidgetsWindow.screen ? bgWidgetsWindow.screen.name : ""]))
             ? 0.0
@@ -816,7 +807,7 @@ PanelWindow {
         Item {
             id: desktopStack
             anchors.fill: parent
-            opacity: (1 - bgWidgetsWindow.windowBlurProgress) * (1 - bgWidgetsWindow.scrollingOverviewHide)
+            opacity: (1 - bgWidgetsWindow.windowBlurProgress)
 
             // The canvas is a screen-sized MouseArea moved by the widgets'
             // parallax, so a long travel (a tall picture's vertical sweep) pulls
@@ -1127,7 +1118,7 @@ PanelWindow {
             id: widgetBlurLoader
             anchors.fill: parent
             active: widgetCanvas.visible && bgWidgetsWindow.windowBlurProgress > 0
-            opacity: bgWidgetsWindow.windowBlurProgress * (1 - bgWidgetsWindow.scrollingOverviewHide)
+            opacity: bgWidgetsWindow.windowBlurProgress
             sourceComponent: Item {
                 id: widgetBlurRoot
                 readonly property Item subject: depthCutoutLoader.item && depthCutoutLoader.item.opacity > 0.01

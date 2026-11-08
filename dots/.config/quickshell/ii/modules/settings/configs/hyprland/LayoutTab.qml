@@ -320,8 +320,6 @@ ContentPage {
             title: Translation.tr("Rows (zscroll)")
             icon: "view_agenda"
 
-            ZscrollPluginCard {}
-
             HyprSelect {
                 title: Translation.tr("Windows in a row")
                 icon: "view_column"
@@ -397,41 +395,6 @@ ContentPage {
                 onRequested: wanted => HyprlandGui.setGlobal("zscroll_keybinds", wanted)
             }
 
-            HyprToggle {
-                buttonIcon: "overview_key"
-                text: Translation.tr("Search opens over the zscroll overview")
-                alwaysExplain: true
-                switchOn: tab.zscrollOn("zscroll_super_overview", true)
-                textOn: Translation.tr("On a zscroll workspace, the search opens with the scrolloverview plugin zoomed out behind its bar; typing searches and puts the plugin away. Without the plugin loaded, the shell's own overview is used.")
-                textOff: Translation.tr("The search opens with the shell's own overview.")
-                onRequested: wanted => HyprlandGui.setGlobal("zscroll_super_overview", wanted)
-            }
-
-            HyprSelect {
-                visible: tab.zscrollOn("zscroll_super_overview", true)
-                title: Translation.tr("Overview zoom")
-                icon: "zoom_out"
-                keys: []
-                currentOverride: tab.zscrollNumber("zscroll_overview_scale", 0.6)
-                options: [0.4, 0.5, 0.6, 0.7].map(scale => ({
-                    "displayName": `${Math.round(scale * 100)}%`, "value": scale
-                }))
-                onSelected: newValue => HyprlandGui.setGlobal("zscroll_overview_scale", newValue)
-            }
-
-            HyprSelect {
-                visible: tab.zscrollOn("zscroll_super_overview", true)
-                title: Translation.tr("Overview lays workspaces out")
-                icon: "view_stream"
-                keys: []
-                currentOverride: String(HyprlandGui.globalValue("zscroll_overview_layout", "vertical"))
-                options: [
-                    { "displayName": Translation.tr("Top to bottom"), "value": "vertical" },
-                    { "displayName": Translation.tr("Side by side"), "value": "horizontal" }
-                ]
-                onSelected: newValue => HyprlandGui.setGlobal("zscroll_overview_layout", newValue)
-            }
-
             ConfigTextField {
                 id: zscrollFullWidth
 
@@ -464,6 +427,57 @@ ContentPage {
                 Layout.fillWidth: true
                 materialIcon: "info"
                 text: Translation.tr("Windows fill rows left to right, then the next row down. The focused row fills the screen; the rows above and below peek through the outer gaps and can be clicked. The overview shows a workspace's rows side by side.")
+            }
+        }
+    }
+
+    // Both scrolling layouts delegate their overview to the scrolloverview
+    // plugin (yayuuu/hyprland-scroll-overview), built and loaded from here.
+    // The options keep their zscroll_ names so existing configs still apply.
+    Loader {
+        active: tab.engine === "scrolling" || tab.engine === "lua:zscroll"
+        visible: active
+        Layout.fillWidth: true
+
+        sourceComponent: ContentSection {
+            title: Translation.tr("Overview")
+            icon: "overview_key"
+
+            ZscrollPluginCard {}
+
+            HyprToggle {
+                buttonIcon: "overview_key"
+                text: Translation.tr("Search opens over the plugin overview")
+                alwaysExplain: true
+                switchOn: tab.zscrollOn("zscroll_super_overview", true)
+                textOn: Translation.tr("On a scrolling or zscroll workspace, the search opens with the scrolloverview plugin zoomed out behind its bar, and both close together. Without the plugin loaded, the shell's regular overview is used.")
+                textOff: Translation.tr("The search opens with the shell's regular overview.")
+                onRequested: wanted => HyprlandGui.setGlobal("zscroll_super_overview", wanted)
+            }
+
+            HyprSelect {
+                visible: tab.zscrollOn("zscroll_super_overview", true)
+                title: Translation.tr("Overview zoom")
+                icon: "zoom_out"
+                keys: []
+                currentOverride: tab.zscrollNumber("zscroll_overview_scale", 0.6)
+                options: [0.4, 0.5, 0.6, 0.7].map(scale => ({
+                    "displayName": `${Math.round(scale * 100)}%`, "value": scale
+                }))
+                onSelected: newValue => HyprlandGui.setGlobal("zscroll_overview_scale", newValue)
+            }
+
+            HyprSelect {
+                visible: tab.zscrollOn("zscroll_super_overview", true)
+                title: Translation.tr("Overview lays workspaces out")
+                icon: "view_stream"
+                keys: []
+                currentOverride: String(HyprlandGui.globalValue("zscroll_overview_layout", "vertical"))
+                options: [
+                    { "displayName": Translation.tr("Top to bottom"), "value": "vertical" },
+                    { "displayName": Translation.tr("Side by side"), "value": "horizontal" }
+                ]
+                onSelected: newValue => HyprlandGui.setGlobal("zscroll_overview_layout", newValue)
             }
         }
     }

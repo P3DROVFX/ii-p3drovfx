@@ -21,7 +21,8 @@
 --                                  nobody off zscroll has a default bind replaced)
 --   zscroll_full_width_classes     comma-separated window classes that take a whole row ("")
 --   zscroll_single_window_fills    a workspace's only tiled window fills the screen (true)
---   zscroll_super_overview         the search opens over the scrolloverview plugin on zscroll (true)
+--   zscroll_super_overview         the search opens over the scrolloverview plugin on zscroll
+--                                  and on the native scrolling layout (true)
 --   zscroll_overview_scale         scrolloverview zoom, 0.2-0.9 (0.6)
 --   zscroll_overview_layout        "vertical" or "horizontal" workspaces (vertical)
 --
@@ -558,15 +559,22 @@ local function run_overview(action)
     return true
 end
 
+-- The plugin is the overview of both scrolling layouts: zscroll and Hyprland's
+-- native `scrolling`, whose tape it was written for.
+local function is_scrolling(workspace)
+    return workspace ~= nil and (workspace.tiled_layout == NAME or workspace.tiled_layout == "scrolling")
+end
+
 function M.plugin_overview_wanted()
-    return bool_option("zscroll_super_overview", true) and is_zscroll(active_workspace())
+    return bool_option("zscroll_super_overview", true) and is_scrolling(active_workspace())
         and scrolloverview() ~= nil
 end
 
 --- Called by the shell (hyprctl eval) as its search opens and closes. Super keeps
 --- the shell's own bind, so the search always opens; on a zscroll workspace with
 --- the plugin loaded the shell stands its overview aside and the plugin's opens
---- behind the search bar (the plugin hands keys to a focused top layer). Opening
+--- behind the search bar (the plugin hands keys to a focused top layer). The same
+--- goes for workspaces on the native scrolling layout. Opening
 --- returns false where the plugin is not wanted; the shell then draws its own.
 function M.shell_overview(open)
     if open then

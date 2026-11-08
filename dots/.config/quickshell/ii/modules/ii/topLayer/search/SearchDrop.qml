@@ -25,7 +25,7 @@ Item {
     IpcHandler {
         target: "searchSuggestionsProbe" + root.screen.name
         function inspect(): string {
-            return JSON.stringify({ open: root.isOpen, suggestions: root.searchWidgetRef?.showSuggestionsPanel, wanted: root.overviewWanted, shown: root.isOverviewVisible, classicActive: overviewLoader.active, classicLoaded: overviewLoader.item !== null, scrollingActive: scrollingOverviewLoader.active, scrollingLoaded: scrollingOverviewLoader.item !== null });
+            return JSON.stringify({ open: root.isOpen, suggestions: root.searchWidgetRef?.showSuggestionsPanel, wanted: root.overviewWanted, shown: root.isOverviewVisible, classicActive: overviewLoader.active, classicLoaded: overviewLoader.item !== null });
         }
         function setSuggestions(enabled: bool): void {
             Config.options.search.suggestions.enable = enabled;
@@ -86,10 +86,7 @@ Item {
     onIsWidgetActiveChanged: {
         if (isWidgetActive) {
             searchWidgetLoader.loadedOnce = true;
-            if (!root.isScrollingLayout)
-                overviewLoader.loadedOnce = true;
-            else
-                scrollingOverviewLoader.loadedOnce = true;
+            overviewLoader.loadedOnce = true;
         }
     }
 
@@ -103,18 +100,18 @@ Item {
     // owns the classic overview's: while one is open the grid stays out, even
     // though opening it clears the query.
     readonly property bool queryIdle: root.searchWidgetRef ? (root.searchWidgetRef.searchingText === "" && !root.searchWidgetRef.isAnySpecialMode) : true
-    // On zscroll the scrolloverview plugin's overview stands behind the bar in place of this one.
+    // On the scrolling layouts the scrolloverview plugin's overview stands behind the bar in place of this one.
     readonly property bool overviewWanted: root.queryIdle && !GlobalStates.searchOnlyMode && !Config.options.search.alwaysListApps && !Config.options.search.suggestions.enable && (Config?.options.overview.enable ?? true)
-        && !ZscrollPluginOverview.hosting
+        && !ScrollOverviewPlugin.hosting
     // The plugin's overview stays up behind the search for as long as it is open,
     // query or not: it goes with the search (an app launched, Esc, Super again).
-    readonly property bool pluginOverviewWanted: root.isOpen && GlobalStates.zscrollLayoutActive
+    readonly property bool pluginOverviewWanted: root.isOpen && GlobalStates.scrollingLayoutActive
         && !GlobalStates.searchOnlyMode && !GlobalStates.panelOpenedDirectly
     onPluginOverviewWantedChanged: {
         if (root.pluginOverviewWanted)
-            ZscrollPluginOverview.open();
+            ScrollOverviewPlugin.open();
         else
-            ZscrollPluginOverview.close();
+            ScrollOverviewPlugin.close();
     }
     /**
      * The grid's visibility, decided only while the drop is open.
@@ -155,7 +152,6 @@ Item {
         root.overviewShown = root.overviewWanted;
     }
 
-    readonly property bool isScrollingLayout: GlobalStates.scrollingLayoutActive
     readonly property real launcherContentWidth: searchWidgetRef ? searchWidgetRef.implicitWidth : 0
     readonly property real launcherContentHeight: searchWidgetRef ? searchWidgetRef.implicitHeight : 0
 
@@ -240,7 +236,7 @@ Item {
     // Under the drop, which keeps the search's own input. The window spans the
     // screen, so screen coordinates are this item's.
     readonly property var realGnomeController: GlobalStates.overviewBackgroundControllerFor(root.screen?.name ?? "")
-    readonly property bool realGnome: !!root.realGnomeController && root.realGnomeController.isRealGnome && !root.isScrollingLayout
+    readonly property bool realGnome: !!root.realGnomeController && root.realGnomeController.isRealGnome
     // Shown with an empty query, whether or not the classic grid is wanted: with
     // search suggestions on there is no grid, but the windows are still there.
     readonly property bool realGnomeIdle: root.isOpen && root.realGnome
@@ -528,47 +524,11 @@ Item {
         Loader { // Classic overview
             id: overviewLoader
             property bool loadedOnce: false
-            active: (loadedOnce || root.isWidgetActive) && !root.isScrollingLayout && !Config.options.search.suggestions.enable
+            active: (loadedOnce || root.isWidgetActive) && !Config.options.search.suggestions.enable
             sourceComponent: OverviewWidget {
                 panelWindow: root.panelWindow
                 monitorIndex: root.monitorIndex
                 hosted: true
-            }
-        }
-    }
-
-    Loader { // Scrolling overview
-        id: scrollingOverviewLoader
-        property bool loadedOnce: false
-        // Under the drop: with a fullscreen window the overview paints a screen-wide backdrop.
-        z: -1
-        // The whole screen, not the space left under the drop: the rows fade out
-        // above the collapsed search instead of riding the drop as it grows.
-        anchors.fill: parent
-        active: (loadedOnce || root.isWidgetActive) && root.isScrollingLayout && !Config.options.search.suggestions.enable
-        // The overview zooms its windows back to full size after a close, so the
-        // layer stays shown while it is still drawing.
-        visible: root.isWidgetActive || (item?.drawing ?? false)
-
-        sourceComponent: ScrollingOverviewWidget {
-            anchors.fill: parent
-            panelWindow: root.panelWindow
-            monitorIndex: root.monitorIndex
-            presented: root.overviewShown
-            // Only a real measurement is taken: the field reports a few pixels
-            // for its first frames, and following that re-laid every row out
-            // (and re-aimed the background zoom) at the start of each open.
-            topInset: Appearance.sizes.elevationMargin * 2
-            bottomInset: Appearance.sizes.elevationMargin
-            Binding on topInset {
-                when: root.isOpen && !root.isBottomBar && (root.searchWidgetRef?.normalSearchChromeHeight ?? 0) > 24
-                value: positioner.anchorY + (root.searchWidgetRef?.normalSearchChromeHeight ?? 52) + 8 + Appearance.sizes.elevationMargin
-                restoreMode: Binding.RestoreNone
-            }
-            Binding on bottomInset {
-                when: root.isOpen && root.isBottomBar && (root.searchWidgetRef?.normalSearchChromeHeight ?? 0) > 24
-                value: root.height - (positioner.anchorY + dropState.targetH) + (root.searchWidgetRef?.normalSearchChromeHeight ?? 52) + 8 + Appearance.sizes.elevationMargin
-                restoreMode: Binding.RestoreNone
             }
         }
     }
