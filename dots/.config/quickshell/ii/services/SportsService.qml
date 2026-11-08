@@ -38,20 +38,16 @@ Item {
     property int updateInterval: Config.options.bar.sports.updateInterval
 
     property var allGames: []
-    property var customOrder: Config.options.bar.sports.customOrder
-    onCustomOrderChanged: {
-        if (JSON.stringify(Config.options.bar.sports.customOrder) !== JSON.stringify(customOrder)) {
-            Config.options.bar.sports.customOrder = customOrder;
-        }
-    }
+    // Serialized copy of the last published `allGames`. A refresh that brings
+    // the same data back keeps the same array, so nothing bound to the feed
+    // (bar, dock, popup rows) re-evaluates on an idle poll.
+    property string _compactSignature: ""
     property int currentGameIndex: 0
     property var currentGame: null
     onCurrentGameChanged: {
-        if (currentGame) {
-            Config.options.bar.sports.activeGameId = currentGame.id;
-        } else {
-            Config.options.bar.sports.activeGameId = "";
-        }
+        const id = currentGame ? String(currentGame.id) : "";
+        if (Config.options.bar.sports.activeGameId !== id)
+            Config.options.bar.sports.activeGameId = id;
     }
 
     property bool loading: false
@@ -195,6 +191,7 @@ Item {
         if (!root.enabled) {
             root.cancelCompactRequests();
             allGames = [];
+            _compactSignature = "";
             currentGameIndex = 0;
             currentGame = null;
         }
@@ -355,6 +352,7 @@ Item {
         root.cancelCompactRequests();
         if (!enabled) {
             allGames = [];
+            _compactSignature = "";
             return;
         }
 
@@ -365,6 +363,7 @@ Item {
 
         if (leaguesToFetch.length === 0) {
             allGames = [];
+            _compactSignature = "";
             loading = false;
             return;
         }
@@ -1570,6 +1569,27 @@ Item {
         }
     }
 
+    // ESPN's match page for a scoreboard event ("summary" desktop link), with
+    // the generic gameId URL as a fallback for events that ship no links.
+    function compactGameLink(event) {
+        const links = Array.isArray(event?.links) ? event.links : [];
+        let fallback = "";
+        for (let i = 0; i < links.length; i++) {
+            const href = String(links[i]?.href ?? "");
+            if (!/^https?:\/\//.test(href))
+                continue;
+            const rel = Array.isArray(links[i].rel) ? links[i].rel : [];
+            if (rel.indexOf("summary") !== -1 && rel.indexOf("desktop") !== -1)
+                return href;
+            if (fallback === "" && rel.indexOf("desktop") !== -1)
+                fallback = href;
+        }
+        if (fallback !== "")
+            return fallback;
+        const sport = encodeURIComponent(String(event?.sportCategory ?? ""));
+        return event?.id && sport !== "" ? `https://www.espn.com/${sport}/game/_/gameId/${encodeURIComponent(event.id)}` : "";
+    }
+
     function processGames(events, forSearch = false) {
         let validGames = [];
 
@@ -1737,6 +1757,7 @@ Item {
                             : (comp.status ? comp.status.type.detail : (event.status ? event.status.type.detail : ""))),
                     state: comp.status ? comp.status.type.state : state,
                     lastPlay: lastPlayText,
+                    link: root.compactGameLink(event),
                     home: home,
                     away: away
                 });
@@ -1749,24 +1770,22 @@ Item {
             return;
         }
 
-        if (customOrder && customOrder.length > 0) {
-            validGames.sort((a, b) => {
-                let idxA = customOrder.indexOf(a.id);
-                let idxB = customOrder.indexOf(b.id);
-                if (idxA !== -1 && idxB !== -1) {
-                    return idxA - idxB;
-                }
-                if (idxA !== -1) return -1;
-                if (idxB !== -1) return 1;
-                const order = { "in": 0, "pre": 1, "post": 2 };
-                return (order[a.state] || 3) - (order[b.state] || 3);
-            });
-        } else {
-            validGames.sort((a, b) => {
-                const order = { "in": 0, "pre": 1, "post": 2 };
-                return (order[a.state] || 3) - (order[b.state] || 3);
-            });
-        }
+        // Live first, then upcoming by kickoff, then finished. The date tie-break
+        // keeps the order stable between polls (Array.sort over equal keys
+        // otherwise follows whatever order the league requests finished in).
+        const stateOrder = { "in": 0, "pre": 1, "post": 2 };
+        validGames.sort((a, b) => {
+            const byState = (stateOrder[a.state] ?? 3) - (stateOrder[b.state] ?? 3);
+            if (byState !== 0)
+                return byState;
+            const byDate = new Date(a.date).getTime() - new Date(b.date).getTime();
+            return byDate !== 0 ? byDate : String(a.id).localeCompare(String(b.id));
+        });
+
+        const signature = JSON.stringify(validGames);
+        if (signature === root._compactSignature)
+            return;
+        root._compactSignature = signature;
 
         let nextIndex = 0;
         let currentId = currentGame ? currentGame.id : Config.options.bar.sports.activeGameId;
@@ -1884,6 +1903,7 @@ Item {
             fetchGames();
         } else {
             allGames = [];
+            _compactSignature = "";
             currentGameIndex = 0;
             currentGame = null;
         }

@@ -5659,7 +5659,6 @@ Singleton {
                     property int showBeforeHours: 12
                     property int showAfterMinutes: 180
                     property string activeGameId: ""
-                    property list<var> customOrder: []
                 }
                 property list<string> screenList: [] // List of names, like "eDP-1", find out with 'hyprctl monitors' command
                 property bool onlyShowOnSingleMonitor: false
