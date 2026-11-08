@@ -71,6 +71,19 @@ ColumnLayout {
             }
 
             ConfigSwitch {
+                buttonIcon: "sports_soccer"
+                text: Translation.tr("Enable Football")
+                checked: Config.options.cheatsheet.enableFootball
+                onCheckedChanged: {
+                    Config.options.cheatsheet.enableFootball = checked;
+                }
+
+                StyledToolTip {
+                    text: Translation.tr("Football overview: matches, lineups, timeline, statistics, tables, teams and highlights.")
+                }
+            }
+
+            ConfigSwitch {
                 buttonIcon: "biotech"
                 text: Translation.tr("Enable Amino acids")
                 checked: Config.options.cheatsheet.enableAminoAcids

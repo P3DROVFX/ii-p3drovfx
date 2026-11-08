@@ -60,6 +60,13 @@ Scope {
                 "name": Translation.tr("Workspaces")
             });
         }
+        if (Config.options.cheatsheet.enableFootball) {
+            list.push({
+                "id": "football",
+                "icon": "sports_soccer",
+                "name": Translation.tr("Football")
+            });
+        }
         if (Config.options.cheatsheet.enableGmail) {
             list.push({
                 "id": "email",
@@ -835,6 +842,8 @@ Scope {
                                             return "CheatsheetWorkspaces.qml";
                                         case "mail":
                                             return "CheatsheetEmail.qml";
+                                        case "sports_soccer":
+                                            return "CheatsheetFootball.qml";
                                         case "speed":
                                             return "CheatsheetTypingTest.qml";
                                         case "handyman":

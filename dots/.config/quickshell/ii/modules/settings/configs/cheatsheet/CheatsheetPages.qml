@@ -18,7 +18,7 @@ Item {
     readonly property int gap: 12
     // ContentSection's own spacing: what a block needs on top of it to sit one gap away.
     readonly property real sectionSpacing: 4
-    readonly property real tileMin: 300
+    readonly property real tileMin: 260
     readonly property int tileHeight: 160
     readonly property real rowMin: 300
     readonly property string hidden: Translation.tr("Hidden from the cheatsheet")
@@ -37,6 +37,13 @@ Item {
             shape: MaterialShape.Shape.Flower,
             name: Translation.tr("Email"),
             summary: Translation.tr("Unread Gmail messages, right in the cheatsheet")
+        },
+        {
+            key: "enableFootball",
+            symbol: "sports_soccer",
+            shape: MaterialShape.Shape.Sunny,
+            name: Translation.tr("Football"),
+            summary: Translation.tr("Matches, lineups, stats, tables and your teams")
         }
     ]
     readonly property var compact: [
@@ -87,6 +94,7 @@ Item {
     readonly property var enabledMap: ({
         "enableTimetable": Config.options.cheatsheet.enableTimetable,
         "enableGmail": Config.options.cheatsheet.enableGmail,
+        "enableFootball": Config.options.cheatsheet.enableFootball,
         "enablePeriodicTable": Config.options.cheatsheet.enablePeriodicTable,
         "enableAminoAcids": Config.options.cheatsheet.enableAminoAcids,
         "enableCommands": Config.options.cheatsheet.enableCommands,
@@ -97,12 +105,13 @@ Item {
     // In the order of the cheatsheet's own tab bar.
     readonly property var pages: {
         const entry = page => ({ key: page.key, symbol: page.symbol, name: page.name, enabled: root.enabledMap[page.key] === true });
-        const [timetable, email] = root.featured;
+        const [timetable, email, football] = root.featured;
         return [entry(timetable), { key: "", symbol: "keyboard", name: Translation.tr("Keybinds"), enabled: true }]
-            .concat(root.compact.slice(0, 4).map(entry), [entry(email)], root.compact.slice(4).map(entry));
+            .concat(root.compact.slice(0, 4).map(entry), [entry(football), entry(email)], root.compact.slice(4).map(entry));
     }
 
-    readonly property int tileColumns: Math.floor((width + root.gap) / (root.tileMin + root.gap)) >= 2 ? 2 : 1
+    // Three feature tiles: three across when they fit, else a column (never 2 + 1).
+    readonly property int tileColumns: Math.floor((width + root.gap) / (root.tileMin + root.gap)) >= root.featured.length ? root.featured.length : 1
     readonly property int tileWidth: Math.floor((width - root.gap * (root.tileColumns - 1)) / root.tileColumns)
     // Six rows: three across, two across or a column, never a lone straggler.
     readonly property int rowFits: Math.max(1, Math.floor((width + root.gap) / (root.rowMin + root.gap)))

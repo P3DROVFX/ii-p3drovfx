@@ -6007,6 +6007,13 @@ Singleton {
                 // The Search Tools panel as a full-size page. Off by default:
                 // a developer surface most people never open.
                 property bool enableDevTools: false
+                // Football overview: matches, lineups, stats, tables and teams from ESPN.
+                property bool enableFootball: false
+                property JsonObject football: JsonObject {
+                    property list<string> leagues: ["eng.1", "esp.1", "ita.1", "ger.1", "fra.1", "bra.1", "uefa.champions", "conmebol.libertadores"]
+                    property list<var> favoriteTeams: []
+                    property int refreshInterval: 30
+                }
                 property JsonObject fontSize: JsonObject {
                     property int key: Appearance.font.pixelSize.smaller
                     property int comment: Appearance.font.pixelSize.smaller
