@@ -180,9 +180,36 @@ ContentPage {
             text: Translation.tr("Enable sports tracker")
             checked: Config.options.bar.sports.enable
             isFirst: true
-            isLast: true
+            isLast: !Config.options.bar.sports.enable
             onCheckedChanged: {
                 Config.options.bar.sports.enable = checked;
+            }
+        }
+
+        ConfigSwitch {
+            visible: Config.options.bar.sports.enable
+            buttonIcon: "sports_soccer"
+            text: Translation.tr("Goal celebration")
+            checked: Config.options.bar.sports.goalAnimation
+            onCheckedChanged: {
+                Config.options.bar.sports.goalAnimation = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("When a monitored football match scores, the bar widget plays a GOAL banner with the crest, score and scorer")
+            }
+        }
+
+        ConfigSwitch {
+            visible: Config.options.bar.sports.enable
+            buttonIcon: "style"
+            text: Translation.tr("Card notices")
+            checked: Config.options.bar.sports.cardAnimation
+            isLast: true
+            onCheckedChanged: {
+                Config.options.bar.sports.cardAnimation = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Show a short notice in the bar widget when a yellow or red card is shown in a monitored football match")
             }
         }
 

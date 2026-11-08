@@ -25,8 +25,44 @@ MouseArea {
     property bool internalVisible: shouldBeVisible
     visible: internalVisible || opacity > 0
     
-    implicitWidth: shouldBeVisible ? (vertical ? Appearance.sizes.verticalBarWidth : layout.implicitWidth + 8) : 0
-    implicitHeight: shouldBeVisible ? (vertical ? layoutVert.implicitHeight + 8 : Appearance.sizes.baseBarHeight) : 0
+    // Match events (goals and bookings) queue up and play one after another;
+    // the widget grows along the bar while a banner plays.
+    property var eventQueue: []
+    property var activeEvent: null
+    readonly property bool celebrating: activeEvent !== null
+    readonly property bool activeIsCard: activeEvent?.kind === "card"
+    readonly property real celebrationLength: activeIsCard ? (vertical ? 150 : 200) : (vertical ? 190 : 236)
+
+    function playNextEvent() {
+        if (eventQueue.length === 0) {
+            activeEvent = null;
+            return;
+        }
+        activeEvent = eventQueue[0];
+        eventQueue = eventQueue.slice(1);
+    }
+
+    function queueEvent(event) {
+        eventQueue = eventQueue.concat([event]);
+        if (!celebrating)
+            playNextEvent();
+    }
+
+    Connections {
+        target: SportsService
+        enabled: root.shouldBeVisible
+        function onGoalScored(goal) {
+            if (Config.options.bar.sports.goalAnimation)
+                root.queueEvent(Object.assign({ kind: "goal" }, goal));
+        }
+        function onCardShown(card) {
+            if (Config.options.bar.sports.cardAnimation)
+                root.queueEvent(Object.assign({ kind: "card" }, card));
+        }
+    }
+
+    implicitWidth: shouldBeVisible ? (vertical ? Appearance.sizes.verticalBarWidth : (celebrating ? Math.max(celebrationLength, layout.implicitWidth + 8) : layout.implicitWidth + 8)) : 0
+    implicitHeight: shouldBeVisible ? (vertical ? (celebrating ? Math.max(celebrationLength, layoutVert.implicitHeight + 8) : layoutVert.implicitHeight + 8) : Appearance.sizes.baseBarHeight) : 0
     hoverEnabled: !BarInteraction.clickToShow
 
     // Click-to-show gives the left click to the popup; cycling moves to the right button.
@@ -143,9 +179,38 @@ MouseArea {
         animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 
+    Loader {
+        anchors.fill: parent
+        active: root.celebrating
+        z: 1
+        sourceComponent: root.activeIsCard ? cardNoticeComponent : goalCelebrationComponent
+    }
+
+    Component {
+        id: goalCelebrationComponent
+        GoalCelebration {
+            goal: root.activeIsCard ? null : root.activeEvent
+            vertical: root.vertical
+            fromFarEdge: Config.options.bar.bottom
+            onFinished: root.playNextEvent()
+        }
+    }
+
+    Component {
+        id: cardNoticeComponent
+        CardNotice {
+            card: root.activeIsCard ? root.activeEvent : null
+            vertical: root.vertical
+            fromFarEdge: Config.options.bar.bottom
+            onFinished: root.playNextEvent()
+        }
+    }
+
     RowLayout {
         id: layout
         visible: !root.vertical
+        opacity: root.celebrating ? 0 : 1
+        Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
         anchors.centerIn: parent
         spacing: 4
         transform: Translate { x: root.horizontalOffset; y: root.verticalOffset }
@@ -203,6 +268,8 @@ MouseArea {
     ColumnLayout {
         id: layoutVert
         visible: root.vertical
+        opacity: root.celebrating ? 0 : 1
+        Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
         anchors {
             top: parent.top
             topMargin: 4
