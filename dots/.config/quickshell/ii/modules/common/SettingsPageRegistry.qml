@@ -28,6 +28,9 @@ import Quickshell
  *                sidebar and in keyboard cycling; the flat `pages` array keeps every
  *                entry so page indices stay stable across families.
  *  - searchable: set false to skip the file during search indexing
+ *  - movedTo:    id of the page that now holds this one's content. The entry stays so
+ *                deep links (IPC, AI, RelatedChip, old bookmarks) keep working:
+ *                SettingsWindow.pageIndexById() resolves it to the target page.
  */
 Singleton {
     // Group 1 – Look & Feel
@@ -174,24 +177,31 @@ Singleton {
         },
         {
             "id": "overlays",
-            "name": "Overlays & OSD",
-            "icon": "picture_in_picture",
+            "name": "Apps & Overlays",
+            "icon": "apps",
             "component": "modules/settings/configs/OverlaysConfig.qml",
             "subPages": [
+                "overlays/OsdConfig.qml",
+                "overlays/KeyboardConfig.qml",
                 "widgets/GameOverlayConfig.qml",
                 "widgets/PerfMonitorConfig.qml",
                 "widgets/OnScreenKeyboardConfig.qml",
                 "widgets/OsdIndicatorsConfig.qml"
             ],
-            "aliases": ["System Overlays", "Media overlay", "Game overlay", "Performance HUD", "FPS counter", "MangoHud", "RivaTuner"]
+            "aliases": ["Overlays & OSD", "System Overlays", "Media overlay", "Game overlay", "Performance HUD", "FPS counter", "MangoHud", "RivaTuner",
+                "OSD", "On-screen display", "On-screen keyboard", "Notes app", "Clock app", "EasyEffects app", "Live draw",
+                "App Usage", "Usage stats", "Screen time", "Digital wellbeing", "Sampler",
+                "Modes & Routines", "Modes", "Routines", "Automation", "Focus mode"]
         },
         {
             "id": "modes",
-            // Desktop automation; the tablet family loads no modes overlay.
-            "families": ["ii", "waffle"],
+            // Folded into Apps & Overlays as an app card (2026-11-07)
+            "movedTo": "overlays",
+            "hidden": true,
+            "searchable": false,
             "name": "Modes & Routines",
             "icon": "tune",
-            "component": "modules/settings/configs/ModesConfig.qml",
+            "component": "modules/settings/configs/OverlaysConfig.qml",
             "subPages": [],
             "aliases": ["Modes", "Routines", "Automation", "Game detection", "Focus mode", "Do not disturb", "Gaming mode", "Activity log"]
         },
@@ -378,9 +388,13 @@ Singleton {
         },
         {
             "id": "usageStats",
+            // Folded into Apps & Overlays as an app card (2026-11-07)
+            "movedTo": "overlays",
+            "hidden": true,
+            "searchable": false,
             "name": "App Usage",
             "icon": "bar_chart",
-            "component": "modules/settings/configs/UsageStatsConfig.qml",
+            "component": "modules/settings/configs/OverlaysConfig.qml",
             "subPages": [],
             "aliases": ["Usage stats", "Screen time", "App usage", "Digital wellbeing", "Energy per app", "RAPL", "History retention", "Sampler"]
         },
@@ -483,17 +497,17 @@ Singleton {
         {
             "id": "tools",
             "name": "Tools",
-            "pageIds": ["launcher", "dictation", "screenCapture", "notifications", "overlays", "modes", "cheatSheet"]
+            "pageIds": ["launcher", "dictation", "screenCapture", "notifications", "overlays", "cheatSheet"]
         },
         {
             "id": "servicesIntegrations",
             "name": "Services & Integrations",
-            "pageIds": ["mediaMusic", "languageTime", "weather", "aiAssistant", "tasksAccounts"]
+            "pageIds": ["mediaMusic", "languageTime", "weather", "aiAssistant", "tasksAccounts", "devicesPhone"]
         },
         {
             "id": "system",
             "name": "System",
-            "pageIds": ["displays", "hyprland", "network", "soundAlerts", "touchGestures", "power", "devicesPhone", "usageStats", "privacy", "about"]
+            "pageIds": ["displays", "hyprland", "network", "soundAlerts", "touchGestures", "power", "privacy", "about"]
         }
     ]
 

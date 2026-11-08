@@ -11,7 +11,7 @@ ContentPage {
     property bool showBackButton: false
     signal goBack()
 
-    SubPageHeader {
+    ConfigSubPageHeader {
         visible: root.showBackButton
         title: Translation.tr("Keep awake")
         onBack: root.goBack()

@@ -103,7 +103,7 @@ class ImprovementTests(unittest.TestCase):
         self.assertIn("requireOverlay: false", read("modules/common/draw/DrawToolButton.qml"))
 
     def test_can_be_switched_off(self):
-        self.assertIn("Config.options.liveDraw.enable = checked", read("modules/settings/configs/OverlaysConfig.qml"))
+        self.assertIn("Config.options.liveDraw.enable = value", read("modules/settings/configs/OverlaysConfig.qml"))
         self.assertIn("readonly property bool enabled:", read("services/LiveDraw.qml"))
         self.assertIn("LiveDraw.enabled", read("modules/ii/liveDraw/LiveDrawOverlay.qml"))
 

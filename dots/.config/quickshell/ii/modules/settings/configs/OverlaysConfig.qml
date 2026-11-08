@@ -1,629 +1,330 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Io
 import "../../.."
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
-import qs.modules.settings.configs.widgets
+import qs.modules.settings.configs.colors
+import qs.modules.settings.configs.overlays
 import qs.services
 
+/**
+ * Apps & Overlays. The shell's own apps (Notes, Clock, EasyEffects, Live Draw, App usage,
+ * Modes & Routines) as a shelf of app cards — load switch, shortcut, Open — and the
+ * on-screen overlays as a grouped list whose rows lead into sub-pages, where the long tail
+ * of OSD, keyboard, game overlay and HUD options now lives.
+ */
 Item {
     id: overlaysConfigRoot
 
     property alias contentY: page.contentY
     property alias activeSubPage: subPageOverlay.activeSubPage
 
-    function triggerRealOsd() {
-        if (typeof GlobalStates !== "undefined") {
-            GlobalStates.osdCurrentIndicator = "volume";
-            GlobalStates.osdVolumeOpen = true;
-            GlobalStates.osdInteraction();
-        }
-        Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "osd", "trigger"]);
+    function open(url) {
+        overlaysConfigRoot.activeSubPage = Qt.resolvedUrl(url);
+    }
+
+    readonly property bool modesAvailable: ["ii", "waffle"].includes(PanelFamily.current)
+
+    // Super + Y is bound in the Hyprland config, which the shell's update never touches
+    property bool modesKeybindFound: true
+    Process {
+        running: overlaysConfigRoot.modesAvailable
+        command: ["grep", "-rqsF", "quickshell:modesToggle", `${FileUtils.trimFileProtocol(Directories.config)}/hypr`]
+        onExited: (code, status) => overlaysConfigRoot.modesKeybindFound = (code === 0)
     }
 
     ContentPage {
         id: page
-
         anchors.fill: parent
         forceWidth: false
         opacity: subPageOverlay.slideProgress
         visible: opacity > 0
 
-        ContentSection {
-            title: Translation.tr("Game Overlays")
-            icon: "sports_esports"
-            tooltip: Translation.tr("In-game HUD widgets, crosshairs and media controls.")
+        // ── intro ──
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.leftMargin: 4
+            spacing: 0
 
-            ColumnLayout {
+            readonly property int loaded: [shelf.notes, shelf.clock, shelf.easyEffects, shelf.liveDraw, shelf.usage, shelf.modes]
+                .filter(card => card.visible && card.checked).length
+            readonly property int total: overlaysConfigRoot.modesAvailable ? 6 : 5
+
+            StyledText {
+                text: Translation.tr("Apps")
+                font.family: Appearance.font.family.title
+                font.variableAxes: Appearance.font.variableAxes.titleRounded
+                font.pixelSize: Appearance.font.pixelSize.huge + 8
+                color: Appearance.colors.colOnLayer0
+            }
+            StyledText {
                 Layout.fillWidth: true
-                spacing: Appearance.sizes.elevationMargin / 2
-
-                ConfigSubpageRow {
-                    buttonIcon: "sports_esports"
-                    title: Translation.tr("Game Overlay Options")
-                    description: Translation.tr("Crosshair, Media overlay, Notes, Discord voice & Floating image")
-                    onClicked: overlaysConfigRoot.activeSubPage = Qt.resolvedUrl("widgets/GameOverlayConfig.qml")
-                }
-
-                ConfigSubpageRow {
-                    buttonIcon: "speed"
-                    title: Translation.tr("Performance HUD")
-                    description: Translation.tr("FPS, 1% low, CPU, GPU, RAM, VRAM and battery over your games")
-                    onClicked: overlaysConfigRoot.activeSubPage = Qt.resolvedUrl("widgets/PerfMonitorConfig.qml")
-                }
+                text: Translation.tr("%1 of %2 loaded. An app that is off frees its memory; its shortcut and toggles stop opening it.").arg(parent.loaded).arg(parent.total)
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                color: Appearance.colors.colSubtext
+                wrapMode: Text.WordWrap
             }
         }
 
-        ContentSection {
-            title: Translation.tr("Notes App")
-            icon: "note_stack"
-            tooltip: Translation.tr("Dedicated notes workspace, Markdown editor, drawing and organization.")
+        // ── the shelf ──
+        Grid {
+            id: shelf
+            Layout.fillWidth: true
+            spacing: 12
+            readonly property int count: overlaysConfigRoot.modesAvailable ? 6 : 5
+            readonly property int maxCols: Math.max(1, Math.floor((width + spacing) / (290 + spacing)))
+            columns: Math.min(maxCols, 3)
+            readonly property real cardWidth: (width - spacing * (columns - 1)) / columns
+            readonly property int cardHeight: 240
 
-            ConfigSwitch {
-                buttonIcon: "note_stack"
-                text: Translation.tr("Enable Notes app")
-                description: Translation.tr("Dedicated notes workspace, editor, and global shortcuts")
-                checked: Config.options.notes?.enable ?? true
-                onCheckedChanged: {
-                    if (Config.ready && Config.options.notes)
-                        Config.options.notes.enable = checked;
-                }
-            }
+            property alias notes: notesCard
+            property alias clock: clockCard
+            property alias easyEffects: eeCard
+            property alias liveDraw: drawCard
+            property alias usage: usageCard
+            property alias modes: modesCard
 
-            KeyboardShortcutBox {
-                Layout.fillWidth: true
-                text: Translation.tr("Toggle Notes app")
+            AppCard {
+                id: notesCard
+                width: shelf.cardWidth
+                height: shelf.cardHeight
+                accent: "primary"
+                symbol: "note_stack"
+                shape: MaterialShape.Shape.Cookie9Sided
+                title: Translation.tr("Notes")
+                summary: Translation.tr("Markdown notes, drawings and cloud backup. Editor and paper options are inside the app.")
                 keys: ["Super", "Alt", "N"]
+                checked: Config.options.notes?.enable ?? true
+                onToggled: value => { if (Config.ready && Config.options.notes) Config.options.notes.enable = value; }
+                onOpenRequested: GlobalStates.openNotes()
             }
 
-            NoticeBox {
-                Layout.fillWidth: true
-                materialIcon: "info"
-                text: Translation.tr("All editor, paper style, cloud backup, and preview options are inside the app.")
-
-                RippleButton {
-                    implicitWidth: 120
-                    implicitHeight: 36
-                    buttonRadius: Appearance.rounding.small
-                    colBackground: Appearance.colors.colPrimary
-                    colBackgroundHover: Appearance.colors.colPrimaryHover
-                    colBackgroundActive: Appearance.colors.colPrimaryActive
-
-                    StyledText {
-                        anchors.centerIn: parent
-                        text: Translation.tr("Open app")
-                        font.pixelSize: Appearance.font.pixelSize.smaller
-                        font.weight: Font.DemiBold
-                        color: Appearance.colors.colOnPrimary
-                    }
-
-                    onClicked: GlobalStates.openNotes()
-                }
-            }
-        }
-
-        ContentSection {
-            title: Translation.tr("EasyEffects App")
-            icon: "graphic_eq"
-            tooltip: Translation.tr("Presets, the effect chain and per-device defaults for EasyEffects in one window.")
-
-            ConfigSwitch {
-                buttonIcon: "graphic_eq"
-                text: Translation.tr("Enable EasyEffects app")
-                description: Translation.tr("Presets, effects and device defaults in one window")
-                checked: Config.options.easyEffects?.appEnable ?? true
-                onCheckedChanged: {
-                    if (Config.ready && Config.options.easyEffects)
-                        Config.options.easyEffects.appEnable = checked;
-                }
-            }
-
-            ConfigSwitch {
-                visible: EasyEffects.bothInstalled
-                buttonIcon: "deployed_code"
-                text: Translation.tr("Use the Flatpak build")
-                description: EasyEffects.preferFlatpak
-                    ? Translation.tr("Running the Flatpak (%1). Off uses the distro package (%2).").arg(EasyEffects.flatpakMajor).arg(EasyEffects.nativeMajor)
-                    : Translation.tr("Running the distro package (%1). On uses the Flatpak (%2).").arg(EasyEffects.nativeMajor).arg(EasyEffects.flatpakMajor)
-                checked: EasyEffects.preferFlatpak
-                onCheckedChanged: {
-                    if (Config.ready)
-                        EasyEffects.setPreferFlatpak(checked);
-                }
-                StyledToolTip {
-                    text: Translation.tr("Both builds are installed. Switching restarts EasyEffects if it is running.")
-                }
-            }
-
-            KeyboardShortcutBox {
-                Layout.fillWidth: true
-                text: Translation.tr("Toggle EasyEffects app")
-                keys: ["Super", "Ctrl", "E"]
-            }
-
-            NoticeBox {
-                Layout.fillWidth: true
-                materialIcon: "info"
-                text: EasyEffects.available
-                    ? Translation.tr("Every EasyEffects option lives inside the app. Presets can also be switched from the island, the quick toggle, the bar and the keybinds.")
-                    : Translation.tr("EasyEffects isn't installed.")
-
-                RippleButton {
-                    implicitWidth: 120
-                    implicitHeight: 36
-                    buttonRadius: Appearance.rounding.small
-                    enabled: (Config.options.easyEffects?.appEnable ?? true) && EasyEffects.available
-                    colBackground: Appearance.colors.colPrimary
-                    colBackgroundHover: Appearance.colors.colPrimaryHover
-                    colBackgroundActive: Appearance.colors.colPrimaryActive
-
-                    StyledText {
-                        anchors.centerIn: parent
-                        text: Translation.tr("Open app")
-                        font.pixelSize: Appearance.font.pixelSize.smaller
-                        font.weight: Font.DemiBold
-                        color: Appearance.colors.colOnPrimary
-                    }
-
-                    onClicked: GlobalStates.openEasyEffectsApp("")
-                }
-            }
-        }
-
-        ContentSection {
-            title: Translation.tr("Live Draw")
-            icon: "draw"
-            tooltip: Translation.tr("Draw over the screen, above every app, for recordings, calls and screen sharing.")
-
-            ConfigSwitch {
-                buttonIcon: "draw"
-                text: Translation.tr("Enable live draw")
-                description: Translation.tr("Annotate the screen over every app. Each drawing stays on the workspace it was drawn on")
-                checked: Config.options.liveDraw?.enable ?? true
-                onCheckedChanged: {
-                    if (Config.ready && Config.options.liveDraw && Config.options.liveDraw.enable !== checked) {
-                        if (!checked) {
-                            LiveDraw.close();
-                            LiveDraw.clearAll();
-                        }
-                        Config.options.liveDraw.enable = checked;
-                    }
-                }
-            }
-
-            KeyboardShortcutBox {
-                Layout.fillWidth: true
-                text: Translation.tr("Toggle live draw")
-                keys: ["Super", "Alt", "D"]
-            }
-
-            NoticeBox {
-                Layout.fillWidth: true
-                materialIcon: "tune"
-                text: Translation.tr("Pen pressure, mouse smoothing and the keyboard shortcuts are in the drawing toolbar's settings button. It also opens from the dashboard's quick toggle, the dock, the bar and the screen recording controls.")
-
-                RippleButton {
-                    implicitWidth: 120
-                    implicitHeight: 36
-                    buttonRadius: Appearance.rounding.small
-                    enabled: Config.options.liveDraw?.enable ?? true
-                    colBackground: Appearance.colors.colPrimary
-                    colBackgroundHover: Appearance.colors.colPrimaryHover
-                    colBackgroundActive: Appearance.colors.colPrimaryActive
-
-                    StyledText {
-                        anchors.centerIn: parent
-                        text: Translation.tr("Start drawing")
-                        font.pixelSize: Appearance.font.pixelSize.smaller
-                        font.weight: Font.DemiBold
-                        color: Appearance.colors.colOnPrimary
-                    }
-
-                    onClicked: {
-                        GlobalStates.settingsOpen = false;
-                        LiveDraw.open();
-                    }
-                }
-            }
-        }
-
-        ContentSection {
-            title: Translation.tr("Clock App")
-            icon: "alarm"
-            tooltip: Translation.tr("Alarms, world clock, timers, stopwatch and pomodoro in one window.")
-
-            ConfigSwitch {
-                buttonIcon: "alarm"
-                text: Translation.tr("Enable Clock app")
-                description: Translation.tr("Alarms, world clock, timers, stopwatch and pomodoro in one window")
-                checked: Config.options.clockApp?.enable ?? true
-                onCheckedChanged: {
-                    if (Config.ready && Config.options.clockApp)
-                        Config.options.clockApp.enable = checked;
-                }
-            }
-
-            KeyboardShortcutBox {
-                Layout.fillWidth: true
-                text: Translation.tr("Toggle Clock app")
+            AppCard {
+                id: clockCard
+                width: shelf.cardWidth
+                height: shelf.cardHeight
+                accent: "secondary"
+                symbol: "alarm"
+                shape: MaterialShape.Shape.Sunny
+                title: Translation.tr("Clock")
+                summary: Translation.tr("Alarms, world clock, timers, stopwatch and pomodoro. They keep running when it is closed.")
                 keys: ["Super", "Alt", "T"]
+                checked: Config.options.clockApp?.enable ?? true
+                onToggled: value => { if (Config.ready && Config.options.clockApp) Config.options.clockApp.enable = value; }
+                onOpenRequested: GlobalStates.openClockApp("")
             }
 
-            NoticeBox {
-                Layout.fillWidth: true
-                materialIcon: "info"
-                text: Translation.tr("Every clock option lives inside the app. Alarms, timers and the pomodoro keep running when it is closed.")
+            AppCard {
+                id: eeCard
+                width: shelf.cardWidth
+                height: shelf.cardHeight
+                accent: "tertiary"
+                symbol: "graphic_eq"
+                shape: MaterialShape.Shape.Clover4Leaf
+                title: Translation.tr("EasyEffects")
+                summary: EasyEffects.available
+                    ? Translation.tr("Presets, the effect chain and per-device defaults in one window.")
+                    : Translation.tr("EasyEffects isn't installed.")
+                keys: ["Super", "Ctrl", "E"]
+                canOpen: EasyEffects.available
+                checked: Config.options.easyEffects?.appEnable ?? true
+                onToggled: value => { if (Config.ready && Config.options.easyEffects) Config.options.easyEffects.appEnable = value; }
+                onOpenRequested: GlobalStates.openEasyEffectsApp("")
 
-                RippleButton {
-                    implicitWidth: 120
-                    implicitHeight: 36
-                    buttonRadius: Appearance.rounding.small
-                    enabled: Config.options.clockApp?.enable ?? true
-                    colBackground: Appearance.colors.colPrimary
-                    colBackgroundHover: Appearance.colors.colPrimaryHover
-                    colBackgroundActive: Appearance.colors.colPrimaryActive
-
-                    StyledText {
-                        anchors.centerIn: parent
-                        text: Translation.tr("Open app")
-                        font.pixelSize: Appearance.font.pixelSize.smaller
-                        font.weight: Font.DemiBold
-                        color: Appearance.colors.colOnPrimary
+                ColorsChip {
+                    visible: EasyEffects.bothInstalled
+                    symbol: "deployed_code"
+                    label: EasyEffects.preferFlatpak ? Translation.tr("Flatpak %1").arg(EasyEffects.flatpakMajor) : Translation.tr("Package %1").arg(EasyEffects.nativeMajor)
+                    chosen: EasyEffects.preferFlatpak
+                    colContent: eeCard.colOnPlate
+                    colChosen: eeCard.colStrong
+                    colOnChosen: eeCard.colOnStrong
+                    onClicked: EasyEffects.setPreferFlatpak(!EasyEffects.preferFlatpak)
+                    StyledToolTip {
+                        text: Translation.tr("Both builds are installed. Switching restarts EasyEffects if it is running.")
                     }
+                }
+            }
 
-                    onClicked: GlobalStates.openClockApp("")
+            AppCard {
+                id: drawCard
+                width: shelf.cardWidth
+                height: shelf.cardHeight
+                accent: "primary"
+                symbol: "draw"
+                shape: MaterialShape.Shape.Flower
+                title: Translation.tr("Live Draw")
+                summary: Translation.tr("Annotate the screen over every app; each drawing stays on its workspace. Pen options are in its toolbar.")
+                keys: ["Super", "Alt", "D"]
+                checked: Config.options.liveDraw?.enable ?? true
+                onToggled: value => {
+                    if (!Config.ready || !Config.options.liveDraw || Config.options.liveDraw.enable === value)
+                        return;
+                    if (!value) {
+                        LiveDraw.close();
+                        LiveDraw.clearAll();
+                    }
+                    Config.options.liveDraw.enable = value;
+                }
+                onOpenRequested: {
+                    GlobalStates.settingsOpen = false;
+                    LiveDraw.open();
+                }
+            }
+
+            AppCard {
+                id: usageCard
+                width: shelf.cardWidth
+                height: shelf.cardHeight
+                accent: "secondary"
+                symbol: "bar_chart"
+                shape: MaterialShape.Shape.Cookie12Sided
+                title: Translation.tr("App usage")
+                summary: Config.options.appStats.enable
+                    ? Translation.tr("Recording screen time, network and battery. Views and retention live in the app.")
+                    : Translation.tr("Not recording. The history already kept stays.")
+                keys: ["Super", "U"]
+                checked: Config.options.appStats.overlayEnabled
+                onToggled: value => Config.options.appStats.overlayEnabled = value
+                onOpenRequested: GlobalStates.openUsageApp("")
+
+                ColorsChip {
+                    symbol: "monitoring"
+                    label: Translation.tr("Collect stats")
+                    chosen: Config.options.appStats.enable
+                    colContent: usageCard.colOnPlate
+                    colChosen: usageCard.colStrong
+                    colOnChosen: usageCard.colOnStrong
+                    onClicked: Config.options.appStats.enable = !Config.options.appStats.enable
+                    StyledToolTip {
+                        text: Translation.tr("Turning this off stops the sampler but keeps the history already recorded")
+                    }
+                }
+            }
+
+            AppCard {
+                id: modesCard
+                visible: overlaysConfigRoot.modesAvailable
+                width: shelf.cardWidth
+                height: shelf.cardHeight
+                accent: "tertiary"
+                symbol: "tune"
+                shape: MaterialShape.Shape.SoftBurst
+                title: Translation.tr("Modes & Routines")
+                summary: {
+                    const line = Translation.tr("%1 mode(s) and %2 routine(s).").arg(Modes.modes.length).arg(Modes.routines.length);
+                    return Modes.active
+                        ? line + " " + Translation.tr("%1 is on right now.").arg(Modes.activeMode?.name ?? "")
+                        : line + " " + Translation.tr("Nothing is on right now.");
+                }
+                warning: checked && !overlaysConfigRoot.modesKeybindFound
+                    ? Translation.tr("Hyprland has no binding for Super + Y. Re-run the setup with --hypr or bind quickshell:modesToggle.")
+                    : ""
+                keys: ["Super", "Y"]
+                checked: Config.options.modes.overlayEnabled
+                onToggled: value => Config.options.modes.overlayEnabled = value
+                onOpenRequested: GlobalStates.openModesApp("")
+
+                ColorsChip {
+                    symbol: "autoplay"
+                    label: Translation.tr("Automatic starts")
+                    chosen: Config.options.modes.enable
+                    colContent: modesCard.colOnPlate
+                    colChosen: modesCard.colStrong
+                    colOnChosen: modesCard.colOnStrong
+                    onClicked: Config.options.modes.enable = !Config.options.modes.enable
+                    StyledToolTip {
+                        text: Translation.tr("Off: conditions are ignored everywhere. Modes and routines still work when you start them yourself")
+                    }
                 }
             }
         }
 
-        ContentSection {
-            title: Translation.tr("On-Screen Display (OSD)")
-            icon: "desktop_windows"
+        // ── on screen ──
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.topMargin: 20
+            Layout.leftMargin: 4
+            spacing: 0
+            StyledText {
+                text: Translation.tr("On screen")
+                font.family: Appearance.font.family.title
+                font.variableAxes: Appearance.font.variableAxes.titleRounded
+                font.pixelSize: Appearance.font.pixelSize.huge + 8
+                color: Appearance.colors.colOnLayer0
+            }
+            StyledText {
+                Layout.fillWidth: true
+                text: Translation.tr("What draws over your apps and games. Each one opens into its own options.")
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                color: Appearance.colors.colSubtext
+                wrapMode: Text.WordWrap
+            }
+        }
 
-            ConfigSwitch {
-                buttonIcon: "visibility"
-                text: Translation.tr("Enable OSD")
-                description: Translation.tr("Choose which indicators show up")
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 3
+
+            OverlayNavRow {
+                first: true
+                symbol: "desktop_windows"
+                shape: MaterialShape.Shape.Cookie7Sided
+                title: Translation.tr("On-screen display")
+                summary: {
+                    if (Config.options.sidebar.sidebarStyle === "connect")
+                        return Translation.tr("Connect mode draws its own OSD");
+                    if (!Config.options.osd.enable)
+                        return Translation.tr("Off");
+                    const styles = { "default": Translation.tr("Android"), "minimalist": Translation.tr("Minimal"),
+                                     "material": Translation.tr("Material"), "tuner": Translation.tr("Tuner") };
+                    return Translation.tr("%1 style · %2 s").arg(styles[Config.options.osd.style ?? "default"] ?? "").arg(((Config.options.osd.timeout ?? 3000) / 1000).toFixed(1));
+                }
+                hasSwitch: true
                 checked: Config.options.osd.enable
-                configPage: Qt.resolvedUrl("widgets/OsdIndicatorsConfig.qml")
-                onCheckedChanged: {
-                    Config.options.osd.enable = checked;
-                }
-                StyledToolTip {
-                    text: Translation.tr("Display visual indicator when changing volume, brightness, or gamma")
-                }
+                onToggled: value => Config.options.osd.enable = value
+                onOpenRequested: overlaysConfigRoot.open("overlays/OsdConfig.qml")
             }
 
-            ConfigSwitch {
-                buttonIcon: "fullscreen"
-                text: Translation.tr("Hide OSD when fullscreen")
-                checked: Config.options.osd.hideWhenFullscreen
-                onCheckedChanged: {
-                    Config.options.osd.hideWhenFullscreen = checked;
+            OverlayNavRow {
+                symbol: "keyboard"
+                shape: MaterialShape.Shape.Pill
+                title: Translation.tr("On-screen keyboard")
+                summary: {
+                    const style = (Config.options.osk.style ?? "deck") === "deck" ? Translation.tr("Deck") : Translation.tr("Classic");
+                    const auto = Config.options.osk.autoShow.enable ? Translation.tr("shows on touch") : Translation.tr("Super + K");
+                    return `${style} · ${auto}`;
                 }
-                StyledToolTip {
-                    text: Translation.tr("Prevent OSD from appearing over fullscreen games and media players")
-                }
+                hasSwitch: true
+                checked: GlobalStates.oskOpen
+                onToggled: value => GlobalStates.oskOpen = value
+                onOpenRequested: overlaysConfigRoot.open("overlays/KeyboardConfig.qml")
             }
 
-            NoticeBox {
-                Layout.fillWidth: true
-                visible: Config.options.sidebar.sidebarStyle === "connect"
-                materialIcon: "phone_android"
-                text: Translation.tr("OSD customization is only available in Default shell mode. The Connect mode uses its own native OSD.")
-
-                ShortcutBox {
-                    targetPageId: "bar"
-                    targetSectionTitle: Translation.tr("Shell mode")
-                    materialIcon: "arrow_forward"
-                    text: Translation.tr("Go to Shell mode settings")
-                    linkText: Translation.tr("Go there")
-                }
+            OverlayNavRow {
+                symbol: "sports_esports"
+                shape: MaterialShape.Shape.Clover4Leaf
+                title: Translation.tr("Game overlay")
+                summary: Translation.tr("Crosshair, media, notes, Discord voice and floating image")
+                onOpenRequested: overlaysConfigRoot.open("widgets/GameOverlayConfig.qml")
             }
 
-            // Real OSD Live Preview Card
-            OsdPreviewCard {
-                Layout.fillWidth: true
-                enabled: Config.options.sidebar.sidebarStyle !== "connect"
-                opacity: Config.options.sidebar.sidebarStyle !== "connect" ? 1.0 : 0.4
-            }
-
-            // Android Style Exclusive: OSD Position (Moved ABOVE OSD Style as requested)
-            ContentSubsection {
-                title: Translation.tr("OSD Position")
-                icon: "align_horizontal_right"
-                Layout.fillWidth: true
-                visible: (Config.options.osd.style ?? "default") === "default"
-                enabled: Config.options.sidebar.sidebarStyle !== "connect"
-                opacity: Config.options.sidebar.sidebarStyle !== "connect" ? 1.0 : 0.4
-
-                OsdPositionPicker {
-                    Layout.fillWidth: true
-                    enabled: Config.options.sidebar.sidebarStyle !== "connect"
-                }
-            }
-
-            // OSD Style Selector
-            ContentSubsection {
-                title: Translation.tr("OSD Style")
-                icon: "tune"
-                Layout.fillWidth: true
-                enabled: Config.options.sidebar.sidebarStyle !== "connect"
-                opacity: Config.options.sidebar.sidebarStyle !== "connect" ? 1.0 : 0.4
-
-                ConfigSelectionArray {
-                    enabled: Config.options.sidebar.sidebarStyle !== "connect"
-                    currentValue: Config.options.osd.style ?? "default"
-                    onSelected: (newValue) => {
-                        Config.options.osd.style = newValue;
-                        overlaysConfigRoot.triggerRealOsd();
-                    }
-                    options: [{
-                        "displayName": Translation.tr("Android"),
-                        "icon": "smartphone",
-                        "tooltip": Translation.tr("Edge vertical slider bar"),
-                        "value": "default"
-                    }, {
-                        "displayName": Translation.tr("Minimal"),
-                        "icon": "horizontal_rule",
-                        "tooltip": Translation.tr("Compact horizontal floating pill"),
-                        "value": "minimalist"
-                    }, {
-                        "displayName": Translation.tr("Material"),
-                        "icon": "interests",
-                        "tooltip": Translation.tr("Expressive Material 3 card with shaped glyphs"),
-                        "value": "material"
-                    }, {
-                        "displayName": Translation.tr("Tuner"),
-                        "icon": "straighten",
-                        "tooltip": Translation.tr("Sliding ruler under a beam of light; lives in the Dynamic Island when it's on"),
-                        "value": "tuner"
-                    }]
-                }
-            }
-
-            ConfigSwitch {
-                visible: Config.options.osd.style === "tuner"
-                enabled: Config.options.sidebar.sidebarStyle !== "connect"
-                opacity: enabled ? 1.0 : 0.4
-                buttonIcon: "straighten"
-                text: Translation.tr("Ruler on on/off indicators")
-                description: Translation.tr("Caps Lock, microphone and other on/off indicators slide along the ruler like the sliders")
-                checked: Config.options.osd.tuner?.toggleRuler ?? false
-                onCheckedChanged: {
-                    if (Config.ready && Config.options.osd.tuner)
-                        Config.options.osd.tuner.toggleRuler = checked;
-                }
-            }
-
-            // Material 3 Exclusive Options
-            ContentSubsectionLabel {
-                text: Translation.tr("Material OSD Options")
-                visible: Config.options.osd.style === "material"
-                enabled: Config.options.sidebar.sidebarStyle !== "connect"
-                opacity: enabled ? 1.0 : 0.4
-                Layout.topMargin: 4
-            }
-
-            ConfigSwitch {
-                visible: Config.options.osd.style === "material"
-                enabled: Config.options.sidebar.sidebarStyle !== "connect"
-                opacity: enabled ? 1.0 : 0.4
-                buttonIcon: "compress"
-                text: Translation.tr("Minimal variant")
-                checked: Config.options.osd.material.minimal
-                onCheckedChanged: {
-                    // Only a real change shows the OSD: the switch also fires while the page builds
-                    if (Config.options.osd.material.minimal === checked)
-                        return;
-                    Config.options.osd.material.minimal = checked;
-                    overlaysConfigRoot.triggerRealOsd();
-                }
-                StyledToolTip {
-                    text: Translation.tr("Compact single-line Material 3 slider layout")
-                }
-            }
-
-            ConfigSwitch {
-                visible: Config.options.osd.style === "material"
-                enabled: Config.options.sidebar.sidebarStyle !== "connect"
-                opacity: enabled ? 1.0 : 0.4
-                buttonIcon: "shapes"
-                text: Translation.tr("Shaped value labels")
-                checked: Config.options.osd.material.shapedValues
-                onCheckedChanged: {
-                    // Only a real change shows the OSD: the switch also fires while the page builds
-                    if (Config.options.osd.material.shapedValues === checked)
-                        return;
-                    Config.options.osd.material.shapedValues = checked;
-                    overlaysConfigRoot.triggerRealOsd();
-                }
-                StyledToolTip {
-                    text: Translation.tr("Use geometric shape background containers around icons")
-                }
-            }
-
-            ConfigSwitch {
-                visible: Config.options.osd.style === "material"
-                enabled: Config.options.sidebar.sidebarStyle !== "connect"
-                opacity: enabled ? 1.0 : 0.4
-                buttonIcon: "circle"
-                text: Translation.tr("Circled shapes")
-                checked: Config.options.osd.material.circledShapes
-                onCheckedChanged: {
-                    // Only a real change shows the OSD: the switch also fires while the page builds
-                    if (Config.options.osd.material.circledShapes === checked)
-                        return;
-                    Config.options.osd.material.circledShapes = checked;
-                    overlaysConfigRoot.triggerRealOsd();
-                }
-                StyledToolTip {
-                    text: Translation.tr("Force circular shape container instead of flower/star shapes")
-                }
-            }
-
-            ConfigSwitch {
-                visible: Config.options.osd.style === "material"
-                enabled: Config.options.sidebar.sidebarStyle !== "connect"
-                opacity: enabled ? 1.0 : 0.4
-                buttonIcon: "rotate_right"
-                text: Translation.tr("Rotate shapes when changing values")
-                checked: Config.options.osd.material.rotateShape
-                onCheckedChanged: {
-                    // Only a real change shows the OSD: the switch also fires while the page builds
-                    if (Config.options.osd.material.rotateShape === checked)
-                        return;
-                    Config.options.osd.material.rotateShape = checked;
-                    overlaysConfigRoot.triggerRealOsd();
-                }
-                StyledToolTip {
-                    text: Translation.tr("Rotate geometric shape glyph dynamically with value changes")
-                }
-            }
-
-            // Common Options (Timeout)
-            ConfigSlider {
-                enabled: Config.options.sidebar.sidebarStyle !== "connect"
-                opacity: Config.options.sidebar.sidebarStyle !== "connect" ? 1.0 : 0.4
-                buttonIcon: "schedule"
-                text: Translation.tr("OSD Timeout")
-                usePercentTooltip: false
-                tooltipContent: `${(value / 1000).toFixed(1)}s`
-                from: 1000
-                to: 5000
-                stepSize: 500
-                value: Config.options.osd.timeout ?? 3000
-                onValueChanged: {
-                    Config.options.osd.timeout = value;
-                }
-            }
-        }
-
-        ContentSection {
-            title: Translation.tr("On-screen Keyboard")
-            icon: "keyboard"
-
-            KeyboardShortcutBox {
-                Layout.fillWidth: true
-                text: Translation.tr("Toggle On-Screen Keyboard")
-                keys: ["Super", "K"]
-            }
-
-            ConfigSwitch {
-                buttonIcon: "keyboard"
-                text: Translation.tr("Show on-screen keyboard")
-                checked: typeof GlobalStates !== "undefined" ? GlobalStates.oskOpen : false
-                onCheckedChanged: {
-                    if (typeof GlobalStates !== "undefined")
-                        GlobalStates.oskOpen = checked;
-                }
-                StyledToolTip {
-                    text: Translation.tr("Open or close the virtual keyboard on screen")
-                }
-            }
-
-            ContentSubsection {
-                title: Translation.tr("Keyboard Style")
-                icon: "keyboard"
-                Layout.fillWidth: true
-
-                ConfigSelectionArray {
-                    currentValue: Config.options.osk.style ?? "deck"
-                    onSelected: (newValue) => {
-                        Config.options.osk.style = newValue;
-                    }
-                    options: [{
-                        "displayName": Translation.tr("Deck"),
-                        "icon": "keyboard",
-                        "tooltip": Translation.tr("Spans the bottom of the screen"),
-                        "value": "deck"
-                    }, {
-                        "displayName": Translation.tr("Classic"),
-                        "icon": "keyboard_alt",
-                        "tooltip": Translation.tr("Floats above the screen edge"),
-                        "value": "classic"
-                    }]
-                }
-            }
-
-            ContentSubsection {
-                title: Translation.tr("Layout")
-                icon: "language"
-                Layout.fillWidth: true
-
-                ConfigSelectionArray {
-                    currentValue: Config.options.osk.layout ?? "auto"
-                    onSelected: (newValue) => {
-                        Config.options.osk.layout = newValue;
-                    }
-                    options: [{
-                        "displayName": Translation.tr("Auto"),
-                        "icon": "autorenew",
-                        "tooltip": Translation.tr("Follows the keyboard layout you are typing in"),
-                        "value": "auto"
-                    }, {
-                        "displayName": Translation.tr("French"),
-                        "value": "French"
-                    }, {
-                        "displayName": Translation.tr("English"),
-                        "value": "English (US)"
-                    }, {
-                        "displayName": Translation.tr("German"),
-                        "value": "German"
-                    }, {
-                        "displayName": Translation.tr("Russian"),
-                        "value": "Russian"
-                    }]
-                }
-            }
-
-            ConfigSpinBox {
-                enabled: (Config.options.osk.style ?? "deck") === "deck"
-                opacity: enabled ? 1.0 : 0.4
-                icon: "height"
-                text: Translation.tr("Height (% of the screen)")
-                value: Config.options.osk.heightPercent
-                from: 15
-                to: 60
-                stepSize: 1
-                onValueChanged: {
-                    Config.options.osk.heightPercent = value;
-                }
-            }
-
-            ConfigSwitch {
-                enabled: (Config.options.osk.style ?? "deck") === "deck"
-                opacity: enabled ? 1.0 : 0.4
-                buttonIcon: "text_fields"
-                text: Translation.tr("Show shift and AltGr glyphs")
-                checked: Config.options.osk.secondaryGlyphs
-                onCheckedChanged: {
-                    Config.options.osk.secondaryGlyphs = checked;
-                }
-                StyledToolTip {
-                    text: Translation.tr("Display secondary key characters (Shift and AltGr) on keycaps")
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "touch_app"
-                text: Translation.tr("Show automatically on touch")
-                checked: Config.options.osk.autoShow.enable
-                configPage: Qt.resolvedUrl("widgets/OnScreenKeyboardConfig.qml")
-                onCheckedChanged: {
-                    Config.options.osk.autoShow.enable = checked;
-                }
-                StyledToolTip {
-                    text: Translation.tr("Configure automatic virtual keyboard popup behavior for touchscreen and pen input")
-                }
+            OverlayNavRow {
+                last: true
+                symbol: "speed"
+                shape: MaterialShape.Shape.SoftBurst
+                title: Translation.tr("Performance HUD")
+                summary: Translation.tr("FPS, 1% low, CPU, GPU, RAM, VRAM and battery over your games")
+                onOpenRequested: overlaysConfigRoot.open("widgets/PerfMonitorConfig.qml")
             }
         }
     }
 
     ConfigSubPageHost {
         id: subPageOverlay
-
         anchors.fill: parent
         z: 10
     }

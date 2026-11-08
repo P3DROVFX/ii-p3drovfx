@@ -93,8 +93,8 @@ hl.layer_rule({ match = { namespace = "quickshell:usage" }, animation = "slide b
 ```
 
 On the shell side: `services/AppStats.qml`, the `modules/ii/usage/` app, the
-`appStats` group in `modules/common/Config.qml`, `UsageSettingsPage.qml` (the app's own settings page), `UsageStatsConfig.qml` registered in
-`SettingsPageRegistry` under System, `Directories.appStats`, `usageOpen` in
+`appStats` group in `modules/common/Config.qml`, `UsageSettingsPage.qml` (the app's own settings page), the App usage card in `OverlaysConfig.qml` (Apps & Overlays), registered in
+`SettingsPageRegistry` under Tools, `Directories.appStats`, `usageOpen` in
 `GlobalStates.qml`, and a `PanelLoader` for `Usage` in both panel families.
 
 One line is not optional: `shell.qml` touches `AppStats.stateDir` on startup. The

@@ -4,7 +4,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 
-/** Back button + title for the Power sub-pages. */
+/** Back button + title for a Settings sub-page (bind `visible` to its showBackButton). */
 RowLayout {
     id: root
 

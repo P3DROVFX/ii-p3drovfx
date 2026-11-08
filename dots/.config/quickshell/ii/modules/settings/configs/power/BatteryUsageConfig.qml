@@ -25,7 +25,7 @@ Item {
         property string selectedKey: ""
     }
 
-    SubPageHeader {
+    ConfigSubPageHeader {
         id: header
         anchors {
             left: parent.left

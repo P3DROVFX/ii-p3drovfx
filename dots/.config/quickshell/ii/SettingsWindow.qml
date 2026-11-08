@@ -380,7 +380,9 @@ FloatingWindow {
     }
 
     function pageIndexById(id) {
-        return SettingsPageRegistry.pageIndexById(id);
+        // A page folded into another (registry `movedTo`) opens its new home
+        const moved = SettingsPageRegistry.pageById(id)?.movedTo;
+        return SettingsPageRegistry.pageIndexById(moved ?? id);
     }
 
     /**
