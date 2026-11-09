@@ -30,6 +30,9 @@ Singleton {
         // through "clear all", only dismissed by hand. `liveData` is the decoded view.
         property bool live: false
         property var liveData: null
+        // A notification relayed from the phone by KDE Connect. Its home is the
+        // Phone tab; here it only pops up and then leaves (never in history).
+        property bool phone: false
         property list<var> customActions: []
         property string _qsFilePath: ""
         property var internalActionPayload: ({})
@@ -183,7 +186,7 @@ Singleton {
 
     function stringifyList(list) {
         // Live updates are rebuilt from the phone after a restart, never restored.
-        return JSON.stringify(list.filter((notif) => notif && !notif.live).map((notif) => notifToJSON(notif)), null, 2);
+        return JSON.stringify(list.filter((notif) => notif && !notif.live && !notif.phone).map((notif) => notifToJSON(notif)), null, 2);
     }
 
     function trimHistory(values) {
@@ -254,15 +257,29 @@ Singleton {
         && KdeConnectService.activeReachable
         && !(Config.options?.phone?.mirrorNotificationsToDesktop ?? true)
 
-    function groupsForList(list) {
+    function isKdeConnectAppName(appName) {
+        const appNameLower = String(appName || "").toLowerCase();
+        return appNameLower === "kdeconnect"
+            || appNameLower === "kde connect"
+            || appNameLower === "org.kde.kdeconnect"
+            || KdeConnectService.devices.some(d => d.name && d.name.toLowerCase() === appNameLower);
+    }
+
+    // Only the notifications plugin relays phone notifications ("notification"
+    // event); pairing, transfers, pings and calls are the daemon's own.
+    function isPhoneRelay(notification) {
+        if (!root.isKdeConnectAppName(notification?.appName)) return false;
+        const eventId = notification?.hints?.["x-kde-eventId"];
+        return eventId === undefined || eventId === null || eventId === "" || eventId === "notification";
+    }
+
+    // `popups`: phone relays are popup-only; the history list never shows them.
+    function groupsForList(list, popups) {
         const groups = {};
         list.forEach((notif) => {
             if (!notif) return;
-            const appNameLower = (notif.appName || "").toLowerCase();
-            const isKdeConnect = appNameLower === "kdeconnect"
-                || appNameLower === "kde connect"
-                || appNameLower === "org.kde.kdeconnect"
-                || KdeConnectService.devices.some(d => d.name && d.name.toLowerCase() === appNameLower);
+            if (notif.phone && !popups) return;
+            const isKdeConnect = root.isKdeConnectAppName(notif.appName);
 
             if (isKdeConnect && (root.hidePhoneNotifications || KdeConnectService.isIgnoredNotification(notif))) {
                 return;
@@ -321,7 +338,7 @@ Singleton {
 
     // Computed group bindings - automatically cached by the QML engine and re-evaluated reactively.
     property var groupsByAppName: groupsForList(root.list)
-    property var popupGroupsByAppName: groupsForList(root.popupList)
+    property var popupGroupsByAppName: groupsForList(root.popupList, true)
     property list<string> appNameList: appNameListForGroups(root.groupsByAppName)
     property list<string> popupAppNameList: appNameListForGroups(root.popupGroupsByAppName)
 
@@ -425,7 +442,9 @@ Singleton {
     }
 
     function armNotificationTimeout(notifObject, notification) {
-        const expireTimeout = notification?.expireTimeout ?? notifObject?.internalExpireTimeout ?? -1;
+        // A phone relay must always leave: it has no place in the history.
+        const expireTimeout = notifObject?.phone ? -1
+            : (notification?.expireTimeout ?? notifObject?.internalExpireTimeout ?? -1);
         if (root.popupInhibited || expireTimeout === 0)
             return;
         const interval = expireTimeout < 0
@@ -516,11 +535,7 @@ Singleton {
         persistenceSupported: true
 
         onNotification: (notification) => {
-            const appNameLower = (notification.appName || "").toLowerCase();
-            const isKdeConnect = appNameLower === "kdeconnect"
-                || appNameLower === "kde connect"
-                || appNameLower === "org.kde.kdeconnect"
-                || KdeConnectService.devices.some(d => d.name && d.name.toLowerCase() === appNameLower);
+            const isKdeConnect = root.isKdeConnectAppName(notification.appName);
 
             // The KDE Connect daemon reports outgoing file transfer results only
             // through this notification. The service consumes it, publishes a
@@ -554,6 +569,16 @@ Singleton {
                 return;
             }
 
+            // Phone relays live in the Phone tab. Here they are popup-only, so
+            // with popups held back (sidebar open, DND) there is nothing to show,
+            // and a repeat of something already shown is dropped (anti-spam).
+            const isPhone = root.isPhoneRelay(notification);
+            if (isPhone && (root.popupInhibited
+                    || KdeConnectService.isRepeatedPhoneNotification(notification.summary, notification.body))) {
+                notification.tracked = true;
+                return;
+            }
+
             notification.tracked = true
             const notificationId = notification.id + root.idOffset;
             const existingNotifObject = root.findTrackedNotification(notificationId);
@@ -577,6 +602,7 @@ Singleton {
                 "notificationId": notificationId,
                 "notification": notification,
                 "time": Date.now(),
+                "phone": isPhone,
             });
 
             root._handleShellNotification(newNotifObject);
@@ -588,7 +614,8 @@ Singleton {
             // Popup
             if (!root.popupInhibited) {
                 root.armNotificationTimeout(newNotifObject, notification);
-                root.unread++;
+                if (!isPhone)
+                    root.unread++;
             }
             root.notify(newNotifObject);
             // Schedule disk write instead of immediate write
@@ -778,6 +805,7 @@ Singleton {
         if (root.list[index] != null)
             root.list[index].popup = false;
         root.timeout(id);
+        root._dropPhoneRelays();
     }
 
     function timeoutAll() {
@@ -786,6 +814,23 @@ Singleton {
         })
         root.popupList.forEach((notif) => {
             notif.popup = false;
+        });
+        root._dropPhoneRelays();
+    }
+
+    // A phone relay whose popup ended leaves the shell. Expired, not dismissed:
+    // the phone keeps its notification, and the Phone tab keeps showing it.
+    function _dropPhoneRelays() {
+        const gone = Array.from(root.list ?? []).filter(notif => notif && notif.phone && !notif.popup);
+        if (gone.length === 0) return;
+        const goneIds = new Set(gone.map(notif => notif.notificationId));
+        root.list = root.list.filter(notif => !(notif && goneIds.has(notif.notificationId)));
+        // Release the wrappers first so expiring the server side can't loop
+        // back into discardNotification (which would dismiss on the phone).
+        gone.forEach(notif => root.releaseNotificationObject(notif));
+        notifServer.trackedNotifications.values.forEach(notif => {
+            if (goneIds.has(notif.id + root.idOffset))
+                notif.expire();
         });
     }
 
@@ -830,12 +875,8 @@ Singleton {
                 const parsed = JSON.parse(fileContents || "[]");
                 const filtered = parsed.filter(notif => {
                     if (!notif) return false;
-                    const appLower = (notif.appName || "").toLowerCase();
-                    const isKde = appLower === "kdeconnect"
-                        || appLower === "kde connect"
-                        || appLower === "org.kde.kdeconnect"
-                        || KdeConnectService.devices.some(d => d.name && d.name.toLowerCase() === appLower);
-                    if (isKde && KdeConnectService.isIgnoredNotification(notif)) return false;
+                    // Phone relays saved by older versions: their home is the Phone tab.
+                    if (root.isPhoneRelay(notif)) return false;
                     if (!String(notif.summary || "").trim() && !String(notif.body || "").trim()) return false;
                     return true;
                 });

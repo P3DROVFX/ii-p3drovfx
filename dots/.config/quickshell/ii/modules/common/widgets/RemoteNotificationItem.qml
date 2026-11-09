@@ -347,7 +347,7 @@ Item {
                     wrapMode: root.expanded ? Text.Wrap : Text.NoWrap
                     maximumLineCount: 1
                     textFormat: Text.StyledText
-                    text: NotificationUtils.processNotificationBody(root.modelData?.body || "", root.modelData?.appName || "").replace(/\n/g, " ")
+                    text: NotificationUtils.processNotificationBody(root.modelData?.body || "", root.modelData?.appName || "").replace(/\n/g, " ").replace(/<br\s*\/?>/gi, " ")
                 }
             }
 

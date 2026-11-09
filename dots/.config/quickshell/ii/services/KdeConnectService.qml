@@ -1011,6 +1011,17 @@ Singleton {
         root._setLiveRelays(list)
         // Relay copies stay in the Phone tab as their decoded selves.
         list = list.map(n => root.isLiveRelay(n) ? root._liveAsNotification(n) : n)
+        // The same app can hold several copies of one notification (re-posts
+        // under new keys); the Phone tab shows each text once, newest key wins.
+        const seenText = new Set()
+        list = list.slice().reverse().filter(n => {
+            if (n.live === true) return true
+            const sig = (n.appName ?? "") + "\u0002"
+                + root._phoneSignature(n.summary ?? n.title, n.body ?? n.text ?? n.ticker)
+            if (seenText.has(sig)) return false
+            seenText.add(sig)
+            return true
+        }).reverse()
         return list.filter(n => !root.isIgnoredNotification(n)).map(n => {
             const ticker = n.ticker ?? ""
             const appName = n.appName ?? ""
@@ -1951,6 +1962,33 @@ Singleton {
         const alive = root.pendingOutgoingTransfers.filter(t => now - t.startedAt < root.outgoingTransferTimeoutMs);
         if (alive.length !== root.pendingOutgoingTransfers.length)
             root.pendingOutgoingTransfers = alive;
+    }
+
+    // Anti-spam for desktop popups of phone notifications. Messaging apps
+    // (Telegram forks above all) re-post every active chat notification on each
+    // new message or when the app is opened, so the same text arrives over and
+    // over. A popup whose normalised title + text was already shown in the
+    // last `_phoneRepeatWindowMs` is dropped; each repeat extends the window.
+    // Only exact repeats match, so a new message (different text) always shows.
+    readonly property int _phoneRepeatWindowMs: 30 * 60 * 1000
+    property var _recentPhonePopups: ({})
+
+    function _phoneSignature(summary, body) {
+        const norm = s => String(s ?? "").replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim().toLowerCase()
+        return norm(summary) + "\u0001" + norm(body)
+    }
+
+    function isRepeatedPhoneNotification(summary, body) {
+        const now = Date.now()
+        const seen = root._recentPhonePopups
+        for (const key in seen) {
+            if (now - seen[key] > root._phoneRepeatWindowMs)
+                delete seen[key]
+        }
+        const sig = root._phoneSignature(summary, body)
+        const repeated = seen[sig] !== undefined
+        seen[sig] = now
+        return repeated
     }
 
     /**

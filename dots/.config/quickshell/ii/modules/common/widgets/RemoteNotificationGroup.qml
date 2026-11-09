@@ -32,6 +32,8 @@ Item {
     property int notificationCount: notifications.length
     property bool multipleNotifications: notificationCount > 1
     property bool expanded: false
+    // Expanded children are built in batches of 8 (lazyLoadTimer).
+    property int lazyLimit: 2
     property real padding: 10
     property int groupPosition: 0 // 0: single, 1: top, 2: middle, 3: bottom
     property bool isFirstInGroup: groupPosition === 0 || groupPosition === 1
@@ -42,13 +44,13 @@ Item {
 
     onExpandedChanged: {
         if (expanded) {
-            lazyLimit = Math.min(8, root.notificationCount)
-            if (lazyLimit < root.notificationCount) {
+            root.lazyLimit = Math.min(8, root.notificationCount)
+            if (root.lazyLimit < root.notificationCount) {
                 lazyLoadTimer.restart()
             }
         } else {
             lazyLoadTimer.stop()
-            lazyLimit = 2
+            root.lazyLimit = 2
         }
     }
 
@@ -537,7 +539,7 @@ Item {
                 Item {
                     id: notifChildContainer
                     Layout.fillWidth: true
-                    implicitHeight: root.expanded ? notifChildColumn.implicitHeight : (childRepeater.count > 1 ? 44 : (notifChildColumn.children[0]?.implicitHeight ?? 36))
+                    implicitHeight: root.expanded ? notifChildColumn.implicitHeight : notifChildColumnCollapsed.implicitHeight
 
                     Column {
                         id: notifChildColumn
@@ -588,13 +590,24 @@ Item {
                         Repeater {
                             id: childRepeater
                             model: !root.expanded ? root.notifications.slice().reverse().slice(0, Math.min(2, root.notifications.length)) : []
-                            delegate: RemoteNotificationItem {
+                            // Wrapped: redeclaring `required property var modelData` on the
+                            // item itself shadows RemoteNotificationItem's own modelData,
+                            // which then stays null inside (title fell back, body empty).
+                            delegate: Item {
+                                id: childWrapperCol
                                 required property int index
                                 required property var modelData
                                 width: notifChildColumnCollapsed.width
-                                expanded: false
-                                onlyNotification: root.notificationCount === 1
+                                implicitHeight: collapsedItem.implicitHeight
                                 opacity: index === 1 ? 0.55 : 1.0
+
+                                RemoteNotificationItem {
+                                    id: collapsedItem
+                                    width: parent.width
+                                    modelData: childWrapperCol.modelData
+                                    expanded: false
+                                    onlyNotification: root.notificationCount === 1
+                                }
                             }
                         }
                     }
