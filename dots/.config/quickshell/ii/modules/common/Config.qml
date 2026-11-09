@@ -6407,6 +6407,21 @@ Singleton {
                     /// Finger travel, in touchpad pixels, that fully opens a tracked surface.
                     property int trackedDistance: 280
                 }
+                /**
+                 * Graphics tablet buttons (OpenTabletDriver) driving shell actions.
+                 * One action id per slot ("keep" = leave the driver's own binding). See
+                 * services/TabletButtons.qml.
+                 */
+                property JsonObject tabletButtons: JsonObject {
+                    property bool enable: false
+                    property list<string> aux: []
+                    property list<string> pen: []
+                    /// Notches per press of a fixed scroll button (repeats while held).
+                    property int scrollStep: 1
+                    /// Drag-to-scroll speed: 1 = one notch per 40 px of pen travel.
+                    property real dragSpeed: 1.0
+                    property bool invertDrag: false
+                }
             }
 
             property JsonObject language: JsonObject {

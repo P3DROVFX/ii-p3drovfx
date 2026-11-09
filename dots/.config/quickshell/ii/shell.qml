@@ -152,6 +152,7 @@ ShellRoot {
         ClosedWindows.count; // Registers the reopen bind and keeps the closed-window stack; idle while disabled
         if (Config.options?.interactions?.touchGestures?.enable ?? true)
             TouchGestureService.enabled; // Start the touch helper only when gestures are enabled
+        TabletButtons.enabled; // Registers the tablet button binds and IPC; idle while disabled
         TouchpadGestures.enabled; // Keeps the compositor's touchpad gesture snapshot in step with the config
         if (Config.options?.bar?.workspaces?.arranger?.autoCloseGaps ?? false)
             WorkspaceArranger.enabled; // Start the arranger's watcher only when auto-close gaps is enabled

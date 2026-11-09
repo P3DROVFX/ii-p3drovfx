@@ -46,6 +46,23 @@ Item {
             }
         }
 
+        // ── Graphics tablet ───────────────────────────────────────────────────
+        ContentSection {
+            icon: "stylus_note"
+            title: Translation.tr("Graphics Tablet")
+            tooltip: Translation.tr("OpenTabletDriver express keys and pen buttons running shell actions, like live draw and its tools.")
+
+            ConfigSubpageRow {
+                buttonIcon: "stylus"
+                title: Translation.tr("Tablet buttons")
+                description: Translation.tr("Map express keys and pen buttons to live draw, undo, spotlight, board and other shell actions")
+                summary: !TabletButtons.enabled ? Translation.tr("Off")
+                    : Translation.tr("%1 buttons").arg(TabletButtons.auxActions.concat(TabletButtons.penActions)
+                        .filter(id => TabletButtons.handedToShell(id)).length)
+                onClicked: subPageOverlay.open(Qt.resolvedUrl("widgets/TabletButtonsConfig.qml"))
+            }
+        }
+
         // ── Master & Daemon Status ────────────────────────────────────────────
         ContentSection {
             icon: "touch_app"
