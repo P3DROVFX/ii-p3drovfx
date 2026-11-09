@@ -22,6 +22,8 @@ Rectangle {
     property bool last: false
     property bool hasSwitch: false
     property bool checked: false
+    // Without a page behind it the row is just a switch: the arrow goes and a tap toggles.
+    property bool hasOpen: true
 
     signal toggled(bool value)
     signal openRequested()
@@ -48,7 +50,12 @@ Rectangle {
     // Under the content, so the switch keeps its own clicks
     TapHandler {
         id: rowTap
-        onTapped: root.openRequested()
+        onTapped: {
+            if (root.hasOpen)
+                root.openRequested();
+            else if (root.hasSwitch)
+                root.toggled(!root.checked);
+        }
     }
 
     RowLayout {
@@ -96,6 +103,7 @@ Rectangle {
 
         // the way in
         Item {
+            visible: root.hasOpen
             implicitWidth: 52
             implicitHeight: 52
             MaterialShapeWrappedMaterialSymbol {

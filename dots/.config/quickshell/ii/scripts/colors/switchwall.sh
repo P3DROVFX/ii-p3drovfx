@@ -128,6 +128,10 @@ post_process() {
 
 check_and_prompt_upscale() {
     local img="$1"
+    # Settings → Apps & Overlays → Wallpaper upscaling. Not `// true`: jq treats false as empty.
+    [[ "$(jq -r '.background.upscaylPrompt' "$SHELL_CONFIG_FILE" 2>/dev/null)" == "false" ]] && return
+    # Our own output (services/Upscayl.qml) never asks again, even at a smaller scale.
+    [[ "$(basename "$img")" == *-upscaled-[234]x.* ]] && return
     min_width_desired="$(hyprctl monitors -j | jq '([.[].width] | max)' | xargs)" # max monitor width
     min_height_desired="$(hyprctl monitors -j | jq '([.[].height] | max)' | xargs)" # max monitor height
 
@@ -143,8 +147,20 @@ check_and_prompt_upscale() {
         if [[ "$img_width" -lt "$min_width_desired" || "$img_height" -lt "$min_height_desired" ]]; then
             action=$(notify-send "Upscale?" \
                 "Image resolution (${img_width}x${img_height}) is lower than screen resolution (${min_width_desired}x${min_height_desired})" \
-                -A "open_upscayl=Open Upscayl"\
+                -A "upscale=Upscale" \
+                -A "open_upscayl=Open Upscayl" \
                 -a "Wallpaper switcher")
+            if [[ "$action" == "upscale" ]]; then
+                local target="desktop"
+                [[ -n "$lockscreen_flag" ]] && target="lockscreen"
+                [[ -n "$lightmode_flag" ]] && target="lightmode"
+                # The shell's corner popup does it headless (services/Upscayl.qml);
+                # without a running shell, fall back to the app.
+                if ! qs -c "$QUICKSHELL_CONFIG_NAME" ipc call upscayl prompt "$(realpath "$img")" "$target" \
+                        "$img_width" "$img_height" "$min_width_desired" "$min_height_desired" &>/dev/null; then
+                    action="open_upscayl"
+                fi
+            fi
             if [[ "$action" == "open_upscayl" ]]; then
                 if command -v upscayl &>/dev/null; then
                     nohup upscayl > /dev/null 2>&1 &

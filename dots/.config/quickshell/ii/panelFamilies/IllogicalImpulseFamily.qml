@@ -167,6 +167,11 @@ Scope {
         panelUrl: Qt.resolvedUrl("../modules/ii/localSendPopup/LocalSendPopup.qml")
     }
     PanelUrlLoader {
+        // Wallpaper upscaling card; switchwall.sh opens it through `ipc call upscayl prompt`.
+        extraCondition: Upscayl.popupVisible
+        panelUrl: Qt.resolvedUrl("../modules/ii/upscaylPopup/UpscaylPopup.qml")
+    }
+    PanelUrlLoader {
         extraCondition: !IslandPolicy.ownsNotifications
         panelUrl: Qt.resolvedUrl("../modules/ii/notificationPopup/NotificationPopup.qml")
     }

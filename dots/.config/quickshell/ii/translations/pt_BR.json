@@ -15593,5 +15593,22 @@
     "No weather yet": "Sem clima ainda",
     "Forecast for your city or live location, in the bar, dock, lock screen and desktop widgets.": "Previsão para sua cidade ou localização ao vivo, na barra, dock, tela de bloqueio e widgets da área de trabalho.",
     "%1 in %2. Forecast for the bar, dock, lock screen and desktop widgets.": "%1 em %2. Previsão para a barra, dock, tela de bloqueio e widgets da área de trabalho.",
-    "Weather settings": "Configurações do clima"
+    "Weather settings": "Configurações do clima",
+    "High fidelity": "Alta fidelidade",
+    "Lite": "Leve",
+    "Digital art": "Arte digital",
+    "Upscayl's engine wasn't found. Install Upscayl (upscayl-bin on Arch) and try again.": "O motor do Upscayl não foi encontrado. Instale o Upscayl (upscayl-bin no Arch) e tente de novo.",
+    "Upscayl stopped with code %1": "O Upscayl parou com o código %1",
+    "Upscale failed": "Falha no upscale",
+    "Wallpaper upscaled": "Wallpaper ampliado",
+    "Upscaling…": "Ampliando…",
+    "Upscale wallpaper": "Ampliar wallpaper",
+    "Keep upscaling in the background": "Continuar ampliando em segundo plano",
+    "fits screen": "cobre a tela",
+    "Looking for Upscayl…": "Procurando o Upscayl…",
+    "Get Upscayl": "Obter o Upscayl",
+    "Upscale %1×": "Ampliar %1×",
+    "Wallpaper upscaling": "Ampliação de wallpaper",
+    "Offers Upscayl when a wallpaper is smaller than your screen": "Oferece o Upscayl quando o wallpaper é menor que a tela",
+    "Off: low-resolution wallpapers are applied without asking": "Desligado: wallpapers de baixa resolução são aplicados sem perguntar"
 }

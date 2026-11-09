@@ -4845,6 +4845,11 @@ Singleton {
                 // Play a screen-sized copy of videos taller than the screen
                 // (scripts/videos/video-proxy.sh, made once in the background).
                 property bool videoDownscale: true
+                // Low-resolution wallpapers: switchwall.sh offers the Upscayl popup
+                // (services/Upscayl.qml) through a notification. Read from disk by the script.
+                property bool upscaylPrompt: true
+                // Last model picked in the popup (a .param basename in Upscayl's models dir).
+                property string upscaylModel: "upscayl-standard-4x"
                 // Written by switchwall.sh: the file to open for videoPlaybackSource
                 // (its screen-sized copy once one exists).
                 property string videoPlaybackSource: ""

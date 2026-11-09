@@ -313,6 +313,19 @@ Item {
             }
 
             OverlayNavRow {
+                symbol: "auto_awesome"
+                shape: MaterialShape.Shape.Sunny
+                title: Translation.tr("Wallpaper upscaling")
+                summary: Config.options.background.upscaylPrompt
+                    ? Translation.tr("Offers Upscayl when a wallpaper is smaller than your screen")
+                    : Translation.tr("Off: low-resolution wallpapers are applied without asking")
+                hasOpen: false
+                hasSwitch: true
+                checked: Config.options.background.upscaylPrompt
+                onToggled: value => Config.options.background.upscaylPrompt = value
+            }
+
+            OverlayNavRow {
                 last: true
                 symbol: "speed"
                 shape: MaterialShape.Shape.SoftBurst
