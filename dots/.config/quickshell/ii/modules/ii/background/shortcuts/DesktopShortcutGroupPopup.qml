@@ -101,6 +101,9 @@ FocusScope {
         onFinished: { if (root.closing) root.closeRequested(); }
     }
 
+    // The card spills past the shrunk canvas in Edit Mode (PointerBoundsEscape).
+    PointerBoundsEscape {}
+
     // Click anywhere outside closes. The scrim covers the whole layer, so a
     // press on another icon closes the folder rather than launching through.
     MouseArea {
@@ -142,6 +145,8 @@ FocusScope {
         scale: root.counterScale * (0.94 + 0.06 * root.bodyReveal)
         transformOrigin: Item.TopLeft
         transform: Translate { y: (1 - root.bodyReveal) * (root.opensDownward ? -10 : 10) }
+        // The counter-scaled card spills past the shrunk canvas in Edit Mode.
+        PointerBoundsEscape {}
         ColumnLayout {
             id: cardLayout
             anchors.fill: parent

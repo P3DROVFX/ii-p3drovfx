@@ -671,6 +671,9 @@ PanelWindow {
 
     Item {
         id: transformContainer
+        // Desktop-icon menus spill past the Edit Mode shrink: every level from
+        // here down to them carries one (see PointerBoundsEscape).
+        PointerBoundsEscape {}
         anchors.fill: parent
 
         // Match the wallpaper's stable layer lifetime: opening only changes
@@ -874,6 +877,7 @@ PanelWindow {
 
         WidgetCanvas {
             id: widgetCanvas
+            PointerBoundsEscape {}
             parent: desktopStack
             // A screen that shows no widgets only maps this surface for the
             // wallpaper framing below; the canvas stays off it.
@@ -1043,6 +1047,7 @@ PanelWindow {
 
             Loader {
                 id: desktopIcons
+                PointerBoundsEscape {}
                 anchors.fill: parent
                 // The widget Repeater is declared after this Loader, so at equal z
                 // a placed widget buries the context menu and the editor. Raise the

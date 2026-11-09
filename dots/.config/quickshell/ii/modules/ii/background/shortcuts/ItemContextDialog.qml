@@ -275,6 +275,8 @@ FocusScope {
         }
     }
 
+    PointerBoundsEscape {}
+
     MouseArea {
         anchors.fill: parent
         acceptedButtons: Qt.AllButtons
@@ -330,6 +332,10 @@ FocusScope {
             enabled: root.counterScale === 1
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
         }
+
+        // In Edit Mode the counter-scaled card spills past the shrunk canvas;
+        // every level down to here carries one (see PointerBoundsEscape).
+        PointerBoundsEscape {}
         Behavior on width {
             enabled: !Appearance.reducedMotion && root.reveal >= 1 && !root.closing
             animation: Appearance.animation.elementMove.numberAnimation.createObject(this)

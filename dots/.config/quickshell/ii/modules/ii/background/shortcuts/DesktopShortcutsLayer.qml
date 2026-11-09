@@ -1137,6 +1137,10 @@ Item {
     }
     ListModel { id: iconModel; dynamicRoles: true }
 
+    // The modal cards spill past the shrunk canvas in Edit Mode: this layer
+    // and both Loaders below carry one (see PointerBoundsEscape).
+    PointerBoundsEscape {}
+
     onVisibleChanged: {
         if (!visible) {
             closeContext();
@@ -2235,6 +2239,7 @@ Item {
     // popup on the popup itself.
     Loader {
         id: contextDialog
+        PointerBoundsEscape {}
         anchors.fill: parent
         z: 3
         active: false
@@ -2273,6 +2278,7 @@ Item {
 
     Loader {
         id: groupPopup
+        PointerBoundsEscape {}
         anchors.fill: parent
         z: 4
         active: false
