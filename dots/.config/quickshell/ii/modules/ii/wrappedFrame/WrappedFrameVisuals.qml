@@ -78,6 +78,17 @@ Item {
     property real dockRightInset: 0
     readonly property real dockLeftBand: dockLeftInset * retract
     readonly property real dockRightBand: dockRightInset * retract
+    // Search lifts this layer over the dock: the band keeps its place (the hole and its
+    // rounded corners still end where the windows do) but is not painted, so the dock,
+    // which paints its own tray in baseColor meanwhile, shows through. The side strips
+    // run on across the band's ends instead.
+    property bool dockBandHollow: false
+    readonly property real dockTopPaint: dockBandHollow ? 0 : dockTopBand
+    readonly property real dockBottomPaint: dockBandHollow ? 0 : dockBottomBand
+    readonly property real dockLeftPaint: dockBandHollow ? 0 : dockLeftBand
+    readonly property real dockRightPaint: dockBandHollow ? 0 : dockRightBand
+    readonly property real stripTopEdge: topEdge - (dockTopBand - dockTopPaint)
+    readonly property real stripBottomEdge: bottomEdge - (dockBottomBand - dockBottomPaint)
     readonly property real topEdge: (hasTopFrame ? frameThickness : Math.max(frameThickness, totalTopPush)) + dockTopBand
     readonly property real bottomEdge: (hasBottomFrame ? frameThickness : Math.max(frameThickness, totalBottomPush)) + dockBottomBand
 
@@ -208,7 +219,7 @@ Item {
             leftMargin: ((visualsRoot.dockTopBand > 0 && !visualsRoot.leftPlateShown) ? 0 : visualsRoot.totalLeftPush) + visualsRoot.leftStripAtTop
             rightMargin: ((visualsRoot.dockTopBand > 0 && !visualsRoot.rightPlateShown) ? 0 : visualsRoot.totalRightPush) + visualsRoot.rightStripAtTop
         }
-        height: hasTopFrame ? frameThickness + visualsRoot.dockTopBand : (visualsRoot.dockTopBand > 0 ? visualsRoot.dockTopBand : frameThickness)
+        height: hasTopFrame ? frameThickness + visualsRoot.dockTopPaint : (visualsRoot.dockTopBand > 0 ? visualsRoot.dockTopPaint : frameThickness)
         color: visualsRoot.baseColor
     }
 
@@ -223,7 +234,7 @@ Item {
             leftMargin: ((visualsRoot.dockBottomBand > 0 && !visualsRoot.leftPlateShown) ? 0 : visualsRoot.totalLeftPush) + visualsRoot.leftStripAtBottom
             rightMargin: ((visualsRoot.dockBottomBand > 0 && !visualsRoot.rightPlateShown) ? 0 : visualsRoot.totalRightPush) + visualsRoot.rightStripAtBottom
         }
-        height: hasBottomFrame ? frameThickness + visualsRoot.dockBottomBand : (visualsRoot.dockBottomBand > 0 ? visualsRoot.dockBottomBand : frameThickness)
+        height: hasBottomFrame ? frameThickness + visualsRoot.dockBottomPaint : (visualsRoot.dockBottomBand > 0 ? visualsRoot.dockBottomPaint : frameThickness)
         color: visualsRoot.baseColor
     }
 
@@ -236,10 +247,10 @@ Item {
             bottom: parent.bottom
             left: parent.left
             leftMargin: (!hasLeftFrame) ? (visualsRoot.dockLeftBand > 0 ? visualsRoot.totalLeftPush : -Math.max(0, frameThickness - visualsRoot.vBarHiddenAmount)) : visualsRoot.leftSidebarOffset
-            topMargin: (visualsRoot.leftSidebarOffset > 0 && !visualsRoot.barBottom) ? visualsRoot.sidebarTopOffset : visualsRoot.topEdge
-            bottomMargin: (visualsRoot.leftSidebarOffset > 0 && visualsRoot.barBottom) ? visualsRoot.sidebarBottomOffset : visualsRoot.bottomEdge
+            topMargin: (visualsRoot.leftSidebarOffset > 0 && !visualsRoot.barBottom) ? visualsRoot.sidebarTopOffset : visualsRoot.stripTopEdge
+            bottomMargin: (visualsRoot.leftSidebarOffset > 0 && visualsRoot.barBottom) ? visualsRoot.sidebarBottomOffset : visualsRoot.stripBottomEdge
         }
-        width: hasLeftFrame ? frameThickness + visualsRoot.dockLeftBand : (visualsRoot.dockLeftBand > 0 ? visualsRoot.dockLeftBand : frameThickness)
+        width: hasLeftFrame ? frameThickness + visualsRoot.dockLeftPaint : (visualsRoot.dockLeftBand > 0 ? visualsRoot.dockLeftPaint : frameThickness)
         color: visualsRoot.baseColor
     }
 
@@ -251,10 +262,10 @@ Item {
             bottom: parent.bottom
             right: parent.right
             rightMargin: (!hasRightFrame) ? (visualsRoot.dockRightBand > 0 ? visualsRoot.totalRightPush : -Math.max(0, frameThickness - visualsRoot.vBarHiddenAmount)) : visualsRoot.rightSidebarOffset
-            topMargin: (visualsRoot.rightSidebarOffset > 0 && !visualsRoot.barBottom) ? visualsRoot.sidebarTopOffset : visualsRoot.topEdge
-            bottomMargin: (visualsRoot.rightSidebarOffset > 0 && visualsRoot.barBottom) ? visualsRoot.sidebarBottomOffset : visualsRoot.bottomEdge
+            topMargin: (visualsRoot.rightSidebarOffset > 0 && !visualsRoot.barBottom) ? visualsRoot.sidebarTopOffset : visualsRoot.stripTopEdge
+            bottomMargin: (visualsRoot.rightSidebarOffset > 0 && visualsRoot.barBottom) ? visualsRoot.sidebarBottomOffset : visualsRoot.stripBottomEdge
         }
-        width: hasRightFrame ? frameThickness + visualsRoot.dockRightBand : (visualsRoot.dockRightBand > 0 ? visualsRoot.dockRightBand : frameThickness)
+        width: hasRightFrame ? frameThickness + visualsRoot.dockRightPaint : (visualsRoot.dockRightBand > 0 ? visualsRoot.dockRightPaint : frameThickness)
         color: visualsRoot.baseColor
     }
 

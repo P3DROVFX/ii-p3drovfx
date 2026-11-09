@@ -59,10 +59,8 @@ PanelWindow {
     // screenshot showed. Mirrors transformContainer's three transforms
     // term for term; if one of them changes, this changes with it.
     readonly property real contentScale:
-        (bgWidgetsWindow.isGnomeLikeOverview
-            ? (!videoEffectsDisabled && bgWidgetsWindow.showOpeningAnimation && bgWidgetsWindow.overviewOpen && bgWidgetsWindow.isScrollingLayout
-                ? bgWidgetsWindow.zoomedRatio : bgWidgetsWindow.defaultRatio)
-            : 1.0)
+        (bgWidgetsWindow.isGnomeLikeOverview && !bgWidgetsWindow.isScrollingLayout
+            ? bgWidgetsWindow.defaultRatio : 1.0)
         * (bgWidgetsWindow.overviewController && bgWidgetsWindow.overviewController.followWidgetsScale
             ? bgWidgetsWindow.overviewController.scale : 1.0)
         * bgWidgetsWindow.editTransform.scale
@@ -724,9 +722,10 @@ PanelWindow {
             }
         ]
 
-        scale: bgWidgetsWindow.isGnomeLikeOverview
-            ? (!videoEffectsDisabled && showOpeningAnimation && overviewOpen && isScrollingLayout ? zoomedRatio : defaultRatio)
-            : 1.0
+        // No opening ratio on the scrolling layouts: the scrolloverview plugin
+        // draws that overview, and the old 1% zoom in read as a glitch.
+        scale: bgWidgetsWindow.isGnomeLikeOverview && !bgWidgetsWindow.isScrollingLayout
+            ? bgWidgetsWindow.defaultRatio : 1.0
         Behavior on scale {
             animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(transformContainer)
         }

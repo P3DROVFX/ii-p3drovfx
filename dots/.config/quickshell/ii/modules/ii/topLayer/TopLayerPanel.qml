@@ -135,8 +135,24 @@ PanelWindow {
     // switched at once both ways so there is no frame with neither.
     readonly property bool dockUnderThisLayer: !topPanel.searchOpenOnMonitor
     // Without the wrapped frame the band is a plain strip (dockBandPlain) in the sidebar's colour.
-    readonly property bool dockOnFrameBand: (frameLoader.active || !usingWrappedFrame) && dockShapesShell && dockUnderThisLayer
+    // The wrapped frame keeps its band through search (hollow, see dockBandHollow); only the
+    // plain strip still hands the tray back to the dock.
+    readonly property bool dockOnFrameBand: dockShapesShell && (frameLoader.active || (!usingWrappedFrame && dockUnderThisLayer))
     onDockOnFrameBandChanged: GlobalStates.setDockBand(topPanel.screen.name, topPanel.dockOnFrameBand)
+    // Over the dock the band would hide its content: the frame keeps the band's geometry
+    // (the joins stay rounded) but does not paint it, and the dock paints its tray in the
+    // frame's colour instead.
+    readonly property bool dockBandHollow: frameLoader.active && dockShapesShell && !dockUnderThisLayer
+    // An opaque frame colour is handed over all the time: the dock's tray then already
+    // covers the band, identical, before search lifts this layer, and nothing on the dock
+    // changes in that frame (two surfaces never commit in sync; a hand-off showed a hole).
+    readonly property var dockBandCoverColor: {
+        if (!frameLoader.active || !dockShapesShell || !frameLoader.item)
+            return null;
+        const color = frameLoader.item.baseColor;
+        return (dockBandHollow || color.a >= 0.999) ? color : null;
+    }
+    onDockBandCoverColorChanged: GlobalStates.setDockBandCover(topPanel.screen.name, topPanel.dockBandCoverColor)
     // The dock sits inside the frame's ring when nothing else holds that edge.
     readonly property real ringThickness: usingWrappedFrame ? Config.options.appearance.wrappedFrameThickness : 0
     readonly property real sidebarTopOffset: sidebarTopBarOffset + (dockTopZone > 0 ? dockTopZone + (sidebarTopBarOffset > 0 ? 0 : ringThickness) : 0)
@@ -377,10 +393,11 @@ PanelWindow {
 
             sidebarTopOffset: topPanel.sidebarTopOffset
             sidebarBottomOffset: topPanel.sidebarBottomOffset
-            dockTopInset: topPanel.dockUnderThisLayer ? topPanel.dockTopBand : 0
-            dockBottomInset: topPanel.dockUnderThisLayer ? topPanel.dockBottomBand : 0
-            dockLeftInset: topPanel.dockUnderThisLayer ? topPanel.dockLeftBand : 0
-            dockRightInset: topPanel.dockUnderThisLayer ? topPanel.dockRightBand : 0
+            dockTopInset: topPanel.dockTopBand
+            dockBottomInset: topPanel.dockBottomBand
+            dockLeftInset: topPanel.dockLeftBand
+            dockRightInset: topPanel.dockRightBand
+            dockBandHollow: topPanel.dockBandHollow
         }
     }
 
@@ -1652,6 +1669,7 @@ PanelWindow {
     Component.onDestruction: {
         GlobalFocusGrab.removeDismissable(topPanel);
         GlobalStates.setDockBand(topPanel.screen.name, false);
+        GlobalStates.setDockBandCover(topPanel.screen.name, null);
     }
 
     Connections {

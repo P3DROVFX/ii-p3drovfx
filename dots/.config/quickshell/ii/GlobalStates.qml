@@ -922,6 +922,23 @@ Singleton {
             delete next[screenName];
         root.dockBandScreens = next;
     }
+    // While search lifts the top layer to Overlay, over the dock, the frame keeps the band's
+    // shape and its rounded joins but leaves the band itself hollow (screen name -> the
+    // frame's colour), and the dock fills its tray with that colour. Dropping the band
+    // instead flattened the joins and swapped two surfaces in one frame (a flicker).
+    property var dockBandCover: ({})
+    function setDockBandCover(screenName, color) {
+        if (!screenName)
+            return;
+        const next = Object.assign({}, root.dockBandCover);
+        if (color)
+            next[screenName] = color;
+        else if (next[screenName] === undefined)
+            return;
+        else
+            delete next[screenName];
+        root.dockBandCover = next;
+    }
 
     // What the Dynamic Island bar style really occupies of its edge, published by the
     // real bar window (screen name -> { edge, extent, reserve }). The style reserves a
