@@ -84,7 +84,7 @@ Singleton {
             return;
         if (scanner.running)
             return;
-        scanner.command = ["/usr/bin/python3", Directories.scriptPath + "/desktop_shortcuts.py",
+        scanner.command = ["python3", Directories.scriptPath + "/desktop_shortcuts.py",
             "scan", root.desktopFolder];
         scanner.running = true;
     }
@@ -122,7 +122,7 @@ Singleton {
             thumbnailer.again = true;
             return;
         }
-        thumbnailer.command = ["/usr/bin/python3", Directories.scriptPath + "/desktop_shortcuts.py",
+        thumbnailer.command = ["python3", Directories.scriptPath + "/desktop_shortcuts.py",
             "thumbnails", root.desktopFolder];
         thumbnailer.running = true;
     }
@@ -942,7 +942,7 @@ Singleton {
         root.registerPlacement(name || "New Folder", screenName, x, y);
         root.registerPlacement("__new_item__", screenName, x, y);
         root.renameOnCreate = { screen: screenName };
-        actionRunner.run(["/usr/bin/python3", Directories.scriptPath + "/desktop_shortcuts.py",
+        actionRunner.run(["python3", Directories.scriptPath + "/desktop_shortcuts.py",
             "create-folder", root.desktopFolder, name]);
     }
 
@@ -951,7 +951,7 @@ Singleton {
         root.registerPlacement(name || "New Document.txt", screenName, x, y);
         root.registerPlacement("__new_item__", screenName, x, y);
         root.renameOnCreate = { screen: screenName };
-        actionRunner.run(["/usr/bin/python3", Directories.scriptPath + "/desktop_shortcuts.py",
+        actionRunner.run(["python3", Directories.scriptPath + "/desktop_shortcuts.py",
             "create-file", root.desktopFolder, name]);
     }
 
@@ -963,7 +963,7 @@ Singleton {
         let curY = Math.round(y / 10) * 10;
         for (const appId of appIds) {
             root.registerPlacement(appId, screenName, curX, curY);
-            actionRunner.run(["/usr/bin/python3", Directories.scriptPath + "/desktop_shortcuts.py",
+            actionRunner.run(["python3", Directories.scriptPath + "/desktop_shortcuts.py",
                 "create-app", root.desktopFolder, appId]);
             curY += root.cellHeight;
         }
@@ -1023,7 +1023,7 @@ Singleton {
             return;
         root.error = "";
         root.currentImport = root.importQueue.shift();
-        resolver.command = ["/usr/bin/python3", Directories.scriptPath + "/desktop_shortcuts.py",
+        resolver.command = ["python3", Directories.scriptPath + "/desktop_shortcuts.py",
             "copy-to-desktop", root.desktopFolder, JSON.stringify(root.currentImport.urls),
             root.currentImport.mode ?? "link"];
         resolver.running = true;
@@ -1239,7 +1239,7 @@ Singleton {
         const item = root.itemsFor(screenName).find(i => i.id === itemId);
         const path = item ? (item.path || item.id) : itemId;
         root.save(screenName, root.itemsFor(screenName).filter(item => item.id !== itemId));
-        actionRunner.run(["/usr/bin/python3", Directories.scriptPath + "/desktop_shortcuts.py",
+        actionRunner.run(["python3", Directories.scriptPath + "/desktop_shortcuts.py",
             "trash", path]);
     }
     // Bulk forms of the two gestures a multi-selection produces. One save
@@ -1283,7 +1283,7 @@ Singleton {
         const toTrash = items.filter(i => gone.has(i.id)).map(i => i.path || i.id);
         root.save(screenName, root.itemsFor(screenName).filter(item => !gone.has(item.id)));
         for (const p of toTrash) {
-            actionRunner.run(["/usr/bin/python3", Directories.scriptPath + "/desktop_shortcuts.py",
+            actionRunner.run(["python3", Directories.scriptPath + "/desktop_shortcuts.py",
                 "trash", p]);
         }
     }
@@ -1454,7 +1454,7 @@ Singleton {
             root.registerPlacement(newName, screenName, item.x, item.y);
         root.save(screenName, root.itemsFor(screenName).map(i => i.id === itemId
             ? Object.assign({}, i, { name: newName }) : i));
-        actionRunner.run(["/usr/bin/python3", Directories.scriptPath + "/desktop_shortcuts.py",
+        actionRunner.run(["python3", Directories.scriptPath + "/desktop_shortcuts.py",
             "rename", root.desktopFolder, targetId, newName]);
     }
 
