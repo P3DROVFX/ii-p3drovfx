@@ -342,15 +342,20 @@ Singleton {
             "name": "APIs",
             "icon": "api",
             "component": "modules/settings/configs/ApisConfig.qml",
-            "subPages": ["apis/SportsApiConfig.qml"],
+            "subPages": ["apis/SportsApiConfig.qml", "apis/WeatherApiConfig.qml"],
             "aliases": ["Sports", "Sports tracker", "ESPN", "Scores", "Leagues", "Competitions", "Teams", "Football", "Soccer",
-                "Goal celebration", "Card notices", "Data sources", "Integrations"]
+                "Goal celebration", "Card notices", "Data sources", "Integrations",
+                "Weather", "Weather Service", "Open-Meteo", "Forecast", "Weather location", "GPS location", "Fahrenheit", "Celsius", "Polling interval"]
         },
         {
             "id": "weather",
+            // Folded into APIs as a source card (2026-11-08)
+            "movedTo": "apis",
+            "hidden": true,
+            "searchable": false,
             "name": "Weather",
             "icon": "cloud",
-            "component": "modules/settings/configs/WeatherConfig.qml",
+            "component": "modules/settings/configs/ApisConfig.qml",
             "subPages": [],
             "aliases": ["Core Services", "Weather Service"]
         },
@@ -521,7 +526,7 @@ Singleton {
         {
             "id": "servicesIntegrations",
             "name": "Services & Integrations",
-            "pageIds": ["mediaMusic", "languageTime", "weather", "apis", "aiAssistant", "tasksAccounts", "devicesPhone"]
+            "pageIds": ["mediaMusic", "languageTime", "apis", "aiAssistant", "tasksAccounts", "devicesPhone"]
         },
         {
             "id": "system",

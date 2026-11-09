@@ -15569,5 +15569,22 @@
     "Sports data off": "Sports data off",
     "Off. The shell never contacts ESPN and every sports surface stays hidden.": "Off. The shell never contacts ESPN and every sports surface stays hidden.",
     "On. Scores from ESPN reach the bar, dock, lock screen, island, timetable, search, the AI and the football page.": "On. Scores from ESPN reach the bar, dock, lock screen, island, timetable, search, the AI and the football page.",
-    "Off. The shell never contacts ESPN and hides every sports surface. Nothing you follow is lost.": "Off. The shell never contacts ESPN and hides every sports surface. Nothing you follow is lost."
+    "Off. The shell never contacts ESPN and hides every sports surface. Nothing you follow is lost.": "Off. The shell never contacts ESPN and hides every sports surface. Nothing you follow is lost.",
+    "No reading yet. The forecast arrives once the location is known.": "No reading yet. The forecast arrives once the location is known.",
+    "Wind %1": "Wind %1",
+    "UV index": "UV index",
+    "Sunrise %1 · Sunset %2 · Updated %3": "Sunrise %1 · Sunset %2 · Updated %3",
+    "Location & units": "Location & units",
+    "Where weather shows": "Where weather shows",
+    "The bar widget is placed from the bar layout.": "The bar widget is placed from the bar layout.",
+    "The current weather beside your apps.": "The current weather beside your apps.",
+    "Off. The dock shows no weather.": "Off. The dock shows no weather.",
+    "Temperature and sky on the lock screen.": "Temperature and sky on the lock screen.",
+    "Off. The lock screen shows no weather.": "Off. The lock screen shows no weather.",
+    "Refresh weather every": "Refresh weather every",
+    "Minutes between automatic updates": "Minutes between automatic updates",
+    "No weather yet": "No weather yet",
+    "Forecast for your city or live location, in the bar, dock, lock screen and desktop widgets.": "Forecast for your city or live location, in the bar, dock, lock screen and desktop widgets.",
+    "%1 in %2. Forecast for the bar, dock, lock screen and desktop widgets.": "%1 in %2. Forecast for the bar, dock, lock screen and desktop widgets.",
+    "Weather settings": "Weather settings"
 }

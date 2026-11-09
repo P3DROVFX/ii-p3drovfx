@@ -11,8 +11,8 @@ import qs.modules.settings.configs.apis
 /**
  * APIs: the live data sources the shell talks to, each as a card that says
  * what it brings in right now and opens its own page. Sports leads (ESPN
- * scores for the bar, dock and lock screen); the cheatsheet's Football
- * overview uses the same feed.
+ * scores for the bar, dock and lock screen; the cheatsheet's Football
+ * overview uses the same feed), then Weather (Open-Meteo).
  */
 Item {
     id: apisRoot
@@ -29,6 +29,8 @@ Item {
     readonly property int sportsTeams: String(Config.options.bar.sports.teamFilter ?? "").split(",").filter(term => term.trim().length > 0).length
     readonly property int liveCount: (SportsService.allGames ?? []).filter(game => game.state === "in").length
     readonly property bool apiOn: Config.options.bar.sports.apiEnabled ?? true
+    readonly property var weather: Weather.data ?? ({})
+    readonly property bool weatherReady: (weather.city ?? "City") !== "City" && String(weather.wDesc ?? "") !== ""
     readonly property bool sportsOn: apiOn && (Config.options.bar.sports.enable || (Config.options.dock.enableSportsWidget ?? false) || (Config.options.lock.sports ?? true))
 
     ContentPage {
@@ -117,7 +119,8 @@ Item {
                     Repeater {
                         model: [
                             { on: apisRoot.apiOn, label: !apisRoot.apiOn ? Translation.tr("Sports data off") : apisRoot.sportsOn ? Translation.tr("Scores on") : Translation.tr("Scores off"), icon: "scoreboard" },
-                            { on: apisRoot.liveCount > 0, label: apisRoot.liveCount > 0 ? Translation.tr("%1 live now").arg(apisRoot.liveCount) : Translation.tr("Nothing live"), icon: "radio_button_checked" }
+                            { on: apisRoot.liveCount > 0, label: apisRoot.liveCount > 0 ? Translation.tr("%1 live now").arg(apisRoot.liveCount) : Translation.tr("Nothing live"), icon: "radio_button_checked" },
+                            { on: apisRoot.weatherReady, label: apisRoot.weatherReady ? `${apisRoot.weather.city} · ${apisRoot.weather.temp}` : Translation.tr("No weather yet"), icon: "partly_cloudy_day" }
                         ]
                         delegate: Rectangle {
                             required property var modelData
@@ -187,6 +190,29 @@ Item {
             }
         }
 
+        AppSettingsSection {
+            Layout.topMargin: 12
+            title: Translation.tr("Weather data")
+            symbol: "partly_cloudy_day"
+
+            ApiCard {
+                Layout.fillWidth: true
+                symbol: Icons.getWeatherIcon(apisRoot.weather.wCode ?? 113) ?? "cloud"
+                shapeOn: MaterialShape.Shape.Cookie9Sided
+                provider: "Open-Meteo"
+                title: Translation.tr("Weather")
+                summary: !apisRoot.weatherReady ? Translation.tr("Forecast for your city or live location, in the bar, dock, lock screen and desktop widgets.")
+                    : Translation.tr("%1 in %2. Forecast for the bar, dock, lock screen and desktop widgets.").arg(apisRoot.weather.wDesc).arg(apisRoot.weather.city)
+                stats: !apisRoot.weatherReady ? [] : [
+                    { value: apisRoot.weather.temp, label: Translation.tr("Now") },
+                    { value: apisRoot.weather.humidity, label: Translation.tr("Humidity") },
+                    { value: Config.options.bar.weather.fetchInterval + "m", label: Translation.tr("Refresh") }
+                ]
+                actionLabel: Translation.tr("Weather settings")
+                onOpened: apisRoot.open("apis/WeatherApiConfig.qml")
+            }
+        }
+
         ContentSection {
             icon: "link"
             title: Translation.tr("Other services")
@@ -194,10 +220,6 @@ Item {
             Flow {
                 Layout.fillWidth: true
                 spacing: 8
-                RelatedChip {
-                    pageId: "weather"
-                    label: Translation.tr("Weather")
-                }
                 RelatedChip {
                     pageId: "aiAssistant"
                     label: Translation.tr("AI models & keys")

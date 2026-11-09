@@ -15576,5 +15576,22 @@
     "Sports data off": "Dados esportivos desligados",
     "Off. The shell never contacts ESPN and every sports surface stays hidden.": "Desligado. O shell nunca acessa a ESPN e todas as áreas de esportes ficam ocultas.",
     "On. Scores from ESPN reach the bar, dock, lock screen, island, timetable, search, the AI and the football page.": "Ligado. Placares da ESPN chegam à barra, dock, tela de bloqueio, island, timetable, busca, IA e à página de futebol.",
-    "Off. The shell never contacts ESPN and hides every sports surface. Nothing you follow is lost.": "Desligado. O shell nunca acessa a ESPN e esconde todas as áreas de esportes. Nada do que você segue é perdido."
+    "Off. The shell never contacts ESPN and hides every sports surface. Nothing you follow is lost.": "Desligado. O shell nunca acessa a ESPN e esconde todas as áreas de esportes. Nada do que você segue é perdido.",
+    "No reading yet. The forecast arrives once the location is known.": "Sem leitura ainda. A previsão chega assim que a localização for conhecida.",
+    "Wind %1": "Vento %1",
+    "UV index": "Índice UV",
+    "Sunrise %1 · Sunset %2 · Updated %3": "Nascer do sol %1 · Pôr do sol %2 · Atualizado %3",
+    "Location & units": "Localização e unidades",
+    "Where weather shows": "Onde o clima aparece",
+    "The bar widget is placed from the bar layout.": "O widget da barra é posicionado pelo layout da barra.",
+    "The current weather beside your apps.": "O clima atual ao lado dos seus apps.",
+    "Off. The dock shows no weather.": "Desligado. A dock não mostra o clima.",
+    "Temperature and sky on the lock screen.": "Temperatura e céu na tela de bloqueio.",
+    "Off. The lock screen shows no weather.": "Desligado. A tela de bloqueio não mostra o clima.",
+    "Refresh weather every": "Atualizar o clima a cada",
+    "Minutes between automatic updates": "Minutos entre atualizações automáticas",
+    "No weather yet": "Sem clima ainda",
+    "Forecast for your city or live location, in the bar, dock, lock screen and desktop widgets.": "Previsão para sua cidade ou localização ao vivo, na barra, dock, tela de bloqueio e widgets da área de trabalho.",
+    "%1 in %2. Forecast for the bar, dock, lock screen and desktop widgets.": "%1 em %2. Previsão para a barra, dock, tela de bloqueio e widgets da área de trabalho.",
+    "Weather settings": "Configurações do clima"
 }

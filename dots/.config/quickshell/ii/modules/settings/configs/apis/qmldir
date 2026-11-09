@@ -7,4 +7,5 @@ SportsFollowModel 1.0 SportsFollowModel.qml
 SportsHero 1.0 SportsHero.qml
 SportsLeaguePane 1.0 SportsLeaguePane.qml
 SportsTeamsPane 1.0 SportsTeamsPane.qml
+WeatherApiConfig 1.0 WeatherApiConfig.qml
 CrestImage 1.0 CrestImage.qml
