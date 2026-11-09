@@ -775,6 +775,26 @@ Scope {
                             }
                         }
 
+                        // Side dynamic island: the same silhouette turned to the
+                        // edge it hangs from. The concave shoulders flare into the
+                        // screen at the tray's two ends and the inner corners stay
+                        // round. It is laid out along the tray's long axis and
+                        // rotated about its centre, so it still fills the tray.
+                        Notch {
+                            id: dynamicIslandNotchVertical
+                            visible: dockRoot.isDynamicIsland && !dockContent.islandsStyle && dock.isVertical
+                            anchors.centerIn: parent
+                            width: parent.height
+                            height: parent.width
+                            rotation: dock.dockEffectivePosition === "left" ? -90 : 90
+                            bodyWidth: width
+                            bodyHeight: height
+                            disableBehaviors: true
+                            topRadius: dockRoot.concaveCornerRadius
+                            bottomRadius: Math.min(dockContent.dockCornerRadius, height)
+                            fillColor: Appearance.colors.colLayer0
+                        }
+
                         // Full width · rounded: the tray spans the screen and
                         // curves into it at both sides, the way the hug bar's
                         // screen corners do — the screen above looks rounded.
@@ -804,42 +824,6 @@ Scope {
                                 y: pos === "bottom" ? -height + tuck
                                     : pos === "top" ? parent.height - tuck
                                     : (startEnd ? 0 : parent.height - height)
-                            }
-                        }
-
-                        RoundCorner {
-                            id: concaveCorner1
-                            visible: dockRoot.isDynamicIsland && !dockContent.islandsStyle && dock.isVertical && opacity > 0.01
-                            opacity: dockVisualBackground.opacity
-                            implicitSize: Math.max(1, dockRoot.concaveCornerRadius)
-                            color: dockVisualBackground.color
-                            corner: {
-                                if (dock.dockEffectivePosition === "left") return RoundCorner.CornerEnum.BottomLeft;
-                                return RoundCorner.CornerEnum.BottomRight;
-                            }
-                            anchors {
-                                bottom: (dock.dockEffectivePosition === "left" || dock.dockEffectivePosition === "right") ? parent.top : undefined
-                                bottomMargin: (dock.dockEffectivePosition === "left" || dock.dockEffectivePosition === "right") ? -1 : 0
-                                right: (dock.dockEffectivePosition === "right") ? parent.right : undefined
-                                left: (dock.dockEffectivePosition === "left") ? parent.left : undefined
-                            }
-                        }
-
-                        RoundCorner {
-                            id: concaveCorner2
-                            visible: dockRoot.isDynamicIsland && !dockContent.islandsStyle && dock.isVertical && opacity > 0.01
-                            opacity: dockVisualBackground.opacity
-                            implicitSize: Math.max(1, dockRoot.concaveCornerRadius)
-                            color: dockVisualBackground.color
-                            corner: {
-                                if (dock.dockEffectivePosition === "left") return RoundCorner.CornerEnum.TopLeft;
-                                return RoundCorner.CornerEnum.TopRight;
-                            }
-                            anchors {
-                                top: (dock.dockEffectivePosition === "left" || dock.dockEffectivePosition === "right") ? parent.bottom : undefined
-                                topMargin: (dock.dockEffectivePosition === "left" || dock.dockEffectivePosition === "right") ? -1 : 0
-                                left: (dock.dockEffectivePosition === "left") ? parent.left : undefined
-                                right: (dock.dockEffectivePosition === "right") ? parent.right : undefined
                             }
                         }
                     }
