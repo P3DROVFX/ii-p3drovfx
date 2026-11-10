@@ -44,16 +44,35 @@ Singleton {
     // Live values: the daemon's when it runs, detect's otherwise
     readonly property var temps: (root.daemonRunning ? root.status.temps : root.caps?.temps) ?? []
     readonly property var fans: (root.daemonRunning ? root.status.fans : root.caps?.fans) ?? []
-    readonly property real hottest: root.temps.reduce((m, t) => Math.max(m, t.c), 0)
+    // Board-ambient sensors (Framework EC: ambient, charger) are shown but don't drive the curve
+    readonly property var curveTemps: root.temps.filter(t => t.drive !== false)
+    readonly property real hottest: root.curveTemps.reduce((m, t) => Math.max(m, t.c), 0)
     readonly property real appliedPct: root.daemonRunning && root.status.targetPct !== null ? root.status.targetPct : -1
     readonly property bool turboEnabled: (root.daemonRunning ? root.status.turbo : root.caps?.turbo?.enabled) ?? true
     readonly property int tccOffset: (root.daemonRunning ? root.status.tcc : root.caps?.tcc?.current) ?? 0
+
+    // ── Framework laptops ──
+    // Detection runs as the user: DMI vendor, the cros_ec hwmon and framework_tool on PATH.
+    // Everything framework_tool reads needs root, so the values come from the daemon only.
+    readonly property var frameworkCaps: root.caps?.framework ?? null
+    readonly property bool isFramework: root.frameworkCaps?.detected ?? false
+    readonly property bool frameworkToolInstalled: root.frameworkCaps?.tool ?? false
+    readonly property bool frameworkEcDriver: root.frameworkCaps?.ec ?? false
+    readonly property bool frameworkReady: root.isFramework && root.frameworkToolInstalled && root.frameworkEcDriver
+    readonly property bool frameworkLaptop16: root.frameworkCaps?.laptop16 ?? false
+    readonly property var frameworkStatus: root.daemonRunning ? (root.status.framework ?? null) : null
+    readonly property var frameworkConfig: root.config.framework ?? ({ "chargeLimit": null, "fpLevel": null })
+
+    function applyFramework(changes) {
+        root.apply(Object.assign({}, root.config, { "framework": Object.assign({}, root.frameworkConfig, changes) }));
+    }
 
     // The stored config, or the curve the old g15-fancurve shipped with
     readonly property var defaultConfig: ({
         "enabled": true,
         "curve": { "tStart": 60, "tMax": 80, "minPct": 40, "maxPct": 100, "steepness": 2.0 },
-        "hysteresis": 4, "interval": 2, "turbo": null, "tccOffset": null
+        "hysteresis": 4, "interval": 2, "turbo": null, "tccOffset": null,
+        "framework": { "chargeLimit": null, "fpLevel": null }
     })
     readonly property var config: root.status?.config ?? root.defaultConfig
 

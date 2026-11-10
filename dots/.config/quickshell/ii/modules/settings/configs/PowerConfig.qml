@@ -88,6 +88,7 @@ Item {
         PowerModePane {
             Layout.fillWidth: true
             onThermalsRequested: powerRoot.open("power/FanControlConfig.qml")
+            onFrameworkRequested: powerRoot.open("power/FrameworkConfig.qml")
         }
 
         // ── feature tiles ──

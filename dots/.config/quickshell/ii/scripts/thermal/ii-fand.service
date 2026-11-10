@@ -6,6 +6,8 @@ Conflicts=g15-fancurve.service
 [Service]
 Type=simple
 ExecStart=/usr/local/bin/ii-fand daemon
+# also after a crash: never leave a manual duty/pwm behind
+ExecStopPost=-/usr/local/bin/ii-fand release
 Restart=always
 RestartSec=5
 

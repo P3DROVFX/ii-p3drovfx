@@ -15,6 +15,7 @@ Rectangle {
     id: root
 
     signal thermalsRequested()
+    signal frameworkRequested()
 
     radius: Appearance.rounding.verylarge
     color: Appearance.colors.colLayer1
@@ -213,6 +214,70 @@ Rectangle {
                             text: thermals.detail
                             font.pixelSize: Appearance.font.pixelSize.smaller
                             color: Appearance.colors.colSubtext
+                            elide: Text.ElideRight
+                        }
+                    }
+                    MaterialSymbol {
+                        text: "chevron_right"
+                        iconSize: Appearance.font.pixelSize.huge
+                        color: Appearance.colors.colOnLayer2
+                    }
+                }
+            }
+        }
+
+        // Framework Laptop strip → charge limit, fingerprint light, firmware (only on a Framework)
+        RippleButton {
+            id: framework
+            Layout.fillWidth: true
+            visible: FanControl.isFramework
+            implicitHeight: 64
+            buttonRadius: Appearance.rounding.large
+            colBackground: Appearance.colors.colLayer2
+            colBackgroundHover: Appearance.colors.colLayer2Hover
+            colRipple: Appearance.colors.colLayer2Active
+            onClicked: root.frameworkRequested()
+
+            readonly property string detail: {
+                if (!FanControl.frameworkReady)
+                    return Translation.tr("Setup needed");
+                const fw = FanControl.frameworkStatus;
+                const parts = [];
+                if (fw?.chargeLimit)
+                    parts.push(fw.chargeLimit < 100 ? Translation.tr("Charges to %1 %").arg(fw.chargeLimit) : Translation.tr("Charges to 100 %"));
+                if (fw?.privacy && (!fw.privacy.microphone || !fw.privacy.camera))
+                    parts.push(Translation.tr("Privacy slider on"));
+                return parts.length > 0 ? parts.join(" · ") : Translation.tr("Charge limit, fingerprint light and firmware");
+            }
+
+            contentItem: Item {
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 10
+                    anchors.rightMargin: 16
+                    spacing: 12
+
+                    MaterialShapeWrappedMaterialSymbol {
+                        text: "laptop"
+                        iconSize: 20
+                        padding: 9
+                        shape: framework.hovered ? MaterialShape.Shape.Cookie12Sided : MaterialShape.Shape.Cookie7Sided
+                        color: Appearance.colors.colSecondaryContainer
+                        colSymbol: Appearance.colors.colOnSecondaryContainer
+                    }
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 0
+                        StyledText {
+                            text: Translation.tr("Framework Laptop")
+                            font.weight: Font.DemiBold
+                            color: Appearance.colors.colOnLayer2
+                        }
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: framework.detail
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            color: FanControl.frameworkReady ? Appearance.colors.colSubtext : Appearance.colors.colError
                             elide: Text.ElideRight
                         }
                     }

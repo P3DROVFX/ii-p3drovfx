@@ -8,6 +8,7 @@ the daemon refreshes on every tick.
     ii-fand detect            capabilities as JSON (no root needed)
     ii-fand daemon            the control loop (root)
     ii-fand set '<json>'      validate + store config, signal the daemon (root, via pkexec)
+    ii-fand release           hand the fans back to the firmware (root; the unit's ExecStopPost)
 
 Fan backends, best first:
   alienware_wmi  fanN_boost 0-255, added by the EC on top of its own curve (Dell G-series,
@@ -15,6 +16,10 @@ Fan backends, best first:
   hwmon_pwm      pwmN + pwmN_enable=1 (manual) on any hwmon chip: nct67xx/it87 desktop
                  boards, thinkpad_acpi (fan_control=1), asus-nb-wmi, dell_smm on models
                  whose BIOS lets go. Full authority, so a safety floor applies.
+  framework_ec   Framework laptops: readings from the cros_ec hwmon, duty through
+                 `framework_tool --fansetduty` (the kernel exposes no pwm there), handed
+                 back with `--autofanctrl`. The EC drops the duty on suspend, so it is
+                 rewritten after every resume.
 Anything else is read-only: temperatures and RPM are still reported.
 
 Safety, regardless of the stored curve: at SAFETY_TEMP the fans are forced to 100 %,
@@ -24,7 +29,10 @@ import glob
 import json
 import math
 import os
+import re
+import shutil
 import signal
+import subprocess
 import sys
 import time
 
@@ -41,7 +49,10 @@ DEFAULT_CONFIG = {
     "interval": 2,
     "turbo": None,       # None = leave alone, True/False = enforce
     "tccOffset": None,   # None = leave alone, int = enforce (°C below TjMax)
+    # Framework laptops only (framework_tool); None = leave alone
+    "framework": {"chargeLimit": None, "fpLevel": None},
 }
+FP_LEVELS = ("high", "medium", "low", "ultra-low", "auto")
 
 
 # ── sysfs helpers ──────────────────────────────────────────────────────────────
@@ -78,6 +89,42 @@ CPU_SENSORS = ("coretemp", "k10temp", "zenpower", "cpu_thermal")
 GPU_SENSORS = ("amdgpu", "nouveau")
 
 
+# Framework EC sensor names (`cpu@4c`, `apu_f75303@4d`…) → label, and whether the curve
+# follows it. Board-ambient sensors sit far below the silicon and only add noise.
+EC_SENSORS = (
+    ("gpu_vram", "dGPU memory", True), ("gpu_vr", "dGPU VRM", True), ("gpu_amb", "dGPU ambient", False),
+    ("gpu_temp", "dGPU", True), ("apu", "APU", True), ("cpu", "CPU (EC)", True),
+    ("ambient", "Ambient", False), ("charger", "Charger", False), ("battery", "Battery", False),
+)
+
+
+def ec_sensor_label(raw):
+    key = raw.lower()
+    for prefix, label, drive in EC_SENSORS:
+        if key.startswith(prefix):
+            return label, drive
+    return raw.split("@")[0], True
+
+
+def read_temp(t):
+    """°C, or None for a sensor that is off (a powered-down dGPU reads 0 or faults)."""
+    if t.get("fault") and read_int(t["fault"], 0):
+        return None
+    v = read_int(t["path"])
+    if v is None or v <= 0:
+        return None
+    return round(v / 1000, 1)
+
+
+def tidy_labels(readings):
+    """A lone readable GPU is "GPU", even when it was the second chip found (a powered-down
+    dGPU enumerates first on the Framework 16)."""
+    gpus = [r for r in readings if re.fullmatch(r"GPU( \d+)?", r["label"])]
+    if len(gpus) == 1:
+        gpus[0]["label"] = "GPU"
+    return readings
+
+
 def find_temps():
     """CPU/GPU temperature inputs, labelled. Vendor sensors (alienware/dell) first."""
     temps = []
@@ -87,13 +134,22 @@ def find_temps():
                 if os.path.exists(f"{path}/temp{i}_input"):
                     temps.append({"id": f"{name}:{i}", "label": read(f"{path}/temp{i}_label", f"temp{i}"),
                                   "path": f"{path}/temp{i}_input"})
+        elif name == "cros_ec":
+            for inp in sorted(glob.glob(f"{path}/temp*_input"), key=lambda p: int(re.sub(r"\D", "", os.path.basename(p)) or 0)):
+                n = re.sub(r"\D", "", os.path.basename(inp))
+                label, drive = ec_sensor_label(read(f"{path}/temp{n}_label", f"temp{n}"))
+                temps.append({"id": f"{name}:{n}", "label": label, "path": inp, "drive": drive,
+                              "fault": f"{path}/temp{n}_fault"})
         elif name in CPU_SENSORS:
             # Package / Tctl is temp1 on coretemp and k10temp
             if os.path.exists(f"{path}/temp1_input"):
                 temps.append({"id": f"{name}:1", "label": "CPU", "path": f"{path}/temp1_input"})
         elif name in GPU_SENSORS:
+            # an iGPU + dGPU pair (Framework 16, hybrid laptops) shows up as two chips
             if os.path.exists(f"{path}/temp1_input"):
-                temps.append({"id": f"{name}:1", "label": "GPU", "path": f"{path}/temp1_input"})
+                gpus = sum(1 for t in temps if t["id"].split(":")[0] in GPU_SENSORS)
+                temps.append({"id": f"{name}:{gpus + 1}", "label": "GPU" if gpus == 0 else f"GPU {gpus + 1}",
+                              "path": f"{path}/temp1_input"})
     # one entry per label; the vendor sensor wins because it came first
     seen, unique = set(), []
     for t in temps:
@@ -135,9 +191,24 @@ def find_fans():
         if fans and name not in ("dell_smm", "amdgpu", "nouveau"):
             return "hwmon_pwm", fans
 
-    # read-only: any hwmon with fanN_input
+    ec = cros_ec_hwmon()
+    if ec and is_framework() and framework_tool():
+        fans = ec_fans(ec)
+        for i, f in enumerate(fans):
+            f["control"] = i          # framework_tool fan id
+        if fans:
+            return "framework_ec", fans
+
+    # read-only: any hwmon with fanN_input. The EC's own chip first: on a Framework the
+    # acpi_fan node reports one anonymous fan and amdgpu's is the dGPU's, not the laptop's.
+    if ec:
+        fans = ec_fans(ec)
+        if fans:
+            return "none", fans
     fans = []
     for path, name in hwmons():
+        if name in GPU_SENSORS:
+            continue
         for rpm in sorted(glob.glob(f"{path}/fan[0-9]_input")):
             n = rpm.split("/fan")[-1].split("_")[0]
             fans.append({"label": read(f"{path}/fan{n}_label", f"Fan {n}"), "rpm": rpm,
@@ -145,6 +216,143 @@ def find_fans():
         if fans:
             break
     return "none", fans
+
+
+def ec_fans(ec):
+    """cros_ec fans. framework_tool calls the Laptop 16's pair Left/Right (ids 0/1)."""
+    rpms = sorted(glob.glob(f"{ec}/fan[0-9]_input"))
+    names = ["Left fan", "Right fan"] if len(rpms) == 2 else []
+    fans = []
+    for i, rpm in enumerate(rpms):
+        n = rpm.split("/fan")[-1].split("_")[0]
+        fans.append({"label": read(f"{ec}/fan{n}_label") or (names[i] if names else ("Fan" if len(rpms) == 1 else f"Fan {n}")),
+                     "rpm": rpm, "max": read_int(f"{ec}/fan{n}_max", 0), "control": None})
+    return fans
+
+
+# ── Framework (framework_tool) ─────────────────────────────────────────────────
+
+FRAMEWORK_TOOL_PATHS = ("/usr/bin/framework_tool", "/usr/local/bin/framework_tool", "/usr/sbin/framework_tool",
+                        "/opt/framework-system/framework_tool")
+
+
+def is_framework():
+    return (read("/sys/class/dmi/id/sys_vendor", "") or "").lower().startswith("framework")
+
+
+def framework_tool():
+    found = shutil.which("framework_tool")
+    if found:
+        return found
+    return next((p for p in FRAMEWORK_TOOL_PATHS if os.access(p, os.X_OK)), None)
+
+
+def cros_ec_hwmon():
+    return next((p for p, n in hwmons() if n == "cros_ec"), None)
+
+
+def ft(*args, timeout=6):
+    """Run framework_tool; stdout, or None when it is missing, fails or hangs."""
+    tool = framework_tool()
+    if not tool:
+        return None
+    try:
+        r = subprocess.run([tool, *map(str, args)], capture_output=True, text=True, timeout=timeout)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return r.stdout if r.returncode == 0 else None
+
+
+def ft_sections(text):
+    """`Header` lines and indented `Key: value` lines → {header: {key: value}}; keys whose
+    padding is part of the alignment (`Door  closed`) are normalised to single spaces."""
+    out, section = {}, ""
+    for line in (text or "").splitlines():
+        if not line.strip():
+            continue
+        if not line.startswith(" ") and ":" not in line:
+            section = line.strip()
+            continue
+        if ":" in line:
+            key, _, value = line.strip().partition(":")
+            out.setdefault(section, {})[" ".join(key.split())] = value.strip()
+    return out
+
+
+def fw_charge_limit():
+    m = re.search(r"Maximum\s+(\d+)%", ft("--charge-limit") or "")
+    return int(m.group(1)) if m else None
+
+
+def fw_fp():
+    text = ft("--fp-led-level")
+    if text is None:
+        return None
+    kv = ft_sections(text).get("Fingerprint LED Brightness", {})
+    requested = kv.get("Requested")
+    level = re.sub(r"(?<=[a-z])(?=[A-Z])", "-", requested).lower() if requested else None
+    m = re.match(r"(\d+)", kv.get("Brightness", ""))
+    return {"level": level if level in FP_LEVELS else None, "pct": int(m.group(1)) if m else None}
+
+
+def fw_privacy():
+    text = ft("--privacy")
+    if not text or "Microphone" not in text:
+        return None
+    kv = {}
+    for line in text.splitlines():
+        key, _, value = line.strip().partition(":")
+        kv[key] = value.strip()
+    # Black slider = device connected = usable
+    return {"microphone": kv.get("Microphone") == "Connected", "camera": kv.get("Camera") == "Connected"}
+
+
+def fw_versions():
+    text = ft("--versions")
+    if not text:
+        return None
+    sec = ft_sections(text)
+    top = sec.get("", {})
+    board, bios, ec = sec.get("Mainboard Hardware", {}), sec.get("UEFI BIOS", {}), sec.get("EC Firmware", {})
+    return {"board": board.get("Type"), "revision": board.get("Revision"),
+            "bios": bios.get("Version"), "biosDate": bios.get("Release Date"),
+            "ec": (ec.get("Build version") or ec.get("RO Version") or "").split(" ")[0] or None,
+            "ecImage": ec.get("Current image"), "tool": top.get("Tool Version")}
+
+
+def fw_bay():
+    text = ft("--expansion-bay")
+    kv = ft_sections(text).get("Expansion Bay") if text else None
+    if not kv:
+        return None
+    return {"enabled": kv.get("Enabled") == "true", "doorClosed": kv.get("Door closed") == "true",
+            "board": kv.get("Board"), "config": kv.get("Config"), "vendor": kv.get("Vendor")}
+
+
+def charge_sysfs():
+    """The kernel's charge_control_end_threshold, when cros_charge_control provides one."""
+    for bat in sorted(glob.glob("/sys/class/power_supply/BAT*")):
+        node = f"{bat}/charge_control_end_threshold"
+        if os.path.exists(node):
+            return node
+    return None
+
+
+def set_charge_limit(pct):
+    node = charge_sysfs()
+    if node:
+        try:
+            write(node, pct)
+            return True
+        except OSError:
+            pass
+    return ft("--charge-limit", pct) is not None
+
+
+def framework_caps():
+    return {"detected": is_framework(), "tool": framework_tool() is not None,
+            "ec": cros_ec_hwmon() is not None, "chargeSysfs": charge_sysfs() is not None,
+            "laptop16": "16" in (read("/sys/class/dmi/id/product_name", "") or "")}
 
 
 def find_tcc():
@@ -197,14 +405,15 @@ def capabilities():
         "backend": backend,
         "fans": [{"label": f["label"], "max": f["max"], "rpm": read_int(f["rpm"], 0),
                   "controllable": f["control"] is not None} for f in fans],
-        "temps": [{"id": t["id"], "label": t["label"], "c": round(read_int(t["path"], 0) / 1000, 1)}
-                  for t in find_temps()],
+        "temps": tidy_labels([{"id": t["id"], "label": t["label"], "c": c, "drive": t.get("drive", True)}
+                              for t in find_temps() for c in [read_temp(t)] if c is not None]),
         "turbo": {"available": node is not None, "enabled": read_turbo()},
         "tcc": {"available": tcc is not None, "max": read_int(f"{tcc}/max_state", 0) if tcc else 0,
                 "current": read_int(f"{tcc}/cur_state") if tcc else None, "tjmax": tjmax()},
         "platformProfiles": platform_profiles(),
         "product": read("/sys/class/dmi/id/product_name", ""),
         "vendor": read("/sys/class/dmi/id/sys_vendor", ""),
+        "framework": framework_caps(),
     }
 
 
@@ -230,6 +439,12 @@ def validate(cfg):
     out["turbo"] = None if turbo is None else bool(turbo)
     tcc = cfg.get("tccOffset")
     out["tccOffset"] = None if tcc is None else clamp(int(tcc), 0, 63)
+    fw = cfg.get("framework") or {}
+    limit = fw.get("chargeLimit")
+    level = fw.get("fpLevel")
+    # framework_tool refuses limits under 25 %
+    out["framework"] = {"chargeLimit": None if limit is None else clamp(int(limit), 25, 100),
+                        "fpLevel": level if level in FP_LEVELS else None}
     return out
 
 
@@ -299,7 +514,17 @@ def cmd_daemon():
     def to_raw(pct):
         return round(clamp(pct, 0, 100) * 255 / 100)
 
+    # framework_tool can't read the duty back: remember what was sent
+    fw = {"duty": None, "sent": 0.0}
+    extras = is_framework() and framework_tool() is not None
+    fw_state = {"chargeLimit": None, "fp": None, "privacy": None, "versions": None, "bay": None,
+                "chargeSysfs": charge_sysfs() is not None}
+    fw_next = {"fast": 0.0}
+
     def release(*_):
+        if backend == "framework_ec":
+            ft("--autofanctrl")
+            sys.exit(0)
         for f in fans:
             try:
                 if backend == "hwmon_pwm":
@@ -318,22 +543,58 @@ def cmd_daemon():
     signal.signal(signal.SIGINT, release)
     signal.signal(signal.SIGHUP, on_hup)
 
+    def framework_refresh(cfg, full):
+        """Read the EC's settings, put back the ones the user chose, read again what changed.
+        Every call is a framework_tool process (~35 ms), so this runs every few ticks."""
+        if full:
+            fw_state["versions"] = fw_versions()
+            if framework_caps()["laptop16"]:
+                fw_state["bay"] = fw_bay()
+        fw_state["chargeLimit"] = fw_charge_limit()
+        fw_state["fp"] = fw_fp()
+        fw_state["privacy"] = fw_privacy()
+        want = cfg["framework"]
+        if want["chargeLimit"] is not None and fw_state["chargeLimit"] != want["chargeLimit"]:
+            if set_charge_limit(want["chargeLimit"]):
+                fw_state["chargeLimit"] = fw_charge_limit()
+            else:
+                print("[-] framework: charge limit refused", file=sys.stderr, flush=True)
+        current_level = (fw_state["fp"] or {}).get("level")
+        if want["fpLevel"] is not None and current_level != want["fpLevel"]:
+            if ft("--fp-led-level", want["fpLevel"]) is not None:
+                fw_state["fp"] = fw_fp()
+            else:
+                print("[-] framework: fingerprint LED level refused", file=sys.stderr, flush=True)
+
+    def gap():
+        # grows by the time spent suspended: CLOCK_BOOTTIME counts it, monotonic doesn't
+        return time.clock_gettime(time.CLOCK_BOOTTIME) - time.monotonic()
+
+    last_gap = gap()
     current = None
     was_enabled = None
+    first = True
     while True:
+        resumed = gap() - last_gap > 1.0
+        last_gap = gap()
+        if resumed:
+            print("[+] resumed from suspend", flush=True)
+        reloaded = False
         if state["reload"]:
             state["reload"] = False
             state["cfg"] = load_config()
             current = None
+            reloaded = True
             print(f"[+] config reloaded: {json.dumps(state['cfg'])}", flush=True)
         cfg = state["cfg"]
 
         readings = []
         for t in temps:
-            v = read_int(t["path"])
-            if v is not None:
-                readings.append({"label": t["label"], "c": round(v / 1000, 1)})
-        hottest = max((r["c"] for r in readings), default=None)
+            c = read_temp(t)
+            if c is not None:
+                readings.append({"label": t["label"], "c": c, "drive": t.get("drive", True)})
+        tidy_labels(readings)
+        hottest = max((r["c"] for r in readings if r["drive"]), default=None)
 
         # fan curve
         target = None
@@ -346,7 +607,16 @@ def cmd_daemon():
                     current = min(current, curve_pct(cfg["curve"], hottest + cfg["hysteresis"]))
                 applied = 100.0 if hottest >= SAFETY_TEMP else current
                 raw = to_raw(applied)
-                for f in fans:
+                if backend == "framework_ec":
+                    duty = round(applied)
+                    # resend on change, after a resume (the EC forgets it) and once a minute
+                    if duty != fw["duty"] or resumed or time.monotonic() - fw["sent"] > 60:
+                        if ft("--fansetduty", duty) is not None:
+                            fw["duty"], fw["sent"] = duty, time.monotonic()
+                        else:
+                            fw["duty"] = None
+                            print("[-] framework_tool --fansetduty failed", file=sys.stderr, flush=True)
+                for f in (fans if backend != "framework_ec" else []):
                     try:
                         if backend == "hwmon_pwm" and read_int(f["enable"]) != 1:
                             write(f["enable"], 1)
@@ -356,7 +626,10 @@ def cmd_daemon():
                         print(f"[-] {f['control']}: {e}", file=sys.stderr, flush=True)
             elif was_enabled is not False:
                 # just disabled: hand the fans back to the firmware
-                for f in fans:
+                if backend == "framework_ec":
+                    ft("--autofanctrl")
+                    fw["duty"] = None
+                for f in (fans if backend != "framework_ec" else []):
                     try:
                         write(f["enable"] if backend == "hwmon_pwm" else f["control"],
                               2 if backend == "hwmon_pwm" else 0)
@@ -382,6 +655,11 @@ def cmd_daemon():
                 except OSError as e:
                     print(f"[-] tcc: {e}", file=sys.stderr, flush=True)
 
+        if extras and (first or reloaded or resumed or time.monotonic() >= fw_next["fast"]):
+            framework_refresh(cfg, full=first or resumed)
+            fw_next["fast"] = time.monotonic() + 10
+        first = False
+
         try:
             write_status({
                 "time": int(time.time()),
@@ -392,14 +670,33 @@ def cmd_daemon():
                 "targetPct": None if current is None else round(current, 1),
                 "safety": hottest is not None and hottest >= SAFETY_TEMP,
                 "fans": [{"label": f["label"], "rpm": read_int(f["rpm"], 0), "max": f["max"],
-                          "raw": read_int(f["control"]) if f["control"] else None} for f in fans],
+                          "raw": (None if f["control"] is None
+                                  else to_raw(fw["duty"]) if backend == "framework_ec" and fw["duty"] is not None
+                                  else None if backend == "framework_ec"
+                                  else read_int(f["control"]))} for f in fans],
                 "turbo": read_turbo(),
                 "tcc": read_int(f"{tcc}/cur_state") if tcc else None,
+                "framework": fw_state if extras else None,
                 "config": cfg,
             })
         except OSError:
             pass
         time.sleep(cfg["interval"])
+
+
+def cmd_release():
+    """Hand the fans back to the firmware. The unit runs it after the daemon stops, so a
+    crash never leaves a manual duty or pwm behind."""
+    backend, fans = find_fans()
+    if backend == "framework_ec":
+        ft("--autofanctrl")
+    elif backend == "hwmon_pwm":
+        for f in fans:
+            try:
+                write(f["enable"], 2)
+            except OSError:
+                pass
+    return 0
 
 
 def main(argv):
@@ -408,6 +705,8 @@ def main(argv):
         return 0
     if argv[1] == "daemon":
         return cmd_daemon()
+    if argv[1] == "release":
+        return cmd_release()
     if argv[1] == "set" and len(argv) == 3:
         return cmd_set(argv[2])
     if argv[1] == "curve" and len(argv) == 3:   # debug: print the curve for a config

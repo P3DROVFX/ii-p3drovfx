@@ -179,6 +179,12 @@ ContentPage {
         }
     }
 
+    // ── a Framework missing a requirement: say which one instead of the generic hint ──
+    FrameworkRequirements {
+        Layout.fillWidth: true
+        visible: FanControl.ready && FanControl.isFramework && !FanControl.frameworkReady
+    }
+
     ThermalHero {
         Layout.fillWidth: true
     }
@@ -306,7 +312,9 @@ ContentPage {
                 ? Translation.tr("alienware-wmi fan boost (kernel driver)")
                 : FanControl.backend === "hwmon_pwm"
                     ? Translation.tr("hwmon PWM, manual mode")
-                    : Translation.tr("None: the firmware keeps the fans")
+                    : FanControl.backend === "framework_ec"
+                        ? Translation.tr("Framework EC duty through framework_tool")
+                        : Translation.tr("None: the firmware keeps the fans")
             StyledText {
                 text: FanControl.daemonRunning ? Translation.tr("Service running") : Translation.tr("Service stopped")
                 font.pixelSize: Appearance.font.pixelSize.smaller
@@ -318,7 +326,7 @@ ContentPage {
     // ── no control at all ──
     StyledText {
         Layout.fillWidth: true
-        visible: FanControl.ready && !FanControl.controllable
+        visible: FanControl.ready && !FanControl.controllable && !FanControl.isFramework
         text: Translation.tr("No writable fan interface was found. Desktop boards usually need their Super I/O driver (nct6775, it87); ThinkPads need thinkpad_acpi with fan_control=1; other laptops may only offer the power profiles in Quick Settings.")
         font.pixelSize: Appearance.font.pixelSize.smaller
         color: Appearance.colors.colSubtext

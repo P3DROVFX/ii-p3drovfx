@@ -40,7 +40,11 @@ SpinBox {
             font.pixelSize: Appearance.font.pixelSize.normal
             validator: root.validator
             onTextChanged: {
-                root.value = parseFloat(text);
+                // Only typed text: echoing our own value back would break the caller's
+                // `value:` binding the first time the text is set.
+                const typed = parseFloat(text);
+                if (!isNaN(typed) && typed !== root.value)
+                    root.value = typed;
             }
         }
     }
