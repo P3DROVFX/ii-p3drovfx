@@ -13,6 +13,7 @@ Machine-readable lines on stdout (the Settings page parses them):
   @@PROGRESS <keys_done> <keys_total> <batch> <batches>
   @@ERROR <message>
   @@DONE <keys_translated> <keys_failed>
+  @@USAGE <input_tokens> <output_tokens> <api_equivalent_usd>   (claude provider, per batch)
 
 Exit codes: 0 everything translated, 1 nothing could run, 2 some batches failed.
 """
@@ -45,6 +46,7 @@ def instruction_for(target_locale: str) -> str:
         "Given a JSON object of key-value pairs, return a JSON with the exact same structure, "
         f"with keys unchanged and values translated to {target_locale}. "
         "Keep placeholders such as %1, %2 and \\n exactly as they are. "
+        "Leave product names, commands, file names, keys and proper nouns unchanged. "
         "Be as **concise** as possible to save screen space, and make sure terminology is relevant "
         '(e.g. "discharging" refers to the battery status). '
         "Reply with the JSON object only."
@@ -133,6 +135,11 @@ def translate_claude(batch: dict, locale: str, model: str, claude_bin: str) -> d
         raise RuntimeError(f"claude CLI failed: {tail[0]}") from None
     if envelope.get("is_error") or result.returncode != 0:
         raise RuntimeError(f"claude CLI: {str(envelope.get('result', 'error')).strip()[:200]}")
+    usage = envelope.get("usage") or {}
+    emit("USAGE",
+         usage.get("input_tokens", 0) + usage.get("cache_creation_input_tokens", 0) + usage.get("cache_read_input_tokens", 0),
+         usage.get("output_tokens", 0),
+         f"{float(envelope.get('total_cost_usd') or 0):.5f}")
     return parse_json_object(envelope.get("result", ""))
 
 
@@ -146,6 +153,8 @@ def main() -> None:
     parser.add_argument("--model", default="gemini-3.8-flash", help="Model id")
     parser.add_argument("--provider", default="auto", choices=["auto", "gemini", "claude"])
     parser.add_argument("--batch-size", type=int, default=300, help="Keys per batch")
+    parser.add_argument("--include-identical", action="store_true",
+                        help="Also translate values still identical to the English source (copied, never translated)")
     args = parser.parse_args()
 
     provider = args.provider
@@ -178,7 +187,13 @@ def main() -> None:
         except Exception as e:
             log(f"Warning: could not parse the existing target file: {e}")
 
-    missing = [(k, v) for k, v in source_data.items() if not target_data.get(k)]
+    keep_suffix = "/*keep*/"
+    def needs(key, value):
+        current = target_data.get(key)
+        if not current:
+            return True
+        return args.include_identical and current == value and not current.endswith(keep_suffix)
+    missing = [(k, v) for k, v in source_data.items() if needs(k, v)]
     total = len(missing)
     batch_size = max(1, args.batch_size)
     batches = (total + batch_size - 1) // batch_size
@@ -212,9 +227,9 @@ def main() -> None:
             target_data.update(accepted)
             failed += len(batch) - len(accepted)
             target_path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = target_path.with_suffix(".json.part")
-            tmp.write_text(json.dumps(target_data, ensure_ascii=False, indent=2), encoding="utf-8")
-            os.replace(tmp, target_path)
+            # Rewrite in place: a new inode would detach the shell's file watcher.
+            with open(target_path, "w", encoding="utf-8") as f:
+                f.write(json.dumps(target_data, ensure_ascii=False, indent=4) + "\n")
         done += len(batch)
         emit("PROGRESS", done, total, b + 1, batches)
 

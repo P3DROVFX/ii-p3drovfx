@@ -243,7 +243,7 @@ Rectangle {
                         text: root.runState === "success"
                             ? (AiTranslation.keysTotal === 0
                                 ? Translation.tr("%1 already had every string translated.").arg(AiTranslation.locale)
-                                : Translation.tr("%1 strings translated to %2; the interface now uses it.").arg(AiTranslation.keysTranslated).arg(AiTranslation.locale))
+                                : Translation.tr("%1 strings translated to %2. Pick it above to use it.").arg(AiTranslation.keysTranslated).arg(AiTranslation.locale))
                             : root.runState === "partial"
                                 ? Translation.tr("%1 strings are still missing. Generate again to retry only those.").arg(AiTranslation.keysFailed)
                                 : AiTranslation.message
