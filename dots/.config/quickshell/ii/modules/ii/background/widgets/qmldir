@@ -6,3 +6,6 @@ Supersampled 1.0 Supersampled.qml
 WidgetDelegate 1.0 WidgetDelegate.qml
 singleton WidgetsRegistry 1.0 WidgetsRegistry.qml
 WidgetStateManager 1.0 WidgetStateManager.qml
+ExpressiveCardWidget 1.0 ExpressiveCardWidget.qml
+WidgetButton 1.0 WidgetButton.qml
+WidgetTextEntry 1.0 WidgetTextEntry.qml

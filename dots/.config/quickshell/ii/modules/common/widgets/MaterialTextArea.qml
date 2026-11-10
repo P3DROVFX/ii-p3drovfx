@@ -205,7 +205,7 @@ TextArea {
     }
     wrapMode: TextEdit.Wrap
 
-    StyledTextContextMenu {
+    StyledTextContextMenuLoader {
         id: contextMenu
         targetField: root
     }

@@ -39,7 +39,11 @@ Singleton {
      * startup seed covers that window, and this takes over from it.
      */
     property bool graceElapsed: false
-    readonly property bool active: root.graceElapsed && !root.backendHasWifi
+    // Either transport can be the one missing. A backend that resolved at boot
+    // often has the Wi-Fi adapter but not the wired port (it appears after
+    // NetworkManager is up), and until NetworkManager was restarted the cable
+    // was simply invisible to the bar.
+    readonly property bool active: root.graceElapsed && (!root.backendHasWifi || !root.backendHasWired)
 
     /** True once a probe has come back, whether or not it found anything. */
     property bool loaded: false
@@ -66,6 +70,7 @@ Singleton {
     readonly property bool wifiConnected: root.wifiState === "connected"
     readonly property bool wifiConnecting: root.wifiState === "connecting"
     readonly property bool wiredConnected: root.wiredState === "connected"
+    readonly property bool wiredConnecting: root.wiredState === "connecting"
     // A port with no cable in it reads "unavailable", which is the same thing
     // the backend's `hasLink` says with a boolean.
     readonly property bool wiredHasLink: root.hasWiredDevice && root.wiredState !== "unavailable"
@@ -142,7 +147,7 @@ Singleton {
         interval: 5000
         repeat: true
         triggeredOnStart: true
-        running: root.active && (!root.loaded || root.hasWifiDevice || (root.hasWiredDevice && !root.backendHasWired))
+        running: root.active && (!root.loaded || (root.hasWifiDevice && !root.backendHasWifi) || (root.hasWiredDevice && !root.backendHasWired))
         onTriggered: root.probe()
     }
 }

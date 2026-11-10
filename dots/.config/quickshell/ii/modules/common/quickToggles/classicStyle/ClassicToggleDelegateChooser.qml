@@ -16,8 +16,11 @@ DelegateChooser {
     signal openWifiDialog
     signal openVpnDialog
     signal openTailscaleDialog
+    signal openKdeConnectDialog
     signal openIdleInhibitorDialog
     signal openModesDialog
+    signal openEasyEffectsDialog
+    signal openSmartDevicesDialog
     signal editRequested(string type)
 
     role: "toggleType"
@@ -75,6 +78,19 @@ DelegateChooser {
         }
     }
     DelegateChoice {
+        roleValue: "kdeConnect"
+        KdeConnectToggle {
+            editMode: root.editMode
+            isUnused: root.isUnused
+            toggleType: "kdeConnect"
+            draggable: root.draggable
+            onEditClicked: root.editRequested("kdeConnect")
+            altAction: () => {
+                root.openKdeConnectDialog();
+            }
+        }
+    }
+    DelegateChoice {
         roleValue: "nightLight"
         NightLight {
             editMode: root.editMode
@@ -92,6 +108,16 @@ DelegateChooser {
             toggleType: "gameMode"
             draggable: root.draggable
             onEditClicked: root.editRequested("gameMode")
+        }
+    }
+    DelegateChoice {
+        roleValue: "liveDraw"
+        LiveDrawQuickToggle {
+            editMode: root.editMode
+            isUnused: root.isUnused
+            toggleType: "liveDraw"
+            draggable: root.draggable
+            onEditClicked: root.editRequested("liveDraw")
         }
     }
     DelegateChoice {
@@ -138,6 +164,9 @@ DelegateChooser {
             toggleType: "easyEffects"
             draggable: root.draggable
             onEditClicked: root.editRequested("easyEffects")
+            altAction: () => {
+                root.openEasyEffectsDialog();
+            }
         }
     }
     DelegateChoice {
@@ -168,6 +197,35 @@ DelegateChooser {
             toggleType: "laptopKeyboard"
             draggable: root.draggable
             onEditClicked: root.editRequested("laptopKeyboard")
+        }
+    }
+    DelegateChoice {
+        roleValue: "phoneMirror"
+        PhoneMirrorToggle {
+            editMode: root.editMode
+            isUnused: root.isUnused
+            toggleType: "phoneMirror"
+            draggable: root.draggable
+            onEditClicked: root.editRequested("phoneMirror")
+            altAction: () => {
+                GlobalStates.phoneRequestSubPage = Qt.resolvedUrl(
+                    Quickshell.shellPath("modules/ii/sidebarPolicies/phone/PhoneScrcpyPage.qml"));
+                GlobalStates.policiesRequestTabIcon = "smartphone";
+                GlobalStates.openLeftSidebar();
+            }
+        }
+    }
+    DelegateChoice {
+        roleValue: "smartDevices"
+        SmartDevices {
+            editMode: root.editMode
+            isUnused: root.isUnused
+            toggleType: "smartDevices"
+            draggable: root.draggable
+            onEditClicked: root.editRequested("smartDevices")
+            altAction: () => {
+                root.openSmartDevicesDialog();
+            }
         }
     }
 }

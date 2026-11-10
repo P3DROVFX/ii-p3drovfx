@@ -22,6 +22,31 @@ Item {
     readonly property bool isConnecting: Network.wifiConnectTarget === root.wifiNetwork && !isActive
     readonly property bool hasError: Network.lastWifiExitCode !== 0 && Network.wifiErrorTarget === root.wifiNetwork
 
+    // 802.1X asks in steps that slide in one after another: the username, the
+    // password page, then the server domain.
+    readonly property bool enterprise: wifiNetwork?.enterprise ?? false
+    property string step: "password"
+    readonly property int stepPage: !root.enterprise ? 1 : (root.step === "identity" ? 1 : (root.step === "password" ? 2 : 3))
+
+    function goToStep(name: string): void {
+        root.step = name;
+        Qt.callLater(() => {
+            if (root.step === "identity")
+                identityStep.focusField();
+            else if (root.step === "domain")
+                domainStep.focusField();
+            else
+                passwordInput.forceActiveFocus();
+        });
+    }
+
+    function submitCredentials(): void {
+        if (root.enterprise)
+            Network.changePassword(root.wifiNetwork, passwordInput.text, identityStep.text.trim(), domainStep.text.trim());
+        else
+            Network.connectWithPassword(root.wifiNetwork.ssid, passwordInput.text);
+    }
+
     onHasErrorChanged: {
         if (hasError) {
             shakeAnim.start();
@@ -55,6 +80,10 @@ Item {
                 Network.wifiErrorTarget = null;
                 Network.lastWifiExitCode = 0;
             }
+            // The saved profile's values, until they are edited.
+            identityStep.text = Qt.binding(() => root.wifiNetwork?.savedIdentity ?? "");
+            domainStep.text = Qt.binding(() => root.wifiNetwork?.savedDomain ?? "");
+            root.goToStep(root.enterprise ? "identity" : "password");
         } else {
             passwordInput.text = "";
         }
@@ -81,12 +110,13 @@ Item {
     Flickable {
         id: flick
         anchors.fill: parent
-        contentWidth: flick.width * 2 + 8
+        readonly property int pages: root.enterprise ? 4 : 2
+        contentWidth: flick.width * flick.pages + 8 * (flick.pages - 1)
         contentHeight: flick.height
         interactive: false
         clip: true
 
-        contentX: root.isAskingPassword ? (flick.width + 8) : 0
+        contentX: root.isAskingPassword ? root.stepPage * (flick.width + 8) : 0
 
         Behavior on contentX {
             NumberAnimation {
@@ -218,6 +248,30 @@ Item {
                 }
             }
 
+            // 802.1X only: username, ahead of the password
+            CredentialStep {
+                id: identityStep
+                width: flick.width
+                height: flick.height
+                visible: root.enterprise
+                circleRadius: root.rFull
+                fieldRadius: root.rInner
+                failed: root.hasError
+                icon: "badge"
+                backIcon: "close"
+                backText: Translation.tr("Cancel")
+                nextIcon: "arrow_forward"
+                nextText: Translation.tr("Next")
+                placeholder: Translation.tr("Username")
+                inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
+                onBack: root.wifiNetwork.askingPassword = false
+                // Empty keeps the saved identity, when there is one to keep.
+                onNext: {
+                    if (identityStep.text.trim().length > 0 || (root.wifiNetwork?.savedIdentity ?? "").length > 0)
+                        root.goToStep("password");
+                }
+            }
+
             // PAGE 2: Password entry row (passwordRow)
             RowLayout {
                 id: passwordRow
@@ -230,8 +284,9 @@ Item {
                     id: lockCircle
                     width: 56
                     height: 56
+                    // Goes back to the username on 802.1X, cancels otherwise
                     color: root.hasError ? Appearance.colors.colError
-                           : (cancelMouseArea.containsMouse ? Appearance.colors.colErrorContainer : Appearance.colors.colSurfaceContainerHighest)
+                           : (cancelMouseArea.containsMouse ? (root.enterprise ? Appearance.colors.colSurfaceContainerHighestHover : Appearance.colors.colErrorContainer) : Appearance.colors.colSurfaceContainerHighest)
 
                     Behavior on color {
                         animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
@@ -259,11 +314,11 @@ Item {
 
                     MaterialSymbol {
                         anchors.centerIn: parent
-                        text: root.hasError ? "close" : (cancelMouseArea.containsMouse ? "close" : "password")
+                        text: root.hasError ? "close" : (cancelMouseArea.containsMouse ? (root.enterprise ? "arrow_back" : "close") : "password")
                         fill: 1
                         iconSize: 22
                         color: root.hasError ? Appearance.colors.colOnError
-                               : (cancelMouseArea.containsMouse ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnSurface)
+                               : (cancelMouseArea.containsMouse && !root.enterprise ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnSurface)
 
                         Behavior on color {
                             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
@@ -276,12 +331,15 @@ Item {
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
-                            root.wifiNetwork.askingPassword = false;
+                            if (root.enterprise)
+                                root.goToStep("identity");
+                            else
+                                root.wifiNetwork.askingPassword = false;
                         }
                     }
 
                     StyledToolTip {
-                        text: Translation.tr("Cancel")
+                        text: root.enterprise ? Translation.tr("Back") : Translation.tr("Cancel")
                         alternativeVisibleCondition: cancelMouseArea.containsMouse
                         extraVisibleCondition: false
                     }
@@ -463,7 +521,10 @@ Item {
                         }
 
                         onAccepted: {
-                            Network.connectWithPassword(root.wifiNetwork.ssid, passwordInput.text);
+                            if (root.enterprise)
+                                root.goToStep("domain");
+                            else
+                                root.submitCredentials();
                         }
                     }
 
@@ -491,7 +552,7 @@ Item {
                     // Checkmark
                     MaterialSymbol {
                         anchors.centerIn: parent
-                        text: (Network.lastWifiExitCode !== 0 && Network.wifiConnectTarget === root.wifiNetwork) ? "close" : "check"
+                        text: root.enterprise ? "arrow_forward" : ((Network.lastWifiExitCode !== 0 && Network.wifiConnectTarget === root.wifiNetwork) ? "close" : "check")
                         fill: 1
                         iconSize: 22
                         color: Appearance.colors.colOnPrimaryContainer
@@ -524,16 +585,183 @@ Item {
                         cursorShape: Qt.PointingHandCursor
                         enabled: !root.isConnecting
                         onClicked: {
-                            Network.connectWithPassword(root.wifiNetwork.ssid, passwordInput.text);
+                            if (root.enterprise)
+                                root.goToStep("domain");
+                            else
+                                root.submitCredentials();
                         }
                     }
 
                     StyledToolTip {
-                        text: Translation.tr("Connect")
+                        text: root.enterprise ? Translation.tr("Next") : Translation.tr("Connect")
                         alternativeVisibleCondition: confirmMouseArea.containsMouse
                         extraVisibleCondition: false
                     }
                 }
+            }
+
+            // 802.1X only: server domain, after the password. Shows the saved
+            // one; clearing it turns the certificate check off.
+            CredentialStep {
+                id: domainStep
+                width: flick.width
+                height: flick.height
+                visible: root.enterprise
+                circleRadius: root.rFull
+                fieldRadius: root.rInner
+                busy: root.isConnecting
+                icon: "dns"
+                backIcon: "arrow_back"
+                backText: Translation.tr("Back")
+                nextIcon: "check"
+                nextText: Translation.tr("Connect")
+                placeholder: Translation.tr("Server domain (optional)")
+                inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText | Qt.ImhUrlCharactersOnly
+                onBack: root.goToStep("password")
+                onNext: root.submitCredentials()
+            }
+        }
+    }
+
+    // A plain-text step of the 802.1X prompt, shaped like the password page:
+    // a circle to go back, the field, a circle to go on.
+    component CredentialStep: RowLayout {
+        id: credentialStep
+
+        property string icon
+        property string backIcon
+        property string backText
+        property string nextIcon
+        property string nextText
+        property string placeholder
+        property bool failed: false
+        property bool busy: false
+        property real circleRadius
+        property real fieldRadius
+        property alias text: field.text
+        property alias inputMethodHints: field.inputMethodHints
+
+        signal back
+        signal next
+
+        function focusField(): void {
+            field.forceActiveFocus();
+        }
+
+        spacing: 4
+
+        Rectangle {
+            Layout.preferredWidth: 56
+            Layout.preferredHeight: 56
+            radius: credentialStep.circleRadius
+            color: credentialStep.failed ? Appearance.colors.colError
+                   : (backArea.containsMouse ? Appearance.colors.colSurfaceContainerHighestHover : Appearance.colors.colSurfaceContainerHighest)
+
+            Behavior on color {
+                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+            }
+
+            MaterialSymbol {
+                anchors.centerIn: parent
+                text: backArea.containsMouse ? credentialStep.backIcon : credentialStep.icon
+                fill: 1
+                iconSize: 22
+                color: credentialStep.failed ? Appearance.colors.colOnError : Appearance.colors.colOnSurface
+            }
+
+            MouseArea {
+                id: backArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: credentialStep.back()
+            }
+
+            StyledToolTip {
+                text: credentialStep.backText
+                alternativeVisibleCondition: backArea.containsMouse
+                extraVisibleCondition: false
+            }
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 56
+            radius: credentialStep.fieldRadius
+            color: Appearance.colors.colSurfaceContainerHighest
+
+            StyledTextInput {
+                id: field
+                anchors {
+                    fill: parent
+                    leftMargin: 16
+                    rightMargin: 16
+                }
+                verticalAlignment: TextInput.AlignVCenter
+                color: Appearance.colors.colOnSurface
+                font.bold: true
+                clip: true
+
+                onAccepted: credentialStep.next()
+
+                StyledText {
+                    anchors.fill: parent
+                    verticalAlignment: Text.AlignVCenter
+                    elide: Text.ElideRight
+                    text: credentialStep.placeholder
+                    color: ColorUtils.transparentize(Appearance.colors.colOnSurface, 0.4)
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    visible: field.text.length === 0
+                }
+            }
+        }
+
+        Rectangle {
+            Layout.preferredWidth: 56
+            Layout.preferredHeight: 56
+            radius: credentialStep.circleRadius
+            color: Appearance.colors.colPrimaryContainer
+
+            MaterialSymbol {
+                anchors.centerIn: parent
+                text: credentialStep.nextIcon
+                fill: 1
+                iconSize: 22
+                color: Appearance.colors.colOnPrimaryContainer
+                opacity: credentialStep.busy ? 0 : 1
+                Behavior on opacity { NumberAnimation { duration: 200 } }
+            }
+
+            MaterialShape {
+                anchors.centerIn: parent
+                width: 22
+                height: 22
+                shape: MaterialShape.Shape.Cookie7Sided
+                color: Appearance.colors.colOnPrimaryContainer
+                opacity: credentialStep.busy ? 1 : 0
+                Behavior on opacity { NumberAnimation { duration: 200 } }
+                RotationAnimator on rotation {
+                    from: 0
+                    to: 360
+                    duration: 2000
+                    loops: Animation.Infinite
+                    running: credentialStep.busy
+                }
+            }
+
+            MouseArea {
+                id: nextArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                enabled: !credentialStep.busy
+                onClicked: credentialStep.next()
+            }
+
+            StyledToolTip {
+                text: credentialStep.nextText
+                alternativeVisibleCondition: nextArea.containsMouse
+                extraVisibleCondition: false
             }
         }
     }

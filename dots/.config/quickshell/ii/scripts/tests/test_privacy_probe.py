@@ -78,6 +78,44 @@ class PipewireClassificationTests(unittest.TestCase):
             [],
         )
 
+    def test_internal_audio_capture_stream_is_not_reported(self):
+        self.assertEqual(
+            self.streams_for([
+                pw_node(
+                    "Stream/Input/Audio/Internal",
+                    **{
+                        "node.name": "bluez_capture_internal.E8:EE:CC:96:31:3A",
+                        "node.description": "Bluetooth internal capture stream for Soundcore Life Q30",
+                        "bluez5.loopback": True,
+                    },
+                ),
+            ]),
+            [],
+        )
+
+    def test_wireplumber_owned_stream_is_not_reported(self):
+        client = {
+            "id": 165,
+            "type": "PipeWire:Interface:Client",
+            "info": {
+                "props": {
+                    "application.name": "WirePlumber [client]",
+                    "application.process.binary": "wireplumber",
+                },
+            },
+        }
+        node = pw_node(
+            "Stream/Input/Audio",
+            **{
+                "client.id": 165,
+                "node.description": "Internal routing",
+            },
+        )
+        node.update({"id": 149, "type": "PipeWire:Interface:Node"})
+        with mock.patch.object(privacy_probe.subprocess, "run", return_value=pw_dump([client, node])):
+            streams = privacy_probe.pipewire_streams()
+        self.assertEqual(streams, [])
+
     def test_a_broken_pw_dump_is_survivable(self):
         with mock.patch.object(
             privacy_probe.subprocess,
@@ -168,6 +206,110 @@ class CollectTests(unittest.TestCase):
         probe.assert_not_called()
 
 
+class PipewireMonitorTests(unittest.TestCase):
+    """The monitor mirrors nodes from `pw-dump --monitor` output, fed here by hand."""
+
+    @staticmethod
+    def dump(objects):
+        # pw-dump prints each array pretty, closing with "]" at column 0.
+        return (json.dumps(objects, indent=2) + "\n").encode()
+
+    @staticmethod
+    def node(node_id, media_class, state="running", **props):
+        obj = pw_node(media_class, state, **props)
+        obj.update({"id": node_id, "type": "PipeWire:Interface:Node"})
+        return obj
+
+    def test_a_running_input_stream_is_reported_once_the_dump_is_read(self):
+        monitor = privacy_probe.PipewireMonitor()
+        payload = self.dump([self.node(5, "Stream/Input/Audio", **{"application.name": "Firefox"})])
+        # Split mid-array: a partial array must not be parsed early.
+        self.assertFalse(monitor._feed(payload[:20]))
+        self.assertFalse(monitor.ready)
+        self.assertTrue(monitor._feed(payload[20:]))
+        self.assertTrue(monitor.ready)
+        self.assertEqual([item["app"] for item in monitor.streams()], ["Firefox"])
+
+    def test_an_update_replaces_the_node_and_a_removal_drops_it(self):
+        monitor = privacy_probe.PipewireMonitor()
+        monitor._feed(self.dump([self.node(5, "Stream/Input/Audio", **{"application.name": "obs"})]))
+        monitor._feed(self.dump([self.node(5, "Stream/Input/Audio", state="suspended",
+                                           **{"application.name": "obs"})]))
+        self.assertEqual(monitor.streams(), [])
+        monitor._feed(self.dump([self.node(5, "Stream/Input/Audio", **{"application.name": "obs"})]))
+        self.assertEqual(len(monitor.streams()), 1)
+        self.assertTrue(monitor._feed(self.dump([{"id": 5, "info": None}])))
+        self.assertEqual(monitor.streams(), [])
+
+    def test_non_node_objects_are_not_mirrored(self):
+        monitor = privacy_probe.PipewireMonitor()
+        monitor._feed(self.dump([
+            {"id": 9, "type": "PipeWire:Interface:Port", "info": {"props": {}}},
+            {"id": 38, "type": "PipeWire:Interface:Metadata", "metadata": []},
+        ]))
+        self.assertEqual(monitor.nodes, {})
+        # A metadata change arrives with info null but keeps its type: not a removal.
+        self.assertFalse(monitor._feed(self.dump([{"id": 38, "type": "PipeWire:Interface:Metadata",
+                                                   "info": None}])))
+
+    def test_internal_audio_stream_ignored_by_monitor(self):
+        monitor = privacy_probe.PipewireMonitor()
+        node = self.node(
+            149,
+            "Stream/Input/Audio/Internal",
+            **{
+                "node.name": "bluez_capture_internal.E8:EE:CC:96:31:3A",
+                "node.description": "Bluetooth internal capture stream for Soundcore Life Q30",
+                "bluez5.loopback": True,
+            },
+        )
+        monitor._feed(self.dump([node]))
+        self.assertEqual(monitor.streams(), [])
+
+
+class NodeWatchTests(unittest.TestCase):
+    """Real inotify on a temp file standing in for a capture node."""
+
+    def setUp(self):
+        handle, self.node = tempfile.mkstemp(prefix="privacy-probe-node-")
+        os.close(handle)
+        self.addCleanup(os.unlink, self.node)
+        self.watch = privacy_probe.NodeWatch()
+        if self.watch.fd is None:
+            self.skipTest("inotify unavailable")
+        self.addCleanup(os.close, self.watch.fd)
+        self.watch.watch({self.node: "Fake webcam"})
+        self.watch.mark_walked()
+
+    def test_every_node_watched_means_no_polling_fallback(self):
+        self.assertTrue(self.watch.complete)
+        self.watch.watch({self.node: "Fake webcam", "/nonexistent/video9": "gone"})
+        self.assertFalse(self.watch.complete)
+
+    def test_open_then_close_is_enumeration_not_use(self):
+        os.close(os.open(self.node, os.O_RDONLY))
+        self.assertTrue(self.watch.drain())
+        self.assertFalse(self.watch.moved())
+
+    def test_a_node_kept_open_moves_the_count_and_its_close_moves_it_back(self):
+        handle = os.open(self.node, os.O_RDONLY)
+        try:
+            self.watch.drain()
+            self.assertTrue(self.watch.moved())
+            self.watch.mark_walked()
+            self.assertFalse(self.watch.moved())
+        finally:
+            os.close(handle)
+        self.watch.drain()
+        self.assertTrue(self.watch.moved())
+
+    def test_a_lost_event_queue_forces_a_walk(self):
+        self.watch._count(privacy_probe.NodeWatch.EVENT.pack(-1, privacy_probe.NodeWatch.IN_Q_OVERFLOW, 0, 0))
+        self.assertTrue(self.watch.moved())
+        self.watch.mark_walked()
+        self.assertFalse(self.watch.moved())
+
+
 class OutputTests(unittest.TestCase):
     def test_once_emits_a_single_payload(self):
         output = io.StringIO()
@@ -194,8 +336,8 @@ class QmlIntegrationContractTests(unittest.TestCase):
     def test_the_widget_has_a_single_design(self):
         widget_registry = (REPO_ROOT / "modules/ii/bar/registry/BarWidgetRegistry.qml").read_text()
         registry = (REPO_ROOT / "modules/common/BarComponentRegistry.qml").read_text()
-        # No style key and no case in getStyle: one design, as asked.
-        self.assertNotIn("privacy_pill", widget_registry)
+        # Always expressive in widget registry, no styleConfigKey in component registry
+        self.assertIn('case "privacy_pill":', widget_registry)
         start = registry.index('id: "privacy_pill"')
         end = registry.index("}", registry.index("configPage", start))
         self.assertNotIn("styleConfigKey", registry[start:end])
@@ -204,9 +346,10 @@ class QmlIntegrationContractTests(unittest.TestCase):
         widget = (REPO_ROOT / "modules/ii/bar/widgets/privacy/PrivacyPill.qml").read_text()
         self.assertIn("Appearance.colors.colTertiary", widget)
         self.assertIn("Appearance.colors.colOnTertiary", widget)
-        # A privacy indicator must not react to the pointer.
-        self.assertNotIn("containsMouse", widget)
-        self.assertNotIn("hovered", widget.replace("hoverEnabled", "").replace("hoverTarget", ""))
+        # A privacy indicator must not react to the pointer (only lazy popup uses containsMouse).
+        cleaned = widget.replace("root.containsMouse", "").replace("hoverEnabled", "").replace("hoverTarget", "")
+        self.assertNotIn("containsMouse", cleaned)
+        self.assertNotIn("hovered", cleaned)
 
     def test_pill_animates_size_from_a_single_driver(self):
         """Two Behaviors on the same geometry is what made it jump then settle."""
@@ -250,6 +393,53 @@ class QmlIntegrationContractTests(unittest.TestCase):
     def test_location_stays_opt_in(self):
         config = (REPO_ROOT / "modules/common/Config.qml").read_text()
         self.assertIn("property bool watchLocation: false", config)
+
+    def test_privacy_service_runs_probe_only_when_needed(self):
+        service = (REPO_ROOT / "services/Privacy.qml").read_text()
+        self.assertIn("barWidgetPresent", service)
+        self.assertIn("islandWidgetPresent", service)
+        self.assertIn("needed", service)
+        self.assertIn('item.id === "privacy_pill"', service)
+        self.assertIn('IslandPolicy.widgetEnabled("privacy")', service)
+
+
+class FalseDetectionPreventionTests(unittest.TestCase):
+    def test_metadata_capture_nodes_are_excluded(self):
+        with mock.patch("os.path.exists", return_value=True):
+            with mock.patch.object(privacy_probe, "SYS_V4L", Path("/fake/sys")):
+                fake_entry = Path("/fake/sys/video1")
+                with mock.patch.object(Path, "iterdir", return_value=[fake_entry]):
+                    with mock.patch.object(privacy_probe, "query_v4l2_caps", return_value=("uvcvideo", "Webcam Metadata", privacy_probe.V4L2_CAP_META_CAPTURE)):
+                        nodes = privacy_probe.video_capture_nodes()
+                        self.assertEqual(nodes, {})
+
+    def test_scrcpy_loopback_node_is_excluded(self):
+        with mock.patch.object(privacy_probe, "SYS_V4L", Path("/fake/sys")):
+            fake_entry = Path("/fake/sys/video10")
+            with mock.patch.object(Path, "iterdir", return_value=[fake_entry]):
+                with mock.patch.object(privacy_probe, "query_v4l2_caps", return_value=("v4l2 loopback", "scrcpy-loopback", privacy_probe.V4L2_CAP_VIDEO_CAPTURE | privacy_probe.V4L2_CAP_VIDEO_OUTPUT)):
+                    nodes = privacy_probe.video_capture_nodes()
+                    self.assertEqual(nodes, {})
+
+    def test_write_only_fds_are_ignored_by_camera_users(self):
+        with mock.patch("os.readlink", return_value="/dev/video0"):
+            with mock.patch.object(privacy_probe, "process_name", return_value="producer_app"):
+                with mock.patch.object(privacy_probe, "is_write_only_fd", return_value=True):
+                    fake_entry = Path("/proc/1234")
+                    fake_handle = Path("/proc/1234/fd/3")
+                    with mock.patch.object(Path, "iterdir", side_effect=[[fake_entry], [fake_handle]]):
+                        users = privacy_probe.camera_users({"/dev/video0": "Webcam"})
+                        self.assertEqual(users, [])
+
+    def test_screencast_heuristics_prevent_false_camera_classification(self):
+        streams = privacy_probe.streams_from_objects([
+            pw_node("Stream/Input/Video", **{"media.role": "ScreenShare", "application.name": "Discord"}),
+            pw_node("Stream/Input/Video", **{"node.description": "PipeWire desktop capture", "application.name": "obs"}),
+            pw_node("Stream/Input/Video", **{"node.name": "xdg-desktop-portal-hyprland", "application.name": "portal"}),
+        ])
+        self.assertEqual(len(streams), 3)
+        for s in streams:
+            self.assertEqual(s["kind"], "screen")
 
 
 if __name__ == "__main__":

@@ -24,6 +24,10 @@ MouseArea {
 
     hoverEnabled: !BarInteraction.clickToShow
 
+    // Click-to-show gives the left click to the popup; cycling moves to the right button.
+    readonly property bool rightClickCycles: BarInteraction.cycleOnRightClick
+    acceptedButtons: rightClickCycles ? (Qt.LeftButton | Qt.RightButton) : Qt.LeftButton
+
     function abbreviateLayoutCode(fullCode) {
         if (!fullCode)
             return "";
@@ -39,7 +43,9 @@ MouseArea {
         command: ["bash", "-c", "hyprctl switchxkblayout all next"]
     }
 
-    onClicked: {
+    onClicked: mouse => {
+        if (mouse.button !== (rightClickCycles ? Qt.RightButton : Qt.LeftButton))
+            return;
         if (hasMultipleLayouts) {
             switchProc.running = false;
             switchProc.running = true;
@@ -142,8 +148,12 @@ MouseArea {
         }
     }
 
-    KeyboardLayoutPopup {
-        id: popup
-        hoverTarget: root
+    // Lazy: popup controller is only built on approach (same as ExpressiveSports).
+    PopupLoader {
+        active: BarInteraction.enablePopups
+            && (BarInteraction.clickToShow || root.containsMouse || held)
+        sourceComponent: KeyboardLayoutPopup {
+            hoverTarget: root
+        }
     }
 }

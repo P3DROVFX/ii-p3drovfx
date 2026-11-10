@@ -14,6 +14,26 @@ Item {
 
     implicitHeight: loader.item ? loader.item.implicitHeight : 0
 
+    /**
+     * Clicks that land on the row but not on the text.
+     *
+     * A row is taller than its line — the rhythm padding above and below, the gutter the
+     * bullet sits in, the margin a callout draws around itself — and all of it belongs to
+     * the paragraph. The text still takes its own clicks (a `TextEdit` accepts the press,
+     * so a tap on the glyphs never reaches this handler) and so do the buttons inside the
+     * row; what lands here is every dead pixel that used to do nothing at all.
+     */
+    TapHandler {
+        acceptedButtons: Qt.LeftButton
+        onTapped: eventPoint => {
+            const item = loader.item;
+            if (!item || typeof item.placeCaret !== "function")
+                return;
+            const point = item.mapFromItem(root, eventPoint.position.x, eventPoint.position.y);
+            item.placeCaret(point.x, point.y);
+        }
+    }
+
     Loader {
         id: loader
         width: parent.width

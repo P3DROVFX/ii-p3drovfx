@@ -18,6 +18,7 @@ import qs.services
  */
 StyledPopup {
     id: root
+    popupId: "portWatcher"
 
     stickyHover: true
     popupRadius: Appearance.rounding.large

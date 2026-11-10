@@ -91,4 +91,31 @@ Scope {
             GlobalStates.overlayOpen = !GlobalStates.overlayOpen;
         }
     }
+
+    // Performance HUD: `qs -c ii ipc call perfMonitor toggle`
+    IpcHandler {
+        target: "perfMonitor"
+
+        function toggle(): void {
+            OverlayContext.togglePerfMonitor();
+        }
+        function cycleGpu(): void {
+            OverlayContext.perfSampler?.cycleGpu();
+        }
+        function toggleFpsOnly(): void {
+            Config.options.overlay.perfMonitor.fpsOnly = !Config.options.overlay.perfMonitor.fpsOnly;
+        }
+        function cycleStyle(): void {
+            const styles = ["bars", "graph", "text"];
+            const current = styles.indexOf(Config.options.overlay.perfMonitor.style);
+            Config.options.overlay.perfMonitor.style = styles[(current + 1) % styles.length];
+        }
+    }
+
+    GlobalShortcut {
+        name: "perfMonitorToggle"
+        description: "Shows or hides the performance HUD"
+
+        onPressed: OverlayContext.togglePerfMonitor()
+    }
 }

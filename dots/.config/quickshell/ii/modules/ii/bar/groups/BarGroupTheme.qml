@@ -1,6 +1,7 @@
 import QtQuick
 import qs
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.ii.bar.shared
 
 // Computes radius and color values for a BarGroup.
@@ -18,20 +19,25 @@ QtObject {
     required property var activeTheme       // from BarThemes
     required property string widgetId
 
-    readonly property int barGroupStyle:     Config.options.bar.barGroupStyle
+    // Set by BarComponent (Settings' preview can try another style on).
+    property int barGroupStyle: Config.options.bar.barGroupStyle
     readonly property int barBackgroundStyle: Config.options.bar.barBackgroundStyle
+
+    property bool hasActiveLeftNeighbor: false
+    property bool hasActiveRightNeighbor: false
+    property bool isDefault: true
 
     // ── Radius ────────────────────────────────────────────────────────────────
     readonly property real startRadius: {
         if (barGroupStyle === 1) return Appearance.rounding.windowRounding;
-        const hasLeft = list.slice(0, originalIndex).some(i => i.visible !== false);
-        return hasLeft ? Appearance.rounding.verysmall : Appearance.rounding.full;
+        if (!isDefault) return Appearance.rounding.full;
+        return hasActiveLeftNeighbor ? Appearance.rounding.verysmall : Appearance.rounding.full;
     }
 
     readonly property real endRadius: {
         if (barGroupStyle === 1) return Appearance.rounding.windowRounding;
-        const hasRight = list.slice(originalIndex + 1).some(i => i.visible !== false);
-        return hasRight ? Appearance.rounding.verysmall : Appearance.rounding.full;
+        if (!isDefault) return Appearance.rounding.full;
+        return hasActiveRightNeighbor ? Appearance.rounding.verysmall : Appearance.rounding.full;
     }
 
     // ── Colors ────────────────────────────────────────────────────────────────
@@ -39,9 +45,7 @@ QtObject {
         if (Config.options.bar.expressiveColors) return activeTheme.componentBackground;
         if (Config.options.bar.expressiveGroupColor && (barGroupStyle === 0 || barGroupStyle === 1))
             return Appearance.colors.colPrimaryContainer;
-        if (barGroupStyle === 0) return Appearance.colors.colLayer1;
-        if (barGroupStyle === 1 && barBackgroundStyle === 1) return Appearance.colors.colLayer1;
-        if (barGroupStyle === 1) return Appearance.m3colors.m3surfaceContainerLow;
+        if (barGroupStyle === 0 || barGroupStyle === 1) return Appearance.colors.colLayer1;
         return "transparent";
     }
 
@@ -63,7 +67,7 @@ QtObject {
     }
 
     // Resolved background for BarGroup (transparent when expressive, highlight when active)
-    readonly property color resolvedBackground: ((isExpressive && widgetId !== "workspaces") || (widgetId === "system_monitor" && Config.options.bar.resources.showDocker))
+    readonly property color resolvedBackground: (isExpressive && widgetId !== "workspaces")
         ? "transparent"
         : ((activated || highlighted) ? colBackgroundHighlight : colBackground)
 }

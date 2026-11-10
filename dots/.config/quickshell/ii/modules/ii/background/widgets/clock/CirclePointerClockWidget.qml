@@ -15,7 +15,7 @@ AbstractBackgroundWidget {
 
     configEntryName: "circle_pointer_clock"
 
-    visibleWhenLocked: root.lockBehavior === "keep"
+    visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "custom"
                     || root.lockBehavior === "center"
                     || root.lockBehavior === "lockOnly"
                     || (Config.options.lock.centerWidget === "circle_pointer_clock")

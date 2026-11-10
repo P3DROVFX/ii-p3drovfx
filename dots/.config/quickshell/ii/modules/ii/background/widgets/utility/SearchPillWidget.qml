@@ -16,7 +16,7 @@ AbstractBackgroundWidget {
 
     configEntryName: "search_pill"
 
-    visibleWhenLocked: root.lockBehavior === "keep"
+    visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "custom"
                     || root.lockBehavior === "center"
                     || root.lockBehavior === "lockOnly"
                     || (Config.options.lock.centerWidget === "search_pill")

@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -10,7 +11,7 @@ AbstractBackgroundWidget {
 
     configEntryName: "grid_card_clock"
 
-    visibleWhenLocked: root.lockBehavior === "keep"
+    visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "custom"
                     || root.lockBehavior === "center"
                     || root.lockBehavior === "lockOnly"
                     || (Config.options.lock.centerWidget === "grid_card_clock")

@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import qs.modules.common
+import qs.modules.ii.dynamicIsland.core
 import qs.modules.common.widgets
 import qs.services
 
@@ -10,7 +11,12 @@ import qs.services
 Item {
     id: root
 
-    readonly property bool compVisible: timerState.visible
+    /**
+     * Out in one of the Dynamic Island's auxiliary bubbles right now, so the bar
+     * leaves it to the bubble instead of showing it twice.
+     */
+    readonly property bool bubbled: IslandGeometry.bubbled("timer")
+    readonly property bool compVisible: timerState.visible && !root.bubbled
 
     visible: root.compVisible
     implicitWidth: root.compVisible ? readoutRow.implicitWidth + 16 : 0
@@ -81,6 +87,18 @@ Item {
                 badgeCount: timerState.countdownCount
                 tooltip: timerState.countdownTooltip
                 onTriggered: timerState.toggleCountdown()
+            }
+        }
+
+        Loader {
+            active: timerState.hasUpcomingAlarm
+            visible: active
+            Layout.alignment: Qt.AlignVCenter
+            sourceComponent: TimerReadout {
+                iconName: timerState.upcomingAlarm?.phone ? "phone_android" : "alarm"
+                value: timerState.upcomingAlarmText
+                tooltip: timerState.upcomingAlarmTooltip
+                onTriggered: timerState.openUpcomingAlarm()
             }
         }
     }

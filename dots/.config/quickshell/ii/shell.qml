@@ -6,7 +6,23 @@
 // output is identical without it; it only trades a little GPU time on heavy overdraw for ~20 MB per
 // fullscreen window on HiDPI.
 //@ pragma Env QSG_NO_DEPTH_BUFFER=1
+// Qt sizes each window's texture atlas to the next power of two over the window, so every
+// full-screen layer (background, desktop widgets, island, overview transition) got a
+// 2048x2048 RGBA atlas (16 MB of VRAM) the moment it showed its first small image. The atlas
+// only batches small images; 1024x1024 holds everything up to 512 px and costs 4 MB.
+//@ pragma Env QSG_ATLAS_WIDTH=1024
+//@ pragma Env QSG_ATLAS_HEIGHT=1024
 //@ pragma Env MALLOC_CONF=dirty_decay_ms:1000,muzzy_decay_ms:1000,background_thread:true
+// FFmpeg's hardware decoders on NVIDIA create a CUDA context on the first sound of a session
+// (~40 MB that is never released). The shell only plays short sounds and two optional videos
+// (lock screen wallpaper, video editor preview), so software decoding is enough.
+//@ pragma Env QT_FFMPEG_DECODING_HW_DEVICE_TYPES=
+//@ pragma Env QT_FFMPEG_ENCODING_HW_DEVICE_TYPES=
+// Qt falls back to the basic render loop on NVIDIA's Wayland EGL, which renders every window in
+// turn on the GUI thread. When the GPU has clocked down after a while idle, the driver spin-waits
+// there for 50-200 ms and every GUI-driven animation (the overview's opening zoom first) jumps.
+// Threaded gives each window its own render thread and keeps the GUI thread's clock at 120 Hz.
+//@ pragma Env QSG_RENDER_LOOP=threaded
 
 // Remove two slashes below and adjust the value to change the UI scale
 ////@ pragma Env QT_SCALE_FACTOR=1
@@ -30,7 +46,14 @@ ShellRoot {
     // Stuff for every panel family
     ReloadPopup {}
     IdleDim {} // hypridle's 120 s dim, see hypr/hypridle.conf
+    BarPopupService {}
 
+    // Boot split: only what the FIRST PAINT needs runs during engine load.
+    // Everything else starts from a 3 s timer — panel incubation is main-thread
+    // work, and ~40 singleton initializations (each spawning one-shot probes,
+    // FileView reads or daemons) compete with it and delay the bar's first
+    // mapped frame. Services still start exactly once per engine generation:
+    // the timer re-arms on every hot reload just like Component.onCompleted did.
     Component.onCompleted: {
         if (Qt.application) {
             Qt.application.applicationName = "quickshell";
@@ -38,15 +61,47 @@ ShellRoot {
             Qt.application.organizationDomain = "unknown.organization";
         }
         MaterialThemeLoader.reapplyTheme();
+        Wallpapers.load(); // The background layer renders the wallpaper — needed for first paint
+        ConflictKiller.load(); // Startup hygiene: conflicting notification daemons must die early
+        FullGameMode.recover(); // Undo a full game mode session this shell replaces (Hyprland overrides, wallpaper)
+        deferredServicesTimer.restart();
+    }
+
+    // MangoHud has to be in Steam's environment before a game starts, so the
+    // wiring happens at shell start instead of when the HUD is first opened.
+    Process {
+        id: perfAutoWire
+        command: ["python3", Quickshell.shellPath("scripts/perfOverlay/perf_monitor.py"), "autowire",
+            "--dir", String(Directories.cache).replace(/^file:\/\//, "") + "/perf-overlay/mangohud"]
+        onExited: exitCode => {
+            if (exitCode === 0)
+                Config.options.overlay.perfMonitor.gamesAutoWired = true;
+        }
+    }
+
+    Timer {
+        id: deferredServicesTimer
+        interval: 3000
+        onTriggered: root.loadDeferredServices()
+    }
+
+    function loadDeferredServices() {
+        if (!Config.options.overlay.perfMonitor.gamesAutoWired)
+            perfAutoWire.running = true;
         Hyprsunset.load();
         DisplayColorFilter.load();
-        ConflictKiller.load();
         Cliphist.refresh();
-        Wallpapers.load();
         Updates.load();
         ShellUpdates.load(); // Touch singleton: the fork-update probe must run whether or not Settings is open
-        ShellUpdateSummary.load(); // Same: the automatic summary hooks the probe from startup
-        DarkModeService.automatic;
+        FeatureDeps.checkCore(); // One late probe: notifies once if core packages are missing
+        // The summary owns an AiTextTask, which resolves the complete AI
+        // catalog, Settings index and session store. Do not create that graph
+        // when the optional summary is disabled; opening the About page still
+        // loads it on demand through ShellUpdateSummaryCard.
+        if (Config.options?.update?.aiSummary)
+            ShellUpdateSummary.load();
+        if (Config.options?.light?.darkMode?.automatic ?? false)
+            DarkModeService.automatic;
         if (Config.options?.sounds?.enable)
             SoundService.indexReady; // Instantiate only if sound themes/effects are enabled
         if (Config.options?.background?.mediaMode?.musicVideo?.enable)
@@ -56,7 +111,19 @@ ShellRoot {
         if (Config.options?.calendar?.timetable?.notifications?.enable)
             CalendarNotifier.enabled;
         Todo.list; // Touch singleton: monitors due task notifications and done history
-        CalendarSubscriptions.enabled; // Touch singleton: keeps managed read-only ICS subscriptions reconciled
+        AlarmService.alarms; // Touch singleton: alarms ring, catch up after a suspend and schedule the wake timer
+        BedtimeService.enabled; // Bedtime reminders and tracking; idles when off but keeps its IPC
+        RemindersService.loaded; // Touch singleton: reminders alert, catch up after a suspend and schedule the wake timer
+        if (Config.options?.clockApp?.reminders?.todoSync?.enable ?? false)
+            RemindersSync.enabled; // Two-way Microsoft To Do sync
+        if (Config.options?.clockApp?.phoneAlarm?.enable ?? true)
+            PhoneAlarmService.enabled; // Mirrors the phone's next alarm over ADB
+        if (Config.options?.health?.enable ?? true)
+            HealthService.enabled; // Runs health_watch: failed services, crashes, new errors, disks
+        const timetable = Config.options?.calendar?.timetable;
+        const hasCalendarSubscriptions = (timetable?.imports?.enable ?? false) || ((timetable?.subscriptions ?? []).length > 0);
+        if (hasCalendarSubscriptions)
+            CalendarSubscriptions.enabled;
         if (Config.options?.calendar?.timetable?.imports?.enable) {
             if (Config.options?.calendar?.timetable?.imports?.gmailIcs?.enable)
                 GmailCalendarImport.enabled;
@@ -69,23 +136,33 @@ ShellRoot {
             BirthdaysService.enabled;
         if (Config.options?.googleDrive?.enabled)
             GoogleDriveService.configured;
-        AppStats.stateDir; // Instantiate: starts the usage sampler, which must collect whether or not the overlay is open
-        NotesService.ready; // Touch singleton: the notes store migrates once, on its own schedule rather than
-                            // whenever a surface happens to ask for a note first — the game overlay, the desktop
-                            // widgets and the AI tools all read it, and none of them should be the one waiting
-                            // for a migration to finish mid-interaction.
-        Modes.ready; // Touch singleton: the modes engine must watch triggers whether or not its overlay is open
+        if (Config.options?.appStats?.enable ?? false)
+            AppStats.stateDir; // Instantiate only when usage tracking is enabled
+        if ((Config.options?.appStats?.enable ?? false) && (Config.options?.screenTime?.enable ?? true))
+            ScreenTimeLimits.enabled; // Daily limits: counts focused time and opens the block screen
+        if (Config.options?.notes?.enable ?? true)
+            NotesService.ready; // Touch singleton only when the notes feature is enabled
+        if (Config.options?.modes?.enable ?? false)
+            Modes.ready; // Touch singleton only when modes are enabled
         if (Config.options?.tiling?.enable)
             TilingAssistant.enabled; // Touch singleton: watches for window drags, does nothing while disabled
-        TypeToSearch.armed; // Touch singleton: registers the type-to-search binds, does nothing while disabled
-        TouchGestureService.enabled; // Touch singleton: starts passive touch input helper daemon
-        WorkspaceCompactor.enabled; // Touch singleton: auto-compacts workspace gaps, does nothing while disabled
-        IconThemes.availableThemes; // Touch singleton: arms the DynamicTheme watcher for live icon refresh
+        if (Config.options?.launcher?.typeToSearch?.enable ?? false)
+            TypeToSearch.armed; // Register binds only when type-to-search is enabled
+        StaleFocusRelease.active; // Drops the keyboard from a window silently sent off screen
+        ClosedWindows.count; // Registers the reopen bind and keeps the closed-window stack; idle while disabled
+        if (Config.options?.interactions?.touchGestures?.enable ?? true)
+            TouchGestureService.enabled; // Start the touch helper only when gestures are enabled
+        TabletButtons.enabled; // Registers the tablet button binds and IPC; idle while disabled
+        TouchpadGestures.enabled; // Keeps the compositor's touchpad gesture snapshot in step with the config
+        if (Config.options?.bar?.workspaces?.arranger?.autoCloseGaps ?? false)
+            WorkspaceArranger.enabled; // Start the arranger's watcher only when auto-close gaps is enabled
+        // IconThemes is loaded by the settings page when its data is actually needed.
+        IiIconPack.busy; // Touch singleton: registers the iconPack IPC; idle until Settings or IPC asks for something
         if (Config.options?.dictation?.enabled)
             DictationService.installed; // Touch singleton: registers the dictation keybind, whose surfaces are all optional
         if (Config.options?.budsLink?.enabled)
             BudsLinkService.serviceAvailable; // Touch singleton: candidate-aware BudsLink lifecycle
-        EarbudsControlService.connected; // Touch singleton: provider-priority earbuds router
+        // EarbudsControlService is created by the media/Bluetooth surfaces on demand.
         if (Config.options && Config.options.policies && Config.options.policies.phone !== 0) {
             KdeConnectService.available;
             PhoneContactsService.available;
@@ -163,71 +240,92 @@ ShellRoot {
         familyUrl: Qt.resolvedUrl("panelFamilies/WaffleFamily.qml")
     }
 
-    // Settings app loaded in-process once requested, then kept alive briefly
-    // for fast re-opens. After the delay we drop the component to recover
-    // its QML memory. Positive configured delays are capped at five seconds;
-    // 0 still means keep it warm explicitly.
-    readonly property int settingsUnloadCapSeconds: 5
-
-    function settingsUnloadDelaySeconds() {
-        const settingsApp = Config.options && Config.options.settingsApp;
-        let configured = settingsApp && settingsApp.unloadAfterSeconds !== undefined
-            ? settingsApp.unloadAfterSeconds
-            : settingsUnloadCapSeconds;
-
-        if (configured <= 0)
-            return 0;
-        return Math.min(configured, settingsUnloadCapSeconds);
-    }
+    // Closing destroys the window and its page tree, at once or after
+    // `appearance.settingsUnloadDelay` seconds, or never when that is negative;
+    // a reopen before then only shows the hidden window again. Screenshot
+    // capture only hides it temporarily; its Process belongs to the current
+    // page and must survive until capture finishes.
 
     Loader {
         id: settingsLoader
-        property bool loadedOnce: false
-        active: loadedOnce || GlobalStates.settingsOpen
-        asynchronous: true
-        source: "SettingsWindow.qml"
+        // Seconds; 0 frees Settings as soon as it closes, a negative value never does.
+        readonly property int unloadDelay: Config.options?.appearance?.settingsUnloadDelay ?? 0
+        readonly property bool keepAliveWanted: unloadDelay !== 0
+        // Raised when Settings opens, not when it closes: the close would
+        // otherwise race `active` below and tear the window down first.
+        property bool keptAlive: false
 
-        // When settings closes, schedule an unload pass. If the user
-        // reopens before the timer fires, the timer is reset and we
-        // keep the warm component.
-        Timer {
-            id: settingsUnloadTimer
-            interval: root.settingsUnloadDelaySeconds() * 1000
-            repeat: false
-            onTriggered: {
-                if (GlobalStates.settingsOpen)
-                    return
-                // The visual Loader only owns the Settings object tree. These
-                // singletons outlive it, so release their page-specific data
-                // before dropping the component as well.
-                SearchRegistry.clearIndex()
-                ThemePreviewCache.release()
-                WallpaperPreviewCache.release()
-                settingsLoader.loadedOnce = false
+        active: GlobalStates.settingsOpen || GlobalStates.settingsSuspendedForScreenshot || keptAlive
+        // Synchronous: the window itself builds in a few tens of ms once
+        // compiled (see settingsWarmup), while an asynchronous build held the
+        // window back for most of a second. Pages still load asynchronously.
+        asynchronous: false
+        source: "SettingsWindow.qml"
+        onActiveChanged: {
+            if (!active && settingsGarbageCollect)
+                settingsGarbageCollect.restart();
+        }
+        onUnloadDelayChanged: {
+            settingsUnloadTimer.stop();
+            if (!keepAliveWanted) {
+                keptAlive = false;
+            } else if (GlobalStates.settingsOpen) {
+                keptAlive = true;
+            } else if (keptAlive && unloadDelay > 0) {
+                settingsUnloadTimer.restart();
             }
         }
+    }
 
-        Connections {
-            target: GlobalStates
-            function onSettingsOpenChanged() {
-                if (GlobalStates.settingsOpen) {
-                    settingsUnloadTimer.stop()
-                    if (!settingsLoader.loadedOnce)
-                        settingsLoader.loadedOnce = true
-                } else {
-                    const s = root.settingsUnloadDelaySeconds()
-                    if (s > 0) {
-                        settingsUnloadTimer.interval = s * 1000
-                        settingsUnloadTimer.restart()
-                    }
-                }
+    Timer {
+        id: settingsUnloadTimer
+        interval: Math.max(1, settingsLoader.unloadDelay) * 1000
+        onTriggered: {
+            if (!GlobalStates.settingsOpen)
+                settingsLoader.keptAlive = false;
+        }
+    }
+
+    Connections {
+        target: GlobalStates
+        function onSettingsOpenChanged() {
+            if (GlobalStates.settingsOpen) {
+                settingsUnloadTimer.stop();
+                settingsLoader.keptAlive = settingsLoader.keepAliveWanted;
+            } else if (settingsLoader.keptAlive && settingsLoader.unloadDelay > 0) {
+                settingsUnloadTimer.restart();
             }
+        }
+    }
+
+    // Compiles Settings and every page ahead of the first open. Compiling is
+    // what made the first open of a session (and each first page visit) slow;
+    // an asynchronous component compiles off the GUI thread, and the engine
+    // keeps compiled code after a first visit anyway. No objects are created.
+    Timer {
+        id: settingsWarmup
+        property var components: []
+        interval: 15000
+        running: Config.ready && components.length === 0
+        onTriggered: {
+            const urls = ["SettingsWindow.qml"].concat(SettingsPageRegistry.pages.map(page => page.component));
+            settingsWarmup.components = urls.map(url => Qt.createComponent(url, Component.Asynchronous));
+        }
+    }
+
+    // Loader deletion is deferred. Collect only after its tree and the
+    // window-owned search data have been released, never inside destruction.
+    Timer {
+        id: settingsGarbageCollect
+        interval: 0
+        onTriggered: {
+            if (!settingsLoader.active)
+                gc();
         }
     }
 
     // Welcome runs in-process so it shares Config, GlobalStates and the same
-    // Quickshell lifecycle as Settings. Unlike Settings, the onboarding is
-    // destroyed as soon as it closes so costly page trees do not stay warm.
+    // Quickshell lifecycle as Settings and is also destroyed on close.
     Loader {
         id: welcomeLoader
         active: Config.ready && GlobalStates.welcomeOpen
@@ -249,9 +347,7 @@ ShellRoot {
 
     LazyLoader {
         id: welcomeCollapsedLoader
-        readonly property bool wanted: Config.ready
-            && GlobalStates.welcomeOpen
-            && GlobalStates.welcomeCollapsed
+        readonly property bool wanted: Config.ready && GlobalStates.welcomeOpen && GlobalStates.welcomeCollapsed
         source: wanted ? "modules/welcome/WelcomeCollapsedPill.qml" : ""
         active: wanted && source !== ""
     }

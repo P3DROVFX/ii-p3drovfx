@@ -86,7 +86,48 @@ QtObject {
         "matchers": ["Shell: Toggle session menu"]
     }]
 
-    readonly property var actions: [...everydayActions, ...exploreActions]
+    /**
+     * The apps the feature tour presents. Daily limits has no key of its own:
+     * it is a tab of App usage, so it shows the key that opens App usage.
+     */
+    readonly property var featureActions: [{
+        "id": "clock",
+        "labelKey": "Clock",
+        "icon": "alarm",
+        "matchers": ["Shell: Toggle clock"]
+    }, {
+        "id": "notes",
+        "labelKey": "Notes",
+        "icon": "edit_note",
+        "matchers": ["Shell: Toggle notes"]
+    }, {
+        "id": "limits",
+        "labelKey": "Daily limits",
+        "icon": "hourglass_top",
+        "matchers": ["Shell: Toggle app usage stats"]
+    }, {
+        "id": "modes",
+        "labelKey": "Modes & routines",
+        "icon": "auto_mode",
+        "matchers": ["Shell: Toggle modes & routines"]
+    }, {
+        "id": "mediaMode",
+        "labelKey": "Media mode",
+        "icon": "music_note",
+        "matchers": ["Shell: Toggle media mode"]
+    }, {
+        "id": "health",
+        "labelKey": "System health",
+        "icon": "monitor_heart",
+        "matchers": ["Shell: Toggle System Health"]
+    }, {
+        "id": "easyEffects",
+        "labelKey": "EasyEffects",
+        "icon": "instant_mix",
+        "matchers": ["Shell: Toggle EasyEffects"]
+    }]
+
+    readonly property var actions: [...everydayActions, ...exploreActions, ...featureActions]
 
     // ── What the reader has actually tried ────────────────────────────────
     //
@@ -147,6 +188,41 @@ QtObject {
         function onSettingsOpenChanged() {
             if (GlobalStates.settingsOpen)
                 root.markPerformed("settings");
+        }
+
+        function onClockAppOpenChanged() {
+            if (GlobalStates.clockAppOpen)
+                root.markPerformed("clock");
+        }
+
+        function onNotesAppOpenChanged() {
+            if (GlobalStates.notesAppOpen)
+                root.markPerformed("notes");
+        }
+
+        function onUsageOpenChanged() {
+            if (GlobalStates.usageOpen)
+                root.markPerformed("limits");
+        }
+
+        function onModesOpenChanged() {
+            if (GlobalStates.modesOpen)
+                root.markPerformed("modes");
+        }
+
+        function onMediaModeActiveChanged() {
+            if (GlobalStates.mediaModeActive)
+                root.markPerformed("mediaMode");
+        }
+
+        function onHealthAppOpenChanged() {
+            if (GlobalStates.healthAppOpen)
+                root.markPerformed("health");
+        }
+
+        function onEasyEffectsAppOpenChanged() {
+            if (GlobalStates.easyEffectsAppOpen)
+                root.markPerformed("easyEffects");
         }
 
         function onWelcomeOpenChanged() {

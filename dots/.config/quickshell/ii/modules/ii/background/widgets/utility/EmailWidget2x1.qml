@@ -241,6 +241,10 @@ AbstractBackgroundWidget {
                             }
                         }
                     }
+
+                    TouchpadScrollHandler {
+                        flickable: emailListView
+                    }
                 }
             }
         }

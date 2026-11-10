@@ -16,6 +16,8 @@ import Quickshell
  *  - component:  page file, relative to the ii config root
  *  - subPages:   widget config files opened from this page, relative to
  *                modules/settings/configs/ (used for search indexing)
+ *  - searchSubPages: { searchSource: subPage } for a search source that indexes
+ *                a sub-page's options, so its results open that sub-page
  *  - aliases:    extra untranslated search terms (old page names etc.)
  *  - hidden:     not shown in the sidebar, excluded from keyboard cycling.
  *                Hidden pages must stay at the END of the list.
@@ -26,6 +28,9 @@ import Quickshell
  *                sidebar and in keyboard cycling; the flat `pages` array keeps every
  *                entry so page indices stay stable across families.
  *  - searchable: set false to skip the file during search indexing
+ *  - movedTo:    id of the page that now holds this one's content. The entry stays so
+ *                deep links (IPC, AI, RelatedChip, old bookmarks) keep working:
+ *                SettingsWindow.pageIndexById() resolves it to the target page.
  */
 Singleton {
     // Group 1 – Look & Feel
@@ -43,8 +48,8 @@ Singleton {
             "name": "Colors & Themes",
             "icon": "palette",
             "component": "modules/settings/configs/ColorsThemesConfig.qml",
-            "subPages": ["widgets/OpenRGBConfig.qml", "widgets/WallpaperEngineConfig.qml"],
-            "searchSources": ["sections/ColorsPreviewSection.qml", "sections/ColorsSchedulingSection.qml", "sections/ColorsWallpaperThemingSection.qml", "sections/ColorsWallpaperVariantsSection.qml"],
+            "subPages": ["widgets/OpenRGBConfig.qml", "widgets/WallpaperEngineConfig.qml", "widgets/MatugenTemplatesConfig.qml"],
+            "searchSources": ["sections/ColorsPreviewSection.qml", "sections/ColorsSchedulingSection.qml", "sections/ColorsWallpaperThemingSection.qml", "sections/ColorsWallpaperVariantsSection.qml", "sections/ColorsPickerSection.qml"],
             "aliases": []
         },
         {
@@ -52,16 +57,22 @@ Singleton {
             "name": "Bar",
             "icon": "space_bar",
             "component": "modules/settings/configs/BarConfig.qml",
-            "subPages": ["widgets/BarAppearanceConfig.qml", "widgets/BarLayoutConfig.qml", "widgets/BarWidgetsWaffleConfig.qml", "widgets/ActiveWindowConfig.qml", "widgets/SearchBarWidgetConfig.qml", "widgets/DateBarWidgetConfig.qml", "widgets/ClockBarWidgetConfig.qml", "widgets/WeatherBarWidgetConfig.qml", "widgets/MediaPlayerConfig.qml", "widgets/UtilButtonsConfig.qml", "widgets/KeyboardLayoutConfig.qml", "widgets/SystemMonitorConfig.qml", "widgets/AiPlanUsageConfig.qml", "widgets/PortWatcherConfig.qml", "widgets/PrivacyPillConfig.qml", "widgets/IndicatorsConfig.qml", "widgets/RecordIndicatorConfig.qml", "widgets/SportsConfig.qml", "widgets/BluetoothConfig.qml", "widgets/SystemTrayConfig.qml", "widgets/BatteryConfig.qml", "widgets/DashboardButtonConfig.qml", "widgets/ClockDateWidgetConfig.qml", "widgets/WaffleTweaksConfig.qml", "widgets/DockToPanelConfig.qml", "widgets/BarScrollActionsConfig.qml", "widgets/BarTooltipsConfig.qml", "widgets/BarPopupsConfig.qml"],
-            "aliases": ["Bar & Status Bar", "Status Bar", "Shell mode", "Waffle", "Bar appearance", "Bar layout", "Bar style", "Brand icon", "Bar popups", "Floating popups"]
+            "searchComponent": false,
+            "searchSources": ["sections/BarPlacementSection.qml", "sections/BarAppearanceSection.qml"],
+            "subPages": ["widgets/BarAppearanceConfig.qml", "widgets/BarLayoutConfig.qml", "widgets/BarWidgetsWaffleConfig.qml", "widgets/ActiveWindowConfig.qml", "widgets/SearchBarWidgetConfig.qml", "widgets/DateBarWidgetConfig.qml", "widgets/ClockBarWidgetConfig.qml", "widgets/WeatherBarWidgetConfig.qml", "widgets/MediaPlayerConfig.qml", "widgets/UtilButtonsConfig.qml", "widgets/KeyboardLayoutConfig.qml", "widgets/SystemMonitorConfig.qml", "widgets/AiPlanUsageConfig.qml", "widgets/PortWatcherConfig.qml", "widgets/PasswordManagerConfig.qml", "widgets/NetworkSpeedConfig.qml", "widgets/PrivacyPillConfig.qml", "widgets/IndicatorsConfig.qml", "widgets/RecordIndicatorConfig.qml", "widgets/BluetoothConfig.qml", "widgets/SystemTrayConfig.qml", "widgets/BatteryConfig.qml", "widgets/DashboardButtonConfig.qml", "widgets/ClockDateWidgetConfig.qml", "widgets/WaffleTweaksConfig.qml", "widgets/DockToPanelConfig.qml", "widgets/BarScrollActionsConfig.qml", "widgets/BarTooltipsConfig.qml", "widgets/BarPopupsConfig.qml"],
+            "aliases": ["Bar & Status Bar", "Status Bar", "Shell mode", "Waffle", "Bar appearance", "Bar layout", "Bar style", "Brand icon", "Bar popups", "Floating popups", "Click bar to open sidebars"]
         },
         {
             "id": "wallpaper",
             "name": "Background",
             "icon": "wallpaper",
             "component": "modules/settings/configs/BackgroundConfig.qml",
-            "subPages": ["widgets/ParallaxConfig.qml", "widgets/MediaModeBackgroundConfig.qml"],
-            "aliases": ["Wallpaper", "Backgrounds", "Wallpaper Engine"]
+            "subPages": ["widgets/ParallaxConfig.qml", "widgets/MediaModeBackgroundConfig.qml", "widgets/DepthEffectConfig.qml", "widgets/VideoWallpaperConfig.qml"],
+            "searchComponent": false,
+            "searchSources": ["sections/BackgroundOptionsSection.qml", "sections/ContextMenusOptionsSection.qml"],
+            // The context menus page is a sub-page here; its options open it.
+            "searchSubPages": { "sections/ContextMenusOptionsSection.qml": "widgets/ContextMenusConfig.qml" },
+            "aliases": ["Wallpaper", "Backgrounds", "Wallpaper Engine", "Context menus", "Right-click menu", "Compact menu", "Custom commands"]
         },
         {
             "id": "interfaceFonts",
@@ -69,6 +80,8 @@ Singleton {
             "icon": "font_download",
             "component": "modules/settings/configs/InterfaceFontsConfig.qml",
             "subPages": ["widgets/CustomFontsConfig.qml"],
+            "searchComponent": false,
+            "searchSources": ["sections/InterfaceFontsOptionsSection.qml"],
             "aliases": ["Base Icon Themes", "Decorative Options", "Shell family", "Panel family", "Tablet mode", "Waffle", "illogical-impulse", "Switch shell"]
         },
         {
@@ -80,6 +93,7 @@ Singleton {
                 "presets/PublishSubPage.qml",
                 "presets/PresetDetailSubPage.qml",
                 "presets/PushUpdateSubPage.qml",
+                "presets/PresetScreenshotsSubPage.qml",
                 "presets/PresetDiffSubPage.qml"
             ],
             "aliases": []
@@ -100,6 +114,8 @@ Singleton {
             "icon": "side_navigation",
             "component": "modules/settings/configs/SidebarsConfig.qml",
             "subPages": ["widgets/SidebarQuickTogglesConfig.qml", "widgets/ScreenCornersConfig.qml"],
+            "searchComponent": false,
+            "searchSources": ["sections/SidebarsOptionsSection.qml"],
             "aliases": ["Sidebars & Panels", "Panels"]
         },
         {
@@ -110,13 +126,14 @@ Singleton {
             "icon": "dock_to_bottom",
             "component": "modules/settings/configs/DockConfig.qml",
             "subPages": [
-                "widgets/DockContentConfig.qml",
+                "widgets/DockUtilitiesConfig.qml",
+                "widgets/DockOverviewButtonConfig.qml",
                 "widgets/DockAppearanceConfig.qml",
                 "widgets/DockLivePreviewConfig.qml",
-                "widgets/DockMagnificationConfig.qml",
-                "widgets/DockPresetsManager.qml"
+                "widgets/DockMagnificationConfig.qml"
             ],
-            "aliases": ["Dock Content", "Dock Widgets", "Dock Appearance", "Taskbar", "Pinned apps", "Magnification", "Smart grouping"]
+            "searchSources": ["sections/DockLookSection.qml", "sections/DockWidgetsSection.qml"],
+            "aliases": ["Dock Content", "Dock Widgets", "Widgets & buttons", "Utility widgets", "Dock presets", "Dock folders", "Stopwatch", "Pomodoro", "Shelf", "Color picker", "Dock Appearance", "Taskbar", "Pinned apps", "Magnification", "Smart grouping"]
         },
         {
             "id": "workspaces",
@@ -124,7 +141,9 @@ Singleton {
             "icon": "workspaces",
             "component": "modules/settings/configs/WorkspacesConfig.qml",
             "subPages": ["widgets/DockWorkspaceConfig.qml"],
-            "aliases": ["Tint workspaces icons"]
+            "searchComponent": false,
+            "searchSources": ["sections/WorkspacesOptionsSection.qml"],
+            "aliases": ["Tint workspaces icons", "Active indicator", "Numerals", "Workspace arranger", "Workspace compactor", "Insert workspace", "Close workspace gaps"]
         },
         {
             "id": "overview",
@@ -150,30 +169,39 @@ Singleton {
             "icon": "water_drop",
             "component": "modules/settings/configs/DynamicIslandConfig.qml",
             "subPages": [
-                "widgets/DynamicIslandStatusConfig.qml",
-                "widgets/DynamicIslandActivitiesConfig.qml"
+                "widgets/DynamicIslandActivitiesConfig.qml",
+                "features/TeleprompterConfig.qml"
             ],
-            "aliases": ["Notch", "Floating notch", "Status notches", "Activity notches", "Dynamic Island in bar center"]
+            "searchSources": ["sections/DynamicIslandModeSection.qml", "sections/DynamicIslandActivitiesSection.qml"],
+            "aliases": ["Notch", "Floating notch", "Activity notches", "Island activities", "Earbuds battery", "Weather", "Dynamic Island in bar center"]
         },
         {
             "id": "overlays",
-            "name": "Overlays & OSD",
-            "icon": "picture_in_picture",
+            "name": "Apps & Overlays",
+            "icon": "apps",
             "component": "modules/settings/configs/OverlaysConfig.qml",
             "subPages": [
+                "overlays/OsdConfig.qml",
+                "overlays/KeyboardConfig.qml",
                 "widgets/GameOverlayConfig.qml",
+                "widgets/PerfMonitorConfig.qml",
                 "widgets/OnScreenKeyboardConfig.qml",
                 "widgets/OsdIndicatorsConfig.qml"
             ],
-            "aliases": ["System Overlays", "Media overlay", "Game overlay"]
+            "aliases": ["Overlays & OSD", "System Overlays", "Media overlay", "Game overlay", "Performance HUD", "FPS counter", "MangoHud", "RivaTuner",
+                "OSD", "On-screen display", "On-screen keyboard", "Notes app", "Clock app", "EasyEffects app", "Live draw",
+                "App Usage", "Usage stats", "Screen time", "Digital wellbeing", "Sampler",
+                "Modes & Routines", "Modes", "Routines", "Automation", "Focus mode"]
         },
         {
             "id": "modes",
-            // Desktop automation; the tablet family loads no modes overlay.
-            "families": ["ii", "waffle"],
+            // Folded into Apps & Overlays as an app card (2026-11-07)
+            "movedTo": "overlays",
+            "hidden": true,
+            "searchable": false,
             "name": "Modes & Routines",
             "icon": "tune",
-            "component": "modules/settings/configs/ModesConfig.qml",
+            "component": "modules/settings/configs/OverlaysConfig.qml",
             "subPages": [],
             "aliases": ["Modes", "Routines", "Automation", "Game detection", "Focus mode", "Do not disturb", "Gaming mode", "Activity log"]
         },
@@ -207,13 +235,14 @@ Singleton {
                 "widgets/LauncherAliasesConfig.qml",
                 "widgets/LauncherModulesConfig.qml",
                 "widgets/LauncherQuicklinksConfig.qml",
+                "widgets/LauncherWebSearchConfig.qml",
                 "widgets/LauncherSnippetsConfig.qml",
                 "widgets/LauncherShortcutsConfig.qml",
                 "widgets/LauncherTypeToSearchConfig.qml",
                 "widgets/LauncherAppearanceConfig.qml",
                 "widgets/LauncherDataConfig.qml"
             ],
-            "aliases": ["App Search", "Search Prefixes", "App Aliases", "Search Modules", "Quicklinks", "Search Shortcuts", "Type to search", "Type to run", "KRunner", "Launcher Privacy", "Search matching", "Typo tolerance", "Fuzzy matching", "Best match", "Result priority", "Clipboard", "Clipboard History", "Content detectors"]
+            "aliases": ["App Search", "Search Prefixes", "App Aliases", "Search Modules", "Quicklinks", "Web search", "Engine shortcuts", "Search bangs", "Search suggestions", "Open address", "Search Shortcuts", "Type to search", "Type to run", "KRunner", "Launcher Privacy", "Search matching", "Typo tolerance", "Fuzzy matching", "Best match", "Result priority", "Clipboard", "Clipboard History", "Content detectors"]
         },
         {
             "id": "dictation",
@@ -230,12 +259,9 @@ Singleton {
             "name": "Cheat Sheet",
             "icon": "help",
             "component": "modules/settings/configs/CheatSheetConfig.qml",
-            "subPages": [
-                "widgets/CheatSheetAppearanceConfig.qml",
-                "widgets/TimetableConfig.qml",
-                "widgets/CheatsheetAminoAcidsConfig.qml",
-                "widgets/CheatsheetCommandsConfig.qml"
-            ],
+            "subPages": [],
+            "searchComponent": false,
+            "searchSources": ["sections/CheatSheetOptionsSection.qml"],
             "aliases": ["Shortcuts", "Keybinds", "Timetable", "Gmail", "Amino acids", "Commands reference", "Periodic table"]
         },
         {
@@ -243,8 +269,8 @@ Singleton {
             "name": "Windows",
             "icon": "rule",
             "component": "modules/settings/configs/WindowsConfig.qml",
-            "subPages": [],
-            "aliases": ["Hyprland Rules", "Transparency", "Blur", "Gaps", "Borders"]
+            "subPages": ["widgets/WindowsBlurConfig.qml"],
+            "aliases": ["Hyprland Rules", "Transparency", "Blur", "Advanced blur", "Gaps", "Borders", "Animations", "Alt+Tab", "Window switcher", "Task switcher"]
         },
         {
             "id": "tiling",
@@ -262,7 +288,7 @@ Singleton {
             "icon": "monitor",
             "component": "modules/settings/configs/DisplaysConfig.qml",
             "subPages": [],
-            "aliases": ["Monitors", "hyprmon", "Resolution", "Refresh rate", "Scale", "OLED Saver", "Blackout"]
+            "aliases": ["Monitors", "hyprmon", "Resolution", "Refresh rate", "Scale", "OLED Saver", "Blackout", "Always On Display", "AOD"]
         },
         {
             "id": "hyprland",
@@ -274,15 +300,26 @@ Singleton {
             "aliases": ["Compositor", "Keyboard layout", "Key repeat", "Mouse", "Touchpad", "Cursor", "Dwindle", "Master layout", "Keybinds", "Default apps", "Default applications", "XDG", "MIME types", "File associations", "Window rules", "Layer rules", "Environment variables", "hyprland.conf", "custom lua"]
         },
         {
+            "id": "startup",
+            "name": "Startup & Services",
+            "icon": "rocket_launch",
+            "component": "modules/settings/configs/StartupServicesConfig.qml",
+            "subPages": ["startup/StartupEditConfig.qml"],
+            "aliases": ["Startup apps", "Startup programs", "Autostart", "Start at login", "exec-once", "execs.lua",
+                "Services", "systemd", "Daemons", "Units", "Timers", "Enable service", "Disable service",
+                "Failed services", "journalctl", "Service log", "keyd"]
+        },
+        {
             "id": "touchGestures",
             "name": "Touch & Gestures",
             "icon": "touch_app",
             "component": "modules/settings/configs/TouchGesturesConfig.qml",
             "subPages": [
+                "widgets/TouchpadGesturesConfig.qml",
                 "widgets/TouchEdgeGesturesConfig.qml",
                 "widgets/TouchSensitivityConfig.qml"
             ],
-            "aliases": ["Touchscreen", "Touch", "Swipe", "Gestures", "Edge gestures", "Tablet", "Calibration", "Touchpad"]
+            "aliases": ["Touchscreen", "Touch", "Swipe", "Gestures", "Edge gestures", "Tablet", "Calibration", "Touchpad", "Touchpad gestures", "Pinch", "Three finger swipe", "Four finger swipe"]
         },
         {
             "id": "mediaMusic",
@@ -301,10 +338,24 @@ Singleton {
             "aliases": ["Core Services", "Language & Translation", "Time & Date", "World Clocks", "Alarms", "Translator", "Date format", "Clock format", "Custom format strings"]
         },
         {
+            "id": "apis",
+            "name": "APIs",
+            "icon": "api",
+            "component": "modules/settings/configs/ApisConfig.qml",
+            "subPages": ["apis/SportsApiConfig.qml", "apis/WeatherApiConfig.qml"],
+            "aliases": ["Sports", "Sports tracker", "ESPN", "Scores", "Leagues", "Competitions", "Teams", "Football", "Soccer",
+                "Goal celebration", "Card notices", "Data sources", "Integrations",
+                "Weather", "Weather Service", "Open-Meteo", "Forecast", "Weather location", "GPS location", "Fahrenheit", "Celsius", "Polling interval"]
+        },
+        {
             "id": "weather",
+            // Folded into APIs as a source card (2026-11-08)
+            "movedTo": "apis",
+            "hidden": true,
+            "searchable": false,
             "name": "Weather",
             "icon": "cloud",
-            "component": "modules/settings/configs/WeatherConfig.qml",
+            "component": "modules/settings/configs/ApisConfig.qml",
             "subPages": [],
             "aliases": ["Core Services", "Weather Service"]
         },
@@ -351,19 +402,24 @@ Singleton {
             "name": "Power & Battery",
             "icon": "battery_android_full",
             "component": "modules/settings/configs/PowerConfig.qml",
-            "subPages": [],
-            "aliases": ["Core Services", "Suspend", "Battery warning", "Automatic suspend",
+            "subPages": ["power/FanControlConfig.qml", "power/BatteryUsageConfig.qml",
+                "power/BatteryAlertsConfig.qml", "power/KeepAwakeConfig.qml"],
+            "aliases": ["Core Services", "Suspend", "Fan curve", "Fans", "Fan control", "Temperature",
+                "Thermals", "Turbo boost", "TCC offset", "Throttling", "Power mode", "Power profile",
+                "Power saver", "Performance", "Keep awake", "Battery history", "Battery usage by app",
+                "Keyboard backlight", "Low battery", "Critical battery", "Battery warning", "Automatic suspend",
                 "Charge limit", "Charge threshold", "Battery full notification", "Battery health"]
         },
         {
             "id": "usageStats",
+            // Folded into Apps & Overlays as an app card (2026-11-07)
+            "movedTo": "overlays",
+            "hidden": true,
+            "searchable": false,
             "name": "App Usage",
             "icon": "bar_chart",
-            "component": "modules/settings/configs/UsageStatsConfig.qml",
-            "subPages": [
-                "widgets/UsageStatsOverlayConfig.qml",
-                "widgets/UsageStatsCollectionConfig.qml"
-            ],
+            "component": "modules/settings/configs/OverlaysConfig.qml",
+            "subPages": [],
             "aliases": ["Usage stats", "Screen time", "App usage", "Digital wellbeing", "Energy per app", "RAPL", "History retention", "Sampler"]
         },
         {
@@ -381,9 +437,9 @@ Singleton {
             "name": "Devices & Phone",
             "icon": "smartphone",
             "component": "modules/settings/configs/DevicesPhoneConfig.qml",
-            "subPages": ["widgets/KdeConnectConfig.qml"],
+            "subPages": [],
             "searchSources": ["sections/PhoneBluetoothImagesSection.qml"],
-            "aliases": ["Core Services", "scrcpy", "Bluetooth Device Images", "LocalSend", "Wireless debugging", "Phone"]
+            "aliases": ["Core Services", "Bluetooth Device Images", "LocalSend", "Phone", "KDE Connect", "File Sharing", "Share files"]
         },
         {
             "id": "privacy",
@@ -398,8 +454,9 @@ Singleton {
             "name": "Lock Screen",
             "icon": "lock",
             "component": "modules/settings/configs/LockScreenConfig.qml",
-            "subPages": ["widgets/LockscreenNotificationsConfig.qml", "widgets/LockscreenEffectsConfig.qml", "widgets/LockscreenWidgetsConfig.qml", "widgets/FingerprintConfig.qml"],
-            "aliases": ["Fingerprint", "Biometrics", "fprintd", "Fingerprint reader"]
+            "subPages": ["widgets/LockscreenNotificationsConfig.qml", "widgets/FingerprintConfig.qml"],
+            "searchSources": ["sections/LockLookSection.qml", "sections/LockGeneralSection.qml"],
+            "aliases": ["Fingerprint", "Biometrics", "fprintd", "Fingerprint reader", "Lock blur", "Vignette", "Color wash", "Desaturate"]
         },
         {
             "id": "about",
@@ -464,17 +521,17 @@ Singleton {
         {
             "id": "tools",
             "name": "Tools",
-            "pageIds": ["launcher", "dictation", "screenCapture", "notifications", "overlays", "modes", "cheatSheet"]
+            "pageIds": ["launcher", "dictation", "screenCapture", "notifications", "overlays", "cheatSheet"]
         },
         {
             "id": "servicesIntegrations",
             "name": "Services & Integrations",
-            "pageIds": ["mediaMusic", "languageTime", "weather", "aiAssistant", "tasksAccounts"]
+            "pageIds": ["mediaMusic", "languageTime", "apis", "aiAssistant", "tasksAccounts", "devicesPhone"]
         },
         {
             "id": "system",
             "name": "System",
-            "pageIds": ["displays", "hyprland", "network", "soundAlerts", "touchGestures", "power", "devicesPhone", "usageStats", "privacy", "about"]
+            "pageIds": ["displays", "hyprland", "startup", "network", "soundAlerts", "touchGestures", "power", "privacy", "about"]
         }
     ]
 

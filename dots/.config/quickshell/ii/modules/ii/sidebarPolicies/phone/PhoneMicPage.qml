@@ -444,15 +444,18 @@ ContentPage {
         icon: "cable"
         title: Translation.tr("Connection")
 
-        ConfigSelectionArray {
-            text: Translation.tr("Connection type")
+        ContentSubsection {
+            title: Translation.tr("Connection type")
             icon: "router"
-            options: [
-                { displayName: Translation.tr("Wi-Fi"), icon: "wifi", value: "wifi" },
-                { displayName: Translation.tr("USB"), icon: "usb", value: "usb" }
-            ]
-            currentValue: Config.options.phone.microphone.connection
-            onSelected: (v) => Config.options.phone.microphone.connection = v
+
+            ConfigSelectionArray {
+                options: [
+                    { displayName: Translation.tr("Wi-Fi"), icon: "wifi", value: "wifi" },
+                    { displayName: Translation.tr("USB"), icon: "usb", value: "usb" }
+                ]
+                currentValue: Config.options.phone.microphone.connection
+                onSelected: (v) => Config.options.phone.microphone.connection = v
+            }
         }
 
         ConfigTextField {
@@ -461,9 +464,7 @@ ContentPage {
             icon: "ip"
             placeholderText: Translation.tr("Auto-detect from KDE Connect")
             inputText: Config.options.phone.microphone.wifiIp
-            onEditingFinished: {
-                Config.options.phone.microphone.wifiIp = inputText.trim()
-            }
+            textField.onEditingFinished: Config.options.phone.microphone.wifiIp = textField.text.trim()
             tooltip: Translation.tr("Leave empty to auto-detect from KDE Connect")
         }
 

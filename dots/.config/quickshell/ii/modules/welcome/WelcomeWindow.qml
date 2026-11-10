@@ -116,6 +116,7 @@ FloatingWindow {
                     onOpenAudioOutput: root.showAudioOutputDialog = true
                     onTrySidebar: root.trySidebarPreview()
                     onTrySearch: root.trySearchPreview()
+                    onTrySearchPanel: panelId => root.trySearchPanelPreview(panelId)
                     onOpenEditMode: root.tryEditModePreview()
 
                     onOpenSettingsPage: pageId => {
@@ -323,6 +324,21 @@ FloatingWindow {
             GlobalStates.openOverview();
             root.previewSearchOwned = !root.previewSearchWasOpen;
         }
+    }
+
+    /**
+     * The same preview as `trySearchPreview()`, landed on one panel. Owned
+     * the same way, so leaving the step closes only what the Welcome opened.
+     */
+    function trySearchPanelPreview(panelId: string): void {
+        if (!root.previewSidebarOwned && !root.previewSearchOwned) {
+            root.previewSidebarWasOpen = GlobalStates.sidebarRightOpen;
+            root.previewSearchWasOpen = GlobalStates.overviewSurfaceOpen;
+        }
+        const wasOpen = GlobalStates.overviewSurfaceOpen;
+        GlobalStates.openSearchPanel(panelId);
+        if (!wasOpen)
+            root.previewSearchOwned = !root.previewSearchWasOpen;
     }
 
     /**

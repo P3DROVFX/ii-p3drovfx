@@ -14,7 +14,7 @@ ContentPage {
     forceWidth: false
 
     readonly property string style: Config.options.bar.styles.weather ?? "default"
-    readonly property bool customStyle: root.style === "horizon" || root.style === "tessera"
+    readonly property bool customStyle: root.style === "horizon" || root.style === "tessera" || root.style === "sculpt"
 
     RowLayout {
         spacing: Appearance.rounding.small
@@ -65,6 +65,8 @@ ContentPage {
                             return horizonHorizontalPreview;
                         if (root.style === "tessera")
                             return tesseraHorizontalPreview;
+                        if (root.style === "sculpt")
+                            return sculptHorizontalPreview;
                         return null;
                     }
                 }
@@ -100,6 +102,8 @@ ContentPage {
                             return horizonVerticalPreview;
                         if (root.style === "tessera")
                             return tesseraVerticalPreview;
+                        if (root.style === "sculpt")
+                            return sculptVerticalPreview;
                         return null;
                     }
                 }
@@ -113,6 +117,7 @@ ContentPage {
 
         NoticeBox {
             Layout.fillWidth: true
+            visible: root.style !== "sculpt"
             materialIcon: root.style === "tessera" ? "view_module" : "landscape"
             text: root.style === "tessera"
                 ? Translation.tr("Tessera separates the weather icon and temperature into two compact Material pieces, with no outer pill.")
@@ -134,7 +139,8 @@ ContentPage {
                     { displayName: Translation.tr("Default"), icon: "style", value: "default" },
                     { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" },
                     { displayName: Translation.tr("Horizon"), icon: "landscape", value: "horizon" },
-                    { displayName: Translation.tr("Tessera"), icon: "view_module", value: "tessera" }
+                    { displayName: Translation.tr("Tessera"), icon: "view_module", value: "tessera" },
+                    { displayName: Translation.tr("Sculpt"), icon: "shapes", value: "sculpt" }
                 ]
             }
         }
@@ -170,7 +176,7 @@ ContentPage {
         }
 
         ContentSubsection {
-            visible: root.customStyle
+            visible: root.customStyle && root.style !== "sculpt"
             title: Translation.tr("Colour treatment")
 
             ConfigSelectionArray {
@@ -181,6 +187,59 @@ ContentPage {
                     { displayName: Translation.tr("Vibrant"), icon: "auto_awesome", value: "vibrant" },
                     { displayName: Translation.tr("Neutral"), icon: "contrast", value: "neutral" }
                 ]
+            }
+        }
+
+        ExpressiveColorModeSubsection {
+            visible: root.style === "expressive" || root.style === "sculpt"
+            currentValue: Config.options.bar.weatherWidget.colorMode
+            onSelected: newValue => Config.options.bar.weatherWidget.colorMode = String(newValue)
+        }
+
+        ContentSubsection {
+            visible: Config.options.bar.styles.weather === "sculpt"
+            title: Translation.tr("Sculpt variant")
+
+            ConfigSelectionArray {
+                currentValue: Config.options.bar.weatherWidget.sculptVariant
+                onSelected: newValue => Config.options.bar.weatherWidget.sculptVariant = String(newValue)
+                options: [
+                    { displayName: Translation.tr("Poster"), icon: "format_size", value: "poster" },
+                    { displayName: Translation.tr("Stamp"), icon: "approval", value: "stamp" },
+                    { displayName: Translation.tr("Daylight"), icon: "wb_twilight", value: "daylight" }
+                ]
+            }
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: Config.options.bar.styles.weather === "sculpt" && Config.options.bar.weatherWidget.sculptVariant === "poster"
+            materialIcon: "format_size"
+            text: Translation.tr("The temperature as a poster numeral whose weight is the warmth: hairline when it is freezing, black when it is hot. The condition beside it in a slanted voice, the city in capitals.")
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: Config.options.bar.styles.weather === "sculpt" && Config.options.bar.weatherWidget.sculptVariant === "stamp"
+            materialIcon: "approval"
+            text: Translation.tr("The sky as one display word on a card, stamped with the temperature inside a shape that is the weather itself: a sunburst, a puff of cloud, a spiky storm.")
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: Config.options.bar.styles.weather === "sculpt" && Config.options.bar.weatherWidget.sculptVariant === "daylight"
+            materialIcon: "wb_twilight"
+            text: Translation.tr("The day as an arc: the sun travels it from sunrise to sunset and a moon the night arc below it. The temperature and the next sunrise or sunset beside it.")
+        }
+
+        ConfigSwitch {
+            visible: Config.options.bar.styles.weather === "sculpt" && (Config.options.bar.weatherWidget.sculptVariant !== "stamp")
+            buttonIcon: "notes"
+            text: Translation.tr("Show details")
+            checked: Config.options.bar.weatherWidget.sculptShowDetails
+            onCheckedChanged: Config.options.bar.weatherWidget.sculptShowDetails = checked
+            StyledToolTip {
+                text: Translation.tr("Poster: condition and city. Daylight: the next sunrise or sunset. Horizontal bar only.")
             }
         }
     }
@@ -223,5 +282,15 @@ ContentPage {
     Component {
         id: tesseraVerticalPreview
         TesseraWeatherWidget { vertical: true }
+    }
+
+    Component {
+        id: sculptHorizontalPreview
+        SculptWeatherWidget { vertical: false }
+    }
+
+    Component {
+        id: sculptVerticalPreview
+        SculptWeatherWidget { vertical: true }
     }
 }

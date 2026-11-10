@@ -1,9 +1,11 @@
 pragma Singleton
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Hyprland
 import qs.modules.common
+import qs.modules.common.functions
 import qs.services
 import "modes/ModeSchema.js" as ModeSchema
 
@@ -11,12 +13,14 @@ import "modes/ModeSchema.js" as ModeSchema
  * Combined "a game is running / focused" signal for Modes, the Game Mode
  * toggle and anything else that wants it.
  *
- * Four signals, by confidence:
+ * Five signals, by confidence:
  *  1. launcher classes (steam_app_*, gamescope, heroic/lutris/bottles,
- *     minecraft/prism, fullscreen wine .exe) — instant
+ *     minecraft/prism/modrinth, omikuji, orion, bedrock, mcpelauncher,
+ *     fullscreen wine .exe) — instant
  *  2. desktop entry category "Game" — instant
  *  3. user list Config.options.modes.game.extraClasses — instant
  *  4. focused window fullscreen with GPU above `gpuThreshold` % for `holdSec`
+ *  5. MangoHud log while a game is running (opt-in, useMangoHudLog) — instant
  *
  * `reason` says which one fired ("Steam app", "fullscreen + GPU 62 %") so a
  * false positive can be diagnosed from the trigger chip.
@@ -70,8 +74,30 @@ Singleton {
     readonly property var extraRegexes: ModeSchema.classRegexes(root.settings?.extraClasses)
     readonly property var wineRegex: /\.exe$/i
 
+    // MangoHud writes a log only while it is injected into a game.
+    property string mangoHudGame: ""
+
+    property Process mangoHudWatch: Process {
+        command: ["python3", `${Directories.scriptPath}/perfOverlay/perf_monitor.py`,
+            "watch", "--mangohud-dir", FileUtils.trimFileProtocol(`${Directories.cache}/perf-overlay/mangohud`)]
+        running: root.settings?.useMangoHudLog ?? false
+        onRunningChanged: if (!running) root.mangoHudGame = ""
+        onExited: root.mangoHudGame = ""
+        stdout: SplitParser {
+            onRead: line => {
+                try {
+                    const message = JSON.parse(line);
+                    if (message.t === "game")
+                        root.mangoHudGame = String(message.process ?? "");
+                } catch (e) {}
+            }
+        }
+    }
+
     // Desktop-entry lookups are not free; remember the verdict per class.
     property var categoryCache: ({})
+
+    readonly property var toolCategories: ["Utility", "Network", "FileTransfer", "Development", "Office", "System", "Settings"]
 
     function isGameByDesktopEntry(cls) {
         if (!cls)
@@ -83,7 +109,10 @@ Singleton {
         try {
             const entry = DesktopEntries.heuristicLookup(cls);
             const cats = Array.from(entry?.categories ?? []);
-            verdict = cats.indexOf("Game") !== -1;
+            // "Game" next to a tool category (save editors, stores, trainers:
+            // Utility;Game, Network;FileTransfer;Game) is a tool about games.
+            verdict = cats.indexOf("Game") !== -1
+                && !cats.some(c => root.toolCategories.indexOf(c) !== -1);
         } catch (e) {
             verdict = false;
         }
@@ -91,9 +120,106 @@ Singleton {
         return verdict;
     }
 
+    readonly property var clientRegexes: ModeSchema.GAME_CLIENT_PATTERNS.map(p => new RegExp(p, "i"))
+
+    // Every process Steam starts for a game carries SteamGameId=<appid> (native
+    // games keep arbitrary classes like "Lightning.bin.x86_64"); the client and
+    // its web helper do not. Window pids are probed once each, off the UI thread.
+    property var steamApps: ({})     // pid -> appid, published
+    property var steamVerdicts: ({}) // pid -> appid ("0" = not a Steam game), probed
+    readonly property string windowPidKey: {
+        const seen = {};
+        for (const w of (HyprlandData.windowList ?? []))
+            if (w.pid > 0) seen[w.pid] = true;
+        return Object.keys(seen).sort().join(" ");
+    }
+    onWindowPidKeyChanged: root.probeSteam()
+    onUsersChanged: root.probeSteam()
+
+    function probeSteam() {
+        if (root.users <= 0 || steamProbe.busy)
+            return;
+        const all = root.windowPidKey.length ? root.windowPidKey.split(" ") : [];
+        const keep = {};
+        const todo = [];
+        for (const p of all) {
+            if (root.steamVerdicts[p] !== undefined)
+                keep[p] = root.steamVerdicts[p];
+            else
+                todo.push(p);
+        }
+        root.steamVerdicts = keep;
+        root.publishSteam();
+        if (todo.length === 0)
+            return;
+        steamProbe.asked = todo;
+        steamProbe.busy = true;
+        steamProbe.command = ["sh", "-c",
+            'for p; do v=$(tr "\\0" "\\n" <"/proc/$p/environ" 2>/dev/null | sed -n "s/^SteamGameId=//p" | head -n1); echo "$p ${v:-0}"; done',
+            "sh"].concat(todo);
+        steamProbe.running = true;
+    }
+
+    function publishSteam() {
+        const out = {};
+        for (const p in root.steamVerdicts)
+            if (/^[1-9]\d*$/.test(root.steamVerdicts[p]))
+                out[p] = root.steamVerdicts[p];
+        root.steamApps = out;
+    }
+
+    property Process steamProbe: Process {
+        property var asked: []
+        property bool busy: false
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const verdicts = Object.assign({}, root.steamVerdicts);
+                for (const p of steamProbe.asked)
+                    verdicts[p] = "0";
+                for (const line of text.split("\n")) {
+                    const m = line.match(/^(\d+) (\S+)$/);
+                    if (m) verdicts[m[1]] = m[2];
+                }
+                root.steamVerdicts = verdicts;
+                root.publishSteam();
+                steamProbe.busy = false;
+                Qt.callLater(root.probeSteam);
+            }
+        }
+    }
+
+    readonly property var clientTitleRules: ModeSchema.GAME_CLIENT_TITLE_RULES.map(r => ({
+        cls: new RegExp(r.cls, "i"), playing: new RegExp(r.playing, "i") }))
+
+    readonly property var ignoreRegexes: ModeSchema.classRegexes(root.settings?.ignoreClasses)
+
+    // User exclusion list: a class pattern, or the window's Steam app id.
+    function isIgnored(win) {
+        if (!win || (root.ignoreRegexes.length === 0 && !(root.settings?.ignoreClasses?.length)))
+            return false;
+        const initial = String(win.initialClass || "");
+        const current = String(win["class"] || "");
+        if (root.ignoreRegexes.some(rx => rx.test(initial) || rx.test(current)))
+            return true;
+        const app = root.steamApps[win.pid];
+        return !!app && Array.from(root.settings.ignoreClasses).some(s => String(s).trim() === app);
+    }
+
+    // A store/launcher's own window (Steam, Big Picture, its web helper).
+    function isClientWindow(win) {
+        if (!win)
+            return false;
+        const initial = String(win.initialClass || "");
+        const current = String(win["class"] || "");
+        if (root.clientRegexes.some(rx => rx.test(initial) || rx.test(current)))
+            return true;
+        const title = String(win.title || "");
+        return root.clientTitleRules.some(r => (r.cls.test(initial) || r.cls.test(current)) && !r.playing.test(title));
+    }
+
     // Returns a short reason, or "" when the window is not a game.
     function classify(win) {
-        if (!win)
+        if (!win || root.isIgnored(win))
             return "";
         const initial = String(win.initialClass || "");
         const current = String(win["class"] || "");
@@ -106,10 +232,15 @@ Singleton {
             if ((win.fullscreen ?? 0) >= 2 && (root.wineRegex.test(initial) || root.wineRegex.test(current)))
                 return `fullscreen ${cls}`;
         }
+        const steamApp = root.steamApps[win.pid];
+        if (steamApp)
+            return `Steam game ${steamApp}`;
         for (const rx of root.extraRegexes) {
             if (rx.test(initial) || rx.test(current))
                 return `listed ${cls}`;
         }
+        if (root.isClientWindow(win))
+            return "";
         if (root.settings?.useDesktopCategory ?? true) {
             if (root.isGameByDesktopEntry(current))
                 return `${cls} (Game category)`;
@@ -142,7 +273,9 @@ Singleton {
 
     readonly property int gpuPercent: Math.round((ResourceUsage.gpuUsage ?? 0) * 100)
     readonly property bool gpuCandidate: root.gpuWanted && root.focusedFullscreen
-        && root.focusedAddress.length > 0 && root.gpuPercent >= (root.settings?.gpuThreshold ?? 45)
+        && root.focusedAddress.length > 0 && !root.isClientWindow(root.focusedWindow)
+        && !root.isIgnored(root.focusedWindow)
+        && root.gpuPercent >= (root.settings?.gpuThreshold ?? 45)
     // Window that passed the hold; cleared when it closes or leaves fullscreen.
     property string gpuGameAddress: ""
     property int gpuGamePercent: 0
@@ -180,11 +313,16 @@ Singleton {
                 reason: `fullscreen + GPU ${root.gpuGamePercent} %`
             });
         }
+        if (root.mangoHudGame.length > 0 && (root.settings?.useMangoHudLog ?? false))
+            list.push({ address: "", cls: root.mangoHudGame, reason: "MangoHud log" });
         return list;
     }
     readonly property bool rawRunning: root.matches.length > 0
-    readonly property bool rawFocused: root.matches.some(m => m.address === root.focusedAddress)
-    readonly property var primaryMatch: root.matches.find(m => m.address === root.focusedAddress)
+    // The MangoHud match has no window: an empty focus must not match it.
+    readonly property bool rawFocused: root.focusedAddress.length > 0
+        && root.matches.some(m => m.address === root.focusedAddress)
+    readonly property var primaryMatch: (root.focusedAddress.length > 0
+        ? root.matches.find(m => m.address === root.focusedAddress) : undefined)
         ?? root.matches[0] ?? null
 
     property bool gameRunning: false
@@ -258,7 +396,7 @@ Singleton {
     function statusText() {
         const lines = [];
         lines.push(`running=${root.gameRunning} focused=${root.gameFocused} users=${root.users} `
-            + `gpuPolling=${root.gpuRequested} gpu=${root.gpuPercent}% `
+            + `mangohud=${root.mangoHudGame || "-"} gpuPolling=${root.gpuRequested} gpu=${root.gpuPercent}% `
             + `focusedFullscreen=${root.focusedFullscreen}`);
         for (const m of root.matches) {
             const focused = m.address === root.focusedAddress ? " (focused)" : "";

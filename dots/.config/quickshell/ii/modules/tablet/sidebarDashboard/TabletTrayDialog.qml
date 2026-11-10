@@ -24,7 +24,13 @@ WindowDialog {
     readonly property real listSpacing: Math.round(root.rowHeight * 0.16)
 
     preferredDialogWidth: Math.round(Math.min(root.width * 0.6, Math.max(420, root.rowHeight * 8)))
-    backgroundHeight: Math.min(root.height * 0.8, header.implicitHeight + closeRow.implicitHeight + itemList.implicitHeight + Appearance.rounding.large * 2 + 32)
+    readonly property real contentStackHeight: header.implicitHeight + closeRow.implicitHeight
+        + itemList.implicitHeight + Appearance.rounding.large * 2 + 32
+    // The 0.8 cap belongs to dialog mode, where the root is the full-screen overlay.
+    // As an island page the root is sized *by* this height, so a cap reading it is a
+    // loop that collapses the page (h ≤ 0.8·h) down to one row. The island already
+    // caps pages at the screen's available height.
+    backgroundHeight: pageMode ? contentStackHeight : Math.min(root.height * 0.8, contentStackHeight)
 
     StyledText {
         id: header

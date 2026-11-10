@@ -15,6 +15,7 @@ import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.modules.common.models
 import qs.modules.ii.background.widgets
+import qs.modules.common.media
 
 AbstractBackgroundWidget {
     id: root
@@ -29,7 +30,7 @@ AbstractBackgroundWidget {
     property list<real> visualizerPoints: []
 
     readonly property bool playing: player ? player.playbackState === MprisPlaybackState.Playing : false
-    readonly property string artUrl: MprisController.artUrl
+    readonly property string artUrl: root.player?.trackArtUrl ?? ""
     readonly property string trackTitle: StringUtils.cleanMusicTitle(player?.trackTitle) || Translation.tr("No media")
     readonly property string trackArtist: player?.trackArtist || Translation.tr("Unknown Artist")
     readonly property string identity: player ? (player.identity ?? "") : ""
@@ -52,54 +53,47 @@ AbstractBackgroundWidget {
         return HyprlandData.windowList.some(w => w.workspace && w.workspace.id === activeWsId);
     }
 
-    property bool isLocalArt: artUrl.startsWith("file://")
-    property string artDownloadLocation: Directories.coverArt
-    property string artFileName: Qt.md5(artUrl)
-    property string artFilePath: `${artDownloadLocation}/${artFileName}`
-    property bool artDownloaded: false
-
-    readonly property string artSource: {
-        if (!artUrl) return "";
-        if (isLocalArt) return artUrl;
-        return artDownloaded ? Qt.resolvedUrl(artFilePath) : "";
-    }
-
-    onArtFilePathChanged: {
-        if (!artUrl || artUrl.length === 0) {
-            artDownloaded = false;
-            return;
-        }
-        if (isLocalArt) {
-            artDownloaded = true;
-            return;
-        }
-        artDownloader.targetFile = artUrl;
-        artDownloader.artFilePath = artFilePath;
-        artDownloader.artTempPath = artFilePath + ".tmp";
-        artDownloaded = false;
-        artDownloader.running = true;
-    }
-
-    Process {
-        id: artDownloader
-        property string targetFile: root.artUrl
-        property string artFilePath: root.artFilePath
-        property string artTempPath: root.artFilePath + ".tmp"
-        command: ["bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
-        onExited: {
-            artDownloaded = true;
-        }
-    }
+    readonly property string artSource: CoverArt.source(root.artUrl)
 
     property string activeLyricText: ""
     property real lyricOpacity: 1.0
     property real lyricYOffset: 0.0
 
+    // Held while the host pauses the widget (windows cover the desktop): LyricsService
+    // and the bar keep moving the shared player's position, and each lyric line or
+    // progress step re-rendered the full-screen widget layer (scroll + fade bursts
+    // every ~2 s, seek bar 4x/s). Resuming jumps straight to the live values.
+    readonly property real liveProgress: MprisController.trackProgressOf(root.player)
+    readonly property int liveLyricIndex: LyricsService.currentIndex
+    property real shownProgress: 0
+    property int shownLyricIndex: -1
+    property bool lyricJump: false
+    function syncPlayback() {
+        if (!root.live)
+            return;
+        root.shownProgress = root.liveProgress;
+        root.shownLyricIndex = root.liveLyricIndex;
+    }
+    onLiveProgressChanged: root.syncPlayback()
+    onLiveLyricIndexChanged: root.syncPlayback()
+    onLiveChanged: {
+        if (!root.live)
+            return;
+        root.lyricJump = true;
+        root.syncPlayback();
+        root.lyricJump = false;
+        if (root.activeLyricText !== root.displaySongText) {
+            lyricTransitionAnimation.stop();
+            root.lyricOpacity = 1.0;
+            root.lyricYOffset = 0.0;
+            root.activeLyricText = root.displaySongText;
+        }
+    }
+
     property string displayArtist: root.trackArtist
     property real titleOpacity: 1.0
     property real titleYOffset: 0.0
 
-    property real artVignetteBlur: root.playing ? 50 : 90
 
     readonly property bool useDynamicColors: Config.options.media.dynamicAlbumColors && root.artSource !== ""
 
@@ -132,12 +126,6 @@ AbstractBackgroundWidget {
     readonly property color artTextColor: root.textColorOnBg
     readonly property color artSubtextColor: root.subtextColorOnBg
 
-    Behavior on artVignetteBlur {
-        NumberAnimation {
-            duration: 500
-            easing.type: Easing.OutCubic
-        }
-    }
 
     readonly property string displaySongText: {
         if (LyricsService.hasSyncedLines && LyricsService.statusText !== "") {
@@ -147,6 +135,8 @@ AbstractBackgroundWidget {
     }
 
     onDisplaySongTextChanged: {
+        if (!root.live)
+            return;
         lyricTransitionAnimation.stop();
         lyricTransitionAnimation.start();
     }
@@ -189,7 +179,7 @@ AbstractBackgroundWidget {
     }
 
     Timer {
-        running: root.playing && root.visible
+        running: root.playing && root.live
         interval: 1000
         repeat: true
         onTriggered: if (root.player) root.player.positionChanged()
@@ -210,12 +200,14 @@ AbstractBackgroundWidget {
     Component.onCompleted: {
         LyricsService.initiliazeLyrics();
         root.activeLyricText = root.displaySongText;
+        root.shownProgress = root.liveProgress;
+        root.shownLyricIndex = root.liveLyricIndex;
     }
 
     Item {
         id: contentItem
 
-        implicitWidth: 480
+        implicitWidth: 492
         implicitHeight: 240
 
         Loader {
@@ -232,116 +224,52 @@ AbstractBackgroundWidget {
             radius: Appearance.rounding.windowRounding + 16
             clip: true
 
-            layer.enabled: true
-            layer.effect: OpacityMask {
-                maskSource: Rectangle {
-                    width: mainBg.width
-                    height: mainBg.height
-                    radius: mainBg.radius
-                }
-            }
-
+            // Only the artwork and its shading are rounded-clipped. A layer on mainBg
+            // would also rasterize the texts below, which come out soft.
             Item {
+                id: artClip
                 anchors.fill: parent
-                visible: root.hasTrack
-
-                Image {
-                    id: artBlurredUnderlay
-                    anchors.fill: parent
-                    source: root.artSource
-                    fillMode: Image.PreserveAspectCrop
-                    visible: root.artSource !== ""
-                    layer.enabled: root.artVignetteBlur > 0
-                    layer.effect: MultiEffect {
-                        blurEnabled: root.artVignetteBlur > 0
-                        blurMax: 128
-                        blur: root.artVignetteBlur / 128
+                layer.enabled: true
+                layer.effect: OpacityMask {
+                    maskSource: Rectangle {
+                        width: mainBg.width
+                        height: mainBg.height
+                        radius: mainBg.radius
                     }
                 }
 
-                Item {
-                    id: vignetteMask
+                AndroidMediaArtwork {
+                    id: artwork
                     anchors.fill: parent
+                    visible: root.hasTrack
+                    artSource: root.artUrl
+                    trackKey: JSON.stringify([root.player?.uniqueId ?? "", root.player?.trackTitle ?? "",
+                        root.player?.trackArtist ?? "", root.player?.trackAlbum ?? ""])
+                    hasPlayer: !!root.player
+                    playing: root.playing
+                    wide: 1
+                }
+
+                Item {
+                    anchors.fill: parent
+                    visible: root.hasTrack
+                    opacity: 0.3
 
                     RadialGradient {
                         anchors.fill: parent
                         gradient: Gradient {
-                            GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 1) }
-                            GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0) }
+                            GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0) }
+                            GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.9) }
                         }
-                        horizontalRadius: width * 0.65
-                        verticalRadius: height * 0.65
-                    }
-                }
-
-                Item {
-                    anchors.fill: parent
-                    layer.enabled: true
-                    layer.effect: OpacityMask {
-                        maskSource: vignetteMask
-                    }
-
-                    Image {
-                        id: artExpanded
-                        anchors.fill: parent
-                        source: root.artSource
-                        fillMode: Image.PreserveAspectCrop
-                        opacity: 0.85
-                        visible: root.artSource !== ""
+                        horizontalRadius: width * 0.7
+                        verticalRadius: height * 0.7
                     }
                 }
             }
 
-            Item {
-                anchors.fill: parent
-                visible: root.hasTrack
-                opacity: root.playing ? 0.55 : 0.75
-
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: 400
-                        easing.type: Easing.OutCubic
-                    }
-                }
-
-                Rectangle {
-                    anchors.fill: parent
-                    gradient: Gradient {
-                        GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0.0) }
-                        GradientStop { position: 0.5; color: Qt.rgba(0, 0, 0, 0.05) }
-                        GradientStop { position: 0.8; color: Qt.rgba(0, 0, 0, 0.25) }
-                        GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.45) }
-                    }
-                }
-
-                Rectangle {
-                    anchors.fill: parent
-                    color: Qt.rgba(0, 0, 0, 0.3)
-                    opacity: root.playing ? 0.0 : 0.5
-
-                    Behavior on opacity {
-                        NumberAnimation {
-                            duration: 500
-                            easing.type: Easing.OutCubic
-                        }
-                    }
-                }
-            }
-
-            Item {
-                anchors.fill: parent
-                visible: root.hasTrack
-                opacity: 0.3
-
-                RadialGradient {
-                    anchors.fill: parent
-                    gradient: Gradient {
-                        GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0) }
-                        GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.9) }
-                    }
-                    horizontalRadius: width * 0.7
-                    verticalRadius: height * 0.7
-                }
+            Connections {
+                target: root.player
+                function onPostTrackChanged(): void { artwork.requestArt(true); }
             }
 
             ColumnLayout {
@@ -410,12 +338,7 @@ AbstractBackgroundWidget {
                             return "volume_up";
                         }
 
-                        onClicked: {
-                            GlobalStates.openRightSidebar();
-                            Qt.callLater(() => {
-                                GlobalStates.requestVolumeDialog = true;
-                            });
-                        }
+                        onClicked: GlobalStates.openAudioOutputSettings()
 
                         contentItem: RowLayout {
                             id: audioPillLayout
@@ -465,7 +388,7 @@ AbstractBackgroundWidget {
 
                                 readonly property int rowHeight: Math.floor(parent.height / 2.5)
                                 readonly property real baseY: (parent.height - rowHeight) / 2
-                                readonly property int targetCurrentIndex: LyricsService.hasSyncedLines ? LyricsService.currentIndex : -1
+                                readonly property int targetCurrentIndex: LyricsService.hasSyncedLines ? root.shownLyricIndex : -1
                                 property int lastIndex: -1
                                 property bool isMovingForward: true
                                 property real scrollOffset: 0
@@ -476,6 +399,10 @@ AbstractBackgroundWidget {
                                         isMovingForward = targetCurrentIndex > lastIndex;
                                         lastIndex = targetCurrentIndex;
                                         scrollAnim.stop();
+                                        if (root.lyricJump) {
+                                            scrollOffset = 0;
+                                            return;
+                                        }
                                         scrollOffset = isMovingForward ? -rowHeight : rowHeight;
                                         scrollAnim.start();
                                     }
@@ -670,8 +597,10 @@ AbstractBackgroundWidget {
                         colRipple: root.pillFillColor
 
                         onClicked: {
-                            if (root.player)
+                            if (root.player?.canGoPrevious) {
+                                artwork.beginChange();
                                 root.player.previous();
+                            }
                         }
 
                         contentItem: Item {
@@ -702,16 +631,22 @@ AbstractBackgroundWidget {
                         Loader {
                             id: sliderLoader
                             anchors.fill: parent
-                            active: root.player ? (root.player.canSeek ?? false) : false
+                            active: root.player?.canSeek ?? false
                             sourceComponent: StyledSlider {
                                 configuration: StyledSlider.Configuration.Wavy
-                                animateWave: root.playing && root.visible && !root.hasActiveWindows
+                                animateWave: root.playing && root.live && (!root.hasActiveWindows || GlobalStates.mediaControlsOpen)
                                 highlightColor: root.accentColor
                                 trackColor: Qt.rgba(1, 1, 1, 0.2)
                                 handleColor: root.accentColor
-                                value: (root.player && root.player.length > 0) ? Math.min(1, Math.max(0, root.player.position / root.player.length)) : 0
-                                onMoved: if (root.player)
-                                    root.player.position = value * root.player.length
+                                value: root.shownProgress
+                                // Nothing to seek to while the player publishes no length.
+                                enabled: MprisController.hasTrackLength(root.player)
+                                onMoved: MprisController.seekFraction(root.player, value)
+                                // QQuickSlider writes `value` itself while the user drags, which destroys
+                                // the binding below it. Without this the bar froze where the drag left it
+                                // and never followed the track again.
+                                onPressedChanged: if (!pressed)
+                                    value = Qt.binding(() => root.shownProgress)
                             }
                         }
 
@@ -722,13 +657,13 @@ AbstractBackgroundWidget {
                                 left: parent.left
                                 right: parent.right
                             }
-                            active: root.player ? !(root.player.canSeek ?? false) : false
+                            active: !!root.player && !sliderLoader.active
                             sourceComponent: StyledProgressBar {
                                 wavy: root.player ? root.playing : false
-                                animateWave: root.playing && root.visible && !root.hasActiveWindows
+                                animateWave: root.playing && root.live && (!root.hasActiveWindows || GlobalStates.mediaControlsOpen)
                                 highlightColor: root.accentColor
                                 trackColor: Qt.rgba(1, 1, 1, 0.2)
-                                value: (root.player && root.player.length > 0) ? Math.min(1, Math.max(0, root.player.position / root.player.length)) : 0
+                                value: root.shownProgress
                             }
                         }
                     }
@@ -743,8 +678,10 @@ AbstractBackgroundWidget {
                         colRipple: root.pillFillColor
 
                         onClicked: {
-                            if (root.player)
+                            if (root.player?.canGoNext) {
+                                artwork.beginChange();
                                 root.player.next();
+                            }
                         }
 
                         contentItem: Item {

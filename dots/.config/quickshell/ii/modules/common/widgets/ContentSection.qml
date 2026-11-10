@@ -42,7 +42,24 @@ ColumnLayout {
             : root.subPage;
         // A section title belongs to the parent page, not necessarily to the
         // destination sub-page. Highlight only page-level deep links.
-        win.pendingSectionHighlight = targetSubPage === "" ? root.title : "";
+        root.openPage(win, idx, targetSubPage, targetSubPage === "" ? root.title : "");
+    }
+
+    // A search landmark is drawn where it was found, sub-page included, so it is
+    // flashed there (SettingsWindow finds the text when no section claims it).
+    function navigateToLandmark(text) {
+        if (!root.pageId || root.pageId === "")
+            return;
+        const win = root.QsWindow.window;
+        if (!win || win.pageIndexById === undefined)
+            return;
+        const idx = win.pageIndexById(root.pageId);
+        if (idx >= 0)
+            root.openPage(win, idx, root.subPage, text);
+    }
+
+    function openPage(win, idx, targetSubPage, highlight) {
+        win.pendingSectionHighlight = highlight;
         win.pendingSubPage = targetSubPage;
 
         if (win.currentPage === idx) {
@@ -50,7 +67,7 @@ ColumnLayout {
                 win.restoreSubPagePath(win.pendingSubPage);
                 win.pendingSubPage = "";
             }
-            SearchRegistry.currentSearch = targetSubPage === "" ? root.title : "";
+            SearchRegistry.currentSearch = highlight;
             win.pendingSectionHighlight = "";
         } else {
             win.currentPage = idx;

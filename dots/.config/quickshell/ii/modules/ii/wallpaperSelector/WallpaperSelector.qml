@@ -15,7 +15,9 @@ Scope {
 
     Loader {
         id: wallpaperSelectorLoader
-        active: GlobalStates.wallpaperSelectorOpen
+        // The island draws the picker itself when it owns it; two surfaces showing the
+        // same browser is the duplicate-surface bug. See IslandPolicy.ownsWallpaper.
+        active: GlobalStates.wallpaperSelectorOpen && !GlobalStates.islandOwnsWallpaper
 
         sourceComponent: PanelWindow {
             id: panelWindow

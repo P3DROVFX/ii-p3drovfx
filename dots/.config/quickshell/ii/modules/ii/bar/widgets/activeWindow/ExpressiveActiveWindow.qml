@@ -197,17 +197,21 @@ Item {
         hoverEnabled: !BarInteraction.clickToShow
     }
 
-    ActiveWindowPopup {
-        id: titlePopup
-        // The MouseArea, not the Item around it: the popup opens from a real press now, and
-        // only the MouseArea has one to raise. Its geometry is the Item's, so nothing moves.
-        targetItem: mouseArea
-        appClassText: root.appClassText
-        appTitleText: root.appTitleText
-        activeWindowAddress: root.activeWindowAddress
-        monitor: root.monitor
-        popupWidth: root.popupWidth
-        maxPopupWidth: root.maxPopupWidth
+    // Lazy: popup controller is only built on approach (same as ExpressiveSports).
+    PopupLoader {
+        active: BarInteraction.enablePopups
+            && (BarInteraction.clickToShow || mouseArea.containsMouse || held)
+        sourceComponent: ActiveWindowPopup {
+            // The MouseArea, not the Item around it: the popup opens from a real press now, and
+            // only the MouseArea has one to raise. Its geometry is the Item's, so nothing moves.
+            targetItem: mouseArea
+            appClassText: root.appClassText
+            appTitleText: root.appTitleText
+            activeWindowAddress: root.activeWindowAddress
+            monitor: root.monitor
+            popupWidth: root.popupWidth
+            maxPopupWidth: root.maxPopupWidth
+        }
     }
 
     Behavior on implicitWidth {
@@ -217,12 +221,17 @@ Item {
         animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 
+    BarWidgetPalette {
+        id: palette
+        colorMode: Config.options.bar.activeWindow.colorMode
+    }
+
     Rectangle {
         anchors.fill: parent
         anchors.margins: 4
         radius: Appearance.rounding.full
         color: "transparent"
-        border.color: Appearance.colors.colTertiaryContainer
+        border.color: root.containsMouse ? palette.colBackgroundHover : palette.colBackground
         border.width: 2
         clip: true
 
@@ -243,7 +252,7 @@ Item {
                 font.variableAxes: Appearance.font.variableAxes.rounded
                 font.weight: Font.Bold
                 font.pixelSize: Appearance.font.pixelSize.small
-                color: Appearance.colors.colOnLayer0
+                color: root.containsMouse ? palette.colBackgroundHover : palette.colBackground
                 elide: Text.ElideRight
                 width: root.vertical ? parent.height - 20 : parent.width - 20
                 horizontalAlignment: Text.AlignHCenter
@@ -269,7 +278,7 @@ Item {
                 font.variableAxes: Appearance.font.variableAxes.rounded
                 font.weight: Font.Bold
                 font.pixelSize: Appearance.font.pixelSize.small
-                color: Appearance.colors.colOnLayer0
+                color: root.containsMouse ? palette.colBackgroundHover : palette.colBackground
                 elide: Text.ElideRight
                 width: root.vertical ? parent.height - 20 : parent.width - 20
                 horizontalAlignment: Text.AlignHCenter

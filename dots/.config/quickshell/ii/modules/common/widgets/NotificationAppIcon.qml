@@ -8,17 +8,22 @@ import Quickshell.Services.Notifications
 
 MaterialShape { // App icon
     id: root
-    property var appIcon: ""
-    property var summary: ""
+    property string appIcon: ""
+    property string summary: ""
     property var urgency: NotificationUrgency.Normal
     property bool isUrgent: urgency === NotificationUrgency.Critical
-    property var image: ""
+    property string image: ""
     property real materialIconScale: 0.57
     property real appIconScale: 0.8
     property real smallAppIconScale: 0.49
     property real materialIconSize: implicitSize * materialIconScale
     property real appIconSize: implicitSize * appIconScale
     property real smallAppIconSize: implicitSize * smallAppIconScale
+    // `notify-send -i <name>` arrives as an image-path hint, which the server turns into
+    // image://icon/<name>. Shell senders pass Material Symbol names there, which no icon
+    // theme has, so draw those as a glyph instead of the missing-icon checkerboard.
+    readonly property string themedImageName: image.startsWith("image://icon/") ? image.slice(13).split("?")[0] : ""
+    readonly property bool imageIsGlyph: themedImageName !== "" && Quickshell.iconPath(themedImageName, true) === ""
 
     implicitSize: 38 * scale
     property list<var> urgentShapes: [MaterialShape.Shape.VerySunny, MaterialShape.Shape.SoftBurst,]
@@ -27,10 +32,12 @@ MaterialShape { // App icon
     color: isUrgent ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSecondaryContainer
     Loader {
         id: materialSymbolLoader
-        active: root.appIcon == "" && root.image == ""
+        active: (root.appIcon == "" && root.image == "") || root.imageIsGlyph
         anchors.fill: parent
         sourceComponent: MaterialSymbol {
             text: {
+                if (root.imageIsGlyph)
+                    return root.themedImageName;
                 const defaultIcon = NotificationUtils.findSuitableMaterialSymbol("");
                 const guessedIcon = NotificationUtils.findSuitableMaterialSymbol(root.summary);
                 return (root.urgency == NotificationUrgency.Critical && guessedIcon === defaultIcon) ? "priority_high" : guessedIcon;
@@ -55,7 +62,7 @@ MaterialShape { // App icon
     }
     Loader {
         id: notifImageLoader
-        active: root.image != ""
+        active: root.image != "" && !root.imageIsGlyph
         anchors.fill: parent
         sourceComponent: Item {
             anchors.fill: parent
@@ -66,7 +73,11 @@ MaterialShape { // App icon
 
                 source: root.image
                 fillMode: Image.PreserveAspectCrop
-                cache: true
+                // Notification images can be arbitrary screenshots or remote
+                // previews. Do not put every transient notification image in
+                // Qt's global image cache; sourceSize in StyledImage keeps the
+                // decoded surface bounded to this icon as well.
+                cache: false
                 antialiasing: true
                 asynchronous: !source.toString().startsWith("image://icon/")
             }

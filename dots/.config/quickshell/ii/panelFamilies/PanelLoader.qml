@@ -16,25 +16,30 @@ LazyLoader {
 
     property bool extraCondition: true
 
+    /// Higher builds first. Only what the first paint shows (bar, background, island,
+    /// dock) should set it; everything else keeps 0.
+    property int priority: 0
+
     readonly property bool wanted: Config.ready && root.extraCondition
 
-    /// Zero until this panel has asked for a slot. It is released when the panel is no
-    /// longer wanted so inactive panel families do not retain a schedule ticket.
-    property int ticket: 0
+    /// Set by PanelSchedule when this panel's slot comes up. Cleared when the panel is no
+    /// longer wanted, so an inactive panel family holds no place in the queue.
+    property bool granted: false
 
-    function takeTicket() {
-        if (!root.wanted || root.ticket !== 0)
-            return;
-        root.ticket = PanelSchedule.take();
-    }
-
-    active: root.wanted && root.ticket > 0 && PanelSchedule.released >= root.ticket
+    active: root.wanted && root.granted
 
     onWantedChanged: {
-        if (root.wanted)
-            root.takeTicket();
-        else
-            root.ticket = 0;
+        if (root.wanted) {
+            if (!root.granted)
+                PanelSchedule.request(root);
+        } else {
+            root.granted = false;
+            PanelSchedule.withdraw(root);
+        }
     }
-    Component.onCompleted: root.takeTicket()
+    Component.onCompleted: {
+        if (root.wanted && !root.granted)
+            PanelSchedule.request(root);
+    }
+    Component.onDestruction: PanelSchedule.withdraw(root)
 }

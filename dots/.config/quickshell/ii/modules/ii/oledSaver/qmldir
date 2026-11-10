@@ -1,2 +1,9 @@
 module qs.modules.ii.oledSaver
 OledSaver 1.0 OledSaver.qml
+AodClockFace 1.0 AodClockFace.qml
+AodFlipClock 1.0 AodFlipClock.qml
+AodDialClock 1.0 AodDialClock.qml
+AodExpressiveClock 1.0 AodExpressiveClock.qml
+AodDotMatrixClock 1.0 AodDotMatrixClock.qml
+AodShapeAnalogClock 1.0 AodShapeAnalogClock.qml
+AodInfoClock 1.0 AodInfoClock.qml

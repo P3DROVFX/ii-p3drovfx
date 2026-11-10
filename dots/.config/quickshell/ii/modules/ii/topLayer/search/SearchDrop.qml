@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Effects
 import Quickshell.Hyprland
+import Quickshell.Io
 import qs
 import qs.services
 import qs.modules.common
@@ -11,16 +12,25 @@ import qs.modules.ii.overview
 import qs.modules.ii.bar.shared
 
 // ── Animation strategy ──────────────────────────────────────────────────────
-// Caestelia-inspired: uses expressiveFastSpatial (spring overshoot y1=1.67)
-// for open, emphasizedAccel for close. The spring curve makes the drop feel
-// physical and alive. The Notch shape renders at full target size from the
-// start; the clip + corner radius scaling handles the visual reveal cleanly.
+// The drop is a liquid SDF surface pulled out of the bar (SearchDropSurface):
+// its own linear clock drives the morph, and a spring carries every later size
+// change (typing, panels), so a retarget keeps its velocity instead of kinking.
+// `openProgress` keeps its old curve: the overview's entrance still rides it.
 
 Item {
     id: root
     focus: true
     width: screenWidth
     height: screenHeight
+    IpcHandler {
+        target: "searchSuggestionsProbe" + root.screen.name
+        function inspect(): string {
+            return JSON.stringify({ open: root.isOpen, suggestions: root.searchWidgetRef?.showSuggestionsPanel, wanted: root.overviewWanted, shown: root.isOverviewVisible, classicActive: overviewLoader.active, classicLoaded: overviewLoader.item !== null });
+        }
+        function setSuggestions(enabled: bool): void {
+            Config.options.search.suggestions.enable = enabled;
+        }
+    }
 
     BarThemes {
         id: barThemes
@@ -70,31 +80,121 @@ Item {
     property bool rightSidebarActiveOnMonitor: false
 
     readonly property bool isOpen: GlobalStates.overviewOpen && GlobalStates.searchConnectActive && screen.name === GlobalStates.activeSearchMonitor
-    readonly property bool isWidgetActive: isOpen || openProgress > 0.001
+    readonly property bool isWidgetActive: isOpen || openProgress > 0.001 || dropSurface.active || overviewBubble.active
     readonly property string mode: isWidgetActive ? "launcher" : "idle"
+
+    onIsWidgetActiveChanged: {
+        if (isWidgetActive) {
+            searchWidgetLoader.loadedOnce = true;
+            overviewLoader.loadedOnce = true;
+        }
+    }
 
     readonly property real screenWidth: screen ? screen.width : 1920
     readonly property real screenHeight: screen ? screen.height : 1080
 
     property var searchWidgetRef: null
 
-    readonly property bool isOverviewVisible: root.isWidgetActive && (root.searchWidgetRef ? root.searchWidgetRef.searchingText === "" : true) && !GlobalStates.searchOnlyMode && !Config.options.search.alwaysListApps && (Config?.options.overview.enable ?? true)
+    // What the grid would want right now, from the live query. A hosted panel
+    // (Commands, Tools, Email, AI…) owns the drop's surface the same way it
+    // owns the classic overview's: while one is open the grid stays out, even
+    // though opening it clears the query.
+    readonly property bool queryIdle: root.searchWidgetRef ? (root.searchWidgetRef.searchingText === "" && !root.searchWidgetRef.isAnySpecialMode) : true
+    // On the scrolling layouts the scrolloverview plugin's overview stands behind the bar in place of this one.
+    readonly property bool overviewWanted: root.queryIdle && !GlobalStates.searchOnlyMode && !Config.options.search.alwaysListApps && !Config.options.search.suggestions.enable && (Config?.options.overview.enable ?? true)
+        && !ScrollOverviewPlugin.hosting
+    // The plugin's overview stays up behind the search for as long as it is open,
+    // query or not: it goes with the search (an app launched, Esc, Super again).
+    readonly property bool pluginOverviewWanted: root.isOpen && GlobalStates.scrollingLayoutActive
+        && !GlobalStates.searchOnlyMode && !GlobalStates.panelOpenedDirectly
+    onPluginOverviewWantedChanged: {
+        if (root.pluginOverviewWanted)
+            ScrollOverviewPlugin.open();
+        else
+            ScrollOverviewPlugin.close();
+    }
+    /**
+     * The grid's visibility, decided only while the drop is open.
+     *
+     * Closing the overview clears the query while `openProgress` is still
+     * running down. Read live, that turned the grid back on for the close:
+     * launching an app from the results made the grid rise out of the closing
+     * drop. The default overview never did, because its reveal ignores every
+     * change once the overview is closed. This latch does the same.
+     */
+    property bool overviewShown: root.overviewWanted
+    readonly property bool isOverviewVisible: root.isWidgetActive && (root.overviewShown || overviewBubble.active)
 
-    readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
+    function syncOverviewShown() {
+        // Frozen outside the open state; see `overviewShown`.
+        if (!root.isOpen)
+            return;
+        const wanted = root.overviewWanted;
+        if (wanted === root.overviewShown)
+            return;
+        // The overview drop carries the change: tucked back into the search
+        // while a query owns it, pulled out again when the query is cleared.
+        root.overviewShown = wanted;
+    }
+
+    onOverviewWantedChanged: root.syncOverviewShown()
+    onIsOpenChanged: {
+        Qt.callLater(root._updateBlurExclusion);
+        if (!root.isOpen)
+            return;
+        // Shortcuts queue the prefix before opening; a retained widget does
+        // not run Component.onCompleted again to consume it.
+        if (GlobalStates.activeSearchQuery && root.searchWidgetRef) {
+            root.searchWidgetRef.setSearchingText(GlobalStates.activeSearchQuery);
+            GlobalStates.activeSearchQuery = "";
+        }
+        // A new session starts from the query it opens with.
+        root.overviewShown = root.overviewWanted;
+    }
+
     readonly property real launcherContentWidth: searchWidgetRef ? searchWidgetRef.implicitWidth : 0
     readonly property real launcherContentHeight: searchWidgetRef ? searchWidgetRef.implicitHeight : 0
 
     property real lastActiveW: 360
     property real lastActiveH: 120
 
-    onLauncherContentWidthChanged: {
+    // Frozen once the drop starts closing: closing clears the query, and following
+    // that would shrink the shape under its own close.
+    readonly property bool _followsContent: root.isOpen || root.heldByGesture
+    function _syncLastActive() {
+        if (!root._followsContent)
+            return;
         if (launcherContentWidth > 0)
             lastActiveW = launcherContentWidth;
-    }
-
-    onLauncherContentHeightChanged: {
         if (launcherContentHeight > 0)
             lastActiveH = launcherContentHeight;
+    }
+    onLauncherContentWidthChanged: root._syncLastActive()
+    onLauncherContentHeightChanged: root._syncLastActive()
+    on_FollowsContentChanged: root._syncLastActive()
+
+    /**
+     * The size the surface is drawn at: the content's target, carried by a spring.
+     *
+     * The widget no longer eases its own size (`hostDrivesSize`), so this is the one
+     * animator. A spring keeps its velocity when the target moves again mid-flight, which
+     * is what typing does - every eased restart was a visible kink. No visible overshoot;
+     * at multiplier 0.75, 90% of the way in ~150 ms and settled in ~0.35 s. While the drop is still opening the morph owns the motion, and
+     * a late first measurement is taken as is.
+     */
+    property real dropW: dropState.targetW
+    property real dropH: dropState.targetH
+    readonly property bool _springSizes: root.animStyle !== "none" && root.isOpen && dropSurface.clock > 0.3
+    // Time scale of the spring: stiffness goes with its square and damping with it, so
+    // the overshoot stays the same and the animation multiplier applies here as well.
+    readonly property real _springSpeed: 1.5 / Math.max(0.1, Appearance.animMultiplier)
+    Behavior on dropW {
+        enabled: root._springSizes
+        SpringAnimation { spring: 1.5 * root._springSpeed * root._springSpeed; damping: 0.25 * root._springSpeed; epsilon: 0.25 }
+    }
+    Behavior on dropH {
+        enabled: root._springSizes
+        SpringAnimation { spring: 1.5 * root._springSpeed * root._springSpeed; damping: 0.25 * root._springSpeed; epsilon: 0.25 }
     }
 
     SearchDropState {
@@ -129,6 +229,50 @@ Item {
         rightSidebarActiveOnMonitor: root.rightSidebarActiveOnMonitor
     }
 
+    // ── Real Gnome: window picker and workspace indicator ──────────────────
+    // The connect-mode search owns this monitor's overview, so it also hosts what
+    // the standalone overview window does there: the hit areas over the window
+    // captures (pick, close, drag to another workspace or monitor) and the dots.
+    // Under the drop, which keeps the search's own input. The window spans the
+    // screen, so screen coordinates are this item's.
+    readonly property var realGnomeController: GlobalStates.overviewBackgroundControllerFor(root.screen?.name ?? "")
+    readonly property bool realGnome: !!root.realGnomeController && root.realGnomeController.isRealGnome
+    // Shown with an empty query, whether or not the classic grid is wanted: with
+    // search suggestions on there is no grid, but the windows are still there.
+    readonly property bool realGnomeIdle: root.isOpen && root.realGnome
+        && (root.searchWidgetRef ? (root.searchWidgetRef.searchingText === "" && !root.searchWidgetRef.isAnySpecialMode) : true)
+        && !GlobalStates.searchOnlyMode && !GlobalStates.searchPanelActive
+    readonly property bool realGnomePickerShown: root.realGnomeIdle
+        && !!root.realGnomeController && root.realGnomeController.progress > 0.9
+    // The panel's input mask takes the whole screen while this is up.
+    readonly property bool coversScreen: root.isOverviewVisible || root.realGnomePickerShown
+    // Clicking away from the windows leaves the overview, as the standalone one does.
+    MouseArea {
+        anchors.fill: parent
+        enabled: root.realGnomePickerShown
+        visible: enabled
+        onClicked: GlobalStates.overviewOpen = false
+    }
+    Loader {
+        anchors.fill: parent
+        active: root.realGnome && root.isWidgetActive
+        sourceComponent: RealGnomeWindowPicker {
+            screenName: root.screen?.name ?? ""
+            shown: root.realGnomePickerShown
+        }
+    }
+    Loader {
+        active: root.realGnome && root.isWidgetActive
+        readonly property var reserved: HyprlandData.monitors.find(m => m.name === (root.screen?.name ?? ""))?.reserved ?? [0, 0, 0, 0]
+        x: (root.width - (item ? item.width : 0)) / 2
+        y: root.height - reserved[3] - 20 - (item ? item.height / 2 : 0)
+        sourceComponent: RealGnomeWorkspaceIndicator {
+            screenName: root.screen?.name ?? ""
+            shown: root.realGnomeIdle
+                && !!root.realGnomeController && root.realGnomeController.progress > 0.6
+        }
+    }
+
     HyprlandFocusGrab {
         id: keyboardGrab
         windows: root.panelWindow ? [root.panelWindow] : []
@@ -148,12 +292,21 @@ Item {
     // openProgress: 0 = fully closed, 1 = fully open
     property real openProgress: 0.0
 
-    // animHeight: the visible reveal height — drives both the clip and the Notch radii
-    readonly property real animHeight: openProgress * dropState.targetH
+    // A touchpad gesture is holding the drop where the fingers are. No transition leads in
+    // or out of this state: the gesture settles the value itself before it lets go.
+    readonly property bool heldByGesture: GlobalStates.overviewDragging && GlobalStates.searchConnectActive
+        && screen.name === GlobalStates.activeSearchMonitor
 
-    state: isOpen ? "open" : "closed"
+    state: heldByGesture ? "held" : (isOpen ? "open" : "closed")
 
     states: [
+        State {
+            name: "held"
+            PropertyChanges {
+                target: root
+                openProgress: GlobalStates.gestureDragProgress
+            }
+        },
         State {
             name: "closed"
             PropertyChanges {
@@ -197,65 +350,76 @@ Item {
         }
     ]
 
+    /** The bar's edge on this screen; the drop grows away from it. */
+    readonly property real barEdgeY: root.isBottomBar ? positioner.anchorY + dropState.targetH : positioner.anchorY
+
+    SearchDropSurface {
+        id: dropSurface
+        x: positioner.horizontalCenter - width / 2
+        y: root.isBottomBar ? root.barEdgeY - height : root.barEdgeY
+        width: root.dropW
+        height: root.dropH
+        open: root.isOpen
+        held: root.heldByGesture
+        heldProgress: GlobalStates.gestureDragProgress
+        animationsEnabled: root.animStyle !== "none"
+        openDuration: Math.round(600 * Appearance.animMultiplier)
+        closeDuration: Math.round(260 * Appearance.animMultiplier)
+        targetWidth: root.dropW
+        targetHeight: root.dropH
+        shoulderRadius: Appearance.rounding.windowRounding
+        cornerRadius: Appearance.rounding.windowRounding
+        surfaceColor: root.themeBgColor
+        transform: Scale {
+            yScale: root.isBottomBar ? -1 : 1
+            origin.y: dropSurface.height / 2
+        }
+    }
+
+    // The part of the screen the drop covers right now: input mask, blur exclusion,
+    // and the content's clip.
     Item {
         id: dropContainer
-        x: positioner.anchorX
-        y: root.isBottomBar ? (positioner.anchorY + (dropState.targetH - root.animHeight)) : positioner.anchorY
-        width: dropState.targetW
-        height: root.animHeight
-        visible: root.animHeight > 0.001
+        x: positioner.horizontalCenter - width / 2
+        y: root.isBottomBar ? root.barEdgeY - height : root.barEdgeY
+        width: Math.min(root.dropW, dropSurface.visibleWidth)
+        height: dropSurface.visibleHeight
+        visible: dropSurface.visible
 
-        // Publish drop bounds to GlobalStates for background blur exclusion
         onXChanged: root._updateBlurExclusion()
         onYChanged: root._updateBlurExclusion()
         onWidthChanged: root._updateBlurExclusion()
         onHeightChanged: root._updateBlurExclusion()
 
-        // ── Notch background (unclipped) ─────────────────────────────────────
-        Notch {
-            id: dropNotch
-            width: dropContainer.width
-            height: dropContainer.height   // = animHeight, always matches clip edge
-            y: isBottomBar ? (dropContainer.height - height) : 0
-            disableBehaviors: true
-            readonly property real _wr: Appearance.rounding.windowRounding
-            // Grow topRadius from 0 immediately — no dead zone threshold.
-            // animHeight * 0.8 reaches windowRounding quickly without overshoot.
-            topRadius: Math.min(_wr, Math.max(0, root.animHeight * 0.8))
-            bottomRadius: Math.min(_wr, Math.max(0, root.animHeight))
-            fillColor: root.themeBgColor
-            transform: Scale {
-                xScale: 1
-                yScale: isBottomBar ? -1 : 1
-                origin.y: dropNotch.height / 2
-            }
-        }
-
-        // ── Content (clipped to growing height) ──────────────────────────────
+        // ── Content (clipped to the drop's length, never its width) ──────────
         Item {
             id: clippingClip
-            x: -200
-            width: parent.width + 400
+            x: (dropContainer.width - width) / 2
+            width: root.dropW + 400
             height: parent.height
             clip: true
 
             Item {
                 id: contentWrapper
                 x: 200
-                width: dropContainer.width
-                height: dropState.targetH
-                y: isBottomBar ? parent.height - height : 0
+                width: root.dropW
+                height: root.dropH
+                y: root.isBottomBar ? parent.height - height : 0
+                opacity: dropSurface.contentOpacity
+                visible: opacity > 0.001
 
                 Loader {
                     id: searchWidgetLoader
                     property bool loadedOnce: false
                     active: loadedOnce || root.isWidgetActive
-                    onLoaded: loadedOnce = true
                     focus: root.isOpen
                     anchors.fill: parent
                     sourceComponent: Component {
                         SearchWidget {
                             id: searchWidget
+                            hostWidth: root.dropW
+                            hostHeight: root.dropH
+                            surfaceAnimating: dropSurface.morphing
                             Component.onCompleted: {
                                 root.searchWidgetRef = searchWidget;
                                 if (GlobalStates.activeSearchQuery) {
@@ -317,63 +481,55 @@ Item {
         }
     }
 
-    Loader { // Classic overview
-        id: overviewLoader
-        property bool loadedOnce: false
-        y: root.isBottomBar ? (dropContainer.y - height - 10) : (dropContainer.y + dropContainer.height + 10)
-        height: implicitHeight
-        anchors.horizontalCenter: parent.horizontalCenter
-        active: (loadedOnce || root.isWidgetActive) && !root.isScrollingLayout
-        onLoaded: loadedOnce = true
-        visible: opacity > 0.01
-        opacity: root.isOverviewVisible ? (root.animStyle === "none" ? 1.0 : root.openProgress) : 0.0
+    /**
+     * The classic overview, pulled out of the search as a drop of its own
+     * (SearchOverviewBubble). It leaves with the search's first frame and is
+     * tucked back into it while a query owns the drop. Hosted: the drop paints
+     * the overview's panel, so the widget draws no panel or shadow of its own.
+     */
+    SearchOverviewBubble {
+        id: overviewBubble
+        anchors.fill: parent
+        readonly property var overview: overviewLoader.item
+        searchOpen: root.isOpen
+        wanted: root.overviewShown && overview !== null
+        held: root.heldByGesture && root.overviewShown
+        heldProgress: GlobalStates.gestureDragProgress
+        animationsEnabled: root.animStyle !== "none"
+        // Coming back out of a search that is already open (the query was cleared) is a
+        // smaller move than leaving the bar with it, and waiting on the full opening read
+        // as a slow collapse.
+        openDuration: Math.round((dropSurface.clock >= 1 ? 440 : 700) * Appearance.animMultiplier)
+        closeDuration: Math.round(240 * Appearance.animMultiplier)
+        tuckDuration: Math.round(460 * Appearance.animMultiplier)
 
-        transform: [
-            Translate {
-                y: root.animStyle === "none" ? 0 : ((1.0 - (root.isOverviewVisible ? root.openProgress : 0.0)) * (root.isBottomBar ? -30 : 30))
-            },
-            Scale {
-                origin.x: overviewLoader.implicitWidth / 2
-                origin.y: overviewLoader.implicitHeight / 2
-                xScale: root.animStyle === "zoom" ? (0.92 + 0.08 * (root.isOverviewVisible ? root.openProgress : 0.0)) : 1.0
-                yScale: root.animStyle === "zoom" ? (0.92 + 0.08 * (root.isOverviewVisible ? root.openProgress : 0.0)) : 1.0
+        barEdgeY: root.barEdgeY
+        away: root.isBottomBar ? -1 : 1
+        searchCenterX: positioner.horizontalCenter
+        searchBodyWidth: dropSurface.liveBodyWidth
+        searchHeight: dropSurface.visibleHeight
+        searchRadius: dropSurface.liveCornerRadius
+        searchRestHeight: root.dropH
+        searchColor: root.themeBgColor
+
+        overviewCenterX: root.width / 2
+        overviewWidth: overview ? overview.implicitWidth : 0
+        overviewHeight: overview ? overview.implicitHeight : 0
+        overviewRadius: OverviewStyle.radiusCellOuter + OverviewStyle.panelPadding
+        // Where the floating panel used to sit: 10 px under the drop plus the
+        // elevation margin it drew its shadow in.
+        gap: 10 + Appearance.sizes.elevationMargin
+        panelColor: OverviewStyle.colPanel
+
+        Loader { // Classic overview
+            id: overviewLoader
+            property bool loadedOnce: false
+            active: (loadedOnce || root.isWidgetActive) && !Config.options.search.suggestions.enable
+            sourceComponent: OverviewWidget {
+                panelWindow: root.panelWindow
+                monitorIndex: root.monitorIndex
+                hosted: true
             }
-        ]
-
-        sourceComponent: OverviewWidget {
-            panelWindow: root.panelWindow
-            monitorIndex: root.monitorIndex
-        }
-    }
-
-    Loader { // Scrolling overview
-        id: scrollingOverviewLoader
-        property bool loadedOnce: false
-        y: root.isBottomBar ? 0 : (dropContainer.y + dropContainer.height)
-        height: root.isBottomBar ? dropContainer.y : (parent.height - y)
-        anchors.left: parent.left
-        anchors.right: parent.right
-        active: (loadedOnce || root.isWidgetActive) && root.isScrollingLayout
-        onLoaded: loadedOnce = true
-        visible: opacity > 0.01
-        opacity: root.isOverviewVisible ? (root.animStyle === "none" ? 1.0 : root.openProgress) : 0.0
-
-        transform: [
-            Translate {
-                y: root.animStyle === "none" ? 0 : ((1.0 - (root.isOverviewVisible ? root.openProgress : 0.0)) * (root.isBottomBar ? -30 : 30))
-            },
-            Scale {
-                origin.x: scrollingOverviewLoader.width / 2
-                origin.y: scrollingOverviewLoader.height / 2
-                xScale: root.animStyle === "zoom" ? (0.92 + 0.08 * (root.isOverviewVisible ? root.openProgress : 0.0)) : 1.0
-                yScale: root.animStyle === "zoom" ? (0.92 + 0.08 * (root.isOverviewVisible ? root.openProgress : 0.0)) : 1.0
-            }
-        ]
-
-        sourceComponent: ScrollingOverviewWidget {
-            anchors.fill: parent
-            panelWindow: root.panelWindow
-            monitorIndex: root.monitorIndex
         }
     }
 
@@ -386,8 +542,8 @@ Item {
         var sw = dropContainer.width;
         var sh = dropContainer.height;
 
-        const topR = dropNotch.topRadius;
-        const bottomR = dropNotch.bottomRadius;
+        const topR = dropSurface.liveFillet;
+        const bottomR = dropSurface.liveCornerRadius;
         if (GlobalStates.searchDropActive !== active || GlobalStates.searchDropExclusionX !== sx || GlobalStates.searchDropExclusionY !== sy || GlobalStates.searchDropExclusionWidth !== sw || GlobalStates.searchDropExclusionHeight !== sh || GlobalStates.searchDropTopRadius !== topR || GlobalStates.searchDropBottomRadius !== bottomR) {
             GlobalStates.searchDropActive = active;
             GlobalStates.searchDropExclusionX = sx;
@@ -399,7 +555,6 @@ Item {
         }
     }
 
-    onIsOpenChanged: Qt.callLater(_updateBlurExclusion)
     onIsOverviewVisibleChanged: Qt.callLater(_updateBlurExclusion)
     Component.onCompleted: Qt.callLater(_updateBlurExclusion)
 }

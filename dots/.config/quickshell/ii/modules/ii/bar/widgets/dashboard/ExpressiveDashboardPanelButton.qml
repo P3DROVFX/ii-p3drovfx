@@ -17,6 +17,11 @@ Item {
     property bool vertical: BarPlacement.vertical
     property bool isMaterial: true // Forced expressive
 
+    BarWidgetPalette {
+        id: widgetPalette
+        colorMode: Config.options.bar.dashboardButton.colorMode
+    }
+
     implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : pill.implicitWidth
     implicitHeight: vertical ? pill.implicitHeight : Appearance.sizes.baseBarHeight
 
@@ -38,16 +43,16 @@ Item {
 
         property color pillColor: GlobalStates.sidebarRightOpen 
             ? (mouseArea.containsMouse ? Appearance.colors.colLayer4Hover : "transparent")
-            : (mouseArea.containsMouse ? Appearance.colors.colPrimaryHover : Appearance.colors.colPrimaryContainer)
+            : (mouseArea.containsMouse ? widgetPalette.colBackgroundHover : widgetPalette.colBackground)
 
         property color borderColor: GlobalStates.sidebarRightOpen 
-            ? Appearance.colors.colPrimary
+            ? widgetPalette.colBackground
             : "transparent"
 
         property real borderWidth: GlobalStates.sidebarRightOpen ? 1.5 : 0
         property real dashLength: GlobalStates.sidebarRightOpen ? 6 : 0
         property real gapLength: GlobalStates.sidebarRightOpen ? 4 : 0
-        property real radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
+        property real radius: (typeof rootItem !== "undefined" ? rootItem.groupStyle : Config.options.bar.barGroupStyle) === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
         property real dashOffset: 0
 
         implicitWidth: root.vertical ? Appearance.sizes.verticalBarWidth - 8 : Math.max(0, flow.implicitWidth - flow.itemSpacing) + 10
@@ -135,6 +140,8 @@ Item {
     DashboardIconDriver {
         id: iconDriver
         wifiIcon: wifiRev.registeredIcon
+        ethernetIcon: wifiRev.loadedContent?.ethernetRef ?? null
+        hotspotIcon: wifiRev.loadedContent?.hotspotRef ?? null
         bluetoothIcon: bluetoothRev.registeredIcon
         volumeIcon: volumeRev.registeredIcon
         micIcon: micRev.registeredIcon
@@ -176,7 +183,7 @@ Item {
                         id: caffeineIcon
                         anchors.centerIn: parent
                         iconSize: root.iconPixelSize
-                        color: caffeineWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: caffeineWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                         active: Idle.inhibit ?? false
                     }
                 }
@@ -196,7 +203,7 @@ Item {
                         id: volumeIcon
                         anchors.centerIn: parent
                         iconSize: root.iconPixelSize
-                        color: volumeWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: volumeWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                     }
                 }
             }
@@ -215,7 +222,7 @@ Item {
                         id: micIcon
                         anchors.centerIn: parent
                         iconSize: root.iconPixelSize
-                        color: micWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: micWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                         muted: iconDriver.sourceMuted
                     }
                 }
@@ -230,22 +237,34 @@ Item {
                 ExpressiveIconWrapper {
                     id: netWrapper
                     property alias iconRef: wifiIcon
+                    property alias ethernetRef: ethernetIcon
+                    property alias hotspotRef: hotspotIcon
                     vertical: root.vertical
     
-                    MaterialSymbol {
+                    EthernetIcon {
+                        id: ethernetIcon
                         anchors.centerIn: parent
-                        visible: Network.ethernet && !GlobalStates.dashboardWifiDialogOpen
-                        text: "lan"
+                        visible: iconDriver.shownNetworkKind === "ethernet"
                         iconSize: root.iconPixelSize
-                        color: netWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: netWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
+                        linked: Network.ethernet
+                    }
+
+                    HotspotIcon {
+                        id: hotspotIcon
+                        anchors.centerIn: parent
+                        visible: iconDriver.shownNetworkKind === "hotspot"
+                        iconSize: root.iconPixelSize
+                        color: netWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
+                        active: NetworkState.accessPointMode
                     }
     
                     WifiIcon {
                         id: wifiIcon
                         anchors.centerIn: parent
-                        visible: !Network.ethernet || GlobalStates.dashboardWifiDialogOpen
+                        visible: iconDriver.shownNetworkKind === "wifi"
                         iconSize: root.iconPixelSize
-                        color: netWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: netWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                         bars: {
                             if (!Network.ready || Network.wifiStatus !== "connected")
                                 return 0;
@@ -272,7 +291,7 @@ Item {
                         id: bluetoothIcon
                         anchors.centerIn: parent
                         iconSize: root.iconPixelSize
-                        color: btWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: btWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                         connected: BluetoothStatus.connected
                         poweredOff: !BluetoothStatus.enabled
                     }
@@ -293,7 +312,7 @@ Item {
                         id: vpnIcon
                         anchors.centerIn: parent
                         iconSize: root.iconPixelSize
-                        color: vpnWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: vpnWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                         connected: VpnService.active
                     }
                 }
@@ -313,7 +332,7 @@ Item {
                         id: tailscaleIcon
                         anchors.centerIn: parent
                         iconSize: root.iconPixelSize
-                        color: tailscaleWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: tailscaleWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                         connected: TailscaleService.active
                     }
                 }
@@ -333,7 +352,7 @@ Item {
                         id: pomodoroIcon
                         anchors.centerIn: parent
                         iconSize: root.iconPixelSize
-                        color: pomodoroWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: pomodoroWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                         running: TimerService.pomodoroRunning
                         onBreak: TimerService.pomodoroBreak
                     }
@@ -354,7 +373,7 @@ Item {
                         id: stopwatchIcon
                         anchors.centerIn: parent
                         iconSize: root.iconPixelSize
-                        color: stopwatchWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: stopwatchWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                         running: TimerService.stopwatchRunning
                     }
                 }
@@ -374,10 +393,11 @@ Item {
                         id: countdownIcon
                         anchors.centerIn: parent
                         iconSize: root.iconPixelSize
-                        color: countdownWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: countdownWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                         running: iconDriver.countdownRunning
                         paused: iconDriver.countdownPaused
                         finished: iconDriver.countdownFinished
+                        progress: iconDriver.countdownProgress
                     }
                 }
             }
@@ -396,7 +416,7 @@ Item {
                         id: easyEffectsIcon
                         anchors.centerIn: parent
                         iconSize: root.iconPixelSize
-                        color: easyEffectsWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: easyEffectsWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                         active: EasyEffects.active
                     }
                 }
@@ -416,7 +436,7 @@ Item {
                         id: dnsIcon
                         anchors.centerIn: parent
                         iconSize: root.iconPixelSize
-                        color: dnsWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: dnsWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                         active: DnsOverTls.active
                     }
                 }
@@ -436,7 +456,7 @@ Item {
                         id: powerProfileIcon
                         anchors.centerIn: parent
                         iconSize: root.iconPixelSize
-                        color: powerProfileWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: powerProfileWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                         profile: iconDriver.powerProfileName
                     }
                 }
@@ -456,7 +476,7 @@ Item {
                         id: gameModeIcon
                         anchors.centerIn: parent
                         iconSize: root.iconPixelSize
-                        color: gameModeWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: gameModeWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                         active: iconDriver.gameModeOn
                     }
                 }
@@ -476,7 +496,7 @@ Item {
                         id: songRecIcon
                         anchors.centerIn: parent
                         iconSize: root.iconPixelSize
-                        color: songRecWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: songRecWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                         listening: SongRec.running
                     }
                 }
@@ -496,7 +516,7 @@ Item {
                         id: alarmIcon
                         anchors.centerIn: parent
                         iconSize: root.iconPixelSize
-                        color: alarmWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: alarmWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                         scheduled: iconDriver.alarmCount > 0
                         ringing: iconDriver.alarmRinging
                     }
@@ -517,7 +537,7 @@ Item {
                         id: notificationIcon
                         anchors.centerIn: parent
                         iconSize: root.iconPixelSize
-                        color: notifWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: notifWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                         silent: Notifications.silent
                     }
                 }

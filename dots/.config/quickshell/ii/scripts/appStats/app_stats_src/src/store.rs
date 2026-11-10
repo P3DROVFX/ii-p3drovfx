@@ -32,6 +32,11 @@ pub struct Bucket {
     pub uj_bg: u64,
     pub launches: u64,
     pub sessions: u64,
+    /// TCP bytes received and sent, and the part of both that moved while the app
+    /// was in the background; written out as KiB.
+    pub net_rx: u64,
+    pub net_tx: u64,
+    pub net_bg: u64,
 }
 
 impl Bucket {
@@ -50,7 +55,7 @@ impl Bucket {
     }
 
     fn to_tuple(&self) -> Vec<u64> {
-        vec![
+        let mut t = vec![
             (self.fg_ms + 500) / 1000,
             (self.bg_ms + 500) / 1000,
             (self.focus_ms + 500) / 1000,
@@ -62,7 +67,18 @@ impl Bucket {
             self.uj_bg / 1000,
             self.launches,
             self.sessions,
-        ]
+        ];
+        // The network fields trail the rest and readers default anything missing to
+        // zero, so a row that never touched the network keeps its old 11-field
+        // shape — most headless rows, and every file a machine offline all day writes.
+        let mut net = [self.net_rx, self.net_tx, self.net_bg].map(|b| (b + 512) / 1024);
+        // Rounded one by one, two sub-KiB directions can both come out 0 while their
+        // background sum rounds to 1; background is never more than the whole.
+        net[2] = net[2].min(net[0] + net[1]);
+        if net.iter().any(|&k| k > 0) {
+            t.extend(net);
+        }
+        t
     }
 
     /// Reload after a restart. Sub-second and sub-millijoule remainders are lost,
@@ -83,6 +99,9 @@ impl Bucket {
             uj_bg: g(8) * 1000,
             launches: g(9),
             sessions: g(10),
+            net_rx: g(11) * 1024,
+            net_tx: g(12) * 1024,
+            net_bg: g(13) * 1024,
         }
     }
 }
@@ -153,8 +172,10 @@ impl BatBucket {
             off_ac_ms: g(6) * 1000,
             charge_ms: g(7) * 1000,
             ac_ms: g(8) * 1000,
-            // An hour on disk was written from samples, so its opening level stands.
-            seen: true,
+            // An hour on disk with a level was written from samples, so its opening
+            // level stands. One without was written while the pack could not be read,
+            // and the first reading now is its opening level, not a drop from zero.
+            seen: g(3) > 0,
         }
     }
 }

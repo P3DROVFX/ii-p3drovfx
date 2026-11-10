@@ -242,6 +242,10 @@ Item {
                     text: Translation.tr("No commands match")
                     color: Appearance.colors.colSubtext
                 }
+
+                TouchpadScrollHandler {
+                    flickable: commandsList
+                }
             }
         }
     }

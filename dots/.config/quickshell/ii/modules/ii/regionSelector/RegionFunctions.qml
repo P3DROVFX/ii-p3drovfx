@@ -51,10 +51,23 @@ Singleton {
         return keep;
     }
 
+    // Fraction of `region` covered by `cover`.
+    function coverage(region, cover) {
+        const x1 = Math.max(region.at[0], cover.at[0]);
+        const y1 = Math.max(region.at[1], cover.at[1]);
+        const x2 = Math.min(region.at[0] + region.size[0], cover.at[0] + cover.size[0]);
+        const y2 = Math.min(region.at[1] + region.size[1], cover.at[1] + cover.size[1]);
+        const area = region.size[0] * region.size[1];
+        return area > 0 ? Math.max(0, x2 - x1) * Math.max(0, y2 - y1) / area : 0;
+    }
+
+    // Drops only windows hidden behind a layer. Touching one is not enough:
+    // a thin shell strip along the top used to remove every tiled window,
+    // and layers already win the hover by being checked first.
     function filterWindowRegionsByLayers(windowRegions, layerRegions) {
         return windowRegions.filter(windowRegion => {
             for (let i = 0; i < layerRegions.length; ++i) {
-                if (intersectionOverUnion(windowRegion, layerRegions[i]) > 0)
+                if (coverage(windowRegion, layerRegions[i]) > 0.9)
                     return false;
             }
             return true;

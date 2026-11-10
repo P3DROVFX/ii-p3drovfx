@@ -19,9 +19,19 @@ Rectangle {
     property alias text: input.text
     property bool expanded: true
     property string placeholder: ""
+    readonly property bool hasActiveFocus: input.activeFocus
 
     signal accepted(string text)
     signal cleared()
+
+    function focusInput(): void {
+        input.forceActiveFocus();
+    }
+
+    function clearFocus(): void {
+        input.deselect();
+        input.focus = false;
+    }
 
     implicitHeight: 56
     // Capped rather than a raw half-height: the project's rule for anything this tall.

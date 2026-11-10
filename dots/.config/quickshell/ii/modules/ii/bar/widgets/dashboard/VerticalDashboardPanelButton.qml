@@ -21,7 +21,8 @@ RippleButton { // Right sidebar button
     bottomRightRadius: endRadius
 
     implicitHeight: Math.max(0, indicatorsColumnLayout.implicitHeight - indicatorsColumnLayout.realSpacing) + 8 * 2
-    implicitWidth: Math.max(indicatorsColumnLayout.implicitWidth, Appearance.font.pixelSize.larger) + 12
+    // At least the group's plate (bar width less its 4px margins).
+    implicitWidth: Math.max(Math.max(indicatorsColumnLayout.implicitWidth, Appearance.font.pixelSize.larger) + 12, Appearance.sizes.baseVerticalBarWidth - 8)
 
     colBackgroundHover: Appearance.colors.colLayer1Hover
     colRipple: Appearance.colors.colLayer1Active
@@ -47,6 +48,8 @@ RippleButton { // Right sidebar button
     DashboardIconDriver {
         id: iconDriver
         wifiIcon: wifiIcon
+        ethernetIcon: ethernetIcon
+        hotspotIcon: hotspotIcon
         bluetoothIcon: bluetoothIcon
         volumeIcon: volumeIcon
         micIcon: micIcon
@@ -110,6 +113,7 @@ RippleButton { // Right sidebar button
                 running: iconDriver.countdownRunning
                 paused: iconDriver.countdownPaused
                 finished: iconDriver.countdownFinished
+                progress: iconDriver.countdownProgress
             }
         }
         DashboardIconRevealer {
@@ -152,18 +156,28 @@ RippleButton { // Right sidebar button
                 implicitWidth: rightSidebarButton.iconPixelSize
                 implicitHeight: rightSidebarButton.iconPixelSize
 
-                MaterialSymbol {
+                EthernetIcon {
+                    id: ethernetIcon
                     anchors.centerIn: parent
-                    visible: Network.ethernet && !GlobalStates.dashboardWifiDialogOpen
-                    text: "lan"
+                    visible: iconDriver.shownNetworkKind === "ethernet"
                     iconSize: rightSidebarButton.iconPixelSize
                     color: rightSidebarButton.colText
+                    linked: Network.ethernet
+                }
+
+                HotspotIcon {
+                    id: hotspotIcon
+                    anchors.centerIn: parent
+                    visible: iconDriver.shownNetworkKind === "hotspot"
+                    iconSize: rightSidebarButton.iconPixelSize
+                    color: rightSidebarButton.colText
+                    active: NetworkState.accessPointMode
                 }
 
                 WifiIcon {
                     id: wifiIcon
                     anchors.centerIn: parent
-                    visible: !Network.ethernet || GlobalStates.dashboardWifiDialogOpen
+                    visible: iconDriver.shownNetworkKind === "wifi"
                     iconSize: rightSidebarButton.iconPixelSize
                     color: rightSidebarButton.colText
                     bars: {

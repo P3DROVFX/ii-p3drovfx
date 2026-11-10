@@ -4,6 +4,7 @@ import Quickshell
 import qs.services
 import qs.modules.common
 import qs.modules.common.functions
+import qs.modules.common.widgets
 import "../../../services/modes/ModeSchema.js" as ModeSchema
 
 /**
@@ -123,6 +124,50 @@ Singleton {
 
     function triggerTypeIcon(type) {
         return ModeSchema.TRIGGER_TYPES[type]?.icon ?? "bolt";
+    }
+
+    // Each condition group and action category wears its own shape, so an editor's lists
+    // do not read as one column of identical badges; the second shape of a pair is the
+    // one a row morphs into while hovered or unfolded. Page-level badges use the cookies,
+    // suns, flowers and clovers — keep those out of here.
+    readonly property var triggerShapes: ({
+        time: [MaterialShape.Shape.Clover8Leaf, MaterialShape.Shape.Burst],
+        windows: [MaterialShape.Shape.Slanted, MaterialShape.Shape.Square],
+        you: [MaterialShape.Shape.Heart, MaterialShape.Shape.Circle],
+        system: [MaterialShape.Shape.Pentagon, MaterialShape.Shape.Gem],
+        connectivity: [MaterialShape.Shape.Arch, MaterialShape.Shape.SemiCircle],
+        outside: [MaterialShape.Shape.Oval, MaterialShape.Shape.Pill],
+        automation: [MaterialShape.Shape.Diamond, MaterialShape.Shape.PuffyDiamond],
+        events: [MaterialShape.Shape.Boom, MaterialShape.Shape.Burst]
+    })
+    readonly property var actionShapes: ({
+        notifications: [MaterialShape.Shape.Triangle, MaterialShape.Shape.Arrow],
+        display: [MaterialShape.Shape.Square, MaterialShape.Shape.Slanted],
+        sound: [MaterialShape.Shape.Fan, MaterialShape.Shape.SemiCircle],
+        power: [MaterialShape.Shape.PuffyDiamond, MaterialShape.Shape.Diamond],
+        session: [MaterialShape.Shape.SemiCircle, MaterialShape.Shape.Circle],
+        radios: [MaterialShape.Shape.Arch, MaterialShape.Shape.SemiCircle],
+        input: [MaterialShape.Shape.Pill, MaterialShape.Shape.Oval],
+        apps: [MaterialShape.Shape.Circle, MaterialShape.Shape.Pill],
+        hyprland: [MaterialShape.Shape.Gem, MaterialShape.Shape.Pentagon],
+        advanced: [MaterialShape.Shape.PixelTriangle, MaterialShape.Shape.Triangle],
+        tools: [MaterialShape.Shape.Burst, MaterialShape.Shape.Boom],
+        flow: [MaterialShape.Shape.Arrow, MaterialShape.Shape.Triangle]
+    })
+
+    /// The shape of a condition's badge; `active` gives the hovered/unfolded variant.
+    function triggerShape(type, active = false) {
+        const pair = root.triggerShapes[ModeSchema.TRIGGER_TYPES[type]?.group ?? ""]
+            ?? [MaterialShape.Shape.Pentagon, MaterialShape.Shape.Gem];
+        return pair[active ? 1 : 0];
+    }
+
+    /// The shape of an action's badge, by action type or category key.
+    function actionShape(typeOrCategory, active = false) {
+        const key = root.actionShapes[typeOrCategory] ? typeOrCategory
+            : (Modes.actions.get(typeOrCategory)?.category ?? "");
+        const pair = root.actionShapes[key] ?? [MaterialShape.Shape.Gem, MaterialShape.Shape.Pentagon];
+        return pair[active ? 1 : 0];
     }
 
     function listText(items, max = 2) {
@@ -307,7 +352,22 @@ Singleton {
             return out;
         }
         case "alarm":
-            return Translation.tr("An alarm rings");
+            return t.event === "dismissed" ? Translation.tr("An alarm is dismissed")
+                : t.event === "snoozed" ? Translation.tr("An alarm is snoozed")
+                : t.event === "missed" ? Translation.tr("An alarm was missed")
+                : Translation.tr("An alarm rings");
+        case "alarmSoon": {
+            const where = t.source === "phone" ? Translation.tr("The phone's alarm")
+                : (t.source === "pc" ? Translation.tr("An alarm") : Translation.tr("An alarm or the phone's"));
+            return Translation.tr("%1 rings within %2 min").arg(where).arg(t.minutes ?? 60);
+        }
+        case "bedtime":
+            return t.phase === "windDown" ? Translation.tr("Winding down before bedtime")
+                : (t.phase === "bedtime" ? Translation.tr("Past bedtime") : Translation.tr("Around bedtime"));
+        case "timerDone":
+            return Translation.tr("A timer finishes");
+        case "phoneAlarm":
+            return Translation.tr("The phone's alarm rings");
         case "pomodoroLap":
             return t.lap === "focusEnd" ? Translation.tr("A Pomodoro focus lap ends")
                 : (t.lap === "breakEnd" ? Translation.tr("A Pomodoro break ends") : Translation.tr("A Pomodoro lap ends"));
@@ -464,6 +524,18 @@ Singleton {
         return "";
     }
 
+    // A template's description, or — for one without written words — what it does,
+    // read off its first condition and its actions.
+    function templateText(tpl) {
+        const written = root.templateDescription(tpl?.template ?? "");
+        if (written.length)
+            return written;
+        const triggers = ModeSchema.toArray(tpl?.triggers);
+        const actions = ModeSchema.toArray(tpl?.actions).filter(a => a.type !== "wait").map(a => root.actionLabel(a.type));
+        const cause = triggers.length ? root.triggerText(triggers[0]) : Translation.tr("By hand");
+        return Translation.tr("If %1 → %2").arg(cause).arg(actions.join(", "));
+    }
+
     // ---------------------------------------------------------------- history
 
     function historyEventText(h) {
@@ -474,6 +546,8 @@ Singleton {
             return Translation.tr("Ended");
         case "run":
             return Translation.tr("Ran");
+        case "result":
+            return Translation.tr("Finished");
         }
         return root.capitalize(h?.event ?? "");
     }
@@ -485,6 +559,74 @@ Singleton {
         if (h.event === "end")
             return Modes.reasonText(h.why);
         return root.capitalize(Modes.sourceText(h.why));
+    }
+
+    // ── Tracked-command results (services/modes/ModeTasks.qml) ──────────
+    // `status` is ok | warn | error | running.
+
+    function statusLabel(status) {
+        switch (status) {
+        case "ok":
+            return Translation.tr("OK");
+        case "warn":
+            return Translation.tr("Warnings");
+        case "error":
+            return Translation.tr("Failed");
+        case "running":
+            return Translation.tr("Running");
+        }
+        return "";
+    }
+
+    function statusIcon(status) {
+        switch (status) {
+        case "ok":
+            return "check_circle";
+        case "warn":
+            return "warning";
+        case "error":
+            return "error";
+        case "running":
+            return "progress_activity";
+        }
+        return "info";
+    }
+
+    function statusContainer(status) {
+        switch (status) {
+        case "error":
+            return Appearance.colors.colErrorContainer;
+        case "warn":
+            return Appearance.colors.colTertiaryContainer;
+        case "running":
+            return Appearance.colors.colSecondaryContainer;
+        }
+        return Appearance.colors.colPrimaryContainer;
+    }
+
+    function statusOnContainer(status) {
+        switch (status) {
+        case "error":
+            return Appearance.colors.colOnErrorContainer;
+        case "warn":
+            return Appearance.colors.colOnTertiaryContainer;
+        case "running":
+            return Appearance.colors.colOnSecondaryContainer;
+        }
+        return Appearance.colors.colOnPrimaryContainer;
+    }
+
+    // The tracked run an Activity entry belongs to: a result names it; a
+    // routine's "ran" entry is the one that started within a few seconds of it.
+    function historyRun(h) {
+        if (!h)
+            return null;
+        const runs = Modes.tasks.runs;
+        if (h.task)
+            return runs.find(r => r.runId === h.task) ?? null;
+        if (h.event !== "run" && h.event !== "start")
+            return null;
+        return runs.find(r => r.owner === h.id && Math.abs(r.startedAt - h.t) < 5000) ?? null;
     }
 
     function historyName(h) {
@@ -685,6 +827,8 @@ Singleton {
             return Translation.tr("Rounding");
         case "tearing":
             return Translation.tr("Tearing");
+        case "transparency":
+            return Translation.tr("Transparency");
         }
         return key;
     }

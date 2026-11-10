@@ -6,6 +6,7 @@ singleton WelcomeProjectLinks 1.0 WelcomeProjectLinks.qml
 singleton WelcomeTutorialRegistry 1.0 WelcomeTutorialRegistry.qml
 singleton WelcomeTutorialContent 1.0 WelcomeTutorialContent.qml
 singleton WelcomeMotion 1.0 WelcomeMotion.qml
+singleton WelcomeFeatureRegistry 1.0 WelcomeFeatureRegistry.qml
 
 WelcomeActionCard 1.0 WelcomeActionCard.qml
 WelcomeChoiceList 1.0 WelcomeChoiceList.qml
@@ -15,6 +16,10 @@ WelcomeProfilePage 1.0 WelcomeProfilePage.qml
 WelcomeBarPage 1.0 WelcomeBarPage.qml
 WelcomeShortcutsPage 1.0 WelcomeShortcutsPage.qml
 WelcomeSearchPage 1.0 WelcomeSearchPage.qml
+WelcomeFeaturesPage 1.0 WelcomeFeaturesPage.qml
+WelcomeFeatureRow 1.0 WelcomeFeatureRow.qml
+WelcomeAppsPage 1.0 WelcomeAppsPage.qml
+WelcomeSystemPage 1.0 WelcomeSystemPage.qml
 WelcomeDisplaysPage 1.0 WelcomeDisplaysPage.qml
 WelcomeKeyboardLayoutPage 1.0 WelcomeKeyboardLayoutPage.qml
 WelcomeLanguagePage 1.0 WelcomeLanguagePage.qml

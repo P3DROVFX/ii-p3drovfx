@@ -32,7 +32,9 @@ Item {
             Bluetooth: [],
             Utility: [],
             Resources: [],
-            System: []
+            System: [],
+            Wellbeing: [],
+            People: []
         };
         const allWidgets = WidgetsRegistry.allWidgets || [];
         for (let i = 0; i < allWidgets.length; i++) {
@@ -54,6 +56,8 @@ Item {
     readonly property var utilityWidgets: widgetCategories.Utility
     readonly property var resourceWidgets: widgetCategories.Resources
     readonly property var systemWidgets: widgetCategories.System
+    readonly property var wellbeingWidgets: widgetCategories.Wellbeing
+    readonly property var peopleWidgets: widgetCategories.People
 
     // Accordion collapse state per category. Default: all categories collapsed.
     // When collapsed, widget preview Loaders are not active → no GPU/memory cost.
@@ -66,6 +70,8 @@ Item {
     property bool utilityExpanded: false
     property bool resourceExpanded: false
     property bool systemExpanded: false
+    property bool wellbeingExpanded: false
+    property bool peopleExpanded: false
 
     // Rich catalog sections are opt-in. This keeps the first page pass limited
     // to the small Desktop Widgets controls and avoids starting network work.
@@ -506,6 +512,52 @@ Item {
                 }
             }
 
+            ContentSubsection {
+                title: Translation.tr("Wellbeing")
+                icon: "self_improvement"
+                Layout.fillWidth: true
+                collapsible: true
+                expanded: widgetsConfigRoot.wellbeingExpanded
+                onExpandedChanged: widgetsConfigRoot.wellbeingExpanded = expanded
+
+                Loader {
+                    Layout.fillWidth: true
+                    active: widgetsConfigRoot.wellbeingExpanded
+                    asynchronous: true
+                    sourceComponent: Flow {
+                        Layout.fillWidth: true
+                        spacing: 12
+                        Repeater {
+                            model: widgetsConfigRoot.wellbeingWidgets
+                            delegate: widgetCardComponent
+                        }
+                    }
+                }
+            }
+
+            ContentSubsection {
+                title: Translation.tr("People & dates")
+                icon: "cake"
+                Layout.fillWidth: true
+                collapsible: true
+                expanded: widgetsConfigRoot.peopleExpanded
+                onExpandedChanged: widgetsConfigRoot.peopleExpanded = expanded
+
+                Loader {
+                    Layout.fillWidth: true
+                    active: widgetsConfigRoot.peopleExpanded
+                    asynchronous: true
+                    sourceComponent: Flow {
+                        Layout.fillWidth: true
+                        spacing: 12
+                        Repeater {
+                            model: widgetsConfigRoot.peopleWidgets
+                            delegate: widgetCardComponent
+                        }
+                    }
+                }
+            }
+
             ConfigSwitch {
                 Layout.fillWidth: true
                 buttonIcon: "speed"
@@ -589,6 +641,8 @@ Item {
                     case "Utility": return "build";
                     case "System": return "tune";
                     case "Resources": return "monitor_heart";
+                    case "Wellbeing": return "self_improvement";
+                    case "People": return "cake";
                     default: return "widgets";
                 }
             }
@@ -1037,6 +1091,11 @@ Item {
                                 tooltip: "Show fixed on lock"
                             },
                             {
+                                value: "custom",
+                                icon: "open_with",
+                                tooltip: "Own position on lock"
+                            },
+                            {
                                 value: "center",
                                 icon: "center_focus_strong",
                                 tooltip: "Center on lock"
@@ -1181,6 +1240,7 @@ Item {
 
                 // Schema-driven controls via ExtensionWidgetSettingsRenderer
                 Flickable {
+                    id: schemaFlickable
                     Layout.fillWidth: true
                     Layout.preferredHeight: Math.min(contentHeight, extConfigOverlay.height - 120)
                     contentHeight: schemaSection.implicitHeight
@@ -1222,6 +1282,10 @@ Item {
                             }
                             when: schemaRenderer.item !== null
                         }
+                    }
+
+                    TouchpadScrollHandler {
+                        flickable: schemaFlickable
                     }
                 }
             }

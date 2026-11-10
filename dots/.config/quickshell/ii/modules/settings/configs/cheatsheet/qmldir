@@ -1,0 +1,5 @@
+module qs.modules.settings.configs.cheatsheet
+
+CheatsheetHero 1.0 CheatsheetHero.qml
+CheatsheetPages 1.0 CheatsheetPages.qml
+CheatsheetPageToggle 1.0 CheatsheetPageToggle.qml

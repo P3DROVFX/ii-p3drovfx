@@ -521,7 +521,6 @@ Singleton {
         root.stale = false;
         if (!upstreamProc.running) upstreamProc.running = true;
         if (!lateProc.running) lateProc.running = true;
-        if (!root.themesReady) root.refreshThemes();
         if (!probeProc.running) probeProc.running = true;
     }
 
@@ -550,6 +549,15 @@ Singleton {
         target: HyprlandGui
         function onWatchingChanged() {
             if (HyprlandGui.watching) root.ensureFresh();
+            else {
+                root.upstream = [];
+                root.late = [];
+                root.themes = [];
+                root.probe = ({});
+                root.ready = false;
+                root.themesReady = false;
+                root.stale = true;
+            }
         }
     }
 
@@ -588,6 +596,7 @@ Singleton {
         command: [HyprlandGui.scriptPath, "read", "--file", root.upstreamFile]
         stdout: StdioCollector {
             onStreamFinished: {
+                if (!HyprlandGui.watching) return;
                 const list = root._readEnvList(text);
                 if (ObjectUtils.canon(list) !== ObjectUtils.canon(root.upstream))
                     root.upstream = list;
@@ -601,6 +610,7 @@ Singleton {
         command: [HyprlandGui.scriptPath, "read", "--file", root.lateFile]
         stdout: StdioCollector {
             onStreamFinished: {
+                if (!HyprlandGui.watching) return;
                 const list = root._readEnvList(text);
                 if (ObjectUtils.canon(list) !== ObjectUtils.canon(root.late)) root.late = list;
             }
@@ -651,6 +661,7 @@ Singleton {
         `]
         stdout: StdioCollector {
             onStreamFinished: {
+                if (!HyprlandGui.watching) return;
                 const seen = {};
                 const out = [];
                 for (const line of String(text).split("\n")) {
@@ -702,6 +713,7 @@ Singleton {
         `]
         stdout: StdioCollector {
             onStreamFinished: {
+                if (!HyprlandGui.watching) return;
                 const map = {};
                 for (const line of String(text).split("\n")) {
                     const at = line.indexOf("=");

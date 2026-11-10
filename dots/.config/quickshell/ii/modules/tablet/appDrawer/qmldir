@@ -6,3 +6,4 @@ TabletAppDrawerWorkspaceOverview 1.0 TabletAppDrawerWorkspaceOverview.qml
 TabletAppDragLaunchOverlay 1.0 TabletAppDragLaunchOverlay.qml
 TabletAppTile 1.0 TabletAppTile.qml
 TabletSearchResultRow 1.0 TabletSearchResultRow.qml
+TabletEdgeFade 1.0 TabletEdgeFade.qml

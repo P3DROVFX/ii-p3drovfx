@@ -5,6 +5,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.modules.ii.modes
+import qs.modules.ii.clock.components
 import QtQuick
 import QtQuick.Layouts
 import "../../../../services/modes/ModeSchema.js" as ModeSchema
@@ -93,24 +94,24 @@ ColumnLayout {
 
     Rectangle {
         Layout.fillWidth: true
-        implicitHeight: bindText.implicitHeight + 16
-        radius: Appearance.rounding.small
-        color: Appearance.colors.colLayer3
+        implicitHeight: bindText.implicitHeight + ClockStyle.gap * 2
+        radius: ClockStyle.radiusSmall
+        color: ClockStyle.colField
 
         StyledText {
             id: bindText
             anchors {
                 fill: parent
-                leftMargin: 12
-                rightMargin: 12
-                topMargin: 8
+                leftMargin: ClockStyle.gap + 2
+                rightMargin: ClockStyle.gap + 2
+                topMargin: ClockStyle.gap
             }
             text: `hl.bind("SUPER + SHIFT + R", hl.dsp.global("${form.globalName}"))\n`
                 + `bind = SUPER SHIFT, R, global, ${form.globalName}`
             font.family: Appearance.font.family.monospace
-            font.pixelSize: Appearance.font.pixelSize.smaller
+            font.pixelSize: ClockStyle.textSmall
             wrapMode: Text.Wrap
-            color: Appearance.colors.colOnLayer3
+            color: ClockStyle.colOnSurface
         }
     }
 

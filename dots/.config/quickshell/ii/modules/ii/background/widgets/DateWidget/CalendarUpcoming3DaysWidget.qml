@@ -258,6 +258,10 @@ AbstractBackgroundWidget {
                         }
                     }
                 }
+
+                TouchpadScrollHandler {
+                    flickable: daysListView
+                }
             }
         }
 

@@ -1,6 +1,5 @@
 pragma ComponentBehavior: Bound
 
-import Qt.labs.synchronizer
 import QtQuick
 import qs
 import QtQuick.Controls
@@ -37,11 +36,10 @@ Item {
     onContentYChanged: hubRoot.pushContentY()
 
     function pushContentY() {
-        const page = swipeView.currentItem?.pageItem ?? null;
+        const page = tabLoader.item;
         if (page && page.contentY !== undefined)
             page.contentY = hubRoot.contentY;
     }
-
     /**
      * Whether this page shows everything the compositor can be told, or the part of it a
      * desktop actually needs.
@@ -80,68 +78,45 @@ Item {
 
     readonly property var tabs: hubRoot.allTabs.filter(tab => !tab.advanced || hubRoot.advanced)
 
-    // Turning advanced mode off takes a tab away, so whatever index was current may now be
-    // past the end - or be a different tab entirely. `swipeView` may not exist yet the first
-    // time this list is evaluated, which is why the guard is here and not only in the body.
+    // Turning advanced mode off takes a tab away, so the current index may fall past the end
+    // - or point at a different tab entirely. The selection lives on the bar and follows it;
+    // clamping first avoids a one-frame load of whatever was at the clipped index.
     onTabsChanged: {
-        if (!swipeView)
-            return;
-        if (swipeView.currentIndex >= hubRoot.tabs.length)
-            swipeView.currentIndex = 0;
-        hubRoot.markVisited(swipeView.currentIndex);
+        if (hubRoot.currentTab >= hubRoot.tabs.length)
+            hubRoot.currentTab = 0;
     }
 
-    /// A tab keeps its component tree while it stays among the last few used, so switching
-    /// back is instant and the slide animates between two real pages instead of one and a
-    /// hole. Every tab of controls alive at once is most of this page's memory, so the
-    /// count is capped: the least recently used one is unloaded, and rebuilds behind its
-    /// placeholder when it is next visited.
-    ///
-    /// Keyed by tab id rather than by position: the list of tabs is not fixed any more, and an
-    /// index into it means a different tab depending on whether advanced mode is on.
-    property var visited: ({ "input": true })
-    /// Live tab ids, most recently used first.
-    property var recent: ["input"]
-    readonly property int maxLiveTabs: 3
-    /// True while the tab strip is animating between two pages. Only then are the other built
-    /// tabs kept visible: the renderer walks whatever is visible on every frame, and five idle
-    /// pages of controls are a real cost on an integrated GPU.
-    property bool sliding: false
+    // Only the selected tab owns a tree. Delay its first construction until
+    // the placeholder has a frame and the managed values are available.
+    property bool tabLoadArmed: false
+    readonly property bool tabBarReady: tabBar.count === hubRoot.tabs.length
+    /// The tab this page is showing. The bar and the page load both read this one source of
+    /// truth; indexes emitted while the bar fills are the bar's, not the user's.
+    property int currentTab: 0
 
-    /**
-     * False only for the moment the page is being built.
-     *
-     * The tab the page opens on is built there and then, because incubating it means looking
-     * at an empty page for as long as the incubator takes - which is longer than just building
-     * it. Every tab after that is incubated, because by then there is a page on screen and the
-     * window has to keep answering while it arrives.
-     */
-    property bool settled: false
-
-    Timer {
-        interval: 1
-        running: true
-        onTriggered: hubRoot.settled = true
-    }
-
-    Timer {
-        id: slideSettle
-        interval: 450
-        onTriggered: hubRoot.sliding = false
-    }
-
-    function markVisited(index: int) {
+    function selectTab(index: int) {
         if (index < 0 || index >= hubRoot.tabs.length)
             return;
-        const id = hubRoot.tabs[index].id;
-        const order = [id].concat(Array.from(hubRoot.recent).filter(other => other !== id));
-        const next = Object.assign({}, hubRoot.visited);
-        next[id] = true;
-        while (order.length > hubRoot.maxLiveTabs)
-            next[order.pop()] = false;
-        hubRoot.recent = order;
-        if (JSON.stringify(next) !== JSON.stringify(hubRoot.visited))
-            hubRoot.visited = next;
+        hubRoot.currentTab = index;
+    }
+
+    function syncTabBar() {
+        if (!hubRoot.tabBarReady)
+            return;
+        tabBar.setCurrentIndex(hubRoot.currentTab);
+    }
+
+    onTabBarReadyChanged: hubRoot.syncTabBar()
+
+    Timer {
+        id: tabActivation
+        interval: 16
+        onTriggered: hubRoot.tabLoadArmed = true
+    }
+
+    function scheduleTab() {
+        hubRoot.tabLoadArmed = false;
+        tabActivation.restart();
     }
 
     /// A settings search result knows the file its section was indexed from, not the tab. Map
@@ -161,7 +136,7 @@ Item {
         if (index < 0)
             return;
         subPageOverlay.close();
-        swipeView.currentIndex = index;
+        hubRoot.selectTab(index);
     }
 
     function takePendingTab() {
@@ -175,18 +150,13 @@ Item {
             if (section.pageId !== "hyprland" || section.title !== title)
                 continue;
             const index = hubRoot.tabIndexForSource(section.sourceKey);
-            if (index >= 0)
-                swipeView.currentIndex = index;
+            hubRoot.selectTab(index);
             return;
         }
     }
 
-    /// Whether anyone can actually see this page. The settings window is hidden when it
-    /// closes, not destroyed, so this page lives on - and used to stay subscribed: every
-    /// config reload re-ran the readers and re-parsed the bind files for a window nobody had
-    /// open. The subscription now follows the window, and the tabs are unloaded shortly after
-    /// it closes so their controls stop costing memory as well.
-    readonly property bool onScreen: GlobalStates.settingsOpen
+    /// Screenshot capture hides the window without ending the editing session.
+    readonly property bool onScreen: GlobalStates.settingsOpen || GlobalStates.settingsSuspendedForScreenshot
     property bool subscribed: false
 
     function syncSubscription() {
@@ -199,28 +169,13 @@ Item {
             HyprlandGui.detach();
     }
 
-    onOnScreenChanged: {
-        hubRoot.syncSubscription();
-        if (hubRoot.onScreen) {
-            retireTimer.stop();
-            hubRoot.markVisited(swipeView.currentIndex);
-        } else {
-            retireTimer.restart();
-        }
-    }
-
-    Timer {
-        id: retireTimer
-        interval: 10000
-        onTriggered: {
-            hubRoot.visited = ({});
-            hubRoot.recent = [];
-        }
-    }
+    onOnScreenChanged: hubRoot.syncSubscription()
 
     Component.onCompleted: {
         hubRoot.syncSubscription();
         hubRoot.takePendingTab();
+        hubRoot.syncTabBar();
+        hubRoot.scheduleTab();
     }
     Component.onDestruction: {
         if (hubRoot.subscribed) {
@@ -287,113 +242,64 @@ Item {
             }
         }
 
-        Item {
-            id: tabStrip
+        SecondaryTabBar {
+            id: tabBar
             Layout.fillWidth: true
-            implicitHeight: 52
+            enabled: !subPageOverlay.isOpen
 
-            // The tab strip scrolls when the window is narrow rather than spilling over the page.
-            Flickable {
-                anchors.fill: parent
-                contentWidth: Math.max(width, toolbar.implicitWidth)
-                contentHeight: height
-                flickableDirection: Flickable.HorizontalFlick
-                boundsBehavior: Flickable.StopAtBounds
-                clip: true
+            onCurrentIndexChanged: {
+                if (!hubRoot.tabBarReady)
+                    return;
+                hubRoot.selectTab(currentIndex);
+            }
 
-                Toolbar {
-                    id: toolbar
-                    enableShadow: false
-                    width: implicitWidth
-                    height: implicitHeight
-                    x: Math.max(0, (tabStrip.width - implicitWidth) / 2)
-                    y: (tabStrip.height - height) / 2
+            Repeater {
+                model: hubRoot.tabs.length
 
-                    ToolbarTabBar {
-                        id: tabBar
-                        tabButtonList: hubRoot.tabs
-
-                        delegate: ToolbarTabButton {
-                            required property int index
-                            required property var modelData
-
-                            current: index === tabBar.currentIndex
-                            text: Translation.tr(modelData.name)
-                            materialSymbol: modelData.icon
-                            onClicked: tabBar.setCurrentIndex(index)
-                        }
-
-                        Synchronizer on currentIndex {
-                            property alias source: swipeView.currentIndex
-                        }
-                    }
+                delegate: SecondaryTabButton {
+                    required property int index
+                    readonly property var tab: hubRoot.tabs[index]
+                    buttonText: Translation.tr(tab.name)
+                    buttonIcon: tab.icon
                 }
             }
         }
 
-        SwipeView {
-            id: swipeView
+        Item {
+            id: tabHost
+
             Layout.fillWidth: true
             Layout.fillHeight: true
-            clip: true
-            // Tabs are switched from the bar. A horizontal drag inside a settings page belongs
-            // to whatever control is under the finger, not to the tab strip.
-            interactive: false
 
-            onCurrentIndexChanged: {
-                hubRoot.markVisited(swipeView.currentIndex);
-                hubRoot.sliding = true;
-                slideSettle.restart();
-                // The tab that is arriving is still incubating, so the restored scroll
-                // position has nothing to land on yet; it is pushed again below when it does.
-                hubRoot.pushContentY();
+            Loader {
+                id: tabLoader
+
+                anchors.fill: parent
+
+                readonly property bool armed: hubRoot.tabBarReady && hubRoot.tabLoadArmed
+                    && HyprlandGui.ready
+
+                active: armed && hubRoot.currentTab >= 0
+                    && hubRoot.currentTab < hubRoot.tabs.length
+                asynchronous: true
+                source: active
+                    ? Qt.resolvedUrl(hubRoot.tabs[hubRoot.currentTab].file) : ""
+
+                onLoaded: hubRoot.pushContentY()
             }
 
-            onCurrentItemChanged: hubRoot.pushContentY()
-
-            Repeater {
-                model: hubRoot.tabs
-
-                // Built off the main thread. A tab is several hundred controls deep, and
-                // building one where the user could see it froze the window for as long as it
-                // took. The placeholder holds the tab's shape for the frames in between, so
-                // the switch animates either way.
-                //
-                // The two are wrapped rather than nested, because a Loader's default property
-                // is its sourceComponent: a placeholder written inside one is not a sibling of
-                // the page, it is a candidate for being the page.
-                delegate: Item {
-                    id: tabHost
-
-                    required property var modelData
-                    required property int index
-
-                    readonly property var pageItem: tabLoader.item
-
-                    // Out of the render tree unless on screen or mid-slide. Built tabs keep
-                    // their state either way.
-                    visible: hubRoot.sliding || tabHost.SwipeView.isCurrentItem
-
-                    Loader {
-                        id: tabLoader
-                        anchors.fill: parent
-
-                        active: hubRoot.visited[tabHost.modelData.id] ?? false
-                        asynchronous: hubRoot.settled || !tabHost.SwipeView.isCurrentItem
-                        source: Qt.resolvedUrl(tabHost.modelData.file)
-
-                        onLoaded: {
-                            if (tabHost.SwipeView.isCurrentItem) hubRoot.pushContentY();
-                        }
-                    }
-
-                    HyprlandTabPlaceholder {
-                        visible: tabLoader.status !== Loader.Ready
-                        icon: tabHost.modelData.icon
-                        title: Translation.tr(tabHost.modelData.name)
-                        description: Translation.tr("Just a moment…")
-                    }
+            HyprlandTabPlaceholder {
+                anchors.fill: parent
+                visible: tabLoader.status !== Loader.Ready
+                icon: {
+                    const tab = hubRoot.tabs[hubRoot.currentTab];
+                    return tab ? tab.icon : "";
                 }
+                title: {
+                    const tab = hubRoot.tabs[hubRoot.currentTab];
+                    return Translation.tr(tab ? tab.name : "");
+                }
+                description: Translation.tr("Just a moment…")
             }
         }
     }

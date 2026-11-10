@@ -16,24 +16,13 @@ MouseArea {
     readonly property var displayProvider: AiPlanUsage.displayProviderById(AiPlanUsage.displayedProviderId)
     readonly property string providerId: String(root.displayProvider?.providerId ?? "")
     readonly property string groupId: String(root.displayProvider?.groupId ?? "")
-    readonly property color containerColor: {
-        if (root.providerId === "chatgpt")
-            return Appearance.colors.colSecondaryContainer;
-        if (root.providerId === "claude")
-            return Appearance.colors.colTertiaryContainer;
-        if (root.providerId === "antigravity" && root.groupId === "other")
-            return Appearance.colors.colSecondaryContainer;
-        return Appearance.colors.colPrimaryContainer;
+    BarWidgetPalette {
+        id: palette
+        colorMode: Config.options.bar.aiPlanUsage.colorMode
     }
-    readonly property color onContainerColor: {
-        if (root.providerId === "chatgpt")
-            return Appearance.colors.colOnSecondaryContainer;
-        if (root.providerId === "claude")
-            return Appearance.colors.colOnTertiaryContainer;
-        if (root.providerId === "antigravity" && root.groupId === "other")
-            return Appearance.colors.colOnSecondaryContainer;
-        return Appearance.colors.colOnPrimaryContainer;
-    }
+
+    readonly property color containerColor: root.containsMouse ? palette.colBackgroundHover : palette.colBackground
+    readonly property color onContainerColor: palette.colOnBackground
 
     visible: root.shown
     hoverEnabled: !BarInteraction.clickToShow
@@ -63,7 +52,7 @@ MouseArea {
         implicitHeight: root.vertical
             ? constellation.implicitHeight + 12
             : Appearance.sizes.baseBarHeight - 8
-        radius: Config.options.bar.barGroupStyle === 1
+        radius: (typeof rootItem !== "undefined" ? rootItem.groupStyle : Config.options.bar.barGroupStyle) === 1
             ? Appearance.rounding.windowRounding
             : Appearance.rounding.full
         color: root.containerColor
@@ -81,7 +70,12 @@ MouseArea {
         }
     }
 
-    AiPlanUsagePopup {
-        hoverTarget: root
+    // Lazy: popup controller is only built on approach (same as ExpressiveSports).
+    PopupLoader {
+        active: BarInteraction.enablePopups
+            && (BarInteraction.clickToShow || root.containsMouse || held)
+        sourceComponent: AiPlanUsagePopup {
+            hoverTarget: root
+        }
     }
 }

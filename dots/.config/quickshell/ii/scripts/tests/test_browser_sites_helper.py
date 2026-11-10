@@ -691,7 +691,12 @@ class BrowserSitesQmlContractTests(unittest.TestCase):
             "function requestFavicon", 1
         )[0]
 
-        self.assertIn("root.sites", matching)
+        # Matching reads the records normalized once per index change,
+        # which are derived from the in-memory site list.
+        self.assertIn("root.siteRecords", matching)
+        self.assertIn(
+            "readonly property var siteRecords: (root.sites ?? []).map(", qml
+        )
         self.assertIn("maxResults", matching)
         self.assertIn("site?.host", qml)
         self.assertIn("site?.title", qml)

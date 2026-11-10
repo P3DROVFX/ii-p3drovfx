@@ -8,7 +8,6 @@ import qs.services
 Item {
     id: root
     anchors.fill: parent
-    property bool isExpanded: false
 
     readonly property string workspaceStyle: Config.options.bar.styles.workspaces ?? "default"
 
@@ -16,21 +15,10 @@ Item {
         id: loader
         anchors.centerIn: parent
 
-        // Instead of scale (causes aliasing), use explicit width/height
-        // expanding widget fills more space when expanded
-        width: root.isExpanded
-            ? (loaderBaseWidth * 1.15)
-            : loaderBaseWidth
-        height: root.isExpanded ? 80 : (root.height > 0 ? root.height : 40)
+        width: loaderBaseWidth
+        height: root.height > 0 ? root.height : 40
 
         readonly property real loaderBaseWidth: item ? item.implicitWidth : (Config.options.bar.workspaces.shown * 26)
-
-        Behavior on width {
-            NumberAnimation { duration: 250; easing.type: Easing.OutCubic }
-        }
-        Behavior on height {
-            NumberAnimation { duration: 250; easing.type: Easing.OutCubic }
-        }
 
         source: {
             if (root.workspaceStyle === "minimal")
@@ -39,6 +27,10 @@ Item {
                 return "../../bar/widgets/workspaces/ExpressiveWorkspaces.qml";
             if (root.workspaceStyle === "dock")
                 return "../../bar/widgets/workspaces/DockWorkspaces.qml";
+            if (root.workspaceStyle === "index")
+                return "../../bar/widgets/workspaces/IndexWorkspaces.qml";
+            if (root.workspaceStyle === "pills")
+                return "../../bar/widgets/workspaces/PillsWorkspaces.qml";
             return "../../bar/widgets/workspaces/Workspaces.qml";
         }
         onLoaded: {
@@ -50,10 +42,16 @@ Item {
         }
     }
 
-    implicitWidth: {
-        let baseWidth = loader.item ? loader.item.implicitWidth : (Config.options.bar.workspaces.shown * 26);
-        return Math.max((baseWidth * (root.isExpanded ? 1.15 : 1.0)) + 40, loader.width + 32);
-    }
+    /**
+     * The strip's own size, for the island to pad evenly around it. The bar widget
+     * reports the whole bar's height, so the drawn height is its button size (plus the
+     * occupied-indicator background around it) when the style exposes one.
+     */
+    readonly property real contentWidth: loader.loaderBaseWidth
+    readonly property real contentHeight: loader.item && loader.item.iconBoxWrapperSize
+        ? loader.item.iconBoxWrapperSize + 2 : 28
+
+    implicitWidth: root.contentWidth + 16
 
     Component.onCompleted: {
         // Expose root to DynamicIslandPanel

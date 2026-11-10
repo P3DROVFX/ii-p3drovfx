@@ -124,6 +124,40 @@ Singleton {
 
     readonly property string activeProvider: root.providerForDevice(root.activeDevice)
     readonly property bool connected: root.activeDevice !== null && root.activeProvider !== null
+    // =========================================================================
+    // Island glance: the connected headset whose battery can be shown
+    // =========================================================================
+    /**
+     * Headset-class connected device with a readable battery. `activeDevice` is
+     * deliberately not used: it falls back to any connected device, which would
+     * show a mouse battery as earbuds. Enhanced providers come first because
+     * they report per-bud aggregates; plain BlueZ battery is the fallback.
+     */
+    readonly property var glanceDevice: {
+        if (!BluetoothStatus.available || !BluetoothStatus.enabled)
+            return null;
+        const headsets = BluetoothStatus.connectedDevices.filter(d =>
+            d && d.connected
+            && Icons.getBluetoothDeviceMaterialSymbol(d.icon ?? "") === "headphones");
+        for (let d of headsets) {
+            if (root.providerForDevice(d) !== null && root.primaryBatteryPercent(d) !== null)
+                return d;
+        }
+        for (let d of headsets) {
+            if (d.batteryAvailable && (d.battery ?? -1) >= 0)
+                return d;
+        }
+        return null;
+    }
+
+    /** Percent for `glanceDevice`, or -1 when there is nothing to glance at. */
+    readonly property int glancePercent: {
+        const d = root.glanceDevice;
+        if (!d)
+            return -1;
+        const p = root.primaryBatteryPercent(d);
+        return p !== null ? p : Math.round(d.battery * 100);
+    }
 
     // =========================================================================
     // Capabilities Inspection (Plan Section 70)

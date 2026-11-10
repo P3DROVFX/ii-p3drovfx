@@ -1,3 +1,5 @@
 module qs.modules.common.dock
 
 DockIcon 1.0 DockIcon.qml
+DockRunningIndicator 1.0 DockRunningIndicator.qml
+AppNotificationBadge 1.0 AppNotificationBadge.qml

@@ -4,6 +4,7 @@ pragma ComponentBehavior: Bound
 // From https://git.outfoxxed.me/outfoxxed/nixnew
 // It does not have a license, but the author is okay with redistribution.
 
+import QtQml
 import QtQml.Models
 import QtQuick
 import Quickshell
@@ -49,8 +50,211 @@ Singleton {
 	property MprisPlayer trackedPlayer: null;
 	property MprisPlayer activePlayer: localPlayerSelected && localPlayer
 		? localPlayer
-		: (trackedPlayer ?? applicationPlayers[0] ?? Mpris.players.values[0] ?? null);
+		: (trackedPlayer ?? applicationPlayers[0] ?? Mpris.players.values.find(player => !isEmptyPlayer(player)) ?? null);
 	signal trackChanged(reverse: bool);
+
+    // ── Track length ────────────────────────────────────────────────────────────
+    /**
+     * The last real length seen for a track, per player.
+     *
+     * Quickshell answers `length` with the current `position` whenever the player is
+     * not publishing `mpris:length` at that moment, so `position / length` is exactly 1
+     * and every progress bar in the shell drew a finished track over a song that had
+     * just started. Browsers are worse than absent: they publish the real duration in
+     * the odd sample and fall back to the synthesized one in between, measured flipping
+     * several times a minute on Firefox, so a bar reading `lengthSupported` live
+     * flickered between honest and complete - and a seek control gated on it died under
+     * the pointer.
+     *
+     * The truth is therefore latched: once a track has named its length, that is its
+     * length until the track changes. `position` needs no such help - it stays correct
+     * across the fallback.
+     */
+    property var trackLengths: ({})
+
+    /** A track's identity: the length is only reused while the same thing is playing. */
+    function trackKeyOf(player: MprisPlayer): string {
+        if (!player)
+            return "";
+        return [player.trackTitle ?? "", player.trackArtist ?? "", player.trackAlbum ?? ""].join("\u0000");
+    }
+
+    /**
+     * Remember a length the moment a player publishes a real one. One entry per player,
+     * replaced rather than accumulated, so the map cannot grow.
+     */
+    function noteTrackLength(player: MprisPlayer): void {
+        if (!player || player.lengthSupported !== true || !(player.length > 0))
+            return;
+        const bus = player.dbusName ?? "";
+        const key = root.trackKeyOf(player);
+        const known = root.trackLengths[bus];
+        if (known && known.key === key && known.length === player.length)
+            return;
+        // Reassigned whole: bindings that read the map only re-evaluate on identity.
+        const next = Object.assign({}, root.trackLengths);
+        next[bus] = { key: key, length: player.length };
+        root.trackLengths = next;
+    }
+
+    property Instantiator _lengthWatchers: Instantiator {
+        // The live D-Bus list, not the filtered one: a length is worth latching
+        // whoever is playing, and `allPlayers` only refreshes every ten seconds.
+        model: Mpris.players
+        delegate: QtObject {
+            required property MprisPlayer modelData
+            property Connections watcher: Connections {
+                target: modelData
+                function onLengthChanged() { root.noteTrackLength(modelData); }
+                function onLengthSupportedChanged() { root.noteTrackLength(modelData); }
+                function onTrackTitleChanged() { root.noteTrackLength(modelData); }
+                function onUniqueIdChanged() { root.resetTrackClock(modelData); }
+            }
+            Component.onCompleted: root.noteTrackLength(modelData)
+        }
+    }
+
+    // ── Track position clock ─────────────────────────────────────────────────
+    /**
+     * The shell's own position through the current track, immune to stale anchors.
+     *
+     * Quickshell answers `position` with the value last anchored plus real time since
+     * that anchor, and on a track change it re-anchors by reading `Position` off the
+     * bus - a read browsers answer with the *previous* track's time, because their
+     * MPRIS adapters only write `Position` on seeks (measured on YouTube Music: the
+     * bus sits at `0` for an entire playing track, and returns the old song's elapsed
+     * time in the moment a new one starts). So every progress surface inherited the
+     * old track's position: a 3:17 track started after a 4:00 one drew its bar at
+     * ~100 % and "finished" minutes before the music did.
+     *
+     * The clock therefore never trusts an absolute position at a track change. When
+     * `uniqueId` bumps, whatever raw reads then becomes the new track's zero; after
+     * that only the raw's advances are followed, since they share the player's own
+     * clock. A raw that moves out of line with wall time - a seek, or a player
+     * finally pushing the truth - re-anchors to that absolute value.
+     *
+     * Per bus: { base, raw, wallMs, wasPlaying }, mutated in place. Bindings on the
+     * position wake from `positionChanged` (the surfaces' own 1 s timers); this map
+     * is storage, not a signal source.
+     */
+    property var trackClocks: ({})
+
+    /** A raw moving more than this past wall time is a seek or a re-anchor, not drift. */
+    readonly property real positionJumpTolerance: 2.0
+
+    /** A new track's zero is wherever the raw stands the moment the track id bumps. */
+    function resetTrackClock(player: MprisPlayer): void {
+        if (!player)
+            return;
+        const bus = player.dbusName ?? "";
+        const raw = Math.max(0, player.position ?? 0);
+        const clock = root.trackClocks[bus];
+        if (clock) {
+            clock.base = raw;
+            clock.raw = raw;
+            clock.wallMs = Date.now();
+            clock.wasPlaying = player.isPlaying ?? false;
+        } else {
+            root.trackClocks[bus] = {
+                base: raw, raw: raw, wallMs: Date.now(), wasPlaying: player.isPlaying ?? false,
+            };
+        }
+    }
+
+    /** A track's length in seconds, or 0 when nothing has ever published one. */
+    function trackLengthOf(player: MprisPlayer): real {
+        if (!player)
+            return 0;
+        if (player.lengthSupported === true && player.length > 0)
+            return player.length;
+        const known = root.trackLengths[player.dbusName ?? ""];
+        return (known && known.key === root.trackKeyOf(player)) ? known.length : 0;
+    }
+
+    /** Whether the track's length is known at all - live, or from the latch. */
+    function hasTrackLength(player: MprisPlayer): bool {
+        return root.trackLengthOf(player) > 0;
+    }
+
+    /**
+     * Where the player is through the current track, stale anchors subtracted and
+     * the result clamped to a known length - the raw position when there is none.
+     */
+    function trackPositionOf(player: MprisPlayer): real {
+        if (!player)
+            return 0;
+        const raw = Math.max(0, player.position ?? 0);
+        const now = Date.now();
+        const bus = player.dbusName ?? "";
+        const length = root.trackLengthOf(player);
+        let clock = root.trackClocks[bus];
+        if (!clock) {
+            // First sight of this player - shell start or a new bus. A mid-track
+            // resume is plausible and nothing marks the raw as stale: trust it.
+            clock = { base: 0, raw: raw, wallMs: now, wasPlaying: player.isPlaying ?? false };
+            root.trackClocks[bus] = clock;
+        } else {
+            const elapsed = (now - clock.wallMs) / 1000;
+            const rate = (player.rate ?? 1) || 1;
+            // Quickshell freezes `position` while paused and scales it by the rate
+            // while playing. Anything else in the raw is a seek or a re-anchor.
+            const expected = clock.raw + (clock.wasPlaying ? elapsed * rate : 0);
+            if (Math.abs(raw - expected) > root.positionJumpTolerance) {
+                // A jump normally means the player moved to where its absolute
+                // says it is. Unless that absolute is impossible: YouTube Music
+                // answers a seek with `Seeked` past the end of the track - either
+                // wildly out of range (measured: Seeked(878 s) and Seeked(1174 s)
+                // on a 148 s one) or landing exactly on the end (measured: the
+                // clock held at 148.0 = length after a bus seek). Adopting it
+                // pinned every bar to 100 % the moment the user dragged. A jump
+                // at or past the end is noise: re-anchor the clock onto it and
+                // hold the position. Real end-of-track transitions arrive as
+                // `uniqueIdChanged`, which resets the clock anyway.
+                if (length > 0 && raw > length - root.positionJumpTolerance) {
+                    const held = Math.min(Math.max(0, clock.raw - clock.base), length);
+                    clock.base = raw - held;
+                } else {
+                    clock.base = 0;
+                }
+            }
+            clock.raw = raw;
+            clock.wallMs = now;
+            clock.wasPlaying = player.isPlaying ?? false;
+        }
+        const position = Math.max(0, raw - clock.base);
+        return length > 0 ? Math.min(position, length) : position;
+    }
+
+    /**
+     * Seek to a fraction of the track. A no-op when the length is unknown, because
+     * there is no position a fraction could mean.
+     */
+    function seekFraction(player: MprisPlayer, fraction: real): void {
+        const length = root.trackLengthOf(player);
+        if (!player || length <= 0)
+            return;
+        const target = Math.max(0, Math.min(1, fraction)) * length;
+        player.position = target;
+        // Seed the clock with the commanded position. Players answer a seek with
+        // their echo (`Seeked`) within a beat - and YouTube Music's echo is minutes
+        // past the end - so the clock must already stand at the target when that
+        // noise arrives: the out-of-range jump then holds the place the user
+        // dragged to, not the last position read before the drag.
+        const clock = root.trackClocks[player.dbusName ?? ""];
+        if (clock) {
+            clock.base = 0;
+            clock.raw = target;
+            clock.wallMs = Date.now();
+        }
+    }
+
+    /** How far through the track a player is, 0..1, and 0 when that cannot be known. */
+    function trackProgressOf(player: MprisPlayer): real {
+        const length = root.trackLengthOf(player);
+        if (length <= 0)
+            return 0;
+        return Math.min(1, Math.max(0, root.trackPositionOf(player) / length));
+    }
 
     // This is an intent for Media Mode only. The explicit local-session claim
     // below intentionally makes the exported local MPRIS player active for
@@ -101,7 +305,139 @@ Singleton {
 		}
 	}
 
+	// ── Selection policy ─────────────────────────────────────────────────────
+	/**
+	 * Which player the shell follows when it picks one on its own.
+	 *
+	 * A pinned player (`media.priorityPlayer`) outranks everything while it runs;
+	 * with `media.preferMusicPlayers` music apps outrank browsers, KDE Connect and
+	 * video players; inside a tier the old rule holds — the player that started
+	 * playing last takes over. With neither option set every player is tier 0 and
+	 * the behaviour is exactly the historical one.
+	 *
+	 * The pin used to be honoured only when nothing was tracked, so the first
+	 * player that changed state took the focus back, and it had to equal the
+	 * desktop entry byte for byte (`spotify` never matched the Flatpak's
+	 * `com.spotify.Client`). It is now matched leniently against the desktop
+	 * entry, the identity and the bus name, and every automatic switch goes
+	 * through `tierOf`.
+	 */
 	property string priorityPlayer: Config.options.media.priorityPlayer;
+	readonly property bool preferMusicPlayers: Config.options.media.preferMusicPlayers ?? false;
+
+	readonly property var _nonMusicPattern: /firefox|chrom|brave|vivaldi|opera|edge|zen|librewolf|floorp|waterfox|epiphany|falkon|qutebrowser|midori|plasma-browser-integration|kdeconnect|valent|gsconnect|vlc|mpv|celluloid|totem|showtime|haruna|smplayer|dragon|clapper|kodi|jellyfin|plex|stremio|obs|discord|telegram|zoom|teams/;
+	readonly property var _musicPattern: /spotify|spot\b|psst|ncspot|youtube.?music|youtube_music|pear.?desktop|ytmdesktop|cider|tidal|deezer|apple.?music|amazon.?music|soundcloud|feishin|sonixd|supersonic|sublime.?music|high.?tide|elisa|rhythmbox|lollypop|strawberry|clementine|audacious|deadbeef|cmus|mpd|mopidy|ncmpcpp|amberol|g4music|gapless|tauon|quodlibet|quod.?libet|amarok|juk|musikcube|harmonoid|cantata|gnome-music|music|euphonica|resonance|museeks|nuclear|tuxguitar|foobar|musicbee|aimp|winamp|qmmp|guayadeque|exaile|pragha|kasts|gpodder|shortwave|goodvibes/;
+
+	/** Lower-case names a player answers to: desktop entry (and its last segment), identity, bus name. */
+	function playerNames(player: MprisPlayer): var {
+		if (!player)
+			return [];
+		const names = [];
+		const add = value => {
+			const name = String(value ?? "").trim().toLowerCase();
+			if (name !== "" && names.indexOf(name) === -1)
+				names.push(name);
+		};
+		const entry = player.desktopEntry ?? "";
+		add(entry);
+		add(entry.split(".").pop());
+		add(player.identity);
+		// org.mpris.MediaPlayer2.<name>[.instance123]
+		const bus = (player.dbusName ?? "").replace(/^org\.mpris\.MediaPlayer2\./, "").replace(/\.instance[_0-9]+$/, "");
+		add(bus);
+		add(bus.split(".")[0]);
+		return names;
+	}
+
+	/** The value the settings picker stores to pin this player. */
+	function playerKey(player: MprisPlayer): string {
+		if (!player)
+			return "";
+		return player.desktopEntry || player.identity
+			|| (player.dbusName ?? "").replace(/^org\.mpris\.MediaPlayer2\./, "").replace(/\.instance[_0-9]+$/, "");
+	}
+
+	function playerMatchesKey(player: MprisPlayer, key: string): bool {
+		const wanted = String(key ?? "").trim().toLowerCase();
+		if (!player || wanted === "")
+			return false;
+		const short = wanted.replace(/\.desktop$/, "").split(".").pop();
+		const names = root.playerNames(player);
+		return names.indexOf(wanted) !== -1 || names.indexOf(short) !== -1;
+	}
+
+	function isPinnedPlayer(player: MprisPlayer): bool {
+		return root.playerMatchesKey(player, root.priorityPlayer);
+	}
+
+	/**
+	 * A music app, as opposed to a browser, a phone bridge or a video player.
+	 * Known names first, then the desktop entry's categories (Audio/Music but not
+	 * Video or WebBrowser) for players the lists do not know.
+	 */
+	function isMusicPlayer(player: MprisPlayer): bool {
+		const names = root.playerNames(player);
+		if (names.length === 0)
+			return false;
+		const joined = names.join(" ");
+		if (root._nonMusicPattern.test(joined))
+			return false;
+		if (root._musicPattern.test(joined))
+			return true;
+		const entry = player.desktopEntry ? DesktopEntries.heuristicLookup(player.desktopEntry) : null;
+		const categories = entry?.categories ?? [];
+		return (categories.indexOf("Audio") !== -1 || categories.indexOf("Music") !== -1)
+			&& categories.indexOf("Video") === -1 && categories.indexOf("WebBrowser") === -1;
+	}
+
+	/** 2 = pinned, 1 = music app while music is preferred, 0 = anything else. */
+	function tierOf(player: MprisPlayer): int {
+		if (!player)
+			return -1;
+		if (root.isPinnedPlayer(player))
+			return 2;
+		if (root.preferMusicPlayers && root.isMusicPlayer(player))
+			return 1;
+		return 0;
+	}
+
+	/** Whether an automatic switch from the tracked player to `player` is allowed. */
+	function mayTakeOver(player: MprisPlayer): bool {
+		const current = root.trackedPlayer;
+		if (!current || Mpris.players.values.indexOf(current) === -1)
+			return true;
+		const diff = root.tierOf(player) - root.tierOf(current);
+		if (diff !== 0)
+			return diff > 0;
+		return player.isPlaying || !current.isPlaying;
+	}
+
+	/** The player the policy would pick right now: tier, then playing, then the tracked one. */
+	function bestApplicationPlayer(): MprisPlayer {
+		let best = null;
+		for (const player of root.applicationPlayers) {
+			if (!best) {
+				best = player;
+				continue;
+			}
+			const diff = root.tierOf(player) - root.tierOf(best);
+			if (diff > 0 || (diff === 0 && player.isPlaying && !best.isPlaying)
+				|| (diff === 0 && player.isPlaying === best.isPlaying && player === root.trackedPlayer))
+				best = player;
+		}
+		return best;
+	}
+
+	function applySelectionPolicy(): void {
+		if (root.localPlayerSelected)
+			return;
+		const best = root.bestApplicationPlayer();
+		if (best && best !== root.trackedPlayer && root.mayTakeOver(best))
+			root.trackedPlayer = best;
+	}
+
+	onPriorityPlayerChanged: applySelectionPolicy()
+	onPreferMusicPlayersChanged: applySelectionPolicy()
 
 	property bool __reverse: false;
 
@@ -122,44 +458,74 @@ Singleton {
 			if (!stillExists)
 				root.trackedPlayer = null;
 		}
-		if (root.trackedPlayer == null) {
-			const priority = applicationPlayers.find(player => player.desktopEntry === root.priorityPlayer);
-			if (priority) {
-				root.trackedPlayer = priority;
-			} else {
-				const playing = applicationPlayers.find(player => player && player.isPlaying);
-				if (playing) {
-					root.trackedPlayer = playing;
-				} else if (applicationPlayers.length > 0) {
-					root.trackedPlayer = applicationPlayers[0];
-				} else if (players.length > 0) {
-					root.trackedPlayer = players[0];
-				}
-			}
-		}
+		if (root.trackedPlayer == null)
+			root.trackedPlayer = root.bestApplicationPlayer() ?? players[0] ?? null;
+		else
+			root.applySelectionPolicy();
 	}
 
-	property bool hasActivePlasmaIntegration: false
-    Process {
-        id: plasmaIntegrationAvailabilityCheckProc
-        running: true
-        command: ["bash", "-c", "command -v plasma-browser-integration-host"]
-        onExited: (exitCode, exitStatus) => {
-            root.hasActivePlasmaIntegration = (exitCode === 0);
-        }
-    }
+	/**
+	 * Duplicate filtering (`media.filterDuplicatePlayers`).
+	 *
+	 * Native browser buses are dropped only when they repeat what a running
+	 * plasma-browser-integration player already shows. Matching on the bus name
+	 * alone (and on the host binary merely being installed) hid every Electron
+	 * app, since Electron registers as `org.mpris.MediaPlayer2.chromium.instanceN`.
+	 */
+	readonly property string _pbiBusPrefix: "org.mpris.MediaPlayer2.plasma-browser-integration"
+
+	function _normTitle(value): string {
+		const title = String(value ?? "").trim().toLowerCase();
+		return title === "untitled" ? "" : title;
+	}
+
+	function _sameTrack(a: MprisPlayer, b: MprisPlayer): bool {
+		const ta = root._normTitle(a?.trackTitle);
+		const tb = root._normTitle(b?.trackTitle);
+		return ta !== "" && tb !== "" && (ta === tb || ta.includes(tb) || tb.includes(ta));
+	}
+
+	/** A native browser/Electron bus repeating the track a plasma-browser-integration player shows. */
+	function isBrowserDuplicate(player: MprisPlayer): bool {
+		const bus = player?.dbusName ?? "";
+		if (!bus.startsWith("org.mpris.MediaPlayer2.firefox") && !bus.startsWith("org.mpris.MediaPlayer2.chromium"))
+			return false;
+		return Mpris.players.values.some(other => other !== player
+			&& (other.dbusName ?? "").startsWith(root._pbiBusPrefix)
+			&& root._sameTrack(other, player));
+	}
+
+	/** A bus with nothing to show and nothing to control (e.g. GeForce NOW's idle "Untitled" player). */
+	function isEmptyPlayer(player: MprisPlayer): bool {
+		if (!player || root.isLocalPlayer(player))
+			return false;
+		const controllable = player.canControl && (player.canPlay || player.canPause
+			|| player.canTogglePlaying || player.canGoNext || player.canGoPrevious || player.canSeek);
+		return !controllable && !(player.length > 0) && root._normTitle(player.trackTitle) === "";
+	}
+
 	function isRealPlayer(player) {
-        if (!Config.options.media.filterDuplicatePlayers) {
-            return true;
-        }
-        return (
-            // Remove native browser buses only if plasma-browser-integration is actually active on D-Bus
-            !(root.hasActivePlasmaIntegration && player.dbusName.startsWith('org.mpris.MediaPlayer2.firefox')) && !(root.hasActivePlasmaIntegration && player.dbusName.startsWith('org.mpris.MediaPlayer2.chromium')) &&
-            // playerctld just copies other buses and we don't need duplicates
-            !player.dbusName?.startsWith('org.mpris.MediaPlayer2.playerctld') &&
-            // Non-instance mpd bus
-            !(player.dbusName?.endsWith('.mpd') && !player.dbusName.endsWith('MediaPlayer2.mpd')));
-    }
+		if (!Config.options.media.filterDuplicatePlayers)
+			return true;
+		const bus = player?.dbusName ?? "";
+		return !root.isBrowserDuplicate(player)
+			&& !root.isEmptyPlayer(player)
+			// playerctld just copies other buses and we don't need duplicates
+			&& !bus.startsWith('org.mpris.MediaPlayer2.playerctld')
+			// Non-instance mpd bus
+			&& !(bus.endsWith('.mpd') && !bus.endsWith('MediaPlayer2.mpd'));
+	}
+
+	/** Metadata or capabilities changed: the filter above may now answer differently. */
+	function _refreshForPlayerChange(): void {
+		root.updatePlayersList();
+		if (root.localPlayerSelected)
+			return;
+		if (root.trackedPlayer && root.players.indexOf(root.trackedPlayer) === -1 && !root.trackedPlayer.isPlaying)
+			root.trackedPlayer = null;
+		if (root.trackedPlayer == null)
+			root.trackedPlayer = root.bestApplicationPlayer();
+	}
 
 	// Original stuff from fox below
 	Instantiator {
@@ -174,11 +540,19 @@ Singleton {
 					root.updatePlayersList();
 					return;
 				}
-				if (root.trackedPlayer == null || modelData.isPlaying) {
-					root.trackedPlayer = modelData;
-				}
 				root.updatePlayersList();
+				if (root.isRealPlayer(modelData) && root.mayTakeOver(modelData))
+					root.trackedPlayer = modelData;
+				else if (root.trackedPlayer == null && !root.isEmptyPlayer(modelData))
+					root.trackedPlayer = modelData;
 			}
+
+			// Empty buses often get their metadata a moment after they appear, and a
+			// browser bus only becomes a duplicate once the titles match.
+			function onPostTrackChanged() { Qt.callLater(root._refreshForPlayerChange); }
+			function onCanControlChanged() { Qt.callLater(root._refreshForPlayerChange); }
+			function onCanPlayChanged() { Qt.callLater(root._refreshForPlayerChange); }
+			function onLengthSupportedChanged() { Qt.callLater(root._refreshForPlayerChange); }
 
 			Component.onDestruction: {
 				const removedLocalPlayer = root.isLocalPlayer(modelData);
@@ -195,25 +569,21 @@ Singleton {
 					Qt.callLater(() => root.updatePlayersList());
 					return;
 				}
-				if (root.trackedPlayer == null || !root.trackedPlayer.isPlaying) {
-					for (const player of Mpris.players.values) {
-						if (!root.isLocalPlayer(player) && player.playbackState.isPlaying) {
-							root.trackedPlayer = player;
-							break;
-						}
-					}
-
-					if (root.trackedPlayer == null && root.applicationPlayers.length != 0) {
-						root.trackedPlayer = root.applicationPlayers[0];
-					}
-				}
-				Qt.callLater(() => root.updatePlayersList());
+				// Picked once the list no longer holds the player going away.
+				Qt.callLater(() => {
+					root.updatePlayersList();
+					if (root.localPlayerSelected)
+						return;
+					if (root.trackedPlayer == null || !root.trackedPlayer.isPlaying)
+						root.trackedPlayer = root.bestApplicationPlayer() ?? root.trackedPlayer;
+				});
 			}
 
 			function onPlaybackStateChanged() {
 				if (root.localPlayerSelected && !root.isLocalPlayer(modelData))
 					return;
-				if (root.trackedPlayer !== modelData) root.trackedPlayer = modelData;
+				if (root.trackedPlayer !== modelData && root.isRealPlayer(modelData) && root.mayTakeOver(modelData))
+					root.trackedPlayer = modelData;
 			}
 		}
 	}
@@ -225,6 +595,8 @@ Singleton {
 			if (root.activePlayer?.trackArtUrl) {
 				root._artUrlFallback = root.activePlayer.trackArtUrl;
 				root.updateTrack();
+			} else {
+				artlessTrackTimer.restart();
 			}
 		}
 
@@ -232,6 +604,7 @@ Singleton {
 			const url = root.activePlayer?.trackArtUrl;
 			if (url && url !== "") {
 				root._artUrlFallback = url;
+				artlessTrackTimer.stop();
 			}
 			if (root.activeTrack && root.activeTrack.artUrl === url) return;
 			const r = root.__reverse;
@@ -244,6 +617,20 @@ Singleton {
 		if (root.activePlayer?.trackArtUrl) {
 			root._artUrlFallback = root.activePlayer.trackArtUrl;
 			root.updateTrack();
+		} else {
+			artlessTrackTimer.restart();
+		}
+	}
+
+	// The track waits for its cover art, which browsers send a moment after the title.
+	// A player that never sends any (mpv, a podcast app, a script) still gets its track,
+	// once it is clear none is coming - before, it never got one at all.
+	Timer {
+		id: artlessTrackTimer
+		interval: 400
+		onTriggered: {
+			if (!root.activePlayer?.trackArtUrl)
+				root.updateTrack();
 		}
 	}
 

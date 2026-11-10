@@ -1,4 +1,5 @@
 import QtQuick
+import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.functions as CF
@@ -23,6 +24,11 @@ QtObject {
         interval: 2000
         repeat: false
         onTriggered: {
+            // The cascade has not played yet while a preset holds motion.
+            if (GlobalStates.presetHoldMotion) {
+                restart();
+                return;
+            }
             manager.staggerTransitionActive = false;
             for (let i = 0; i < widgetListModel.count; i++) {
                 widgetListModel.get(i).staggerDelay = 0;
@@ -36,10 +42,25 @@ QtObject {
     // actually dropped. Kept slightly longer than the exit animation so the
     // widget is never destroyed mid-fade.
     property bool reapDue: false
+    // A preset holding motion also holds the exits; reap after they play.
+    property bool _reapAfterHold: false
+    property Connections _holdWatcher: Connections {
+        target: GlobalStates
+        function onPresetHoldMotionChanged() {
+            if (!GlobalStates.presetHoldMotion && manager._reapAfterHold) {
+                manager._reapAfterHold = false;
+                manager.reapTimer.restart();
+            }
+        }
+    }
     property Timer reapTimer: Timer {
         interval: Math.round(260 * Appearance.animMultiplier)
         repeat: false
         onTriggered: {
+            if (GlobalStates.presetHoldMotion) {
+                manager._reapAfterHold = true;
+                return;
+            }
             manager.reapDue = true;
             manager.syncActiveWidgets();
             manager.reapDue = false;

@@ -25,15 +25,126 @@ Item {
 
     property bool isActive: root.device?.connected ?? false
 
-    implicitHeight: 56
-    height: implicitHeight
+    readonly property string deviceImageSource: {
+        const _ = Config.options?.bluetoothDeviceImages;
+        return BluetoothDeviceImages.sourceFor(root.device);
+    }
+    readonly property bool hasDeviceImage: deviceImageSource.length > 0
 
-    readonly property real rFull: height / 2
+    property bool isExiting: false
+    property bool animateEntry: false
+    signal exitFinished()
+
+    property real slideX: 0
+    property real slideOpacity: 1.0
+    property real heightProgress: 1.0
+
+    implicitHeight: Math.round(56 * heightProgress)
+    height: implicitHeight
+    Layout.fillWidth: true
+    Layout.preferredHeight: implicitHeight
+    clip: heightProgress < 1.0
+
+    readonly property real rFull: 28
     readonly property real rOuter: Appearance?.rounding?.large ?? 23
     readonly property real rInner: Appearance?.rounding?.normal ?? 17
 
-    // Sliding Flickable for Connected/Paired devices
-    Flickable {
+    Component.onCompleted: {
+        if (root.animateEntry && !Appearance.reducedMotion) {
+            root.slideX = -36;
+            root.slideOpacity = 0;
+            root.heightProgress = 0;
+            enterAnim.restart();
+        }
+    }
+
+    onIsExitingChanged: {
+        if (root.isExiting) {
+            if (Appearance.reducedMotion) {
+                root.slideOpacity = 0;
+                root.heightProgress = 0;
+                root.exitFinished();
+            } else {
+                exitAnim.restart();
+            }
+        }
+    }
+
+    ParallelAnimation {
+        id: enterAnim
+        NumberAnimation {
+            target: root
+            property: "slideX"
+            from: -36
+            to: 0
+            duration: Appearance?.animation?.elementMoveEnter?.duration ?? 400
+            easing.type: Appearance?.animation?.elementMoveEnter?.type ?? Easing.BezierSpline
+            easing.bezierCurve: Appearance?.animation?.elementMoveEnter?.bezierCurve ?? (Appearance?.animationCurves?.emphasizedDecel ?? [0.05, 0.7, 0.1, 1.0])
+        }
+        NumberAnimation {
+            target: root
+            property: "slideOpacity"
+            from: 0
+            to: 1.0
+            duration: Appearance?.animation?.elementMoveEnter?.duration ?? 400
+            easing.type: Appearance?.animation?.elementMoveEnter?.type ?? Easing.BezierSpline
+            easing.bezierCurve: Appearance?.animation?.elementMoveEnter?.bezierCurve ?? (Appearance?.animationCurves?.emphasizedDecel ?? [0.05, 0.7, 0.1, 1.0])
+        }
+        NumberAnimation {
+            target: root
+            property: "heightProgress"
+            from: 0
+            to: 1.0
+            duration: Appearance?.animation?.elementMoveEnter?.duration ?? 400
+            easing.type: Appearance?.animation?.elementMoveEnter?.type ?? Easing.BezierSpline
+            easing.bezierCurve: Appearance?.animation?.elementMoveEnter?.bezierCurve ?? (Appearance?.animationCurves?.emphasizedDecel ?? [0.05, 0.7, 0.1, 1.0])
+        }
+    }
+
+    ParallelAnimation {
+        id: exitAnim
+        NumberAnimation {
+            target: root
+            property: "slideX"
+            to: 40
+            duration: Appearance?.animation?.elementMoveExit?.duration ?? 200
+            easing.type: Appearance?.animation?.elementMoveExit?.type ?? Easing.BezierSpline
+            easing.bezierCurve: Appearance?.animation?.elementMoveExit?.bezierCurve ?? (Appearance?.animationCurves?.emphasizedAccel ?? [0.3, 0.0, 0.8, 0.15])
+        }
+        NumberAnimation {
+            target: root
+            property: "slideOpacity"
+            to: 0
+            duration: Appearance?.animation?.elementMoveExit?.duration ?? 200
+            easing.type: Appearance?.animation?.elementMoveExit?.type ?? Easing.BezierSpline
+            easing.bezierCurve: Appearance?.animation?.elementMoveExit?.bezierCurve ?? (Appearance?.animationCurves?.emphasizedAccel ?? [0.3, 0.0, 0.8, 0.15])
+        }
+        NumberAnimation {
+            target: root
+            property: "heightProgress"
+            to: 0
+            duration: Appearance?.animation?.elementMoveExit?.duration ?? 200
+            easing.type: Appearance?.animation?.elementMoveExit?.type ?? Easing.BezierSpline
+            easing.bezierCurve: Appearance?.animation?.elementMoveExit?.bezierCurve ?? (Appearance?.animationCurves?.emphasizedAccel ?? [0.3, 0.0, 0.8, 0.15])
+        }
+        onFinished: {
+            root.exitFinished();
+        }
+    }
+
+    Item {
+        id: itemContent
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        height: 56
+        opacity: root.slideOpacity
+        transform: Translate {
+            x: root.slideX
+        }
+
+        // Sliding Flickable for Connected/Paired devices
+        Flickable {
         id: flick
         visible: root.isPairedSection
         anchors.fill: parent
@@ -144,16 +255,32 @@ Item {
                         anchors.rightMargin: 20
                         spacing: 12
 
-                        // Left Device Icon (Always static and clean)
+                        // Left Device Icon (Dynamic Device Image or Material Symbol fallback)
                         Item {
-                            width: 24
-                            height: 24
+                            width: 34
+                            height: 34
+
+                            Image {
+                                id: pairedDeviceImg
+                                objectName: "pairedDeviceImg"
+                                anchors.centerIn: parent
+                                width: 34
+                                height: 34
+                                source: root.deviceImageSource
+                                fillMode: Image.PreserveAspectFit
+                                smooth: true
+                                mipmap: true
+                                visible: root.hasDeviceImage && status !== Image.Error
+                            }
 
                             MaterialSymbol {
+                                id: pairedSymbol
+                                objectName: "pairedSymbol"
                                 anchors.centerIn: parent
                                 iconSize: 24
                                 text: Icons.getBluetoothDeviceMaterialSymbol(root.device?.icon || "")
                                 color: isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                                visible: !pairedDeviceImg.visible
                             }
                         }
 
@@ -454,16 +581,36 @@ Item {
             anchors.rightMargin: 20
             spacing: 12
 
-            // Left icon or Loading cookie
+            // Left icon or Loading cookie or Custom Device Image
             Item {
-                width: 24
-                height: 24
+                width: 34
+                height: 34
+
+                Image {
+                    id: availDeviceImg
+                    objectName: "availDeviceImg"
+                    anchors.centerIn: parent
+                    width: 34
+                    height: 34
+                    source: root.deviceImageSource
+                    fillMode: Image.PreserveAspectFit
+                    smooth: true
+                    mipmap: true
+                    visible: root.hasDeviceImage && status !== Image.Error
+                    opacity: root.isProcessing ? 0 : 1
+                    scale: root.isProcessing ? 0.5 : 1
+                    Behavior on opacity { NumberAnimation { duration: 150 } }
+                    Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutBack } }
+                }
 
                 MaterialSymbol {
+                    id: availSymbol
+                    objectName: "availSymbol"
                     anchors.centerIn: parent
                     iconSize: 24
                     text: Icons.getBluetoothDeviceMaterialSymbol(root.device?.icon || "")
                     color: Appearance.colors.colOnSurface
+                    visible: !availDeviceImg.visible
                     opacity: root.isProcessing ? 0 : 1
                     scale: root.isProcessing ? 0.5 : 1
                     Behavior on opacity { NumberAnimation { duration: 150 } }
@@ -511,4 +658,5 @@ Item {
             }
         }
     }
+}
 }

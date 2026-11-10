@@ -18,7 +18,9 @@ Scope {
 
     LazyLoader {
         id: popupLoader
-        active: GlobalStates.localSendPopupOpen
+        // The island draws the request itself when it owns it; see
+        // IslandPolicy.ownsLocalSendRequest.
+        active: GlobalStates.localSendPopupOpen && !GlobalStates.islandOwnsLocalSendRequest
 
         component: PanelWindow {
             id: popupWindow

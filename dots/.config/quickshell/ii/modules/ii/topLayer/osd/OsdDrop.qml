@@ -67,6 +67,10 @@ Item {
         {
             id: "keyboardBrightness",
             sourceUrl: "indicators/KeyboardBrightnessIndicator.qml"
+        },
+        {
+            id: "toggle",
+            sourceUrl: "indicators/ToggleIndicator.qml"
         }
     ]
 

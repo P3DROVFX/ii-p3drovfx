@@ -393,47 +393,56 @@ ContentPage {
         title: Translation.tr("Camera Settings")
 
         // Camera facing: front / back
-        ConfigSelectionArray {
-            text: Translation.tr("Camera")
+        ContentSubsection {
+            title: Translation.tr("Camera")
             icon: "camera_front"
-            options: [
-                { displayName: Translation.tr("Front"), icon: "camera_front", value: "front" },
-                { displayName: Translation.tr("Back"), icon: "camera_rear", value: "back" }
-            ]
-            currentValue: Config.options.phone.webcam.cameraFacing
-            onSelected: (v) => {
-                Config.options.phone.webcam.cameraFacing = v
-                // DroidCam does not have a CLI flag to switch cameras.
-                // Persist the preference so the next fresh start uses it,
-                // but do NOT restart the running stream.
-                // See AGENTS.md Phone Module Round 5.
-                PhoneCameraService.flipCamera()
+
+            ConfigSelectionArray {
+                options: [
+                    { displayName: Translation.tr("Front"), icon: "camera_front", value: "front" },
+                    { displayName: Translation.tr("Back"), icon: "camera_rear", value: "back" }
+                ]
+                currentValue: Config.options.phone.webcam.cameraFacing
+                onSelected: (v) => {
+                    // DroidCam does not have a CLI flag to switch cameras.
+                    // Persist the preference so the next fresh start uses it,
+                    // but do NOT restart the running stream (AGENTS.md Phone
+                    // Module Round 5). Not flipCamera(): it toggles, which
+                    // undid the value just picked.
+                    Config.options.phone.webcam.cameraFacing = v
+                }
             }
         }
 
         // Connection
-        ConfigSelectionArray {
-            text: Translation.tr("Connection")
+        ContentSubsection {
+            title: Translation.tr("Connection")
             icon: "cable"
-            options: [
-                { displayName: Translation.tr("Wi-Fi"), icon: "wifi", value: "wifi" },
-                { displayName: Translation.tr("USB"), icon: "usb", value: "usb" }
-            ]
-            currentValue: Config.options.phone.webcam.connection
-            onSelected: (v) => Config.options.phone.webcam.connection = v
+
+            ConfigSelectionArray {
+                options: [
+                    { displayName: Translation.tr("Wi-Fi"), icon: "wifi", value: "wifi" },
+                    { displayName: Translation.tr("USB"), icon: "usb", value: "usb" }
+                ]
+                currentValue: Config.options.phone.webcam.connection
+                onSelected: (v) => Config.options.phone.webcam.connection = v
+            }
         }
 
         // Resolution
-        ConfigSelectionArray {
-            text: Translation.tr("Resolution")
+        ContentSubsection {
+            title: Translation.tr("Resolution")
             icon: "aspect_ratio"
-            options: [
-                { displayName: "480p", value: "640x480" },
-                { displayName: "720p", value: "1280x720" },
-                { displayName: "1080p", value: "1920x1080" }
-            ]
-            currentValue: Config.options.phone.webcam.resolution
-            onSelected: (v) => Config.options.phone.webcam.resolution = v
+
+            ConfigSelectionArray {
+                options: [
+                    { displayName: "480p", value: "640x480" },
+                    { displayName: "720p", value: "1280x720" },
+                    { displayName: "1080p", value: "1920x1080" }
+                ]
+                currentValue: Config.options.phone.webcam.resolution
+                onSelected: (v) => Config.options.phone.webcam.resolution = v
+            }
         }
 
         // Mirror toggle
@@ -447,17 +456,20 @@ ContentPage {
         }
 
         // Rotation
-        ConfigSelectionArray {
-            text: Translation.tr("Rotation")
+        ContentSubsection {
+            title: Translation.tr("Rotation")
             icon: "rotate_right"
-            options: [
-                { displayName: "0°", value: 0 },
-                { displayName: "90°", value: 90 },
-                { displayName: "180°", value: 180 },
-                { displayName: "270°", value: 270 }
-            ]
-            currentValue: Config.options.phone.webcam.rotateDegrees
-            onSelected: (v) => PhoneCameraService.setRotation(v)
+
+            ConfigSelectionArray {
+                options: [
+                    { displayName: "0°", value: 0 },
+                    { displayName: "90°", value: 90 },
+                    { displayName: "180°", value: 180 },
+                    { displayName: "270°", value: 270 }
+                ]
+                currentValue: Config.options.phone.webcam.rotateDegrees
+                onSelected: (v) => PhoneCameraService.setRotation(v)
+            }
         }
     }
 
@@ -472,9 +484,7 @@ ContentPage {
             icon: "ip"
             placeholderText: Translation.tr("Auto-detect from KDE Connect")
             inputText: Config.options.phone.webcam.wifiIp
-            onEditingFinished: {
-                Config.options.phone.webcam.wifiIp = inputText.trim()
-            }
+            textField.onEditingFinished: Config.options.phone.webcam.wifiIp = textField.text.trim()
             tooltip: Translation.tr("Leave empty to auto-detect from KDE Connect. Set explicitly if auto-detect fails.")
         }
 

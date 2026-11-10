@@ -1,3 +1,4 @@
+import qs
 import qs.modules.ii.bar.popups.sports
 import QtQuick
 import QtQuick.Layouts
@@ -10,6 +11,11 @@ MouseArea {
     id: root
     property bool vertical: false
 
+    BarWidgetPalette {
+        id: palette
+        colorMode: Config.options.bar.sports.colorMode
+    }
+
     readonly property bool shouldBeVisible: Config.options.bar.sports.enable && SportsService.allGames.length > 0
     
     // Stable game for animations - prevents instant data swap during transitions
@@ -19,9 +25,49 @@ MouseArea {
     property bool internalVisible: shouldBeVisible
     visible: internalVisible || opacity > 0
     
-    implicitWidth: shouldBeVisible ? (vertical ? Appearance.sizes.verticalBarWidth : layout.implicitWidth + 8) : 0
-    implicitHeight: shouldBeVisible ? (vertical ? layoutVert.implicitHeight + 8 : Appearance.sizes.baseBarHeight) : 0
+    // Match events (goals and bookings) queue up and play one after another;
+    // the widget grows along the bar while a banner plays.
+    property var eventQueue: []
+    property var activeEvent: null
+    readonly property bool celebrating: activeEvent !== null
+    readonly property bool activeIsCard: activeEvent?.kind === "card"
+    readonly property real celebrationLength: activeIsCard ? (vertical ? 150 : 200) : (vertical ? 190 : 236)
+
+    function playNextEvent() {
+        if (eventQueue.length === 0) {
+            activeEvent = null;
+            return;
+        }
+        activeEvent = eventQueue[0];
+        eventQueue = eventQueue.slice(1);
+    }
+
+    function queueEvent(event) {
+        eventQueue = eventQueue.concat([event]);
+        if (!celebrating)
+            playNextEvent();
+    }
+
+    Connections {
+        target: SportsService
+        enabled: root.shouldBeVisible
+        function onGoalScored(goal) {
+            if (Config.options.bar.sports.goalAnimation)
+                root.queueEvent(Object.assign({ kind: "goal" }, goal));
+        }
+        function onCardShown(card) {
+            if (Config.options.bar.sports.cardAnimation)
+                root.queueEvent(Object.assign({ kind: "card" }, card));
+        }
+    }
+
+    implicitWidth: shouldBeVisible ? (vertical ? Appearance.sizes.verticalBarWidth : (celebrating ? Math.max(celebrationLength, layout.implicitWidth + 8) : layout.implicitWidth + 8)) : 0
+    implicitHeight: shouldBeVisible ? (vertical ? (celebrating ? Math.max(celebrationLength, layoutVert.implicitHeight + 8) : layoutVert.implicitHeight + 8) : Appearance.sizes.baseBarHeight) : 0
     hoverEnabled: !BarInteraction.clickToShow
+
+    // Click-to-show gives the left click to the popup; cycling moves to the right button.
+    readonly property bool rightClickCycles: BarInteraction.cycleOnRightClick
+    acceptedButtons: rightClickCycles ? (Qt.LeftButton | Qt.RightButton) : Qt.LeftButton
 
     // Animation offsets
     property real verticalOffset: 0
@@ -115,7 +161,9 @@ MouseArea {
         }
     }
 
-    onClicked: {
+    onClicked: mouse => {
+        if (mouse.button !== (rightClickCycles ? Qt.RightButton : Qt.LeftButton))
+            return;
         SportsService.nextGame();
     }
 
@@ -131,9 +179,38 @@ MouseArea {
         animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 
+    Loader {
+        anchors.fill: parent
+        active: root.celebrating
+        z: 1
+        sourceComponent: root.activeIsCard ? cardNoticeComponent : goalCelebrationComponent
+    }
+
+    Component {
+        id: goalCelebrationComponent
+        GoalCelebration {
+            goal: root.activeIsCard ? null : root.activeEvent
+            vertical: root.vertical
+            fromFarEdge: Config.options.bar.bottom
+            onFinished: root.playNextEvent()
+        }
+    }
+
+    Component {
+        id: cardNoticeComponent
+        CardNotice {
+            card: root.activeIsCard ? root.activeEvent : null
+            vertical: root.vertical
+            fromFarEdge: Config.options.bar.bottom
+            onFinished: root.playNextEvent()
+        }
+    }
+
     RowLayout {
         id: layout
         visible: !root.vertical
+        opacity: root.celebrating ? 0 : 1
+        Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
         anchors.centerIn: parent
         spacing: 4
         transform: Translate { x: root.horizontalOffset; y: root.verticalOffset }
@@ -141,13 +218,14 @@ MouseArea {
         MaterialShape {
             Layout.alignment: Qt.AlignVCenter
             shapeString: "Cookie7Sided"
-            color: Appearance.colors.colSecondaryContainer
+            color: palette.colBackgroundVariant
             implicitSize: Appearance.sizes.baseBarHeight - 8
             StyledImage {
                 anchors.centerIn: parent
                 width: parent.implicitSize - 14
                 height: parent.implicitSize - 14
-                source: root.displayGame ? root.displayGame.home.logo : ""
+                source: !root.vertical && root.displayGame ? root.displayGame.home.logo : ""
+                cache: false
             }
         }
 
@@ -157,7 +235,7 @@ MouseArea {
             Layout.preferredHeight: Appearance.sizes.baseBarHeight - 14
             Layout.preferredWidth: Math.max(statusText.implicitWidth + 16, 30)
             radius: Appearance.rounding.full
-            color: Appearance.colors.colPrimary
+            color: root.containsMouse ? palette.colBackgroundHover : palette.colBackground
             
             StyledText {
                 id: statusText
@@ -166,7 +244,7 @@ MouseArea {
                 text: root.displayGame ? (root.displayGame.state === "in" ? `${root.displayGame.home.score} - ${root.displayGame.away.score}` : root.displayGame.status) : ""
                 font.pixelSize: 10
                 font.weight: Font.Black
-                color: Appearance.colors.colOnPrimary
+                color: palette.colOnBackground
                 animateChange: true
             }
         }
@@ -174,13 +252,14 @@ MouseArea {
         MaterialShape {
             Layout.alignment: Qt.AlignVCenter
             shapeString: "Cookie7Sided"
-            color: Appearance.colors.colSecondaryContainer
+            color: palette.colBackgroundVariant
             implicitSize: Appearance.sizes.baseBarHeight - 8
             StyledImage {
                 anchors.centerIn: parent
                 width: parent.implicitSize - 14
                 height: parent.implicitSize - 14
-                source: root.displayGame ? root.displayGame.away.logo : ""
+                source: !root.vertical && root.displayGame ? root.displayGame.away.logo : ""
+                cache: false
             }
         }
     }
@@ -189,6 +268,8 @@ MouseArea {
     ColumnLayout {
         id: layoutVert
         visible: root.vertical
+        opacity: root.celebrating ? 0 : 1
+        Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
         anchors {
             top: parent.top
             topMargin: 4
@@ -204,13 +285,14 @@ MouseArea {
             MaterialShape {
                 Layout.alignment: Qt.AlignHCenter
                 shapeString: "Cookie7Sided"
-                color: Appearance.colors.colSecondaryContainer
+                color: palette.colBackgroundVariant
                 implicitSize: Appearance.sizes.verticalBarWidth - 8
                 StyledImage {
                     anchors.centerIn: parent
                     width: parent.implicitSize - 12
                     height: parent.implicitSize - 12
-                    source: root.displayGame ? root.displayGame.home.logo : ""
+                    source: root.vertical && root.displayGame ? root.displayGame.home.logo : ""
+                    cache: false
                 }
             }
             StyledText {
@@ -218,7 +300,7 @@ MouseArea {
                 text: root.displayGame ? root.displayGame.home.score : ""
                 font.pixelSize: 12
                 font.weight: Font.Black
-                color: Appearance.colors.colOnSurface
+                color: palette.colBare
                 visible: root.displayGame ? root.displayGame.state !== "pre" : false
                 animateChange: true
             }
@@ -230,13 +312,13 @@ MouseArea {
             implicitWidth: Appearance.sizes.verticalBarWidth - 8
             implicitHeight: 20 // Fixed height is probably okay here for vertical flow
             radius: Appearance.rounding.full
-            color: Appearance.colors.colPrimary
+            color: root.containsMouse ? palette.colBackgroundHover : palette.colBackground
             StyledText {
                 anchors.centerIn: parent
                 text: root.displayGame ? (root.displayGame.state === "in" ? root.displayGame.status : root.displayGame.status.split(" ")[0]) : ""
                 font.pixelSize: 8
                 font.weight: Font.Black
-                color: Appearance.colors.colOnPrimary
+                color: palette.colOnBackground
                 animateChange: true
             }
         }
@@ -250,26 +332,34 @@ MouseArea {
                 text: root.displayGame ? root.displayGame.away.score : ""
                 font.pixelSize: 12
                 font.weight: Font.Black
-                color: Appearance.colors.colOnSurface
+                color: palette.colBare
                 visible: root.displayGame ? root.displayGame.state !== "pre" : false
                 animateChange: true
             }
             MaterialShape {
                 Layout.alignment: Qt.AlignHCenter
                 shapeString: "Cookie7Sided"
-                color: Appearance.colors.colSecondaryContainer
+                color: palette.colBackgroundVariant
                 implicitSize: Appearance.sizes.verticalBarWidth - 8
                 StyledImage {
                     anchors.centerIn: parent
                     width: parent.implicitSize - 12
                     height: parent.implicitSize - 12
-                    source: root.displayGame ? root.displayGame.away.logo : ""
+                    source: root.vertical && root.displayGame ? root.displayGame.away.logo : ""
+                    cache: false
                 }
             }
         }
     }
 
-    SportsPopup {
-        hoverTarget: root
+    PopupLoader {
+        id: popupLoader
+        // Do not construct the StyledPopup interaction/window graph until
+        // the sports widget is actually approached or clicked.
+        active: (root.shouldBeVisible || GlobalStates.isBarPopupOpen("sports", root.screen?.name)) && BarInteraction.enablePopups
+            && (BarInteraction.clickToShow || root.containsMouse || held)
+        sourceComponent: SportsPopup {
+            hoverTarget: root
+        }
     }
 }

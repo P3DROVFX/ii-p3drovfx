@@ -1,0 +1,17 @@
+# Warns when Quickshell no longer matches the installed Qt.
+# Installed by ii's setup or System Health's Settings (install-hook.sh).
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = qt6-base
+Target = qt6-declarative
+Target = qt6-wayland
+Target = qt6-svg
+Target = quickshell
+Target = quickshell-git
+
+[Action]
+Description = Checking that Quickshell matches the installed Qt...
+When = PostTransaction
+Exec = /usr/local/lib/ii/quickshell-qt-check

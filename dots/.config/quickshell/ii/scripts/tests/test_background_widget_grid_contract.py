@@ -86,8 +86,11 @@ class TestBackgroundWidgetGridContract(unittest.TestCase):
 
     def test_wallpaper_drag_dim_reduced(self):
         content = self.wallpaper_image_path.read_text()
-        self.assertIn("opacity: anyWidgetIsDragging ? 0.08 : 0.0", content,
-                      "wallpaperDimLayer opacity during drag should be reduced to 0.08")
+        # e7fed0303 settled the drag dim at 0.2, down from the 0.45 that washed
+        # the wallpaper out on every drag.
+        self.assertNotIn("anyWidgetIsDragging ? 0.45", content)
+        self.assertIn("opacity: anyWidgetIsDragging ? 0.2 : 0.0", content,
+                      "wallpaperDimLayer opacity during drag should be a light 0.2")
 
     def test_abstract_background_widget_grid_step(self):
         content = self.abstract_widget_path.read_text()

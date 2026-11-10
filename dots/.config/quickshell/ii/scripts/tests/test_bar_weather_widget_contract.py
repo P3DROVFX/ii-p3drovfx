@@ -102,9 +102,11 @@ class BarWeatherWidgetContractTest(unittest.TestCase):
         self.assertIn("root.thickness * 0.72", temperature_block)
         self.assertIn("Appearance.sizes.elevationMargin * 1.6", temperature_block)
         self.assertIn("radius: Appearance.rounding.full", temperature_block)
-        self.assertIn("color: palette.colContainer", temperature_block)
-        self.assertIn("ColorUtils.categoryOnColor(palette.colContainer)", temperature_block)
-        self.assertNotIn("palette.colOnContainer", temperature_block)
+        # The background pair, not `colContainer`: that one is the same colour in
+        # `primary` and `primaryContainer`, so the two modes looked identical.
+        self.assertIn("color: palette.colBackground", temperature_block)
+        self.assertIn("ColorUtils.categoryOnColor(palette.colBackground)", temperature_block)
+        self.assertNotIn("palette.colContainer", temperature_block)
         self.assertNotIn("palette.colOnAccent", temperature_block)
 
     def test_new_designs_keep_weather_interactions(self):

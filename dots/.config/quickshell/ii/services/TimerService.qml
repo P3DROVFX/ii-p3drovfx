@@ -165,6 +165,41 @@ Singleton {
         });
     }
 
+    /** Android's "+1:00": adds time to a running or paused timer, or rings a finished one again. */
+    function extendCountdown(countdownId, seconds = 60) {
+        const countdown = root.findCountdown(countdownId);
+        if (!countdown)
+            return;
+        const extra = Math.max(1, Math.round(Number(seconds) || 60));
+        if (countdown.notified) {
+            root.updateCountdown(countdownId, {
+                endsAt: Date.now() + extra * 1000,
+                durationSeconds: extra,
+                paused: false,
+                remaining: 0,
+                notified: false
+            });
+            return;
+        }
+        root.updateCountdown(countdownId, countdown.paused
+            ? { remaining: Number(countdown.remaining ?? 0) + extra * 1000, durationSeconds: Number(countdown.durationSeconds ?? 0) + extra }
+            : { endsAt: Number(countdown.endsAt ?? Date.now()) + extra * 1000, durationSeconds: Number(countdown.durationSeconds ?? 0) + extra });
+    }
+
+    function renameCountdown(countdownId, label) {
+        const countdown = root.findCountdown(countdownId);
+        if (!countdown)
+            return;
+        const text = String(label ?? "").trim();
+        root.updateCountdown(countdownId, { label: text.length > 0 ? text : root.defaultCountdownLabel(countdown.durationSeconds) });
+    }
+
+    /** Fraction of the timer already elapsed, 0..1. */
+    function countdownProgress(countdown) {
+        const total = Math.max(1, Number(countdown?.durationSeconds ?? 1));
+        return Math.max(0, Math.min(1, 1 - root.countdownSecondsLeft(countdown) / total));
+    }
+
     function removeCountdown(countdownId) {
         const next = Array.from(Persistent.states.timer.countdowns ?? [])
             .filter(countdown => String(countdown?.id ?? "") !== String(countdownId ?? ""));
@@ -192,20 +227,44 @@ Singleton {
         return root.addCountdownSeconds(seconds);
     }
 
+    /// A countdown reached zero (Modes' "A timer finishes" event).
+    signal countdownFinished(var countdown)
+
+    /// What the full-screen timer popup shows: { kind: "focus" | "break" | "longBreak" | "countdown",
+    /// label, minutes }. Null while none is up.
+    property var alert: null
+
+    function dismissAlert() {
+        root.alert = null;
+    }
+
+    onCountdownFinished: countdown => {
+        root.alert = {
+            kind: "countdown",
+            label: String(countdown?.label ?? "") || Translation.tr("Timer"),
+            minutes: Math.round(Number(countdown?.durationSeconds ?? 0) / 60)
+        };
+    }
+
     function refreshCountdowns() {
         const current = Array.from(Persistent.states.timer.countdowns ?? []);
         let changed = false;
+        const finished = [];
         const next = current.map(countdown => {
             if (countdown.paused || countdown.notified || root.countdownSecondsLeft(countdown) > 0)
                 return countdown;
             changed = true;
-            Quickshell.execDetached(["notify-send", String(countdown.label ?? Translation.tr("Timer")), Translation.tr("Timer finished"), "-a", "Shell", "-i", "alarm", "--hint=boolean:suppress-sound:true"]);
-            SoundService.playEvent("pomodoro", "alarm-clock-elapsed");
+            if (Config.options.time.timer?.notify ?? true)
+                Quickshell.execDetached(["notify-send", String(countdown.label ?? Translation.tr("Timer")), Translation.tr("Timer finished"), "-a", "Shell", "-i", "alarm", "--hint=boolean:suppress-sound:true"]);
+            SoundService.playEvent("timer", "alarm-clock-elapsed");
+            finished.push(countdown);
             return Object.assign({}, countdown, { notified: true });
         });
         if (changed) {
             Persistent.states.timer.countdowns = next;
         }
+        for (const countdown of finished)
+            root.countdownFinished(countdown);
     }
 
     Timer {
@@ -237,12 +296,22 @@ Singleton {
                 notificationMessage = Translation.tr(`🔴 Focus: %1 minutes`).arg(Math.floor(focusTime / 60));
             }
 
-            Quickshell.execDetached(["notify-send", "Pomodoro", notificationMessage, "-a", "Shell", "--hint=boolean:suppress-sound:true"]);
+            if (Config.options.time.pomodoro.notify ?? true)
+                Quickshell.execDetached(["notify-send", "Pomodoro", notificationMessage, "-a", "Shell", "--hint=boolean:suppress-sound:true"]);
             SoundService.playEvent("pomodoro", "alarm-clock-elapsed");
+
+            const long = pomodoroBreak && (pomodoroCycle + 1 == cyclesBeforeLongBreak);
+            root.alert = {
+                kind: long ? "longBreak" : pomodoroBreak ? "break" : "focus",
+                label: "Pomodoro",
+                minutes: Math.floor((long ? longBreakTime : pomodoroBreak ? breakTime : focusTime) / 60)
+            };
 
             if (!pomodoroBreak) {
                 Persistent.states.timer.pomodoro.cycle = (Persistent.states.timer.pomodoro.cycle + 1) % root.cyclesBeforeLongBreak;
             }
+            if (Persistent.states.timer.pomodoro.isBreak)
+                root.recordPomodoroFocusDone();
         }
 
         pomodoroSecondsLeft = pomodoroLapDuration - (getCurrentTimeInSeconds() - Persistent.states.timer.pomodoro.start);
@@ -271,6 +340,34 @@ Singleton {
         Persistent.states.timer.pomodoro.cycle = 0;
         refreshPomodoro();
     }
+
+    /** Ends the current phase now: focus goes to its break, a break back to focus. */
+    function skipPomodoroPhase() {
+        Persistent.states.timer.pomodoro.start = getCurrentTimeInSeconds() - pomodoroLapDuration;
+        refreshPomodoro();
+        if (!pomodoroRunning)
+            pomodoroSecondsLeft = pomodoroLapDuration;
+    }
+
+    function todayKey() {
+        const d = new Date();
+        return d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate();
+    }
+
+    /** Focus sessions finished today; a stored count from another day reads as 0. */
+    readonly property int pomodoroFocusToday: Persistent.states.timer.pomodoro.todayDate === root.todayKey()
+        ? Persistent.states.timer.pomodoro.todayCount : 0
+
+    function recordPomodoroFocusDone() {
+        const today = root.todayKey();
+        const state = Persistent.states.timer.pomodoro;
+        state.todayCount = state.todayDate === today ? state.todayCount + 1 : 1;
+        state.todayDate = today;
+    }
+
+    /** Fraction of the current pomodoro phase already spent, 0..1. */
+    readonly property real pomodoroProgress: pomodoroLapDuration > 0
+        ? Math.max(0, Math.min(1, 1 - pomodoroSecondsLeft / pomodoroLapDuration)) : 0
 
     signal customTimeRequested(int currentHour, int currentMinute, string title)
 
@@ -335,6 +432,6 @@ Singleton {
     }
 
     function stopwatchRecordLap() {
-        Persistent.states.timer.stopwatch.laps.push(stopwatchTime);
+        Persistent.states.timer.stopwatch.laps = Array.from(Persistent.states.timer.stopwatch.laps ?? []).concat([stopwatchTime]);
     }
 }

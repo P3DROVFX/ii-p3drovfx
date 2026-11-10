@@ -18,7 +18,8 @@ Canvas { // High-performance silky-smooth radial wave visualizer
 
     // Frame animation loop for organic LERP interpolation
     FrameAnimation {
-        running: root.live && root.points.length > 0
+        // A hidden canvas still repaints on the CPU: never animate one nobody sees.
+        running: root.live && root.visible && root.points.length > 0
         onTriggered: {
             var n = root.points.length;
             if (n === 0) return;

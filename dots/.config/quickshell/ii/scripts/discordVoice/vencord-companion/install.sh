@@ -112,9 +112,11 @@ case "$DETECTED" in
         CLIENT_NAME="Vesktop"
         REPO_URL="https://github.com/Vendicated/Vencord.git"
         BUILD_DIR="${HOME}/.local/share/quickshell-ii/Vencord"
-        STATE_FILE="${HOME}/.config/vesktop/settings.json"
+        # Vesktop reads a custom Vencord build from state.json's vencordDir
+        # (State.store.vencordDir); settings.json has no such key.
+        STATE_FILE="${HOME}/.config/vesktop/state.json"
         VENCORD_SETTINGS="${HOME}/.config/vesktop/settings/settings.json"
-        CONFIG_KEY="vencordLocation"
+        CONFIG_KEY="vencordDir"
         ;;
     equibop)
         CLIENT_NAME="Equibop"
@@ -163,18 +165,26 @@ fi
 # name) rather than -f (full command line): this script's own path contains
 # "discord" (scripts/discordVoice/...), so a substring/full-cmdline match
 # would find and kill install.sh's own process before it finishes.
-if [ "$STANDALONE_VENCORD" -eq 1 ]; then
-    PROC_PATTERN="Discord"
-else
-    PROC_PATTERN="vesktop"
-fi
+case "$DETECTED" in
+    vencord) PROC_PATTERN="Discord" ;;
+    equibop) PROC_PATTERN="equibop" ;;
+    *) PROC_PATTERN="vesktop" ;;
+esac
 
 WAS_RUNNING=0
 if pgrep -ix "$PROC_PATTERN" >/dev/null 2>&1; then
     WAS_RUNNING=1
     info "Closing $CLIENT_NAME to update settings cleanly..."
     pkill -ix "$PROC_PATTERN" 2>/dev/null || true
-    sleep 1
+    # The client saves its state file on the way out; writing ours before it is
+    # gone would be overwritten by that save.
+    for _ in $(seq 50); do
+        pgrep -ix "$PROC_PATTERN" >/dev/null 2>&1 || break
+        sleep 0.2
+    done
+    if pgrep -ix "$PROC_PATTERN" >/dev/null 2>&1; then
+        error "$CLIENT_NAME did not close; close it and run the install again."
+    fi
 fi
 
 if [ "$STANDALONE_VENCORD" -eq 1 ]; then
@@ -205,6 +215,20 @@ except Exception:
 data['$CONFIG_KEY'] = '$DIST_DIR'
 with open('$STATE_FILE', 'w') as f: json.dump(data, f, indent=4)
 "
+            if [ "$DETECTED" = vesktop ]; then
+                # Earlier versions of this script wrote the build path under a key
+                # Vesktop never reads; drop it so it cannot be mistaken for the real one.
+                python3 -c "
+import json
+path = '${HOME}/.config/vesktop/settings.json'
+try:
+    with open(path) as f: data = json.load(f)
+except Exception:
+    data = None
+if isinstance(data, dict) and data.pop('vencordLocation', None) is not None:
+    with open(path, 'w') as f: json.dump(data, f, indent=4)
+"
+            fi
             info "Updated $CONFIG_KEY in $STATE_FILE"
         fi
     else
@@ -246,6 +270,8 @@ if [ $WAS_RUNNING -eq 1 ]; then
         elif [ -x "/opt/discord/Discord" ]; then
             nohup /opt/discord/Discord >/dev/null 2>&1 &
         fi
+    elif [ "$DETECTED" = equibop ]; then
+        command -v equibop >/dev/null 2>&1 && nohup equibop >/dev/null 2>&1 &
     else
         if command -v vesktop >/dev/null 2>&1; then
             nohup vesktop >/dev/null 2>&1 &

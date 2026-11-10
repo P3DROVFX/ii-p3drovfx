@@ -10,7 +10,14 @@ import Quickshell
 Item {
     id: root
     anchors.fill: parent
-    property bool isExpanded: false
+
+    readonly property var source: {
+        let node = root.parent;
+        while (node && !node.hasOwnProperty("controller"))
+            node = node.parent;
+        return node && node.controller ? node.controller.sources.clipboard : null;
+    }
+    readonly property bool fromPhone: root.source ? root.source.fromPhone : false
 
     // Contracted view: simple "Copied" banner
     RowLayout {
@@ -19,13 +26,10 @@ Item {
         anchors.leftMargin: 12
         anchors.rightMargin: 12
         spacing: 8
-        opacity: !root.isExpanded ? 1.0 : 0.0
-        visible: opacity > 0.01
-        Behavior on opacity { NumberAnimation { duration: 150 } }
 
         MaterialSymbol {
             Layout.alignment: Qt.AlignVCenter
-            text: "assignment"
+            text: root.fromPhone ? "phonelink" : "assignment"
             iconSize: 16
             color: Appearance.colors.colPrimary
         }
@@ -36,78 +40,45 @@ Item {
             font.pixelSize: Appearance.font.pixelSize.smaller
             font.bold: true
             color: Appearance.colors.colOnSurface
-            text: Translation.tr("Copied!")
+            text: root.fromPhone ? Translation.tr("Copied from phone") : Translation.tr("Copied!")
             elide: Text.ElideRight
             maximumLineCount: 1
             wrapMode: Text.NoWrap
         }
-    }
 
-    // Expanded view: displays full clipboard content preview
-    ColumnLayout {
-        id: expandedLayout
-        anchors.fill: parent
-        anchors.margins: 12
-        spacing: 6
-        opacity: root.isExpanded ? 1.0 : 0.0
-        visible: opacity > 0.01
-        Behavior on opacity { NumberAnimation { duration: 150 } }
+        // The copy is already in the clipboard: one press reads it aloud from
+        // the island. Only for text the prompter can draw, and only while the
+        // feature has an island to live in.
+        RippleButton {
+            id: prompterButton
+            Layout.alignment: Qt.AlignVCenter
+            Layout.preferredWidth: 26
+            Layout.preferredHeight: 26
+            buttonRadius: Appearance.rounding.full
+            visible: Teleprompter.available && root.source && root.source.payload
+                && !Cliphist.entryIsImage(root.source.payload)
+            colBackground: prompterHover.hovered ? Appearance.colors.colSecondaryContainer : Qt.rgba(0, 0, 0, 0)
+            colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+            colBackgroundActive: Appearance.colors.colSecondaryContainerActive
+            colRipple: Appearance.colors.colSecondaryContainerActive
+            onClicked: Teleprompter.startFromClipboard()
 
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 6
+            HoverHandler {
+                id: prompterHover
+            }
 
-            MaterialSymbol {
-                text: "assignment"
-                iconSize: 14
+            contentItem: MaterialSymbol {
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                text: "subtitles"
+                iconSize: 15
+                fill: prompterHover.hovered ? 1 : 0
                 color: Appearance.colors.colPrimary
             }
 
-            StyledText {
-                text: Translation.tr("Clipboard")
-                font.pixelSize: Appearance.font.pixelSize.smaller
-                font.bold: true
-                color: Appearance.colors.colPrimary
-                Layout.fillWidth: true
-            }
-
-            StyledText {
-                text: Translation.tr("Recent")
-                font.pixelSize: 9
-                color: Appearance.colors.colSubtext
-            }
-        }
-
-        // Preview box for text content
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            radius: Appearance.rounding.small
-            color: Appearance.colors.colSurfaceContainerLow
-            border.width: 0
-            border.color: Appearance.colors.colLayer0Border
-
-            ScrollView {
-                anchors.fill: parent
-                anchors.margins: 8
-                clip: true
-
-                StyledText {
-                    width: parent.width
-                    text: {
-                        const entry = Cliphist.entries[0];
-                        if (!entry) return "";
-                        if (Cliphist.entryIsImage(entry)) {
-                            return Translation.tr("Image copied");
-                        }
-                        return entry.replace(/^\s*\S+\s+/, "").trim();
-                    }
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    color: Appearance.colors.colOnSurface
-                    wrapMode: Text.Wrap
-                    maximumLineCount: 5
-                    elide: Text.ElideRight
-                }
+            StyledToolTip {
+                text: Translation.tr("Read with Teleprompter")
+                requireOverlay: false
             }
         }
     }

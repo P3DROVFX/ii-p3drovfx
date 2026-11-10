@@ -1,0 +1,9 @@
+module qs.modules.settings.configs.startup
+
+CircleAction 1.0 CircleAction.qml
+ConnectedToggle 1.0 ConnectedToggle.qml
+ServiceDetailConfig 1.0 ServiceDetailConfig.qml
+ServiceRow 1.0 ServiceRow.qml
+StartupEditConfig 1.0 StartupEditConfig.qml
+StartupEntryCard 1.0 StartupEntryCard.qml
+SummaryTile 1.0 SummaryTile.qml

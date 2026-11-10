@@ -16,12 +16,8 @@ import Quickshell.Services.Mpris
 Item { // Player instance
     id: root
     required property MprisPlayer player
-    property var artUrl: MprisController.artUrl
-    property string artDownloadLocation: Directories.coverArt
-    property string artFileName: Qt.md5(artUrl)
-    property string artFilePath: `${artDownloadLocation}/${artFileName}`
+    property var artUrl: player?.trackArtUrl ?? ""
     property color artDominantColor: ColorUtils.mix((colorQuantizer?.colors[0] ?? Appearance.colors.colPrimary), Appearance.colors.colPrimaryContainer, 0.8) || Appearance.m3colors.m3secondaryContainer
-    property bool downloaded: false
     property list<real> visualizerPoints: []
     property real maxVisualizerValue: 1000 // Max value in the data points
     property int visualizerSmoothing: 2 // Number of points to average for smoothing
@@ -29,7 +25,7 @@ Item { // Player instance
 
     // Some players (e.g. Deezer) stop reporting position on track change, so the locally
     // extrapolated position keeps running past the end of the track. Clamp it.
-    readonly property real trackLength: Math.max(0, root.player?.length ?? 0)
+    readonly property real trackLength: MprisController.trackLengthOf(root.player)
     readonly property real trackPosition: Math.min(Math.max(0, root.player?.position ?? 0), root.trackLength > 0 ? root.trackLength : Infinity)
     readonly property real trackProgress: root.trackLength > 0 ? root.trackPosition / root.trackLength : 0
 
@@ -41,7 +37,8 @@ Item { // Player instance
     property real playPauseButtonSize: compactMode ? 32 : 44
     property real trackChangeButtonSize: compactMode ? 18 : 24
 
-    property string displayedArtFilePath: root.downloaded ? Qt.resolvedUrl(artFilePath) : ""
+    readonly property string displayedArtFilePath: CoverArt.source(root.artUrl)
+    readonly property bool downloaded: root.displayedArtFilePath !== ""
 
     component TrackChangeButton: RippleButton {
         id: button
@@ -78,30 +75,9 @@ Item { // Player instance
         }
     }
 
-    onArtFilePathChanged: {
-        if (root.artUrl.length == 0) {
+    onArtUrlChanged: {
+        if (root.artUrl.length == 0)
             root.artDominantColor = Appearance.m3colors.m3secondaryContainer;
-            return;
-        }
-
-        // Binding does not work in Process
-        coverArtDownloader.targetFile = root.artUrl;
-        coverArtDownloader.artFilePath = root.artFilePath;
-        coverArtDownloader.artTempPath = root.artFilePath + ".tmp";
-        // Download
-        root.downloaded = false;
-        coverArtDownloader.running = true;
-    }
-
-    Process { // Cover art downloader
-        id: coverArtDownloader
-        property string targetFile: root.artUrl
-        property string artFilePath: root.artFilePath
-        property string artTempPath: root.artFilePath + ".tmp"
-        command: ["bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
-        onExited: (exitCode, exitStatus) => {
-            root.downloaded = true;
-        }
     }
 
     ColorQuantizer {
@@ -243,7 +219,7 @@ Item { // Player instance
                         font.pixelSize: root.compactMode ? Appearance.font.pixelSize.smallest : Appearance.font.pixelSize.small
                         color: blendedColors.colSubtext
                         elide: Text.ElideRight
-                        text: `${StringUtils.friendlyTimeForSeconds(root.trackPosition)} / ${StringUtils.friendlyTimeForSeconds(root.trackLength)}`
+                        text: `${StringUtils.friendlyTimeForSeconds(root.trackPosition)} / ${root.trackLength > 0 ? StringUtils.friendlyTimeForSeconds(root.trackLength) : "\u2013\u2013:\u2013\u2013"}`
                     }
                     RowLayout {
                         id: sliderRow
@@ -268,13 +244,19 @@ Item { // Player instance
                                 active: root.player?.canSeek ?? false
                                 sourceComponent: StyledSlider {
                                     configuration: StyledSlider.Configuration.Wavy
+                                    animateWave: (root.player?.isPlaying ?? false) && root.visible
                                     highlightColor: blendedColors.colPrimary
                                     trackColor: blendedColors.colSecondaryContainer
                                     handleColor: blendedColors.colPrimary
                                     value: root.trackProgress
-                                    onMoved: {
-                                        root.player.position = value * root.trackLength;
-                                    }
+                                    // Nothing to seek to while the player publishes no length.
+                                    enabled: MprisController.hasTrackLength(root.player)
+                                    onMoved: MprisController.seekFraction(root.player, value)
+                                    // QQuickSlider writes `value` itself while the user drags, which destroys
+                                    // the binding below it. Without this the bar froze where the drag left it
+                                    // and never followed the track again.
+                                    onPressedChanged: if (!pressed)
+                                        value = Qt.binding(() => root.trackProgress)
                                 }
                             }
 
@@ -285,9 +267,10 @@ Item { // Player instance
                                     left: parent.left
                                     right: parent.right
                                 }
-                                active: !(root.player?.canSeek ?? false)
+                                active: !!root.player && !sliderLoader.active
                                 sourceComponent: StyledProgressBar {
                                     wavy: root.player?.isPlaying
+                                    animateWave: (root.player?.isPlaying ?? false) && root.visible
                                     highlightColor: blendedColors.colPrimary
                                     trackColor: blendedColors.colSecondaryContainer
                                     value: root.trackProgress

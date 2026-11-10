@@ -4,6 +4,8 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import qs
+import qs.services
 import qs.modules.common
 import qs.modules.common.functions
 
@@ -70,6 +72,47 @@ Singleton {
         { value: "mp3", label: "MP3" },
         { value: "m4a", label: "M4A" }
     ]
+
+    // ── On the island ────────────────────────────────────────────────────────
+    // A download outlives the overview it was started from; the island's background-jobs
+    // activity is where it can still be followed. Only while the island shows jobs at
+    // all: ProgressService starts a job monitor of its own the moment it is touched.
+    property bool _islandJobShown: false
+    onIsDownloadingChanged: Qt.callLater(root._publishIslandJob)
+    onDownloadProgressChanged: Qt.callLater(root._publishIslandJob)
+    onCurrentStatusChanged: Qt.callLater(root._publishIslandJob)
+
+    function _publishIslandJob() {
+        if (root.isDownloading) {
+            if (!GlobalStates.islandOwnsProgress)
+                return;
+            root._islandJobShown = true;
+            const converting = root.currentStatus === "converting";
+            ProgressService.reportShellJob("mediaDownloader", {
+                appName: Translation.tr("Media downloader"),
+                icon: converting ? "transform" : "download",
+                percent: Math.round(root.downloadProgress * 100),
+                message: converting ? Translation.tr("Converting…")
+                    : root.thumbnailTitle !== "" ? root.thumbnailTitle
+                    : Translation.tr("Downloading media"),
+                speedText: converting ? "" : (root.parsedStats.speed ?? ""),
+                etaText: converting ? "" : (root.parsedStats.eta ?? "")
+            });
+            return;
+        }
+        if (!root._islandJobShown)
+            return;
+        root._islandJobShown = false;
+        // onExited has already set the outcome: an error status, a full bar, or a
+        // cancel's reset to nothing.
+        if (root.currentStatus === "error")
+            ProgressService.finishShellJob("mediaDownloader", "failed", Translation.tr("Download failed"));
+        else if (root.downloadProgress >= 1)
+            ProgressService.finishShellJob("mediaDownloader", "completed",
+                Translation.tr("Download complete"));
+        else
+            ProgressService.finishShellJob("mediaDownloader", "cleared");
+    }
 
     // ── Signals ──────────────────────────────────────────────────────────────
     signal downloadFinished(string filePath)

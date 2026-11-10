@@ -53,7 +53,10 @@ Toolbar {
             }
         }
 
-        Component.onCompleted: extraOptions.focusSearch()
+        // The floating pill only owns the keyboard when it is on screen: the
+        // compact layout keeps this toolbar hidden and draws its own search in the
+        // address row, which would otherwise lose the focus to this invisible field.
+        Component.onCompleted: if (extraOptions.visible) extraOptions.focusSearch()
 
         onAccepted: {
             if (wallpaperSelectorContent.browserMode && text.trim().length > 0) {
@@ -62,12 +65,12 @@ Toolbar {
                 wallpaperSelectorContent.moreOptionsModelData = null
                 WallpaperBrowser.clearResponses();
                 WallpaperBrowser.makeRequest(allTags, 20, 1);
-                grid.currentIndex = 0;
+                wallpaperSelectorContent.view.currentIndex = 0;
                 text = "";
-            } else if (!wallpaperSelectorContent.browserMode && grid.count > 0) {
+            } else if (!wallpaperSelectorContent.browserMode && wallpaperSelectorContent.view.count > 0) {
                 // TextInput owns the focus while searching, so forward Enter
                 // explicitly to the same activation path used by the shell.
-                grid.activateCurrent();
+                wallpaperSelectorContent.view.activateCurrent();
             }
         }
 
@@ -79,12 +82,12 @@ Toolbar {
             else if (text.length !== 0) {
                 // No filtering, just navigate grid
                 if (event.key === Qt.Key_Down) {
-                    grid.moveSelection(grid.columns);
+                    wallpaperSelectorContent.view.moveSelection(wallpaperSelectorContent.compact ? 1 : grid.columns);
                     event.accepted = true;
                     return;
                 }
                 if (event.key === Qt.Key_Up) {
-                    grid.moveSelection(-grid.columns);
+                    wallpaperSelectorContent.view.moveSelection(wallpaperSelectorContent.compact ? -1 : -grid.columns);
                     event.accepted = true;
                     return;
                 }

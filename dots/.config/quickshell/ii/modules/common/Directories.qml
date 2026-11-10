@@ -20,6 +20,8 @@ Singleton {
     readonly property string pictures: StandardPaths.standardLocations(StandardPaths.PicturesLocation)[0] || ""
     readonly property string music: StandardPaths.standardLocations(StandardPaths.MusicLocation)[0] || ""
     readonly property string videos: StandardPaths.standardLocations(StandardPaths.MoviesLocation)[0] || ""
+    readonly property string desktop: StandardPaths.standardLocations(StandardPaths.DesktopLocation)[0] || (Directories.home + "/Desktop")
+    property string desktopPath: FileUtils.trimFileProtocol(Directories.desktop)
     readonly property string runtime: FileUtils.trimFileProtocol(StandardPaths.standardLocations(StandardPaths.RuntimeLocation)[0] || "/run/user/1000")
 
     readonly property string losslessCutDesktopPath: FileUtils.trimFileProtocol(`${Directories.home}/.local/share/applications/losslesscut.desktop`)
@@ -39,20 +41,33 @@ Singleton {
     // Other dirs used by the shell, without "file://"
     property string assetsPath: Quickshell.shellPath("assets")
     property string scriptPath: FileUtils.trimFileProtocol(Quickshell.shellPath("scripts"))
+    // Knows which Rust helpers exist, what each was built from, and whether that is
+    // still true. The shell asks it for a state; the updater asks it for a rebuild.
+    property string rustHelpersScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/rust-helpers.sh`)
     property string favicons: FileUtils.trimFileProtocol(`${Directories.cache}/media/favicons`)
     property string coverArt: FileUtils.trimFileProtocol(`${Directories.cache}/media/coverart`)
     // Reconstructible artwork extracted from files selected by the local
     // player. It must not share the remote-cover directory that is cleared at
     // startup, otherwise reopening an offline local session loses its art.
     property string localMediaCoverCache: FileUtils.trimFileProtocol(`${Directories.cache}/media/local-media/covers`)
+    // Reconstructible lyrics extracted from files selected by the local player.
+    property string localMediaLyricsCache: FileUtils.trimFileProtocol(`${Directories.cache}/media/local-media/lyrics`)
     property string tempImages: `/tmp/quickshell-${SystemInfo.username}/media/images`
     property string booruPreviews: FileUtils.trimFileProtocol(`${Directories.cache}/media/boorus`)
     property string booruDownloads: FileUtils.trimFileProtocol(Directories.pictures + "/homework")
     property string booruDownloadsNsfw: FileUtils.trimFileProtocol(Directories.pictures + "/homework/🌶️")
     property string latexOutput: FileUtils.trimFileProtocol(`${Directories.cache}/media/latex`)
+    // Named copies of screenshots sent to a phone. kdeconnectd reads the file
+    // while the transfer runs, so the copy has to outlive the overlay.
+    property string phoneShare: FileUtils.trimFileProtocol(`${Directories.cache}/phone-share`)
     property string shellConfig: FileUtils.trimFileProtocol(`${Directories.config}/illogical-impulse`)
     property string shellConfigName: "config.json"
     property string shellConfigPath: `${Directories.shellConfig}/${Directories.shellConfigName}`
+    // Durable mirror of the machine-local settings that presets never carry
+    // (see LocalPreferences.qml). Lives beside config.json but survives its
+    // deletion/reset — that is the whole point.
+    property string localPreferencesName: "local-preferences.json"
+    property string localPreferencesPath: `${Directories.shellConfig}/${Directories.localPreferencesName}`
     // The setup script's standing request to run the Welcome once, consumed
     // and deleted by shell.qml. Written only when the install was a first
     // install AND no running shell answered the IPC call that would have
@@ -60,6 +75,10 @@ Singleton {
     property string welcomeRequestPath: FileUtils.trimFileProtocol(`${Directories.state}/user/welcome_pending`)
     property string todoPath: FileUtils.trimFileProtocol(`${Directories.state}/user/todo.json`)
     property string todoDoneHistoryPath: FileUtils.trimFileProtocol(`${Directories.state}/user/todo_done.json`)
+    property string remindersPath: FileUtils.trimFileProtocol(`${Directories.state}/user/reminders.json`)
+    // Images attached to reminders are copied here, so a moved or deleted original
+    // doesn't leave a broken thumbnail behind.
+    property string reminderAttachmentsDir: FileUtils.trimFileProtocol(`${Directories.state}/user/reminder_attachments`)
     property string appUsagePath: FileUtils.trimFileProtocol(`${Directories.state}/user/app_usage.json`)
     // One file per local day, written by the app_stats sampler.
     property string appStats: FileUtils.trimFileProtocol(`${Directories.state}/user/app_stats`)
@@ -102,11 +121,27 @@ Singleton {
     property string conflictCachePath: FileUtils.trimFileProtocol(`${Directories.cache}/conflict-killer`)
     property string notificationsPath: FileUtils.trimFileProtocol(`${Directories.cache}/notifications/notifications.json`)
     property string lyricsPath: FileUtils.trimFileProtocol(`${Directories.cache}/lyrics/lyrics.json`)
+    property string lyricsCacheDir: FileUtils.trimFileProtocol(`${Directories.cache}/lyrics`)
+    property string betterlyricsCachePath: FileUtils.trimFileProtocol(`${Directories.cache}/lyrics/betterlyrics.json`)
     // Hand-written .lrc keyed by track. Lives in state, not cache: it can't be
     // re-fetched from anywhere if it gets cleared.
     property string customLyricsPath: FileUtils.trimFileProtocol(`${Directories.state}/user/custom-lyrics.json`)
     property string generatedMaterialThemePath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/colors.json`)
     property string wallpaperPreviewColorsPath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/wallpaper_preview_colors.json`)
+    // The same document as wallpaperPreviewColorsPath above, but for the
+    // wallpaper the shell ships with, and generated at build time instead of by
+    // a wallpaper switch. A first install never runs one - nothing applies a
+    // wallpaper until the user picks one - so without these the scheme swatches
+    // have no colours to show. One file per mode because switchwall generates
+    // the previews with the mode it was called in.
+    // Regenerate both with scripts/colors/generate-default-previews.sh whenever
+    // assets/images/default_wallpaper.png changes.
+    property string defaultPreviewColorsDarkPath: FileUtils.trimFileProtocol(
+        Quickshell.shellPath("assets/data/default_preview_colors_dark.json"))
+    property string defaultPreviewColorsLightPath: FileUtils.trimFileProtocol(
+        Quickshell.shellPath("assets/data/default_preview_colors_light.json"))
+    property string defaultWallpaperImagePath: FileUtils.trimFileProtocol(
+        Quickshell.shellPath("assets/images/default_wallpaper.png"))
     property string lockscreenColorsPath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/lockscreen_colors.json`)
     // Public holidays fetched from Nager.Date, one entry per "<COUNTRY>-<YEAR>".
     property string holidaysCachePath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/holidays.json`)
@@ -172,6 +207,7 @@ Singleton {
 
     // Cleanup on init
     Component.onCompleted: {
+        Quickshell.execDetached(["mkdir", "-p", `${desktopPath}`]);
         Quickshell.execDetached(["mkdir", "-p", `${shellConfig}`]);
         Quickshell.execDetached(["mkdir", "-p", `${favicons}`]);
         Quickshell.execDetached(["bash", "-c", `rm -rf '${coverArt}'; mkdir -p '${coverArt}'`]);
@@ -190,6 +226,8 @@ Singleton {
         Quickshell.execDetached(["mkdir", "-p", `${userWidgetsPath}`]);
         Quickshell.execDetached(["rm", "-rf", `${tempImages}`]);
         Quickshell.execDetached(["mkdir", "-p", `${screenshotTemp}`]);
+        Quickshell.execDetached(["mkdir", "-p", `${localMediaLyricsCache}`]);
+        Quickshell.execDetached(["mkdir", "-p", `${localMediaCoverCache}`]);
     }
 
     // The name of the user is read by a process, so for the first moments of

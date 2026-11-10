@@ -48,6 +48,10 @@ LazyLoader {
     property bool animate: true
     property bool animateHeight: true
     property bool stickyHover: false
+    // Keeps a sticky-hover popup open while the pointer is away — e.g. while
+    // the user is typing into it. Releasing it re-checks the hover state.
+    property bool holdOpen: false
+    onHoldOpenChanged: if (!holdOpen) _evaluateStickyState()
     property int keyboardFocus: WlrKeyboardFocus.None
 
     property bool customPosition: false
@@ -75,7 +79,11 @@ LazyLoader {
     property bool _isClosing: false
     property bool _reopenPending: false
 
-    readonly property bool _computedActive: BarInteraction.enablePopups && ((BarInteraction.clickToShow || forceClick) ? _clickActive : (stickyHover ? _stickyActive : (_targetHovered && _openDebounced)))
+    property string popupId: ""
+    readonly property string screenName: root.hoverTarget?.QsWindow?.window?.screen?.name ?? root.QsWindow?.window?.screen?.name ?? ""
+    readonly property bool _ipcActive: popupId !== "" && GlobalStates.isBarPopupOpen(popupId, screenName)
+
+    readonly property bool _computedActive: _ipcActive || (BarInteraction.enablePopups && ((BarInteraction.clickToShow || forceClick) ? _clickActive : (stickyHover ? _stickyActive : (_targetHovered && _openDebounced))))
 
     property bool _openDebounced: false
 
@@ -108,6 +116,8 @@ LazyLoader {
         property Timer grace: Timer {
             interval: 100 + Math.max(0, (Config.options && Config.options.bar && Config.options.bar.tooltips && Config.options.bar.tooltips.closeDelay) ? Config.options.bar.tooltips.closeDelay : 0)
             onTriggered: {
+                if (root._ipcActive || root.holdOpen)
+                    return;
                 root._popupHovered = false;
                 root._stickyActive = false;
             }
@@ -146,7 +156,12 @@ LazyLoader {
         // with an inner MouseArea and only drives `down`, so Control's `pressed` signal
         // never fires there — the two together cover every target the bar actually uses,
         // and ignoreUnknownSignals makes the one a given target lacks a no-op.
-        function onPressed() { root.toggleFromPress(); }
+        function onPressed(mouse) {
+            // A widget that cycles on the right button keeps that press away from the popup.
+            if (mouse?.button === Qt.RightButton && root.hoverTarget?.rightClickCycles)
+                return;
+            root.toggleFromPress();
+        }
         function onDownChanged() {
             if (root.hoverTarget?.down)
                 root.toggleFromPress();
@@ -164,6 +179,11 @@ LazyLoader {
     function toggleFromPress() {
         if (Date.now() - root._lastDismissMs < root._dismissGuardMs)
             return;
+        if (root._ipcActive && root.popupId !== "") {
+            GlobalStates.closeBarPopup(root.popupId, root.screenName);
+            root._lastDismissMs = Date.now();
+            return;
+        }
         if (root._clickActive) {
             root.close();
             root._lastDismissMs = Date.now();
@@ -178,6 +198,9 @@ LazyLoader {
 
     // Dismiss the popup regardless of which mode opened it (click, sticky hover or plain hover).
     function close() {
+        if (root._ipcActive && root.popupId !== "") {
+            GlobalStates.closeBarPopup(root.popupId, root.screenName);
+        }
         _clickActive = false;
         _stickyActive = false;
         _openDebounced = false;
@@ -252,6 +275,22 @@ LazyLoader {
         readonly property real screenWidth: popupWindow.screen?.width ?? 0
         readonly property real screenHeight: popupWindow.screen?.height ?? 0
 
+        // The sidebars push the vertical bar inward (TopLayerPanel offsets the bar's x by
+        // the same animated width). The popup is anchored by layer-shell margins, which know
+        // nothing about that push, so it must add the offset itself — otherwise it stays at
+        // the bar's resting position and ends up underneath the open sidebar. Same side,
+        // same monitor, following the animated clock so the popup tracks the motion both ways.
+        readonly property real sidebarPush: {
+            const screenName = popupWindow.screen?.name ?? "";
+            if (screenName === "")
+                return 0;
+            if (!BarPlacement.bottom && screenName === GlobalStates.effectiveLeftMonitor)
+                return GlobalStates.animatedLeftSidebarWidth;
+            if (BarPlacement.bottom && screenName === GlobalStates.effectiveRightMonitor)
+                return GlobalStates.animatedRightSidebarWidth;
+            return 0;
+        }
+
         anchors.left: root.customPosition ? root.anchorLeft : (!BarPlacement.vertical || (BarPlacement.vertical && !BarPlacement.bottom))
         anchors.right: root.customPosition ? root.anchorRight : (BarPlacement.vertical && BarPlacement.bottom)
         anchors.top: root.customPosition ? root.anchorTop : (BarPlacement.vertical || (!BarPlacement.vertical && !BarPlacement.bottom))
@@ -286,14 +325,14 @@ LazyLoader {
                 }
                 if (!BarPlacement.vertical) {
                     if (!root.hoverTarget || !root.QsWindow)
-                        return 0;
+                        return (screenWidth > 0 && popupWindow.implicitWidth > 0) ? Math.max(0, (screenWidth - popupWindow.implicitWidth) / 2) : 0;
                     var targetPos = root.QsWindow.mapFromItem(root.hoverTarget, 0, 0);
                     var centeredX = targetPos.x + (root.hoverTarget.width - popupWindow.implicitWidth) / 2;
                     var minX = 0;
                     var maxX = screenWidth - popupWindow.implicitWidth;
                     return Math.max(minX, Math.min(maxX, centeredX));
                 }
-                return Appearance.sizes.verticalBarWidth;
+                return Appearance.sizes.verticalBarWidth + popupWindow.sidebarPush;
             }
 
             top: {
@@ -312,7 +351,7 @@ LazyLoader {
                 return Math.max(minY, Math.min(maxY, centeredY));
             }
 
-            right: root.customPosition ? root.customMarginRight : Appearance.sizes.verticalBarWidth
+            right: root.customPosition ? root.customMarginRight : Appearance.sizes.verticalBarWidth + popupWindow.sidebarPush
             bottom: root.customPosition ? root.customMarginBottom : Appearance.sizes.barHeight
         }
 
@@ -324,7 +363,7 @@ LazyLoader {
         HyprlandFocusGrab {
             id: dismissGrab
             windows: [popupWindow]
-            active: root.selfDismiss && (BarInteraction.clickToShow || root.forceClick) && root._computedActive && popupWindow._dismissGrabArmed
+            active: !root._ipcActive && root.selfDismiss && (BarInteraction.clickToShow || root.forceClick) && root._computedActive && popupWindow._dismissGrabArmed
             onCleared: () => {
                 // Stamped so a press on the widget that caused this clear is understood as
                 // the dismissal it was, instead of reopening what it just closed.
@@ -340,7 +379,7 @@ LazyLoader {
         // open — the same mechanism BarWindow.qml already uses for the bar itself.
         // Click-to-show popups are excluded: they run their own dismissGrab above.
         readonly property bool joinsSharedGrab: !(root.selfDismiss
-            && (BarInteraction.clickToShow || root.forceClick))
+            && (BarInteraction.clickToShow || root.forceClick)) || root._ipcActive
 
         function updateSharedGrabMembership() {
             if (popupWindow.joinsSharedGrab && root.active)
@@ -379,10 +418,14 @@ LazyLoader {
         }
 
         readonly property Item heroItem: {
-            if (!root.contentItem)
+            let container = root.contentItem;
+            // Lazy popups wrap their body in a Loader; the hero is inside the loaded item.
+            if (container && container.sourceComponent !== undefined)
+                container = container.item;
+            if (!container)
                 return null;
-            for (let i = 0; i < root.contentItem.children.length; i++) {
-                let child = root.contentItem.children[i];
+            for (let i = 0; i < container.children.length; i++) {
+                let child = container.children[i];
                 if (child.visible && child.width > 0)
                     return child;
             }
@@ -473,7 +516,7 @@ LazyLoader {
                 }
             }
             function on_ComputedActiveChanged() {
-                if (root._computedActive && root.selfDismiss) {
+                if (root._computedActive && root.selfDismiss && !root._ipcActive) {
                     popupWindow._dismissGrabArmed = false;
                     dismissGrabArmTimer.restart();
                 } else {
@@ -484,7 +527,7 @@ LazyLoader {
         }
 
         Component.onCompleted: {
-            if (root.selfDismiss && BarInteraction.clickToShow) {
+            if (root.selfDismiss && BarInteraction.clickToShow && !root._ipcActive) {
                 dismissGrabArmTimer.restart();
             }
             popupWindow.animProgress = 0.0;
@@ -518,6 +561,12 @@ LazyLoader {
 
             Rectangle {
                 id: popupBackground
+
+                ShellRegionTarget {
+                    target: popupBackground
+                    label: Translation.tr("Popup")
+                    namespace: "quickshell:popup"
+                }
                 readonly property real margin: 10
 
                 readonly property real targetWidth: ((root.contentItem?.implicitWidth ?? 0) + margin * 2) * root.layoutScale

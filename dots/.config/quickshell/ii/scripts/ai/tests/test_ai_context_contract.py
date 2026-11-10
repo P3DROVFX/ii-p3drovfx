@@ -157,7 +157,7 @@ class SearchSurfaceContractTests(unittest.TestCase):
         # Derived from the query, it fed on its own side effect (entering AI
         # mode clears the query), Qt froze the binding, and Escape could no
         # longer leave the panel.
-        self.assertIn("readonly property bool isAiMode: Ai.enabled && root.aiModeLocked", self.SEARCH_WIDGET)
+        self.assertIn("readonly property bool isAiMode: SearchPanelRegistry.aiPolicyEnabled && root.aiModeLocked", self.SEARCH_WIDGET)
         entering = self.SEARCH_WIDGET.split("onIsAiModeChanged:", 1)[1].split("\n    }", 1)[0]
         self.assertNotIn("aiModeLocked = true", entering)
 

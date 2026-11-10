@@ -221,7 +221,7 @@ PanelWindow {
             "screenWidth": root.width,
             "screenHeight": root.height
         });
-        if (GlobalStates.editLockPreview) {
+        if (GlobalStates.editLockLayout) {
             root.placeOnLock(widgetId, placed.x, placed.y);
             return;
         }
@@ -252,7 +252,7 @@ PanelWindow {
     // copy they mean.
     function addWidgetInstance(widgetId) {
         Config.addWidgetToDesktop(widgetId, undefined, undefined, root.screenName,
-            GlobalStates.editLockPreview ? "lockOnly" : "hide");
+            GlobalStates.editLockLayout ? "lockOnly" : "hide");
     }
 
     function addAppAt(appId, dropX, dropY) {
@@ -825,28 +825,13 @@ PanelWindow {
             EditBarMenu {
                 id: barMenuCard
                 readonly property point at: root.barMenuPoint()
-                x: Math.min(Math.max(at.x, 8), root.width - width - 8)
-                y: Math.min(Math.max(at.y, 8), root.height - height - 8)
+                x: Math.min(Math.max(at.x, 8), root.width - width * ContextMenus.scale - 8)
+                y: Math.min(Math.max(at.y, 8), root.height - height * ContextMenus.scale - 8)
                 controller: GlobalStates.editBarMenuController
                 bucket: GlobalStates.editBarMenuBucket
                 index: GlobalStates.editBarMenuIndex
                 centered: GlobalStates.editBarMenuCentered
                 onDismissRequested: GlobalStates.closeEditBarMenu()
-                transformOrigin: Item.TopLeft
-                scale: 0.85
-                opacity: 0
-                Component.onCompleted: {
-                    scale = 1;
-                    opacity = 1;
-                }
-                Behavior on scale {
-                    enabled: !Appearance.reducedMotion
-                    animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(barMenuCard)
-                }
-                Behavior on opacity {
-                    enabled: !Appearance.reducedMotion
-                    animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(barMenuCard)
-                }
             }
         }
     }
@@ -866,27 +851,11 @@ PanelWindow {
             }
             EditWidgetMenu {
                 id: menuCard
-                x: Math.min(Math.max(GlobalStates.editWidgetMenuX, 8), root.width - width - 8)
-                y: Math.min(Math.max(GlobalStates.editWidgetMenuY, 8), root.height - height - 8)
+                x: Math.min(Math.max(GlobalStates.editWidgetMenuX, 8), root.width - width * ContextMenus.scale - 8)
+                y: Math.min(Math.max(GlobalStates.editWidgetMenuY, 8), root.height - height * ContextMenus.scale - 8)
                 canvas: GlobalStates.editWidgetMenuCanvas
                 instanceId: GlobalStates.editWidgetMenuInstanceId
                 onDismissRequested: GlobalStates.closeEditWidgetMenu()
-                // From the corner the pointer is at: the card belongs to a point.
-                transformOrigin: Item.TopLeft
-                scale: 0.85
-                opacity: 0
-                Component.onCompleted: {
-                    scale = 1.0;
-                    opacity = 1.0;
-                }
-                Behavior on scale {
-                    enabled: !Appearance.reducedMotion
-                    animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(menuCard)
-                }
-                Behavior on opacity {
-                    enabled: !Appearance.reducedMotion
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(menuCard)
-                }
             }
         }
     }

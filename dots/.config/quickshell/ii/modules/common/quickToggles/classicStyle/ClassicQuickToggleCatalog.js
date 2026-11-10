@@ -9,6 +9,7 @@ var TOGGLE_TYPES = [
     "bluetooth",
     "vpn",
     "tailscale",
+    "kdeConnect",
     "nightLight",
     "gameMode",
     "idleInhibitor",
@@ -17,7 +18,10 @@ var TOGGLE_TYPES = [
     "cloudflareWarp",
     "keyboardBacklight",
     "keypressDisplay",
-    "laptopKeyboard"
+    "liveDraw",
+    "laptopKeyboard",
+    "phoneMirror",
+    "smartDevices"
 ];
 
 function allTypes() {

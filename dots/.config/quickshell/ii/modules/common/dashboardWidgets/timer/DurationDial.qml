@@ -18,12 +18,22 @@ Item {
     property real tapSlop: 4
     property real numberSize: 32
     property bool interactive: true
+    property string shortcut: ""
+    property bool showShortcutHints: false
+    activeFocusOnTab: dial.interactive
+    Keys.onPressed: event => {
+        if (!dial.interactive || (event.modifiers !== Qt.NoModifier && event.modifiers !== Qt.ControlModifier)) return;
+        if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
+            dial.step(event.key === Qt.Key_Up ? 1 : -1);
+            event.accepted = true;
+        }
+    }
     signal valueRequested(int newValue)
 
     implicitWidth: 62
     implicitHeight: 66
 
-    readonly property bool active: dragArea.containsMouse || dragArea.pressed
+    readonly property bool active: dragArea.containsMouse || dragArea.pressed || dial.activeFocus
 
     function step(delta) {
         if (delta === 0 || !dial.interactive)
@@ -54,10 +64,14 @@ Item {
             font.pixelSize: dial.numberSize
             color: Appearance.m3colors.m3onSurface
         }
-        StyledText {
+        TaskShortcutContent {
             anchors.horizontalCenter: parent.horizontalCenter
-            text: dial.unitLabel
-            font.pixelSize: Appearance.font.pixelSize.smaller
+            width: dial.width
+            height: Appearance.font.pixelSize.smaller
+            labelText: dial.unitLabel
+            labelPixelSize: Appearance.font.pixelSize.smaller
+            shortcut: dial.activeFocus ? "↑ / ↓" : dial.shortcut
+            showHint: dial.showShortcutHints
             color: Appearance.colors.colSubtext
         }
     }

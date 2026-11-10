@@ -61,11 +61,7 @@ Item {
             text: Translation.tr("OLED Saver")
             onClicked: {
                 GlobalStates.sessionOpen = false;
-                const name = Hyprland.focusedMonitor?.name || (Quickshell.screens.length > 0 ? Quickshell.screens[0].name : "");
-                if (name) {
-                    const monitors = GlobalStates.oledSaverMonitors;
-                    GlobalStates.oledSaverMonitors = monitors.includes(name) ? monitors.filter(n => n !== name) : [...monitors, name];
-                }
+                GlobalStates.toggleOledSaver();
             }
             KeyNavigation.up: signOutButton
             KeyNavigation.down: cancelButton

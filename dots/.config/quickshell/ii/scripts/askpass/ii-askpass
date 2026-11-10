@@ -1,0 +1,569 @@
+#!/usr/bin/env python3
+"""
+ii-askpass: hands a password prompt to the ii shell's Dynamic Island.
+
+Speaks the askpass protocol that sudo (SUDO_ASKPASS, `sudo -A`), ssh (SSH_ASKPASS)
+and git (GIT_ASKPASS) share: the prompt comes as argv[1], the answer goes to stdout,
+exit 0 answers and anything else cancels.
+
+The island listens on $XDG_RUNTIME_DIR/ii-askpass.sock only while the user has opted
+in. One JSON line goes each way:
+
+    -> {"v": 1, "op": "ask", "kind": "sudo", "route": "askpass", "prompt": "...",
+        "requester": 1234, "chain": [1234, 1200, ...], "command": "sudo pacman -Syu",
+        "echo": false, "confirm": false}
+    <- {"r": "ok", "secret": "..."} | {"r": "cancel"} | {"r": "fallback"}
+
+and, when the terminal answered first, {"op": "answered"} goes up before the socket
+closes, so the island can tell a retry from a new question.
+
+A plain `sudo` typed in a terminal (the wrapper marks it with II_ASKPASS_ROUTE) is
+asked in both places at once: sudo's usual prompt in the terminal, with echo off, and
+the pill on the island. Whichever is answered first wins and the other goes away.
+
+When the island can't answer (shell not running, the route switched off), the
+prompt goes somewhere else instead of failing: the terminal sudo came from if there
+is one, the askpass the user had before ($II_ASKPASS_FALLBACK), then whichever
+common askpass is installed. Nothing here ever writes the secret anywhere but stdout.
+"""
+from __future__ import annotations
+
+import json
+import os
+import select
+import shutil
+import signal
+import socket
+import stat
+import sys
+import termios
+import time
+
+SOCK = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}", "ii-askpass.sock")
+SELF = os.path.realpath(sys.argv[0])
+# The terminal wrapper marks its requests, so the island can draw them as a pill and
+# the terminal can be asked too.
+ROUTE = "terminal" if os.environ.get("II_ASKPASS_ROUTE") == "terminal" else "askpass"
+
+# sudo's own options that take a value, as -u root or -uroot; anything after them is
+# the command. -h takes one only attached (-hhost), so it is not here.
+SUDO_VALUE_OPTS = set("aCcDgpRrTtUu")
+SUDO_VALUE_LONG = {"--auth-type", "--chdir", "--chroot", "--close-from", "--command-timeout",
+                   "--group", "--host", "--login-class", "--other-user", "--prompt", "--role",
+                   "--type", "--user"}
+
+# How often the wait looks at sudo, in seconds.
+POLL = 0.1
+
+
+
+def proc_comm(pid: int) -> str:
+    try:
+        with open(f"/proc/{pid}/comm") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
+def proc_cmdline(pid: int) -> list[str]:
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as f:
+            return [a.decode(errors="replace") for a in f.read().split(b"\0") if a]
+    except OSError:
+        return []
+
+
+def proc_stat(pid: int) -> tuple[str, int]:
+    """(state, ppid) from /proc/<pid>/stat, or ("", 0) once it is gone."""
+    try:
+        with open(f"/proc/{pid}/stat") as f:
+            # comm may hold spaces and parentheses: split after the last ')'.
+            fields = f.read().rsplit(")", 1)[1].split()
+        return fields[0], int(fields[1])
+    except (OSError, IndexError, ValueError):
+        return "", 0
+
+
+def ancestry(pid: int) -> list[int]:
+    chain = []
+    while pid > 1 and len(chain) < 48:
+        chain.append(pid)
+        pid = proc_stat(pid)[1]
+    return chain
+
+
+def sudo_command(argv: list[str]) -> str:
+    """'/usr/bin/sudo -A -u root pacman -Syu' -> 'sudo pacman -Syu'."""
+    args = argv[1:]
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg == "--":
+            i += 1
+            break
+        if not arg.startswith("-") or arg == "-":
+            break
+        i += 1
+        if arg.startswith("--"):
+            if arg in SUDO_VALUE_LONG:
+                i += 1
+            continue
+        # A cluster such as -Au root, or -uroot with the value attached.
+        for n, flag in enumerate(arg[1:], start=2):
+            if flag in SUDO_VALUE_OPTS:
+                if n == len(arg):
+                    i += 1
+                break
+    rest = args[i:]
+    return " ".join(["sudo"] + rest) if rest else "sudo"
+
+
+def describe() -> dict:
+    parent = os.getppid()
+    comm = proc_comm(parent)
+    prompt = sys.argv[1] if len(sys.argv) > 1 else ""
+    lowered = prompt.lower()
+    kind, command = "other", comm
+    if comm in ("sudo", "sudo-rs", "doas"):
+        kind, command = "sudo", sudo_command(proc_cmdline(parent))
+    elif os.environ.get("SSH_ASKPASS_PROMPT") or comm.startswith("ssh"):
+        kind, command = "ssh", " ".join(proc_cmdline(parent)[:4])
+    elif comm.startswith("git") or "GIT_ASKPASS" in os.environ:
+        kind, command = "git", "git"
+    confirm_mode = os.environ.get("SSH_ASKPASS_PROMPT", "")
+    return {
+        "v": 1,
+        "op": "ask",
+        "kind": kind,
+        "route": ROUTE,
+        "prompt": prompt,
+        "requester": parent,
+        "chain": ancestry(parent),
+        "command": command,
+        # A username, or ssh's host-key question, is not a secret.
+        "echo": lowered.startswith("username") or "(yes/no" in lowered,
+        "confirm": confirm_mode in ("confirm", "none"),
+        "info": confirm_mode == "none",
+    }
+
+
+# ── Knowing when nobody wants the answer any more ─────────────────────────────
+def is_prompt(pid: int) -> bool:
+    """Another askpass: ours for a second prompt, or a fallback one."""
+    args = proc_cmdline(pid)
+    if any(os.path.realpath(arg) == SELF for arg in args[:2]):
+        return True
+    name = os.path.basename(args[0]) if args else proc_comm(pid)
+    return "askpass" in name or name in ("zenity", "kdialog")
+
+
+class SudoWatch:
+    """
+    Notices sudo going on without this prompt.
+
+    pam_fprintd_grosshack asks for the password from a thread of its own while it waits
+    for a finger, and whatever ends the wait - a match, the reader timing out, too many
+    wrong fingers - it ends with pthread_cancel on that thread. Nobody reads this prompt
+    after that, and nobody closes it: sudo runs the command, or pam_unix asks again with
+    a new prompt. The thread that started this one disappearing is that moment
+    ("abandoned").
+
+    Anything else that leaves the prompt behind is caught the general way ("moved"):
+    sudo does nothing else while it waits for a prompt, so a child of its own that is
+    not a prompt - the command, or the monitor that runs it - means it has moved on. So
+    does sudo exec'ing the command in place (its name changes).
+    """
+
+    def __init__(self, pid: int):
+        self.pid = pid
+        self.comm = proc_comm(pid)
+        self.seen: set[int] = set()
+        # The thread that started this prompt; sudo's own main thread without grosshack.
+        self.asker = next((tid for tid, kids in self._children() if os.getpid() in kids), pid)
+
+    def _children(self) -> list[tuple[int, list[int]]]:
+        try:
+            tasks = os.listdir(f"/proc/{self.pid}/task")
+        except OSError:
+            return []
+        found = []
+        for tid in tasks:
+            try:
+                with open(f"/proc/{self.pid}/task/{tid}/children") as f:
+                    found.append((int(tid), [int(kid) for kid in f.read().split()]))
+            except (OSError, ValueError):
+                continue
+        return found
+
+    def check(self) -> str | None:
+        """ "abandoned", "moved", or None while sudo still waits for this prompt."""
+        if proc_comm(self.pid) != self.comm:
+            return "moved"
+        if self.asker != self.pid and not os.path.exists(f"/proc/{self.pid}/task/{self.asker}"):
+            return "abandoned"
+        return "moved" if self._went_on() else None
+
+    def went_on(self) -> bool:
+        """sudo is past its prompts: running the command, or gone."""
+        return proc_comm(self.pid) != self.comm or self._went_on()
+
+    def _went_on(self) -> bool:
+        others = set()
+        for _, kids in self._children():
+            for kid in kids:
+                if kid == os.getpid() or is_prompt(kid):
+                    continue
+                # A prompt that ended stays behind as a zombie until sudo reaps it.
+                if proc_stat(kid)[0] not in ("", "Z", "X"):
+                    others.add(kid)
+        # Seen on two looks in a row: not a prompt caught between fork and exec.
+        lasting = others & self.seen
+        self.seen = others
+        return bool(lasting)
+
+    def live_prompts(self) -> set[int]:
+        return {kid for _, kids in self._children() for kid in kids
+                if is_prompt(kid) and proc_stat(kid)[0] not in ("", "Z", "X")}
+
+
+def reader_gone() -> bool:
+    """sudo, ssh or git closed its end of our stdout: nobody will read the answer."""
+    try:
+        if not stat.S_ISFIFO(os.fstat(1).st_mode):
+            return False
+        poller = select.poll()
+        poller.register(1, 0)
+        return any(events & (select.POLLERR | select.POLLHUP) for _, events in poller.poll(0))
+    except OSError:
+        return True
+
+
+# ── The terminal ──────────────────────────────────────────────────────────────
+def open_terminal() -> int | None:
+    """
+    The terminal a plain `sudo` came from, when it may be read: only while this is its
+    foreground job. A background job reading it would be stopped by SIGTTIN, and a
+    program that runs sudo without a terminal of its own has none to offer.
+    """
+    if ROUTE != "terminal":
+        return None
+    try:
+        fd = os.open("/dev/tty", os.O_RDWR | os.O_NOCTTY)
+    except OSError:
+        return None
+    try:
+        if os.tcgetpgrp(fd) == os.getpgrp():
+            return fd
+    except OSError:
+        pass
+    os.close(fd)
+    return None
+
+
+class Terminal:
+    """sudo's usual prompt, typed into without echo, alongside the island's."""
+
+    def __init__(self, fd: int, prompt: str, echo: bool):
+        self.fd = fd
+        # Our own open of /dev/tty: non-blocking touches nobody else's descriptor, and a
+        # line another reader took first can't leave this one stuck in read().
+        os.set_blocking(fd, False)
+        self.saved = termios.tcgetattr(fd)
+        mode = termios.tcgetattr(fd)
+        if not echo:
+            # ECHO alone, as getpass and sudo do - and as grosshack puts back.
+            mode[3] &= ~termios.ECHO
+        # TCSAFLUSH drops anything typed ahead, as getpass does.
+        termios.tcsetattr(fd, termios.TCSAFLUSH, mode)
+        self.mode = termios.tcgetattr(fd)
+        self.buf = b""
+        # grosshack's prompt ends in a newline; the answer goes on the prompt's line.
+        os.write(fd, (prompt.rstrip() + " ").encode())
+
+    def read(self) -> str | None:
+        """The line typed, or None while it isn't finished. EOFError on Ctrl-D."""
+        try:
+            chunk = os.read(self.fd, 4096)
+        except BlockingIOError:
+            return None
+        if not chunk:
+            if not self.buf:
+                raise EOFError
+            line, self.buf = self.buf, b""
+            return line.decode(errors="replace")
+        self.buf += chunk
+        if b"\n" not in self.buf:
+            return None
+        line = self.buf.split(b"\n", 1)[0]
+        self.buf = b""
+        return line.decode(errors="replace")
+
+    def close(self, answered_here: bool, abandoned: bool = False):
+        # Called from the foreground as a rule, but a job moved to the background
+        # meanwhile must not be stopped on the way out.
+        previous = signal.signal(signal.SIGTTOU, signal.SIG_IGN)
+        try:
+            if abandoned:
+                # grosshack has put echo back already, and pam_unix's prompt may have
+                # the terminal by now: its modes are no longer ours to touch.
+                os.write(self.fd, b"\n")
+            # Left alone if what sudo went on to run has set modes of its own since.
+            elif termios.tcgetattr(self.fd) == self.mode:
+                if not answered_here:
+                    # Half a secret typed here before the island answered.
+                    termios.tcflush(self.fd, termios.TCIFLUSH)
+                termios.tcsetattr(self.fd, termios.TCSANOW, self.saved)
+                os.write(self.fd, b"\n")
+        except (OSError, termios.error):
+            pass
+        finally:
+            signal.signal(signal.SIGTTOU, previous)
+            os.close(self.fd)
+
+
+# ── The island ────────────────────────────────────────────────────────────────
+def connect_island(request: dict) -> socket.socket | None:
+    try:
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.connect(SOCK)
+        sock.sendall((json.dumps(request) + "\n").encode())
+        return sock
+    except OSError:
+        return None
+
+
+def wait_for_answer(request: dict, sock: socket.socket | None, term: Terminal | None,
+                    watch: SudoWatch | None) -> dict | None:
+    """
+    The first answer from the island or the terminal. None when neither can give one
+    (the island went away with no terminal to fall back on).
+    """
+    parent = os.getppid()
+    poller = select.poll()
+    if sock:
+        poller.register(sock, select.POLLIN)
+    if term:
+        poller.register(term.fd, select.POLLIN)
+    buf = b""
+    while True:
+        events = poller.poll(int(POLL * 1000))
+        state = watch.check() if watch else None
+        if state == "abandoned":
+            return {"r": "abandoned"}
+        if os.getppid() != parent or reader_gone() or state == "moved":
+            return {"r": "gone"}
+        for fd, flags in events:
+            if sock and fd == sock.fileno():
+                try:
+                    chunk = sock.recv(65536)
+                except OSError:
+                    chunk = b""
+                if chunk:
+                    buf += chunk
+                    if b"\n" not in buf:
+                        continue
+                    try:
+                        reply = json.loads(buf.split(b"\n", 1)[0])
+                    except ValueError:
+                        reply = {"r": "fallback"}
+                    if reply.get("r") != "fallback":
+                        return reply
+                # The island went away (a shell restart), or passed because the route
+                # is off: the terminal still asks, or someone else does.
+                poller.unregister(sock)
+                sock.close()
+                sock = None
+                if not term:
+                    return None
+            elif term and fd == term.fd:
+                if flags & (select.POLLHUP | select.POLLERR | select.POLLNVAL):
+                    return {"r": "cancel"}
+                try:
+                    line = term.read()
+                except EOFError:
+                    return {"r": "cancel"}
+                # Enter on nothing sends nothing, as on the island: an empty password is
+                # a wasted attempt.
+                if not line:
+                    continue
+                if sock:
+                    try:
+                        sock.sendall(b'{"op": "answered"}\n')
+                    except OSError:
+                        pass
+                return {"r": "ok", "secret": line, "here": True}
+
+
+def ask_tty(prompt: str, echo: bool) -> int:
+    """Plain terminal prompt, for a terminal sudo the island can't answer."""
+    import getpass
+
+    try:
+        tty = open("/dev/tty", "r+")
+    except OSError:
+        return 1
+    with tty:
+        try:
+            if echo:
+                tty.write(prompt)
+                tty.flush()
+                answer = tty.readline().rstrip("\n")
+            else:
+                answer = getpass.getpass(prompt, stream=tty)
+        except (EOFError, KeyboardInterrupt, termios.error):
+            return 1
+    sys.stdout.write(answer + "\n")
+    return 0
+
+
+def fallback(request: dict) -> int:
+    prompt = request["prompt"] or "Password: "
+    if ROUTE == "terminal":
+        return ask_tty(prompt, request["echo"])
+    candidates = [os.environ.get("II_ASKPASS_FALLBACK", "")]
+    candidates += ["ksshaskpass", "ssh-askpass", "lxqt-openssh-askpass",
+                   "/usr/lib/ssh/ssh-askpass", "/usr/lib/ssh/x11-ssh-askpass"]
+    for candidate in candidates:
+        path = shutil.which(candidate) if candidate else None
+        if path and os.path.realpath(path) != SELF:
+            os.execv(path, [path] + sys.argv[1:])
+    if shutil.which("zenity"):
+        mode = "--entry" if request["echo"] else "--password"
+        args = ["zenity", mode, "--title", "Authentication required"]
+        if request["echo"]:
+            args += ["--text", prompt]
+        os.execvp("zenity", args)
+    if shutil.which("kdialog"):
+        mode = "--inputbox" if request["echo"] else "--password"
+        os.execvp("kdialog", ["kdialog", mode, prompt])
+    # Last resort: a terminal, if the caller has one.
+    if ask_tty(prompt, request["echo"]) == 0:
+        return 0
+    print("ii-askpass: the island is not listening and no other askpass is installed",
+          file=sys.stderr)
+    return 1
+
+
+def early_reply(sock: socket.socket, seconds: float) -> dict | None:
+    """
+    An answer the island gives at once - the follow-up to a prompt the user cancelled,
+    a route that is switched off - read before anything goes to the terminal, so no
+    prompt flashes there. None when there is none yet.
+    """
+    try:
+        ready, _, _ = select.select([sock], [], [], seconds)
+        if not ready:
+            return None
+        data = sock.recv(65536, socket.MSG_PEEK)
+        if not data:
+            return {"r": "fallback"}
+        if b"\n" not in data:
+            return None
+        return json.loads(sock.recv(data.index(b"\n") + 1))
+    except (OSError, ValueError):
+        return {"r": "fallback"}
+
+
+def finish(request: dict, reply: dict) -> int:
+    if reply.get("r") != "ok":
+        return 1
+    if not request["confirm"]:
+        sys.stdout.write(str(reply.get("secret", "")) + "\n")
+    sys.stdout.flush()
+    return 0
+
+
+def follow_outcome(sock: socket.socket, watch: SudoWatch):
+    """
+    After answering sudo: stays behind just long enough to tell the island how sudo took
+    the answer, so the prompt waits as "Checking…" through PAM's pause after a wrong
+    password instead of vanishing and coming back. sudo waits for this process to exit
+    before it reads on, so what stays is a fork holding nothing but the socket.
+    """
+    try:
+        if os.fork() != 0:
+            return
+    except OSError:
+        return
+    try:
+        os.setsid()
+        null = os.open(os.devnull, os.O_RDWR)
+        for fd in (0, 1, 2):
+            os.dup2(null, fd)
+        before = watch.live_prompts()
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            # The island saying anything (the next prompt reached it) or going away ends
+            # the watch; so does sudo asking again, which the island is about to hear.
+            if select.select([sock], [], [], POLL)[0]:
+                sock.recv(4096)
+                return
+            if watch.live_prompts() - before:
+                return
+            if watch.went_on():
+                break
+        sock.sendall(b'{"op": "done"}\n')
+    except OSError:
+        pass
+    finally:
+        os._exit(0)
+
+
+def main() -> int:
+    request = describe()
+    # First thing: which of sudo's threads asked is only readable before it is cancelled.
+    watch = SudoWatch(os.getppid()) if request["kind"] == "sudo" else None
+    term_fd = open_terminal()
+    sock = connect_island(request)
+    if sock is None and term_fd is None:
+        return fallback(request)
+    if sock and term_fd is not None:
+        early = early_reply(sock, 0.15)
+        if early is not None and early.get("r") == "fallback":
+            sock.close()
+            sock = None
+        elif early is not None:
+            os.close(term_fd)
+            sock.close()
+            return finish(request, early)
+    term = None
+    if term_fd is not None:
+        try:
+            term = Terminal(term_fd, request["prompt"] or "Password:", request["echo"])
+        except (OSError, termios.error):
+            os.close(term_fd)
+            if sock is None:
+                return fallback(request)
+    reply = None
+    try:
+        reply = wait_for_answer(request, sock, term, watch)
+    finally:
+        if term:
+            term.close(answered_here=bool(reply and reply.get("here")),
+                       abandoned=bool(reply and reply.get("r") == "abandoned"))
+    # wait_for_answer closes the socket itself when the island goes away.
+    island = sock if sock is not None and sock.fileno() != -1 else None
+    if reply is None:
+        if island:
+            island.close()
+        return fallback(request)
+    code = finish(request, reply)
+    if code == 0 and island and watch:
+        follow_outcome(island, watch)
+    if island:
+        island.close()
+    return code
+
+
+def _exit(signum, frame):
+    # SIGTERM, SIGHUP: leave through main's cleanup, which puts the terminal back.
+    raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    signal.signal(signal.SIGTERM, _exit)
+    signal.signal(signal.SIGHUP, _exit)
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        sys.exit(1)

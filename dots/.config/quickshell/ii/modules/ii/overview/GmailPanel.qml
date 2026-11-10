@@ -289,6 +289,10 @@ Item {
                             font.pixelSize: Appearance.font.pixelSize.small
                         }
                     }
+
+                    TouchpadScrollHandler {
+                        flickable: messageList
+                    }
                 }
 
                 ColumnLayout {

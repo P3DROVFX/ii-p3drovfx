@@ -151,7 +151,7 @@ Item {
                                     verticalAlignment: Text.AlignVCenter
                                     font.pixelSize: Appearance.font.pixelSize.small
 
-                                    StyledTextContextMenu {
+                                    StyledTextContextMenuLoader {
                                         id: aliasEditContextMenu
                                         targetField: aliasEditInput
                                     }
@@ -478,7 +478,7 @@ Item {
                                 background: null
                                 font.pixelSize: Appearance.font.pixelSize.small
 
-                                StyledTextContextMenu {
+                                StyledTextContextMenuLoader {
                                     id: newAliasContextMenu
                                     targetField: newAliasInput
                                 }
@@ -520,7 +520,7 @@ Item {
                                 background: null
                                 font.pixelSize: Appearance.font.pixelSize.small
 
-                                StyledTextContextMenu {
+                                StyledTextContextMenuLoader {
                                     id: newTargetContextMenu
                                     targetField: newTargetInput
                                 }
@@ -635,7 +635,7 @@ Item {
                                         clip: true
                                         onTextChanged: addAliasArea.appFilter = text
 
-                                        StyledTextContextMenu {
+                                        StyledTextContextMenuLoader {
                                             id: appFilterContextMenu
                                             targetField: appFilterInput
                                         }

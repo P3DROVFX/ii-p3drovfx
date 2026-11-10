@@ -47,6 +47,8 @@ Item {
     property bool initialScrollApplied: false
     property bool sportsEnabled: false
     property int loadedDayCount: 0
+    // See MonthView.incubateAsync.
+    property bool incubateAsync: true
     property string requestedSportsRange: ""
     readonly property int visibleDayCount: root.viewMode === "day" ? 1 : (root.viewMode === "threeDay" ? 3 : 7)
     property date viewWeekStart: root.rangeStartFor(DateTime.clock.date)
@@ -56,8 +58,11 @@ Item {
     property real weekShiftX: 0
     property real zoomWheelAccumulator: 0
     property bool componentReady: false
-    property date keyboardDate: DateTime.clock.date
-    property bool keyboardNavigationActive: false
+    property var keyboardDate: H.startOfDay(DateTime.clock.date)
+    property bool keyboardNavigationActive: true
+    property bool showShortcutHints: false
+    property bool ctrlPressed: false
+    readonly property bool hintsVisible: root.showShortcutHints || root.ctrlPressed
     readonly property int dayCount: root.days?.length ?? 0
     readonly property bool initialLoadComplete: root.dayCount > 0 && root.loadedDayCount >= root.dayCount
     readonly property date currentWeekStart: root.rangeStartFor(DateTime.clock.date)
@@ -91,8 +96,96 @@ Item {
             easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
         }
     }
+    // Pending moves: "uid|originalStartMs" -> { uid, start, end } in ms. A
+    // dropped event shows at its new slot while khal is still writing it, so
+    // the grid never flashes back to the old one.
+    property var pendingMoves: ({})
+
+    // Calendar events with the pending moves applied, bucketed by day exactly
+    // like CalendarService.eventsByDay.
+    readonly property var calendarByDay: {
+        const base = CalendarService.eventsByDay;
+        const moves = root.pendingMoves;
+        if (Object.keys(moves).length === 0)
+            return base;
+        const map = {};
+        for (const key in base) {
+            for (const evt of base[key]) {
+                const origKey = root.eventKey(evt);
+                const pending = moves[origKey];
+                const shown = pending ? Object.assign({}, evt, {
+                    startDate: new Date(pending.start),
+                    endDate: new Date(pending.end),
+                    _origKey: origKey
+                }) : evt;
+                const dayKey = CalendarService.dayKey(shown.startDate);
+                if (!map[dayKey])
+                    map[dayKey] = [];
+                map[dayKey].push(shown);
+            }
+        }
+        for (const dayKey in map) {
+            map[dayKey].sort((a, b) => (CalendarService.isAllDayEvent(a) ? 0 : 1) - (CalendarService.isAllDayEvent(b) ? 0 : 1)
+                || a.startDate.getTime() - b.startDate.getTime());
+        }
+        return map;
+    }
+
+    // Identity of an event's stored occurrence, stable across projections.
+    function eventKey(eventData) {
+        if (!eventData?.startDate)
+            return "";
+        return eventData._origKey ?? (String(eventData.uid) + "|" + eventData.startDate.getTime());
+    }
+
+    // Every timed write goes through here so the grid shows the new range at
+    // once; the projection stays until the calendar confirms it.
+    function dispatchFields(eventData, fields, scope) {
+        CalendarService.saveEventFields(eventData, fields, scope);
+        const start = CalendarService.localDateFromIso(fields?.start);
+        const end = CalendarService.localDateFromIso(fields?.end);
+        if (!start || !end || !eventData?.startDate)
+            return;
+        const next = Object.assign({}, root.pendingMoves);
+        next[root.eventKey(eventData)] = { uid: String(eventData.uid), start: start.getTime(), end: end.getTime() };
+        root.pendingMoves = next;
+        pendingMovesTimer.restart();
+    }
+
+    // Drops each projection once the calendar lists the event at its new range,
+    // so a projection never outlives the write it stands for.
+    function pruneConfirmedMoves() {
+        const pending = root.pendingMoves;
+        const keys = Object.keys(pending);
+        if (keys.length === 0)
+            return;
+        const persisted = CalendarService.events ?? [];
+        const next = {};
+        for (const key of keys) {
+            const move = pending[key];
+            const confirmed = persisted.some(evt => String(evt.uid) === move.uid
+                && evt.startDate?.getTime() === move.start && evt.endDate?.getTime() === move.end);
+            if (!confirmed)
+                next[key] = move;
+        }
+        if (Object.keys(next).length === keys.length)
+            return;
+        root.pendingMoves = next;
+        if (Object.keys(next).length === 0)
+            pendingMovesTimer.stop();
+    }
+
+    // A write that never lands must not pin the grid to a projection: after this
+    // long the calendar's own state is shown again.
+    Timer {
+        id: pendingMovesTimer
+        interval: 15000
+        repeat: false
+        onTriggered: root.pendingMoves = ({})
+    }
+
     readonly property var days: {
-        const calendarEvents = CalendarService.eventsByDay;
+        const calendarEvents = root.calendarByDay;
         // gamesForDate() reads a plain array, so depend explicitly on the
         // replacement that SportsService publishes after each refresh.
         const sportsGames = root.sportsEnabled ? SportsService.timetableGames : [];
@@ -134,31 +227,39 @@ Item {
     property var nextEventData: null
     property real maxLogicalDistance: 1.0
 
-    property bool ghostVisible: false
-    property int ghostDayIndex: -1
-    property real ghostTopY: 0
-    property real ghostHeight: 0
+    // The grid's pointer state machine. It owns the live preview and the draft
+    // block, so nothing else in the grid tracks a drag.
+    TimetableGesture {
+        id: gestureState
+        dayCount: root.dayCount
+        dayStride: root.dayColumnWidth + root.spacing
+        pixelsPerMinute: root.pixelsPerMinute
+        gridStart: root.startHour * 60 + root.startMinute
+        gridEnd: root.endHour * 60
+        step: 15
+    }
+
+    readonly property TimetableGesture gesture: gestureState
+
     // The host exposes this to Cheatsheet.qml so a day-grid selection keeps
     // ownership of its pointer instead of switching the outer SwipeView tab.
     property bool timetableDragActive: false
-
-    function clearGhostPreview() {
-        root.ghostVisible = false;
-        root.ghostDayIndex = -1;
-        root.ghostTopY = 0;
-        root.ghostHeight = 0;
-    }
-    property var timedMutationEvent: null
-    property string timedMutationKind: ""
-    property real timedMutationPointerOffsetY: 0
-    property int timedMutationStartMinutes: 0
-    property int timedMutationEndMinutes: 0
-    property int timedMutationDayIndex: -1
 
     function setTimetableDragActive(active) {
         root.timetableDragActive = active;
         if (styledFlickable)
             styledFlickable.interactive = !active;
+    }
+
+    function clearGhostPreview() {
+        root.gesture.clearDraft();
+    }
+
+    Connections {
+        target: root.gesture
+        function onBusyChanged() {
+            root.setTimetableDragActive(root.gesture.busy);
+        }
     }
 
     // ─── Helpers ───
@@ -320,6 +421,44 @@ Item {
         onTriggered: root.maybeApplyInitialScroll()
     }
 
+    // While a drag hugs the top or bottom of the viewport the grid scrolls under
+    // it; the pointer keeps its place on the screen.
+    Timer {
+        id: gestureAutoScroll
+        interval: 16
+        repeat: true
+        running: root.gesture.active
+        onTriggered: {
+            const edge = 56;
+            const viewHeight = styledFlickable.height;
+            const viewportY = eventsRow.mapToItem(styledFlickable, 0, root.gesture.pointerY).y;
+            let speed = 0;
+            if (viewportY < edge)
+                speed = -18 * (edge - viewportY) / edge;
+            else if (viewportY > viewHeight - edge)
+                speed = 18 * (viewportY - (viewHeight - edge)) / edge;
+            if (speed === 0)
+                return;
+            const minY = -styledFlickable.topMargin;
+            const maxY = Math.max(minY, styledFlickable.contentHeight + styledFlickable.bottomMargin - viewHeight);
+            const next = Math.max(minY, Math.min(maxY, styledFlickable.contentY + speed));
+            const applied = next - styledFlickable.contentY;
+            if (Math.abs(applied) < 0.5)
+                return;
+            styledFlickable.contentY = next;
+            root.gesture.scrollBy(applied);
+        }
+    }
+
+    // Leaving the editor for a day, an event or the sources ends the draft.
+    Connections {
+        target: eventSidebar
+        function onModeChanged() {
+            if (eventSidebar.mode !== "create")
+                root.gesture.clearDraft();
+        }
+    }
+
     function toggleSportsDay(date) {
         if (eventSidebar.open && eventSidebar.mode === "day" && eventSidebar.sportsListOnly && H.sameDate(eventSidebar.day, date)) {
             eventSidebar.close();
@@ -418,33 +557,163 @@ Item {
             root.goToWeek(target, afterRange ? 1 : -1);
     }
 
+    function stepDay(delta) {
+        const origin = H.startOfDay(root.keyboardDate ?? (root.viewingCurrentWeek ? DateTime.clock.date : root.viewWeekStart));
+        const target = H.addDays(origin, delta);
+        root.focusKeyboardDate(target);
+    }
+
     function scrollKeyboardHours(delta) {
         const target = styledFlickable.contentY + delta * root.slotHeight;
         styledFlickable.contentY = Math.max(0, Math.min(target, styledFlickable.contentHeight - styledFlickable.height));
     }
 
-    function handleNavigationKey(event) {
-        if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
-            root.focusKeyboardDate(H.addDays(root.keyboardNavigationActive ? root.keyboardDate : (root.viewingCurrentWeek ? DateTime.clock.date : root.viewWeekStart), event.key === Qt.Key_Left ? -1 : 1));
+    function handleKey(event) {
+        if (event.key === Qt.Key_Control) {
+            root.ctrlPressed = true;
+            return false;
+        }
+
+        if (datePicker.opened) {
+            if (event.key === Qt.Key_Escape) {
+                datePicker.dismiss();
+                return true;
+            }
+            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                datePicker.confirm();
+                return true;
+            }
+            return false;
+        }
+
+        if (timePicker.opened) {
+            if (event.key === Qt.Key_Escape) {
+                timePicker.dismiss();
+                return true;
+            }
+            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                timePicker.confirm();
+                return true;
+            }
+            return false;
+        }
+
+        if (eventSidebar.open && typeof eventSidebar.handleKey === "function") {
+            if (eventSidebar.handleKey(event))
+                return true;
+        }
+
+        const ctrl = Boolean(event.modifiers & Qt.ControlModifier);
+        const shift = Boolean(event.modifiers & Qt.ShiftModifier);
+        const origin = H.startOfDay(root.keyboardDate ?? (root.viewingCurrentWeek ? DateTime.clock.date : root.viewWeekStart));
+
+        // 1. Shift week / range: PageUp/PageDown, or Shift+Left/Right (with or without Ctrl)
+        if (event.key === Qt.Key_PageUp || (shift && event.key === Qt.Key_Left)) {
+            root.shiftWeek(-1);
             return true;
         }
-        if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
-            root.keyboardNavigationActive = true;
-            root.scrollKeyboardHours(event.key === Qt.Key_Up ? -1 : 1);
+        if (event.key === Qt.Key_PageDown || (shift && event.key === Qt.Key_Right)) {
+            root.shiftWeek(1);
             return true;
         }
-        if (event.key === Qt.Key_PageUp || event.key === Qt.Key_PageDown) {
-            const delta = event.key === Qt.Key_PageUp ? -root.visibleDayCount : root.visibleDayCount;
-            root.focusKeyboardDate(H.addDays(root.keyboardNavigationActive ? root.keyboardDate : root.viewWeekStart, delta));
-            return true;
-        }
-        if (event.key === Qt.Key_Home) {
+
+        // 2. Today / Home
+        if (event.key === Qt.Key_Home || (ctrl && event.key === Qt.Key_T)) {
             root.goToday();
             root.focusKeyboardDate(DateTime.clock.date);
             return true;
         }
-        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-            root.toggleDay(root.keyboardNavigationActive ? root.keyboardDate : (root.viewingCurrentWeek ? DateTime.clock.date : root.viewWeekStart));
+
+        // 3. Ctrl-specific commands
+        if (ctrl) {
+            if (event.key === Qt.Key_G && !event.isAutoRepeat) {
+                datePicker.purpose = "navigate";
+                datePicker.open(root.viewWeekStart, root.viewMode === "day" ? Translation.tr("Go to day") : Translation.tr("Go to range"));
+                return true;
+            }
+            if (event.key === Qt.Key_B && !event.isAutoRepeat) {
+                root.toggleDayRail();
+                return true;
+            }
+            if (event.key === Qt.Key_S && !event.isAutoRepeat) {
+                eventSidebar.showSources();
+                return true;
+            }
+            if (event.key === Qt.Key_N && !event.isAutoRepeat) {
+                root.startCreate(root.viewingCurrentWeek ? DateTime.clock.date : root.viewWeekStart);
+                return true;
+            }
+            if (event.key === Qt.Key_A && !event.isAutoRepeat) {
+                root.allDayExpanded = !root.allDayExpanded;
+                return true;
+            }
+            if (event.key === Qt.Key_J && !event.isAutoRepeat && root.nextEventData) {
+                let targetY = H.minutesToY(root.nextEventData.startMinutes, root.startHour, root.startMinute, root.pixelsPerMinute) - styledFlickable.height / 3;
+                styledFlickable.contentY = Math.min(Math.max(0, targetY), Math.max(0, styledFlickable.contentHeight - styledFlickable.height));
+                return true;
+            }
+        }
+
+        // 4. Open / Activate Day (Enter / Ctrl+Enter / Space)
+        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+            if (!event.isAutoRepeat) {
+                root.keyboardNavigationActive = true;
+                root.toggleDay(origin);
+                return true;
+            }
+        }
+
+        // 5. Day Navigation with Arrow Keys (works both with and without Ctrl)
+        if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
+            const delta = event.key === Qt.Key_Left ? -1 : 1;
+            root.stepDay(delta);
+            return true;
+        }
+
+        // 6. Timeline hours scrolling with Up/Down (works both with and without Ctrl)
+        if (event.key === Qt.Key_Up) {
+            root.scrollKeyboardHours(-1);
+            return true;
+        }
+        if (event.key === Qt.Key_Down) {
+            root.scrollKeyboardHours(1);
+            return true;
+        }
+
+        return false;
+    }
+
+    function handleNavigationKey(event) {
+        return root.handleKey(event);
+    }
+
+    function releaseKey(event) {
+        if (event.key === Qt.Key_Control || !(event.modifiers & Qt.ControlModifier)) {
+            root.ctrlPressed = false;
+        }
+        if (eventSidebar.open && typeof eventSidebar.releaseKey === "function") {
+            eventSidebar.releaseKey(event);
+        }
+    }
+
+    function handleEscape() {
+        if (root.gesture.busy) {
+            root.gesture.cancel();
+            return true;
+        }
+        if (datePicker.opened) {
+            datePicker.dismiss();
+            return true;
+        }
+        if (timePicker.opened) {
+            timePicker.dismiss();
+            return true;
+        }
+        if (eventSidebar.open && typeof eventSidebar.handleEscape === "function") {
+            return eventSidebar.handleEscape();
+        }
+        if (root.keyboardNavigationActive) {
+            root.keyboardNavigationActive = false;
             return true;
         }
         return false;
@@ -458,10 +727,6 @@ Item {
         root.toggleDay(root.viewingCurrentWeek ? DateTime.clock.date : root.viewWeekStart);
     }
 
-    function eventMinutes(date) {
-        return date.getHours() * 60 + date.getMinutes();
-    }
-
     function dayIndexForDate(date) {
         for (let index = 0; index < root.days.length; index++) {
             if (H.sameDate(root.days[index]?.sportsDate, date))
@@ -470,97 +735,64 @@ Item {
         return -1;
     }
 
-    function gridPointAt(x, y) {
-        const point = root.mapToItem(contentRow, x, y);
-        const relativeX = point.x - root.timeColumnWidth - root.spacing;
-        const stride = root.dayColumnWidth + root.spacing;
-        const dayIndex = Math.floor(relativeX / stride);
-        if (dayIndex < 0 || dayIndex >= root.dayCount || relativeX - dayIndex * stride > root.dayColumnWidth)
-            return null;
-        return { dayIndex: dayIndex, contentY: point.y };
-    }
-
-    function clampStart(minutes, duration) {
-        const snapped = H.snapToGrid(minutes, 15);
-        return Math.max(root.startHour * 60 + root.startMinute, Math.min(24 * 60 - duration, snapped));
-    }
-
-    function beginEventMove(event, x, y, pointerOffsetY) {
-        if (!event?.uid || event.readOnly === true)
-            return;
-        const dayIndex = root.dayIndexForDate(event.startDate);
-        if (dayIndex < 0)
-            return;
-        root.timedMutationEvent = event;
-        root.timedMutationKind = "move";
-        root.timedMutationPointerOffsetY = pointerOffsetY;
-        root.timedMutationStartMinutes = root.eventMinutes(event.startDate);
-        root.timedMutationEndMinutes = H.eventEndMinutes(event) ?? root.timedMutationStartMinutes;
-        root.timedMutationDayIndex = dayIndex;
-        root.updateEventMove(x, y);
-    }
-
-    function updateEventMove(x, y) {
-        if (!root.timedMutationEvent || root.timedMutationKind !== "move")
-            return;
-        const target = root.gridPointAt(x, y);
-        if (!target)
-            return;
-        const duration = root.timedMutationEndMinutes - root.timedMutationStartMinutes;
-        const topY = target.contentY - root.timedMutationPointerOffsetY;
-        root.timedMutationStartMinutes = root.clampStart(H.yToMinutes(topY, root.startHour, root.startMinute, root.pixelsPerMinute), duration);
-        root.timedMutationEndMinutes = root.timedMutationStartMinutes + duration;
-        root.timedMutationDayIndex = target.dayIndex;
-    }
-
-    function beginEventResize(event, x, y) {
-        if (!event?.uid || event.readOnly === true)
-            return;
-        const dayIndex = root.dayIndexForDate(event.startDate);
-        if (dayIndex < 0)
-            return;
-        root.timedMutationEvent = event;
-        root.timedMutationKind = "resize";
-        root.timedMutationStartMinutes = root.eventMinutes(event.startDate);
-        root.timedMutationEndMinutes = H.eventEndMinutes(event) ?? root.timedMutationStartMinutes;
-        root.timedMutationDayIndex = dayIndex;
-        root.updateEventResize(x, y);
-    }
-
-    function updateEventResize(x, y) {
-        if (!root.timedMutationEvent || root.timedMutationKind !== "resize")
-            return;
-        const target = root.gridPointAt(x, y);
-        if (!target)
-            return;
-        const end = H.snapToGrid(H.yToMinutes(target.contentY, root.startHour, root.startMinute, root.pixelsPerMinute), 15);
-        root.timedMutationEndMinutes = Math.max(root.timedMutationStartMinutes + 15, Math.min(24 * 60, end));
-    }
-
     function isoForDayMinutes(date, minutes) {
         const value = new Date(date.getFullYear(), date.getMonth(), date.getDate());
         value.setMinutes(minutes);
         return CalendarService.localIso(value, Qt.formatTime(value, "hh:mm"));
     }
 
-    function commitTimedMutation() {
-        const event = root.timedMutationEvent;
-        const day = root.days[root.timedMutationDayIndex]?.sportsDate;
-        const action = root.timedMutationKind;
-        if (event?.uid && day && root.timedMutationEndMinutes > root.timedMutationStartMinutes) {
-            eventSidebar.requestTimedMutation(event, {
-                allDay: false,
-                start: root.isoForDayMinutes(day, root.timedMutationStartMinutes),
-                end: root.isoForDayMinutes(day, root.timedMutationEndMinutes)
-            }, action);
+    // Writes a moved or resized event's new range. A drag that ends where it
+    // began is a no-op, so it never touches the calendar.
+    function commitTiming(result) {
+        const event = result.target;
+        const date = root.days[result.day]?.sportsDate;
+        if (!event?.uid || !date)
+            return;
+        if (result.day === result.originDay && result.start === result.originStart && result.end === result.originEnd)
+            return;
+        const fields = {
+            allDay: false,
+            start: root.isoForDayMinutes(date, result.start),
+            end: root.isoForDayMinutes(date, result.end)
+        };
+        // A recurring event asks which occurrences change before it writes.
+        if (String(event.repeatSymbol ?? "").length > 0) {
+            eventSidebar.requestTimedMutation(event, fields, result.kind);
+            return;
         }
-        root.cancelTimedMutation();
+        root.dispatchFields(event, fields, "all");
     }
 
-    function cancelTimedMutation() {
-        root.timedMutationEvent = null;
-        root.timedMutationKind = "";
-        root.timedMutationDayIndex = -1;
+    // The gesture reports what the pointer meant; this decides what gets written.
+    function handleGesture(result) {
+        if (!result)
+            return;
+        if (result.kind === "click") {
+            if (result.target)
+                root.openPopupForEdit(result.target);
+            return;
+        }
+        if (result.kind === "create") {
+            root.gesture.setDraft(result.day, result.start, result.end);
+            Qt.callLater(root.openPopupForGhost);
+            return;
+        }
+        if (result.kind === "draft") {
+            if (result.day < 0)
+                return;
+            root.gesture.setDraft(result.day, result.start, result.end);
+            if (eventSidebar.mode === "create")
+                eventSidebar.setCreateSpan(root.days[result.day]?.sportsDate, result.start, result.end);
+            else
+                Qt.callLater(root.openPopupForGhost);
+            return;
+        }
+        root.commitTiming(result);
+    }
+
+    // The editor's date and times are the draft's source while it is open.
+    function syncDraftFromEditor(date, startMinutes, endMinutes) {
+        root.gesture.setDraft(root.dayIndexForDate(date), startMinutes, endMinutes);
     }
 
     function requestWeekDelete(event) {
@@ -576,14 +808,14 @@ Item {
 
     // ─── Actions ───
     function openPopupForGhost() {
-        let topMin = H.snapToGrid(H.yToMinutes(root.ghostTopY, root.startHour, root.startMinute, root.pixelsPerMinute), 15);
-        let botMin = H.snapToGrid(H.yToMinutes(root.ghostTopY + root.ghostHeight, root.startHour, root.startMinute, root.pixelsPerMinute), 15);
-        let eventDate = root.days[root.ghostDayIndex]?.sportsDate ?? root.viewWeekStart;
+        if (!root.gesture.hasDraft)
+            return;
+        const date = root.days[root.gesture.draftDay]?.sportsDate ?? root.viewWeekStart;
         eventSidebar.sportsListOnly = false;
-        eventSidebar.startCreateAt(eventDate, topMin, botMin);
+        eventSidebar.startCreateAt(date, root.gesture.draftStart, root.gesture.draftEnd);
     }
 
-    function openPopupForEdit(event, dayIndex) {
+    function openPopupForEdit(event) {
         if (event?.sportEvent === true) {
             eventSidebar.showEvent(event);
             return;
@@ -626,6 +858,7 @@ Item {
     Connections {
         target: CalendarService
         function onEventsByDayChanged() {
+            root.pruneConfirmedMoves();
             root.updateNextEvent();
             root.maybeApplyInitialScroll();
         }
@@ -685,9 +918,18 @@ Item {
     onViewWeekStartChanged: root.refreshVisibleRange()
 
     function restartDayLoading() {
-        root.loadedDayCount = -1;
         root.requestedSportsRange = "";
+        if (!root.incubateAsync) {
+            root.loadedDayCount = root.dayCount;
+            return;
+        }
+        root.loadedDayCount = -1;
         Qt.callLater(() => root.loadedDayCount = 0);
+    }
+
+    onIncubateAsyncChanged: {
+        if (!root.incubateAsync && root.loadedDayCount >= 0)
+            root.loadedDayCount = Math.max(root.loadedDayCount, root.dayCount);
     }
 
     function advanceDayLoading(index) {
@@ -813,7 +1055,7 @@ Item {
 
                 StyledToolTip {
                     extraVisibleCondition: weekTitleButton.hovered
-                    text: root.viewMode === "day" ? Translation.tr("Choose day") : Translation.tr("Choose range")
+                    text: (root.viewMode === "day" ? Translation.tr("Choose day") : Translation.tr("Choose range")) + " (Ctrl+G)"
                 }
             }
 
@@ -830,44 +1072,52 @@ Item {
                 colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
                 onClicked: root.toggleDayRail()
 
-                contentItem: MaterialSymbol {
+                contentItem: TaskShortcutContent {
                     anchors.centerIn: parent
-                    text: "view_sidebar"
+                    symbol: "view_sidebar"
+                    shortcut: "Ctrl\nB"
+                    showHint: root.hintsVisible
                     iconSize: Appearance.font.pixelSize.larger
                     color: eventSidebar.open ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurfaceVariant
                 }
 
                 StyledToolTip {
                     extraVisibleCondition: dayRailToggle.hovered
-                    text: eventSidebar.open ? Translation.tr("Hide day details") : Translation.tr("Show day details")
+                    text: (eventSidebar.open ? Translation.tr("Hide day details") : Translation.tr("Show day details")) + " (Ctrl+B)"
                 }
             }
 
-            RippleButtonWithIcon {
+            RippleButton {
                 id: todayButton
-                implicitWidth: root.compactNav ? 42 : todayButton.contentImplicitWidth + 32
+                implicitWidth: root.compactNav ? 42 : todayContent.implicitWidth + 32
                 implicitHeight: 42
                 buttonRadius: Appearance.rounding.full
-                centerContent: true
-                materialIcon: "today"
-                materialIconFill: false
-                mainText: root.compactNav ? "" : Translation.tr("Today")
-                iconPixelSize: Appearance.font.pixelSize.larger
-                textPixelSize: Appearance.font.pixelSize.small
-                mainTextWeight: Font.Bold
-                colText: Appearance.colors.colOnSurface
                 colBackground: Appearance.colors.colLayer2
                 colBackgroundHover: Appearance.colors.colLayer2Hover
                 colBackgroundActive: Appearance.colors.colLayer2Active
                 onClicked: root.goToday()
 
+                contentItem: TaskShortcutContent {
+                    id: todayContent
+                    anchors.centerIn: parent
+                    symbol: "today"
+                    labelText: root.compactNav ? "" : Translation.tr("Today")
+                    shortcut: "Ctrl\nT"
+                    showHint: root.hintsVisible
+                    iconSize: Appearance.font.pixelSize.larger
+                    labelPixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colOnSurface
+                }
+
                 StyledToolTip {
-                    extraVisibleCondition: todayButton.hovered && root.compactNav
-                    text: Translation.tr("Today")
+                    extraVisibleCondition: todayButton.hovered
+                    text: Translation.tr("Today") + " (Ctrl+T)"
                 }
             }
 
             RippleButton {
+                id: prevRangeButton
+                visible: root.viewMode !== "day"
                 implicitWidth: 42
                 implicitHeight: 42
                 buttonRadius: Appearance.rounding.full
@@ -876,15 +1126,74 @@ Item {
                 colBackgroundActive: Appearance.colors.colLayer2Active
                 onClicked: root.shiftWeek(-1)
 
-                contentItem: MaterialSymbol {
+                contentItem: TaskShortcutContent {
                     anchors.centerIn: parent
-                    text: "chevron_left"
+                    symbol: "first_page"
+                    shortcut: "PgUp"
+                    showHint: root.hintsVisible
                     iconSize: Appearance.font.pixelSize.huge
                     color: Appearance.colors.colOnSurface
+                }
+
+                StyledToolTip {
+                    extraVisibleCondition: prevRangeButton.hovered
+                    text: (root.viewMode === "threeDay" ? Translation.tr("Previous 3 days") : Translation.tr("Previous week")) + " (PgUp / Shift+Left)"
                 }
             }
 
             RippleButton {
+                id: prevDayButton
+                implicitWidth: 42
+                implicitHeight: 42
+                buttonRadius: Appearance.rounding.full
+                colBackground: Appearance.colors.colLayer2
+                colBackgroundHover: Appearance.colors.colLayer2Hover
+                colBackgroundActive: Appearance.colors.colLayer2Active
+                onClicked: root.stepDay(-1)
+
+                contentItem: TaskShortcutContent {
+                    anchors.centerIn: parent
+                    symbol: "chevron_left"
+                    shortcut: "Ctrl\n←"
+                    showHint: root.hintsVisible
+                    iconSize: Appearance.font.pixelSize.huge
+                    color: Appearance.colors.colOnSurface
+                }
+
+                StyledToolTip {
+                    extraVisibleCondition: prevDayButton.hovered
+                    text: Translation.tr("Previous day") + " (← / Ctrl+←)"
+                }
+            }
+
+            RippleButton {
+                id: nextDayButton
+                implicitWidth: 42
+                implicitHeight: 42
+                buttonRadius: Appearance.rounding.full
+                colBackground: Appearance.colors.colLayer2
+                colBackgroundHover: Appearance.colors.colLayer2Hover
+                colBackgroundActive: Appearance.colors.colLayer2Active
+                onClicked: root.stepDay(1)
+
+                contentItem: TaskShortcutContent {
+                    anchors.centerIn: parent
+                    symbol: "chevron_right"
+                    shortcut: "Ctrl\n→"
+                    showHint: root.hintsVisible
+                    iconSize: Appearance.font.pixelSize.huge
+                    color: Appearance.colors.colOnSurface
+                }
+
+                StyledToolTip {
+                    extraVisibleCondition: nextDayButton.hovered
+                    text: Translation.tr("Next day") + " (→ / Ctrl+→)"
+                }
+            }
+
+            RippleButton {
+                id: nextRangeButton
+                visible: root.viewMode !== "day"
                 implicitWidth: 42
                 implicitHeight: 42
                 buttonRadius: Appearance.rounding.full
@@ -893,11 +1202,18 @@ Item {
                 colBackgroundActive: Appearance.colors.colLayer2Active
                 onClicked: root.shiftWeek(1)
 
-                contentItem: MaterialSymbol {
+                contentItem: TaskShortcutContent {
                     anchors.centerIn: parent
-                    text: "chevron_right"
+                    symbol: "last_page"
+                    shortcut: "PgDn"
+                    showHint: root.hintsVisible
                     iconSize: Appearance.font.pixelSize.huge
                     color: Appearance.colors.colOnSurface
+                }
+
+                StyledToolTip {
+                    extraVisibleCondition: nextRangeButton.hovered
+                    text: (root.viewMode === "threeDay" ? Translation.tr("Next 3 days") : Translation.tr("Next week")) + " (PgDn / Shift+Right)"
                 }
             }
 
@@ -911,16 +1227,18 @@ Item {
                 colBackgroundActive: Appearance.colors.colLayer2Active
                 onClicked: eventSidebar.showSources()
 
-                contentItem: MaterialSymbol {
+                contentItem: TaskShortcutContent {
                     anchors.centerIn: parent
-                    text: "calendar_add_on"
+                    symbol: "calendar_add_on"
+                    shortcut: "Ctrl\nS"
+                    showHint: root.hintsVisible
                     iconSize: Appearance.font.pixelSize.larger
                     color: Appearance.colors.colOnSurface
                 }
 
                 StyledToolTip {
                     extraVisibleCondition: calendarSourcesButton.hovered
-                    text: Translation.tr("Calendar sources")
+                    text: Translation.tr("Calendar sources") + " (Ctrl+S)"
                 }
             }
 
@@ -937,9 +1255,18 @@ Item {
                 enabled: CalendarService.khalAvailable
                 onClicked: root.startCreate(root.viewingCurrentWeek ? DateTime.clock.date : root.viewWeekStart)
 
+                contentItem: TaskShortcutContent {
+                    anchors.centerIn: parent
+                    symbol: "add"
+                    shortcut: "Ctrl\nN"
+                    showHint: root.hintsVisible
+                    iconSize: 26
+                    color: Appearance.colors.colOnPrimary
+                }
+
                 StyledToolTip {
                     extraVisibleCondition: newEventButton.hovered
-                    text: CalendarService.khalAvailable ? Translation.tr("New event") : Translation.tr("Calendar service unavailable")
+                    text: (CalendarService.khalAvailable ? Translation.tr("New event") : Translation.tr("Calendar service unavailable")) + " (Ctrl+N)"
                 }
             }
         }
@@ -974,6 +1301,7 @@ Item {
                     allDayExpanderHeight: root.allDayExpanderHeight
                     expanded: root.allDayExpanded
                     hasExpandableLane: root.hasExpandableAllDayLane
+                    showShortcutHints: root.hintsVisible
                     onDayActivated: date => root.toggleDay(date)
                     onSportsDayActivated: date => root.toggleSportsDay(date)
                     onAllDayExpansionRequested: expanded => root.allDayExpanded = expanded
@@ -1071,18 +1399,20 @@ Item {
                         spacing: root.spacing
 
                         Repeater {
-                            model: root.days ?? []
+                            model: root.dayCount
 
                             delegate: Loader {
                                 id: dayLoader
 
                                 required property int index
-                                required property var modelData
+                                // Columns keep their identity across calendar refreshes;
+                                // only their data is swapped in place.
+                                readonly property var dayInfo: root.days[index] ?? null
 
                                 width: root.dayColumnWidth
                                 height: root.contentHeight
                                 active: index <= root.loadedDayCount
-                                asynchronous: true
+                                asynchronous: root.incubateAsync
 
                                 onLoaded: root.advanceDayLoading(index)
 
@@ -1092,21 +1422,18 @@ Item {
                                     property int revealKey: root.entranceKey
 
                                     dayIdx: dayLoader.index
-                                    dayData: dayLoader.modelData
+                                    dayData: dayLoader.dayInfo
                                     isToday: dayLoader.index === root.currentDayIndex
+                                    keyboardSelected: root.keyboardNavigationActive && H.sameDate(root.keyboardDate, dayLoader.dayInfo?.sportsDate)
                                     dayColumnWidth: root.dayColumnWidth
                                     contentHeight: root.contentHeight
                                     pixelsPerMinute: root.pixelsPerMinute
                                     eventSpacing: root.spacing / 2
                                     startHour: root.startHour
                                     startMinute: root.startMinute
-                                    snapInterval: 15
-                                    coordinateRoot: root
-                                    draggedEvent: root.timedMutationEvent
-                                    ghostVisible: root.ghostVisible
-                                    ghostDayIndex: root.ghostDayIndex
-                                    ghostTopY: root.ghostTopY
-                                    ghostHeight: root.ghostHeight
+                                    coordinateRoot: eventsRow
+                                    gesture: root.gesture
+                                    frozen: root.gesture.busy
                                     nextEventData: root.nextEventData
                                     maxLogicalDistance: root.maxLogicalDistance
                                     todayHighlightFill: root.todayHighlightFill
@@ -1153,56 +1480,25 @@ Item {
                                         }
                                     }
 
-                                    onDragRequestInteractivity: i => root.setTimetableDragActive(!i)
-                                    onDragReleased: (dIdx, sY, cY) => {
-                                        let dist = Math.abs(cY - sY);
-                                        if (dist < 10) {
-                                            let clickMin = H.snapToGrid(H.yToMinutes(sY, root.startHour, root.startMinute, root.pixelsPerMinute), 15);
-                                            root.ghostTopY = H.minutesToY(clickMin, root.startHour, root.startMinute, root.pixelsPerMinute);
-                                            root.ghostHeight = H.minutesToY(clickMin + 60, root.startHour, root.startMinute, root.pixelsPerMinute) - root.ghostTopY;
-                                        } else {
-                                            let topMin = H.snapToGrid(H.yToMinutes(Math.min(sY, cY), root.startHour, root.startMinute, root.pixelsPerMinute), 15);
-                                            let botMin = H.snapToGrid(H.yToMinutes(Math.max(sY, cY), root.startHour, root.startMinute, root.pixelsPerMinute), 15);
-                                            if (botMin - topMin < 15)
-                                                botMin = topMin + 15;
-                                            root.ghostTopY = H.minutesToY(topMin, root.startHour, root.startMinute, root.pixelsPerMinute);
-                                            root.ghostHeight = H.minutesToY(botMin, root.startHour, root.startMinute, root.pixelsPerMinute) - root.ghostTopY;
-                                        }
-                                        root.ghostDayIndex = dIdx;
-                                        root.ghostVisible = true;
-                                        Qt.callLater(root.openPopupForGhost);
-                                    }
-                                    onEditRequested: (evt, dIdx) => root.openPopupForEdit(evt, dIdx)
                                     onDeleteRequested: (evt, dIdx) => root.requestWeekDelete(evt)
-                                    onEventMoveStarted: (evt, x, y, offsetY) => {
-                                        root.setTimetableDragActive(true);
-                                        root.beginEventMove(evt, x, y, offsetY);
-                                    }
-                                    onEventMoveMoved: (x, y) => root.updateEventMove(x, y)
-                                    onEventMoveEnded: {
-                                        root.commitTimedMutation();
-                                        root.setTimetableDragActive(false);
-                                    }
-                                    onEventMoveCanceled: {
-                                        root.cancelTimedMutation();
-                                        root.setTimetableDragActive(false);
-                                    }
-                                    onEventResizeStarted: (evt, x, y) => {
-                                        root.setTimetableDragActive(true);
-                                        root.beginEventResize(evt, x, y);
-                                    }
-                                    onEventResizeMoved: (x, y) => root.updateEventResize(x, y)
-                                    onEventResizeEnded: {
-                                        root.commitTimedMutation();
-                                        root.setTimetableDragActive(false);
-                                    }
-                                    onEventResizeCanceled: {
-                                        root.cancelTimedMutation();
-                                        root.setTimetableDragActive(false);
-                                    }
+                                    onGestureFinished: result => root.handleGesture(result)
                                 }
                             }
                         }
+                    }
+
+                    // A sibling of the day row, not a child: the row lays its children
+                    // out in a line. Its coordinates are the events row's own.
+                    TimetableGestureLayer {
+                        anchors.fill: parent
+                        gesture: root.gesture
+                        dayColumnWidth: root.dayColumnWidth
+                        dayStride: root.dayColumnWidth + root.spacing
+                        pixelsPerMinute: root.pixelsPerMinute
+                        blockGap: root.spacing / 2
+                        startHour: root.startHour
+                        startMinute: root.startMinute
+                        onFinished: result => root.handleGesture(result)
                     }
                 }
             }
@@ -1230,38 +1526,8 @@ Item {
         pixelsPerMinute: root.pixelsPerMinute
         startHour: root.startHour
         startMinute: root.startMinute
+        showShortcutHints: root.hintsVisible
         onScrollRequested: y => styledFlickable.contentY = Math.min(y, Math.max(0, styledFlickable.contentHeight - styledFlickable.height))
-    }
-
-    Rectangle {
-        id: timedMutationProxy
-        visible: root.timedMutationEvent !== null && root.timedMutationDayIndex >= 0
-        z: 24
-        width: Math.max(32, root.dayColumnWidth - 10)
-        height: H.timedBlockHeight(root.timedMutationStartMinutes, root.timedMutationEndMinutes, root.pixelsPerMinute, root.spacing / 2)
-        radius: Appearance.rounding.normal
-        color: H.chipColor(root.timedMutationEvent, Appearance.colors, GoogleCalendarService.colorForEvent(root.timedMutationEvent))
-        opacity: 0.96
-        x: {
-            const point = eventsRow.mapToItem(root, root.timedMutationDayIndex * (root.dayColumnWidth + root.spacing) + 5, 0);
-            return point.x;
-        }
-        y: {
-            const point = eventsRow.mapToItem(root, 0, H.minutesToY(root.timedMutationStartMinutes, root.startHour, root.startMinute, root.pixelsPerMinute));
-            return point.y;
-        }
-
-        StyledText {
-            anchors.fill: parent
-            anchors.leftMargin: 8
-            anchors.rightMargin: 8
-            verticalAlignment: Text.AlignVCenter
-            text: root.timedMutationEvent?.content ?? ""
-            font.pixelSize: Appearance.font.pixelSize.small
-            font.weight: Font.DemiBold
-            color: ColorUtils.getContrastingTextColor(timedMutationProxy.color)
-            elide: Text.ElideRight
-        }
     }
 
     Item {
@@ -1286,12 +1552,14 @@ Item {
             id: eventSidebar
             anchors.fill: parent
             sportsListOnly: false
+            showShortcutHints: root.hintsVisible
             onSaveRequested: payload => root.applySidebarPayload(payload)
             onCloseRequested: root.clearGhostPreview()
             onTaskCreateRequested: task => Todo.addItem(task)
-            onTaskCompletionRequested: task => Todo.markDone(task)
+            onTaskCompletionRequested: task => RemindersService.completeTask(task) || Todo.markDone(task)
             onDeleteRequested: (eventData, scope) => CalendarService.deleteEventWithScope(eventData, scope)
-            onEventFieldsMutationRequested: (eventData, fields, scope) => CalendarService.saveEventFields(eventData, fields, scope)
+            onEventFieldsMutationRequested: (eventData, fields, scope) => root.dispatchFields(eventData, fields, scope)
+            onCreateSpanChanged: (date, startMinutes, endMinutes) => root.syncDraftFromEditor(date, startMinutes, endMinutes)
             onMoveRequested: (eventData, newDate, scope) => {
                 if (!eventData || !newDate)
                     return;
@@ -1309,19 +1577,22 @@ Item {
         }
     }
 
-    TimePickerPopup {
+    // Built by their host on the first request; see DeferredTimePicker /
+    // DeferredDatePicker for why an unopened picker must not be constructed
+    // with the page. Same stacking as before (z: 50 within this view).
+    DeferredTimePicker {
         id: timePicker
         anchors.fill: parent
         z: 50
-        property string target: "start"
+        showShortcutHints: root.hintsVisible
         onAccepted: (pickedHour, pickedMinute) => eventSidebar.applyPickedTime(timePicker.target, pickedHour, pickedMinute)
     }
 
-    DatePickerPopup {
+    DeferredDatePicker {
         id: datePicker
         anchors.fill: parent
         z: 50
-        property string purpose: "form"
+        showShortcutHints: root.hintsVisible
         onAccepted: pickedDate => {
             if (datePicker.purpose === "navigate") {
                 root.goToWeek(pickedDate);

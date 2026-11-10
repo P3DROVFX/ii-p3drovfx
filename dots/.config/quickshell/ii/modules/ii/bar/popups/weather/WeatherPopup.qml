@@ -11,6 +11,7 @@ import qs.modules.ii.bar
 
 StyledPopup {
     id: root
+    popupId: "weather"
     popupRadius: Appearance.rounding.large
     stickyHover: true
 

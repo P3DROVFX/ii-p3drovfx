@@ -12,6 +12,7 @@ CONFIG_DIR="$XDG_CONFIG_HOME/quickshell/$QUICKSHELL_CONFIG_NAME"
 STATE_DIR="$XDG_STATE_HOME/quickshell"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SHELL_CONFIG_FILE="$XDG_CONFIG_HOME/illogical-impulse/config.json"
+source "$SCRIPT_DIR/matugen.sh"
 
 CURRENT_COLORS="$STATE_DIR/user/generated/colors.json"
 LOCKSCREEN_COLORS="$STATE_DIR/user/generated/lockscreen_colors.json"

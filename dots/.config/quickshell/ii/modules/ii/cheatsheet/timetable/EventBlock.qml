@@ -24,17 +24,10 @@ Rectangle {
     property int startMinute
     property Item coordinateRoot: null
     property bool manipulating: false
+    property var gesture: null
 
-    signal editRequested(var event, int dayIndex)
     signal deleteRequested(var event, int dayIndex)
-    signal moveDragStarted(var event, real x, real y, real pointerOffsetY)
-    signal moveDragMoved(real x, real y)
-    signal moveDragEnded
-    signal moveDragCanceled
-    signal resizeDragStarted(var event, real x, real y)
-    signal resizeDragMoved(real x, real y)
-    signal resizeDragEnded
-    signal resizeDragCanceled
+    signal gestureFinished(var result)
 
     readonly property bool isNextEvent: nextEventData && nextEventData.dayIndex === dayIdx && nextEventData.startMinutes === eventStartMinutes
     readonly property bool sportEvent: eventData?.sportEvent === true
@@ -54,6 +47,12 @@ Rectangle {
     readonly property bool isAtTop: eventStartMinutes <= startHour * 60 + startMinute
     readonly property bool isAtBottom: eventEndMinutes >= (startHour + 24) * 60 || eventEndMinutes >= 24 * 60
     readonly property bool isCompact: eventBlock.height <= 52
+    // Only a single-day event with a real span can be dragged: a multi-day or
+    // zero-length one would be truncated by the write-back.
+    readonly property bool movable: !readOnly && !sportEvent
+        && eventData?.startDate && eventData?.endDate
+        && H.sameDate(eventData.startDate, eventData.endDate)
+        && eventData.endDate.getTime() > eventData.startDate.getTime()
 
     // Overlap layout
     width: (parent.width - 10) / totalCols - 2
@@ -77,7 +76,9 @@ Rectangle {
     )
     y: Math.max(isAtTop ? 4 : 0, H.minutesToY(eventStartMinutes, startHour, startMinute, pixelsPerMinute))
     height: H.timedBlockHeight(eventStartMinutes, eventEndMinutes, pixelsPerMinute, eventSpacing)
-    opacity: eventBlock.manipulating ? 0.24 : 1
+    // The gesture layer draws the lifted copy; the source steps aside so the
+    // event reads as moving, not duplicated.
+    opacity: eventBlock.manipulating ? 0 : 1
 
     // Decorative watermark icon for the next event
     MaterialSymbol {
@@ -98,7 +99,7 @@ Rectangle {
     }
 
     StyledToolTip {
-        extraVisibleCondition: eventHover.hovered
+        extraVisibleCondition: eventHover.hovered && !eventBlock.manipulating
         text: {
             let title = eventData.content || qsTr("Event");
             let description = eventData.description || "";
@@ -109,133 +110,44 @@ Rectangle {
         }
     }
 
-    // Click to edit, drag the body to move. The proxy itself belongs to the
-    // WeekView so it can stay above columns and outlive a clipped delegate.
-    MouseArea {
-        id: eventPointer
-        anchors.fill: parent
-        hoverEnabled: true
-        preventStealing: true
-        cursorShape: eventPointer.started ? Qt.ClosedHandCursor : Qt.OpenHandCursor
-        z: 2
-
-        readonly property int dragThreshold: 6
-        property real pressX: 0
-        property real pressY: 0
-        property bool started: false
-
-        function scenePoint(mouse) {
-            if (!eventBlock.coordinateRoot)
-                return Qt.point(mouse.x, mouse.y);
-            return eventBlock.mapToItem(eventBlock.coordinateRoot, mouse.x, mouse.y);
-        }
-
-        onPressed: mouse => {
-            eventPointer.pressX = mouse.x;
-            eventPointer.pressY = mouse.y;
-            eventPointer.started = false;
-        }
-
-        onPositionChanged: mouse => {
-            if (eventBlock.readOnly || !eventPointer.pressedButtons)
-                return;
-            const point = eventPointer.scenePoint(mouse);
-            if (!eventPointer.started) {
-                if (Math.abs(mouse.x - eventPointer.pressX) + Math.abs(mouse.y - eventPointer.pressY) < eventPointer.dragThreshold)
-                    return;
-                eventPointer.started = true;
-                eventBlock.moveDragStarted(eventBlock.eventData, point.x, point.y, eventPointer.pressY);
-            }
-            eventBlock.moveDragMoved(point.x, point.y);
-        }
-
-        onReleased: {
-            if (eventPointer.started) {
-                eventPointer.started = false;
-                eventBlock.moveDragEnded();
-                return;
-            }
-            eventBlock.editRequested(eventData, dayIdx);
-        }
-
-        onCanceled: {
-            if (!eventPointer.started)
-                return;
-            eventPointer.started = false;
-            eventBlock.moveDragCanceled();
-        }
+    // Body: a press is a click (edit) or, past the threshold, a move. Edges:
+    // resize. The gesture owns the thresholds and the result.
+    TimetableBlockGrab {
+        gesture: eventBlock.gesture
+        coordinateRoot: eventBlock.coordinateRoot
+        kind: eventBlock.movable ? "move" : "click"
+        target: eventBlock.eventData
+        day: eventBlock.dayIdx
+        start: eventBlock.eventStartMinutes
+        end: eventBlock.eventEndMinutes
+        onFinished: result => eventBlock.gestureFinished(result)
     }
 
-    MouseArea {
-        id: resizeHandle
-        anchors.bottom: parent.bottom
-        anchors.horizontalCenter: parent.horizontalCenter
-        width: Math.min(parent.width - 20, 44)
-        height: 14
-        hoverEnabled: true
-        preventStealing: true
-        visible: !eventBlock.readOnly
-        cursorShape: Qt.SizeVerCursor
-        z: 12
+    TimetableEdgeGrab {
+        gesture: eventBlock.gesture
+        coordinateRoot: eventBlock.coordinateRoot
+        kind: "resizeStart"
+        atTop: true
+        target: eventBlock.eventData
+        day: eventBlock.dayIdx
+        start: eventBlock.eventStartMinutes
+        end: eventBlock.eventEndMinutes
+        barColor: ColorUtils.getContrastingTextColor(eventBlock.color)
+        enabled: eventBlock.movable
+        onFinished: result => eventBlock.gestureFinished(result)
+    }
 
-        readonly property int dragThreshold: 4
-        property real pressY: 0
-        property bool started: false
-
-        function scenePoint(mouse) {
-            if (!eventBlock.coordinateRoot)
-                return Qt.point(mouse.x, mouse.y);
-            return resizeHandle.mapToItem(eventBlock.coordinateRoot, mouse.x, mouse.y);
-        }
-
-        Rectangle {
-            anchors.centerIn: parent
-            width: Math.min(parent.width, 26)
-            height: 3
-            radius: Appearance.rounding.full
-            color: ColorUtils.getContrastingTextColor(eventBlock.color)
-            opacity: resizeHandle.hovered || resizeHandle.pressed ? 0.9 : 0
-
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: Appearance.animation.elementMoveFast.duration
-                    easing.type: Appearance.animation.elementMoveFast.type
-                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                }
-            }
-        }
-
-        onPressed: mouse => {
-            resizeHandle.pressY = mouse.y;
-            resizeHandle.started = false;
-        }
-
-        onPositionChanged: mouse => {
-            if (!resizeHandle.pressedButtons)
-                return;
-            const point = resizeHandle.scenePoint(mouse);
-            if (!resizeHandle.started) {
-                if (Math.abs(mouse.y - resizeHandle.pressY) < resizeHandle.dragThreshold)
-                    return;
-                resizeHandle.started = true;
-                eventBlock.resizeDragStarted(eventBlock.eventData, point.x, point.y);
-            }
-            eventBlock.resizeDragMoved(point.x, point.y);
-        }
-
-        onReleased: {
-            if (!resizeHandle.started)
-                return;
-            resizeHandle.started = false;
-            eventBlock.resizeDragEnded();
-        }
-
-        onCanceled: {
-            if (!resizeHandle.started)
-                return;
-            resizeHandle.started = false;
-            eventBlock.resizeDragCanceled();
-        }
+    TimetableEdgeGrab {
+        gesture: eventBlock.gesture
+        coordinateRoot: eventBlock.coordinateRoot
+        kind: "resizeEnd"
+        target: eventBlock.eventData
+        day: eventBlock.dayIdx
+        start: eventBlock.eventStartMinutes
+        end: eventBlock.eventEndMinutes
+        barColor: ColorUtils.getContrastingTextColor(eventBlock.color)
+        enabled: eventBlock.movable
+        onFinished: result => eventBlock.gestureFinished(result)
     }
 
     // Delete button

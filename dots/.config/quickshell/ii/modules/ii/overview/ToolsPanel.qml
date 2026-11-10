@@ -139,7 +139,7 @@ Item {
     }
 
     function setCategoryByIndex(index: int) {
-        const cats = DevToolsRegistry.categories;
+        const cats = DevToolsRegistry.searchCategories;
         if (index >= 0 && index < cats.length) {
             root.selectedCategory = cats[index].id;
             root.selectTool(0);
@@ -147,7 +147,7 @@ Item {
     }
 
     function cycleCategory(step: int) {
-        const cats = DevToolsRegistry.categories;
+        const cats = DevToolsRegistry.searchCategories;
         let idx = cats.findIndex(c => c.id === root.selectedCategory);
         if (idx < 0) idx = 0;
         idx = (idx + step + cats.length) % cats.length;
@@ -312,7 +312,7 @@ Item {
                 spacing: Appearance.sizes.elevationMargin / 2
 
                 Repeater {
-                    model: DevToolsRegistry.categories
+                    model: DevToolsRegistry.searchCategories
                     delegate: RippleButton {
                         required property int index
                         required property var modelData

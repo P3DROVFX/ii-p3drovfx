@@ -17,7 +17,7 @@ AbstractBackgroundWidget {
 
     configEntryName: "concentric_clock"
 
-    visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "center" || root.lockBehavior === "lockOnly" || (Config.options.lock.centerWidget === "concentric_clock")
+    visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "custom" || root.lockBehavior === "center" || root.lockBehavior === "lockOnly" || (Config.options.lock.centerWidget === "concentric_clock")
     opacity: {
         if (root.lockBehavior === "lockOnly")
             return GlobalStates.screenLocked ? 1 : 0;
@@ -69,9 +69,10 @@ AbstractBackgroundWidget {
 
     property int clockSecond: DateTime.clock.seconds
     Timer {
-        running: root.cfgSecondHandStyle !== "hide"
+        running: root.cfgSecondHandStyle !== "hide" && root.live
         repeat: true
         interval: 1000
+        triggeredOnStart: true
         onTriggered: root.clockSecond = new Date().getSeconds()
     }
 

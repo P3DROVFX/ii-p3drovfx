@@ -202,6 +202,12 @@ Singleton {
         root.launchInTerminal(["update", "--keep-config", root.hyprFlag()]);
     }
 
+    // The same update, but always installing the fork's Hyprland files: for a page that
+    // needs them, whatever the update setting says. The script backs up what it replaces.
+    function launchHyprInstall() {
+        root.launchInTerminal(["update", "--keep-config", "--hypr"]);
+    }
+
     // Move to another branch of the current fork. Confirmed in Settings first,
     // so the script runs unattended; config.json is kept since the schema is
     // the same fork's.
@@ -282,6 +288,10 @@ Singleton {
 
     Process {
         id: remoteHeadProc
+        // git aborts before touching the network when its cwd is gone, which
+        // the shell's own may be if it was started from a since-deleted temp
+        // dir; an empty answer would then read as an unreachable remote.
+        workingDirectory: root.stateDir
         command: ["bash", "-c", 'git ls-remote --heads "$1" "$2" 2>/dev/null | awk \'{print $1; exit}\'', "ii-remote-head", root.activeRemote, root.activeBranch]
         stdout: StdioCollector {
             onStreamFinished: {
@@ -378,6 +388,16 @@ Singleton {
         interval: 60 * 1000
         repeat: true
         onTriggered: root.maybeAutoCheck()
+    }
+
+    // `qs -c ii ipc call shellUpdates check`: a check on demand, for a keybind or a
+    // script, without opening Settings for its button.
+    IpcHandler {
+        target: "shellUpdates"
+
+        function check(): void {
+            root.refresh();
+        }
     }
 
     Component.onCompleted: root.reloadState()

@@ -10,11 +10,15 @@ TabButton {
     id: root
     property string buttonText
     property string buttonIcon
+    // Controlled bars supply the same selection that drives their page content.
+    // Native TabBar insertion may change checked, but must not change this view.
+    property bool current: root.checked
+    Accessible.checked: root.current
     property int rippleDuration: 1200
     property int tabContentWidth: buttonBackground.width - buttonBackground.radius * 2
 
     property color colBackground: ColorUtils.transparentize(Appearance.colors.colSurfaceContainer)
-    property color colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colOnSurface, root.checked ? 1 : 0.95)
+    property color colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colOnSurface, root.current ? 1 : 0.95)
     property color colRipple: ColorUtils.transparentize(Appearance.colors.colOnSurface, 0.95)
 
     PointingHandInteraction {}
@@ -170,8 +174,8 @@ TabButton {
                     verticalAlignment: Text.AlignVCenter
                     text: buttonIcon
                     iconSize: Appearance.font.pixelSize.huge
-                    fill: root.checked ? 1 : 0
-                    color: root.checked ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
+                    fill: root.current ? 1 : 0
+                    color: root.current ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
                     Behavior on color {
                         animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
                     }
@@ -181,7 +185,7 @@ TabButton {
                 id: buttonTextWidget
                 verticalAlignment: Text.AlignVCenter
                 font.pixelSize: Appearance.font.pixelSize.small
-                color: root.checked ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
+                color: root.current ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
                 text: buttonText
                 Behavior on color {
                     animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)

@@ -25,8 +25,11 @@ ColumnLayout {
     // The Loader in LockSurface activates when the session gets locked
     Component.onCompleted: lockTime = Date.now()
 
-    readonly property var filtered: Notifications.list.filter(notif => {
-        if (conf.onlySinceLock && notif.time < root.lockTime)
+    // Example notifications drawn instead of the real ones (the Settings preview):
+    // they pass the same rules, minus "only since lock", which they would always fail.
+    property var sampleList: null
+    readonly property var filtered: (root.sampleList ?? Notifications.list).filter(notif => {
+        if (!root.sampleList && conf.onlySinceLock && notif.time < root.lockTime)
             return false;
         if (conf.filters.skipTransient && notif.isTransient)
             return false;

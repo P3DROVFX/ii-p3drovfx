@@ -14,12 +14,20 @@ ToolTip {
     // screen, opt out of that gate.
     property bool requireOverlay: true
 
-    readonly property bool sidebarOpen: !GlobalStates || GlobalStates.sidebarRightOpen || GlobalStates.sidebarLeftOpen || GlobalStates.settingsOpen || GlobalStates.osdVolumeOpen || GlobalStates.wallpaperSelectorOpen || GlobalStates.cheatsheetOpen || GlobalStates.notesAppOpen || GlobalStates.sessionOpen || GlobalStates.usageOpen || GlobalStates.overviewOpen || GlobalStates.modesOpen || GlobalStates.editMode
+    readonly property bool sidebarOpen: !GlobalStates || GlobalStates.sidebarRightOpen || GlobalStates.sidebarLeftOpen || GlobalStates.settingsOpen || GlobalStates.osdVolumeOpen || GlobalStates.wallpaperSelectorOpen || GlobalStates.cheatsheetOpen || GlobalStates.notesAppOpen || GlobalStates.clockAppOpen || GlobalStates.healthAppOpen || GlobalStates.sessionOpen || GlobalStates.usageOpen || GlobalStates.overviewOpen || GlobalStates.modesOpen || GlobalStates.editMode || GlobalStates.islandDashboardOpen || GlobalStates.overlayOpen
+    readonly property bool parentHovered: {
+        if (!parent)
+            return false;
+        if (parent.hovered !== undefined)
+            return Boolean(parent.hovered);
+        if (parent.containsMouse !== undefined)
+            return Boolean(parent.containsMouse);
+        return true;
+    }
+
     readonly property bool internalVisibleCondition: Config.options.bar.tooltips.enableTooltips
-        // Both reads have to be guarded. `parent?.hovered` was, `parent.hovered` was not,
-        // so a tooltip evaluated while it has no parent — during the frame a delegate is
-        // being rebuilt, for instance — threw instead of simply staying hidden.
-        && ((extraVisibleCondition && (parent?.hovered === undefined || parent?.hovered)) || alternativeVisibleCondition)
+        && ((extraVisibleCondition && root.parentHovered) || alternativeVisibleCondition)
+        && parent?.visible !== false
         && (!requireOverlay || sidebarOpen)
     verticalPadding: 5
     horizontalPadding: 10
@@ -36,12 +44,35 @@ ToolTip {
     enabled: Config.options.bar.tooltips.enableTooltips
     visible: internalVisibleCondition
     
-    contentItem: StyledToolTipContent {
-        id: contentItem
-        font: root.font
-        text: root.text
-        shown: root.visible
-        horizontalPadding: root.horizontalPadding
-        verticalPadding: root.verticalPadding
+    // Hundreds of tooltips exist per shell and almost none are ever on screen, so the
+    // bubble (text layout, three animated Behaviors) is built on show and dropped once
+    // its exit animation has settled. It is created hidden and revealed a turn later,
+    // so the grow-in animation still plays on every show.
+    // `lingering` mirrors the bubble's `isVisible` imperatively: read in the `active`
+    // binding, it re-evaluated `active` while the Loader was creating or destroying
+    // the bubble - a binding loop on every show and hide.
+    contentItem: Loader {
+        id: contentLoader
+        property bool revealed: false
+        property bool lingering: false
+        active: root.visible || lingering
+        onActiveChanged: if (!active) {
+            revealed = false;
+            lingering = false;
+        }
+        onLoaded: Qt.callLater(() => contentLoader.revealed = contentLoader.active)
+        Connections {
+            target: contentLoader.item
+            function onIsVisibleChanged() {
+                contentLoader.lingering = contentLoader.item?.isVisible ?? false;
+            }
+        }
+        sourceComponent: StyledToolTipContent {
+            font: root.font
+            text: root.text
+            shown: root.visible && contentLoader.revealed
+            horizontalPadding: root.horizontalPadding
+            verticalPadding: root.verticalPadding
+        }
     }
 }

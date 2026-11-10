@@ -15,6 +15,28 @@ StyledOverlayWidget {
     id: root
     minimumWidth: 300
     minimumHeight: 200
+    property bool _resourceMetricsRequested: false
+
+    function syncResourceMetricRequests() {
+        const wanted = root.visible;
+        if (_resourceMetricsRequested === wanted)
+            return;
+        ResourceUsage.requestMetric("history", wanted);
+        ResourceUsage.requestMetric("swap", wanted);
+        ResourceUsage.requestMetric("hardwareIdentity", wanted);
+        _resourceMetricsRequested = wanted;
+    }
+
+    Component.onCompleted: syncResourceMetricRequests()
+    Component.onDestruction: {
+        if (_resourceMetricsRequested) {
+            ResourceUsage.requestMetric("history", false);
+            ResourceUsage.requestMetric("swap", false);
+            ResourceUsage.requestMetric("hardwareIdentity", false);
+        }
+    }
+    onVisibleChanged: syncResourceMetricRequests()
+
     property list<var> resources: [
         {
             "icon": "planner_review",

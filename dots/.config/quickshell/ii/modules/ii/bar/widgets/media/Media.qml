@@ -1,4 +1,5 @@
 import qs.modules.common
+import qs.modules.ii.dynamicIsland.core
 import qs.modules.common.widgets
 import qs.services
 import qs
@@ -18,7 +19,8 @@ Item {
 
     readonly property MprisPlayer activePlayer: MprisController.activePlayer
     readonly property string cleanedTitle: StringUtils.cleanMusicTitle(activePlayer?.trackTitle) || Translation.tr("No media")
-    readonly property bool hasTrack: (activePlayer?.trackTitle ?? "").length > 0
+    // Out in a Dynamic Island bubble, the track is shown there and not twice.
+    readonly property bool hasTrack: (activePlayer?.trackTitle ?? "").length > 0 && !IslandGeometry.bubbled("media")
 
     visible: hasTrack
 
@@ -81,46 +83,7 @@ Item {
     }
 
     readonly property string artUrl: MprisController.artUrl
-    readonly property bool isLocalArt: artUrl.startsWith("file://")
-    property string artDownloadLocation: Directories.coverArt
-    property string artFileName: Qt.md5(artUrl)
-    property string artFilePath: `${artDownloadLocation}/${artFileName}`
-    property bool artDownloaded: false
-
-    readonly property string artSource: {
-        if (!artUrl)
-            return "";
-        if (isLocalArt)
-            return artUrl;
-        return artDownloaded ? Qt.resolvedUrl(artFilePath) : "";
-    }
-
-    onArtFilePathChanged: {
-        if (!artUrl || artUrl.length === 0) {
-            artDownloaded = false;
-            return;
-        }
-        if (isLocalArt) {
-            artDownloaded = true;
-            return;
-        }
-        artDownloader.targetFile = artUrl;
-        artDownloader.artFilePath = artFilePath;
-        artDownloader.artTempPath = artFilePath + ".tmp";
-        artDownloaded = false;
-        artDownloader.running = true;
-    }
-
-    Process {
-        id: artDownloader
-        property string targetFile: root.artUrl
-        property string artFilePath: root.artFilePath
-        property string artTempPath: root.artFilePath + ".tmp"
-        command: ["bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
-        onExited: {
-            artDownloaded = true;
-        }
-    }
+    readonly property string artSource: CoverArt.source(root.artUrl)
 
     Item {
         id: artworkItem
@@ -178,7 +141,6 @@ Item {
             if (hoverEnabled) {
                 var globalPos = root.mapToItem(null, 0, 0);
                 GlobalStates.mediaPopupRect = Qt.rect(globalPos.x, globalPos.y, root.width, root.height);
-                GlobalStates.mediaControlsOpen = true;
             }
         }
         onExited: {
@@ -224,7 +186,7 @@ Item {
             implicitSize: root.progressButtonSize
 
             lineWidth: Appearance.rounding.unsharpen
-            value: (activePlayer?.length ?? 0) > 0 ? Math.min(1, Math.max(0, activePlayer.position / activePlayer.length)) : 0
+            value: MprisController.trackProgressOf(activePlayer)
             colPrimary: Appearance.colors.colOnSecondaryContainer
             enableAnimation: false
 

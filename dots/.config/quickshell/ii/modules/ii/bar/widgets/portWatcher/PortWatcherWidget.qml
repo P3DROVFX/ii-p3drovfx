@@ -71,8 +71,12 @@ MouseArea {
         }
     }
 
-    PortWatcherPopup {
-        id: popup
-        hoverTarget: root
+    // Lazy: popup controller is only built on approach (same as ExpressiveSports).
+    PopupLoader {
+        active: BarInteraction.enablePopups
+            && (BarInteraction.clickToShow || root.containsMouse || held)
+        sourceComponent: PortWatcherPopup {
+            hoverTarget: root
+        }
     }
 }

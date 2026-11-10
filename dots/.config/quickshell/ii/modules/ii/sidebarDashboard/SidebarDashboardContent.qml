@@ -3,10 +3,12 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.animations
 import qs.modules.common.widgets
+import qs.modules.common.functions
 import qs.modules.ii.bar as Bar
 import qs.modules.ii.bar.shared
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Window
 import QtQuick.Layouts
 import QtQuick.Effects
 import Quickshell
@@ -25,10 +27,14 @@ import qs.modules.common.quickToggleDialogs.darkMode
 import qs.modules.common.quickToggleDialogs.localSend
 import qs.modules.common.quickToggleDialogs.vpn
 import qs.modules.common.quickToggleDialogs.tailscale
+import qs.modules.common.quickToggleDialogs.kdeConnect
 import qs.modules.common.quickToggleDialogs.dnsOverTls
+import qs.modules.common.quickToggleDialogs.easyEffects
 import qs.modules.common.quickToggleDialogs.idleInhibitor
 import qs.modules.common.quickToggleDialogs.screenShader
+import qs.modules.common.quickToggleDialogs.smartDevices
 import qs.modules.ii.sidebarDashboard.modes
+import qs.modules.tablet.sidebarDashboard
 import "../../common/functions/SpaceArbitration.js" as SpaceArbitration
 import "SidebarPerformancePolicy.js" as PerformancePolicy
 
@@ -48,12 +54,105 @@ Item {
     property bool showLocalSendDialog: false
     property bool showVpnDialog: false
     property bool showTailscaleDialog: false
+    property bool showKdeConnectDialog: false
     property bool showDnsOverTlsDialog: false
     property bool showIdleInhibitorDialog: false
     property bool showScreenShaderDialog: false
     property bool showModesDialog: false
+    property bool showEasyEffectsDialog: false
+    property bool showSmartDevicesDialog: false
+    property bool showTrayDialog: false
     property bool wifiDialogStatePublished: false
     property bool bluetoothDialogStatePublished: false
+
+    readonly property bool keyboardContextOpen: root.visible
+        && (root.isLoadedOnLeft ? GlobalStates.sidebarLeftOpen : GlobalStates.sidebarRightOpen)
+    onKeyboardContextOpenChanged: {
+        if (root.keyboardContextOpen) Qt.callLater(root.focusDashboardOnOpen);
+    }
+    function focusDashboardOnOpen() {
+        if (root.keyboardContextOpen && !root.anyDialogVisible && !pomodoroTimePicker.opened)
+            root.forceActiveFocus(Qt.OtherFocusReason);
+    }
+
+    Keys.onPressed: event => {
+        if (root.systemShortcutsEnabled())
+            root.systemHintsVisible = event.key === Qt.Key_Control
+                || !!(event.modifiers & Qt.ControlModifier);
+        event.accepted = root.handleBottomKey(event) || root.handleSystemKey(event);
+    }
+    Keys.onReleased: event => {
+        root.releaseBottomKey(event);
+        event.accepted = false;
+    }
+
+    function handleBottomKey(event) {
+        if (pomodoroTimePicker.opened) return pomodoroTimePicker.handleKey(event);
+        if (root.editMode || root.anyDialogVisible || !bottomGroup.visible)
+            return false;
+        return bottomGroup.handleKey(event);
+    }
+
+    function releaseBottomKey(event) {
+        root.releaseSystemKey(event);
+        bottomGroup.releaseKey(event);
+        pomodoroTimePicker.releaseKey(event);
+    }
+    function systemShortcutsEnabled() {
+        return !root.anyDialogVisible && !pomodoroTimePicker.opened
+            && (root.isLoadedOnLeft ? GlobalStates.sidebarLeftOpen : GlobalStates.sidebarRightOpen);
+    }
+
+    function releaseSystemKey(event) {
+        if (event.key === Qt.Key_Control || !(event.modifiers & Qt.ControlModifier))
+            root.systemHintsVisible = false;
+    }
+
+    function handleSystemKey(event) {
+        if (!root.systemShortcutsEnabled()) return false;
+        root.systemHintsVisible = event.key === Qt.Key_Control
+            || !!(event.modifiers & Qt.ControlModifier);
+        if (event.modifiers !== (Qt.ControlModifier | Qt.ShiftModifier)) return false;
+        if (event.key === Qt.Key_E) {
+            if (!event.isAutoRepeat) root.editMode = !root.editMode;
+            return true;
+        }
+        if (root.editMode) return false;
+        switch (event.key) {
+        case Qt.Key_B:
+            if (!event.isAutoRepeat) bottomGroup.setCollapsed(!bottomGroup.effectivelyCollapsed);
+            return true;
+        case Qt.Key_R:
+            if (!event.isAutoRepeat) {
+                Quickshell.execDetached(["hyprctl", "reload"]);
+                Quickshell.reload(true);
+            }
+            return true;
+        case Qt.Key_S:
+            if (!event.isAutoRepeat) root.showSettings();
+            return true;
+        case Qt.Key_M:
+            if (!event.isAutoRepeat) GlobalStates.sessionOpen = true;
+            return true;
+        }
+        return false;
+    }
+
+    property bool systemHintsVisible: false
+    readonly property bool systemHintsActive: root.systemHintsVisible && root.systemShortcutsEnabled()
+        && (root.Window.window?.active ?? false)
+    onSystemHintsActiveChanged: { if (!root.systemHintsActive) root.systemHintsVisible = false; }
+    Connections {
+        target: root.Window.window
+        function onActiveChanged() { root.systemHintsVisible = false; }
+    }
+
+    function showSettings() {
+        root.systemHintsVisible = false;
+        GlobalStates.sidebarRightOpen = false;
+        GlobalStates.sidebarLeftOpen = false;
+        GlobalStates.toggleSettings();
+    }
 
     function publishWifiDialogState(open: bool): void {
         if (root.wifiDialogStatePublished === open)
@@ -81,7 +180,7 @@ Item {
 
     onShowWifiDialogChanged: root.publishWifiDialogState(root.showWifiDialog)
     onShowBluetoothDialogChanged: root.publishBluetoothDialogState(root.showBluetoothDialog)
-    readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showDnsOverTlsDialog || showIdleInhibitorDialog || showScreenShaderDialog || showModesDialog
+    readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showKdeConnectDialog || showDnsOverTlsDialog || showIdleInhibitorDialog || showScreenShaderDialog || showModesDialog || showEasyEffectsDialog || showSmartDevicesDialog || showTrayDialog
     property bool editMode: false
     property bool isLoadedOnLeft: false
     readonly property bool dashboardSidebarAnimating: isLoadedOnLeft
@@ -135,7 +234,7 @@ Item {
     readonly property bool compactModeRequired: SpaceArbitration.requiresCompactMode(
         expandedNotificationsHeightBudget,
         minimumExpandedNotificationsHeight,
-        !editMode && centerGroup.visible && bottomGroup.visible
+        !editMode && centerGroup.visible && bottomGroup.visible && adaptiveGroups.availableHeight > 0
     )
     readonly property var compactSpaceResolution: SpaceArbitration.resolve(
         compactModeRequired,
@@ -171,6 +270,7 @@ Item {
     readonly property bool isDynamicIslandBottom: !BarPlacement.vertical && BarPlacement.bottom && BarInteraction.cornerStyle === 3
 
     Component.onCompleted: {
+        Qt.callLater(root.focusDashboardOnOpen);
         if (GlobalStates.requestVolumeDialog) {
             root.showAudioOutputDialog = true;
             GlobalStates.requestVolumeDialog = false;
@@ -206,11 +306,24 @@ Item {
                 root.showLocalSendDialog = false;
                 root.showVpnDialog = false;
                 root.showTailscaleDialog = false;
+                root.showKdeConnectDialog = false;
                 root.showDnsOverTlsDialog = false;
                 root.showIdleInhibitorDialog = false;
                 root.showScreenShaderDialog = false;
                 root.showModesDialog = false;
+                root.showEasyEffectsDialog = false;
+                root.showTrayDialog = false;
                 pomodoroTimePicker.close();
+                // In connect mode the SidebarDashboardContent lives inside the always-present
+                // topPanel, so the Loader is never torn down automatically when the sidebar
+                // closes. Explicitly release the heavy centerGroup (NotificationList) by
+                // resetting deferredContentReady — it will be rebuilt asynchronously on the
+                // next open, just like a cold dashboard. Only do this when keepWarm is false
+                // (user opted out of keeping the sidebar resident) to avoid thrashing when
+                // keep-loaded is on.
+                if (GlobalStates.connectModeActive && !root.keepWarm) {
+                    root.deferredContentReady = false;
+                }
             }
         }
     }
@@ -295,7 +408,12 @@ Item {
             anchors.margins: sidebarPadding
             spacing: sidebarPadding
 
-            layer.enabled: sidebarRightBackground.dialogBlurProgress > 0.01
+            // Dialog scrim blur: the layer FBO is allocated lazily only while a dialog
+            // is animating in/out (dialogBlurProgress above the threshold) and released
+            // as soon as the close animation settles back to zero. The 0.05 threshold
+            // avoids allocating the full-column FBO during the first frames of the
+            // opening animation.
+            layer.enabled: sidebarRightBackground.dialogBlurProgress > 0.05
             layer.effect: MultiEffect {
                 blurEnabled: true
                 blurMax: 32
@@ -303,29 +421,36 @@ Item {
             }
 
             // SIDEBAR BANNER
-            SidebarBanner {
+            // Banner and header are exclusive; only the configured one is built.
+            Loader {
                 id: sidebarBanner
                 Layout.fillWidth: true
                 Layout.preferredHeight: 220
-                visible: Config.options.sidebar.enableBanner
-                enabled: visible
-                editMode: root.editMode
-                onEditModeToggled: (newEditMode) => root.editMode = newEditMode
+                active: Config.options.sidebar.enableBanner
+                visible: active
+                sourceComponent: SidebarBanner {
+                    editMode: root.editMode
+                    systemHintsVisible: root.systemHintsActive
+                    onEditModeToggled: (newEditMode) => root.editMode = newEditMode
+                }
             }
 
             // DEFAULT
-            SystemButtonRow {
+            Loader {
                 id: headerRow
                 Layout.fillHeight: false
                 Layout.fillWidth: true
                 // Layout.margins: 10
                 Layout.topMargin: 5
                 Layout.bottomMargin: 0
-                visible: !Config.options.sidebar.enableBanner
-                enabled: visible
-                entranceTrigger: root.entranceTrigger
-                editMode: root.editMode
-                onEditModeToggled: (newEditMode) => root.editMode = newEditMode
+                active: !Config.options.sidebar.enableBanner
+                visible: active
+                sourceComponent: SystemButtonRow {
+                    entranceTrigger: root.entranceTrigger
+                    editMode: root.editMode
+                    systemHintsVisible: root.systemHintsActive
+                    onEditModeToggled: (newEditMode) => root.editMode = newEditMode
+                }
             }
 
             LoaderedQuickPanelImplementation {
@@ -335,6 +460,7 @@ Item {
                     editMode: root.editMode
                     onOpenVpnDialog: root.showVpnDialog = true
                     onOpenTailscaleDialog: root.showTailscaleDialog = true
+                    onOpenKdeConnectDialog: root.showKdeConnectDialog = true
                 }
             }
 
@@ -347,6 +473,7 @@ Item {
                     entranceTrigger: root.entranceTrigger
                     onOpenVpnDialog: root.showVpnDialog = true
                     onOpenTailscaleDialog: root.showTailscaleDialog = true
+                    onOpenKdeConnectDialog: root.showKdeConnectDialog = true
                     onOpenDnsOverTlsDialog: root.showDnsOverTlsDialog = true
                     onOpenScreenShaderDialog: root.showScreenShaderDialog = true
                 }
@@ -356,7 +483,14 @@ Item {
                 id: adaptiveGroups
                 Layout.fillHeight: true
                 Layout.fillWidth: true
-                Layout.minimumHeight: containmentHeight
+                property real takeoverProgress: root.notificationsCollapsed ? 1.0 : 0.0
+
+                Behavior on takeoverProgress {
+                    SidebarGroupAnimation {
+                        animationSpec: Appearance.animation.elementMove
+                    }
+                }
+
                 // This boundary lies inside the dashboard's rounded silhouette
                 // and contains Bottom overshoot without clipping unrelated
                 // header/quick-toggle shadows or allocating an FBO.
@@ -367,10 +501,8 @@ Item {
                         centerGroup.collapsedHeight,
                         targetSpacing
                     )
-                readonly property real targetContainmentHeight: root.notificationsCollapsed
-                    ? packedTakeoverHeight
-                    : availableHeight
-                property real containmentHeight: targetContainmentHeight
+                readonly property real takeoverExtraHeight: Math.max(0, packedTakeoverHeight - availableHeight) * takeoverProgress
+                Layout.minimumHeight: takeoverExtraHeight > 0 ? (availableHeight + takeoverExtraHeight) : 0
                 readonly property real targetSpacing: SpaceArbitration.dashboardSpacing(
                     root.notificationsCollapsed,
                     root.sidebarPadding
@@ -387,16 +519,10 @@ Item {
                         : bottomGroup.expandedHeight
                 readonly property real expandedCenterTargetHeight: Math.max(
                     0,
-                    availableHeight - targetBottomHeight - targetSpacing
+                    availableHeight - animatedBottomHeight - targetSpacing
                 )
                 property real groupSpacing: targetSpacing
                 property real animatedBottomHeight: targetBottomHeight
-
-                Behavior on containmentHeight {
-                    SidebarGroupAnimation {
-                        animationSpec: Appearance.animation.elementMove
-                    }
-                }
 
                 Behavior on groupSpacing {
                     SidebarGroupAnimation {
@@ -422,17 +548,8 @@ Item {
                         entranceTrigger: root.entranceTrigger
                     }
                     readonly property real collapsedHeight: item?.collapsedHeight ?? 0
-                    property real animatedHeight: SpaceArbitration.notificationMaximumHeight(
-                        root.notificationsCollapsed,
-                        collapsedHeight,
-                        adaptiveGroups.expandedCenterTargetHeight
-                    )
-
-                    Behavior on animatedHeight {
-                        SidebarGroupAnimation {
-                            animationSpec: Appearance.animation.elementMove
-                        }
-                    }
+                    property real animatedHeight: (collapsedHeight * adaptiveGroups.takeoverProgress)
+                        + (adaptiveGroups.expandedCenterTargetHeight * (1.0 - adaptiveGroups.takeoverProgress))
 
                     anchors.left: parent.left
                     anchors.right: parent.right
@@ -450,6 +567,9 @@ Item {
                     height: adaptiveGroups.animatedBottomHeight
                     forceCollapsed: root.bottomForceCollapsed
                     keepWarm: root.keepWarm
+                    chromeHintsVisible: root.systemHintsActive && !root.editMode
+                    keyboardEnabled: !root.editMode && !root.anyDialogVisible && !pomodoroTimePicker.opened
+                        && (root.isLoadedOnLeft ? GlobalStates.sidebarLeftOpen : GlobalStates.sidebarRightOpen)
                     outerSidebarAnimating: root.dashboardSidebarAnimating
                     entranceTrigger: root.entranceTrigger
                     onCollapseRequested: shouldCollapse => {
@@ -530,6 +650,13 @@ Item {
 
     DialogHostLoader {
         owner: root
+        shownPropertyString: "showKdeConnectDialog"
+        dialogRadius: sidebarRightBackground.defaultRadius
+        dialog: KdeConnectDialog {}
+    }
+
+    DialogHostLoader {
+        owner: root
         shownPropertyString: "showDnsOverTlsDialog"
         dialogRadius: sidebarRightBackground.defaultRadius
         dialog: DnsOverTlsDialog {}
@@ -550,12 +677,66 @@ Item {
         dialog: ModesDialog {}
     }
 
-    TimePickerPopup {
+    DialogHostLoader {
+        owner: root
+        shownPropertyString: "showEasyEffectsDialog"
+        dialogRadius: sidebarRightBackground.defaultRadius
+        dialog: EasyEffectsDialog {}
+    }
+
+    DialogHostLoader {
+        owner: root
+        shownPropertyString: "showSmartDevicesDialog"
+        dialogRadius: sidebarRightBackground.defaultRadius
+        dialog: SmartDevicesDialog {}
+    }
+
+    // The tray tile (trayWidget) asks for this: the island shows the same dialog as a
+    // page over its grid, the tablet's shade hosts it over its dashboard, and here it is
+    // one more sidebar dialog. Activating an app closes it and leaves the sidebar.
+    DialogHostLoader {
+        owner: root
+        shownPropertyString: "showTrayDialog"
+        dialogRadius: sidebarRightBackground.defaultRadius
+        dialog: TabletTrayDialog {
+            onItemActivated: root.showTrayDialog = false
+        }
+    }
+
+    // The picker is only ever opened by the pomodoro tab: it is built on request and
+    // dropped once its close animation has finished, instead of living in every
+    // retained dashboard.
+    Loader {
         id: pomodoroTimePicker
         anchors.fill: parent
         z: 999
-        onAccepted: (pickedHour, pickedMinute) => {
-            TimerService.setPomodoroTime(pickedHour, pickedMinute);
+        active: false
+        readonly property bool opened: item?.opened ?? false
+        function open(startHour, startMinute, titleText) {
+            active = true;
+            item.open(startHour, startMinute, titleText);
+        }
+        function close() {
+            item?.close();
+        }
+        function handleKey(event) {
+            return item ? item.handleKey(event) : false;
+        }
+        function releaseKey(event) {
+            item?.releaseKey(event);
+        }
+        sourceComponent: TimePickerPopup {
+            keyboardShortcutsEnabled: true
+            onAccepted: (pickedHour, pickedMinute) => {
+                TimerService.setPomodoroTime(pickedHour, pickedMinute);
+            }
+            onVisibleChanged: {
+                if (!visible && !opened)
+                    Qt.callLater(() => {
+                        if (pomodoroTimePicker.item && !pomodoroTimePicker.item.visible)
+                            pomodoroTimePicker.active = false;
+                    });
+            }
         }
     }
 
@@ -569,8 +750,18 @@ Item {
     component SidebarBanner: Item {
         id: headerRoot
         property bool editMode: false
+        property bool systemHintsVisible: false
         signal editModeToggled(bool newEditMode)
         implicitHeight: 220
+
+        BannerImagePicker {
+            id: bannerPicker
+        }
+
+        UserProfileImagePicker {
+            id: profileImagePicker
+        }
+
 
         Rectangle {
             id: bannerBackground
@@ -685,22 +876,126 @@ Item {
                 AnimatedImage {
                     id: bannerAnimatedImage
                     anchors.fill: parent
-                    source: (wallpaperArea.isBannerAnimated && wallpaperArea.animatedDecodeBox.width > 0)
+                    source: (wallpaperArea.isBannerAnimated && wallpaperArea.animatedDecodeBox.width > 0
+                             && bannerAnimatedImage.keepMovie)
                         ? wallpaperArea.cleanBannerSource
                         : ""
                     sourceSize: wallpaperArea.animatedDecodeBox
                     fillMode: Image.PreserveAspectCrop
                     playing: wallpaperArea.shouldPlayBanner
-                    paused: !wallpaperArea.shouldPlayBanner
-                    // AnimatedImage maps this to QMovie::CacheAll only after
-                    // the display-sized target is known, avoiding both a full
-                    // GIF decode on every loop and a native-size frame cache.
-                    cache: wallpaperArea.animatedDecodeBox.width > 0
+                    // Never toggle `cache` on a live movie: turning it off runs
+                    // QQuickAnimatedImage::clearCache() (qDeleteAll of the frame
+                    // pixmaps) mid-playback, and from then on every frame deletes
+                    // and recreates its pixmap through the global pixmap cache.
+                    // Under Qt 6.12 that path segfaults (memcpy in QtGui) when the
+                    // dashboard closes for the overview/lock screen. Frames are
+                    // released instead by unloading the movie once it is closed.
+                    cache: true
                     asynchronous: true
+                    property bool keepMovie: wallpaperArea.shouldPlayBanner
+                    Connections {
+                        target: wallpaperArea
+                        function onShouldPlayBannerChanged() {
+                            if (wallpaperArea.shouldPlayBanner) {
+                                bannerMovieRelease.stop();
+                                bannerAnimatedImage.keepMovie = true;
+                            } else {
+                                bannerMovieRelease.restart();
+                            }
+                        }
+                    }
+                    // Keep the paused last frame through the close animation.
+                    Timer {
+                        id: bannerMovieRelease
+                        interval: 2000
+                        onTriggered: bannerAnimatedImage.keepMovie = false
+                    }
                     visible: wallpaperArea.isBannerAnimated && status === Image.Ready
                     layer.enabled: true
                     layer.effect: OpacityMask {
                         maskSource: imageMask
+                    }
+                }
+
+                // Edit mode overlay and button for banner image
+                Item {
+                    id: bannerEditContainer
+                    anchors.fill: parent
+                    visible: headerRoot.editMode
+                    opacity: headerRoot.editMode ? 1.0 : 0.0
+
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Appearance.animation.elementMoveFast.type
+                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                        }
+                    }
+
+                    Rectangle {
+                        id: bannerEditScrim
+                        anchors.fill: parent
+                        color: wallpaperMouseArea.containsMouse
+                            ? ColorUtils.transparentize(Appearance.colors.colLayer0, 0.45)
+                            : ColorUtils.transparentize(Appearance.colors.colLayer0, 0.65)
+                        layer.enabled: true
+                        layer.effect: OpacityMask {
+                            maskSource: imageMask
+                        }
+
+                        Behavior on color {
+                            ColorAnimation { duration: Appearance.animation.elementMoveFast.duration }
+                        }
+                    }
+
+                    Rectangle {
+                        id: bannerEditBadge
+                        anchors.centerIn: parent
+                        radius: Appearance.rounding.full
+                        color: wallpaperMouseArea.containsMouse
+                            ? Appearance.colors.colPrimaryContainerHover
+                            : Appearance.colors.colPrimaryContainer
+                        implicitHeight: 34
+                        implicitWidth: bannerEditRow.implicitWidth + 24
+
+                        Behavior on color {
+                            ColorAnimation { duration: Appearance.animation.elementMoveFast.duration }
+                        }
+
+                        Row {
+                            id: bannerEditRow
+                            anchors.centerIn: parent
+                            spacing: 8
+
+                            MaterialSymbol {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "wallpaper"
+                                iconSize: 18
+                                color: Appearance.colors.colOnPrimaryContainer
+                            }
+
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: Translation.tr("Change banner")
+                                color: Appearance.colors.colOnPrimaryContainer
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                font.weight: Font.DemiBold
+                            }
+                        }
+                    }
+
+                    MouseArea {
+                        id: wallpaperMouseArea
+                        anchors.fill: parent
+                        enabled: headerRoot.editMode
+                        cursorShape: headerRoot.editMode ? Qt.PointingHandCursor : Qt.ArrowCursor
+                        hoverEnabled: headerRoot.editMode
+                        onClicked: bannerPicker.pick()
+
+                        StyledToolTip {
+                            extraVisibleCondition: headerRoot.editMode && wallpaperMouseArea.containsMouse
+                            text: Translation.tr("Select banner image")
+                        }
                     }
                 }
             }
@@ -724,6 +1019,7 @@ Item {
             // pfp overlaps both sections
             Item {
                 id: profilePicContainer
+                z: 2
 
                 anchors {
                     left: parent.left
@@ -761,6 +1057,59 @@ Item {
                     fontWeight: Font.Black
                     borderWidth: 4
                     borderColor: Appearance.colors.colLayer1
+                }
+
+                Rectangle {
+                    id: pfpEditBadge
+                    anchors {
+                        right: parent.right
+                        bottom: parent.bottom
+                    }
+                    width: 24
+                    height: 24
+                    radius: Appearance.rounding.full
+                    color: profilePicMouseArea.containsMouse
+                        ? Appearance.colors.colPrimaryContainerHover
+                        : Appearance.colors.colPrimaryContainer
+                    visible: headerRoot.editMode
+                    opacity: headerRoot.editMode ? 1.0 : 0.0
+
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Appearance.animation.elementMoveFast.type
+                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                        }
+                    }
+
+                    Behavior on color {
+                        ColorAnimation { duration: Appearance.animation.elementMoveFast.duration }
+                    }
+
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "edit"
+                        iconSize: 14
+                        color: Appearance.colors.colOnPrimaryContainer
+                    }
+                }
+
+                MouseArea {
+                    id: profilePicMouseArea
+                    anchors.fill: parent
+                    enabled: headerRoot.editMode
+                    cursorShape: headerRoot.editMode ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    hoverEnabled: headerRoot.editMode
+                    onClicked: {
+                        Config.options.sidebar.dashboardHeader.profileImageType = "user_profile";
+                        Config.options.userProfile.imageStyle = "custom";
+                        profileImagePicker.pick();
+                    }
+
+                    StyledToolTip {
+                        extraVisibleCondition: headerRoot.editMode && profilePicMouseArea.containsMouse
+                        text: Translation.tr("Change profile picture")
+                    }
                 }
             }
 
@@ -838,30 +1187,54 @@ Item {
 
             ButtonGroup {
                 id: systemButtonsRow
+                readonly property bool isCircles: Config.options.sidebar.dashboardHeader.buttonsDesign === "circles"
                 anchors {
                     right: parent.right
                     rightMargin: 10
                     verticalCenter: parent.verticalCenter
                 }
                 color: Appearance.colors.colLayer1
-                padding: 4
+                padding: isCircles ? 4 : 4
+                spacing: isCircles ? 4 : 5
 
                 QuickToggleButton {
                     id: editButton
                     toggled: headerRoot.editMode
+                    buttonRadius: systemButtonsRow.isCircles ? (baseHeight / 2) : ((altAction && toggled) ? Appearance?.rounding.normal : sharpMode ? 0 : Math.min(baseHeight, baseWidth) / 2)
+                    buttonRadiusPressed: systemButtonsRow.isCircles ? (baseHeight / 2) : Appearance?.rounding?.small
+                    clickedWidth: systemButtonsRow.isCircles ? baseWidth : baseWidth + (isAtSide ? 10 : 20)
+                    bounce: !systemButtonsRow.isCircles
 
                     visible:
                         Config.options.sidebar.quickToggles.style === "android"
 
                     buttonIcon: "edit"
-                    onClicked: {
-                        headerRoot.editMode = !headerRoot.editMode
-                        headerRoot.editModeToggled(headerRoot.editMode)
+                    contentItem: TaskShortcutContent {
+                        symbol: "edit"
+                        shortcut: "Ctrl\n⇧E"
+                        showHint: headerRoot.systemHintsVisible
+                        iconSize: 22
+                        fill: headerRoot.editMode ? 1 : 0
+                        color: headerRoot.editMode ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer1
                     }
+                    StyledToolTip { text: Translation.tr("Edit quick toggles") + " (Ctrl+Shift+E)" }
+                    onClicked: root.editMode = !root.editMode
                 }
 
                 QuickToggleButton {
                     buttonIcon: "restart_alt"
+                    buttonRadius: systemButtonsRow.isCircles ? (baseHeight / 2) : ((altAction && toggled) ? Appearance?.rounding.normal : sharpMode ? 0 : Math.min(baseHeight, baseWidth) / 2)
+                    buttonRadiusPressed: systemButtonsRow.isCircles ? (baseHeight / 2) : Appearance?.rounding?.small
+                    clickedWidth: systemButtonsRow.isCircles ? baseWidth : baseWidth + (isAtSide ? 10 : 20)
+                    bounce: !systemButtonsRow.isCircles
+                    contentItem: TaskShortcutContent {
+                        symbol: "restart_alt"
+                        shortcut: "Ctrl\n⇧R"
+                        showHint: headerRoot.systemHintsVisible && !headerRoot.editMode
+                        iconSize: 22
+                        color: Appearance.colors.colOnLayer1
+                    }
+                    StyledToolTip { text: Translation.tr("Reload Hyprland & Quickshell") + " (Ctrl+Shift+R)" }
                     onClicked: {
                         Quickshell.execDetached(["hyprctl", "reload"])
                         Quickshell.reload(true)
@@ -870,14 +1243,45 @@ Item {
 
                 QuickToggleButton {
                     buttonIcon: "settings"
-                    onClicked: {
-                        GlobalStates.sidebarRightOpen = false
-                        GlobalStates.toggleSettings()
+                    buttonRadius: systemButtonsRow.isCircles ? (baseHeight / 2) : ((altAction && toggled) ? Appearance?.rounding.normal : sharpMode ? 0 : Math.min(baseHeight, baseWidth) / 2)
+                    buttonRadiusPressed: systemButtonsRow.isCircles ? (baseHeight / 2) : Appearance?.rounding?.small
+                    clickedWidth: systemButtonsRow.isCircles ? baseWidth : baseWidth + (isAtSide ? 10 : 20)
+                    bounce: !systemButtonsRow.isCircles
+                    colBackground: systemButtonsRow.isCircles ? Appearance.colors.colSecondaryContainer : "transparent"
+                    colBackgroundHover: systemButtonsRow.isCircles ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colLayer1Hover
+                    colBackgroundActive: systemButtonsRow.isCircles ? Appearance.colors.colSecondaryContainerActive : Appearance.colors.colLayer1Active
+                    contentItem: TaskShortcutContent {
+                        symbol: "settings"
+                        shortcut: "Ctrl\n⇧S"
+                        showHint: headerRoot.systemHintsVisible && !headerRoot.editMode
+                        iconSize: 22
+                        color: systemButtonsRow.isCircles ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnLayer1
+                        badgeColor: systemButtonsRow.isCircles ? Appearance.colors.colSecondary : Appearance.colors.colPrimary
+                        badgeTextColor: systemButtonsRow.isCircles ? Appearance.colors.colOnSecondary : Appearance.colors.colOnPrimary
                     }
+                    StyledToolTip { text: Translation.tr("Settings") + " (Ctrl+Shift+S)" }
+                    onClicked: root.showSettings()
                 }
 
                 QuickToggleButton {
                     buttonIcon: "power_settings_new"
+                    buttonRadius: systemButtonsRow.isCircles ? (baseHeight / 2) : ((altAction && toggled) ? Appearance?.rounding.normal : sharpMode ? 0 : Math.min(baseHeight, baseWidth) / 2)
+                    buttonRadiusPressed: systemButtonsRow.isCircles ? (baseHeight / 2) : Appearance?.rounding?.small
+                    clickedWidth: systemButtonsRow.isCircles ? baseWidth : baseWidth + (isAtSide ? 10 : 20)
+                    bounce: !systemButtonsRow.isCircles
+                    colBackground: systemButtonsRow.isCircles ? Appearance.colors.colErrorContainer : "transparent"
+                    colBackgroundHover: systemButtonsRow.isCircles ? Appearance.colors.colErrorContainerHover : Appearance.colors.colLayer1Hover
+                    colBackgroundActive: systemButtonsRow.isCircles ? Appearance.colors.colErrorContainerActive : Appearance.colors.colLayer1Active
+                    contentItem: TaskShortcutContent {
+                        symbol: "power_settings_new"
+                        shortcut: "Ctrl\n⇧M"
+                        showHint: headerRoot.systemHintsVisible && !headerRoot.editMode
+                        iconSize: 22
+                        color: systemButtonsRow.isCircles ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnLayer1
+                        badgeColor: systemButtonsRow.isCircles ? Appearance.colors.colError : Appearance.colors.colPrimary
+                        badgeTextColor: systemButtonsRow.isCircles ? Appearance.colors.colOnError : Appearance.colors.colOnPrimary
+                    }
+                    StyledToolTip { text: Translation.tr("Session") + " (Ctrl+Shift+M)" }
                     onClicked: {
                         GlobalStates.sessionOpen = true
                     }
@@ -893,27 +1297,47 @@ Item {
         readonly property bool shown: root[shownPropertyString]
         anchors.fill: parent
 
-        onShownChanged: if (shown)
-            toggleDialogLoader.active = true
-        active: shown
+        // active is managed imperatively only — NO declarative `active: shown` binding.
+        // A declarative binding would destroy the item the moment `shown` goes false,
+        // aborting any exit animation before it plays. Instead:
+        //   • onShownChanged(true)  → build the loader and show the dialog
+        //   • onVisibleChanged(false) → tear down AFTER the exit animation finishes
+        active: false
+
+        onShownChanged: {
+            if (shown) {
+                // Build on demand when first opened.
+                toggleDialogLoader.active = true;
+            } else if (item) {
+                // Tell the dialog to animate out; onVisibleChanged will do the teardown.
+                item.show = false;
+            }
+        }
+
         onActiveChanged: {
-            if (active) {
+            if (active && item) {
                 item.show = true;
                 item.forceActiveFocus();
             }
         }
         onLoaded: {
-            if (item && item.hasOwnProperty("radius")) {
-                item.radius = sidebarRightBackground.defaultRadius;
+            if (item) {
+                if (item.hasOwnProperty("radius")) {
+                    item.radius = sidebarRightBackground.defaultRadius;
+                }
+                item.show = true;
+                item.forceActiveFocus();
             }
         }
         Connections {
             target: toggleDialogLoader.item
             function onDismiss() {
-                toggleDialogLoader.item.show = false;
+                // Dialog wants to close: clear the shown flag (triggers onShownChanged above).
                 root[toggleDialogLoader.shownPropertyString] = false;
             }
             function onVisibleChanged() {
+                // Only tear down once the item is fully invisible (post-animation) and
+                // the shown flag is already false (i.e. we're in the closing path).
                 if (!toggleDialogLoader.item.visible && !root[toggleDialogLoader.shownPropertyString])
                     toggleDialogLoader.active = false;
             }
@@ -969,6 +1393,15 @@ Item {
             function onOpenModesDialog() {
                 root.showModesDialog = true;
             }
+            function onOpenEasyEffectsDialog() {
+                root.showEasyEffectsDialog = true;
+            }
+            function onOpenSmartDevicesDialog() {
+                root.showSmartDevicesDialog = true;
+            }
+            function onOpenTrayDialog() {
+                root.showTrayDialog = true;
+            }
         }
     }
 
@@ -977,7 +1410,14 @@ Item {
         implicitHeight: Math.max(uptimeContainer.implicitHeight, systemButtonsRow.implicitHeight)
         property int entranceTrigger: -1
         property bool editMode: false
+        property bool systemHintsVisible: false
         signal editModeToggled(bool newEditMode)
+        readonly property bool hintVisible: systemHintsVisible && (root.Window.window?.active ?? false)
+
+        UserProfileImagePicker {
+            id: profileImagePicker
+        }
+
 
         DashboardEntranceProgress {
             id: headerEntranceProgress
@@ -1048,6 +1488,61 @@ Item {
                         visible: Config.options.sidebar.dashboardHeader.profileImageType === "user_profile"
                         avatarShape: Config.options.sidebar.dashboardHeader.avatarShape
                     }
+
+                    Rectangle {
+                        id: pfpEditBadge
+                        anchors {
+                            right: parent.right
+                            bottom: parent.bottom
+                            rightMargin: -2
+                            bottomMargin: -2
+                        }
+                        width: 18
+                        height: 18
+                        radius: Appearance.rounding.full
+                        color: profilePicMouseArea.containsMouse
+                            ? Appearance.colors.colPrimaryContainerHover
+                            : Appearance.colors.colPrimaryContainer
+                        visible: systemButtonRowRoot.editMode
+                        opacity: systemButtonRowRoot.editMode ? 1.0 : 0.0
+
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: Appearance.animation.elementMoveFast.duration
+                                easing.type: Appearance.animation.elementMoveFast.type
+                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                            }
+                        }
+
+                        Behavior on color {
+                            ColorAnimation { duration: Appearance.animation.elementMoveFast.duration }
+                        }
+
+                        MaterialSymbol {
+                            anchors.centerIn: parent
+                            text: "edit"
+                            iconSize: 11
+                            color: Appearance.colors.colOnPrimaryContainer
+                        }
+                    }
+
+                    MouseArea {
+                        id: profilePicMouseArea
+                        anchors.fill: parent
+                        enabled: systemButtonRowRoot.editMode
+                        cursorShape: systemButtonRowRoot.editMode ? Qt.PointingHandCursor : Qt.ArrowCursor
+                        hoverEnabled: systemButtonRowRoot.editMode
+                        onClicked: {
+                            Config.options.sidebar.dashboardHeader.profileImageType = "user_profile";
+                            Config.options.userProfile.imageStyle = "custom";
+                            profileImagePicker.pick();
+                        }
+
+                        StyledToolTip {
+                            extraVisibleCondition: systemButtonRowRoot.editMode && profilePicMouseArea.containsMouse
+                            text: Translation.tr("Change profile picture")
+                        }
+                    }
                 }
 
                 ColumnLayout {
@@ -1088,13 +1583,15 @@ Item {
 
         ButtonGroup {
             id: systemButtonsRow
+            readonly property bool isCircles: Config.options.sidebar.dashboardHeader.buttonsDesign === "circles"
             anchors {
                 top: parent.top
                 bottom: parent.bottom
                 right: parent.right
             }
             color: Appearance.colors.colLayer1
-            padding: 4
+            padding: isCircles ? 4 : 4
+            spacing: isCircles ? 4 : 5
             opacity: headerEntranceProgress.progress
             transform: Translate {
                 x: 30 * (1 - headerEntranceProgress.progress)
@@ -1106,26 +1603,45 @@ Item {
                 rotation: -180 * (1 - headerEntranceProgress.progress)
                 toggled: systemButtonRowRoot.editMode
                 buttonIcon: "edit"
-                onClicked: {
-                    systemButtonRowRoot.editMode = !systemButtonRowRoot.editMode;
-                    systemButtonRowRoot.editModeToggled(systemButtonRowRoot.editMode);
+                buttonRadius: systemButtonsRow.isCircles ? (baseHeight / 2) : ((altAction && toggled) ? Appearance?.rounding.normal : sharpMode ? 0 : Math.min(baseHeight, baseWidth) / 2)
+                buttonRadiusPressed: systemButtonsRow.isCircles ? (baseHeight / 2) : Appearance?.rounding?.small
+                clickedWidth: systemButtonsRow.isCircles ? baseWidth : baseWidth + (isAtSide ? 10 : 20)
+                bounce: !systemButtonsRow.isCircles
+                contentItem: TaskShortcutContent {
+                    symbol: "edit"
+                    shortcut: "Ctrl\n⇧E"
+                    showHint: systemButtonRowRoot.hintVisible
+                    iconSize: 22
+                    fill: systemButtonRowRoot.editMode ? 1 : 0
+                    color: systemButtonRowRoot.editMode ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer1
                 }
+                onClicked: root.editMode = !root.editMode
                 StyledToolTip {
-                    text: Translation.tr("Edit quick toggles") + (!systemButtonRowRoot.editMode ? "" : Config.options.sidebar.quickToggles.style === "android" ? Translation.tr("\nLMB to enable/disable\nDrag handles to resize\nDrag icon to swap position") : Translation.tr("\nLMB to show/hide a toggle"))
+                    text: Translation.tr("Edit quick toggles") + " (Ctrl+Shift+E)"
                 }
-
             }
             QuickToggleButton {
                 id: reloadButton
                 rotation: -360 * (1 - headerEntranceProgress.progress)
                 toggled: false
                 buttonIcon: "restart_alt"
+                buttonRadius: systemButtonsRow.isCircles ? (baseHeight / 2) : ((altAction && toggled) ? Appearance?.rounding.normal : sharpMode ? 0 : Math.min(baseHeight, baseWidth) / 2)
+                buttonRadiusPressed: systemButtonsRow.isCircles ? (baseHeight / 2) : Appearance?.rounding?.small
+                clickedWidth: systemButtonsRow.isCircles ? baseWidth : baseWidth + (isAtSide ? 10 : 20)
+                bounce: !systemButtonsRow.isCircles
+                contentItem: TaskShortcutContent {
+                    symbol: "restart_alt"
+                    shortcut: "Ctrl\n⇧R"
+                    showHint: systemButtonRowRoot.hintVisible && !systemButtonRowRoot.editMode
+                    iconSize: 22
+                    color: Appearance.colors.colOnLayer1
+                }
                 onClicked: {
                     Quickshell.execDetached(["hyprctl", "reload"]);
                     Quickshell.reload(true);
                 }
                 StyledToolTip {
-                    text: Translation.tr("Reload Hyprland & Quickshell")
+                    text: Translation.tr("Reload Hyprland & Quickshell") + " (Ctrl+Shift+R)"
                 }
 
             }
@@ -1134,14 +1650,26 @@ Item {
                 rotation: 90 * (1 - headerEntranceProgress.progress)
                 toggled: false
                 buttonIcon: "settings"
-                onClicked: {
-                    GlobalStates.sidebarRightOpen = false;
-                    GlobalStates.toggleSettings();
+                buttonRadius: systemButtonsRow.isCircles ? (baseHeight / 2) : ((altAction && toggled) ? Appearance?.rounding.normal : sharpMode ? 0 : Math.min(baseHeight, baseWidth) / 2)
+                buttonRadiusPressed: systemButtonsRow.isCircles ? (baseHeight / 2) : Appearance?.rounding?.small
+                clickedWidth: systemButtonsRow.isCircles ? baseWidth : baseWidth + (isAtSide ? 10 : 20)
+                bounce: !systemButtonsRow.isCircles
+                colBackground: systemButtonsRow.isCircles ? Appearance.colors.colSecondaryContainer : "transparent"
+                colBackgroundHover: systemButtonsRow.isCircles ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colLayer1Hover
+                colBackgroundActive: systemButtonsRow.isCircles ? Appearance.colors.colSecondaryContainerActive : Appearance.colors.colLayer1Active
+                contentItem: TaskShortcutContent {
+                    symbol: "settings"
+                    shortcut: "Ctrl\n⇧S"
+                    showHint: systemButtonRowRoot.hintVisible && !systemButtonRowRoot.editMode
+                    iconSize: 22
+                    color: systemButtonsRow.isCircles ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnLayer1
+                    badgeColor: systemButtonsRow.isCircles ? Appearance.colors.colSecondary : Appearance.colors.colPrimary
+                    badgeTextColor: systemButtonsRow.isCircles ? Appearance.colors.colOnSecondary : Appearance.colors.colOnPrimary
                 }
+                onClicked: root.showSettings()
                 StyledToolTip {
-                    text: Translation.tr("Settings")
+                    text: Translation.tr("Settings") + " (Ctrl+Shift+S)"
                 }
-
             }
 
             QuickToggleButton {
@@ -1149,14 +1677,31 @@ Item {
                 rotation: -90 * (1 - headerEntranceProgress.progress)
                 toggled: false
                 buttonIcon: "power_settings_new"
+                buttonRadius: systemButtonsRow.isCircles ? (baseHeight / 2) : ((altAction && toggled) ? Appearance?.rounding.normal : sharpMode ? 0 : Math.min(baseHeight, baseWidth) / 2)
+                buttonRadiusPressed: systemButtonsRow.isCircles ? (baseHeight / 2) : Appearance?.rounding?.small
+                clickedWidth: systemButtonsRow.isCircles ? baseWidth : baseWidth + (isAtSide ? 10 : 20)
+                bounce: !systemButtonsRow.isCircles
+                colBackground: systemButtonsRow.isCircles ? Appearance.colors.colErrorContainer : "transparent"
+                colBackgroundHover: systemButtonsRow.isCircles ? Appearance.colors.colErrorContainerHover : Appearance.colors.colLayer1Hover
+                colBackgroundActive: systemButtonsRow.isCircles ? Appearance.colors.colErrorContainerActive : Appearance.colors.colLayer1Active
+                contentItem: TaskShortcutContent {
+                    symbol: "power_settings_new"
+                    shortcut: "Ctrl\n⇧M"
+                    showHint: systemButtonRowRoot.hintVisible && !systemButtonRowRoot.editMode
+                    iconSize: 22
+                    color: systemButtonsRow.isCircles ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnLayer1
+                    badgeColor: systemButtonsRow.isCircles ? Appearance.colors.colError : Appearance.colors.colPrimary
+                    badgeTextColor: systemButtonsRow.isCircles ? Appearance.colors.colOnError : Appearance.colors.colOnPrimary
+                }
                 onClicked: {
                     GlobalStates.sessionOpen = true;
                 }
                 StyledToolTip {
-                    text: Translation.tr("Session")
+                    text: Translation.tr("Session") + " (Ctrl+Shift+M)"
                 }
 
             }
         }
     }
+
 }

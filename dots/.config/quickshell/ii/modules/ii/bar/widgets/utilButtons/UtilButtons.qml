@@ -1,6 +1,7 @@
 import qs
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.services
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
@@ -77,6 +78,22 @@ Item {
                     horizontalAlignment: Qt.AlignHCenter
                     fill: 1
                     text: Persistent.states.screenRecord.paused ? "play_arrow" : "pause"
+                    iconSize: Appearance.font.pixelSize.large
+                    color: Appearance.colors.colOnLayer2
+                }
+            }
+        }
+
+        Loader {
+            active: Config.options.bar.utilButtons.showLiveDraw && LiveDraw.enabled
+            visible: active
+            sourceComponent: CircleUtilButton {
+                Layout.alignment: Qt.AlignVCenter
+                onClicked: LiveDraw.toggle()
+                MaterialSymbol {
+                    horizontalAlignment: Qt.AlignHCenter
+                    fill: LiveDraw.trayOpen ? 1 : 0
+                    text: "draw"
                     iconSize: Appearance.font.pixelSize.large
                     color: Appearance.colors.colOnLayer2
                 }
@@ -196,6 +213,22 @@ Item {
                         case PowerProfile.Balanced: return "airwave"
                         case PowerProfile.Performance: return "local_fire_department"
                     }
+                    iconSize: Appearance.font.pixelSize.large
+                    color: Appearance.colors.colOnLayer2
+                }
+            }
+        }
+
+        Loader {
+            active: Config.options.bar.utilButtons.showPhoneMirror
+            visible: Config.options.bar.utilButtons.showPhoneMirror
+            sourceComponent: CircleUtilButton {
+                Layout.alignment: Qt.AlignVCenter
+                onClicked: PhoneScrcpyService.openMirrorWindow()
+                MaterialSymbol {
+                    horizontalAlignment: Qt.AlignHCenter
+                    fill: GlobalStates.phoneMirrorRunning ? 1 : 0
+                    text: GlobalStates.phoneMirrorRunning ? "screen_share" : "smartphone"
                     iconSize: Appearance.font.pixelSize.large
                     color: Appearance.colors.colOnLayer2
                 }

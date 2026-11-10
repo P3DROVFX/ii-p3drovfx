@@ -58,9 +58,16 @@ ContentPage {
                 options: [
                     { displayName: Translation.tr("Default"), icon: "style", value: "default" },
                     { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" },
-                    { displayName: Translation.tr("Orbs"), icon: "workspaces", value: "orbs" }
+                    { displayName: Translation.tr("Orbs"), icon: "workspaces", value: "orbs" },
+                    { displayName: Translation.tr("Sculpt"), icon: "shapes", value: "sculpt" }
                 ]
             }
+        }
+
+        ExpressiveColorModeSubsection {
+            visible: Config.options.bar.styles.dashboard === "expressive" || Config.options.bar.styles.dashboard === "sculpt"
+            currentValue: Config.options.bar.dashboardButton.colorMode
+            onSelected: newValue => Config.options.bar.dashboardButton.colorMode = String(newValue)
         }
 
         ContentSubsection {
@@ -82,6 +89,42 @@ ContentPage {
             visible: Config.options.bar.styles.dashboard === "orbs"
             materialIcon: "workspaces"
             text: Translation.tr("Orbs gives every indicator its own circle and nothing else — no container behind them. Filled discs carry the accent when the panel is open; outlined rings leave the bar showing through and thicken under the pointer. Both have the same geometry, so switching between them moves nothing.")
+        }
+
+        ContentSubsection {
+            visible: Config.options.bar.styles.dashboard === "sculpt"
+            title: Translation.tr("Sculpt variant")
+
+            ConfigSelectionArray {
+                currentValue: Config.options.bar.dashboardButton.sculptVariant
+                onSelected: newValue => Config.options.bar.dashboardButton.sculptVariant = String(newValue)
+                options: [
+                    { displayName: Translation.tr("Tile"), icon: "alarm", value: "tile" },
+                    { displayName: Translation.tr("Chip"), icon: "label", value: "chip" },
+                    { displayName: Translation.tr("Cluster"), icon: "bubble_chart", value: "cluster" }
+                ]
+            }
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: Config.options.bar.styles.dashboard === "sculpt" && Config.options.bar.dashboardButton.sculptVariant === "tile"
+            materialIcon: "alarm"
+            text: Translation.tr("An alarm tile: the unread count in tall digits beside a small switch that is the panel itself. Opening the panel turns the switch on, and the tile goes vivid and bold.")
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: Config.options.bar.styles.dashboard === "sculpt" && Config.options.bar.dashboardButton.sculptVariant === "chip"
+            materialIcon: "label"
+            text: Translation.tr("One chip holding the indicators and a count badge with the bell. Opening the panel swaps the chip and its badge between the two tones.")
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: Config.options.bar.styles.dashboard === "sculpt" && Config.options.bar.dashboardButton.sculptVariant === "cluster"
+            materialIcon: "bubble_chart"
+            text: Translation.tr("Every indicator in a bubble of its own size and height, ending in the bell's bubble. Opening the panel settles them into one line, one size and the vivid tone.")
         }
     }
 
@@ -307,6 +350,10 @@ ContentPage {
                                     switch (String(cueRow.cueGroup.channel)) {
                                     case "wifi":
                                         return wifiPreview;
+                                    case "ethernet":
+                                        return ethernetPreview;
+                                    case "hotspot":
+                                        return hotspotPreview;
                                     case "bluetooth":
                                         return bluetoothPreview;
                                     case "volume":
@@ -397,6 +444,20 @@ ContentPage {
     Component {
         id: wifiPreview
         WifiIcon {
+            iconSize: 26
+            color: Appearance.colors.colOnSurface
+        }
+    }
+    Component {
+        id: ethernetPreview
+        EthernetIcon {
+            iconSize: 26
+            color: Appearance.colors.colOnSurface
+        }
+    }
+    Component {
+        id: hotspotPreview
+        HotspotIcon {
             iconSize: 26
             color: Appearance.colors.colOnSurface
         }

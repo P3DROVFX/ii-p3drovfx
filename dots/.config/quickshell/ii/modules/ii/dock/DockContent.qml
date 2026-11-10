@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Widgets
@@ -13,6 +14,9 @@ import Quickshell.Services.Mpris
 
 import "./widgets"
 import "DockReorder.js" as DockReorder
+import "DockOverflow.js" as DockOverflow
+import "DockMagnification.js" as DockMagnification
+import "utilities/DockUtilityCatalog.js" as DockUtilityCatalog
 
 Item {
     id: root
@@ -20,6 +24,26 @@ Item {
     signal togglePinRequested
 
     property var currentScreen: null
+    // Isolate monitors: a dock lists the running apps of its own monitor only.
+    // Off unless dock.isolateMonitors is on (Settings > Dock > "Isolate monitors").
+    function _toplevelsOnThisMonitor(toplevels) {
+        const isolate = Config.options?.dock?.isolateMonitors ?? false
+        if (!isolate || !root.currentScreen)
+            return toplevels ?? []
+        return (toplevels ?? []).filter(t => t?.screens?.includes(root.currentScreen))
+    }
+
+    // A dock keeps an app when it is pinned -- pinned apps are launchers and stay
+    // on every monitor -- or when it has a window on this monitor.
+    function _appVisibleHere(app) {
+        const isolate = Config.options?.dock?.isolateMonitors ?? false
+        if (!isolate || !root.currentScreen || !app)
+            return true
+        return app.pinned || root._toplevelsOnThisMonitor(app.toplevels).length > 0
+    }
+
+    // Main-axis room the tray has on this screen (Dock.qml); 0 = unknown.
+    property real availableMainExtent: 0
     property bool isPinned: false
     property bool dockRevealed: false
     property bool dockWindowVisible: true
@@ -39,13 +63,18 @@ Item {
     readonly property string dockPos: dock.dockEffectivePosition
     readonly property string effectiveDockStyle: {
         const st = (Config.options && Config.options.dock) ? Config.options.dock.dockStyle : ""
-        if (st === "islands" || st === "dynamic_island" || st === "hug" || st === "floating")
+        if (st === "islands" || st === "dynamic_island" || st === "hug" || st === "floating" || st === "transparent" || st === "full_width" || st === "full_width_concave")
             return st
         return (Config.options && Config.options.dock && Config.options.dock.islandsStyle) ? "islands" : "floating"
     }
     readonly property bool isDynamicIsland: effectiveDockStyle === "dynamic_island"
     readonly property bool isHug: effectiveDockStyle === "hug"
-    readonly property bool isAttachedToEdge: isDynamicIsland || isHug
+    readonly property bool isTransparent: effectiveDockStyle === "transparent"
+    // Both full-width styles share the flush layout; the concave one adds
+    // the two inward corners at the screen's sides (Dock.qml).
+    readonly property bool isFullWidthConcave: effectiveDockStyle === "full_width_concave"
+    readonly property bool isFullWidth: effectiveDockStyle === "full_width" || isFullWidthConcave
+    readonly property bool isAttachedToEdge: isDynamicIsland || isHug || isFullWidth
     readonly property bool islandsStyle: effectiveDockStyle === "islands"
     readonly property real islandSpacing: Math.max(0, (Config.options && Config.options.dock && Config.options.dock.islandSpacing !== undefined) ? Config.options.dock.islandSpacing : 8)
     readonly property real islandExtraGap: islandsStyle
@@ -65,7 +94,7 @@ Item {
     readonly property real baseVisualWidth: isVertical ? buttonSlotSize : baseMetrics.totalMainExtent
     readonly property real baseVisualHeight: isVertical ? baseMetrics.totalMainExtent : buttonSlotHeight
 
-    readonly property bool requestDockShow: (previewPopupLoader.item && previewPopupLoader.item.visible) || anyContextMenuOpen
+    readonly property bool requestDockShow: (previewPopupLoader.item && previewPopupLoader.item.active) || anyContextMenuOpen
 
     // PanelWindow.visible stays true while the auto-hide surface is moved off
     // screen. Expensive visual widgets must follow reveal, not only the
@@ -127,9 +156,33 @@ Item {
             return Appearance.animation.dockMagnificationScale.balanced;
         }
     }
+    // One lens, not one spring per icon: every icon reads the same smoothed
+    // pointer and the same enter/exit strength, so neighbours never drift out
+    // of phase. The pointer is measured against the unmagnified layout, and
+    // the lens itself is a critically damped spring: a fast sweep glides
+    // through the icons instead of snapping from one to the next.
+    property real magnificationPointerTarget: 0
     property real magnificationPointerMain: 0
+    property real magnificationStrength: 0
     property bool magnificationHovered: false
+    // How far the pointer is into the band between the window edge and the
+    // icons, 0..1. The lens follows it both ways, so entering or leaving
+    // through that edge grows and shrinks it with the cursor, and resting
+    // inside the band holds an in-between magnification.
+    property real magnificationCrossReach: 0
+    // The pointer sample the lens is fed from. A mouse can report hundreds of
+    // positions per second and each one used to run the cross-reach mapping
+    // and two mapToItem() calls for a value only the next frame could show;
+    // a move now records the point and wakes the frame loop instead.
+    property var _pointerItem: null
+    property point _pointerRaw: Qt.point(0, 0)
+    property bool _pointerPending: false
+    // Spring velocities of the two lens channels: main-axis units per second
+    // for the pointer, strength units per second for the grow-in.
+    property real _pointerVelocity: 0
+    property real _strengthVelocity: 0
     readonly property bool magnificationInteractionActive: enableMagnification
+        && !DockPresets.magnificationSuspended
         && magnificationHovered
         && !dragging
         && !islandDragging
@@ -138,16 +191,201 @@ Item {
         && !externalDragOver
     readonly property real magnificationPointerContentMain: magnificationPointerMain
         + (isVertical ? scrollArea.contentY : scrollArea.contentX)
-    readonly property string magnificationHoveredIslandId: {
-        if (!islandsStyle || !hoveredSlot)
-            return "";
-        let item = hoveredSlot;
-        for (let depth = 0; item && depth < 8; depth++) {
-            if (typeof item._islandId !== "undefined")
-                return String(item._islandId);
-            item = item.parent;
+    readonly property bool magnificationOverflowing: isVertical
+        ? scrollArea.contentHeight > scrollArea.height + 1
+        : scrollArea.contentWidth > scrollArea.width + 1
+    // The lens measures distance with island gaps squeezed out, so crossing
+    // a gap costs nothing whatever the island spacing: a pointer inside a gap
+    // sits on the seam between both islands and the lens holds still.
+    readonly property real magnificationLensPointer: _lensCoordinateFor(magnificationPointerContentMain)
+    // The same pointer in slot space, where every item spans the room its
+    // growth needs: what the lens field is measured in.
+    readonly property real magnificationSlotPointer: DockMagnification.toSlotSpace(magnificationLensPointer, baseMetrics.items)
+
+    function _lensCoordinateFor(p) {
+        let removed = 0;
+        for (const m of baseMetrics.items) {
+            const gap = m.bodyStart - m.baseStart;
+            if (gap <= 0)
+                continue;
+            if (p <= m.baseStart)
+                break;
+            removed += Math.min(gap, p - m.baseStart);
         }
-        return "";
+        return p - removed;
+    }
+
+    // macOS keeps the point under the cursor fixed: the dock grows by the
+    // magnified extra left of the pointer on the left and the rest on the
+    // right. The dock centre moves by half the difference.
+    readonly property real magnificationCenterShift: {
+        if (!enableMagnification || !magnificationDynamicSpacing || magnificationStrength <= 0
+                || magnificationOverflowing)
+            return 0;
+        const items = baseMetrics.items;
+        const p = magnificationPointerContentMain;
+        let before = 0;
+        let after = 0;
+        for (let i = 0; i < items.length; i++) {
+            const extra = _magnificationExtraForIndex(i);
+            if (extra <= 0)
+                continue;
+            const m = items[i];
+            const f = Math.max(0, Math.min(1, (p - m.bodyStart) / Math.max(1, m.bodyExtent)));
+            before += extra * f;
+            after += extra * (1 - f);
+        }
+        return (after - before) / 2;
+    }
+
+    // A context menu freezes the lens where it is, so the icon under the
+    // menu keeps its size instead of shrinking away from it.
+    property real _lensFrozenStrength: 0
+    onAnyContextMenuOpenChanged: {
+        if (!anyContextMenuOpen)
+            return;
+        _lensFrozenStrength = magnificationStrength;
+        magnificationPointerTarget = magnificationPointerMain;
+    }
+    readonly property real _lensStrengthTarget: anyContextMenuOpen ? _lensFrozenStrength
+        : magnificationInteractionActive ? magnificationCrossReach : 0
+    property bool _lensSettled: true
+    // Exit run: strength it started from and progress 0..1; -1 when idle.
+    property real _lensExitFrom: 0
+    property real _lensExitProgress: -1
+    // Drag targets use baseMetrics, so the visual lens can finish its exit.
+    on_LensStrengthTargetChanged: _lensSettled = false
+
+    // Every pointer sample and every layout change the lens reads goes through
+    // here; the frame loop itself stops as soon as both channels are at rest.
+    function _wakeLens() {
+        root._lensSettled = false;
+    }
+
+    function resetMagnificationImmediate() {
+        magnificationHovered = false;
+        magnificationCrossReach = 0;
+        magnificationStrength = 0;
+        magnificationPointerMain = 0;
+        magnificationPointerTarget = 0;
+        _pointerVelocity = 0;
+        _strengthVelocity = 0;
+        _pointerPending = false;
+        _lensFrozenStrength = 0;
+        _lensExitProgress = -1;
+        _lensSettled = true;
+    }
+
+    FrameAnimation {
+        running: root.enableMagnification && !root._lensSettled
+        onTriggered: root._stepMagnification(frameTime)
+    }
+
+    // Resolves the pointer sample the events left behind. This is the only
+    // place that maps between the hover area and the tray, and it runs once per
+    // frame rather than once per mouse event.
+    function _resolvePointerTarget() {
+        _pointerPending = false;
+        const item = root._pointerItem;
+        if (!item)
+            return;
+        const point = root._pointerRaw;
+        root._updateMagnificationCrossReach(item, point.x, point.y);
+        if (root.magnificationOverflowing) {
+            const targetContainer = root.isVertical ? unifiedColumn : unifiedRow;
+            const mapped = item.mapToItem(targetContainer, point.x, point.y);
+            const visualExtra = root.isVertical
+                ? Math.max(0, root.visualHeight - root.baseVisualHeight)
+                : Math.max(0, root.visualWidth - root.baseVisualWidth);
+            const pointerMain = root.isVertical ? mapped.y : mapped.x;
+            root.magnificationPointerTarget = pointerMain - visualExtra / 2;
+            return;
+        }
+        // `item` never moves and the unmagnified dock is centred in it, so
+        // this stays independent of the lens it drives.
+        root.magnificationPointerTarget = root.isVertical
+            ? point.y - item.height / 2 + root.baseVisualHeight / 2
+            : point.x - item.width / 2 + root.baseVisualWidth / 2;
+    }
+
+    function _stepMagnification(dt) {
+        const profile = root.magnificationMotionProfile;
+        const step = Math.min(Math.max(dt, 0), 0.05);
+        const reduced = Appearance.reducedMotion;
+
+        if (root._pointerPending)
+            root._resolvePointerTarget();
+
+        const pointerTarget = root.magnificationPointerTarget;
+        const strengthTarget = root._lensStrengthTarget;
+
+        // Entering: start the lens where the pointer is, not where it left.
+        let pointer = root.magnificationStrength <= 0.001 ? pointerTarget : root.magnificationPointerMain;
+        let pointerVelocity = root.magnificationStrength <= 0.001 ? 0 : root._pointerVelocity;
+        if (reduced) {
+            pointer = pointerTarget;
+            pointerVelocity = 0;
+        } else {
+            const tracked = DockMagnification.springStep(pointer, pointerVelocity, pointerTarget,
+                DockMagnification.trackingOmega(profile.pointerLag), step);
+            pointer = tracked.position;
+            pointerVelocity = tracked.velocity;
+        }
+
+        let strength = root.magnificationStrength;
+        let strengthVelocity = root._strengthVelocity;
+        if (strengthTarget <= 0 && strength > 0 && !reduced && profile.exitDuration > 0) {
+            // Past the window edge there are no pointer samples. Usually the
+            // band has already brought this near zero; a flick that skipped it
+            // settles on an ease-in-out rather than a decay that reads as a snap.
+            if (root._lensExitProgress < 0) {
+                root._lensExitFrom = strength;
+                root._lensExitProgress = 0;
+            }
+            const progress = Math.min(1, root._lensExitProgress + step / (profile.exitDuration / 1000));
+            root._lensExitProgress = progress;
+            strength = root._lensExitFrom * 0.5 * (1 + Math.cos(Math.PI * progress));
+            strengthVelocity = 0;
+            if (progress >= 1)
+                strength = 0;
+        } else {
+            root._lensExitProgress = -1;
+            if (reduced) {
+                strength = strengthTarget;
+                strengthVelocity = 0;
+            } else {
+                const grown = DockMagnification.springStep(strength, strengthVelocity, strengthTarget,
+                    DockMagnification.settleOmega(profile.strengthDuration), step);
+                strength = grown.position;
+                strengthVelocity = grown.velocity;
+            }
+        }
+
+        // Snap the tail. A spring only approaches its target, and a lens
+        // creeping for a hundredth of a pixel would hold the frame loop — and
+        // with it the whole magnified layout — alive long after the motion is
+        // over. Below a tenth of a pixel per frame the snap is invisible.
+        let pointerAtRest = false;
+        if (Math.abs(pointerTarget - pointer) < 0.05 && Math.abs(pointerVelocity) < 8) {
+            pointer = pointerTarget;
+            pointerVelocity = 0;
+            pointerAtRest = true;
+        }
+        let strengthAtRest = false;
+        if (Math.abs(strengthTarget - strength) < 0.002 && Math.abs(strengthVelocity) < 0.02) {
+            strength = strengthTarget;
+            strengthVelocity = 0;
+            strengthAtRest = true;
+        }
+
+        root.magnificationPointerMain = pointer;
+        root._pointerVelocity = pointerVelocity;
+        root.magnificationStrength = strength;
+        root._strengthVelocity = strengthVelocity;
+        if (pointerAtRest && strengthAtRest && !root._pointerPending) {
+            root._lensExitProgress = -1;
+            root._lensSettled = true;
+        }
     }
 
     // Stable metrics are based only on the unscaled layout. Animated wrapper
@@ -156,23 +394,46 @@ Item {
         const items = [];
         const spacing = Config.options?.dock?.iconSpacing ?? 0;
         let cursor = 0;
+        let removedGap = 0;
         const itemCount = root.flattenedItems.length;
         for (let i = 0; i < itemCount; i++) {
             const leadingGap = root._leadingIslandGapForIndex(i);
             const bodyExtent = root._baseItemMainExtentForIndex(i);
             const mainExtent = leadingGap + bodyExtent;
+            const profile = root._magnificationProfileForItem(root.flattenedItems[i]);
+            removedGap += leadingGap;
             items.push({
                 baseStart: cursor,
                 bodyStart: cursor + leadingGap,
                 baseCenter: cursor + leadingGap + bodyExtent / 2,
+                lensCenter: cursor + leadingGap + bodyExtent / 2 - removedGap,
                 baseExtent: mainExtent,
                 bodyExtent: bodyExtent,
                 islandId: root._islandIdForIndex(i),
-                magnifiable: root._isMagnifiableItem(root.flattenedItems[i])
+                magnifiable: profile !== null,
+                magFactor: profile ? profile.factor : 0,
+                fromBody: profile ? profile.fromBody === true : false,
+                // The extent the slot grows by has to be the extent the
+                // component scales, or the neighbours would move either too
+                // little (overlap) or too much (a gap).
+                magExtent: profile ? (profile.fromBody ? bodyExtent : Appearance.sizes.dockButtonSize) : 0
             });
             cursor += mainExtent;
             if (i < itemCount - 1)
                 cursor += spacing;
+        }
+        // Slot space (DockMagnification.slotCell): each item's cell on the
+        // lens axis, in pixels and in growth units, tiling both.
+        const iconPitch = Math.max(1, root.buttonSlotSize + spacing);
+        let slotCursor = 0;
+        for (const m of items) {
+            m.lensCell = Math.max(1, m.bodyExtent + spacing);
+            m.lensStart = m.lensCenter - m.lensCell / 2;
+            m.slotCell = DockMagnification.slotCell(m.lensCell, m.magExtent, m.magFactor, m.fromBody,
+                Appearance.sizes.dockButtonSize, iconPitch);
+            m.slotStart = slotCursor;
+            m.slotCenter = slotCursor + m.slotCell / 2;
+            slotCursor += m.slotCell;
         }
         return {
             items: items,
@@ -193,18 +454,28 @@ Item {
             for (const metric of baseMetrics.items) {
                 if (!metric.magnifiable)
                     continue;
-                if (root.islandsStyle && metric.islandId !== candidate.islandId)
-                    continue;
-                total += root.magnificationSafetyExtraForFactor(root.magnificationFactorForDistance(Math.abs(candidate.baseCenter - metric.baseCenter)));
+                total += root._magnificationLayoutExtraFor(metric, root.magnificationFactorForDistance(Math.abs(candidate.slotCenter - metric.slotCenter)), true);
             }
             maximum = Math.max(maximum, total);
         }
         return Math.ceil(maximum + Appearance.sizes.elevationMargin);
     }
 
+    readonly property real magnificationRenderScale: enableMagnification ? Math.max(1, magnificationScale) : 1
     readonly property real maximumMagnificationCrossExtra: enableMagnification
         ? Math.ceil(Appearance.sizes.dockButtonSize * Math.max(0, magnificationScale - 1.0))
         : 0
+    // Magnified content grows away from the screen edge the dock sits on, the
+    // way the icons do. Shared so a dock widget cannot pick a different one.
+    readonly property int magnificationTransformOrigin: {
+        if (dockPos === "top")
+            return Item.Top;
+        if (dockPos === "left")
+            return Item.Left;
+        if (dockPos === "right")
+            return Item.Right;
+        return Item.Bottom;
+    }
     readonly property real effectiveIconSpacing: Config.options?.dock?.iconSpacing ?? 0
     readonly property bool enableAppGroups: Config.options?.dock?.enableAppGroups ?? true
     readonly property int maxGroupApps: 6
@@ -273,6 +544,9 @@ Item {
         case "sports": return "sports";
         case "livePreview": return "livePreview";
         case "phone": return "phone";
+        case "tasks": return "tasks";
+        case "widgetStack": return "widgetStack";
+        case "utility": return "utility";
         default: return "single";
         }
     }
@@ -316,6 +590,12 @@ Item {
             return "widget:livePreview";
         case "phone":
             return "widget:phone";
+        case "tasks":
+            return "widget:tasks";
+        case "utility":
+            return "widget:" + String(item.orderKey ?? index);
+        case "widgetStack":
+            return "widget:stack";
         default:
             return "single:" + String(item.orderKey ?? index);
         }
@@ -405,6 +685,9 @@ Item {
         if (!item)
             return [];
 
+        if (item.autoGroup)
+            return Array.from(item.memberKeys ?? []);
+
         if (item.type === "appGroup") {
             return (item.appIds ?? []).map(appId => root._orderKeyForAppId(currentOrder, appId));
         }
@@ -440,8 +723,38 @@ Item {
         root.islandDragCursorMain = 0;
     }
 
+    // Settings → Dock → "Lock arrangement": nothing starts a drag, so nothing
+    // moves, groups or leaves the dock by accident.
+    readonly property bool reorderLocked: Config.options?.dock?.lockReorder ?? false
+
+    // ── Edit Mode, on the dock ─────────────────────────────────────────────
+    // Apps wear their own pin/unpin badges (DockAppButton). Everything else
+    // gets an edit layer from the delegate: a remove badge, and a click that
+    // opens its menu (size, stack, options). The (+) tile at the end adds.
+    readonly property bool editLayerActive: GlobalStates.editMode && (GlobalStates.editProgress > 0.85 || Appearance.reducedMotion)
+    readonly property string editAddKey: "__editAdd"
+    readonly property alias dockEdit: dockEditController
+    DockEditController {
+        id: dockEditController
+        dockContent: root
+    }
+    DockEditMenu {
+        id: dockEditMenu
+        dockContent: root
+        controller: dockEditController
+    }
+    readonly property bool editMenuOpen: dockEditMenu.active && !dockEditMenu.isClosing
+    readonly property var editMenuTarget: dockEditMenu.target
+    function openEditMenu(anchor, item) {
+        dockEditMenu.openFor(anchor, item, item?.type === "editAdd" ? "add" : "item");
+    }
+    onEditLayerActiveChanged: {
+        if (!root.editLayerActive)
+            dockEditMenu.close();
+    }
+
     function startIslandDrag(islandId, scenePosition) {
-        if (!root.islandsStyle || root.dragging || root.anyContextMenuOpen)
+        if (root.reorderLocked || !root.islandsStyle || root.dragging || root.anyContextMenuOpen)
             return false;
 
         const sourceIndex = root._islandSegmentIndexForId(islandId);
@@ -549,14 +862,45 @@ Item {
         });
     }
 
+    // Per-item share of the lens. A single icon takes all of it; a widget
+    // drawn as one wide card takes a muted share, because the same linear
+    // factor applied to a 3-4 slot body would sweep its neighbours several
+    // times as far as an icon does. `fromBody` says which extent the slot
+    // grows by: the icon square, or the item's own body (always the body the
+    // component actually draws, so the slot can never grow less than the card).
+    function _magnificationProfileForType(type) {
+        switch (type) {
+        case "app":
+        case "appGroup":
+        case "file":
+        case "action":
+        case "phone":
+            return { factor: 1.0, fromBody: false };
+        case "media":
+        case "weather":
+            return { factor: 0.5, fromBody: true };
+        case "sports":
+            return { factor: 0.4, fromBody: true };
+        case "livePreview":
+            return { factor: 0.45, fromBody: true };
+        case "tasks":
+        case "widgetStack":
+            return { factor: 0.5, fromBody: true };
+        default:
+            return null;
+        }
+    }
+
+    // A square utility tile is an icon-sized body and takes the icon's share;
+    // a wide one is a card like the other widgets.
+    function _magnificationProfileForItem(item) {
+        if (item?.type === "utility")
+            return root._utilitySlots(item) > 1 ? { factor: 0.5, fromBody: true } : { factor: 1.0, fromBody: false };
+        return root._magnificationProfileForType(item?.type);
+    }
+
     function _isMagnifiableItem(item) {
-        if (!item)
-            return false;
-        return item.type === "app"
-            || item.type === "appGroup"
-            || item.type === "file"
-            || item.type === "action"
-            || item.type === "phone";
+        return root._magnificationProfileForItem(item) !== null;
     }
 
     function _rawItemMainExtent(item) {
@@ -564,12 +908,19 @@ Item {
             return buttonSlotSize;
         switch (item.type) {
         case "media":
+            return buttonSlotSize * root.mediaSlots;
         case "weather":
             return buttonSlotSize * 3;
         case "sports":
             return buttonSlotSize * sportsWidgetSlots;
         case "livePreview":
             return buttonSlotSize * livePreviewWidgetSlots;
+        case "tasks":
+            return buttonSlotSize * 3;
+        case "widgetStack":
+            return root.widgetStackExtent;
+        case "utility":
+            return buttonSlotSize * root._utilitySlots(item);
         default:
             return buttonSlotSize;
         }
@@ -609,36 +960,61 @@ Item {
     }
 
     function magnificationFactorForDistance(distancePx) {
-        const radius = Math.max(1, magnificationInfluenceRadiusPx);
-        if (distancePx >= radius)
-            return 0;
-        const t = Math.max(0, Math.min(1, distancePx / radius));
-        if (magnificationCurve === "gaussian") {
-            const sigma = radius / 2.5;
-            const cutoff = Math.exp(-(radius * radius) / (2 * sigma * sigma));
-            return Math.max(0, (Math.exp(-(distancePx * distancePx) / (2 * sigma * sigma)) - cutoff) / (1 - cutoff));
-        }
-        return 0.5 * (1 + Math.cos(Math.PI * t));
+        return DockMagnification.factorForDistance(distancePx, magnificationInfluenceRadiusPx, magnificationCurve);
     }
 
-    function magnificationLayoutExtraForFactor(factor) {
-        if (!magnificationDynamicSpacing)
-            return 0;
-        return Appearance.sizes.dockButtonSize * Math.max(0, magnificationScale - 1.0) * factor;
+    // The main-axis room one item needs at `factor` of the lens. The slot grows
+    // by exactly the amount the item's content grows, so magnifying an item
+    // slides its neighbours instead of drawing over them.
+    function magnificationLayoutExtraForFactor(factor, extent, contentFactor) {
+        return DockMagnification.layoutExtra(factor, magnificationScale, extent, contentFactor, magnificationDynamicSpacing);
     }
 
-    function magnificationSafetyExtraForFactor(factor) {
-        return Appearance.sizes.dockButtonSize * Math.max(0, magnificationScale - 1.0) * factor;
+    // The same room, without the spacing switch: what the window has to reserve
+    // whether or not the layout actually takes it.
+    function magnificationSafetyExtraForFactor(factor, extent, contentFactor) {
+        return DockMagnification.layoutExtra(factor, magnificationScale, extent, contentFactor, true);
     }
 
-    function _targetMagScaleForIndex(index) {
+    function _magnificationContentScaleForWeight(weight, contentFactor) {
+        return DockMagnification.contentScale(weight, magnificationScale, contentFactor);
+    }
+
+
+    // 0..1 lens weight of one item: distance falloff times enter/exit strength,
+    // measured in slot space. An icon samples the field at its centre; a card
+    // spans several slot units and averages the field over them, so it grows
+    // and shrinks with the lens as one smooth piece.
+    function _magnificationWeightForIndex(index) {
         const metric = baseMetrics.items[index];
-        if (!metric || !metric.magnifiable || !magnificationInteractionActive)
-            return 1.0;
-        if (root.islandsStyle && (!root.magnificationHoveredIslandId || metric.islandId !== root.magnificationHoveredIslandId))
-            return 1.0;
-        const factor = magnificationFactorForDistance(Math.abs(magnificationPointerContentMain - metric.baseCenter));
-        return 1.0 + (magnificationScale - 1.0) * factor;
+        if (!enableMagnification || !metric || metric.magFactor <= 0 || magnificationStrength <= 0)
+            return 0;
+        if (metric.fromBody)
+            return DockMagnification.cellWeight(metric.slotCenter, Math.max(1, metric.slotCell / 2),
+                magnificationSlotPointer, magnificationInfluenceRadiusPx, magnificationCurve, magnificationStrength, 1);
+        const distance = Math.abs(magnificationSlotPointer - metric.slotCenter);
+        return DockMagnification.weightForDistance(distance, magnificationInfluenceRadiusPx, magnificationCurve, magnificationStrength);
+    }
+
+    // The main-axis room an item takes at `weight`: exactly what its content
+    // grows (slot space already evens out the growth along the dock).
+    function _magnificationLayoutExtraFor(metric, weight, dynamicSpacing) {
+        if (!metric)
+            return 0;
+        return DockMagnification.layoutExtra(weight, magnificationScale, metric.magExtent, metric.magFactor, dynamicSpacing);
+    }
+
+    // 0 when the item never magnifies, 1 for a single icon, less for a widget.
+    function _magnificationContentFactorForIndex(index) {
+        const metric = baseMetrics.items[index];
+        return metric ? metric.magFactor : 0;
+    }
+
+    function _magnificationExtraForIndex(index) {
+        const metric = baseMetrics.items[index];
+        if (!metric)
+            return 0;
+        return root._magnificationLayoutExtraFor(metric, _magnificationWeightForIndex(index), magnificationDynamicSpacing);
     }
 
     // Compatibility helper for tooltip/preview code. Main button scale is
@@ -682,7 +1058,10 @@ Item {
     Timer {
         id: magnificationExitTimer
         interval: Appearance.animation.dockMagnificationScale.hoverExitGrace
-        onTriggered: root.magnificationHovered = false
+        onTriggered: {
+            root.magnificationHovered = false;
+            root.magnificationCrossReach = 0;
+        }
     }
 
     function setMagnificationHovered(value) {
@@ -694,16 +1073,44 @@ Item {
         }
     }
 
+    // Called from the hover handler on every mouse move. It only records the
+    // sample: the mapping to the lens and the cross-reach pass run once per
+    // frame in _resolvePointerTarget(), because a mouse reporting hundreds of
+    // positions a second would otherwise run both for every one of them.
     function updateMagnificationPointerFrom(item, x, y) {
-        if (!item)
+        if (!item || !root.enableMagnification || DockPresets.magnificationSuspended || root.anyContextMenuOpen)
             return;
-        const targetContainer = root.isVertical ? unifiedColumn : unifiedRow;
-        const mapped = item.mapToItem(targetContainer, x, y);
-        const visualExtra = root.isVertical
-            ? Math.max(0, root.visualHeight - root.baseVisualHeight)
-            : Math.max(0, root.visualWidth - root.baseVisualWidth);
-        const pointerMain = root.isVertical ? mapped.y : mapped.x;
-        root.magnificationPointerMain = pointerMain - visualExtra / 2;
+        root._pointerItem = item;
+        root._pointerRaw = Qt.point(x, y);
+        root._pointerPending = true;
+        root._wakeLens();
+    }
+
+    function _updateMagnificationCrossReach(item, x, y) {
+        const local = item.mapToItem(root, x, y);
+        const origin = root.mapToItem(item, 0, 0);
+        let distance = 0;
+        let band = 0;
+        switch (root.dockPos) {
+        case "top":
+            distance = local.y - root.height;
+            band = item.height - (origin.y + root.height);
+            break;
+        case "left":
+            distance = local.x - root.width;
+            band = item.width - (origin.x + root.width);
+            break;
+        case "right":
+            distance = -local.x;
+            band = origin.x;
+            break;
+        default:
+            distance = -local.y;
+            band = origin.y;
+            break;
+        }
+        const t = band > 1 ? Math.max(0, Math.min(1, 1 - distance / band)) : 1;
+        root.magnificationCrossReach = t * t * (3 - 2 * t);
     }
 
     readonly property var activePlayer: MprisController.activePlayer
@@ -740,12 +1147,21 @@ Item {
         root.hoveredButtonCenter = btn.mapToItem(null, btn.width / 2, btn.height / 2);
     }
 
+    // The center only feeds the open preview popup and the group popup: both
+    // exist only while the pointer dwells on one item, which is also the only
+    // time the value matters. Trailing a lens in motion was a mapToItem() per
+    // geometry change per frame for a consumer that was not on screen.
+    readonly property bool hoveredCenterTrackingActive:
+        root.dockWindowVisible && !root.dragging && !root.islandDragging
+        && (root.requestDockShow || root.lastHoveredButton?.containsMouse === true)
+
     onLastHoveredButtonChanged: root.updateHoveredButtonCenter()
     onVisualWidthChanged: root.updateHoveredButtonCenter()
     onVisualHeightChanged: root.updateHoveredButtonCenter()
 
     Connections {
         target: root.lastHoveredButton
+        enabled: root.hoveredCenterTrackingActive
         function onXChanged() { root.updateHoveredButtonCenter(); }
         function onYChanged() { root.updateHoveredButtonCenter(); }
         function onWidthChanged() { root.updateHoveredButtonCenter(); }
@@ -756,11 +1172,135 @@ Item {
     readonly property bool showPin: Config.options?.dock?.showPinButton ?? true
     readonly property bool showOverview: Config.options?.dock?.showOverviewButton ?? true
     readonly property bool showTrash: Config.options?.dock?.showTrashButton ?? true
+    // ── Widget stack ───────────────────────────────────────────────────────
+    // Widgets placed in the stack share one slot and are not drawn on their
+    // own. A member that has nothing to show right now (no player, no game)
+    // drops out of the stack the way it would drop out of the dock.
+    readonly property bool widgetStackEnabled: Config.options?.dock?.enableWidgetStack ?? false
+    readonly property var widgetStackMembers: {
+        if (!root.widgetStackEnabled)
+            return [];
+        const wanted = Config.options?.dock?.widgetStackItems ?? [];
+        const members = [];
+        for (const type of wanted) {
+            if (members.indexOf(type) < 0 && root._widgetAvailable(type))
+                members.push(type);
+        }
+        return members;
+    }
+    readonly property real widgetStackExtent: {
+        if (root.isVertical)
+            return root.buttonSlotSize;
+        let widest = root.buttonSlotSize;
+        for (const type of root.widgetStackMembers)
+            widest = Math.max(widest, root._rawItemMainExtent({ type: type }));
+        return widest;
+    }
+    // The page on show, by type: kept here so rebuilding the model (an app
+    // opening or closing) does not turn the stack back to its first page.
+    property string widgetStackCurrentType: ""
+
+    function _widgetAvailable(type) {
+        switch (type) {
+        case "media": return root.showMusicPlayer;
+        case "weather": return true;
+        case "sports": return !root.isVertical && SportsService.allGames.length > 0;
+        case "livePreview": return true;
+        case "tasks": return true;
+        default: return false;
+        }
+    }
+
+    function _inWidgetStack(type) {
+        return root.widgetStackMembers.indexOf(type) >= 0;
+    }
+
+    // One slot, like a vertical dock draws it; vertical docks are always square.
+    readonly property bool mediaSquare: Config.options?.dock?.mediaSquare ?? false
+    readonly property real mediaSlots: root.mediaSquare ? 1 : 3
     readonly property bool showMedia: (Config.options?.dock?.enableMediaWidget ?? false) && root.showMusicPlayer
-    readonly property bool showWeather: Config.options?.dock?.enableWeatherWidget ?? false
+        && !root._inWidgetStack("media")
+    readonly property bool showWeather: (Config.options?.dock?.enableWeatherWidget ?? false) && !root._inWidgetStack("weather")
     readonly property bool showSports: (Config.options?.dock?.enableSportsWidget ?? true) && !root.isVertical
-        && SportsService.allGames.length > 0
-    readonly property bool showLivePreview: Config.options?.dock?.enableLivePreviewWidget ?? false
+        && SportsService.allGames.length > 0 && !root._inWidgetStack("sports")
+    readonly property bool showLivePreview: (Config.options?.dock?.enableLivePreviewWidget ?? false) && !root._inWidgetStack("livePreview")
+    readonly property bool showTasks: (Config.options?.dock?.enableTasksWidget ?? false) && !root._inWidgetStack("tasks")
+    // Utility widgets, as saved ({ kind, wide }), and the ones the dock shows.
+    readonly property var utilityEntries: DockUtilityCatalog.normalize(Config.options?.dock?.utilityWidgets ?? [])
+    readonly property var utilityEntryByKey: {
+        const map = {};
+        for (const entry of root.utilityEntries)
+            map[DockUtilityCatalog.orderKey(entry.kind)] = entry;
+        // A renamed kind keeps the place its old key holds in dock.order.
+        for (const oldKind in DockUtilityCatalog.aliases) {
+            const entry = map[DockUtilityCatalog.orderKey(DockUtilityCatalog.aliases[oldKind])];
+            if (entry)
+                map[DockUtilityCatalog.orderKey(oldKind)] = entry;
+        }
+        return map;
+    }
+    function _utilityItem(entry) {
+        return {
+            type: "utility",
+            kind: entry.kind,
+            wide: entry.wide,
+            orderKey: DockUtilityCatalog.orderKey(entry.kind)
+        };
+    }
+    function _utilitySlots(item) {
+        return DockUtilityCatalog.slotsFor(item, root.isVertical);
+    }
+    // Utility hosts by kind, for the drag-off export above.
+    property var _utilityHosts: ({})
+    function registerUtilityHost(kind, host) {
+        root._utilityHosts[kind] = host;
+    }
+    function unregisterUtilityHost(kind, host) {
+        if (root._utilityHosts[kind] === host)
+            delete root._utilityHosts[kind];
+    }
+    function _utilityExport(kind) {
+        const host = root._utilityHosts[kind];
+        return host ? host.exportFiles() : null;
+    }
+
+    // Renamed utility kinds: rewrite their old dock.order keys once, so a
+    // stale key can never hold the place of the current one.
+    function _migrateUtilityKeys() {
+        if (!Config.ready)
+            return;
+        const order = Array.from(Config.options.dock.order ?? []);
+        let changed = false;
+        const next = [];
+        for (const key of order) {
+            const kind = DockUtilityCatalog.kindFromOrderKey(key);
+            const current = kind.length > 0 ? DockUtilityCatalog.orderKey(kind) : key;
+            if (current !== key)
+                changed = true;
+            if (kind.length > 0 && next.indexOf(current) >= 0) {
+                changed = true;
+                continue;
+            }
+            next.push(current);
+        }
+        if (changed)
+            root._writeDockOrder(next);
+        const saved = Array.from(Config.options.dock.utilityWidgets ?? []);
+        if (saved.some(entry => DockUtilityCatalog.canonical(entry?.kind ?? entry) !== (entry?.kind ?? entry)))
+            Config.options.dock.utilityWidgets = DockUtilityCatalog.normalize(saved);
+    }
+
+    function setUtilityWide(kind, wide) {
+        Config.options.dock.utilityWidgets = DockUtilityCatalog.withKind(Config.options.dock.utilityWidgets ?? [], kind, wide);
+    }
+    function removeUtility(kind) {
+        Config.options.dock.utilityWidgets = DockUtilityCatalog.withoutKind(Config.options.dock.utilityWidgets ?? [], kind);
+        const key = DockUtilityCatalog.orderKey(kind);
+        const order = Array.from(Config.options.dock.order ?? []);
+        if (order.indexOf(key) >= 0)
+            root._writeDockOrder(order.filter(entry => entry !== key));
+    }
+
     readonly property bool showPhone: (Config.options?.dock?.showPhoneButton ?? true)
         && KdeConnectService.activeReachable
 
@@ -773,6 +1313,13 @@ Item {
     property bool dragging: false
     property bool _reordering: false
     property bool _suppressTranslateAnim: false
+    property bool reorderMotionActive: false
+    Timer {
+        id: reorderMotionTimer
+        interval: Appearance.animation.elementMoveFast.duration
+        onTriggered: root.reorderMotionActive = false
+    }
+    property string dragSourceKey: ""
     property int dragSourceIndex: -1
     property real dragCursorX: 0
     property real dragStartCursorX: 0
@@ -784,6 +1331,14 @@ Item {
     property var _dragGroupable: []
     property var _dragState: DockReorder.createDragState()
     property real _groupDropProgress: 0
+    property bool exportingShortcut: false
+    Item {
+        id: shortcutDrag
+        Drag.dragType: Drag.None
+        Drag.supportedActions: Qt.CopyAction
+        Drag.proposedAction: Qt.CopyAction
+        Drag.imageSourceSize: Qt.size(48, 48)
+    }
 
     // The pointer must penetrate a neighbour by this fraction of that
     // neighbour's own extent before it takes over as the drop target. Without
@@ -795,10 +1350,8 @@ Item {
     readonly property real groupDropCenterZone: 0.5
     readonly property int groupDropDwellMs: 220
 
-    // Drop settling. The offset lives on the root rather than the delegate so
-    // it survives the Repeater rebuild that the committed model triggers: the
-    // dropped item keeps the position the pointer left it at and slides into
-    // its new slot instead of the dock snapping to the new order.
+    // The gesture owns settling; the stable delegate retains its visual position
+    // while the committed order catches up with the preview.
     property string _dropSettleKey: ""
     property real _dropSettleOffset: 0
     NumberAnimation {
@@ -846,15 +1399,18 @@ Item {
     // begins.
     //
     // The geometry comes from `baseMetrics` — the model's own layout — and not
-    // from live delegates. Delegates are still carrying the magnified sizes on
-    // the frame the drag starts (magnification only switches off with the next
-    // layout pass) and they pick up preview translations right afterwards, so
-    // reading them back would snapshot a layout that never existed.
+    // from live delegates. Delegates retain magnification during its animated
+    // exit and pick up preview translations, so reading them back would
+    // snapshot a transient layout rather than the resting drop targets.
+    // Where the Row/Column starts in root coordinates when the slots were
+    // taken: slots are in root space, delegates position in the container's.
+    property real _dragSlotOrigin: 0
     function _buildDragSlots() {
         const metrics = root.baseMetrics.items;
         const container = root.isVertical ? unifiedColumn : unifiedRow;
         const origin = container ? container.mapToItem(root, 0, 0) : Qt.point(0, 0);
         const originMain = root.isVertical ? origin.y : origin.x;
+        root._dragSlotOrigin = originMain;
 
         var slots = [];
         for (var i = 0; i < metrics.length; i++) {
@@ -881,7 +1437,7 @@ Item {
             return false;
         if (target.type === "app")
             return target.appId !== source.appId;
-        return target.type === "appGroup";
+        return target.type === "appGroup" && target.autoGroup !== true;
     }
 
     function _buildGroupableFlags() {
@@ -1314,7 +1870,7 @@ Item {
     // closed over copies of the order (a no-op outside the mode).
     function _writeDockOrder(nextOrder) {
         const before = Array.from(Config.options?.dock?.order ?? []);
-        const after = Array.from(nextOrder);
+        const after = Array.from(nextOrder).filter(entry => entry !== root.editAddKey);
         Config.options.dock.order = after;
         TaskbarApps.syncPinnedFileOrder();
         GlobalStates.editHistoryPush({
@@ -1323,45 +1879,42 @@ Item {
         });
     }
 
-    function moveDockItem(sourceItem, targetItem) {
+    // Commits a drop exactly as the preview showed it: the dragged item ends
+    // at the target's index of the visible list, and the order is rebuilt
+    // from that list (DockReorder.orderFromVisual) — dock.order alone does not
+    // name every item the dock shows, so a move resolved inside it landed
+    // wherever that list happened to end.
+    function moveDockItem(sourceIndex, targetIndex) {
+        const items = root.flattenedItems;
+        const sourceItem = items[sourceIndex];
+        if (items[targetIndex]?.type === "editAdd")
+            targetIndex = Math.max(0, targetIndex - 1);
+        const targetItem = items[targetIndex];
+        if (sourceItem?.type === "editAdd" || sourceItem?.autoGroup)
+            return false;
         if (!sourceItem || !targetItem || sourceItem.orderKey === targetItem.orderKey)
             return false;
-
-        const currentOrder = Array.from(Config.options?.dock?.order ?? []);
-        const sourceIsGroup = sourceItem.type === "appGroup";
-        const sourceIds = sourceIsGroup ? sourceItem.appIds : [];
-        const sourceKeys = sourceIsGroup
-            ? sourceIds.map(appId => root._orderKeyForAppId(currentOrder, appId))
-            : [sourceItem.orderKey];
-        const sourceKeySet = {};
-        for (const key of sourceKeys)
-            sourceKeySet[key] = true;
-
-        let targetOriginalIndex = -1;
-        if (targetItem.type === "appGroup") {
-            const anchorId = targetItem.appIds[0];
-            targetOriginalIndex = currentOrder.findIndex(entry => root._orderEntryAppId(entry) === anchorId);
-        } else if (targetItem.type === "app") {
-            targetOriginalIndex = currentOrder.findIndex(entry => root._orderEntryAppId(entry) === targetItem.appId);
-        } else {
-            targetOriginalIndex = currentOrder.indexOf(targetItem.orderKey);
-        }
-
-        if (sourceIsGroup && targetItem.type === "appGroup"
+        if (sourceItem.type === "appGroup" && targetItem.type === "appGroup"
                 && sourceItem.groupId === targetItem.groupId)
             return false;
 
-        let insertionIndex = currentOrder.length;
-        if (targetOriginalIndex >= 0) {
-            insertionIndex = 0;
-            for (let i = 0; i < targetOriginalIndex; i++) {
-                if (!sourceKeySet[currentOrder[i]])
-                    insertionIndex++;
-            }
-        }
+        const currentOrder = Array.from(Config.options?.dock?.order ?? []);
+        const keysOf = function (item) {
+            if (item.autoGroup)
+                return Array.from(item.memberKeys);
+            return item.type === "appGroup"
+                ? item.appIds.map(appId => root._orderKeyForAppId(currentOrder, appId))
+                : [String(item.orderKey)];
+        };
 
-        const nextOrder = currentOrder.filter(entry => !sourceKeySet[entry]);
-        nextOrder.splice(insertionIndex, 0, ...sourceKeys);
+        const sequence = items.slice();
+        sequence.splice(sourceIndex, 1);
+        sequence.splice(targetIndex, 0, sourceItem);
+        const visualKeys = sequence
+            .filter(item => item && item.__exiting !== true)
+            .map(keysOf);
+
+        const nextOrder = DockReorder.orderFromVisual(currentOrder, visualKeys, keysOf(sourceItem));
         if (nextOrder.length === currentOrder.length
                 && nextOrder.every((entry, index) => entry === currentOrder[index]))
             return false;
@@ -1396,7 +1949,14 @@ Item {
         // user's anchors are all stale — pruning against it would wipe them.
         if (current.length === 0 || root.modelItems.length === 0)
             return;
-        const live = root.modelItems.map(function (item) { return String(item?.orderKey ?? ""); });
+        // Apps folded into the overflow group are still on the dock.
+        const live = [];
+        for (const item of root.modelItems) {
+            if (item?.autoGroup)
+                live.push(...item.memberKeys);
+            else
+                live.push(String(item?.orderKey ?? ""));
+        }
         const next = DockReorder.pruneManualKeys(current, live);
         if (next.length !== current.length)
             Config.options.dock.manualOrder = next;
@@ -1438,6 +1998,7 @@ Item {
     function _resetDragState() {
         dragging = false;
         dragSourceIndex = -1;
+        dragSourceKey = "";
         _dragTargetIndex = -1;
         _groupDropTargetIndex = -1;
         _groupDropWillCreate = false;
@@ -1448,6 +2009,7 @@ Item {
         _dragGroupable = [];
         root._clearGroupDwell();
         DockReorder.resetDragState(root._dragState);
+        root._refreshFlattenedItems();
     }
 
     // Where the dragged item's body will start once `target` has been
@@ -1484,6 +2046,7 @@ Item {
     }
 
     function finishDrag() {
+        reorderMotionTimer.restart();
         var src = dragSourceIndex;
         var tgt = _dragTargetIndex;
         var srcEntry = (src >= 0 && src < flattenedItems.length) ? flattenedItems[src] : null;
@@ -1521,7 +2084,7 @@ Item {
                 var tgtEntry = flattenedItems[tgt];
                 // An entry that is mid-exit no longer has a place in the order.
                 if (srcEntry && tgtEntry && tgtEntry.__exiting !== true && srcEntry.__exiting !== true
-                        && root.moveDockItem(srcEntry, tgtEntry))
+                        && root.moveDockItem(src, tgt))
                     landedIndex = tgt;
             }
         }
@@ -1541,6 +2104,9 @@ Item {
     }
 
     function cancelDrag() {
+        if (root.exportingShortcut)
+            return;
+        reorderMotionTimer.restart();
         // A cancelled drag is still a drag that ends somewhere: send the item
         // home with the same settle instead of teleporting it.
         if (dragging && dragSourceIndex >= 0 && dragSourceIndex < flattenedItems.length) {
@@ -1556,11 +2122,20 @@ Item {
     }
 
     function startItemDrag(delegateIndex, child, eventX, eventY) {
+        if (root.reorderLocked)
+            return;
+        const wrapper = root.getItemWrapper(delegateIndex);
+        const visibleStart = wrapper ? wrapper.mapToItem(root,
+            root.isVertical ? 0 : wrapper.leadingIslandGap,
+            root.isVertical ? wrapper.leadingIslandGap : 0) : null;
+        reorderMotionTimer.stop();
+        root.reorderMotionActive = true;
         _suppressTranslateAnim = true;
         dropSettleAnimation.stop();
         root._dropSettleKey = "";
         root._dropSettleOffset = 0;
         dragSourceIndex = delegateIndex;
+        dragSourceKey = String(root.flattenedItems[delegateIndex]?.orderKey ?? "");
         _dragTargetIndex = delegateIndex;
         var mapped = child.mapToItem(root, eventX, eventY);
         var mappedCoord = isVertical ? mapped.y : mapped.x;
@@ -1574,6 +2149,10 @@ Item {
         DockReorder.resetDragState(root._dragState);
         root._dragState.targetIndex = delegateIndex;
         root._dragSlots = root._buildDragSlots();
+        if (visibleStart && root._dragSlots[delegateIndex]) {
+            const visibleMain = root.isVertical ? visibleStart.y : visibleStart.x;
+            dragStartCursorX -= visibleMain - root._dragSlots[delegateIndex].start;
+        }
         root._dragGroupable = root._buildGroupableFlags();
         buttonHovered = false;
         if (previewPopupLoader.item)
@@ -1587,11 +2166,44 @@ Item {
         if (!dragging)
             return;
         var mapped = child.mapToItem(root, eventX, eventY);
+        const outside = root.isVertical ? (mapped.x < -16 || mapped.x > root.width + 16)
+            : (mapped.y < -16 || mapped.y > root.height + 16);
+        const entry = root.flattenedItems[root.dragSourceIndex];
+        // A utility widget that holds files (shelf, screenshots…) hands them
+        // over when it is dragged off the dock, like a pinned file does.
+        const utilityExport = outside && entry?.type === "utility" ? root._utilityExport(entry.kind) : null;
+        if (PanelFamily.isIi && outside && entry
+            && (entry.type === "app" || entry.type === "appGroup" || entry.type === "file" || utilityExport)) {
+            const appIds = entry.type === "appGroup" ? Array.from(entry.appIds) : [entry.appId];
+            shortcutDrag.Drag.mimeData = utilityExport
+                ? { "text/uri-list": utilityExport.uriList }
+                : entry.type === "file"
+                ? { "text/uri-list": "file://" + encodeURI(entry.path).replace(/#/g, "%23").replace(/\?/g, "%3F") }
+                : { "application/x-ii-desktop-shortcut": JSON.stringify({
+                    type: entry.type === "appGroup" ? "group" : "app", apps: appIds }) };
+            shortcutDrag.Drag.imageSource = Quickshell.iconPath(utilityExport ? utilityExport.icon
+                : entry.type === "file" ? "folder"
+                : TaskbarApps.getCachedIcon(appIds[0]), "image-missing");
+            root.exportingShortcut = true;
+            root._clearGroupDwell();
+            // Native QDrag owns the pointer until release/cancel. Keep the model
+            // frozen until it returns; exporting never changes pins or dock order.
+            shortcutDrag.Drag.active = true;
+            shortcutDrag.Drag.startDrag(Qt.CopyAction);
+            shortcutDrag.Drag.active = false;
+            root.exportingShortcut = false;
+            shortcutDrag.Drag.mimeData = {};
+            shortcutDrag.Drag.imageSource = "";
+            root.cancelDrag();
+            return;
+        }
         dragCursorX = isVertical ? mapped.y : mapped.x;
         recomputeDragTarget();
     }
 
     function endItemDrag() {
+        if (root.exportingShortcut || !root.dragging)
+            return;
         finishDrag();
     }
 
@@ -1606,7 +2218,9 @@ Item {
         for (var i = 0; i < allApps.length; i++) {
             var a = allApps[i];
             if (a.pinned)
-                m[a.appId] = a;
+                m[a.appId] = Object.assign({}, a, {
+                    toplevels: root._toplevelsOnThisMonitor(a.toplevels)
+                });
         }
         return m;
     }
@@ -1616,8 +2230,9 @@ Item {
         var allApps = TaskbarApps.apps ?? [];
         for (var i = 0; i < allApps.length; i++) {
             var a = allApps[i];
-            if (!a.pinned && a.toplevels && a.toplevels.length > 0)
-                m[a.appId] = a;
+            var visible = root._toplevelsOnThisMonitor(a.toplevels);
+            if (!a.pinned && visible.length > 0)
+                m[a.appId] = Object.assign({}, a, { toplevels: visible });
         }
         return m;
     }
@@ -1713,7 +2328,10 @@ Item {
     readonly property var modelItems: {
         var result = [];
         var order = Config.options.dock.order ?? [];
-        var allApps = TaskbarApps.apps ?? [];
+        // Only apps this dock may show: pinned, or running here. Without this an
+        // `app:` order entry whose app runs on another monitor would be pushed
+        // back in through allAppIds, with no toplevels.
+        var allApps = (TaskbarApps.apps ?? []).filter(app => root._appVisibleHere(app));
         var allAppIds = [];
         for (var i = 0; i < allApps.length; i++)
             allAppIds.push(allApps[i].appId);
@@ -1730,6 +2348,7 @@ Item {
             }
         }
 
+        const orderHasWidgetStack = order.indexOf("widgetStack") >= 0;
         for (var oi = 0; oi < order.length; oi++) {
             var entry = order[oi];
 
@@ -1747,6 +2366,20 @@ Item {
                     }
                     continue;
                 }
+            }
+
+            // The stack sits where its own key was dropped; before it was
+            // ever dragged, where its first member used to be.
+            if (entry === "widgetStack" || root._inWidgetStack(entry)) {
+                if (!seenOrderKeys["widgetStack"] && root.widgetStackMembers.length > 0
+                        && (entry === "widgetStack" || !orderHasWidgetStack)) {
+                    result.push({
+                        type: "widgetStack",
+                        orderKey: "widgetStack"
+                    });
+                    seenOrderKeys["widgetStack"] = true;
+                }
+                continue;
             }
 
             if (entry === "pin" && root.showPin) {
@@ -1794,6 +2427,18 @@ Item {
                     orderKey: "livePreview"
                 });
                 seenOrderKeys["livePreview"] = true;
+            } else if (root.utilityEntryByKey[entry]) {
+                const utility = root._utilityItem(root.utilityEntryByKey[entry]);
+                if (!seenOrderKeys[utility.orderKey]) {
+                    result.push(utility);
+                    seenOrderKeys[utility.orderKey] = true;
+                }
+            } else if (entry === "tasks" && root.showTasks) {
+                result.push({
+                    type: "tasks",
+                    orderKey: "tasks"
+                });
+                seenOrderKeys["tasks"] = true;
             } else if (entry === "phone" && root.showPhone) {
                 result.push({
                     type: "phone",
@@ -2045,6 +2690,36 @@ Item {
             seenOrderKeys["livePreview"] = true;
         }
 
+        // Widgets new to an order saved before they existed (or never placed)
+        // land before the trailing actions, without rewriting the order.
+        const trailingInsertIndex = function () {
+            let index = result.length;
+            while (index > 0) {
+                const item = result[index - 1];
+                if (item.type === "action"
+                        && (item.actionId === "trash" || item.actionId === "overview" || item.actionId === "pin"))
+                    index--;
+                else
+                    break;
+            }
+            return index;
+        };
+        if (root.showTasks && !seenOrderKeys["tasks"]) {
+            result.splice(trailingInsertIndex(), 0, { type: "tasks", orderKey: "tasks" });
+            seenOrderKeys["tasks"] = true;
+        }
+        for (const entry of root.utilityEntries) {
+            const key = DockUtilityCatalog.orderKey(entry.kind);
+            if (!seenOrderKeys[key]) {
+                result.splice(trailingInsertIndex(), 0, root._utilityItem(entry));
+                seenOrderKeys[key] = true;
+            }
+        }
+        if (root.widgetStackMembers.length > 0 && !seenOrderKeys["widgetStack"]) {
+            result.splice(trailingInsertIndex(), 0, { type: "widgetStack", orderKey: "widgetStack" });
+            seenOrderKeys["widgetStack"] = true;
+        }
+
         if (Config.options?.dock?.smartGrouping) {
             result = DockReorder.applySmartGrouping(
                 result,
@@ -2053,7 +2728,114 @@ Item {
             );
         }
 
-        return root._coalesceLauncherItems(result);
+        let items = root._coalesceLauncherItems(result);
+        const editAdd = root.editLayerActive ? { type: "editAdd", orderKey: root.editAddKey } : null;
+        items = root._foldOverflow(items, editAdd);
+        // Edit Mode's (+): the way to put a widget on the dock from the dock.
+        // Never part of dock.order (_writeDockOrder drops its key).
+        if (editAdd)
+            items.push(editAdd);
+        return items;
+    }
+
+    // ── Overflow group ─────────────────────────────────────────────────────
+    // Widgets and pinned launchers can leave too little room for the apps that
+    // keep opening; past the tray the row is clipped. Instead, the least
+    // recently used apps fold into one group that exists only in the derived
+    // model (never in dock.order or dock.appGroups) and unfolds by itself as
+    // soon as there is room again.
+    readonly property bool autoOverflowEnabled: Config.options?.dock?.autoOverflowGroup ?? true
+    readonly property string overflowGroupId: "__overflow"
+    // Last use per normalised app id. Mutated in place: a focus change must not
+    // rebuild the model unless it can change what is folded.
+    property var _appLastUsed: ({})
+    property var _overflowFoldedIds: ({})
+    property int _overflowRecencyRevision: 0
+
+    function _noteAppUsed(appId) {
+        const id = TaskbarApps.normalizeAppId(appId ?? "");
+        if (!id)
+            return;
+        root._appLastUsed[id] = Date.now();
+        // Only a folded app becoming the most recent changes the fold.
+        if (root._overflowFoldedIds[id])
+            root._overflowRecencyRevision++;
+    }
+
+    Connections {
+        target: ToplevelManager
+        function onActiveToplevelChanged() {
+            root._noteAppUsed(ToplevelManager.activeToplevel?.appId);
+        }
+    }
+
+    function _appRecency(item) {
+        const id = TaskbarApps.normalizeAppId(item?.appId ?? "");
+        if (!id)
+            return 0;
+        // An app seen for the first time counts as just used: a window that
+        // just opened is the last thing that should fold.
+        if (root._appLastUsed[id] === undefined && (item.appData?.toplevels?.length ?? 0) > 0)
+            root._appLastUsed[id] = Date.now();
+        return root._appLastUsed[id] ?? 0;
+    }
+
+    // The row's main-axis extent as the layout will build it, from the item
+    // list alone (baseMetrics reads flattenedItems, which this decides).
+    function _estimateMainExtent(items) {
+        const count = items.length;
+        if (count === 0)
+            return 0;
+        const spacing = Config.options?.dock?.iconSpacing ?? 0;
+        const separator = Math.max(root.dotMargin, root.sepThickness * 2);
+        const smart = Config.options?.dock?.smartGrouping ?? false;
+        let total = spacing * (count - 1);
+        for (let i = 0; i < count; i++) {
+            total += root._rawItemMainExtent(items[i]);
+            if (!root.effectiveShowDividers)
+                continue;
+            if (i > 0 && (smart ? root.getItemCategory(items[i]) !== root.getItemCategory(items[i - 1])
+                                : root.isSpecialItem(items[i])))
+                total += separator;
+            if (!smart && i < count - 1 && root.isSpecialItem(items[i]) && !root.isSpecialItem(items[i + 1]))
+                total += separator;
+        }
+        if (root.islandsStyle)
+            total += Math.max(0, root._buildIslandSegments(items).length - 1) * root.islandExtraGap;
+        return total;
+    }
+
+    function _makeOverflowGroupItem(members) {
+        return {
+            type: "appGroup",
+            autoGroup: true,
+            groupId: root.overflowGroupId,
+            appIds: members.map(item => item.appId),
+            apps: members.map(item => item.appData),
+            memberKeys: members.map(item => String(item.orderKey)),
+            orderKey: "group:" + root.overflowGroupId
+        };
+    }
+
+    function _foldOverflow(items, editAdd) {
+        root._overflowRecencyRevision;
+        const folded = {};
+        let next = items;
+        if (root.autoOverflowEnabled) {
+            const outcome = DockOverflow.fold(items, {
+                budget: root.availableMainExtent,
+                measure: list => root._estimateMainExtent(editAdd ? list.concat([editAdd]) : list),
+                recencyOf: item => root._appRecency(item),
+                makeGroup: members => root._makeOverflowGroupItem(members)
+            });
+            next = outcome.items;
+            for (const item of items) {
+                if (outcome.foldedKeys.indexOf(String(item.orderKey)) >= 0)
+                    folded[TaskbarApps.normalizeAppId(item.appId ?? "")] = true;
+            }
+        }
+        root._overflowFoldedIds = folded;
+        return next;
     }
 
     // ── Presence transitions ───────────────────────────────────────────────
@@ -2068,10 +2850,8 @@ Item {
     property var _exitingRecords: []
     property var _enteringKeys: ({})
 
-    // Only an item that is genuinely new to the dock plays an entrance. Every
-    // delegate is rebuilt whenever the model array is replaced — a running app
-    // gaining a window is enough — and without this the whole dock would
-    // re-animate on each of those.
+    // Only genuinely new identities enter; payload and order updates preserve
+    // the existing delegates, pointer grabs and open menus.
     function _isEnteringKey(orderKey) {
         const at = root._enteringKeys[String(orderKey ?? "")];
         return at !== undefined && (Date.now() - at) < root.itemTransitionDuration;
@@ -2083,7 +2863,16 @@ Item {
     // it — the icon would blink out and only then start animating away.
     property var flattenedItems: []
 
+    StableDockModel {
+        id: dockItemModel
+        sourceValues: root.flattenedItems
+        keyFunction: value => DockReorder.identity(value)
+    }
+
     function _refreshFlattenedItems() {
+        // Preserve the gesture snapshot when apps/windows change in the background.
+        if (root.dragging && !root._reordering)
+            return;
         root.flattenedItems = root._exitingRecords.length === 0
             ? root.modelItems
             : DockReorder.mergeExitingItems(
@@ -2114,7 +2903,11 @@ Item {
         root._refreshFlattenedItems();
     }
 
-    Component.onCompleted: root._refreshFlattenedItems()
+    Component.onCompleted: {
+        root._refreshFlattenedItems();
+        GlobalStates.registerDockContent(root);
+    }
+    Component.onDestruction: GlobalStates.unregisterDockContent(root)
 
     Timer {
         id: exitPurgeTimer
@@ -2134,6 +2927,7 @@ Item {
         running: true
         onTriggered: {
             root._itemTransitionsReady = true;
+            root._migrateUtilityKeys();
             root._pruneManualPlacements();
         }
     }
@@ -2143,7 +2937,8 @@ Item {
         if (!item)
             return false;
         var t = item.type;
-        return t === "media" || t === "weather" || t === "sports" || t === "livePreview" || t === "phone" || t === "action";
+        return t === "media" || t === "weather" || t === "sports" || t === "livePreview" || t === "phone" || t === "action"
+            || t === "tasks" || t === "widgetStack" || t === "utility";
     }
 
     function getItemCategory(item) {
@@ -2161,6 +2956,12 @@ Item {
             return 4;
         if (t === "livePreview")
             return 5;
+        if (t === "tasks")
+            return 6;
+        if (t === "utility")
+            return 7;
+        if (t === "widgetStack")
+            return 3;
         if (t === "phone")
             return 25;
         if (t === "appGroup" && item.appIds?.length > 0)
@@ -2219,14 +3020,25 @@ Item {
         id: scrollArea
         anchors.fill: parent
         clip: false
-        contentWidth: root.isVertical ? parent.width : unifiedRow.width
-        contentHeight: root.isVertical ? unifiedColumn.height : parent.height
+        // Full width lays the content out on a canvas as wide as the tray so the
+        // row can be centred on it; the content is narrower than the tray there,
+        // so nothing scrolls and contentX stays where the lens expects it.
+        contentWidth: root.isVertical ? parent.width : Math.max(unifiedRow.width, parent.width)
+        contentHeight: root.isVertical ? Math.max(unifiedColumn.height, parent.height) : parent.height
         interactive: root.isVertical ? contentHeight > height : contentWidth > width
         flickableDirection: root.isVertical ? Flickable.VerticalFlick : Flickable.HorizontalFlick
 
         WheelHandler {
             onWheel: event => {
-                let d = (event.angleDelta.y !== 0) ? event.angleDelta.y : event.angleDelta.x;
+                if (DockPresets.canSwitchPresets) {
+                    if (DockPresets.handleWheelScroll(event.angleDelta.y, event.angleDelta.x)) {
+                        event.accepted = true;
+                        return;
+                    }
+                }
+                const vertical = event.angleDelta.y !== 0;
+                const d = ScrollWheel.step(vertical ? event.angleDelta.y : event.angleDelta.x,
+                    vertical ? event.pixelDelta.y : event.pixelDelta.x, Config.options?.interactions?.scrolling, event.phase);
                 if (root.isVertical)
                     scrollArea.contentY = Math.max(0, Math.min(scrollArea.contentHeight - scrollArea.height, scrollArea.contentY - d));
                 else
@@ -2244,7 +3056,10 @@ Item {
             height: root.isVertical ? unifiedColumn.height : parent.height
 
             Repeater {
-                model: root.islandSegments
+                // Island surfaces are an alternate style. Do not instantiate
+                // one hidden surface per segment for floating/transparent
+                // docks, where neither the surface nor its shadow is used.
+                model: root.islandsStyle ? root.islandSegments : null
 
                 delegate: DockIslandSurface {
                     required property var modelData
@@ -2273,6 +3088,10 @@ Item {
                     islandKind: modelData.kind
                     dockPosition: root.dockPos
                     cornerRadius: root.dockCornerRadius
+                    // A live lens resizes this surface every frame; the shadow
+                    // then has to be drawn rather than cached into a texture
+                    // that would be thrown away on the next frame.
+                    resizing: root.enableMagnification && root.magnificationStrength > 0.001
                     x: root.isVertical ? 0 : (firstWrapper?.bodyMainStart ?? 0)
                     y: root.isVertical ? (firstWrapper?.bodyMainStart ?? 0) : 0
                     width: root.isVertical
@@ -2295,7 +3114,10 @@ Item {
             height: root.isVertical ? unifiedColumn.height : parent.height
 
             Repeater {
-                model: root.islandSegments
+                // The interaction layer is just as expensive as the visual
+                // layer when it creates a DragHandler per island. Keep it
+                // empty until islands are the selected dock style.
+                model: root.islandsStyle ? root.islandSegments : null
 
                 delegate: Item {
                     required property var modelData
@@ -2332,6 +3154,15 @@ Item {
 
                     Item {
                         id: islandDragStrip
+                        // Edit Mode only. The strip lies on the slots' outer
+                        // padding, which is inside every button's hit area (and
+                        // a magnified icon grows across it), and a DragHandler
+                        // swallows any press under it, even one that never
+                        // moves: outside the mode it showed a grab cursor over
+                        // the icons and ate their clicks. Disabled, presses go
+                        // straight to the buttons; in Edit Mode clicks are
+                        // inert anyway, so arranging islands loses nothing.
+                        enabled: GlobalStates.editMode
                         width: root.isVertical
                             ? Math.max(root.dotMargin, root.sepThickness * 2)
                             : parent.width
@@ -2339,10 +3170,11 @@ Item {
                             ? parent.height
                             : Math.max(root.dotMarginV, root.sepThickness * 2)
 
-                        anchors.top: !root.isVertical && root.dockPos === "bottom" ? parent.top : undefined
-                        anchors.bottom: !root.isVertical && root.dockPos === "top" ? parent.bottom : undefined
-                        anchors.left: root.isVertical && root.dockPos === "right" ? parent.left : undefined
-                        anchors.right: root.isVertical && root.dockPos === "left" ? parent.right : undefined
+                        // On the island's edge away from the screen. Positions, not
+                        // anchors: an anchor set back to undefined keeps the old
+                        // coordinate, so a strip moved with the dock stayed put.
+                        x: root.dockPos === "left" ? parent.width - width : 0
+                        y: root.dockPos === "top" ? parent.height - height : 0
 
                         HoverHandler {
                             cursorShape: islandDragHandler.active ? Qt.ClosedHandCursor : Qt.OpenHandCursor
@@ -2350,7 +3182,7 @@ Item {
 
                         DragHandler {
                             id: islandDragHandler
-                            enabled: parent.parent.enabled
+                            enabled: parent.enabled && parent.parent.enabled
                                 && !root.dragging
                                 && !root.anyContextMenuOpen
                             target: null
@@ -2380,10 +3212,22 @@ Item {
             id: unifiedRow
             visible: !root.isVertical
             spacing: (Config.options && Config.options.dock && Config.options.dock.iconSpacing !== undefined) ? Config.options.dock.iconSpacing : 0
+            // The flat styles size the tray to the content, so the row sits at
+            // its edge; a full width tray spans the screen and the row is
+            // centred on it - which is also the centre the magnification
+            // pointer mapping reads.
+            // A position, not an anchor: setting an anchor back to undefined
+            // leaves the item where it was, so leaving full width kept the
+            // centring offset until a restart - the items sat that far into
+            // a tray sized to them, the islands drawn without them.
+            x: root.isFullWidth ? Math.max(0, (parent.width - width) / 2) : 0
 
             Repeater {
                 id: itemRepeater
-                model: root.flattenedItems
+                // `visible: false` on the Row does not stop a Repeater from
+                // creating delegates. Keep the inactive orientation empty so
+                // each dock item (and its nested Loader tree) exists once.
+                model: root.isVertical ? null : dockItemModel
                 delegate: unifiedItemDelegate
             }
         }
@@ -2392,10 +3236,17 @@ Item {
             id: unifiedColumn
             visible: root.isVertical
             spacing: (Config.options && Config.options.dock && Config.options.dock.iconSpacing !== undefined) ? Config.options.dock.iconSpacing : 0
+            // A position, not an anchor (see unifiedRow).
+            y: root.isFullWidth ? Math.max(0, (parent.height - height) / 2) : 0
 
             Repeater {
                 id: columnItemRepeater
-                model: root.flattenedItems
+                // The vertical and horizontal layouts are alternatives, not
+                // two render targets. A null model avoids duplicating every
+                // delegate; only a deliberate orientation change recreates
+                // the delegates, while reveal/reorder animations stay on the
+                // same active repeater.
+                model: root.isVertical ? dockItemModel : null
                 delegate: unifiedItemDelegate
             }
         }
@@ -2407,21 +3258,29 @@ Item {
 
         Item {
             id: delegateWrapper
-            required property var modelData
+            required property string entryKey
+            required property string entryType
             required property int index
             readonly property int delegateIndex: index
-            readonly property var itemData: modelData
+            readonly property var itemData: dockItemModel.itemsByKey[entryKey] ?? ({ type: entryType })
             readonly property real itemWidth: {
                 if (root.isVertical)
                     return root.buttonSlotSize;
                 switch (itemData.type) {
                 case "media":
+                    return root.buttonSlotSize * root.mediaSlots;
                 case "weather":
                     return root.buttonSlotSize * 3;
                 case "sports":
                     return root.buttonSlotSize * root.sportsWidgetSlots;
                 case "livePreview":
                     return root.buttonSlotSize * root.livePreviewWidgetSlots;
+                case "tasks":
+                    return root.buttonSlotSize * 3;
+                case "widgetStack":
+                    return root.widgetStackExtent;
+                case "utility":
+                    return root.buttonSlotSize * root._utilitySlots(itemData);
                 default:
                     return root.buttonSlotSize;
                 }
@@ -2436,11 +3295,13 @@ Item {
             readonly property real leadingIslandGap: animatedLeadingIslandGap
             readonly property real baseBodyMainExtent: root._baseItemMainExtentForIndex(delegateIndex)
             readonly property real baseMainExtent: root.baseMetrics.items[delegateIndex]?.baseExtent ?? (root.isVertical ? root.buttonSlotSize : itemWidth)
-            readonly property real targetMagScale: root._targetMagScaleForIndex(delegateIndex)
-            property real animatedMagScale: targetMagScale
-            readonly property real layoutExtra: magnifiable && root.magnificationDynamicSpacing
-                ? root.magnificationLayoutExtraForFactor((animatedMagScale - 1.0) / Math.max(0.001, root.magnificationScale - 1.0))
-                : 0
+            readonly property real magWeight: root._magnificationWeightForIndex(delegateIndex)
+            // The lens share this item's content takes: 1 for an icon, less for
+            // a widget drawn as one wide card, 0 when it never magnifies.
+            readonly property real magContentFactor: root._magnificationContentFactorForIndex(delegateIndex)
+            readonly property real magExtent: root.baseMetrics.items[delegateIndex]?.magExtent ?? 0
+            readonly property real animatedMagScale: root._magnificationContentScaleForWeight(magWeight, magContentFactor)
+            readonly property real layoutExtra: root._magnificationLayoutExtraFor(root.baseMetrics.items[delegateIndex], magWeight, root.magnificationDynamicSpacing)
 
             // ── Presence transition ─────────────────────────────────────────
             // An item joining or leaving the dock grows and collapses its own
@@ -2467,11 +3328,13 @@ Item {
             }
 
             onIsExitingChanged: {
-                if (isExiting)
-                    delegateWrapper.playReveal(0);
+                delegateWrapper.playReveal(isExiting ? 0 : 1);
             }
 
             Component.onCompleted: {
+                // Arm the width glide after the first layout: a new delegate
+                // takes its size at once (its presence has its own reveal).
+                Qt.callLater(() => delegateWrapper._extentAnimationReady = true);
                 if (delegateWrapper.isExiting) {
                     delegateWrapper.revealProgress = 1;
                     delegateWrapper.playReveal(0);
@@ -2485,7 +3348,29 @@ Item {
                 delegateWrapper.playReveal(1);
             }
 
-            readonly property real bodyMainExtent: (baseBodyMainExtent + layoutExtra) * revealProgress
+            // ── Width changes ───────────────────────────────────────────────
+            // The item's own extent (a widget made wide or square, a stack or
+            // live preview resized, a separator appearing) glides instead of
+            // jumping; the Row slides the neighbours and the dock's surface
+            // follows the laid-out width. Only the BASE extent animates — the
+            // lens's `layoutExtra` stays on its own springs, so this is never
+            // a second animation queue on the wrapper's width.
+            property real animatedBaseBodyExtent: baseBodyMainExtent
+            property bool _extentAnimationReady: false
+            Behavior on animatedBaseBodyExtent {
+                enabled: delegateWrapper._extentAnimationReady && root._itemTransitionsReady
+                    && !root.dragging && !root._reordering && !Appearance.reducedMotion
+                NumberAnimation {
+                    duration: Appearance.animation.elementMove.duration
+                    easing.type: Appearance.animation.elementMove.type
+                    easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                }
+            }
+            // What the item's content may occupy right now: the animated
+            // extent minus its separator room.
+            readonly property real animatedContentExtent: animatedBaseBodyExtent - _separatorBeforeSpace - _separatorAfterSpace
+
+            readonly property real bodyMainExtent: (animatedBaseBodyExtent + layoutExtra) * revealProgress
             readonly property real bodyMainStart: (root.isVertical ? y : x) + leadingIslandGap
             readonly property real bodyMainEnd: bodyMainStart + bodyMainExtent
             readonly property real _magnificationScale: animatedMagScale
@@ -2495,20 +3380,10 @@ Item {
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
             }
 
-            Behavior on animatedMagScale {
-                enabled: !root.dragging
-                SpringAnimation {
-                    spring: root.magnificationMotionProfile.spring
-                    damping: root.magnificationMotionProfile.damping
-                    mass: root.magnificationMotionProfile.mass
-                    epsilon: root.magnificationMotionProfile.epsilon
-                }
-            }
-
             // Drag translation. Displaced items move by the dragged item's real
             // footprint read from the drag snapshot, so a 4-slot widget pushes
             // its neighbours exactly as far as it will actually occupy.
-            readonly property bool isDragged: root.dragging && delegateIndex === root.dragSourceIndex
+            readonly property bool isDragged: root.dragging && String(itemData?.orderKey ?? "") === root.dragSourceKey
             readonly property bool isSettling: !root.dragging
                 && root._dropSettleKey !== ""
                 && root._dropSettleKey === String(delegateWrapper.itemData?.orderKey ?? "")
@@ -2526,30 +3401,52 @@ Item {
                 );
             }
             readonly property real itemMagScale: animatedMagScale
-            z: (isDragged || isSettling) ? 100 : (itemMagScale > 1.01 ? Math.round(itemMagScale * 50) : 0)
+            // Quantized: a distinct z per fraction of magnification re-orders
+            // the render stack every frame the lens moves, for a difference
+            // nobody can see between two neighbours at 1.03 and 1.05. Three
+            // tiers are all the eye reads — rest, magnified, most magnified.
+            z: (isDragged || isSettling) ? 100
+                : (itemMagScale > 1.01 ? (itemMagScale > 1.25 ? 2 : 1) : 0)
             opacity: isDragged ? 0.85 : 1
             scale: isDragged ? 1.05 : 1
 
             Behavior on opacity {
-                enabled: !root._suppressTranslateAnim
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                NumberAnimation {
+                    duration: Appearance.animation.elementMoveFast.duration
+                    easing.type: Appearance.animation.elementMoveFast.type
+                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                }
             }
             Behavior on scale {
-                enabled: !root._suppressTranslateAnim
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                NumberAnimation {
+                    duration: Appearance.animation.elementMoveFast.duration
+                    easing.type: Appearance.animation.elementMoveFast.type
+                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                }
             }
 
+            // Animate the final position, not a preview offset in a moving slot.
+            // On commit Row/Column moves the slot while previewShift disappears;
+            // a single target preserves the intermediate frame of every neighbour.
+            DockItemPosition {
+                id: itemPosition
+                // The drag offset already includes the initial magnified displacement.
+                layoutPosition: delegateWrapper.isDragged
+                    // Slots are in root space; this position is the container's.
+                    // A full width row starts far into the tray, and the dragged
+                    // item jumped right by that much.
+                    ? (root._dragSlots[delegateWrapper.delegateIndex]
+                        ? root._dragSlots[delegateWrapper.delegateIndex].start - root._dragSlotOrigin
+                        : delegateWrapper.bodyMainStart) - delegateWrapper.leadingIslandGap
+                    : (root.isVertical ? delegateWrapper.y : delegateWrapper.x)
+                offset: delegateWrapper.dragTranslate
+                animate: root.reorderMotionActive
+                tracking: delegateWrapper.isDragged
+                settling: delegateWrapper.isSettling
+            }
             transform: Translate {
-                x: root.isVertical ? 0 : delegateWrapper.dragTranslate
-                y: root.isVertical ? delegateWrapper.dragTranslate : 0
-                Behavior on x {
-                    enabled: !delegateWrapper.isDragged && !delegateWrapper.isSettling && !root._suppressTranslateAnim
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                }
-                Behavior on y {
-                    enabled: !delegateWrapper.isDragged && !delegateWrapper.isSettling && !root._suppressTranslateAnim
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                }
+                x: root.isVertical ? 0 : itemPosition.position - delegateWrapper.x
+                y: root.isVertical ? itemPosition.position - delegateWrapper.y : 0
             }
 
             // ── Intelligent separators ──────────────────────────────────────
@@ -2646,6 +3543,7 @@ Item {
 
                 // Expose delegate data so loaded components can access it via parent
                 readonly property var _itemData: delegateWrapper.itemData
+                readonly property real _animatedContentExtent: delegateWrapper.animatedContentExtent
                 readonly property int _index: delegateWrapper.index
                 readonly property real _magnificationScale: delegateWrapper._magnificationScale
                 readonly property string _islandId: delegateWrapper.islandId
@@ -2670,11 +3568,32 @@ Item {
                         return livePreviewItemComponent;
                     case "phone":
                         return phoneItemComponent;
+                    case "tasks":
+                        return tasksItemComponent;
+                    case "utility":
+                        return utilityItemComponent;
+                    case "widgetStack":
+                        return widgetStackItemComponent;
                     case "runningAppsGroup":
                         return runningAppsGroupComponent;
+                    case "editAdd":
+                        return editAddItemComponent;
                     default:
                         return null;
                     }
+                }
+            }
+
+            Loader {
+                anchors.fill: contentLoader
+                z: 7
+                active: root.editLayerActive && !delegateWrapper.isExiting
+                    && root.dockEdit.editable(delegateWrapper.itemData)
+                sourceComponent: DockEditItemLayer {
+                    dockContent: root
+                    wrapper: delegateWrapper
+                    itemData: delegateWrapper.itemData
+                    delegateIndex: delegateWrapper.delegateIndex
                 }
             }
 
@@ -2737,6 +3656,7 @@ Item {
                 apps: appGroupItemRoot._itemData.apps ?? []
                 dockContent: root
                 groupId: appGroupItemRoot._itemData.groupId ?? ""
+                autoGroup: appGroupItemRoot._itemData.autoGroup === true
                 delegateIndex: appGroupItemRoot._index
             }
         }
@@ -2753,20 +3673,24 @@ Item {
             DockActionButton {
                 anchors.centerIn: parent
                 property int _delegateIndex: actionItemRoot._index
+                actionId: actionItemRoot._itemData.actionId ?? ""
                 symbolName: {
                     switch (actionItemRoot._itemData.actionId) {
                     case "pin":
                         return "keep";
                     case "trash":
                         return "delete";
-                    case "overview":
-                        return "apps";
+                    case "overview": {
+                        const symbol = String(Config.options?.dock?.overviewButton?.symbol ?? "").trim();
+                        return symbol.length > 0 ? symbol : "apps";
+                    }
                     default:
                         return "drag_indicator";
                     }
                 }
                 toggledSymbolName: actionItemRoot._itemData.actionId === "pin" ? "bookmark" : ""
-                toggled: actionItemRoot._itemData.actionId === "pin" && root.isPinned
+                toggled: actionItemRoot._itemData.actionId === "pin" ? root.isPinned
+                    : actionItemRoot._itemData.actionId === "overview" && GlobalStates.overviewSurfaceOpen
                 normalShape: actionItemRoot._itemData.actionId === "overview" ? MaterialShape.Shape.SoftBurst : MaterialShape.Shape.Pill
                 activeShape: actionItemRoot._itemData.actionId === "overview" ? MaterialShape.Shape.SoftBurst : MaterialShape.Shape.Cookie9Sided
                 symbolSize: Math.round(Appearance.sizes.dockButtonSize * 0.5)
@@ -2781,6 +3705,14 @@ Item {
                         GlobalStates.toggleOverview();
                 }
                 customImageSource: actionItemRoot._itemData.actionId === "trash" ? ("file://" + Directories.assetsPath + "/icons/" + (Appearance.m3colors.darkmode ? "macos-trash-dark.png" : "macos-trash.png")) : ""
+                // The overview button's look (Settings → Dock → Overview button).
+                readonly property var overviewCfg: Config.options?.dock?.overviewButton ?? null
+                readonly property bool isOverview: actionItemRoot._itemData.actionId === "overview"
+                customIconSource: isOverview && String(overviewCfg?.iconFile ?? "").length > 0
+                    ? ("file://" + Directories.assetsPath + "/icons/" + overviewCfg.iconFile) : ""
+                tintCustomIcon: overviewCfg?.iconTint ?? true
+                shapeName: isOverview ? String(overviewCfg?.shape ?? "SoftBurst") : ""
+                alwaysShowShape: isOverview && (overviewCfg?.alwaysShowShape ?? false)
                 dragActive: false
                 dragOver: false
                 dragSymbol: ""
@@ -2837,18 +3769,30 @@ Item {
                 }
             }
 
-            readonly property bool _isDragged: root.dragging && _index === root.dragSourceIndex
-            opacity: (_isDragged ? 0.85 : 1.0) * _groupTransitionOpacity
-            scale: (_isDragged ? 1.05 : 1.0) * _groupTransitionScale
+            opacity: _groupTransitionOpacity
+            scale: _groupTransitionScale
 
             Behavior on opacity {
-                enabled: !root._suppressTranslateAnim
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                NumberAnimation {
+                    duration: Appearance.animation.elementMoveFast.duration
+                    easing.type: Appearance.animation.elementMoveFast.type
+                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                }
             }
 
             Behavior on scale {
-                enabled: !root._suppressTranslateAnim
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                NumberAnimation {
+                    duration: Appearance.animation.elementMoveFast.duration
+                    easing.type: Appearance.animation.elementMoveFast.type
+                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                }
+            }
+
+            layer.enabled: opacity > 0 && opacity < 1
+            layer.effect: MultiEffect {
+                blurEnabled: true
+                blurMax: 8
+                blur: 1 - appItemRoot.opacity
             }
 
             DockAppButton {
@@ -2881,7 +3825,7 @@ Item {
         id: mediaItemComponent
         Item {
             id: mediaItemRoot
-            width: root.isVertical ? root.buttonSlotSize : root.buttonSlotSize * 3
+            width: root.isVertical ? root.buttonSlotSize : root.buttonSlotSize * root.mediaSlots
             height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
             readonly property int _index: parent._index
             Loader {
@@ -2890,6 +3834,7 @@ Item {
                 sourceComponent: DockMediaWidget {
                     anchors.centerIn: parent
                     isVertical: root.isVertical
+                    squareMode: root.mediaSquare
                     dockContent: root
                     delegateIndex: mediaItemRoot._index
                 }
@@ -2950,6 +3895,62 @@ Item {
                         // Picker wiring belongs to the following live-preview phase.
                     }
                 }
+            }
+        }
+    }
+
+    Component {
+        id: tasksItemComponent
+        Item {
+            id: tasksItemRoot
+            width: root.isVertical ? root.buttonSlotSize : root.buttonSlotSize * 3
+            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
+            readonly property int _index: parent._index
+            DockTasksWidget {
+                anchors.centerIn: parent
+                isVertical: root.isVertical
+                dockContent: root
+                delegateIndex: tasksItemRoot._index
+            }
+        }
+    }
+
+
+    Component {
+        id: utilityItemComponent
+        Item {
+            id: utilityItemRoot
+            readonly property int _index: parent._index
+            readonly property var _itemData: parent._itemData
+            // Follows the slot while it glides between square and wide.
+            width: root.isVertical ? root.buttonSlotSize : Math.max(root.buttonSlotSize, parent._animatedContentExtent)
+            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
+            DockUtilityWidget {
+                anchors.fill: parent
+                isVertical: root.isVertical
+                dockContent: root
+                delegateIndex: utilityItemRoot._index
+                kind: utilityItemRoot._itemData?.kind ?? ""
+                wide: root._utilitySlots(utilityItemRoot._itemData) > 1
+            }
+        }
+    }
+
+    Component {
+        id: widgetStackItemComponent
+        Item {
+            id: widgetStackItemRoot
+            width: root.widgetStackExtent
+            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
+            readonly property int _index: parent._index
+            DockWidgetStack {
+                anchors.fill: parent
+                isVertical: root.isVertical
+                dockContent: root
+                delegateIndex: widgetStackItemRoot._index
+                members: root.widgetStackMembers
+                currentType: root.widgetStackCurrentType
+                onCurrentTypeRequested: type => root.widgetStackCurrentType = type
             }
         }
     }
@@ -3042,6 +4043,21 @@ Item {
         }
     }
 
+    Component {
+        id: editAddItemComponent
+        Item {
+            id: editAddRoot
+            width: root.buttonSlotSize
+            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
+
+            DockEditAddButton {
+                anchors.centerIn: parent
+                dockContent: root
+                anchorTarget: editAddRoot
+            }
+        }
+    }
+
     // ── Preview Popup ──────────────────────────────────────────────────────
     Loader {
         id: previewPopupLoader
@@ -3054,4 +4070,13 @@ Item {
             appTopLevel: root.lastHoveredButton?.appToplevel
         }
     }
+
+    // The dock's one tooltip: every item's DockTooltip asks this host, which
+    // slides a single bubble between items inside one resident surface.
+    readonly property var dockTooltipHost: tooltipHost
+    DockTooltipHost {
+        id: tooltipHost
+        dockContent: root
+    }
+
 }

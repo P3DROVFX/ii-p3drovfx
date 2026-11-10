@@ -1,0 +1,5 @@
+module qs.modules.ii.contextMenu
+
+ContextMenuIconBar 1.0 ContextMenuIconBar.qml
+ContextMenuList 1.0 ContextMenuList.qml
+ContextMenuMotion 1.0 ContextMenuMotion.qml

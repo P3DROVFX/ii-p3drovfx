@@ -79,7 +79,7 @@ Item {
         y: Math.round((root.implicitHeight - height) / 2)
         width: Math.max(200, Math.min(NotesMetrics.readingWidth,
             root.width - NotesMetrics.readingPadding * 2))
-        height: layout.implicitHeight + 20
+        height: Math.max(layout.implicitHeight, root.rows.length * 36 + 38) + 20
         radius: Appearance.rounding.normal
         color: Appearance.m3colors.m3surfaceContainerLowest
         clip: true
@@ -139,10 +139,14 @@ Item {
                             selectionColor: Appearance.colors.colSecondaryContainer
 
                             onActiveFocusChanged: {
-                                if (activeFocus)
+                                if (activeFocus) {
                                     root.editor.activeBlockId = root.block.id;
-                                else
+                                    root.editor.activeTextEdit = cellText;
+                                } else {
+                                    if (root.editor && root.editor.activeTextEdit === cellText)
+                                        root.editor.activeTextEdit = null;
                                     root.setCell(cell.rowIndex, cell.columnIndex, cellText.text);
+                                }
                             }
 
                             Keys.onPressed: event => {

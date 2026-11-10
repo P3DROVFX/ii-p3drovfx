@@ -101,7 +101,7 @@ Singleton {
             NetworkState.wifiInterface
         ) : ""
     readonly property int networkStrength: root.active?.strength ?? 0
-    readonly property string materialSymbol: root.ethernet ? "lan" : (root.wifiEnabled && root.wifiStatus === "connected") ? ((root.active?.strength ?? 0) > 83 ? "android_wifi_4_bar" : (root.active?.strength ?? 0) > 67 ? "android_wifi_3_bar" : (root.active?.strength ?? 0) > 50 ? "wifi_2_bar" : (root.active?.strength ?? 0) > 33 ? "wifi_2_bar" : (root.active?.strength ?? 0) > 17 ? "wifi_1_bar" : "signal_wifi_0_bar") : (root.wifiStatus === "connecting") ? "signal_wifi_statusbar_not_connected" : (root.wifiStatus === "disconnected") ? "wifi_find" : (root.wifiStatus === "disabled") ? "signal_wifi_off" : "signal_wifi_bad"
+    readonly property string materialSymbol: NetworkState.accessPointMode ? "wifi_tethering" : root.ethernet ? "lan" : (root.wifiEnabled && root.wifiStatus === "connected") ? ((root.active?.strength ?? 0) > 83 ? "android_wifi_4_bar" : (root.active?.strength ?? 0) > 67 ? "android_wifi_3_bar" : (root.active?.strength ?? 0) > 50 ? "wifi_2_bar" : (root.active?.strength ?? 0) > 33 ? "wifi_2_bar" : (root.active?.strength ?? 0) > 17 ? "wifi_1_bar" : "signal_wifi_0_bar") : (root.wifiStatus === "connecting") ? "signal_wifi_statusbar_not_connected" : (root.wifiStatus === "disconnected") ? "wifi_find" : (root.wifiStatus === "disabled") ? "signal_wifi_off" : "signal_wifi_bad"
 
     // Connection Details
     property string ipAddress: ""
@@ -169,16 +169,29 @@ Singleton {
     function connectToWifiNetwork(accessPoint: WifiAccessPoint): void {
         if (!accessPoint)
             return;
-        root.beginConnect(accessPoint);
-        NetworkCommands.connectToSsid(accessPoint.ssid, NetworkState.wifiInterface, (code, out, err) => root.finishConnect(code, err));
+        const attempt = root.beginConnect(accessPoint);
+        const done = (code, out, err) => root.finishConnect(attempt, code, out, err);
+        if (accessPoint.enterprise) {
+            NetworkCommands.connectEnterprise(accessPoint.ssid, NetworkState.wifiInterface, done);
+            return;
+        }
+        NetworkCommands.connectToSsid(accessPoint.ssid, NetworkState.wifiInterface, done);
     }
 
-    function connectWithPassword(ssid: string, password: string, username = "", hidden = false): void {
-        root.beginConnect(root.wifiNetworks.find(n => n && n.ssid === ssid) ?? null);
-        const done = (code, out, err) => root.finishConnect(code, err);
-        if (username.length > 0) {
-            NetworkCommands.connectWithEnterprise(ssid, password, {
+    // `domain` is the 802.1X server domain; null leaves the saved one alone.
+    function connectWithPassword(ssid: string, password: string, username = "", hidden = false, domain = null): void {
+        const accessPoint = root.wifiNetworks.find(n => n && n.ssid === ssid) ?? null;
+        const attempt = root.beginConnect(accessPoint);
+        const done = (code, out, err) => root.finishConnect(attempt, code, out, err);
+        // Chosen by the network rather than by whether a username was typed: on
+        // an 802.1X network an empty one keeps the saved identity, and the PSK
+        // path below would delete that profile.
+        if ((accessPoint?.enterprise ?? false) || username.length > 0) {
+            const savedDomain = accessPoint?.savedDomain ?? "";
+            NetworkCommands.saveEnterprise(ssid, password, {
                 identity: username,
+                domain: domain ?? savedDomain,
+                savedDomain: savedDomain,
                 ifname: NetworkState.wifiInterface,
                 hidden: hidden
             }, done);
@@ -191,18 +204,34 @@ Singleton {
             NetworkCommands.forgetProfile(stale);
         NetworkCommands.connectWithPsk(ssid, password, {
             ifname: NetworkState.wifiInterface,
-            hidden: hidden
+            hidden: hidden,
+            kind: root.pskKind(accessPoint)
         }, done);
+    }
+
+    // What a new profile for a password network needs, read off the scan.
+    // Anything still offering WPA/WPA2 gets wpa-psk, which also covers WPA2/WPA3
+    // transition networks; WPA3 alone needs SAE. A hidden network has no scan
+    // entry to read and gets wpa-psk.
+    function pskKind(accessPoint): string {
+        const tokens = (accessPoint?.security ?? "").split(/\s+/);
+        if (tokens.some(t => t === "WPA" || t === "WPA1" || t === "WPA2"))
+            return "wpa-psk";
+        if (tokens.includes("WPA3"))
+            return "sae";
+        if (tokens.includes("WEP"))
+            return "wep";
+        return "wpa-psk";
     }
 
     function connectToHiddenNetwork(ssid: string, password: string, username = ""): void {
         root.connectWithPassword(ssid, password, username, true);
     }
 
-    function changePassword(network: WifiAccessPoint, password: string, username = ""): void {
+    function changePassword(network: WifiAccessPoint, password: string, username = "", domain = null): void {
         if (!network)
             return;
-        root.connectWithPassword(network.ssid, password, username, false);
+        root.connectWithPassword(network.ssid, password, username, false, domain);
     }
 
     function disconnectWifiNetwork(): void {
@@ -241,25 +270,37 @@ Singleton {
     }
 
     // ---- Connection bookkeeping -------------------------------------------
-    function beginConnect(accessPoint): void {
+    // Commands run one at a time, so a network clicked while another is still
+    // connecting waits its turn. Numbering the attempts keeps the first one's
+    // result off the target and error state the second one now owns.
+    property int connectAttempt: 0
+
+    function beginConnect(accessPoint): int {
         root.lastWifiError = "";
         root.lastWifiExitCode = 0;
         root.wifiErrorTarget = null;
         root.wifiConnectTarget = accessPoint;
         if (accessPoint)
             accessPoint.askingPassword = false;
+        return ++root.connectAttempt;
     }
 
-    function finishConnect(exitCode: int, stderr: string): void {
+    function finishConnect(attempt: int, exitCode: int, output: string, stderr: string): void {
+        root.refreshDetails();
+        root.refreshSaved();
+        if (attempt !== root.connectAttempt)
+            return;
         const target = root.wifiConnectTarget;
         root.wifiConnectTarget = null;
         root.lastWifiError = (stderr ?? "").trim();
-        root.refreshDetails();
-        root.refreshSaved();
         if (!target)
             return;
-        target.askingPassword = exitCode !== 0;
-        if (exitCode === 0 || root.lastWifiError.includes("Secrets were required")) {
+        // A certificate profile has no password to ask for, so its failures stay
+        // errors. Otherwise missing secrets, or a missing 802.1X profile, are
+        // what the prompt is for.
+        const lines = (output ?? "").split("\n");
+        target.askingPassword = exitCode !== 0 && !lines.includes(NetworkCommands.kCertificateProfile);
+        if (exitCode === 0 || (target.askingPassword && (lines.includes(NetworkCommands.kNoProfile) || root.lastWifiError.includes("Secrets were required")))) {
             root.lastWifiExitCode = 0;
             root.wifiErrorTarget = null;
             return;
@@ -271,6 +312,22 @@ Singleton {
     function savedProfileFor(ssid: string): string {
         const match = root.savedConnections.find(c => c.type === "802-11-wireless" && c.name === ssid);
         return match?.name ?? "";
+    }
+
+    // Cleared first so a prompt opening again still sees the values change and
+    // picks them up.
+    function loadEnterpriseProfile(accessPoint: WifiAccessPoint): void {
+        accessPoint.savedIdentity = "";
+        accessPoint.savedDomain = "";
+        accessPoint.savedCaCert = false;
+        NetworkCommands.readEnterpriseProfile(accessPoint.ssid, profile => {
+            // The access point can leave the scan while this is read.
+            if (!root.wifiNetworks.includes(accessPoint))
+                return;
+            accessPoint.savedIdentity = profile.identity;
+            accessPoint.savedDomain = profile.domain;
+            accessPoint.savedCaCert = profile.caCert;
+        });
     }
 
     // ---- Backend to WifiAccessPoint bridge --------------------------------
@@ -400,7 +457,10 @@ Singleton {
             if (!target)
                 return;
             if (reason === QNet.ConnectionFailReason.NoSecrets) {
-                target.askingPassword = true;
+                // 802.1X is left to finishConnect, which knows whether the
+                // profile is a certificate one with no password to ask for.
+                if (!target.enterprise)
+                    target.askingPassword = true;
                 return;
             }
             root.lastWifiError = NetworkState.failReasonLabel(reason);
@@ -443,12 +503,15 @@ Singleton {
     Timer {
         id: savedDebounce
         interval: 400
-        onTriggered: NetworkCommands.readSavedConnections(rows => {
-            root.savedConnections = rows;
-            const wireless = rows.filter(r => r.type === "802-11-wireless").map(r => r.name);
-            const known = Array.from(NetworkState.wifiNetworks ?? []).filter(n => n.known).map(n => n.name);
-            root.savedSsids = [...new Set([...wireless, ...known])];
-        })
+        onTriggered: {
+            NetworkCommands.readSavedConnections(rows => root.savedConnections = rows);
+            // By SSID rather than profile name, which is all a scan row has to
+            // match against on the nmcli path (see WifiAccessPoint.known).
+            NetworkCommands.readSavedWifiSsids(ssids => {
+                const known = Array.from(NetworkState.wifiNetworks ?? []).filter(n => n.known).map(n => n.name);
+                root.savedSsids = [...new Set([...ssids, ...known])];
+            });
+        }
     }
 
     Timer {

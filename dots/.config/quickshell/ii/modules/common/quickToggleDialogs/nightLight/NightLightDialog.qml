@@ -6,56 +6,106 @@ import qs.modules.common.functions
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import Quickshell.Io
-import Quickshell
-import Quickshell.Wayland
-import Quickshell.Hyprland
 
 WindowDialog {
     id: root
-    property var screen: Brightness.targetScreen
     property var brightnessMonitor: Brightness.getTargetMonitor()
-    backgroundHeight: 700
 
-    WindowDialogTitle {
-        text: Translation.tr("Eye protection")
-    }
-    
-    WindowDialogSectionHeader {
-        text: Translation.tr("Night Light")
-    }
-
-    WindowDialogSeparator {
-        Layout.topMargin: -22
-        Layout.leftMargin: 0
-        Layout.rightMargin: 0
-    }
-
-    Column {
-        id: nightLightColumn
+    /**
+     * A section: one expressive title carrying the whole heading — no line
+     * divider — and the rows under it. Rows land in at the reference dialogs'
+     * spacing (4), and the extra 2 under the title separates heading from rows.
+     */
+    component SectionBlock: ColumnLayout {
+        property alias title: sectionTitle.text
         spacing: 4
-        Layout.topMargin: -16
         Layout.fillWidth: true
 
-        ConfigSwitch {
+        StyledText {
+            id: sectionTitle
+            Layout.fillWidth: true
+            Layout.bottomMargin: 2
+            font.family: Appearance.font.family.title
+            font.pixelSize: Appearance.font.pixelSize.larger
+            font.variableAxes: Appearance.font.variableAxes.title
+            color: Appearance.colors.colOnLayer1
+        }
+    }
+
+    /**
+     * A slider in the same rounded card family as the ConfigSwitch rows, one
+     * size up: the label where there is one, and the fat slider below. No
+     * value chrome — the reading lives in the handle's tooltip.
+     */
+    component SliderCard: Rectangle {
+        id: card
+        property alias text: sliderName.text
+        property alias from: sliderWidget.from
+        property alias to: sliderWidget.to
+        property alias value: sliderWidget.value
+        property alias stopIndicatorValues: sliderWidget.stopIndicatorValues
+        property alias tooltipContent: sliderWidget.tooltipContent
+        signal moved()
+
+        Layout.fillWidth: true
+        implicitHeight: cardLayout.implicitHeight + 24
+        radius: Appearance.rounding.large
+        color: Appearance.colors.colLayer2
+
+        ColumnLayout {
+            id: cardLayout
             anchors {
                 left: parent.left
                 right: parent.right
+                verticalCenter: parent.verticalCenter
+                leftMargin: 16
+                rightMargin: 16
             }
-            iconSize: Appearance.font.pixelSize.larger
-            buttonIcon: "check"
-            text: Translation.tr("Enable now")
-            checked: Hyprsunset.temperatureActive
-            onCheckedChanged: {
-                Hyprsunset.toggleTemperature(checked)
+            spacing: 2
+
+            StyledText {
+                id: sliderName
+                visible: text.length > 0
+                Layout.fillWidth: true
+                font.pixelSize: Appearance.font.pixelSize.small
+                color: Appearance.colors.colOnLayer2
+            }
+
+            StyledSlider {
+                id: sliderWidget
+                Layout.fillWidth: true
+                configuration: StyledSlider.Configuration.M
+                onMoved: card.moved()
             }
         }
+    }
+
+    // ── Header (margins and typography matching WifiDialog/BluetoothDialog) ──
+    RowLayout {
+        Layout.fillWidth: true
+        Layout.leftMargin: 4
+        Layout.rightMargin: 4
+        spacing: 0
+
+        StyledText {
+            Layout.fillWidth: true
+            text: Translation.tr("Eye protection")
+            font.family: Appearance.font.family.title
+            font.pixelSize: Appearance.font.pixelSize.title
+            font.variableAxes: Appearance.font.variableAxes.title
+            color: Appearance.colors.colOnLayer1
+        }
+
+        StyledSwitch {
+            checked: Hyprsunset.temperatureActive
+            onToggled: Hyprsunset.toggleTemperature(checked)
+        }
+    }
+
+    SectionBlock {
+        title: Translation.tr("Night Light")
 
         ConfigSwitch {
-            anchors {
-                left: parent.left
-                right: parent.right
-            }
             iconSize: Appearance.font.pixelSize.larger
             buttonIcon: "night_sight_auto"
             text: Translation.tr("Automatic")
@@ -65,44 +115,21 @@ WindowDialog {
             }
         }
 
-        WindowDialogSlider {
-            anchors {
-                left: parent.left
-                right: parent.right
-                leftMargin: 4
-                rightMargin: 4
-            }
+        SliderCard {
             text: Translation.tr("Intensity")
             from: 6500
             to: 1200
             stopIndicatorValues: [5000, to]
             value: Config.options.light.night.colorTemperature
-            onMoved: Config.options.light.night.colorTemperature = value
             tooltipContent: `${Math.round(value)}K`
+            onMoved: Config.options.light.night.colorTemperature = value
         }
     }
 
-    WindowDialogSectionHeader {
-        text: Translation.tr("Anti-flashbang (experimental)")
-    }
-
-    WindowDialogSeparator {
-        Layout.topMargin: -22
-        Layout.leftMargin: 0
-        Layout.rightMargin: 0
-    }
-
-    Column {
-        id: antiFlashbangColumn
-        spacing: 4
-        Layout.topMargin: -16
-        Layout.fillWidth: true
+    SectionBlock {
+        title: Translation.tr("Anti-flashbang (experimental)")
 
         ConfigSwitch {
-            anchors {
-                left: parent.left
-                right: parent.right
-            }
             iconSize: Appearance.font.pixelSize.larger
             buttonIcon: "filter"
             text: Translation.tr("Content adjustment")
@@ -117,10 +144,6 @@ WindowDialog {
         }
 
         ConfigSwitch {
-            anchors {
-                left: parent.left
-                right: parent.right
-            }
             iconSize: Appearance.font.pixelSize.larger
             buttonIcon: "light_mode"
             text: Translation.tr("Brightness adjustment")
@@ -134,72 +157,56 @@ WindowDialog {
         }
     }
 
-    WindowDialogSectionHeader {
-        text: Translation.tr("Brightness")
-    }
+    SectionBlock {
+        title: Translation.tr("Brightness")
 
-    WindowDialogSeparator {
-        Layout.topMargin: -22
-        Layout.leftMargin: 0
-        Layout.rightMargin: 0
-    }
-
-    Column {
-        id: brightnessColumn
-        Layout.topMargin: -16
-        Layout.fillWidth: true
-
-        WindowDialogSlider {
-            anchors {
-                left: parent.left
-                right: parent.right
-                leftMargin: 4
-                rightMargin: 4
-            }
+        SliderCard {
             value: root.brightnessMonitor.brightness
             onMoved: root.brightnessMonitor.setBrightness(value)
         }
     }
 
-    WindowDialogSectionHeader {
-        text: Translation.tr("Gamma")
-    }
+    SectionBlock {
+        title: Translation.tr("Gamma")
 
-    WindowDialogSeparator {
-        Layout.topMargin: -22
-        Layout.leftMargin: 0
-        Layout.rightMargin: 0
-    }
-
-    Column {
-        id: gammaColumn
-        Layout.topMargin: -16
-        Layout.fillWidth: true
-        Layout.fillHeight: true
-
-        WindowDialogSlider {
-            anchors {
-                left: parent.left
-                right: parent.right
-                leftMargin: 4
-                rightMargin: 4
-            }
+        SliderCard {
             from: Hyprsunset.gammaLowerLimit / 100
             value: Hyprsunset.gamma / 100
-            onMoved: Hyprsunset.setGamma(value * 100)
             tooltipContent: `${Math.round(value * 100)}%`
+            onMoved: Hyprsunset.setGamma(value * 100)
         }
     }
-    
+
+    // ── Bottom buttons (WifiDialog/VolumeDialog rhythm) ───────────────────────
     WindowDialogButtonRow {
-        Layout.fillWidth: true
+        Layout.leftMargin: 0
+        Layout.rightMargin: 0
+        Layout.bottomMargin: -8
 
         Item {
             Layout.fillWidth: true
         }
 
-        DialogButton {
-            buttonText: Translation.tr("Done")
+        RippleButton {
+            id: doneBtn
+            buttonRadius: Appearance.rounding.full
+            colBackground: Appearance.colors.colPrimary
+            colBackgroundHover: Appearance.colors.colPrimaryHover
+            colRipple: Appearance.colors.colPrimaryActive
+            implicitHeight: 36
+            implicitWidth: doneText.implicitWidth + 48
+
+            contentItem: StyledText {
+                id: doneText
+                text: Translation.tr("Done")
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                font.pixelSize: Appearance.font.pixelSize.small
+                font.variableAxes: ({
+                        "wght": 700
+                    })
+                color: Appearance.colors.colOnPrimary
+            }
             onClicked: root.dismiss()
         }
     }

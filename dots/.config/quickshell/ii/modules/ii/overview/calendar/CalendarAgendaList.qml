@@ -50,5 +50,9 @@ Item {
             text: root.emptyText
             color: Appearance.colors.colSubtext
         }
+
+        TouchpadScrollHandler {
+            flickable: agenda
+        }
     }
 }

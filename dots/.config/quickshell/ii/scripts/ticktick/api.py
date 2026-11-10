@@ -20,6 +20,7 @@ Operations:
     list      {projectId}                      → the project's tasks
     create    {projectId, title, content?, dueDate?, priority?}
     update    {projectId, taskId, title?, content?, dueDate?, priority?}
+              a field present with null clears it; absent means unchanged
     complete  {projectId, taskId}
     delete    {projectId, taskId}
 """
@@ -114,11 +115,16 @@ def run(payload: dict) -> dict:
         task_id = str(payload.get("taskId") or "")
         if not task_id:
             return {"ok": False, "status": 0, "error": "No task id"}
-        task = {"projectId": project}
+        # The Open API requires both id and projectId in the update body.
+        # A field present with null clears it; a field absent leaves it
+        # untouched, so the caller decides exactly which fields move.
+        task = {"id": task_id, "projectId": project}
+        changed = 0
         for field in ("title", "content", "desc", "dueDate", "startDate", "timeZone", "isAllDay", "priority"):
-            if field in payload and payload[field] not in (None, ""):
+            if field in payload:
                 task[field] = payload[field]
-        if len(task) == 1:
+                changed += 1
+        if changed == 0:
             return {"ok": False, "status": 0, "error": "No task changes"}
         return request(token, "POST", f"/task/{path_part(task_id)}", task)
 

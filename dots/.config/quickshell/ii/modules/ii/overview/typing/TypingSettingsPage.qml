@@ -150,12 +150,16 @@ Item {
                 spacing: 5
 
                 Repeater {
-                    model: TypingLanguages.languages
+                    // Only show base languages (no _extended variants) in the chip list.
+                    model: TypingLanguages.languages.filter(l => !l.id.endsWith("_extended"))
 
                     delegate: RippleButton {
                         id: languageChip
                         required property var modelData
-                        readonly property bool active: root.options.language === languageChip.modelData.id
+                        // Active when the current base language matches this chip.
+                        readonly property bool active: TypingLanguages.currentBaseLanguageId === languageChip.modelData.id
+                            || (root.options.language === languageChip.modelData.id
+                                && TypingLanguages.currentBaseLanguageId === "")
 
                         implicitWidth: languageLabel.implicitWidth + 24
                         implicitHeight: 32
@@ -176,6 +180,30 @@ Item {
                             font.weight: languageChip.active ? Font.DemiBold : Font.Normal
                             color: languageChip.active ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurfaceVariant
                         }
+                    }
+                }
+            }
+
+            // ── Word list size ─────────────────────────────────────────
+            OptionRow {
+                Layout.columnSpan: 2
+                label: Translation.tr("Word list")
+                description: root.options.wordlistSize === "extended"
+                    ? Translation.tr("Extended – full Monkeytype vocabulary for more variety")
+                    : Translation.tr("Standard – curated ~1k words, best for practice")
+
+                ChoiceChips {
+                    values: ["standard", "extended"]
+                    labels: ({
+                        standard: Translation.tr("Standard"),
+                        extended: Translation.tr("Extended")
+                    })
+                    current: root.options.wordlistSize ?? "standard"
+                    onPicked: value => {
+                        root.options.wordlistSize = value;
+                        // Reload immediately so the engine gets the right pack.
+                        TypingLanguages.request(TypingLanguages.currentBaseLanguageId
+                            || root.options.language || "english_1k");
                     }
                 }
             }

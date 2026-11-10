@@ -1,0 +1,957 @@
+pragma Singleton
+pragma ComponentBehavior: Bound
+
+import QtQuick
+import Quickshell
+import qs.modules.common
+
+/**
+ * The single description of every activity the island can show.
+ *
+ * Geometry, priority, which side an activity drifts to and which files draw it all live
+ * here. The old panel answered those questions from a 200-line `if (type === …)` ladder
+ * plus a second ladder for visibility and a third for ordering, so adding an activity
+ * meant editing four places and the settings page by hand. Here a descriptor is data:
+ * the controller arbitrates from it, the styles size themselves from it, and the
+ * settings page is generated from it.
+ *
+ * `-1` on a size means "use the island's own metric" (IslandMotion.pillHeight / orbSize),
+ * so activities follow the user's sizing instead of pinning their own.
+ */
+Singleton {
+    id: root
+
+    readonly property var descriptors: [
+        {
+            id: "clock",
+            tier: "idle",
+            icon: "schedule",
+            label: "Clock",
+            preferredSide: "right",
+            canDetach: false,          // the resting face belongs in the centre
+            settleMs: 0,
+            compact: { width: 168, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },   // the centre expands into the dashboard
+            content: {}
+        },
+        {
+            id: "media",
+            legacyContent: "FloatingNotchMedia.qml",
+            tier: "ambient",
+            icon: "music_note",
+            label: "Media",
+            preferredSide: "right",
+            canDetach: true,
+            settleMs: 2500,
+            compact: { width: 280, height: 52 },
+            orb: { size: -1 },
+            expanded: { width: 420, height: 196 },
+            content: {}
+        },
+        {
+            id: "workspaces",
+            legacyContent: "FloatingNotchWorkspaces.qml",
+            tier: "transient",
+            icon: "grid_view",
+            label: "Workspaces",
+            preferredSide: "left",
+            canDetach: true,
+            settleMs: 700,
+            ttlMs: 2000,
+            compact: { width: 132, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
+            content: {}
+        },
+        {
+            id: "notification",
+            legacyContent: "FloatingNotchNotification.qml",
+            tier: "interrupt",
+            icon: "notifications",
+            label: "Notifications",
+            preferredSide: "right",
+            canDetach: true,
+            settleMs: 4000,
+            ttlMs: 4500,
+            // Title over body, or one slim line (dynamicIsland.widgets.notification.oneLine)
+            // as tall as the bubbles beside the island.
+            compact: { width: 380, height: Config.options.dynamicIsland?.widgets?.notification?.oneLine === true
+                ? IslandMotion.pillHeight - 6 : 60 },
+            orb: { size: -1 },
+            // The pointer resting on a notification grows the face itself (see
+            // `expandsInPlace`) into a card: wider than the hold's swell, so the island
+            // only ever grows. The face measures its height (body lines, actions); this
+            // is the cap - six lines of body and the action row fit under it.
+            expanded: { width: 560, height: 280 },
+            expandsInPlace: true,
+            content: {}
+        },
+        {
+            id: "search",
+            tier: "interrupt",
+            icon: "search",
+            label: "Search",
+            preferredSide: "right",
+            canDetach: false,          // the thing being typed into belongs in the centre
+            settleMs: 0,
+            // Sized by the search widget itself: the surface overrides these, because a
+            // result list's height is whatever the results need.
+            compact: { width: 0, height: 0 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
+            id: "wallpaper",
+            tier: "interrupt",
+            icon: "wallpaper",
+            label: "Wallpapers",
+            preferredSide: "right",
+            canDetach: false,          // a picker being browsed belongs in the centre
+            settleMs: 0,
+            // Sized by the browser itself, like search: one row of wallpapers, the path
+            // above it and the toolbars below come to whatever the island is given.
+            compact: { width: 0, height: 0 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
+            id: "session",
+            tier: "interrupt",
+            icon: "power_settings_new",
+            label: "Session",
+            preferredSide: "right",
+            canDetach: false,          // a menu being chosen from belongs in the centre
+            settleMs: 0,
+            // Sized by the menu itself: four by two buttons and a header.
+            compact: { width: 0, height: 0 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
+            // Alt+Tab (WindowSwitcher). Ahead of everything, a password prompt included: it
+            // is only up while Alt is held, and Alt+Tab is how you get to the window asking.
+            id: "windowSwitcher",
+            tier: "interrupt",
+            priority: -2,
+            interactive: true,         // icons to hover and click: hovering must not open the dashboard
+            icon: "tab",
+            label: "Window switcher",
+            preferredSide: "right",
+            canDetach: false,
+            settleMs: 0,
+            // Sized by NotchContent from the window count.
+            compact: { width: 0, height: 0 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
+            id: "colorPicker",
+            tier: "interrupt",
+            icon: "colorize",
+            label: "Colour picker",
+            preferredSide: "right",
+            canDetach: false,
+            settleMs: 0,
+            // Copy, apply and the scheme page are buttons: hovering must not open the
+            // dashboard. The card holds itself open while the pointer is on it.
+            interactive: true,
+            // Sized by the picker card itself, which is the popup's own layout.
+            compact: { width: 0, height: 0 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
+            id: "displayModes",
+            tier: "interrupt",
+            icon: "desktop_windows",
+            label: "Display modes",
+            preferredSide: "right",
+            canDetach: false,
+            settleMs: 0,
+            // Mode rows and a drag stage: hovering must not open the dashboard.
+            interactive: true,
+            // Sized by the card itself, like the colour picker.
+            compact: { width: 0, height: 0 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
+            id: "osd",
+            tier: "interrupt",
+            icon: "volume_up",
+            label: "Volume & brightness",
+            preferredSide: "right",
+            canDetach: false,          // a slider belongs where the eye already is
+            settleMs: 0,
+            ttlMs: 1500,
+            // The indicator's own size (OsdConnectValueIndicator.osdWidth/osdHeight).
+            // The island needs it before the indicator is loaded - the face swap lags
+            // the activity by the morph - so it is declared here and refined from the
+            // loaded item; see NotchContent.osdTargetWidth.
+            compact: { width: 380, height: 72 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
+            content: {}
+        },
+        {
+            id: "ai",
+            legacyContent: "FloatingNotchAiStatus.qml",
+            tier: "live",
+            icon: "neurology",
+            label: "AI agents",
+            preferredSide: "right",
+            canDetach: true,
+            settleMs: 1800,
+            compact: { width: 230, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 360, height: 200 },
+            content: {}
+        },
+        {
+            id: "clipboard",
+            legacyContent: "FloatingNotchClipboard.qml",
+            tier: "transient",
+            icon: "content_paste",
+            label: "Clipboard",
+            preferredSide: "left",
+            canDetach: false,          // it says one thing and leaves
+            settleMs: 0,
+            ttlMs: 2500,
+            // Room for the teleprompter's send button beside the label.
+            compact: { width: 218, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
+            content: {}
+        },
+        {
+            id: "timer",
+            legacyContent: "FloatingNotchTimer.qml",
+            tier: "live",
+            icon: "timer",
+            label: "Timer & stopwatch",
+            preferredSide: "left",
+            canDetach: true,
+            settleMs: 1500,
+            compact: { width: 160, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 260, height: 160 },
+            content: {}
+        },
+        {
+            id: "recording",
+            legacyContent: "FloatingNotchRecording.qml",
+            tier: "live",
+            icon: "fiber_manual_record",
+            label: "Screen recording",
+            preferredSide: "left",
+            canDetach: true,
+            settleMs: 1500,
+            compact: { width: 172, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 388, height: 68 },
+            content: {
+                expanded: "activities/recording/RecordingExpanded.qml"
+            }
+        },
+        {
+            id: "teleprompter",
+            tier: "live",
+            icon: "subtitles",
+            label: "Teleprompter",
+            preferredSide: "left",
+            canDetach: false,          // the script being read is the centre itself
+            settleMs: 0,
+            // The live box comes from the source's sizeOverride (the user's lines ×
+            // font size); these are the fallback before it measures and, for the
+            // expanded card, the cap over its own implicitHeight.
+            compact: { width: 520, height: 90 },
+            orb: { size: -1 },
+            expanded: { width: 520, height: 640 },
+            // The card is a reading surface with buttons of its own: a click on the
+            // script must not summon the dashboard over it.
+            bodyClickOpensDashboard: false,
+            content: {
+                compact: "widgets/FloatingNotchTeleprompter.qml",
+                expanded: "activities/teleprompter/TeleprompterExpanded.qml"
+            }
+        },
+        {
+            id: "battery",
+            legacyContent: "FloatingNotchBattery.qml",
+            tier: "transient",
+            icon: "battery_charging_full",
+            label: "Battery",
+            preferredSide: "right",
+            canDetach: false,
+            settleMs: 0,
+            ttlMs: 5000,
+            compact: { width: 340, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
+            content: {}
+        },
+        {
+            // A connected headset: a bubble while bubbles are on - the device glyph in a
+            // battery ring, opening into a card with each bud's battery and the noise
+            // control - and the battery beside the clock while they are off. See
+            // EarbudsSource and EarbudsExpanded.
+            id: "earbuds",
+            tier: "live",
+            icon: "headphones",
+            label: "Earbuds battery",
+            preferredSide: "right",
+            canDetach: true,
+            settleMs: 0,
+            compact: { width: 120, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 288, height: 172 },   // the card; it measures its own height
+            content: {
+                expanded: "activities/bluetooth/BluetoothDeviceExpanded.qml"
+            }
+        },
+        {
+            // A phone connected over Bluetooth: the same bubble and card as the earbuds,
+            // less the noise control. Only while bubbles are on; see BluetoothPhoneSource.
+            id: "btPhone",
+            tier: "live",
+            icon: "smartphone",
+            label: "Bluetooth phone",
+            preferredSide: "right",
+            canDetach: true,
+            settleMs: 0,
+            compact: { width: -1, height: -1 },   // the glance is a circle
+            orb: { size: -1 },
+            expanded: { width: 288, height: 124 },   // the card; it measures its own height
+            content: {
+                expanded: "activities/bluetooth/BluetoothDeviceExpanded.qml"
+            }
+        },
+        {
+            id: "weather",
+            tier: "live",
+            icon: "partly_cloudy_day",
+            label: "Weather",
+            preferredSide: "right",
+            canDetach: false,
+            settleMs: 0,
+            compact: { width: 130, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
+            id: "batteryGlance",
+            tier: "live",
+            icon: "battery_android_full",
+            label: "Battery level",
+            preferredSide: "right",
+            canDetach: false,          // a side glance; it never leaves the resting face
+            settleMs: 0,
+            compact: { width: 90, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },   // no expanded face
+            content: {}
+        },
+        {
+            // Ringing takes the centre ahead of every other interrupt; a call in progress
+            // sits beside the clock; a missed call is said once. See PhoneCallSource.
+            id: "phoneCall",
+            legacyContent: "FloatingNotchPhoneCall.qml",
+            tier: "interrupt",
+            priority: 0,
+            interactive: true,         // its buttons are the point: hovering must not open the dashboard
+            icon: "call",
+            label: "Phone calls",
+            preferredSide: "left",
+            canDetach: false,
+            settleMs: 0,
+            compact: { width: 420, height: 76 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
+            // A followed team's game in play, beside the clock; a score change takes the
+            // centre for a moment (see SportsSource).
+            id: "sports",
+            legacyContent: "FloatingNotchSports.qml",
+            tier: "live",
+            icon: "sports_soccer",
+            label: "Live sports",
+            preferredSide: "right",
+            canDetach: false,          // a side glance; bubbles never take it
+            settleMs: 0,
+            compact: { width: 380, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
+            // A live notification on the phone (an order, a ride), relayed by the optional
+            // ii tools app; beside the clock while it lasts. Its changes interrupt as
+            // shell notifications (see PhoneLiveSource).
+            id: "phoneLive",
+            legacyContent: "FloatingNotchPhoneLive.qml",
+            tier: "live",
+            interactive: true,         // a click opens the app on the phone
+            icon: "electric_moped",
+            label: "Phone live updates",
+            preferredSide: "right",
+            canDetach: false,
+            settleMs: 0,
+            compact: { width: 420, height: 84 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
+            // Listening for a song, then what it was (see SongRecSource). Holds the centre
+            // while listening: it is short, and Cancel has to be somewhere.
+            id: "songRec",
+            legacyContent: "FloatingNotchSongRec.qml",
+            tier: "live",
+            interactive: true,
+            icon: "music_cast",
+            label: "Song recognition",
+            preferredSide: "right",
+            canDetach: false,
+            settleMs: 0,
+            compact: { width: 400, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
+            // A ringing alarm, with Snooze and Stop. Only a ringing call outranks it.
+            id: "alarm",
+            legacyContent: "FloatingNotchAlarm.qml",
+            tier: "interrupt",
+            priority: 1,
+            interactive: true,
+            icon: "alarm",
+            label: "Alarms",
+            preferredSide: "right",
+            canDetach: false,
+            settleMs: 0,
+            compact: { width: 440, height: 68 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
+            // A Medium or Strong reminder alerting, with Complete and Snooze. Behind a
+            // ringing alarm: two things ringing at once, the alarm is the one to stop.
+            id: "reminder",
+            legacyContent: "FloatingNotchReminder.qml",
+            tier: "interrupt",
+            priority: 2,
+            interactive: true,
+            icon: "task_alt",
+            label: "Reminders",
+            preferredSide: "right",
+            canDetach: false,
+            settleMs: 0,
+            compact: { width: 540, height: 68 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
+            // The next reminder within the hour, a glance beside the clock: its icon and
+            // when it is due. Side-only, like the weather.
+            id: "reminderSoon",
+            tier: "live",
+            icon: "notification_add",
+            label: "Upcoming reminder",
+            preferredSide: "left",
+            canDetach: false,
+            settleMs: 0,
+            compact: { width: 130, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
+            // A password prompt (sudo, polkit, ssh/git), opt-in per route; see
+            // AskpassService. Ahead of everything, a ringing call included: a prompt
+            // nobody answers leaves sudo hanging, and it must never be pushed off the
+            // island by anything but its own answer.
+            id: "askpass",
+            tier: "interrupt",
+            priority: -1,
+            interactive: true,         // a field and buttons: hovering must not open the dashboard
+            icon: "password",
+            label: "Password prompts",
+            preferredSide: "right",
+            canDetach: false,
+            settleMs: 0,
+            // Sized by the card itself, which declares its size like the session menu.
+            compact: { width: 0, height: 0 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
+            // Anything waiting on the fingerprint reader - sudo, polkit - whoever asked.
+            // Behind a ringing call and an alarm, ahead of every other interrupt.
+            id: "fingerprint",
+            legacyContent: "FloatingNotchFingerprint.qml",
+            tier: "interrupt",
+            priority: 2,
+            icon: "fingerprint",
+            label: "Fingerprint prompt",
+            preferredSide: "right",
+            canDetach: false,
+            settleMs: 0,
+            compact: { width: 330, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
+            // A sensor being taken is announced once in the centre with the app's name,
+            // then folds into an auxiliary bubble for as long as it is held (beside the
+            // clock when bubbles are off). See PrivacySource.
+            id: "privacy",
+            legacyContent: "FloatingNotchPrivacy.qml",
+            tier: "live",
+            icon: "privacy_tip",
+            label: "Privacy indicator",
+            preferredSide: "left",
+            canDetach: true,
+            settleMs: 0,
+            compact: { width: 300, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 300, height: 120 },   // the bubble's card: every sensor and who holds it
+            content: {}
+        },
+        {
+            // In a Discord voice channel: the channel is named once in the centre on
+            // joining, then the call sits beside the clock or in a bubble - who is
+            // talking, how many are there, and whether you are muted. See
+            // DiscordVoiceSource.
+            id: "discordVoice",
+            legacyContent: "FloatingNotchDiscordVoice.qml",
+            tier: "live",
+            icon: "headset_mic",
+            label: "Discord voice",
+            preferredSide: "left",
+            canDetach: true,
+            settleMs: 0,
+            compact: { width: 300, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 300, height: 180 },   // the bubble's card: who is in the call, Mute, Deafen
+            content: {}
+        },
+        {
+            // Phone screen mirroring via scrcpy.
+            id: "phoneMirror",
+            legacyContent: "FloatingNotchPhoneMirror.qml",
+            tier: "live",
+            icon: "screen_share",
+            label: "Phone mirror",
+            preferredSide: "left",
+            canDetach: true,
+            settleMs: 0,
+            compact: { width: 300, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 340, height: 164 },   // the bubble's card: Material 3 Expressive phone controls
+            content: {}
+        },
+        {
+            // The phone's camera or microphone streaming into this computer, which
+            // nothing on screen otherwise shows. Announced once, then a glance for as
+            // long as it runs. See PhoneLinkSource.
+            id: "phoneLink",
+            legacyContent: "FloatingNotchPhoneLink.qml",
+            tier: "live",
+            icon: "phonelink",
+            label: "Phone camera & mic",
+            preferredSide: "left",
+            canDetach: true,
+            settleMs: 0,
+            compact: { width: 300, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 280, height: 120 },   // the bubble's card: each stream, with Stop
+            content: {}
+        },
+        {
+            id: "wifi",
+            legacyContent: "FloatingNotchWifi.qml",
+            tier: "transient",
+            icon: "wifi",
+            label: "Wi-Fi",
+            preferredSide: "right",
+            canDetach: false,
+            settleMs: 0,
+            ttlMs: 3000,
+            compact: { width: 240, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
+            content: {}
+        },
+        {
+            id: "bluetooth",
+            legacyContent: "FloatingNotchBluetooth.qml",
+            tier: "transient",
+            icon: "bluetooth",
+            label: "Bluetooth",
+            preferredSide: "right",
+            canDetach: false,
+            interactive: true,         // Reconnect, on a disconnect: hovering must not open the dashboard
+            settleMs: 0,
+            ttlMs: 3000,
+            compact: { width: 340, height: 60 },   // one strip; the controls are in the earbuds bubble
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
+            content: {}
+        },
+        {
+            id: "keyboard",
+            legacyContent: "FloatingNotchKeyboard.qml",
+            tier: "transient",
+            icon: "keyboard",
+            label: "Keyboard layout",
+            preferredSide: "left",
+            canDetach: false,
+            settleMs: 0,
+            ttlMs: 1500,
+            compact: { width: 200, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
+            content: {}
+        },
+        {
+            // A new critical System Health problem — a service failed, a program
+            // crashed — with the fix as its button. See HealthSource; without the
+            // island it is a notification.
+            id: "health",
+            legacyContent: "FloatingNotchHealth.qml",
+            tier: "transient",
+            icon: "monitor_heart",
+            label: "System Health alerts",
+            preferredSide: "left",
+            canDetach: false,
+            interactive: true,         // the fix is a button: hovering must not open the dashboard
+            settleMs: 0,
+            ttlMs: 9000,
+            compact: { width: 420, height: 64 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
+            // A phone mirror or app window that failed to open or died on its own, and
+            // why. See PhoneMirrorErrorSource; without the island it is a notification.
+            id: "phoneMirrorError",
+            legacyContent: "FloatingNotchPhoneMirrorError.qml",
+            tier: "transient",
+            icon: "mobile_off",
+            label: "Phone mirror errors",
+            preferredSide: "left",
+            canDetach: false,
+            settleMs: 0,
+            ttlMs: 6000,
+            compact: { width: 380, height: 64 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
+            // The phone's KDE Connect keyboard came up in a text field: the PC keyboard
+            // can type there. A click opens the Phone tab's pad. See PhoneKeyboardSource.
+            id: "phoneKeyboard",
+            legacyContent: "FloatingNotchPhoneKeyboard.qml",
+            tier: "transient",
+            icon: "keyboard",
+            label: "Phone keyboard",
+            preferredSide: "left",
+            canDetach: false,
+            settleMs: 0,
+            ttlMs: 5000,
+            compact: { width: 330, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
+            // A VPN or Tailscale connecting or dropping, including from outside the shell.
+            id: "vpn",
+            legacyContent: "FloatingNotchVpn.qml",
+            tier: "transient",
+            icon: "vpn_key",
+            label: "VPN",
+            preferredSide: "right",
+            canDetach: false,
+            settleMs: 0,
+            ttlMs: 3500,
+            compact: { width: 300, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
+            id: "localSend",
+            legacyContent: "FloatingNotchLocalSend.qml",
+            tier: "live",
+            icon: "send_to_mobile",
+            label: "File sharing",
+            preferredSide: "right",
+            canDetach: true,
+            settleMs: 2000,
+            compact: { width: 240, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 360, height: 200 },
+            content: {}
+        },
+        {
+            id: "shelf",
+            legacyContent: "",
+            tier: "live",
+            icon: "shelves",
+            label: "Drop shelf",
+            preferredSide: "right",
+            canDetach: true,
+            settleMs: 2000,
+            compact: { width: 240, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 380, height: 260 },
+            content: {
+                expanded: "activities/shelf/ShelfExpanded.qml"
+            }
+        },
+        {
+            id: "progress",
+            legacyContent: "FloatingNotchProgress.qml",
+            tier: "live",
+            icon: "downloading",
+            label: "Background jobs",
+            preferredSide: "left",
+            canDetach: true,
+            settleMs: 2000,
+            compact: { width: 240, height: 48 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
+            content: {}
+        },
+        {
+            id: "dictation",
+            legacyContent: "FloatingNotchDictation.qml",
+            tier: "live",
+            icon: "mic",
+            label: "Dictation",
+            preferredSide: "left",
+            canDetach: true,
+            settleMs: 1500,
+            compact: { width: 260, height: 44 },
+            orb: { size: -1 },
+            expanded: { width: 360, height: 170 },
+            content: {}
+        },
+        {
+            id: "mode",
+            legacyContent: "FloatingNotchMode.qml",
+            tier: "ambient",
+            icon: "tune",
+            label: "Modes",
+            preferredSide: "right",
+            canDetach: true,
+            settleMs: 1500,
+            compact: { width: 290, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 330, height: 160 },
+            content: {}
+        },
+        {
+            // Days-long, so ambient: it announces itself once (see UpdateSource) and
+            // otherwise keeps to a bubble or the clock's side.
+            id: "update",
+            legacyContent: "FloatingNotchUpdate.qml",
+            tier: "ambient",
+            icon: "deployed_code_update",
+            label: "Shell update",
+            preferredSide: "right",
+            canDetach: true,
+            settleMs: 1500,
+            compact: { width: 250, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 300, height: 108 },
+            content: {}
+        },
+        {
+            // The tray's programs as a bubble of their own: the first icon contracted,
+            // every program aligned in a grid expanded. It behaves like the bar's tray
+            // — left activates, right opens the item's menu, drag pins — so it needs no
+            // face on the island's centre: bubble when those are on, glance beside the
+            // clock when they are not. See SystemTraySource and SystemTrayExpanded.
+            id: "systemTray",
+            tier: "live",
+            icon: "apps",
+            label: "System tray",
+            preferredSide: "right",
+            canDetach: true,
+            settleMs: 0,
+            compact: { width: -1, height: -1 },   // the glance is a circle
+            orb: { size: -1 },
+            expanded: { width: 280, height: 72 }, // the card: five cells a row, one row
+            content: {
+                expanded: "activities/systemTray/SystemTrayExpanded.qml"
+            }
+        },
+        {
+            // EasyEffects' preset, for as long as EasyEffects runs: the preset's glyph in
+            // a circle (dimmed while bypassed, a scroll switches preset), and a card with
+            // the device's presets, bypass and the app. Like the tray it never takes the
+            // centre: a bubble, or a glance beside the clock while bubbles are off.
+            // See EasyEffectsSource and EasyEffectsExpanded.
+            id: "easyEffects",
+            tier: "live",
+            icon: "graphic_eq",
+            label: "EasyEffects",
+            preferredSide: "right",
+            canDetach: true,
+            settleMs: 0,
+            compact: { width: -1, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 320, height: 176 },
+            content: {
+                expanded: "activities/easyEffects/EasyEffectsExpanded.qml"
+            }
+        },
+    ]
+
+    readonly property var ids: root.descriptors.map(descriptor => descriptor.id)
+
+    /**
+     * The widget the legacy notch already draws for an activity.
+     *
+     * The notch style is ported to the engine before the presentations are redrawn, so
+     * it keeps rendering these while the new compact/orb/expanded content is written
+     * activity by activity. Each already honours an `isExpanded` property, which is the
+     * only contract the notch host needs. They disappear with the last port.
+     */
+    function legacyContentFor(id) {
+        const descriptor = root.byId(id);
+        if (!descriptor || !descriptor.legacyContent)
+            return "";
+        // Resolved from the shell root rather than stored as a relative path: a relative
+        // `source` resolves against whichever file instantiates the Loader, and the
+        // notch surface lives two directories away from the widgets.
+        return Quickshell.shellPath("modules/ii/dynamicIsland/widgets/" + descriptor.legacyContent);
+    }
+
+    /**
+     * The file that draws one presentation of an activity.
+     *
+     * The new content is one file per presentation and answers only for the ones that
+     * have been written; a legacy widget draws every presentation of its activity from
+     * an `isExpanded` property, so it stands in for whatever the port has not reached
+     * yet. Both kinds are loaded the same way - a caller binds `isExpanded` when the
+     * item declares it, which is a no-op for the new files.
+     */
+    function faceFor(id, presentation) {
+        const content = root.contentFor(id, presentation);
+        if (content !== "")
+            return Quickshell.shellPath("modules/ii/dynamicIsland/" + content);
+        return root.legacyContentFor(id);
+    }
+
+    /** The tier of an activity, for anything that needs to compare two of them. */
+    function tierOf(id) {
+        const descriptor = root.byId(id);
+        return descriptor ? descriptor.tier : "idle";
+    }
+
+    function byId(id) {
+        for (let i = 0; i < root.descriptors.length; i++) {
+            if (root.descriptors[i].id === id)
+                return root.descriptors[i];
+        }
+        return null;
+    }
+
+    /** Resolved width for a presentation, with `-1` meaning the island's own metric. */
+    function widthFor(id, presentation) {
+        const descriptor = root.byId(id);
+        if (!descriptor)
+            return 0;
+        if (presentation === "orb") {
+            const size = descriptor.orb ? descriptor.orb.size : -1;
+            return size > 0 ? size : IslandMotion.orbSize;
+        }
+        const box = presentation === "expanded" ? descriptor.expanded : descriptor.compact;
+        if (!box)
+            return 0;
+        return box.width > 0 ? box.width : IslandMotion.pillHeight;
+    }
+
+    function heightFor(id, presentation) {
+        const descriptor = root.byId(id);
+        if (!descriptor)
+            return 0;
+        if (presentation === "orb")
+            return root.widthFor(id, "orb");
+        const box = presentation === "expanded" ? descriptor.expanded : descriptor.compact;
+        if (!box)
+            return 0;
+        return box.height > 0 ? box.height : IslandMotion.pillHeight;
+    }
+
+    /**
+     * Whether an activity has an expanded face at all. Most do not any more: expanding
+     * the island opens the dashboard, and only the activities with an auxiliary bubble
+     * (and LocalSend's drop flow) keep one, shown in the bubble's card.
+     */
+    function hasExpanded(id) {
+        const descriptor = root.byId(id);
+        return !!(descriptor && descriptor.expanded && descriptor.expanded.width > 0);
+    }
+
+    /**
+     * Whether an activity's face is something to press rather than look at - a call's
+     * Answer, an alarm's Stop. The island must not turn a hover on it into the dashboard.
+     */
+    function isInteractive(id) {
+        const descriptor = root.byId(id);
+        return !!(descriptor && descriptor.interactive === true);
+    }
+
+    /** The file that draws an activity, or "" when it has no such presentation. */
+    function contentFor(id, presentation) {
+        const descriptor = root.byId(id);
+        if (!descriptor || !descriptor.content)
+            return "";
+        return descriptor.content[presentation] ?? "";
+    }
+
+    function hasPresentation(id, presentation) {
+        return root.contentFor(id, presentation) !== "";
+    }
+
+    /**
+     * Whether the face draws its own expanded state (`isExpanded`) in the growing island,
+     * rather than handing over to a card file: the contracted face *is* what expands.
+     */
+    function expandsInPlace(id) {
+        const descriptor = root.byId(id);
+        return !!(descriptor && descriptor.expandsInPlace === true);
+    }
+
+    /**
+     * Whether a click on the expanded body (not on one of its buttons) opens the
+     * dashboard. True by default; a face that is a reading surface rather than a
+     * card to dismiss — the teleprompter — says false in its descriptor, so a
+     * stray click on the script cannot summon the dashboard over it.
+     */
+    function bodyClickOpensDashboard(id) {
+        const descriptor = root.byId(id);
+        return !descriptor || descriptor.bodyClickOpensDashboard !== false;
+    }
+}

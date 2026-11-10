@@ -13,6 +13,9 @@ Item {
     property color contentColor: Appearance.colors.colOnLayer1
     property var animatedItems: []
     property string renderedTargetId: ""
+    readonly property string visualization: Config.options.bar.aiPlanUsage.visualization
+    // These styles draw both windows in a single indicator instead of one per window.
+    readonly property bool combined: ["capsule", "mood", "duo"].indexOf(root.visualization) >= 0
 
     implicitWidth: transitionContent.implicitWidth
     implicitHeight: transitionContent.implicitHeight
@@ -73,7 +76,7 @@ Item {
 
         Repeater {
             id: quotaRepeater
-            model: root.animatedItems
+            model: root.combined ? [] : root.animatedItems
 
             delegate: AiQuotaIndicator {
                 required property var modelData
@@ -81,8 +84,21 @@ Item {
                 quota: modelData
                 vertical: root.vertical
                 useAccentForeground: root.useAccentForeground
-                visualization: Config.options.bar.aiPlanUsage.visualization
+                visualization: root.visualization
                 showWindowLabel: Config.options.bar.aiPlanUsage.showWindowLabel
+                contentColor: root.contentColor
+            }
+        }
+
+        Loader {
+            active: root.combined
+            visible: active
+            sourceComponent: AiQuotaCombined {
+                primaryQuota: root.animatedItems[0] ?? null
+                secondaryQuota: root.animatedItems[1] ?? null
+                visualization: root.visualization
+                vertical: root.vertical
+                useAccentForeground: root.useAccentForeground
                 contentColor: root.contentColor
             }
         }

@@ -18,6 +18,59 @@ Item {
     property bool vertical: false
     property bool alwaysShowAllResources: false
     property bool isMaterial: true // Forced expressive
+    property bool popupActive: false
+
+    // Hold only the optional metric work that this bar instance actually
+    // renders. CPU/RAM remain the cheap always-on pair in ResourceUsage.
+    property bool _temperatureMetricRequested: false
+    property bool _diskMetricRequested: false
+    property bool _swapMetricRequested: false
+    property bool _dockerConsumerRequested: false
+
+    function syncMetricRequests() {
+        const resources = Config.options.bar.resources;
+        const wantTemperature = !!resources.alwaysShowCpuTemp;
+        const wantDisk = !!resources.alwaysShowDisk;
+        const wantSwap = !!resources.alwaysShowSwap;
+        const wantDocker = !!resources.showDocker;
+
+        if (_temperatureMetricRequested !== wantTemperature) {
+            ResourceUsage.requestMetric("temperature", wantTemperature);
+            _temperatureMetricRequested = wantTemperature;
+        }
+        if (_diskMetricRequested !== wantDisk) {
+            ResourceUsage.requestMetric("disk", wantDisk);
+            _diskMetricRequested = wantDisk;
+        }
+        if (_swapMetricRequested !== wantSwap) {
+            ResourceUsage.requestMetric("swap", wantSwap);
+            _swapMetricRequested = wantSwap;
+        }
+        if (_dockerConsumerRequested !== wantDocker) {
+            DockerService.requestConsumer(wantDocker);
+            _dockerConsumerRequested = wantDocker;
+        }
+    }
+
+    Component.onCompleted: syncMetricRequests()
+    Component.onDestruction: {
+        if (_temperatureMetricRequested)
+            ResourceUsage.requestMetric("temperature", false);
+        if (_diskMetricRequested)
+            ResourceUsage.requestMetric("disk", false);
+        if (_swapMetricRequested)
+            ResourceUsage.requestMetric("swap", false);
+        if (_dockerConsumerRequested)
+            DockerService.requestConsumer(false);
+    }
+
+    Connections {
+        target: Config.options.bar.resources
+        function onAlwaysShowCpuTempChanged() { root.syncMetricRequests(); }
+        function onAlwaysShowDiskChanged() { root.syncMetricRequests(); }
+        function onAlwaysShowSwapChanged() { root.syncMetricRequests(); }
+        function onShowDockerChanged() { root.syncMetricRequests(); }
+    }
 
     implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : mainRow.implicitWidth
     implicitHeight: vertical ? mainCol.implicitHeight : Appearance.sizes.baseBarHeight
@@ -240,14 +293,21 @@ Item {
     }
 
     // ── Popup declaration ────────────────────────────────────────────────────
-    ExpressiveResourcesPopup {
-        hoverTarget: hoverArea
-        Component.onCompleted: {
-            activeChanged.connect(() => {
-                if (active) {
-                    DockerService.refreshForPopup();
-                }
-            });
+    // Lazy: popup controller is only built on approach (same as ExpressiveSports).
+    Loader {
+        active: BarInteraction.enablePopups
+            && (BarInteraction.clickToShow || hoverArea.containsMouse || root.popupActive)
+        sourceComponent: ExpressiveResourcesPopup {
+            hoverTarget: hoverArea
+            onActiveChanged: root.popupActive = active
+            Component.onDestruction: root.popupActive = false
+            Component.onCompleted: {
+                activeChanged.connect(() => {
+                    if (active) {
+                        DockerService.refreshForPopup();
+                    }
+                });
+            }
         }
     }
 

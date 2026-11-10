@@ -8,12 +8,14 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.modules.ii.background.widgets
+import qs.modules.ii.background.shortcuts
 
 /**
  * Edit Mode's panel: the surface that slides in from the right of the card.
  *
- * Five catalogues - the desktop's widgets, the bar, the dock, the lock
- * screen's own switches and the style (wallpaper, theme, palette) - and each
+ * Six catalogues - the desktop's widgets, the bar, the dock, the lock
+ * screen's own switches, the wallpaper (each screen's picture, the colour
+ * source, the framing) and the style (presets, theme, palette) - and each
  * of them is a ROOT with sub-pages rather
  * than a list of accordions. That is the change: sections that expanded in
  * place put eighty rows in one scroll and left no room for anything a section
@@ -81,13 +83,17 @@ Item {
         if (section === "apps")
             return true;
         if (section === "widgets")
-            return page.startsWith("category:");
+            // The apps page is a desktop page: on the lock tab it is not a
+            // valid address even when left over from the desktop side.
+            return page.startsWith("category:") || ((page === "desktopApps" || page === "desktopIcons") && !root.lockTab);
         if (section === "bar")
             return page === "appearance" || page.startsWith("component:");
         if (section === "dock")
             return page === "appearance" || page === "widgets" || page.startsWith("apps:");
         if (section === "style")
-            return page.startsWith("wallpapers") || page === "colours";
+            return page === "colours";
+        if (section === "wallpaper")
+            return page.startsWith("wallpapers");
         return false;
     }
 
@@ -143,7 +149,7 @@ Item {
     // The dock's catalogue alone runs to two hundred rows. A query FLATTENS the
     // catalogue it filters, pages and all: someone typing is after one row, not
     // after where it lives. The lock screen's switches are not worth a box.
-    readonly property bool searchable: root.section !== "lock" && root.section !== "style"
+    readonly property bool searchable: root.section !== "lock" && root.section !== "aod" && root.section !== "style" && root.section !== "wallpaper"
     property string query: ""
     readonly property string needle: root.query.trim().toLowerCase()
     readonly property bool searching: root.searchable && root.needle !== ""
@@ -323,7 +329,9 @@ Item {
         { "key": "Devices", "title": Translation.tr("Devices & Bluetooth"), "icon": "earbuds", "merge": ["Bluetooth"] },
         { "key": "Utility", "title": Translation.tr("Utility"), "icon": "build" },
         { "key": "System", "title": Translation.tr("System"), "icon": "tune" },
-        { "key": "Resources", "title": Translation.tr("Resources"), "icon": "monitor_heart" }
+        { "key": "Resources", "title": Translation.tr("Resources"), "icon": "monitor_heart" },
+        { "key": "Wellbeing", "title": Translation.tr("Wellbeing"), "icon": "self_improvement" },
+        { "key": "People", "title": Translation.tr("People & dates"), "icon": "cake" }
     ]
 
     readonly property var widgetGroups: {
@@ -356,6 +364,10 @@ Item {
 
     function widgetGroupByKey(key) {
         return root.widgetGroups.find(group => group.key === key) ?? null;
+    }
+
+    function widgetCategoryTitle(widget) {
+        return root.widgetGroups.find(group => group.items.indexOf(widget) !== -1)?.title ?? "";
     }
 
     // How many KINDS in this category are placed, not how many copies: the
@@ -485,12 +497,78 @@ Item {
             || item.id.toLowerCase().includes(q)
             || item.genericName.toLowerCase().includes(q));
     }
-
-    readonly property bool lockTab: GlobalStates.editLockPreview
-    onLockTabChanged: {
-        if (root.lockTab ? (root.section === "bar" || root.section === "dock" || root.section === "apps") : root.section === "lock")
-            GlobalStates.editDrawerSection = "widgets";
+    // The desktop twin of the tablet's home-screen list: same AppSearch rows,
+    // but `onScreen` reads the DesktopShortcuts store, so the check marks the
+    // icon standing on THIS screen's desktop.
+    readonly property var desktopAppsItems: {
+        const q = root.needle;
+        const all = Array.from(AppSearch.list ?? []).filter(e => e && e.id && !e.noDisplay);
+        const desktopItems = DesktopShortcuts.itemsFor(root.screenName).filter(item => item.type === "app");
+        const onDesktop = new Set();
+        for (const item of desktopItems) {
+            onDesktop.add(item.id);
+            if (item.fileName) {
+                onDesktop.add(item.fileName);
+                onDesktop.add(item.fileName.replace(/\.desktop$/, ""));
+            }
+            if (item.path) {
+                const fn = item.path.substring(item.path.lastIndexOf("/") + 1);
+                onDesktop.add(fn);
+                onDesktop.add(fn.replace(/\.desktop$/, ""));
+            }
+        }
+        const mapped = all.map(entry => ({
+            "id": entry.id,
+            "name": entry.name ?? entry.id,
+            "genericName": entry.genericName ?? "",
+            "comment": entry.comment ?? "",
+            "onScreen": onDesktop.has(entry.id) || onDesktop.has(entry.id + ".desktop")
+        }));
+        if (!q)
+            return mapped;
+        return mapped.filter(item => item.name.toLowerCase().includes(q)
+            || item.id.toLowerCase().includes(q)
+            || item.genericName.toLowerCase().includes(q));
     }
+    readonly property int desktopAppCount: DesktopShortcuts.itemsFor(root.screenName)
+        .filter(item => item.type === "app").length
+
+    // Click-toggle: an icon on the desktop goes back to the store, a missing
+    // one is placed by the store's own free-space finder, which walks the
+    // grid from the top-left — repeated adds never stack on one cell.
+    function toggleAppOnDesktop(appId) {
+        if (!appId)
+            return;
+        const items = DesktopShortcuts.itemsFor(root.screenName);
+        const match = items.find(item => item.type === "app" && (
+            item.id === appId || item.id === "desktop:" + appId
+            || (item.fileName && (item.fileName === appId || item.fileName === appId + ".desktop"))
+            || (item.path && (item.path.endsWith("/" + appId) || item.path.endsWith("/" + appId + ".desktop")))
+        ));
+        if (match) {
+            DesktopShortcuts.remove(root.screenName, match.id);
+            return;
+        }
+        DesktopShortcuts.addDockApps(root.screenName, [appId], 20, 80);
+    }
+
+    // The lock's widget layout: the Lockscreen tab and the AOD tab both edit it.
+    readonly property bool lockTab: GlobalStates.editLockLayout
+    readonly property bool aodTab: GlobalStates.editAodPreview
+    function sectionFitsTab(section) {
+        if (root.aodTab)
+            return section === "widgets" || section === "aod";
+        if (root.lockTab)
+            return section !== "bar" && section !== "dock" && section !== "apps" && section !== "aod";
+        return section !== "lock" && section !== "aod";
+    }
+    function dropMisplacedSection() {
+        if (!root.sectionFitsTab(root.section))
+            GlobalStates.editDrawerSection = root.aodTab ? "aod" : "widgets";
+    }
+    onLockTabChanged: root.dropMisplacedSection()
+    onAodTabChanged: root.dropMisplacedSection()
+
     readonly property bool anyLockFork: root.activeWidgets.some(entry =>
         WidgetPlacement.fork(entry, root.screenName, true) !== null)
 
@@ -552,8 +630,12 @@ Item {
                 return PanelFamily.touchFirst ? Translation.tr("Taskbar") : Translation.tr("Dock");
             if (root.section === "lock")
                 return Translation.tr("Lock screen");
+            if (root.section === "aod")
+                return Translation.tr("Always On Display");
             if (root.section === "style")
                 return Translation.tr("Style");
+            if (root.section === "wallpaper")
+                return Translation.tr("Wallpaper");
             return Translation.tr("Widgets");
         }
         if (root.page.startsWith("wallpapers")) {
@@ -562,6 +644,8 @@ Item {
                 return Translation.tr("Lock screen wallpaper");
             if (target === "lightmode")
                 return Translation.tr("Light mode wallpaper");
+            if (target === "screen")
+                return Translation.tr("Wallpaper for %1").arg(root.screenName);
             return Translation.tr("Wallpaper");
         }
         if (root.section === "apps") {
@@ -572,6 +656,10 @@ Item {
         }
         if (root.page === "colours")
             return Translation.tr("Colour scheme");
+        if (root.page === "desktopApps")
+            return Translation.tr("Add apps to desktop");
+        if (root.page === "desktopIcons")
+            return Translation.tr("Desktop icons");
         if (root.page.startsWith("category:"))
             return root.widgetGroupByKey(root.page.substring(9))?.title ?? Translation.tr("Widgets");
         if (root.page.startsWith("apps:"))
@@ -601,8 +689,16 @@ Item {
             return PanelFamily.touchFirst ? "dock_to_bottom" : "dock";
         if (root.section === "lock")
             return "lock";
+        if (root.section === "aod")
+            return "dark_mode";
         if (root.section === "style")
             return "palette";
+        if (root.section === "wallpaper")
+            return "wallpaper";
+        if (root.page === "desktopApps")
+            return "apps";
+        if (root.page === "desktopIcons")
+            return "grid_view";
         return "widgets";
     }
 
@@ -703,47 +799,90 @@ Item {
             }
 
             // ── Catalogue picker ─────────────────────────────────────────────
-            ButtonGroup {
+            // Up to seven catalogues in a 380px panel. While every label fits
+            // the group shows them all; when they do not, the current
+            // catalogue keeps its label and the others fold to their icon
+            // (named by a tooltip) - nothing is scaled, so text stays at its
+            // real size.
+            Item {
+                id: pickerHost
+                Layout.fillWidth: true
                 Layout.leftMargin: 4
                 Layout.rightMargin: 4
                 visible: root.atRoot
+                implicitHeight: catalogueGroup.implicitHeight
 
-                SelectionGroupButton {
-                    visible: PanelFamily.touchFirst && !root.lockTab
-                    leftmost: true
-                    buttonText: Translation.tr("Apps")
-                    toggled: root.section === "apps"
-                    onClicked: root.setSection("apps")
+                readonly property var tabs: [
+                    { "section": "apps", "label": Translation.tr("Apps"), "icon": "apps",
+                      "shown": PanelFamily.touchFirst && !root.lockTab },
+                    { "section": "widgets", "label": Translation.tr("Widgets"), "icon": "widgets", "shown": true },
+                    { "section": "bar", "label": Translation.tr("Bar"), "icon": "toolbar", "shown": !root.lockTab },
+                    { "section": "dock", "label": PanelFamily.touchFirst ? Translation.tr("Taskbar") : Translation.tr("Dock"),
+                      "icon": "dock_to_bottom", "shown": !root.lockTab },
+                    { "section": "lock", "label": Translation.tr("Lock screen"), "icon": "lock", "shown": root.lockTab && !root.aodTab },
+                    { "section": "wallpaper", "label": Translation.tr("Wallpaper"), "icon": "wallpaper", "shown": !root.aodTab },
+                    { "section": "style", "label": Translation.tr("Style"), "icon": "palette", "shown": !root.aodTab },
+                    { "section": "aod", "label": Translation.tr("Always On"), "icon": "dark_mode", "shown": root.aodTab }
+                ]
+                readonly property var shownTabs: pickerHost.tabs.filter(tab => tab.shown)
+                // The group with every label: the labels' own widths plus
+                // each button's padding (SelectionGroupButton, 12 a side) and
+                // the group's gaps.
+                readonly property real fullWidth: labelMeasure.implicitWidth
+                    + pickerHost.shownTabs.length * 24 + catalogueGroup.spacing * Math.max(0, pickerHost.shownTabs.length - 1)
+                readonly property bool compact: pickerHost.fullWidth > pickerHost.width
+
+                Row {
+                    id: labelMeasure
+                    visible: false
+                    Repeater {
+                        model: pickerHost.shownTabs
+                        delegate: StyledText {
+                            required property var modelData
+                            text: modelData.label
+                        }
+                    }
                 }
-                SelectionGroupButton {
-                    leftmost: !PanelFamily.touchFirst || root.lockTab
-                    buttonText: Translation.tr("Widgets")
-                    toggled: root.section === "widgets"
-                    onClicked: root.setSection("widgets")
-                }
-                SelectionGroupButton {
-                    visible: !root.lockTab
-                    buttonText: Translation.tr("Bar")
-                    toggled: root.section === "bar"
-                    onClicked: root.setSection("bar")
-                }
-                SelectionGroupButton {
-                    visible: !root.lockTab
-                    buttonText: PanelFamily.touchFirst ? Translation.tr("Taskbar") : Translation.tr("Dock")
-                    toggled: root.section === "dock"
-                    onClicked: root.setSection("dock")
-                }
-                SelectionGroupButton {
-                    visible: root.lockTab
-                    buttonText: Translation.tr("Lock screen")
-                    toggled: root.section === "lock"
-                    onClicked: root.setSection("lock")
-                }
-                SelectionGroupButton {
-                    rightmost: true
-                    buttonText: Translation.tr("Style")
-                    toggled: root.section === "style"
-                    onClicked: root.setSection("style")
+
+                ButtonGroup {
+                    id: catalogueGroup
+
+                    CatalogueTab {
+                        tab: pickerHost.tabs[0]
+                        compact: pickerHost.compact
+                        leftmost: true
+                    }
+                    CatalogueTab {
+                        tab: pickerHost.tabs[1]
+                        compact: pickerHost.compact
+                        leftmost: !pickerHost.tabs[0].shown
+                    }
+                    CatalogueTab {
+                        tab: pickerHost.tabs[2]
+                        compact: pickerHost.compact
+                    }
+                    CatalogueTab {
+                        tab: pickerHost.tabs[3]
+                        compact: pickerHost.compact
+                    }
+                    CatalogueTab {
+                        tab: pickerHost.tabs[4]
+                        compact: pickerHost.compact
+                    }
+                    CatalogueTab {
+                        tab: pickerHost.tabs[5]
+                        compact: pickerHost.compact
+                    }
+                    CatalogueTab {
+                        tab: pickerHost.tabs[6]
+                        compact: pickerHost.compact
+                        rightmost: !pickerHost.tabs[7].shown
+                    }
+                    CatalogueTab {
+                        tab: pickerHost.tabs[7]
+                        compact: pickerHost.compact
+                        rightmost: true
+                    }
                 }
             }
 
@@ -760,8 +899,14 @@ Item {
                         : Translation.tr("Drag a widget onto the desktop to place it, or click to add one. Drag one back here to remove it."))
                     : root.section === "lock"
                         ? Translation.tr("What the lock screen shows besides your widgets.")
+                    : root.section === "aod"
+                        ? Translation.tr("What the screen shows when it goes dark. With Widgets, drag them on the card: the AOD keeps the lock screen's layout.")
                     : root.section === "style"
-                        ? Translation.tr("The wallpaper and the colours everything is drawn in. Changes apply at once; undo takes them back.")
+                        ? Translation.tr("Presets, light or dark, and the colours everything is drawn in. Changes apply at once; undo takes them back.")
+                    : root.section === "wallpaper"
+                        ? (root.lockTab
+                            ? Translation.tr("The picture behind the lock screen. Position and zoom are set on the Desktop tab.")
+                            : Translation.tr("Each screen's picture and how it sits. While this is open, drag the desktop to move the wallpaper and use the wheel or a pinch to zoom."))
                     : root.section === "bar"
                         ? Translation.tr("Drag a widget onto the bar to drop it where you want it, or open one to change how it looks.")
                         : (PanelFamily.touchFirst
@@ -795,7 +940,8 @@ Item {
                     leftPadding: 34
                     rightPadding: 34
                     colBackground: Appearance.colors.colLayer1
-                    placeholderText: root.section === "apps" ? Translation.tr("Search applications")
+                    placeholderText: root.section === "apps" || (root.section === "widgets" && root.page === "desktopApps")
+                        ? Translation.tr("Search applications")
                         : root.section === "dock" ? Translation.tr("Search apps")
                         : root.section === "bar" ? Translation.tr("Search bar widgets")
                         : Translation.tr("Search widgets")
@@ -900,6 +1046,7 @@ Item {
                             return root.section === "bar" ? barListPage
                                 : root.section === "dock" ? dockAppListPage
                                 : root.section === "apps" ? appsListPage
+                                : root.section === "widgets" && root.page === "desktopApps" ? desktopAppsPage
                                 : widgetListPage;
                         if (root.section === "apps") {
                             if (root.page === "createPair")
@@ -909,16 +1056,17 @@ Item {
                             return appsListPage;
                         }
                         if (root.section === "widgets")
-                            return root.page.startsWith("category:") ? widgetListPage : widgetCategoriesPage;
+                            return root.page === "desktopApps" ? desktopAppsPage
+                                : root.page === "desktopIcons" ? desktopIconsPage
+                                : root.page.startsWith("category:") ? widgetListPage : widgetCategoriesPage;
                         if (root.section === "lock")
                             return lockPage;
-                        if (root.section === "style") {
-                            if (root.page.startsWith("wallpapers"))
-                                return wallpaperPage;
-                            if (root.page === "colours")
-                                return colourPage;
-                            return stylePage;
-                        }
+                        if (root.section === "aod")
+                            return aodPage;
+                        if (root.section === "style")
+                            return root.page === "colours" ? colourPage : stylePage;
+                        if (root.section === "wallpaper")
+                            return root.page.startsWith("wallpapers") ? wallpaperPage : wallpaperRootPage;
                         if (root.section === "bar") {
                             if (root.page === "appearance")
                                 return barAppearancePage;
@@ -970,101 +1118,150 @@ Item {
                 onActivated: root.openPage("category:" + modelData.key)
             }
 
-            // A clean slate, one Ctrl+Z away. Shown only while there is
-            // something to clear, so the catalogue's root is not a place
-            // that offers to delete nothing.
+            // The tablet's app catalogue, ported: a row at the end of the
+            // widget list opens the same check/add app page, writing desktop
+            // shortcut icons instead of home-screen ones. Hidden on the lock
+            // tab, where this section catalogues lock widgets, not desktops.
+            // The clear row below keeps its own rule: shown only while there
+            // is something to clear, so the root is not a place that offers
+            // to delete nothing.
+            //
+            // A ListView gives its footer NO item spacing: the footer lands
+            // flush on the last delegate, which glued "Add apps manually"
+            // onto the last category row. The wrapper's 10+3 gutter is the
+            // same one the tablet page's footer below keeps.
             footer: Item {
                 width: categoryList.width
-                height: root.activeWidgets.length > 0 ? clearRow.height + 13 : 0
-                visible: root.activeWidgets.length > 0
+                height: footerColumn.implicitHeight + 13
+                visible: !root.lockTab || root.activeWidgets.length > 0
 
-                EditPanelRow {
-                    id: clearRow
+                ColumnLayout {
+                    id: footerColumn
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.top: parent.top
                     anchors.topMargin: 10
-                    first: true
-                    last: true
-                    destructive: true
-                    symbol: "delete_sweep"
-                    title: Translation.tr("Remove every widget")
-                    valueText: `${root.activeWidgets.length}`
-                    trailingKind: "none"
-                    onActivated: root.resetRequested("widgets")
+                    spacing: 10
+
+                    EditPanelRow {
+                        id: desktopAppsRow
+                        Layout.fillWidth: true
+                        visible: !root.lockTab
+                        first: true
+                        last: true
+                        symbol: "add_to_home_screen"
+                        title: Translation.tr("Add apps manually")
+                        subtitle: Translation.tr("Toggle applications onto the desktop")
+                        valueText: root.desktopAppCount > 0 ? `${root.desktopAppCount}` : ""
+                        trailingKind: "chevron"
+                        onActivated: root.openPage("desktopApps")
+                    }
+                    // The desktop icons' look - size, spacing, origin, labels,
+                    // backgrounds, badges - on a page of its own. It lives
+                    // beside the shortcuts row because it speaks of the
+                    // shortcuts, not of the widget canvas above it.
+                    EditPanelRow {
+                        Layout.fillWidth: true
+                        visible: !root.lockTab
+                        first: true
+                        last: true
+                        symbol: "grid_view"
+                        title: Translation.tr("Desktop icons")
+                        subtitle: Translation.tr("Size, spacing, labels and badges")
+                        valueText: `${Config.options.background.desktopIconScale ?? 1}×`
+                        trailingKind: "chevron"
+                        onActivated: root.openPage("desktopIcons")
+                    }
+
+                    // A clean slate, one Ctrl+Z away.
+                    EditPanelRow {
+                        id: clearRow
+                        Layout.fillWidth: true
+                        visible: root.activeWidgets.length > 0
+                        first: true
+                        last: true
+                        destructive: true
+                        symbol: "delete_sweep"
+                        title: Translation.tr("Remove every widget")
+                        valueText: `${root.activeWidgets.length}`
+                        trailingKind: "none"
+                        onActivated: root.resetRequested("widgets")
+                    }
                 }
             }
         }
     }
 
-    // A category's widgets, or a query's answer: a click adds or removes,
-    // a drag places the widget where the pointer is let go.
+    // Port of the tablet's appsListPage: same rows, same check/add trailing
+    // state, but the store is DesktopShortcuts — a click toggles the app icon
+    // on this screen's desktop. No pairs or folders: the desktop groups by
+    // dragging icons onto each other, which the layer already speaks.
     Component {
-        id: widgetListPage
+        id: desktopIconsPage
+        EditDesktopIconsPage {}
+    }
 
-        // The empty line is a SIBLING of the list, never a child of it: a
-        // plain child of a ListView is parented into its content item, which
-        // scrolls and is zero-sized when the model is empty - exactly the case
-        // the line exists for.
+    Component {
+        id: desktopAppsPage
+
         Item {
             StyledListView {
-                id: widgetList
+                id: desktopAppList
                 anchors.fill: parent
-                staggerStep: root.staggerStep
+                popin: false
+                animateAppearance: false
                 clip: true
                 spacing: 3
-                model: root.widgetItems
+                model: root.desktopAppsItems
 
                 delegate: EditPanelRow {
-                    id: widgetRow
                     required property var modelData
                     required property int index
-                    readonly property int placed: root.widgetCount(modelData.widgetId)
-
-                    width: widgetList.width
+                    width: desktopAppList.width
                     first: index === 0
-                    last: index === root.widgetItems.length - 1
-                    symbol: modelData.icon ?? "widgets"
-                    title: modelData.name ?? modelData.widgetId
-                    subtitle: modelData.description ?? ""
-                    // The row always offers ANOTHER one, and says how many are
-                    // out there. A checkmark would be claiming the row is a
-                    // switch, and it is not one any more.
-                    //
-                    // Once one is placed the count becomes a stepper: the plus
-                    // it already had, and the minus it never did. Taking a
-                    // widget back off meant hunting the copy down on the
-                    // desktop and using its own menu - fine for one, absurd for
-                    // the five a stray click leaves behind, and impossible for
-                    // a copy that landed under another window's worth of
-                    // widgets. The minus takes the last one placed.
-                    valueText: widgetRow.placed > 0 ? `×${widgetRow.placed}` : ""
-                    trailingKind: widgetRow.placed > 0 ? "stepper" : "add"
-                    stepDownEnabled: widgetRow.placed > 0
-                    onStepDown: Config.removeLastWidgetInstance(modelData.widgetId)
-                    onStepUp: root.addInstanceRequested(modelData.widgetId)
-                    draggable: true
-                    dragOwner: widgetList
-
-                    onActivated: root.addInstanceRequested(modelData.widgetId)
-                    onDragBegan: root.dragMetadata = modelData
-                    onDragMovedTo: (x, y) => root.moveGhost(x, y)
-                    onDragFinished: (x, y) => {
-                        root.dragMetadata = null;
-                        const p = root.toGhost(x, y);
-                        root.addRequested(modelData.widgetId, p.x, p.y);
-                    }
-                    onDragCancelled: root.dragMetadata = null
+                    last: index === root.desktopAppsItems.length - 1
+                    iconSource: Quickshell.iconPath(AppSearch.guessIcon(modelData.id ?? ""), "image-missing")
+                    title: modelData.name ?? modelData.id
+                    subtitle: modelData.genericName || modelData.comment || ""
+                    trailingKind: modelData.onScreen ? "check" : "add"
+                    valueText: modelData.onScreen ? Translation.tr("On desktop") : ""
+                    onActivated: root.toggleAppOnDesktop(modelData.id ?? "")
                 }
             }
 
             StyledText {
                 anchors.centerIn: parent
-                visible: widgetList.count === 0
-                text: Translation.tr("No matches")
-                font.pixelSize: Appearance.font.pixelSize.small
+                visible: desktopAppList.count === 0
+                text: Translation.tr("No applications found")
                 color: Appearance.colors.colOnSurfaceVariant
             }
+        }
+    }
+
+    // A category's widgets, or a query's answer: a click adds one, a drag
+    // places it where the pointer is let go, the minus takes the last back.
+    Component {
+        id: widgetListPage
+
+        EditWidgetCatalogPage {
+            items: root.widgetItems
+            group: root.searching ? null : root.widgetGroupByKey(root.page.substring(9))
+            searching: root.searching
+            lockTab: root.lockTab
+            staggerStep: root.staggerStep
+            countOf: widgetId => root.widgetCount(widgetId)
+            captionOf: widget => root.widgetCategoryTitle(widget)
+
+            onAddOne: widgetId => root.addInstanceRequested(widgetId)
+            onRemoveOne: widgetId => Config.removeLastWidgetInstance(widgetId)
+            onDragBegan: widget => root.dragMetadata = widget
+            onDragMoved: (x, y) => root.moveGhost(x, y)
+            onDragDropped: (widgetId, x, y) => {
+                root.dragMetadata = null;
+                const p = root.toGhost(x, y);
+                root.addRequested(widgetId, p.x, p.y);
+            }
+            onDragCancelled: root.dragMetadata = null
         }
     }
 
@@ -1250,6 +1447,16 @@ Item {
                 id: dockColumn
                 width: dockRoot.width
                 spacing: 3
+
+                // The dock is edited where it is drawn; this page keeps the
+                // lists. One line says so instead of a switch per widget.
+                EditPanelNotice {
+                    visible: !PanelFamily.touchFirst
+                    Layout.fillWidth: true
+                    Layout.bottomMargin: 6
+                    symbol: "touch_app"
+                    text: Translation.tr("On the dock: click a widget to resize, stack or set it up, drag to move it, and use + to add more.")
+                }
 
                 EditPanelRow {
                     visible: !PanelFamily.touchFirst
@@ -1665,8 +1872,8 @@ Item {
         }
     }
 
-    // The Style catalogue: the wallpaper, the theme and the palette, with the
-    // folder and the swatch grid a page down each.
+    // The Style catalogue: presets, the theme and the palette, with the swatch
+    // grid a page down.
     Component {
         id: stylePage
         EditStylePage {
@@ -1676,17 +1883,32 @@ Item {
         }
     }
 
-    // Which wallpaper the folder page sets. "wallpapers:lockscreen" and
-    // "wallpapers:lightmode" are the variant rows asking for their own; a bare
-    // "wallpapers" follows the tab and the theme, the way the card does.
+    // The Wallpaper catalogue: this screen's picture, the colour source and
+    // the framing, with the folder a page down.
+    Component {
+        id: wallpaperRootPage
+        EditWallpaperRootPage {
+            screenName: root.screenName
+            onOpenPageRequested: page => root.openPage(page)
+        }
+    }
+
+    // Which wallpaper the folder page sets. "wallpapers:lockscreen",
+    // "wallpapers:lightmode" and "wallpapers:screen" are rows asking for their
+    // own; a bare "wallpapers" follows the tab, the screen and the theme, the
+    // way the card does.
     readonly property string wallpaperPageTarget: {
         if (root.page === "wallpapers:lockscreen")
             return "lockscreen";
         if (root.page === "wallpapers:lightmode")
             return "lightmode";
+        if (root.page === "wallpapers:screen")
+            return "screen";
         const background = Config.options.background;
         if (GlobalStates.editLockPreview && (background.useSeparateLockscreenWallpaper ?? false))
             return "lockscreen";
+        if (!GlobalStates.editLockPreview && WallpaperLayout.hasOwn(root.screenName))
+            return "screen";
         if ((background.useSeparateLightModeWallpaper ?? false) && !Appearance.m3colors.darkmode)
             return "lightmode";
         return "desktop";
@@ -1696,6 +1918,7 @@ Item {
         id: wallpaperPage
         EditWallpaperPage {
             target: root.wallpaperPageTarget
+            screenName: root.screenName
         }
     }
 
@@ -1806,6 +2029,14 @@ Item {
         }
     }
 
+    // The Always On Display: which clock it draws, and how it behaves. Written
+    // straight to config like the lock's switches: preferences, not layout edits.
+    Component {
+        id: aodPage
+
+        EditAodPage {}
+    }
+
     // The drag ghost: the row's name carried under the pointer, parented
     // outside the reveal so it is not clipped at the panel's edge.
     Rectangle {
@@ -1832,6 +2063,25 @@ Item {
                 font.pixelSize: Appearance.font.pixelSize.small
                 color: Appearance.colors.colOnSurface
             }
+        }
+    }
+
+    // One catalogue in the picker. Folded (`compact`), only the current one
+    // keeps its label; the rest show their icon and say their name on hover.
+    component CatalogueTab: SelectionGroupButton {
+        id: catalogueTab
+        required property var tab
+        property bool compact: false
+        visible: catalogueTab.tab.shown
+        toggled: root.section === catalogueTab.tab.section
+        buttonIcon: catalogueTab.compact ? catalogueTab.tab.icon : ""
+        buttonText: !catalogueTab.compact || catalogueTab.toggled ? catalogueTab.tab.label : ""
+        onClicked: root.setSection(catalogueTab.tab.section)
+
+        StyledToolTip {
+            requireOverlay: false
+            extraVisibleCondition: catalogueTab.compact && !catalogueTab.toggled
+            text: catalogueTab.tab.label
         }
     }
 }

@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.services
 import "../../shared/cards"
@@ -12,6 +13,7 @@ SectionCard {
 
     required property var providerData
     property bool startAnim: false
+    property bool collapsed: true
     property int animDelay: 0
     property color accentColor: Appearance.colors.colSecondary
     property color accentContainer: Appearance.colors.colSecondaryContainer
@@ -51,18 +53,30 @@ SectionCard {
     }
     showDivider: false
     opacity: 0.0
+    scale: 0.85
 
     transform: Translate {
         id: cardTranslate
-        y: 18
+        y: 25
     }
 
-    onStartAnimChanged: {
+    function resetEntrance() {
         cardAnim.stop();
         root.opacity = 0.0;
-        cardTranslate.y = 18;
-        if (root.startAnim)
-            Qt.callLater(function() { cardAnim.start(); });
+        root.scale = 0.85;
+        cardTranslate.y = 25;
+    }
+
+    // Same staggered fly-in as the other bar popups.
+    onStartAnimChanged: {
+        if (!root.startAnim)
+            return;
+        root.resetEntrance();
+        Qt.callLater(function() { cardAnim.start(); });
+    }
+    onCollapsedChanged: {
+        if (root.collapsed)
+            root.resetEntrance();
     }
 
     SequentialAnimation {
@@ -76,17 +90,21 @@ SectionCard {
                 target: root
                 property: "opacity"
                 to: 1.0
-                duration: Appearance.animation.elementMoveFast.duration
-                easing.type: Appearance.animation.elementMoveFast.type
-                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                duration: 300
+            }
+            NumberAnimation {
+                target: root
+                property: "scale"
+                to: 1.0
+                duration: 380
+                easing.type: Easing.OutBack
             }
             NumberAnimation {
                 target: cardTranslate
                 property: "y"
                 to: 0
-                duration: Appearance.animation.elementMove.duration
-                easing.type: Appearance.animation.elementMove.type
-                easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                duration: 380
+                easing.type: Easing.OutCubic
             }
         }
     }
@@ -102,11 +120,25 @@ SectionCard {
             quota: modelData
             showGroupName: String(root.providerData.groupId ?? "").length === 0
             startAnim: root.startAnim
-            animDelay: root.animDelay + Appearance.animation.elementMoveFast.duration
-                + Math.min(index, 4) * Math.round(Appearance.animation.elementMoveFast.duration / 5)
+            collapsed: root.collapsed
+            animDelay: root.animDelay + 60 + Math.min(index, 4) * 50
             accentColor: root.accentColor
             accentContainer: root.accentContainer
             onAccentContainer: root.onAccentContainer
         }
+    }
+
+    RippleButtonWithIcon {
+        visible: root.providerData.needsSignIn === true
+        Layout.alignment: Qt.AlignLeft
+        materialIcon: AiPlanUsage.claudeSignInPending ? "hourglass_top" : "login"
+        mainText: AiPlanUsage.claudeSignInPending
+            ? Translation.tr("Waiting for Claude Code…")
+            : Translation.tr("Refresh sign-in")
+        colBackground: root.accentContainer
+        colBackgroundHover: ColorUtils.mix(root.onAccentContainer, root.accentContainer, 0.1)
+        colRipple: ColorUtils.mix(root.onAccentContainer, root.accentContainer, 0.2)
+        colText: root.onAccentContainer
+        onClicked: AiPlanUsage.refreshClaudeSignIn()
     }
 }

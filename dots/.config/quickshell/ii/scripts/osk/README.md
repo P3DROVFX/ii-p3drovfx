@@ -30,14 +30,15 @@ unblocking it cannot itself require a terminal to type in.
 By hand:
 
 ```bash
-cd ~/.config/quickshell/ii/scripts/osk/osk_autoshow_src
-cargo build --release
-cp target/release/osk_autoshow ../osk_autoshow.new
-mv -f ../osk_autoshow.new ../osk_autoshow
+~/.config/quickshell/ii/scripts/rust-helpers.sh build osk_autoshow
 ```
 
-The rename matters on a rebuild: writing over the running helper is `ETXTBSY`, so a
-plain `cp` fails and throws away a compile that worked.
+Both paths go through `rust-helpers.sh`, which does two things a bare `cargo build`
+does not. It installs through a rename, because writing over the running helper is
+`ETXTBSY` — a plain `cp` fails and throws away a compile that worked. And it records
+the hash of the sources it built from in `.osk_autoshow.stamp`, which is how the
+shell and the updater later tell a current helper from one left behind by an update
+(`rust-helpers.sh status`).
 
 ## Output protocol
 

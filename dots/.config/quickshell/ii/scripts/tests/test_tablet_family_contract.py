@@ -63,8 +63,10 @@ class TabletFamilyContractTests(unittest.TestCase):
         self.assertIn("id: drawerViewport", drawer)
         self.assertIn("y: (1 - root.openProgress) * root.height", drawer)
         # The wash still rides the one progress. Which law it uses now depends on whether
-        # the drawer is blurring at all; both branches are that same number.
-        self.assertIn("opacity: root.useBlur ? root.openProgress * 0.72 : root.openProgress", drawer)
+        # the drawer is blurring at all; both branches are that same number. Dragging
+        # an app out of the drawer (ece3e46db) only multiplies it by a launch fade.
+        self.assertIn("opacity: (root.useBlur ? root.openProgress * 0.72 : root.openProgress)"
+                      " * (1 - dragLaunch.fade)", drawer)
         self.assertIn("visible: !GlobalStates.screenLocked", drawer)
         self.assertNotIn("visible: (root.wantOpen || root.openProgress > 0.001)", drawer)
         self.assertIn("y: (1 - root.revealProgress) * root.searchHeight * 0.8", content)
@@ -210,7 +212,7 @@ class TabletFamilyContractTests(unittest.TestCase):
         self.assertIn("PanelFamily.touchFirst ? Qt.LeftButton : Qt.NoButton", calendar_day)
         self.assertIn("button.compactCell ? 4 : 8", calendar_day)
         self.assertIn("root.countdowns.length === 0 && !root.dense", countdown)
-        self.assertIn("taskListRoot.dense || cellHover.hovered", task_list)
+        self.assertIn("taskListRoot.dense || todoItemRectangle.engaged", task_list)
         self.assertFalse((ROOT / "modules/ii/sidebarDashboard/calendar/CalendarWidget.qml").exists())
         self.assertFalse((ROOT / "modules/ii/sidebarDashboard/todo/TodoWidget.qml").exists())
         self.assertFalse((ROOT / "modules/ii/sidebarDashboard/pomodoro/PomodoroWidget.qml").exists())
@@ -276,7 +278,8 @@ class TabletFamilyContractTests(unittest.TestCase):
         # An alpha mask, not a colour band. ScrollEdgeFade paints a colour, which ends
         # content only when the surface behind it is that colour; the drawer sits on a
         # blurred screencopy, so the band washed the last row without ever ending it.
-        self.assertIn("layer.effect: OpacityMask {", content)
+        self.assertIn("layer.effect: TabletEdgeFade {", content)
+        self.assertNotIn("OpacityMask", content)
         self.assertIn("readonly property real fadeSize:", content)
         # Room to scroll the last row clear of the gradient.
         self.assertIn("bottomMargin: body.fadeSize", content)
@@ -459,7 +462,8 @@ class TabletFamilyContractTests(unittest.TestCase):
         self.assertIn("Math.round((root.vertical ? 28 : 22) * root.contentScale)", policies)
         # This one did not follow the bar even on the outside.
         self.assertNotIn("implicitWidth: 42", classicPolicies)
-        self.assertIn("Math.round(42 * root.contentScale)", classicPolicies)
+        # Its root id became leftSidebarButton with the new designs (788f5ed51).
+        self.assertIn("Math.round(42 * leftSidebarButton.contentScale)", classicPolicies)
 
     def test_tablet_keybinds_route_to_tablet_surfaces_not_desktop_overlays(self):
         keybinds = read("modules/tablet/navigation/TabletSystemKeybinds.qml")
@@ -498,7 +502,7 @@ class TabletFamilyContractTests(unittest.TestCase):
         self.assertIn("id: navigationPill", dock)
         self.assertIn("radius: Appearance.rounding.full", dock)
         self.assertIn("spacing: Appearance.sizes.elevationMargin * 1.25", dock)
-        self.assertIn("navigationButtonSize: root.appButtonSize - Appearance.sizes.elevationMargin", dock)
+        self.assertIn("navigationButtonSize: root.appButtonSize\n        - Math.min(Appearance.sizes.elevationMargin", dock)
         self.assertIn("implicitHeight: root.appButtonSize", dock)
         self.assertIn("buttonRadius: Appearance.rounding.full", button)
     def test_tablet_family_home_screen_supports_app_pairs_and_folders(self):

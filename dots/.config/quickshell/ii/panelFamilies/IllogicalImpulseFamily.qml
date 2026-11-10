@@ -3,8 +3,11 @@ import Quickshell
 import qs
 import qs.services
 
+// Panels load by URL (PanelUrlLoader), so most of these imports name no type here.
+// Keep them: they are how the QmlScanner reaches each panel's module.
 import qs.modules.common
 import qs.modules.common.panels.shellSwitcher
+import qs.modules.common.panels.windowSwitcher
 import qs.modules.ii.background
 import qs.modules.ii.background.desktopMenu
 import qs.modules.ii.bar
@@ -12,6 +15,8 @@ import qs.modules.ii.bluetoothConnectionPopup
 import qs.modules.ii.bluetoothPairing
 import qs.modules.ii.cheatsheet
 import qs.modules.ii.notes
+import qs.modules.ii.clock
+import qs.modules.ii.health
 import qs.modules.ii.dock
 import qs.modules.ii.lock
 import qs.modules.ii.mediaControls
@@ -38,17 +43,22 @@ import qs.modules.ii.localSendPopup
 import qs.modules.ii.scratchpadOverlay
 import qs.modules.ii.keyboardLayoutTransitionPopup
 import qs.modules.ii.keypressDisplay
+import qs.modules.ii.liveDraw
 import qs.modules.ii.topLayer
 import qs.modules.ii.tilingAssistant
 import qs.modules.ii.usage
 import qs.modules.ii.modes
 import qs.modules.ii.modeFlashPopup
 import qs.modules.ii.alarmRingingPopup
+import qs.modules.ii.screenTimeOverlay
 import qs.modules.ii.screenshotOverlay
 import qs.modules.ii.dynamicIsland
+import qs.modules.ii.dynamicIsland.core
 import qs.modules.ii.touchGestures
 import qs.modules.ii.editMode
 import qs.modules.tablet.appDrawer
+import qs.modules.ii.phoneControls
+import qs.modules.ii.recordingToolbar
 
 Scope {
     property bool barExtraCondition: true
@@ -68,103 +78,133 @@ Scope {
         Qt.callLater(() => barExtraCondition = true);
     }
 
-    PanelLoader {
+    PanelUrlLoader {
         extraCondition: !BarPlacement.vertical && barExtraCondition && !GlobalStates.connectModeActive
-        component: Bar {}
+        panelUrl: Qt.resolvedUrl("../modules/ii/bar/Bar.qml")
+        priority: 4 // First paint: bar, background, island, dock (see PanelSchedule)
     }
-    PanelLoader {
+    PanelUrlLoader {
         extraCondition: Config.options.background.enable
-        component: Background {}
+        panelUrl: Qt.resolvedUrl("../modules/ii/background/Background.qml")
+        priority: 3
     }
-    PanelLoader {
+    PanelUrlLoader {
         // The desktop layout editor's chrome; nothing to edit without the background.
         extraCondition: Config.options.background.enable
-        component: EditModeChrome {}
+        panelUrl: Qt.resolvedUrl("../modules/ii/editMode/EditModeChrome.qml")
     }
-    PanelLoader {
+    PanelUrlLoader {
         // The desktop's right-click menu; asked for by the background's surfaces.
         extraCondition: Config.options.background.enable
-        component: DesktopMenu {}
+        panelUrl: Qt.resolvedUrl("../modules/ii/background/desktopMenu/DesktopMenu.qml")
     }
-    PanelLoader {
-        component: Cheatsheet {}
+    PanelUrlLoader {
+        panelUrl: Qt.resolvedUrl("../modules/ii/cheatsheet/Cheatsheet.qml")
     }
-    PanelLoader {
+    PanelUrlLoader {
         // The Scope stays loaded so the keybind and the IPC target exist; the window
         // itself is built by the loader inside, when somebody asks for it.
         extraCondition: Config.options.notes.enable
-        component: NotesApp {}
+        panelUrl: Qt.resolvedUrl("../modules/ii/notes/NotesApp.qml")
     }
-    PanelLoader {
+    PanelUrlLoader {
+        // Same shape as the notes app: the Scope holds the keybind and IPC target, the
+        // window is built only while the clock app is open.
+        extraCondition: Config.options.clockApp?.enable ?? true
+        panelUrl: Qt.resolvedUrl("../modules/ii/clock/ClockApp.qml")
+    }
+    PanelUrlLoader {
+        // Always loaded: its keybinds and IPC switch presets even with the app off; the
+        // window inside is gated on the app setting and built only while it is open.
+        panelUrl: Qt.resolvedUrl("../modules/ii/easyEffects/EasyEffectsApp.qml")
+    }
+    PanelUrlLoader {
+        // Same shape as the clock app; `overlayEnabled` predates the window and now
+        // loads the app.
         extraCondition: Config.options.appStats.overlayEnabled
-        component: Usage {}
+        panelUrl: Qt.resolvedUrl("../modules/ii/usage/UsageApp.qml")
     }
-    PanelLoader {
+    PanelUrlLoader {
         extraCondition: Config.options.modes.overlayEnabled
-        component: ModesOverlay {}
+        panelUrl: Qt.resolvedUrl("../modules/ii/modes/ModesApp.qml")
+    }
+    PanelUrlLoader {
+        // Same shape as the clock app; the helper runs in HealthService either way.
+        extraCondition: Config.options.health?.enable ?? true
+        panelUrl: Qt.resolvedUrl("../modules/ii/health/HealthApp.qml")
     }
     // The mode start/end banner; the dynamic island draws it when a notch is on.
-    PanelLoader {
-        extraCondition: Config.ready && !Config.options.bar.floatingNotch.enable
-            && !Config.options.bar.floatingNotch.centerInBar
-        component: ModeFlashPopup {}
+    PanelUrlLoader {
+        extraCondition: (Config.options?.modes?.enable ?? false) && !IslandPolicy.ownsModeFlash
+        panelUrl: Qt.resolvedUrl("../modules/ii/modeFlashPopup/ModeFlashPopup.qml")
     }
-    PanelLoader {
+    PanelUrlLoader {
         extraCondition: Config.options.dock.enable
-        component: Dock {}
+        panelUrl: Qt.resolvedUrl("../modules/ii/dock/Dock.qml")
+        priority: 1
     }
-    PanelLoader {
-        component: Lock {}
+    PanelUrlLoader {
+        panelUrl: Qt.resolvedUrl("../modules/ii/lock/Lock.qml")
     }
-    PanelLoader {
-        component: MediaControls {}
+    PanelUrlLoader {
+        panelUrl: Qt.resolvedUrl("../modules/ii/mediaControls/MediaControls.qml")
     }
-    PanelLoader {
+    PanelUrlLoader {
         // The Scope must stay loaded so the onDeviceConnected trigger inside
         // BluetoothConnectionPopup.qml is alive; the inner LazyLoader gates the
         // actual PanelWindow on GlobalStates.bluetoothConnectionPopupOpen.
         // (df1e26966 gated this PanelLoader on the same flag, creating a
         // chicken-and-egg that prevented the popup from ever appearing.)
-        extraCondition: Config.ready && !Config.options.bar.floatingNotch.enable
-        component: BluetoothConnectionPopup {}
+        extraCondition: !IslandPolicy.ownsBluetoothPopup
+        panelUrl: Qt.resolvedUrl("../modules/ii/bluetoothConnectionPopup/BluetoothConnectionPopup.qml")
     }
-    PanelLoader {
-        extraCondition: Config.ready && !Config.options.bar.floatingNotch.enable
-        component: KeyboardLayoutTransitionPopup {}
+    PanelUrlLoader {
+        extraCondition: !IslandPolicy.ownsKeyboardPopup
+        panelUrl: Qt.resolvedUrl("../modules/ii/keyboardLayoutTransitionPopup/KeyboardLayoutTransitionPopup.qml")
     }
-    PanelLoader {
-        extraCondition: Config.ready && !Config.options.bar.floatingNotch.enable && GlobalStates.localSendPopupOpen
-        component: LocalSendPopup {}
+    PanelUrlLoader {
+        extraCondition: !IslandPolicy.ownsLocalSendPopup && GlobalStates.localSendPopupOpen
+        panelUrl: Qt.resolvedUrl("../modules/ii/localSendPopup/LocalSendPopup.qml")
     }
-    PanelLoader {
-        extraCondition: !(Config.ready && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar) && !Config.options.bar.floatingNotch.disableNotification)
-        component: NotificationPopup {}
+    PanelUrlLoader {
+        // Wallpaper upscaling card; switchwall.sh opens it through `ipc call upscayl prompt`.
+        extraCondition: Upscayl.popupVisible
+        panelUrl: Qt.resolvedUrl("../modules/ii/upscaylPopup/UpscaylPopup.qml")
     }
-    PanelLoader {
+    PanelUrlLoader {
+        extraCondition: !IslandPolicy.ownsNotifications
+        panelUrl: Qt.resolvedUrl("../modules/ii/notificationPopup/NotificationPopup.qml")
+    }
+    PanelUrlLoader {
         extraCondition: !(Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material"))
-        component: OnScreenDisplay {}
+        panelUrl: Qt.resolvedUrl("../modules/ii/onScreenDisplay/OnScreenDisplay.qml")
     }
-    PanelLoader {
+    PanelUrlLoader {
         extraCondition: (Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material"))
-        component: MinimalistOsd {}
+        panelUrl: Qt.resolvedUrl("../modules/ii/onScreenDisplay/minimalist/MinimalistOsd.qml")
     }
-    PanelLoader {
+    PanelUrlLoader {
         // Kept loaded rather than gated on the service: the windows are empty
         // and invisible until a recording or the quick toggle asks for them.
         extraCondition: Config.ready
-        component: KeypressDisplay {}
+        panelUrl: Qt.resolvedUrl("../modules/ii/keypressDisplay/KeypressDisplay.qml")
     }
-    PanelLoader {
-        component: OnScreenKeyboard {}
+    PanelUrlLoader {
+        // The Scope is a keybind and an IPC target; the per-screen surfaces inside load
+        // only while the tray is open or a screen has ink on it.
+        panelUrl: Qt.resolvedUrl("../modules/ii/liveDraw/LiveDrawOverlay.qml")
     }
-    PanelLoader {
-        component: OledSaver {}
+    PanelUrlLoader {
+        panelUrl: Qt.resolvedUrl("../modules/common/onScreenKeyboard/OnScreenKeyboard.qml")
     }
-    PanelLoader {
-        component: Overlay {}
+    PanelUrlLoader {
+        panelUrl: Qt.resolvedUrl("../modules/ii/oledSaver/OledSaver.qml")
     }
-    PanelLoader {
-        component: Overview {}
+    PanelUrlLoader {
+        panelUrl: Qt.resolvedUrl("../modules/ii/overlay/Overlay.qml")
+    }
+    PanelUrlLoader {
+        panelUrl: Qt.resolvedUrl("../modules/ii/overview/Overview.qml")
     }
     // Optional primary surface for the ii family. This is the Tablet Family's
     // actual drawer, not a fork: only the tablet-native app/home actions are
@@ -182,104 +222,149 @@ Scope {
         id: appDrawerToolHost
         SearchPanelHost {}
     }
-    // GNOME-like window scale-out during overview (OverviewWindowTransition).
-    // Scope com Variants/PanelWindows próprios — instancia direto.
-    // featureEnabled interno (zoomOutEnabled + windowZoomOnOverview + zoomOutStyle===0)
-    // controla auto-disable. TopLayerPanel em WlrLayer.Overlay sempre fica acima
-    // deste (WlrLayer.Top) — sem conflito de z-order em qualquer modo.
-    OverviewWindowTransition {}
-    PanelLoader {
-        component: Polkit {}
+    // GNOME-like window scale-out during overview. Keep the scope out of the
+    // object graph when the feature is disabled; its startup hook otherwise
+    // still creates a per-screen transition tree and runs cleanup commands.
+    Loader {
+        active: !GlobalStates.overviewUsesAppDrawer
+            && (Config.options?.background?.zoomOutEnabled ?? false)
+            && (Config.options?.background?.windowZoomOnOverview ?? false)
+        sourceComponent: OverviewWindowTransition {}
+    }
+    PanelUrlLoader {
+        panelUrl: Qt.resolvedUrl("../modules/ii/polkit/Polkit.qml")
     }
     // Kept loaded rather than gated: the Scope decides on its own whether BlueZ
     // is asking anything, and nothing is built until it is.
-    PanelLoader {
-        component: BluetoothPairing {}
+    PanelUrlLoader {
+        panelUrl: Qt.resolvedUrl("../modules/ii/bluetoothPairing/BluetoothPairing.qml")
     }
-    PanelLoader {
-        component: RegionSelector {}
+    PanelUrlLoader {
+        panelUrl: Qt.resolvedUrl("../modules/ii/regionSelector/RegionSelector.qml")
     }
-    PanelLoader {
-        component: ScreenCorners {}
+    PanelUrlLoader {
+        panelUrl: Qt.resolvedUrl("../modules/ii/recordingToolbar/RecordingToolbar.qml")
     }
-    PanelLoader {
-        component: ScreenTranslator {}
+    PanelUrlLoader {
+        // Four corner windows and their Shape layers are only needed for fake
+        // screen rounding or the corner-open hit zones. When both features
+        // are off, unload the whole scope instead of keeping four hidden
+        // PanelWindows alive.
+        extraCondition: Config.options.appearance.fakeScreenRounding !== 0
+            || Config.options.sidebar.cornerOpen.enable
+        panelUrl: Qt.resolvedUrl("../modules/ii/screenCorners/ScreenCorners.qml")
     }
-    PanelLoader {
-        component: ColorPickerPopup {}
+    PanelUrlLoader {
+        panelUrl: Qt.resolvedUrl("../modules/ii/screenTranslator/ScreenTranslator.qml")
     }
-    PanelLoader {
-        component: SessionScreen {}
+    PanelUrlLoader {
+        panelUrl: Qt.resolvedUrl("../modules/ii/colorPickerPopup/ColorPickerPopup.qml")
+    }
+    PanelUrlLoader {
+        panelUrl: Qt.resolvedUrl("../modules/ii/displayModesPopup/DisplayModesPopup.qml")
+    }
+    PanelUrlLoader {
+        panelUrl: Qt.resolvedUrl("../modules/ii/sessionScreen/SessionScreen.qml")
     }
     // Every family loads the chooser: a family that did not offer it would be one the
     // user could switch into and never find the way out of.
-    PanelLoader {
-        component: ShellSwitcher {}
+    PanelUrlLoader {
+        panelUrl: Qt.resolvedUrl("../modules/common/panels/shellSwitcher/ShellSwitcher.qml")
     }
-    PanelLoader {
+    // Alt+Tab. Always loaded (not gated on its setting): it is what takes the switcher's
+    // binds away again when the setting goes off. Drawn on the island when that owns it.
+    PanelUrlLoader {
+        panelUrl: Qt.resolvedUrl("../modules/common/panels/windowSwitcher/WindowSwitcherPanel.qml")
+    }
+    // Its peek, which both faces share (island and panel alike).
+    PanelUrlLoader {
+        panelUrl: Qt.resolvedUrl("../modules/common/panels/windowSwitcher/WindowSwitcherPeek.qml")
+    }
+    PanelUrlLoader {
         extraCondition: !GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate
-        component: SidebarPolicies {}
+        panelUrl: Qt.resolvedUrl("../modules/ii/sidebarPolicies/SidebarPolicies.qml")
     }
-    PanelLoader {
+    PanelUrlLoader {
         extraCondition: !GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate
-        component: SidebarDashboard {}
+        panelUrl: Qt.resolvedUrl("../modules/ii/sidebarDashboard/SidebarDashboard.qml")
     }
-    PanelLoader {
+    PanelUrlLoader {
         extraCondition: BarPlacement.vertical && barExtraCondition && !GlobalStates.connectModeActive
-        component: VerticalBar {}
+        panelUrl: Qt.resolvedUrl("../modules/ii/verticalBar/VerticalBar.qml")
+        priority: 4
     }
-    PanelLoader {
-        component: WallpaperSelector {}
+    PanelUrlLoader {
+        panelUrl: Qt.resolvedUrl("../modules/ii/wallpaperSelector/WallpaperSelector.qml")
     }
-    PanelLoader {
-        component: WrappedFrame {}
+    PanelUrlLoader {
+        panelUrl: Qt.resolvedUrl("../modules/ii/wrappedFrame/WrappedFrame.qml")
     }
-    PanelLoader {
+    PanelUrlLoader {
         extraCondition: GlobalStates.videoEditorPopupOpen
-        component: VideoEditorPopup {}
+        panelUrl: Qt.resolvedUrl("../modules/ii/videoEditor/VideoEditorPopup.qml")
     }
-    PanelLoader {
+    PanelUrlLoader {
         extraCondition: GlobalStates.videoEditorOpen
-        component: VideoEditor {}
+        panelUrl: Qt.resolvedUrl("../modules/ii/videoEditor/VideoEditor.qml")
     }
-    PanelLoader {
-        component: ScratchpadOverlay {}
+    PanelUrlLoader {
+        panelUrl: Qt.resolvedUrl("../modules/ii/scratchpadOverlay/ScratchpadOverlay.qml")
     }
-    PanelLoader {
+    PanelUrlLoader {
         extraCondition: AlarmService.ringingAlarmIndex !== -1 && Config.options.time.alarms.useFullscreenPopup
-        component: AlarmRingingPopup {}
+        panelUrl: Qt.resolvedUrl("../modules/ii/alarmRingingPopup/AlarmRingingPopup.qml")
     }
-    PanelLoader {
+    PanelUrlLoader {
+        // A Medium or Strong reminder taking the screen; built only while one does.
+        extraCondition: RemindersService.ringingId.length > 0 && !GlobalStates.islandOwnsReminder
+        panelUrl: Qt.resolvedUrl("../modules/ii/reminderAlertPopup/ReminderAlertPopup.qml")
+    }
+    PanelUrlLoader {
+        // The daily-limits block screen; the service names what it covers.
+        extraCondition: (Config.options.screenTime?.enable ?? true) && ScreenTimeLimits.activeBlock !== null
+        panelUrl: Qt.resolvedUrl("../modules/ii/screenTimeOverlay/ScreenTimeOverlay.qml")
+    }
+    PanelUrlLoader {
+        // Intrusive bedtime: the modal past the target, snoozes, then the shutdown countdown.
+        extraCondition: BedtimeService.intrusiveDue
+        panelUrl: Qt.resolvedUrl("../modules/ii/bedtimeOverlay/BedtimeOverlay.qml")
+    }
+    PanelUrlLoader {
+        // Pomodoro phase change or a finished timer: the bedtime-style card, no sound.
+        extraCondition: TimerService.alert !== null
+        panelUrl: Qt.resolvedUrl("../modules/ii/timerAlertPopup/TimerAlertPopup.qml")
+    }
+    PanelUrlLoader {
         extraCondition: GlobalStates.screenshotOverlayOpen
-        component: ScreenshotOverlay {}
+        panelUrl: Qt.resolvedUrl("../modules/ii/screenshotOverlay/ScreenshotOverlay.qml")
     }
-    PanelLoader {
+    PanelUrlLoader {
         extraCondition: Config.options.tiling.enable
-        component: TilingOverlay {}
+        panelUrl: Qt.resolvedUrl("../modules/ii/tilingAssistant/TilingOverlay.qml")
     }
-    PanelLoader {
+    PanelUrlLoader {
         extraCondition: Config.options.tiling.enable
-        component: LayoutHint {}
+        panelUrl: Qt.resolvedUrl("../modules/ii/tilingAssistant/LayoutHint.qml")
     }
-    PanelLoader {
+    PanelUrlLoader {
         extraCondition: Config.options.tiling.enable && Config.options.tiling.overlay.stackIndicator
-        component: TilingStackBadges {}
+        panelUrl: Qt.resolvedUrl("../modules/ii/tilingAssistant/TilingStackBadges.qml")
     }
-    PanelLoader {
+    PanelUrlLoader {
         extraCondition: GlobalStates.connectModeActive
-        component: TopLayer {}
+        panelUrl: Qt.resolvedUrl("../modules/ii/topLayer/TopLayer.qml")
     }
-    PanelLoader {
-        extraCondition: Config.ready && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
-        Component.onCompleted: {
-            console.log("[IllogicalImpulseFamily] DynamicIsland PanelLoader - Config.ready:", Config.ready, "floatingNotch.enable:", Config.options.bar.floatingNotch.enable, "centerInBar:", Config.options.bar.floatingNotch.centerInBar);
-        }
-        component: DynamicIsland {}
+    PanelUrlLoader {
+        extraCondition: IslandPolicy.enabled
+        panelUrl: Qt.resolvedUrl("../modules/ii/dynamicIsland/DynamicIsland.qml")
+        priority: 2
     }
-    readonly property var _touchGestureService: TouchGestureService
-
-    PanelLoader {
+    PanelUrlLoader {
         extraCondition: Config.ready && Boolean(Config.options && Config.options.interactions && Config.options.interactions.touchGestures && Config.options.interactions.touchGestures.enable)
-        component: TouchGestures {}
+        panelUrl: Qt.resolvedUrl("../modules/ii/touchGestures/TouchGestures.qml")
+    }
+    PanelUrlLoader {
+        extraCondition: PhoneScrcpyService.mirrorRunning || PhoneScrcpyService.mirrorLaunching || KdeConnectService.scrcpyRunning
+        panelUrl: Qt.resolvedUrl("../modules/ii/phoneControls/PhoneFloatingWindowControls.qml")
     }
 }

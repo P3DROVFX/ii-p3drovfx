@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQml
+import qs
 import qs.modules.common
 import qs.services
 import "TimerBarLogic.js" as TimerBarLogic
@@ -49,9 +50,39 @@ QtObject {
             : 0;
     }
 
+    // ── Upcoming alarm ─────────────────────────────────────────────────
+    // The next alarm — this PC's or the phone's mirrored one, whichever is first —
+    // once it is within the configured window. AlarmService moves a tick every
+    // minute, which keeps the phone's side of this in step too.
+    readonly property bool showUpcomingAlarm: AlarmService.showUpcoming
+    readonly property var upcomingAlarm: {
+        AlarmService.lastPersistedMinute;
+        const pc = AlarmService.upcomingAlarm;
+        const phoneAt = PhoneAlarmService.nextAt;
+        const horizon = Date.now() + AlarmService.upcomingMinutes * 60000;
+        const phone = phoneAt && phoneAt.getTime() > Date.now() && phoneAt.getTime() <= horizon ? phoneAt : null;
+        if (phone && (!pc || phone.getTime() < pc.at.getTime()))
+            return { at: phone, label: Translation.tr("Phone alarm"), phone: true };
+        return pc ? { at: pc.at, label: String(pc.alarm?.label ?? "") || Translation.tr("Alarm"), phone: false } : null;
+    }
+    readonly property bool hasUpcomingAlarm: root.showUpcomingAlarm && root.upcomingAlarm !== null
+        && !(GlobalStates.alarmRinging ?? false)
+    readonly property string upcomingAlarmText: root.upcomingAlarm ? Qt.formatTime(root.upcomingAlarm.at, "HH:mm") : ""
+    readonly property int upcomingAlarmMinutes: {
+        AlarmService.lastPersistedMinute;
+        return root.upcomingAlarm ? Math.max(1, Math.ceil((root.upcomingAlarm.at.getTime() - Date.now()) / 60000)) : 0;
+    }
+    readonly property string upcomingAlarmTooltip: root.upcomingAlarm
+        ? root.upcomingAlarm.label + " · " + Translation.tr("in %1 min").arg(root.upcomingAlarmMinutes) : ""
+
+    function openUpcomingAlarm() {
+        GlobalStates.openClockApp("alarms");
+    }
+
     readonly property bool visible: (root.showStopwatch && root.hasStopwatch)
         || (root.showPomodoro && root.hasPomodoro)
         || (root.showCountdowns && root.hasCountdown)
+        || root.hasUpcomingAlarm
 
     readonly property string stopwatchText: root.formatStopwatch(TimerService.stopwatchTime)
     readonly property string pomodoroText: root.formatClock(TimerService.pomodoroSecondsLeft)

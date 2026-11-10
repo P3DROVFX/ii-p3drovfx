@@ -1,12 +1,12 @@
 pragma ComponentBehavior: Bound
 
-import Qt5Compat.GraphicalEffects
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
 import Quickshell
 import Quickshell.Hyprland
+import Quickshell.Wayland
 
 import qs
 import qs.services
@@ -42,6 +42,9 @@ Item {
     property real revealProgress: 1
 
     signal dismissRequested
+    /// Work that has to wait until the drawer has let go of the keyboard, i.e. raising a
+    /// window that is already open. The host runs it once the close is under way.
+    signal deferredRequested(var action)
     /// Long-pressed an app: the host decides what "add to home" means, because the home
     /// screen is a different module and the drawer must not reach into it.
     signal appHeld(string appId)
@@ -101,7 +104,21 @@ Item {
         { id: "Other", symbol: "category", match: [] }
     ]
 
+    /// Category per desktop entry id, resolved once per app list. The category sort and the
+    /// chip strip asked for it hundreds of times per recompute, each call copying the
+    /// entry's category list out of C++.
+    readonly property var categoryById: {
+        const map = {};
+        for (const entry of AppSearch.list)
+            map[entry.id] = root.resolveCategory(entry);
+        return map;
+    }
+
     function categoryOf(entry) {
+        return root.categoryById[entry?.id] ?? root.resolveCategory(entry);
+    }
+
+    function resolveCategory(entry) {
         const cats = Array.from(entry?.categories ?? []);
         for (const group of root.categoryGroups) {
             for (const wanted of group.match) {
@@ -148,9 +165,7 @@ Item {
     readonly property var availableCategories: {
         if (root.query.trim().length > 0)
             return [];
-        const present = new Set();
-        for (const entry of AppSearch.list)
-            present.add(root.categoryOf(entry));
+        const present = new Set(Object.values(root.categoryById));
         return root.categoryGroups.filter(group => present.has(group.id)).map(group => group.id);
     }
 
@@ -458,10 +473,20 @@ Item {
     // fileResults populate. Only while the drawer is up, so a closed drawer never spawns a
     // file search.
     onQueryChanged: {
-        if (root.revealProgress > 0.01) {
+        if (root.revealProgress > 0.01 && (root.drawerConfig?.showFileResults ?? true)) {
             root.applyFileSearchScope();
             LauncherSearch.query = root.query;
         }
+    }
+
+    /// While this drawer is up it is the one driving LauncherSearch, and it only reads
+    /// `fileResults` — see LauncherSearch.fileResultsOnly. Same single-emitter shape as the
+    /// file scope below: a drawer that never opens never writes.
+    readonly property bool drivesLauncherSearch: root.revealProgress > 0.01
+    onDrivesLauncherSearchChanged: LauncherSearch.fileResultsOnly = root.drivesLauncherSearch
+    Component.onDestruction: {
+        if (root.drivesLauncherSearch)
+            LauncherSearch.fileResultsOnly = false;
     }
 
     /**
@@ -487,6 +512,7 @@ Item {
         const q = root.query.trim().toLocaleLowerCase();
         if (q.length < 2 || !(root.drawerConfig?.showQuickToggleResults ?? true))
             return [];
+        QuickToggleRegistry.ensureLoaded();
         void QuickToggleRegistry.revision;
         return QuickToggleRegistry.entries.filter(entry =>
             String(entry.model.name ?? "").toLocaleLowerCase().includes(q)
@@ -597,6 +623,41 @@ Item {
         return false;
     }
 
+    /**
+     * Open an app, or go to it if it is already open.
+     *
+     * `entry.execute()` on a running single-instance app (every Electron app, most browsers)
+     * only asks the first copy to open a window, and the compositor does not raise it — the
+     * tap looked dead. Most used is made of exactly those apps, since they stay running. A
+     * taskbar tap has always meant "raise it", so that is what a tap does here too.
+     * Raising waits for the drawer to release its keyboard grab, which would otherwise keep
+     * the window from taking focus.
+     */
+    function runningWindowFor(entry) {
+        const wanted = [entry?.id, entry?.startupClass]
+            .map(id => TaskbarApps.normalizeAppId(String(id ?? "")))
+            .filter(id => id.length > 0);
+        if (wanted.length === 0)
+            return null;
+        for (const toplevel of (ToplevelManager.toplevels?.values ?? [])) {
+            if (wanted.indexOf(TaskbarApps.normalizeAppId(toplevel?.appId ?? "")) !== -1)
+                return toplevel;
+        }
+        return null;
+    }
+
+    function launchApp(entry) {
+        if (!entry)
+            return;
+        const running = root.runningWindowFor(entry);
+        if (running) {
+            AppUsage.recordLaunch(entry.id);
+            root.deferredRequested(() => running.activate());
+            return;
+        }
+        LauncherSearch.launchApplication(entry);
+    }
+
     function activateTopResult() {
         if (root.activeToolId.length > 0)
             return;
@@ -606,12 +667,64 @@ Item {
             return;
         }
         if (root.apps.length > 0) {
-            root.apps[0].execute();
+            root.launchApp(root.apps[0]);
             root.dismissRequested();
             return;
         }
         if (root.matchingTools.length > 0)
             root.openTool(root.matchingTools[0].id);
+    }
+
+    /**
+     * Who a vertical drag that starts at (x, y) of `item` belongs to.
+     *
+     *   "content"  — something here moves vertically on its own: a tool panel, the A–Z
+     *                rail, a menu, or a scroller that is not at its top.
+     *   a Flickable — a scroller resting at its top. Pulling down there closes the drawer,
+     *                as it does on Android; pushing up has to scroll it, and the drawer
+     *                forwards that to the Flickable returned here.
+     *   null       — nothing claims it; the drawer follows the finger.
+     */
+    function verticalDragOwnerAt(item, x, y) {
+        if (inlineMenu.visible)
+            return "content";
+        const over = target => {
+            if (!target || !target.visible)
+                return false;
+            const p = item.mapToItem(target, x, y);
+            return p.x >= 0 && p.y >= 0 && p.x <= target.width && p.y <= target.height;
+        };
+        if (root.activeToolId.length > 0)
+            return over(body) ? "content" : null;
+        if (over(letterRail))
+            return "content";
+        const atTop = flick => flick.contentY <= flick.originY - flick.topMargin + 1;
+        for (const flick of [sideColumn, appGrid]) {
+            if (over(flick)) {
+                // A tile is a tap, a hold and a drag-to-launch of its own. The drag layer
+                // above the drawer cannot sit over one without swallowing the press, so a
+                // tile is never "the grid at its top" — only the space around it is.
+                if (flick === appGrid && root.tileAt(item, x, y))
+                    return "content";
+                return atTop(flick) ? flick : "content";
+            }
+        }
+        return null;
+    }
+
+    /// Whether (x, y) of `item` lands on an app tile of the grid or of the predicted row.
+    function tileAt(item, x, y) {
+        if (root.activeToolId.length > 0)
+            return false;
+        const inContent = item.mapToItem(appGrid.contentItem, x, y);
+        if (appGrid.itemAt(inContent.x, inContent.y))
+            return true;
+        if (suggestionsBand.visible) {
+            const inRow = item.mapToItem(suggestionsRow, x, y);
+            if (inRow.x >= 0 && inRow.y >= 0 && suggestionsRow.childAt(inRow.x, inRow.y))
+                return true;
+        }
+        return false;
     }
 
     function reset() {
@@ -682,7 +795,7 @@ Item {
             symbol: "launch",
             label: Translation.tr("Open"),
             trigger: () => {
-                entry.execute();
+                root.launchApp(entry);
                 root.dismissRequested();
             }
         });
@@ -1000,28 +1113,11 @@ Item {
                     (appGrid.contentY - appGrid.originY + appGrid.topMargin) / 48))
 
                 layer.enabled: true
-                layer.effect: OpacityMask {
-                    maskSource: Rectangle {
-                        width: Math.max(1, appGrid.width)
-                        height: Math.max(1, appGrid.height)
-                        gradient: Gradient {
-                            GradientStop {
-                                position: 0.0
-                                color: Qt.rgba(1, 1, 1, 1 - appGrid.topFade)
-                            }
-                            GradientStop {
-                                position: appGrid.height > 0
-                                    ? Math.min(0.45, body.topFadeSize / appGrid.height) : 0
-                                color: "white"
-                            }
-                            GradientStop {
-                                position: appGrid.height > 0
-                                    ? Math.max(0.55, 1 - body.fadeSize / appGrid.height) : 1
-                                color: "white"
-                            }
-                            GradientStop { position: 1.0; color: "transparent" }
-                        }
-                    }
+                layer.effect: TabletEdgeFade {
+                    startAlpha: 1 - appGrid.topFade
+                    startStop: appGrid.height > 0 ? Math.min(0.45, body.topFadeSize / appGrid.height) : 0
+                    endStop: appGrid.height > 0 ? Math.max(0.55, 1 - body.fadeSize / appGrid.height) : 1
+                    endAlpha: 0
                 }
                 /**
                  * The columns, centred in what is left after the rail and the side column.
@@ -1158,7 +1254,7 @@ Item {
                                     if (appCell.isSystemApp)
                                         TabletSystemApps.launch(String(cell.systemAppId));
                                     else
-                                        cell.entry.execute();
+                                        LauncherSearch.launchApplication(cell.entry);
                                 }
                             }, sceneX, sceneY);
                         }
@@ -1176,7 +1272,7 @@ Item {
                                 }
                                 TabletSystemApps.launch(id);
                             } else
-                                appCell.modelData.entry.execute();
+                                root.launchApp(appCell.modelData.entry);
                             root.dismissRequested();
                         }
                         onHeld: {
@@ -1199,6 +1295,10 @@ Item {
                                 root.openAppMenu(appTile, appCell.modelData.entry);
                         }
                     }
+                }
+
+                TouchpadScrollHandler {
+                    flickable: appGrid
                 }
             }
 
@@ -1234,6 +1334,7 @@ Item {
                 }
 
                 Row {
+                    id: suggestionsRow
                     anchors.left: parent.left
                     anchors.top: suggestionsLabel.bottom
                     anchors.topMargin: 6
@@ -1252,7 +1353,7 @@ Item {
                             iconSize: root.appIconSize
 
                             onActivated: {
-                                suggestionTile.modelData.execute();
+                                root.launchApp(suggestionTile.modelData);
                                 root.dismissRequested();
                             }
                             onHeld: {
@@ -1426,21 +1527,13 @@ Item {
                 contentHeight: sideContent.implicitHeight
                 bottomMargin: body.fadeSize
                 boundsBehavior: Flickable.StopAtBounds
-                layer.enabled: true
-                layer.effect: OpacityMask {
-                    maskSource: Rectangle {
-                        width: Math.max(1, sideColumn.width)
-                        height: Math.max(1, sideColumn.height)
-                        gradient: Gradient {
-                            GradientStop { position: 0.0; color: "white" }
-                            GradientStop {
-                                position: sideColumn.height > 0
-                                    ? Math.max(0, 1 - body.fadeSize / sideColumn.height) : 1
-                                color: "white"
-                            }
-                            GradientStop { position: 1.0; color: "transparent" }
-                        }
-                    }
+                // Only while the column is on screen: an idle layer still keeps its texture.
+                layer.enabled: sideColumn.visible
+                layer.effect: TabletEdgeFade {
+                    startAlpha: 1
+                    startStop: 0
+                    endStop: sideColumn.height > 0 ? Math.max(0, 1 - body.fadeSize / sideColumn.height) : 1
+                    endAlpha: 0
                 }
 
                 ColumnLayout {
@@ -1564,6 +1657,10 @@ Item {
                         }
                     }
                 }
+
+                TouchpadScrollHandler {
+                    flickable: sideColumn
+                }
             }
 
             // The ends of both scrollers, faded into the surface behind them rather than
@@ -1630,5 +1727,6 @@ Item {
     TabletInlineMenu {
         id: inlineMenu
         anchors.fill: parent
+        blurSource: body
     }
 }

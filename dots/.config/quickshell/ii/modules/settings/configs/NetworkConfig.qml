@@ -65,7 +65,7 @@ Item {
             Translation.tr("Addressing")]
     })
 
-    readonly property Item currentPage: tabHost.currentPage
+    readonly property Item currentPage: tabLoader.item
 
     readonly property string currentSearch: SearchRegistry.currentSearch
 
@@ -102,6 +102,23 @@ Item {
     /** True once the filled bar has been put where this page wants it. */
     property bool barSettled: false
 
+    // Let tab restoration settle before incubating any page. In particular,
+    // indexes emitted as buttons are inserted must not start Wi-Fi scans or
+    // construct the Bluetooth/hotspot services on the way to the chosen tab.
+    property bool tabLoadArmed: false
+    onWantedTabChanged: root.scheduleTab()
+
+    function scheduleTab(): void {
+        root.tabLoadArmed = false;
+        tabActivation.restart();
+    }
+
+    Timer {
+        id: tabActivation
+        interval: 16
+        onTriggered: root.tabLoadArmed = true
+    }
+
     function selectTab(index: int): void {
         if (index < 0 || index >= root.tabs.length)
             return;
@@ -132,6 +149,7 @@ Item {
         const remembered = GlobalStates.settingsNetworkTab;
         root.selectTab(remembered >= 0 && remembered < root.tabs.length ? remembered : 0);
         root.focusSectionTab(SearchRegistry.currentSearch);
+        root.scheduleTab();
     }
 
     // The moment the bar holds every tab it is put where it should have been
@@ -212,10 +230,6 @@ Item {
     Item {
         id: tabHost
 
-        // Set by whichever tab last finished loading. A binding through
-        // Repeater.itemAt() cannot work here: it is a function call, so it
-        // never re-runs when the delegate it would have returned appears.
-        property Item currentPage: null
 
         anchors {
             top: tabBar.bottom
@@ -227,34 +241,25 @@ Item {
         opacity: subPageOverlay.slideProgress
         visible: opacity > 0
 
-        // Counted rather than listed for the same reason as the bar above, and
-        // for one more: a rebuilt list would tear down the open tab and load it
-        // again from scratch every time a translation changed.
-        Repeater {
-            id: tabRepeater
-            model: root.tabs.length
+        Loader {
+            id: tabLoader
+            anchors.fill: parent
+            active: root.barSettled && root.barReady && root.tabLoadArmed
+            asynchronous: true
+            source: root.tabs[root.wantedTab]
+                ? Qt.resolvedUrl(root.tabs[root.wantedTab].source) : ""
+            onLoaded: {
+                if (item.contentY !== undefined)
+                    item.contentY = root.contentY;
+            }
+        }
 
-            delegate: Loader {
-                id: tabLoader
-                required property int index
-                readonly property var tab: root.tabs[index] ?? null
+        Connections {
+            target: tabLoader.item
+            ignoreUnknownSignals: true
 
-                anchors.fill: parent
-                active: root.currentTab === index
-                asynchronous: true
-                source: tabLoader.tab ? Qt.resolvedUrl(tabLoader.tab.source) : ""
-                onItemChanged: if (item) tabHost.currentPage = item
-
-                // A tab is unloaded as soon as another one is picked, so the
-                // sub-pages it opens have to be owned by this page instead.
-                Connections {
-                    target: tabLoader.item
-                    ignoreUnknownSignals: true
-
-                    function onOpenSubPage(page): void {
-                        root.activeSubPage = page;
-                    }
-                }
+            function onOpenSubPage(page): void {
+                root.activeSubPage = page;
             }
         }
     }

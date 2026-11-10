@@ -1,0 +1,80 @@
+#!/bin/bash
+# NetworkManager dispatcher hook: reset the TCP connections a VPN change black-holes.
+#
+# When a VPN comes up, goes down or switches server, connections opened before the change
+# keep their old local address. Their packets now leave through a route that can't carry
+# that address, get dropped without a reset, and the app hangs until its own timeout
+# (API clients, browsers and chat apps report "no internet"). Linux doesn't reset them on
+# a route change, so this does: after a tunnel goes up or down, every established TCP
+# connection whose local address no longer belongs to the interface its peer now routes
+# through is destroyed (`ss -K`). The app gets an immediate reset and reconnects. LAN
+# connections and connections already inside the tunnel are left alone.
+#
+# Install (NetworkManager only runs root-owned scripts that nobody else can write):
+#   sudo install -Dm755 90-ii-vpn-stale-sockets /etc/NetworkManager/dispatcher.d/90-ii-vpn-stale-sockets
+# Remove:
+#   sudo rm /etc/NetworkManager/dispatcher.d/90-ii-vpn-stale-sockets
+# The installed file is a copy: install it again after this one changes.
+#
+# II_DRY_RUN=1 lists what would be reset without resetting anything (no root needed).
+
+iface="$1"
+action="$2"
+
+case "$action" in
+    vpn-up | vpn-down) ;;
+    up | down)
+        # Tunnels NetworkManager runs as plain devices: WireGuard profiles, and Proton VPN's
+        # "ProtonVPN <server>" connection. Proton's kill-switch dummies (pvpn*) don't match.
+        [[ "$iface" =~ ^(wg|tun|tap|proton|nordlynx|nordtun|ppp|ipsec) || "$CONNECTION_ID" == "ProtonVPN "* ]] || exit 0
+        ;;
+    *) exit 0 ;;
+esac
+
+# Bare address: no brackets, no zone, no IPv4-mapped prefix.
+bare() {
+    local a="${1#[}"
+    a="${a%]}"
+    a="${a%%\%*}"
+    echo "${a#::ffff:}"
+}
+
+reset_stale() {
+    local -A owner route_dev
+    local dev addr local_ep peer_ep laddr paddr route count=0
+
+    while read -r _ dev _ addr _; do
+        owner["${addr%/*}"]="$dev"
+    done < <(ip -o addr show)
+
+    while read -r _ _ local_ep peer_ep _; do
+        laddr=$(bare "${local_ep%:*}")
+        paddr=$(bare "${peer_ep%:*}")
+        [[ "$laddr" == 127.* || "$laddr" == ::1 || "$paddr" == 127.* || "$paddr" == ::1 ]] && continue
+
+        if [[ -z "${route_dev[$paddr]+set}" ]]; then
+            route=$(ip -o route get "$paddr" 2>/dev/null)
+            [[ "$route" =~ \ dev\ ([^ ]+) ]] && route_dev[$paddr]="${BASH_REMATCH[1]}" || route_dev[$paddr]=""
+        fi
+        # Still carried by the interface that owns its address: alive.
+        [[ -n "${owner[$laddr]}" && "${owner[$laddr]}" == "${route_dev[$paddr]}" ]] && continue
+
+        if [[ -n "$II_DRY_RUN" ]]; then
+            echo "would reset $local_ep -> $peer_ep (address on ${owner[$laddr]:-nothing}, route via ${route_dev[$paddr]:-none})"
+        else
+            ss -K -tn state established src "$local_ep" dst "$peer_ep" >/dev/null 2>&1
+        fi
+        count=$((count + 1))
+    done < <(ss -Htn state established)
+
+    ((count > 0)) && [[ -z "$II_DRY_RUN" ]] && logger -t ii-vpn-stale-sockets "$iface $action: reset $count stale connection(s)"
+}
+
+reset_stale
+
+# Some clients (Proton's CLI among them) finish routing and DNS a moment after NetworkManager
+# reports the tunnel up; check once more for connections opened in between.
+if [[ -z "$II_RECHECK" && -z "$II_DRY_RUN" ]]; then
+    II_RECHECK=1 setsid -f bash -c 'sleep 3; exec "$0" "$@"' "$0" "$iface" "$action" >/dev/null 2>&1
+fi
+exit 0

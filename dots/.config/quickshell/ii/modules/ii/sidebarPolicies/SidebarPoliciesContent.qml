@@ -21,8 +21,35 @@ Item {
     // the per-tab Loaders below are what actually hold the Phone/AI/etc. trees, so
     // gating them on sidebarLeftOpen alone threw away every open subpage on close.
     readonly property bool keepLoaded: Config.ready && Config.options.sidebar.keepLeftSidebarLoaded
-    readonly property bool tabsWanted: GlobalStates.sidebarLeftOpen || root.keepLoaded
+    // Config and Persistent load independently. Before both are ready,
+    // Persistent.states.sidebar.policies.tab is only the QML default (0), so
+    // activating the current Loader here can construct Intelligence and then
+    // retain it as the "previous" tab when the real saved tab arrives.
+    // Wait for the real state before creating any tab tree.
+    readonly property bool tabsReady: Config.ready && Persistent.ready
+    property bool tabsInitialized: false
+    readonly property bool tabsWanted: (GlobalStates.sidebarLeftOpen || root.keepLoaded)
+        && root.tabsReady && root.tabsInitialized
     property string routedSessionRequestId: ""
+
+    // Whether the Intelligence tab's tree is actually alive (its per-tab Loader
+    // is active: the tab is current or was the previous one). The AI surface
+    // router only has a consumer while that tree exists, so the Ai-targeted
+    // Connections below gate on this — targeting them unconditionally would
+    // construct the whole Ai singleton with the content, kept loaded or not.
+    // Returning to the tab re-consumes pending intents through the
+    // onCurrentIndexChanged handler, which runs regardless of this flag.
+    readonly property bool aiTabLoaded: {
+        if (!GlobalStates.sidebarLeftOpen || !root.aiChatEnabled)
+            return false;
+        for (const key in root.visitedTabs) {
+            const index = Number(key);
+            if (index >= 0 && index < root.activeTabs.length
+                && root.activeTabs[index]?.icon === "neurology")
+                return true;
+        }
+        return false;
+    }
 
     function cycleTab(direction) {
         if (root.tabCount <= 1)
@@ -30,6 +57,29 @@ Item {
         const next = (tabBar.currentIndex + direction + root.tabCount) % root.tabCount;
         tabBar.setCurrentIndex(next);
     }
+
+    /** Answers a navigation request left by something outside the sidebar —
+     *  an IPC call, a keybind — once the tabs actually exist. */
+    function applyTabRequest(): void {
+        const wanted = GlobalStates.policiesRequestTabIcon;
+        if (!wanted || !root.tabsReady)
+            return;
+        const index = root.activeTabs.findIndex(t => t.icon === wanted);
+        GlobalStates.policiesRequestTabIcon = "";
+        if (index < 0)
+            return;
+        Persistent.states.sidebar.policies.tab = index;
+        if (tabBar.currentIndex !== index)
+            tabBar.setCurrentIndex(index);
+    }
+
+    Connections {
+        target: GlobalStates
+        function onPoliciesRequestTabIconChanged(): void {
+            root.applyTabRequest();
+        }
+    }
+
 
     // Policy controls must be handled at the content boundary as well as by
     // the surrounding PanelWindow/TopLayer. The active tab can contain a
@@ -71,12 +121,17 @@ Item {
     }
 
     // Toggles from Config
-    property bool aiChatEnabled: Ai.enabled
+    // Mirrors Ai.qml's `enabled` (aiPolicy !== 0) through the registry's Config
+    // read: evaluating Ai.enabled from the kept-loaded sidebar content would
+    // construct the whole Ai singleton at boot just to decide whether a tab
+    // button exists.
+    property bool aiChatEnabled: SearchPanelRegistry.aiPolicyEnabled
     property bool translatorEnabled: Config.options.policies.translator !== 0
     property bool mediaEnabled: Config.options.policies.player !== 0
     property bool wallpapersEnabled: Config.options.policies.wallpapers !== 0
     property bool animeEnabled: Config.options.policies.weeb !== 0
     property bool animeCloset: Config.options.policies.weeb === 2
+    property bool ankiEnabled: Config.options.policies.anki !== 0
 
     // Tab and Page mapping
     property var tabs: [
@@ -111,6 +166,12 @@ Item {
             component: anime
         },
         {
+            icon: "school",
+            name: Translation.tr("Anki"),
+            enabled: root.ankiEnabled,
+            component: ankiStudy
+        },
+        {
             icon: "smartphone",
             name: Translation.tr("Phone"),
             enabled: Config.options.policies.phone !== 0,
@@ -126,9 +187,24 @@ Item {
     property int tabCount: activeTabs.length
     // Holds the previously-focused tab index so the bounce-in animation
     // (mirroring the Cheatsheet tab transition) knows the direction.
-    property int _prevTabIndex: Persistent.states.sidebar.policies.tab
-    Component.onCompleted: {
-        root._prevTabIndex = Persistent.states.sidebar.policies.tab;
+    property int _prevTabIndex: -1
+
+    function initializeTabState() {
+        if (!root.tabsReady || root.tabsInitialized)
+            return;
+        root.validateTabIndex();
+        const savedTab = Number(Persistent.states.sidebar.policies.tab);
+        const initialTab = root.tabCount > 0 && savedTab >= 0 && savedTab < root.tabCount ? savedTab : 0;
+        root._prevTabIndex = initialTab;
+        root.visitedTabs = {};
+        if (root.tabCount > 0)
+            root.visitedTabs[initialTab] = true;
+        root.tabsInitialized = true;
+    }
+
+    onTabsReadyChanged: {
+        root.initializeTabState();
+        root.applyTabRequest();
     }
 
     function validateTabIndex() {
@@ -148,12 +224,14 @@ Item {
 
     onActiveTabsChanged: {
         root.validateTabIndex();
+        root.initializeTabState();
     }
 
     Connections {
         target: Persistent
         function onReadyChanged() {
             root.validateTabIndex();
+            root.initializeTabState();
         }
     }
 
@@ -251,6 +329,12 @@ Item {
     // SwipeView item. A requested session is selected first; until the session
     // store confirms that selection the router intent remains pending.
     function tryConsumeSurfaceIntent() {
+        // Reading Ai.surfaceRouter here would construct the whole Ai singleton
+        // on every tab switch; without the Intelligence tab alive there is
+        // nothing that could consume the intent, and switching to the tab
+        // re-runs this through onCurrentIndexChanged.
+        if (!root.aiTabLoaded)
+            return;
         const intent = Ai.surfaceRouter.pendingIntent;
         if (!intent || intent.surface !== "sidebar")
             return;
@@ -273,14 +357,14 @@ Item {
     }
 
     Connections {
-        target: Ai.surfaceRouter
+        target: root.aiTabLoaded ? Ai.surfaceRouter : null
         function onPendingIntentChanged() {
             root.tryConsumeSurfaceIntent();
         }
     }
 
     Connections {
-        target: Ai.sessions
+        target: root.aiTabLoaded ? Ai.sessions : null
         function onCurrentIdChanged() {
             root.tryConsumeSurfaceIntent();
         }
@@ -290,7 +374,7 @@ Item {
     }
 
     Connections {
-        target: Ai
+        target: root.aiTabLoaded ? Ai : null
         function onMessageIDsChanged() {
             root.tryConsumeSurfaceIntent();
         }
@@ -338,6 +422,15 @@ Item {
                 x: 0
             }
 
+            // The fully labelled bar's width, measured off-screen so the real bar can
+            // decide to fold without feeding its own width back into the decision.
+            ToolbarTabBar {
+                id: tabBarMeasure
+                visible: false
+                requestOnly: true
+                tabButtonList: root.tabButtonList
+            }
+
             Toolbar {
                 id: mainToolbar
                 anchors.fill: parent
@@ -347,6 +440,9 @@ Item {
                     id: tabBar
                     Layout.alignment: Qt.AlignHCenter
                     tabButtonList: root.tabButtonList
+                    // Every label at once only while they fit; past that the inactive
+                    // tabs fold to their icon and the current one keeps its name.
+                    collapseInactiveLabels: tabBarMeasure.implicitWidth + mainToolbar.padding * 2 > toolbarContainer.Layout.maximumWidth
                     currentIndex: Persistent.states.sidebar.policies.tab
 
                     transform: Translate {
@@ -372,7 +468,7 @@ Item {
             StackLayout {
                 id: swipeView
                 anchors.fill: parent
-                currentIndex: (root.tabCount > 0 && Persistent.states.sidebar.policies.tab >= 0 && Persistent.states.sidebar.policies.tab < root.tabCount)
+                currentIndex: (root.tabsInitialized && root.tabCount > 0 && Persistent.states.sidebar.policies.tab >= 0 && Persistent.states.sidebar.policies.tab < root.tabCount)
                     ? Persistent.states.sidebar.policies.tab
                     : 0
 
@@ -391,6 +487,8 @@ Item {
                 }
 
                 onCurrentIndexChanged: {
+                    if (!root.tabsInitialized)
+                        return;
                     if (currentIndex >= 0 && currentIndex < root.tabCount && Persistent.states.sidebar.policies.tab !== currentIndex) {
                         Persistent.states.sidebar.policies.tab = currentIndex;
                     }
@@ -415,12 +513,7 @@ Item {
                 }
 
                 Component.onCompleted: {
-                    if (count > 0 && Persistent.states.sidebar.policies.tab >= 0 && Persistent.states.sidebar.policies.tab < count) {
-                        currentIndex = Persistent.states.sidebar.policies.tab;
-                    }
-                    var visited = root.visitedTabs;
-                    visited[currentIndex] = true;
-                    root.visitedTabs = visited;
+                    root.initializeTabState();
                 }
 
                 clip: true
@@ -541,6 +634,10 @@ Item {
         Component {
             id: anime
             Anime {}
+        }
+        Component {
+            id: ankiStudy
+            AnkiStudy {}
         }
         Component {
             id: phonePlaceholder

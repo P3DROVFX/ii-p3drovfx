@@ -13,12 +13,50 @@ TIMETABLE = CHEATSHEET / "timetable"
 
 
 class TimetableLazyLoadingContractTests(unittest.TestCase):
-    def test_timetable_tab_and_selected_view_incubate_across_frames(self) -> None:
+    def test_timetable_incubates_hidden_and_builds_in_one_pass_on_screen(self) -> None:
+        """Async incubation only gets ~1/3 of each animating frame: a page
+        asked for on screen took 3-4x its build cost, so only the hidden
+        preload incubates."""
         cheatsheet = (CHEATSHEET / "Cheatsheet.qml").read_text(encoding="utf-8")
         host = (CHEATSHEET / "CheatsheetTimetable.qml").read_text(encoding="utf-8")
+        keybinds = (CHEATSHEET / "CheatsheetKeybinds.qml").read_text(encoding="utf-8")
 
-        self.assertIn('asynchronous: modelData.icon === "calendar_month"', cheatsheet)
-        self.assertGreaterEqual(host.count("asynchronous: true"), 2)
+        self.assertIn("property bool incubateAsync: true", host)
+        self.assertEqual(host.count("asynchronous: root.incubateAsync"), 2)
+        self.assertEqual(host.count("incubateAsync: root.incubateAsync"), 2)
+        self.assertIn("property bool incubateAsync: true", keybinds)
+        self.assertIn("asynchronous: root.incubateAsync", keybinds)
+        # The tab delegate keeps only the selected page.
+        tab_delegate = cheatsheet.split("delegate: Loader {", 1)[1].split("source: {", 1)[0]
+        self.assertIn("asynchronous: !root.activeState", tab_delegate)
+        self.assertIn('property: "incubateAsync"', tab_delegate)
+        self.assertIn("value: tabDelegate.asynchronous", tab_delegate)
+        self.assertIn("active: isCurrent && (root.activeState || root.cachePrepared", tab_delegate)
+        self.assertIn('return "CheatsheetTimetable.qml";', cheatsheet)
+
+    def test_view_pickers_are_built_on_request(self) -> None:
+        """An unopened picker used to add a second month grid to every open."""
+        month = (TIMETABLE / "MonthView.qml").read_text(encoding="utf-8")
+        week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")
+        time_host = (TIMETABLE / "DeferredTimePicker.qml").read_text(encoding="utf-8")
+        date_host = (TIMETABLE / "DeferredDatePicker.qml").read_text(encoding="utf-8")
+
+        for view in (month, week):
+            self.assertIn("DeferredTimePicker {", view)
+            self.assertIn("DeferredDatePicker {", view)
+            self.assertNotIn("TimePickerPopup {", view)
+            self.assertNotIn("DatePickerPopup {", view)
+            # Call sites keep their shape: the host carries the selector.
+            self.assertIn("timePicker.target = which;", view)
+            self.assertIn("datePicker.purpose = purpose;", view)
+
+        self.assertIn('setSource(Qt.resolvedUrl("TimePickerPopup.qml"))', time_host)
+        self.assertIn('setSource(Qt.resolvedUrl("DatePickerPopup.qml"))', date_host)
+        for host in (time_host, date_host):
+            self.assertIn("active: false", host)
+            self.assertIn("function ensure() {", host)
+            self.assertIn("if (!item) {", host)
+            self.assertIn("Connections {", host)
 
     def test_sports_start_only_after_the_base_view_is_ready(self) -> None:
         host = (CHEATSHEET / "CheatsheetTimetable.qml").read_text(encoding="utf-8")
@@ -31,14 +69,17 @@ class TimetableLazyLoadingContractTests(unittest.TestCase):
 
     def test_timetable_sports_are_explicitly_opt_in(self) -> None:
         config = (ROOT / "modules" / "common" / "Config.qml").read_text(encoding="utf-8")
-        settings = (ROOT / "modules" / "settings" / "configs" / "widgets" / "TimetableConfig.qml").read_text(encoding="utf-8")
+        settings = (ROOT / "modules" / "ii" / "cheatsheet" / "settings" / "TimetableSettings.qml").read_text(encoding="utf-8")
         host = (CHEATSHEET / "CheatsheetTimetable.qml").read_text(encoding="utf-8")
 
         self.assertIn("property bool sportsEvents: false", config)
-        self.assertIn('text: Translation.tr("Show sports events")', settings)
-        self.assertIn("checked: Config.options.calendar.timetable.sportsEvents", settings)
+        self.assertIn('title: Translation.tr("Show sports events")', settings)
+        self.assertIn("checked: root.timetable.sportsEvents", settings)
         self.assertIn("readonly property bool sportsRequested: Config.options.calendar.timetable.sportsEvents", host)
-        self.assertIn("if (!root.sportsRequested)", host)
+        # Requested is not enough: a retained page that is hidden must keep no
+        # subscriber, cache or refresh alive.
+        self.assertIn("readonly property bool sportsSurfaceActive: GlobalStates.cheatsheetOpen", host)
+        self.assertIn("if (!root.sportsRequested || !root.sportsSurfaceActive)", host)
         self.assertIn("SportsService.releaseTimetableSubscriber()", host)
 
     def test_month_cells_are_materialized_progressively(self) -> None:
@@ -53,7 +94,10 @@ class TimetableLazyLoadingContractTests(unittest.TestCase):
         self.assertIn("model: root.cells ?? []", month)
         self.assertIn("id: cellLoader", month)
         self.assertIn("active: index <= root.loadedCellCount", month)
-        self.assertIn("asynchronous: true", month)
+        # Progressive only while incubating hidden; on screen, one pass.
+        self.assertIn("property bool incubateAsync: true", month)
+        self.assertIn("asynchronous: root.incubateAsync", month)
+        self.assertIn("root.loadedCellCount = root.cellCount;", month)
         self.assertIn("onLoaded: root.advanceCellLoading(index)", month)
         self.assertIn("sportsEnabled: root.sportsEnabled", month)
         self.assertIn("property bool sportsEnabled: false", cell)
@@ -68,10 +112,15 @@ class TimetableLazyLoadingContractTests(unittest.TestCase):
         self.assertIn("readonly property bool initialLoadComplete", week)
         self.assertNotIn("id: dayLoadTimer", week)
         self.assertIn("days: (root.days ?? []).slice(0, Math.max(0, root.loadedDayCount))", week)
-        self.assertIn("model: root.days ?? []", week)
+        # Integer model: the columns keep their identity across calendar refreshes,
+        # so a drop or a reload never rebuilds them (or replays their entrance).
+        self.assertIn("model: root.dayCount", week)
+        self.assertIn("readonly property var dayInfo: root.days[index] ?? null", week)
         self.assertIn("id: dayLoader", week)
         self.assertIn("active: index <= root.loadedDayCount", week)
-        self.assertIn("asynchronous: true", week)
+        self.assertIn("property bool incubateAsync: true", week)
+        self.assertIn("asynchronous: root.incubateAsync", week)
+        self.assertIn("root.loadedDayCount = root.dayCount;", week)
         self.assertIn("onLoaded: root.advanceDayLoading(index)", week)
 
     def test_week_initial_scroll_stops_retrying_after_it_is_applied(self) -> None:
@@ -117,6 +166,22 @@ class TimetableLazyLoadingContractTests(unittest.TestCase):
         self.assertNotIn("root.timetableProjectionSource = root.cachedRangeEvents()", sports)
         self.assertIn("timetableProjectionCompactEvents", sports)
         self.assertNotIn("const rawEvents = root.timetableProjectionRawEvents", sports)
+
+    def test_month_chip_slot_builds_only_its_own_kind(self) -> None:
+        """A slot used to build event, birthday, task and group chips and hide
+        three of them; that was most of a busy month's build cost."""
+        cell = (TIMETABLE / "MonthDayCell.qml").read_text(encoding="utf-8")
+        slot = cell.split("model: root.chipModel", 1)[1].split("Component {", 1)[0]
+
+        self.assertIn("delegate: Loader {", slot)
+        for component in ("eventChipComponent", "birthdayChipComponent", "taskChipComponent", "taskGroupChipComponent"):
+            self.assertIn(f"return {component};", slot)
+            self.assertIn(f"id: {component}", cell)
+        self.assertNotIn("visible: parent.modelData.kind", cell)
+        # The hover-only add button and the overflow row are built on demand.
+        self.assertIn("id: addButtonSlot", cell)
+        self.assertIn("active: root.hiddenCount > 0", cell)
+        self.assertIn('source: visible ? WeatherIcons.getWeatherIcon', cell)
 
 
 if __name__ == "__main__":

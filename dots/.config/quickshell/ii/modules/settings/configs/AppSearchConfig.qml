@@ -365,6 +365,11 @@ ContentPage {
                         name: Translation.tr("Typing test"),
                         icon: "keyboard",
                         prop: "typingTest"
+                    },
+                    {
+                        name: Translation.tr("Speed test"),
+                        icon: "speed",
+                        prop: "speedTest"
                     }
                 ]
                 delegate: Rectangle {
@@ -375,8 +380,8 @@ ContentPage {
 
                     topLeftRadius: index === 0 ? Appearance.rounding.small : Appearance.rounding.verysmall
                     topRightRadius: index === 0 ? Appearance.rounding.small : Appearance.rounding.verysmall
-                    bottomLeftRadius: index === 14 ? Appearance.rounding.small : Appearance.rounding.verysmall
-                    bottomRightRadius: index === 14 ? Appearance.rounding.small : Appearance.rounding.verysmall
+                    bottomLeftRadius: index === 15 ? Appearance.rounding.small : Appearance.rounding.verysmall
+                    bottomRightRadius: index === 15 ? Appearance.rounding.small : Appearance.rounding.verysmall
 
                     RowLayout {
                         anchors.fill: parent
@@ -504,7 +509,7 @@ ContentPage {
                                 verticalAlignment: Text.AlignVCenter
                                 font.pixelSize: Appearance.font.pixelSize.small
 
-                                StyledTextContextMenu {
+                                StyledTextContextMenuLoader {
                                     id: aliasEditContextMenu
                                     targetField: aliasEditInput
                                 }
@@ -693,7 +698,7 @@ ContentPage {
                             background: null
                             font.pixelSize: Appearance.font.pixelSize.small
 
-                            StyledTextContextMenu {
+                            StyledTextContextMenuLoader {
                                 id: newAliasContextMenu
                                 targetField: newAliasInput
                             }
@@ -734,7 +739,7 @@ ContentPage {
                             background: null
                             font.pixelSize: Appearance.font.pixelSize.small
 
-                            StyledTextContextMenu {
+                            StyledTextContextMenuLoader {
                                 id: newTargetContextMenu
                                 targetField: newTargetInput
                             }
@@ -845,7 +850,7 @@ ContentPage {
                                     clip: true
                                     onTextChanged: addAliasArea.appFilter = text
 
-                                    StyledTextContextMenu {
+                                    StyledTextContextMenuLoader {
                                         id: appFilterContextMenu
                                         targetField: appFilterInput
                                     }

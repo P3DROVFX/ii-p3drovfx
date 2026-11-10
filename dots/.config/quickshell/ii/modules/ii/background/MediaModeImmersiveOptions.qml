@@ -245,27 +245,11 @@ Item {
                     }
                     StyledText {
                         Layout.topMargin: Appearance.sizes.elevationMargin
+                        Layout.fillWidth: true
                         text: root.lyricsStatus
                         color: root.subtleForeground
                         font.pixelSize: Appearance.font.pixelSize.smaller
-                    }
-                }
-                RowLayout {
-                    Layout.fillWidth: true
-                    visible: root.context.showLyricsPanel
-                    spacing: Appearance.sizes.elevationMargin / 2
-                    MediaModeLyricsProviderRow {
-                        buttonSize: root.smallButton
-                        accentColor: root.foreground
-                        activeFillOpacity: 1
-                        activeIconColor: ColorUtils.getContrastingTextColor(root.foreground)
-                        surfaceColor: ColorUtils.applyAlpha(root.foreground, 0.1)
-                        surfaceHoverColor: ColorUtils.applyAlpha(root.foreground, 0.16)
-                        surfaceActiveColor: ColorUtils.applyAlpha(root.foreground, 0.24)
-                        onSurfaceColor: root.foreground
-                    }
-                    Item {
-                        Layout.fillWidth: true
+                        elide: Text.ElideRight
                     }
                     MediaModeImmersiveButton {
                         symbol: "text_decrease"
@@ -296,31 +280,78 @@ Item {
                         onClicked: LyricsService.initiliazeLyrics()
                     }
                 }
+                SwitchRow {
+                    visible: root.context.showLyricsPanel
+                    symbol: "animated_images"
+                    label: Translation.tr("Kinetic lyrics (word-synced songs)")
+                    checked: Config.options.background.mediaMode.kineticLyrics ?? false
+                    onToggled: checked => Config.options.background.mediaMode.kineticLyrics = checked
+                }
+                SwitchRow {
+                    visible: root.context.showLyricsPanel && (Config.options.background.mediaMode.kineticLyrics ?? false)
+                    symbol: "camera"
+                    label: Translation.tr("Fisheye lens")
+                    checked: Config.options.background.mediaMode.kineticFisheye ?? false
+                    onToggled: checked => Config.options.background.mediaMode.kineticFisheye = checked
+                }
                 RowLayout {
                     Layout.fillWidth: true
                     visible: root.context.showLyricsPanel
                     spacing: Appearance.sizes.elevationMargin / 2
+                    MediaModeLyricsProviderRow {
+                        buttonSize: root.smallButton
+                        accentColor: root.foreground
+                        activeFillOpacity: 1
+                        activeIconColor: ColorUtils.getContrastingTextColor(root.foreground)
+                        surfaceColor: ColorUtils.applyAlpha(root.foreground, 0.1)
+                        surfaceHoverColor: ColorUtils.applyAlpha(root.foreground, 0.16)
+                        surfaceActiveColor: ColorUtils.applyAlpha(root.foreground, 0.24)
+                        onSurfaceColor: root.foreground
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    visible: root.context.showLyricsPanel
+                    spacing: Appearance.sizes.elevationMargin / 2
+                    readonly property int offsetMs: Config.options.background.mediaMode.lyricsOffsetMs ?? 0
                     StyledText {
                         Layout.fillWidth: true
-                        text: Translation.tr("Lyrics offset") + " · " + (
-                                  Config.options.background.mediaMode.lyricsOffsetMs ?? 0) + " ms"
+                        text: Translation.tr("Lyrics offset") + " · " + (parent.offsetMs > 0 ? "+" : "")
+                              + parent.offsetMs + " ms"
                         color: root.foreground
                     }
+                    // The offset shifts the lyrics clock: negative holds the lyrics back,
+                    // positive runs them ahead. Hold a button to keep stepping.
                     MediaModeImmersiveButton {
                         symbol: "remove"
                         implicitWidth: root.smallButton
                         symbolSize: Appearance.font.pixelSize.normal
                         foreground: root.foreground
-                        tooltip: Translation.tr("Nudge Lyrics -250ms (Earlier)")
-                        onClicked: Config.options.background.mediaMode.lyricsOffsetMs -= 250
+                        tooltip: Translation.tr("Delay lyrics by 50 ms")
+                        autoRepeat: true
+                        autoRepeatDelay: 400
+                        autoRepeatInterval: 90
+                        onClicked: Config.options.background.mediaMode.lyricsOffsetMs -= 50
                     }
                     MediaModeImmersiveButton {
                         symbol: "add"
                         implicitWidth: root.smallButton
                         symbolSize: Appearance.font.pixelSize.normal
                         foreground: root.foreground
-                        tooltip: Translation.tr("Nudge Lyrics +250ms (Later)")
-                        onClicked: Config.options.background.mediaMode.lyricsOffsetMs += 250
+                        tooltip: Translation.tr("Advance lyrics by 50 ms")
+                        autoRepeat: true
+                        autoRepeatDelay: 400
+                        autoRepeatInterval: 90
+                        onClicked: Config.options.background.mediaMode.lyricsOffsetMs += 50
+                    }
+                    MediaModeImmersiveButton {
+                        visible: parent.offsetMs !== 0
+                        symbol: "restart_alt"
+                        implicitWidth: root.smallButton
+                        symbolSize: Appearance.font.pixelSize.normal
+                        foreground: root.foreground
+                        tooltip: Translation.tr("Reset lyrics offset")
+                        onClicked: Config.options.background.mediaMode.lyricsOffsetMs = 0
                     }
                 }
 
@@ -397,13 +428,13 @@ Item {
                     visible: root.context.applicationsSource
                     symbol: "music_video"
                     label: Translation.tr("Music video background")
-                    checked: Config.options.background.mediaMode.musicVideo.enable
+                    // Manual, per session: on while searching or playing.
+                    checked: MusicVideoService.active
                     onToggled: checked => {
-                        Config.options.background.mediaMode.musicVideo.enable = checked;
                         if (checked)
-                            MusicVideoService.tryPlayCurrent();
+                            MusicVideoService.start();
                         else
-                            MusicVideoService.stopVideo();
+                            MusicVideoService.stop();
                     }
                 }
                 SheetAction {

@@ -12,18 +12,150 @@ import "network/NmcliDeviceStatus.js" as Nmcli
  * Quickshell's native backend covers state but cannot build a settings
  * dictionary from QML, so profile creation, 802.1X, hidden SSIDs, addressing and
  * the hotspot all have to go through nmcli. Commands are argument vectors rather
- * than assembled shell strings; the handful that carry a secret run a fixed
- * script that reads it out of the environment, because /proc/<pid>/cmdline is
- * world readable and /proc/<pid>/environ is not.
+ * than assembled shell strings.
+ *
+ * Secrets never go on a command line: /proc/<pid>/cmdline is readable by every
+ * local user, and nmcli only takes secrets as arguments. The scripts that carry
+ * one read it from $PASSWORD (/proc/<pid>/environ is private) and hand it to
+ * scripts/network/set_secret.py, which stores it over D-Bus. A profile is
+ * therefore always written in two steps: its settings through nmcli, then its
+ * secret.
  */
 Singleton {
     id: root
 
-    readonly property string kConnectPsk: 'nmcli device wifi connect "$1" password "$PASSWORD" "${@:2}"'
-    readonly property string kSetPsk: 'nmcli connection modify "$1" wifi-sec.psk "$PASSWORD"'
-    readonly property string kAddEnterprise: 'nmcli connection add type wifi con-name "$1" ifname "$2" ssid "$3" wifi-sec.key-mgmt wpa-eap 802-1x.password "$PASSWORD" "${@:4}"'
-    readonly property string kAddWifi: 'name="$1"; ssid="$2"; key="$3"; shift 3; nmcli connection add type wifi con-name "$name" ssid "$ssid" "$key" "$PASSWORD" "$@"'
-    readonly property string kModifySecret: 'uuid="$1"; key="$2"; shift 2; nmcli connection modify uuid "$uuid" "$key" "$PASSWORD" "$@"'
+    readonly property string secretHelper: Quickshell.shellPath("scripts/network/set_secret.py")
+
+    // $1 uuid, $2 setting.property; the secret is $PASSWORD.
+    readonly property string kStoreSecret: `
+        store_secret() { python3 "$SECRET_HELPER" "$1" "$2"; }
+    `
+
+    // $1 setting.property of the secret, then the arguments of `nmcli
+    // connection add`. A profile whose secret cannot be stored is removed
+    // again rather than left half made.
+    readonly property string kAddWithSecret: root.kStoreSecret + `
+        key="$1"; shift
+        uuid=$(cat /proc/sys/kernel/random/uuid)
+        nmcli connection add "$@" connection.uuid "$uuid" || exit
+        store_secret "$uuid" "$key" || { nmcli connection delete uuid "$uuid" >/dev/null; exit 1; }
+    `
+
+    // $1 uuid, $2 setting.property of the secret, then settings to change first.
+    readonly property string kModifySecret: root.kStoreSecret + `
+        uuid="$1"; key="$2"; shift 2
+        if [ $# -gt 0 ]; then nmcli connection modify uuid "$uuid" "$@" || exit; fi
+        store_secret "$uuid" "$key"
+    `
+
+    // ---- 802.1X -----------------------------------------------------------
+    // Printed by the scripts below on a line of their own, for Network to read.
+    readonly property string kNoProfile: "no-profile"
+    readonly property string kCertificateProfile: "eap-tls"
+
+    // Defines find_profile: the uuid of the saved Wi-Fi profile for the SSID in
+    // $1. Matched on the SSID rather than the name, which a provisioning tool —
+    // or nmcli's own "eduroam 1" — can set to anything. One batched show: every
+    // Wi-Fi profile carries both fields, so records are always uuid, SSID and a
+    // blank separator.
+    readonly property string kFindProfile: `
+        find_profile() {
+            local ids=() uuid type ssid
+            while IFS=: read -r uuid type; do
+                [ "$type" = 802-11-wireless ] && ids+=(uuid "$uuid")
+            done < <(nmcli -t -f UUID,TYPE connection show)
+            [ \${#ids[@]} -gt 0 ] || return
+            nmcli -e no -g connection.uuid,802-11-wireless.ssid connection show "\${ids[@]}" |
+                while IFS= read -r uuid && IFS= read -r ssid; do
+                    [ "$ssid" = "$1" ] && { echo "$uuid"; break; }
+                    IFS= read -r
+                done
+        }
+    `
+
+    // $1 SSID, $2 device (may be empty). `nmcli device wifi connect` would
+    // reuse the profile as well, but this way a certificate profile can say
+    // there is no password to ask for, and a failed login gives up after 30 s
+    // rather than 90 — every other nmcli call queues behind it.
+    readonly property string kConnectEnterprise: root.kFindProfile + `
+        uuid=$(find_profile "$1")
+        [ -n "$uuid" ] || { echo ${root.kNoProfile}; exit 10; }
+        [ "$(nmcli -g 802-1x.eap connection show uuid "$uuid")" = tls ] && echo ${root.kCertificateProfile}
+        up=(); [ -n "$2" ] && up=(ifname "$2")
+        exec nmcli --wait 30 connection up uuid "$uuid" "\${up[@]}"
+    `
+
+    // $1 SSID, $2 device (may be empty), then extra settings for a profile
+    // created here. An existing profile is updated in place, so whatever set it
+    // up (CA certificate, anonymous identity, another phase 2) stays. A new one
+    // offers PEAP and TTLS, both with MSCHAPv2 inside, which covers most
+    // networks; the server picks. The password is stored with the profile
+    // (flags 0) because the shell runs no secret agent to hand it over later.
+    // The server domain is only written when it differs from $SAVED_DOMAIN: set,
+    // the server certificate must chain to a system CA and match it; cleared,
+    // that check is turned off.
+    readonly property string kSaveEnterprise: root.kFindProfile + root.kStoreSecret + `
+        ssid="$1"; ifname="$2"; shift 2
+        args=(802-1x.password-flags 0)
+        [ -n "$IDENTITY" ] && args+=(802-1x.identity "$IDENTITY")
+        if [ "$DOMAIN" != "$SAVED_DOMAIN" ]; then
+            if [ -n "$DOMAIN" ]; then
+                args+=(802-1x.system-ca-certs yes 802-1x.domain-suffix-match "$DOMAIN")
+            else
+                args+=(802-1x.system-ca-certs no 802-1x.domain-suffix-match "")
+            fi
+        fi
+        uuid=$(find_profile "$ssid")
+        if [ -n "$uuid" ]; then
+            nmcli connection modify uuid "$uuid" "\${args[@]}" || exit
+        else
+            [ -n "$IDENTITY" ] || { echo ${root.kNoProfile}; exit 10; }
+            uuid=$(cat /proc/sys/kernel/random/uuid)
+            nmcli connection add type wifi con-name "$ssid" ssid "$ssid" connection.uuid "$uuid" wifi-sec.key-mgmt wpa-eap \\
+                802-1x.eap peap,ttls 802-1x.phase2-auth mschapv2 "\${args[@]}" "$@" >/dev/null || exit
+        fi
+        store_secret "$uuid" 802-1x.password || exit
+        up=(); [ -n "$ifname" ] && up=(ifname "$ifname")
+        exec nmcli --wait 30 connection up uuid "$uuid" "\${up[@]}"
+    `
+
+    // $1 SSID, $2 device (may be empty), $3 what the scan says a new profile
+    // needs (wpa-psk, sae or wep), then extra settings for a profile created
+    // here. Like `nmcli device wifi connect`, which takes the password only
+    // as an argument: reuse the profile for the SSID or make one, then store
+    // the secret where that profile keeps it.
+    readonly property string kConnectPsk: root.kFindProfile + root.kStoreSecret + `
+        ssid="$1"; ifname="$2"; kind="$3"; shift 3
+        uuid=$(find_profile "$ssid")
+        if [ -z "$uuid" ]; then
+            if [ "$kind" = wep ]; then
+                # nmcli's own guess: 5 or 13 characters, or 10 or 26 hex digits,
+                # are a key; anything else is a passphrase.
+                type=passphrase
+                if [[ \${#PASSWORD} =~ ^(5|13)$ ]] || [[ \${#PASSWORD} =~ ^(10|26)$ && $PASSWORD =~ ^[0-9A-Fa-f]+$ ]]; then
+                    type=key
+                fi
+                security=(wifi-sec.key-mgmt none wifi-sec.wep-key-type "$type")
+            else
+                security=(wifi-sec.key-mgmt "$kind")
+            fi
+            uuid=$(cat /proc/sys/kernel/random/uuid)
+            nmcli connection add type wifi con-name "$ssid" ssid "$ssid" connection.uuid "$uuid" \\
+                "\${security[@]}" "$@" >/dev/null || exit
+        fi
+        key=802-11-wireless-security.psk
+        [ "$(nmcli -g 802-11-wireless-security.key-mgmt connection show uuid "$uuid")" = none ] && key=802-11-wireless-security.wep-key0
+        store_secret "$uuid" "$key" || exit
+        up=(); [ -n "$ifname" ] && up=(ifname "$ifname")
+        exec nmcli connection up uuid "$uuid" "\${up[@]}"
+    `
+
+    // No secrets: --show-secrets is never passed. A profile without an 802-1x
+    // setting prints nothing at all, so every field comes back empty.
+    readonly property string kReadEnterprise: root.kFindProfile + `
+        uuid=$(find_profile "$1")
+        [ -n "$uuid" ] && nmcli -e no -g 802-1x.identity,802-1x.domain-suffix-match,802-1x.ca-cert connection show uuid "$uuid"
+    `
 
     readonly property bool busy: root.active !== null
     property var active: null
@@ -83,56 +215,53 @@ Singleton {
         root.run(["nmcli", "connection", "up", "id", name], "activate", callback);
     }
 
-    function connectWithPsk(ssid: string, psk: string, options = ({}), callback = null): void {
-        const extra = [];
-        if (options.ifname)
-            extra.push("ifname", options.ifname);
-        if (options.hidden)
-            extra.push("hidden", "yes");
-        root.runScript(root.kConnectPsk, [ssid, ...extra], "connect", callback, {
-            PASSWORD: psk
-        });
+    // The environment of a script that carries a secret.
+    function secretEnv(secret: string, extra = ({})): var {
+        return Object.assign({
+            PASSWORD: secret,
+            SECRET_HELPER: root.secretHelper
+        }, extra);
     }
 
-    function setProfilePsk(profile: string, psk: string, callback = null): void {
-        root.runScript(root.kSetPsk, [profile], "modify", callback, {
-            PASSWORD: psk
-        });
+    // `options` takes ifname, hidden and kind: wpa-psk (default), sae or wep,
+    // for a profile that has to be created.
+    function connectWithPsk(ssid: string, psk: string, options = ({}), callback = null): void {
+        const extra = options.hidden ? ["802-11-wireless.hidden", "yes"] : [];
+        root.runScript(root.kConnectPsk, [ssid, options.ifname ?? "", options.kind ?? "wpa-psk", ...extra], "connect", callback, root.secretEnv(psk));
+    }
+
+    // Brings up the saved 802.1X profile for `ssid`. With none saved it prints
+    // kNoProfile and fails, which is the cue to ask for credentials.
+    function connectEnterprise(ssid: string, ifname = "", callback = null): void {
+        root.runScript(root.kConnectEnterprise, [ssid, ifname], "connect", callback);
     }
 
     /**
-     * Creates an 802.1X profile and brings it up. `options` takes eap ("peap",
-     * "ttls", "tls", "pwd"), identity, anonymousIdentity, phase2, caCert,
-     * domainSuffix, clientCert, privateKey, profile, ifname and hidden.
+     * Stores 802.1X credentials for `ssid` — in the saved profile if there is
+     * one, in a new PEAP/TTLS profile if not — and brings it up. `options` takes
+     * identity (empty keeps the saved one), domain and savedDomain (the server
+     * domain is only written when they differ), ifname and hidden.
      */
-    function connectWithEnterprise(ssid: string, password: string, options = ({}), callback = null): void {
-        const profile = options.profile ?? ssid;
-        const extra = ["802-1x.eap", options.eap ?? "peap"];
-        if (options.identity)
-            extra.push("802-1x.identity", options.identity);
-        if (options.anonymousIdentity)
-            extra.push("802-1x.anonymous-identity", options.anonymousIdentity);
-        if (options.phase2)
-            extra.push("802-1x.phase2-auth", options.phase2);
-        if (options.caCert)
-            extra.push("802-1x.ca-cert", options.caCert);
-        if (options.domainSuffix)
-            extra.push("802-1x.domain-suffix-match", options.domainSuffix);
-        if (options.clientCert)
-            extra.push("802-1x.client-cert", options.clientCert);
-        if (options.privateKey)
-            extra.push("802-1x.private-key", options.privateKey);
-        if (options.hidden)
-            extra.push("802-11-wireless.hidden", "yes");
-        root.runScript(root.kAddEnterprise, [profile, options.ifname ?? "", ssid, ...extra], "enterprise", (code, out, err) => {
-            if (code !== 0) {
-                if (callback)
-                    callback(code, out, err);
-                return;
-            }
-            root.activateProfile(profile, callback);
-        }, {
-            PASSWORD: password
+    function saveEnterprise(ssid: string, password: string, options = ({}), callback = null): void {
+        const extra = options.hidden ? ["802-11-wireless.hidden", "yes"] : [];
+        root.runScript(root.kSaveEnterprise, [ssid, options.ifname ?? "", ...extra], "enterprise", callback, root.secretEnv(password, {
+            IDENTITY: options.identity ?? "",
+            DOMAIN: options.domain ?? "",
+            SAVED_DOMAIN: options.savedDomain ?? ""
+        }));
+    }
+
+    // What a credentials prompt can show back: the saved profile's identity,
+    // server domain and whether it pins a CA certificate (as provisioning tools
+    // do), or empty values.
+    function readEnterpriseProfile(ssid: string, callback): void {
+        root.runScript(root.kReadEnterprise, [ssid], "settings", (code, out) => {
+            const lines = code === 0 ? out.split("\n") : [];
+            callback({
+                identity: lines[0] ?? "",
+                domain: lines[1] ?? "",
+                caCert: (lines[2] ?? "").length > 0
+            });
         });
     }
 
@@ -170,7 +299,7 @@ Singleton {
      * and NetworkManager's own security string. Keyed by SSID.
      */
     function readWifiDetails(callback): void {
-        root.run(["nmcli", "-t", "-e", "yes", "-g", "ACTIVE,SIGNAL,FREQ,SSID,BSSID,SECURITY,NAME", "device", "wifi"], "details", (code, out) => {
+        root.run(["nmcli", "-t", "-e", "yes", "-g", "ACTIVE,SIGNAL,FREQ,SSID,BSSID,SECURITY", "device", "wifi"], "details", (code, out) => {
             callback(code === 0 ? root.parseWifiDetails(out) : ({}));
         });
     }
@@ -190,8 +319,7 @@ Singleton {
                 frequency: parseInt(parts[2]) || 0,
                 ssid: ssid,
                 bssid: parts[4] ?? "",
-                security: parts[5] ?? "",
-                profile: parts[6] ?? ""
+                security: parts[5] ?? ""
             };
             // Several radios can advertise the same SSID; keep the connected one,
             // then the strongest, so these extras describe the same access point
@@ -206,6 +334,22 @@ Singleton {
     function readSavedConnections(callback): void {
         root.run(["nmcli", "-t", "-e", "yes", "-g", "NAME,UUID,TYPE,DEVICE,AUTOCONNECT,TIMESTAMP", "connection", "show"], "saved", (code, out) => {
             callback(code === 0 ? root.parseSavedConnections(out) : []);
+        });
+    }
+
+    // The SSIDs the saved Wi-Fi profiles connect to, which a profile's name
+    // need not be. One batched show: a record per profile, blank-separated.
+    readonly property string kSavedSsids: `
+        ids=()
+        while IFS=: read -r uuid type; do
+            [ "$type" = 802-11-wireless ] && ids+=(uuid "$uuid")
+        done < <(nmcli -t -f UUID,TYPE connection show)
+        [ \${#ids[@]} -eq 0 ] || nmcli -e no -g 802-11-wireless.ssid connection show "\${ids[@]}"
+    `
+
+    function readSavedWifiSsids(callback): void {
+        root.runScript(root.kSavedSsids, [], "saved", (code, out) => {
+            callback(code === 0 ? out.split("\n").filter(line => line.length > 0) : []);
         });
     }
 
@@ -357,9 +501,7 @@ Singleton {
             root.modifyProfile(uuid, settings, callback);
             return;
         }
-        root.runScript(root.kModifySecret, [uuid, secretKey, ...root.settingsToArgv(settings)], "modify", callback, {
-            PASSWORD: secret
-        });
+        root.runScript(root.kModifySecret, [uuid, secretKey, ...root.settingsToArgv(settings)], "modify", callback, root.secretEnv(secret));
     }
 
     // A setting cannot be emptied key by key: NetworkManager rejects an empty
@@ -375,9 +517,7 @@ Singleton {
             root.run(["nmcli", "connection", "add", "type", "wifi", "con-name", name, "ssid", ssid, ...pairs], "add", callback);
             return;
         }
-        root.runScript(root.kAddWifi, [name, ssid, secretKey, ...pairs], "add", callback, {
-            PASSWORD: secret
-        });
+        root.runScript(root.kAddWithSecret, [secretKey, "type", "wifi", "con-name", name, "ssid", ssid, ...pairs], "add", callback, root.secretEnv(secret));
     }
 
     // Names repeat — NetworkManager happily keeps three profiles called
@@ -411,7 +551,6 @@ Singleton {
     // The radio decides whether an access point may run beside the connection
     // it is sharing, and how many channels it can hold while doing it.
     readonly property string kIwCombinations: 'iw list 2>/dev/null | sed -n "/valid interface combinations/,/^[[:space:]]*[A-Z]/p"'
-    readonly property string kAddHotspotSecret: 'name="$1"; ssid="$2"; key="$3"; shift 3; nmcli connection add type wifi con-name "$name" ssid "$ssid" "$key" "$PASSWORD" "$@"'
 
     function readHotspotDeps(callback): void {
         root.runScript(root.kHotspotDeps, [], "deps", (code, out) => {
@@ -589,14 +728,12 @@ Singleton {
                 "ssid", ssid, ...pairs], "add", callback);
             return;
         }
-        root.runScript(root.kAddHotspotSecret, [name, ssid, "802-11-wireless-security.psk",
-            ...device, ...pairs], "add", callback, {
-                PASSWORD: secret
-            });
+        // Prints nmcli's success line, which is where the caller reads the uuid.
+        root.runScript(root.kAddWithSecret, ["802-11-wireless-security.psk", "type", "wifi", "con-name", name,
+            ...device, "ssid", ssid, ...pairs], "add", callback, root.secretEnv(secret));
     }
 
     // ---- Wired ------------------------------------------------------------
-    readonly property string kAddWiredSecret: 'name="$1"; key="$2"; shift 2; nmcli connection add type ethernet con-name "$name" "$key" "$PASSWORD" "$@"'
 
     /**
      * What a port actually is beyond its name: the chip, its driver, the MTU in
@@ -682,10 +819,8 @@ Singleton {
                 ...device, ...pairs], "add", callback);
             return;
         }
-        root.runScript(root.kAddWiredSecret, [name, secretKey, ...device, ...pairs], "add",
-            callback, {
-                PASSWORD: secret
-            });
+        root.runScript(root.kAddWithSecret, [secretKey, "type", "ethernet", "con-name", name, ...device, ...pairs], "add",
+            callback, root.secretEnv(secret));
     }
 
     Process {

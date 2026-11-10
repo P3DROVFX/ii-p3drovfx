@@ -9,6 +9,7 @@ import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.modules.waffle.looks
 import qs.modules.waffle.actionCenter
+import qs.modules.waffle.actionCenter.easyEffects
 
 Item {
     id: root
@@ -110,23 +111,10 @@ Item {
 
         ////////////////////////////////////////////////////////////
 
-        SectionText {
+        // Off, or one of the device's EasyEffects presets.
+        EasyEffectsChoices {
+            Layout.fillWidth: true
             visible: EasyEffects.available && root.output
-            text: Translation.tr("Sound effects")
-        }
-
-        WChoiceButton {
-            visible: EasyEffects.available && root.output
-            text: Translation.tr("Off")
-            checked: !EasyEffects.active
-            onClicked: EasyEffects.disable()
-        }
-
-        WChoiceButton {
-            visible: EasyEffects.available && root.output
-            text: "EasyEffects"
-            checked: EasyEffects.active
-            onClicked: EasyEffects.enable()
         }
 
         WPanelSeparator {

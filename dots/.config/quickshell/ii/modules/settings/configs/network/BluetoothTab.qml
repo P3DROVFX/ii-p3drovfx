@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Bluetooth
+import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.functions
@@ -24,7 +25,19 @@ ContentPage {
     id: root
     forceWidth: false
 
-    Component.onCompleted: BluetoothStatus.startDiscovery()
+    // Settings can stay loaded, hidden, after it is closed; discovery only
+    // runs while the window is actually open.
+    readonly property bool discoveryWanted: GlobalStates.settingsOpen
+    onDiscoveryWantedChanged: {
+        if (root.discoveryWanted)
+            BluetoothStatus.startDiscovery();
+        else
+            BluetoothStatus.stopDiscovery();
+    }
+    Component.onCompleted: {
+        if (root.discoveryWanted)
+            BluetoothStatus.startDiscovery();
+    }
     Component.onDestruction: BluetoothStatus.stopDiscovery()
 
     // The adapter may still have been powering on when the tab appeared, in
@@ -32,7 +45,7 @@ ContentPage {
     Connections {
         target: BluetoothStatus
         function onEnabledChanged() {
-            if (BluetoothStatus.enabled)
+            if (BluetoothStatus.enabled && root.discoveryWanted)
                 BluetoothStatus.startDiscovery();
         }
     }
@@ -95,10 +108,12 @@ ContentPage {
             text: Translation.tr("Another program is already handling pairing requests. Codes may be asked for there instead of by the shell.")
         }
 
-        // Contextual BudsLink notices (Plan Section 35)
+        // Contextual BudsLink notices (Plan Section 35). Never nag about an
+        // integration the user turned off.
         NoticeBox {
             Layout.fillWidth: true
-            visible: BudsLinkService.hasAudioCandidate && !BudsLinkService.serviceAvailable &&
+            visible: Config.options.bluetooth.budsLink.enabled
+                && BudsLinkService.hasAudioCandidate && !BudsLinkService.serviceAvailable &&
                 (!Config.ready || !Config.options?.bluetooth?.budsLink || Config.options.bluetooth.budsLink.showIntegrationNotices !== false)
             materialIcon: "headphones"
             text: Translation.tr("Enhanced earbud controls are available with BudsLink. Install BudsLink to see individual earbud battery and supported audio controls.")
@@ -146,6 +161,19 @@ ContentPage {
                 adapter.discoverable = checked;
                 checked = Qt.binding(() => BluetoothStatus.adapter?.discoverable ?? false);
             }
+        }
+
+        // Master switch for the whole BudsLink integration. Off (the default)
+        // means BudsLinkService.shouldBridgeRun is always false: the ~35 MB
+        // gjs bridge process never spawns, its D-Bus hold is released, and
+        // every surface (EarbudsControlService, battery breakdown, popups)
+        // falls back to the generic BlueZ controls.
+        ConfigSwitch {
+            buttonIcon: "earbuds"
+            text: Translation.tr("BudsLink earbud integration")
+            description: Translation.tr("Enhanced Galaxy Buds battery and controls via the BudsLink companion. Off keeps generic Bluetooth controls.")
+            checked: Config.options.bluetooth.budsLink.enabled
+            onCheckedChanged: Config.options.bluetooth.budsLink.enabled = checked
         }
 
         InfoRow {

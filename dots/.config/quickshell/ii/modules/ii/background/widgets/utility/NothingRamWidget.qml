@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -12,7 +13,7 @@ AbstractBackgroundWidget {
 
     configEntryName: "resource_nothing_ram"
 
-    visibleWhenLocked: root.lockBehavior === "keep"
+    visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "custom"
                     || root.lockBehavior === "center"
                     || root.lockBehavior === "lockOnly"
 

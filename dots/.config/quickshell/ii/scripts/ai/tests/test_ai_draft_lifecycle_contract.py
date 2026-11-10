@@ -35,12 +35,16 @@ class AiDraftLifecycleContractTests(unittest.TestCase):
         self.assertTrue("root.searchingText = \"\"" in SEARCH_WIDGET_QML)
         self.assertTrue("root.resetAiSearchState(false)" in SEARCH_WIDGET_QML)
 
-    def test_regular_open_clears_stale_query_unless_this_open_has_an_intent(self):
+    def test_regular_open_keeps_the_query_and_only_drops_the_auto_cancel_latch_without_an_intent(self):
+        """Opening preserves the previous results; the close boundary owns the
+        clearing. An open without an intent still releases the latch, and an
+        incoming intent still lands."""
         opening_handler = OVERVIEW_QML.split("function onOverviewOpenChanged()", 1)[1].split("HyprlandFocusGrab", 1)[0]
-        self.assertIn("GlobalStates.activeSearchQuery", opening_handler)
-        self.assertIn("const hasIncomingQuery", opening_handler)
-        self.assertIn("if (!hasIncomingQuery)", opening_handler)
-        self.assertIn("searchWidget.cancelSearch()", opening_handler)
+        self.assertIn("const hasIncomingQuery = GlobalStates.activeSearchQuery.length > 0", opening_handler)
+        no_intent = opening_handler.split("if (!hasIncomingQuery) {", 1)[1].split("}", 1)[0]
+        self.assertIn("overviewScope.dontAutoCancelSearch = false", no_intent)
+        self.assertNotIn("cancelSearch()", no_intent)
+        self.assertIn("root.consumePendingSearchQuery()", opening_handler)
 
     def test_cancel_search_clears_the_text_input(self):
         self.assertIn('function cancelSearch()', SEARCH_WIDGET_QML)
@@ -94,7 +98,7 @@ class AiDraftLifecycleContractTests(unittest.TestCase):
 
     def test_search_query_handoff_does_not_echo_through_the_hidden_field(self):
         self.assertIn('property bool syncingSearchText', SEARCH_BAR_QML)
-        self.assertIn('if (!root.syncingSearchText)', SEARCH_BAR_QML)
+        self.assertIn('if (!root.syncingSearchText && !root.activePanelOwnsInput)', SEARCH_BAR_QML)
 
 
 if __name__ == "__main__":

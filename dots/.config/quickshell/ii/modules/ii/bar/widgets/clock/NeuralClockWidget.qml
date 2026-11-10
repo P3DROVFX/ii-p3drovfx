@@ -155,10 +155,10 @@ Item {
             thickness: root.thickness
             hoursText: root.hoursText
             minutesText: root.minutesText
-            colHours: theme.colAccent
-            colOnHours: theme.colOnAccent
-            colMinutes: theme.colContainer
-            colOnMinutes: theme.colOnContainer
+            colHours: theme.colBackgroundVariant
+            colOnHours: theme.colOnBackgroundVariant
+            colMinutes: theme.colBackground
+            colOnMinutes: theme.colOnBackground
         }
     }
 
@@ -181,7 +181,7 @@ Item {
                     anchors.centerIn: parent
                     implicitSize: root.thickness
                     shape: MaterialShape.Shape.Cookie12Sided
-                    color: theme.colContainer
+                    color: theme.colBackground
                 }
 
                 // Hands are rounded bars pinned at the face's centre and rotated
@@ -194,7 +194,7 @@ Item {
                     width: Math.max(2, Math.round(root.thickness * 0.075))
                     height: Math.round(root.thickness * 0.24)
                     radius: Appearance.rounding.full
-                    color: theme.colOnContainer
+                    color: theme.colOnBackground
                     transformOrigin: Item.Bottom
                     rotation: DateTime.hourProgress * 360
                 }
@@ -206,7 +206,7 @@ Item {
                     width: Math.max(2, Math.round(root.thickness * 0.06))
                     height: Math.round(root.thickness * 0.34)
                     radius: Appearance.rounding.full
-                    color: theme.colAccent
+                    color: theme.colBackgroundVariant
                     transformOrigin: Item.Bottom
                     rotation: DateTime.minuteProgress * 360
                 }
@@ -254,9 +254,14 @@ Item {
         anchors.fill: parent
         hoverEnabled: !BarInteraction.clickToShow
 
-        ClockWidgetPopup {
-            compact: Config.options.bar.tooltips.compactPopups
-            hoverTarget: clockMouseArea
+        // Lazy: popup controller is only built on approach (same as ExpressiveSports).
+        PopupLoader {
+            active: BarInteraction.enablePopups
+                && (BarInteraction.clickToShow || clockMouseArea.containsMouse || held)
+            sourceComponent: ClockWidgetPopup {
+                compact: Config.options.bar.tooltips.compactPopups
+                hoverTarget: clockMouseArea
+            }
         }
     }
 }

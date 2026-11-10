@@ -1147,6 +1147,10 @@ Item {
                             }
                         }
                     }
+
+                    TouchpadScrollHandler {
+                        flickable: sessionList
+                    }
                 }
             }
 
@@ -1357,6 +1361,10 @@ Item {
                                 }
                             }
                         }
+                    }
+
+                    TouchpadScrollHandler {
+                        flickable: modelList
                     }
                 }
             }

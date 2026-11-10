@@ -1,10 +1,12 @@
 import qs.modules.common
 import qs.modules.common.animations
+import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.services
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import Qt5Compat.GraphicalEffects
 import Quickshell
 
 Item {
@@ -14,15 +16,94 @@ Item {
     property string emptyPlaceholderText
     property int todoListItemSpacing: 2
     property int todoListItemPadding: 8
-    property int listBottomPadding: 80
+    property int listBottomPadding: dense ? 8 : 80
     property int entranceTrigger: -1
     property bool dense: false
+    property bool showShortcutHints: false
+
+    // Fade the content itself: repainting a translucent surface changes its color.
+    // One mask handles both rounded corners and scroll edges, including the blur.
+    layer.enabled: visible && (Appearance.rounding.normal > 0 || edgeFade.overflowing)
+    layer.effect: OpacityMask {
+        maskSource: Rectangle {
+            id: viewportMask
+            width: taskListRoot.width
+            height: taskListRoot.height
+            radius: Appearance.rounding.normal
+            readonly property real fadeFraction: Math.min(0.5, edgeFade.fadeSize / Math.max(1, height))
+            property real topAlpha: edgeFade.overflowing && edgeFade.startGap > edgeFade.edgeTolerance ? 0 : 1
+            property real bottomAlpha: edgeFade.overflowing && edgeFade.endGap > edgeFade.edgeTolerance ? 0 : 1
+            Behavior on topAlpha {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+            Behavior on bottomAlpha {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+            gradient: Gradient {
+                GradientStop { position: 0; color: Qt.rgba(1, 1, 1, viewportMask.topAlpha) }
+                GradientStop { position: viewportMask.fadeFraction; color: "white" }
+                GradientStop { position: 1 - viewportMask.fadeFraction; color: "white" }
+                GradientStop { position: 1; color: Qt.rgba(1, 1, 1, viewportMask.bottomAlpha) }
+            }
+        }
+    }
+
+    function toggleTask(index) {
+        const task = taskListRoot.taskList[index];
+        if (!task)
+            return;
+        const delegate = listView.itemAtIndex(index);
+        if (delegate) delegate._optimisticDone = !task.done;
+        if (task.done)
+            Todo.markUnfinished(task);
+        else
+            Todo.markDone(task);
+    }
+
+    function handleKey(event) {
+        const ctrl = event.modifiers === Qt.ControlModifier;
+        if (ctrl && event.key >= Qt.Key_1 && event.key <= Qt.Key_9) {
+            if (!event.isAutoRepeat) taskListRoot.toggleTask(event.key - Qt.Key_1);
+            return true;
+        }
+        if (event.modifiers !== Qt.NoModifier)
+            return false;
+        let target = listView.currentIndex;
+        if (event.key === Qt.Key_Down) target++;
+        else if (event.key === Qt.Key_Up) target = Math.max(0, target - 1);
+        else if (event.key === Qt.Key_Home) target = 0;
+        else if (event.key === Qt.Key_End) target = listView.count - 1;
+        else if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+            if (!event.isAutoRepeat) taskListRoot.toggleTask(listView.currentIndex);
+            return true;
+        } else {
+            return false;
+        }
+        if (listView.count > 0) {
+            listView.currentIndex = Math.max(0, Math.min(listView.count - 1, target));
+            listView.positionViewAtIndex(listView.currentIndex, ListView.Contain);
+            const item = listView.itemAtIndex(listView.currentIndex);
+            if (item && item.y + item.height > listView.contentY + listView.height - taskListRoot.listBottomPadding)
+                listView.contentY = Math.min(listView.contentHeight - listView.height,
+                    item.y + item.height - listView.height + taskListRoot.listBottomPadding);
+            // The root owns Space/Enter after arrow navigation, not a stale
+            // checkbox delegate that may disappear when its task is completed.
+            taskListRoot.forceActiveFocus();
+        }
+        return true;
+    }
+    signal editRequested(var task)
     readonly property bool entranceAnimationsEnabled: Config.options.sidebar.dashboardEntranceAnimations
 
     StyledListView {
         id: listView
         anchors.fill: parent
+        currentIndex: -1
+        keyNavigationEnabled: false
         // The add and sync buttons float over the bottom corners of this list.
+        // Priority cards slide under the fades instead of reading as cut
+        // through, and the list stops reading as elastic on a quick flick.
+        boundsBehavior: Flickable.StopAtBounds
         // Without the reserve the last task sits underneath them with no way to
         // scroll it clear - the property existed for this and was never applied.
         bottomMargin: taskListRoot.listBottomPadding
@@ -141,211 +222,295 @@ Item {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
-                implicitHeight: Math.max(taskListRoot.dense ? 44 : 48,
-                    todoContentRowLayout.implicitHeight + (taskListRoot.dense ? 8 : 16))
-                
-                HoverHandler {
-                    id: cellHover
-                }
-                
-                color: cellHover.hovered ? todoItem.priorityContainerHover : todoItem.priorityContainer
-                radius: Appearance.rounding.small
-                
-                Behavior on color { ColorAnimation { duration: 150 } }
+                implicitHeight: cardContent.implicitHeight + taskListRoot.todoListItemPadding * 2
+                radius: Appearance.rounding.normal
+                color: engaged ? todoItem.priorityContainerHover : todoItem.priorityContainer
 
-                RowLayout {
-                    id: todoContentRowLayout
+                readonly property bool engaged: cellHover.hovered || completeButton.activeFocus
+                    || (taskListRoot.activeFocus && listView.currentIndex === todoItem.index)
+                    || editButton.activeFocus || deleteButton.activeFocus
+                readonly property string notes: String(todoItem.modelData.notes ?? "").trim()
+                readonly property var tags: Array.isArray(todoItem.modelData.tags) ? todoItem.modelData.tags : []
+
+                HoverHandler { id: cellHover }
+
+                Behavior on color {
+                    ColorAnimation { duration: Appearance.animation.elementMoveFast.duration }
+                }
+
+                ColumnLayout {
+                    id: cardContent
                     anchors.left: parent.left
                     anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.leftMargin: taskListRoot.dense ? 4 : 8
-                    anchors.rightMargin: taskListRoot.dense ? 4 : 8
-                    spacing: taskListRoot.dense ? 5 : 12
+                    anchors.top: parent.top
+                    anchors.margins: taskListRoot.todoListItemPadding
+                    anchors.leftMargin: taskListRoot.todoListItemPadding / 2
+                    spacing: 4
 
-                    TodoItemActionButton {
-                        Layout.alignment: Qt.AlignVCenter
-                        implicitWidth: taskListRoot.dense ? 34 : 32
-                        implicitHeight: implicitWidth
-                        onClicked: {
-                            todoItem._optimisticDone = !todoItem._optimisticDone;
-                            checkIconScaleAnim.restart();
-                            
-                            if (!todoItem.modelData.done)
-                                Todo.markDone(todoItem.modelData);
-                            else
-                                Todo.markUnfinished(todoItem.modelData);
+                    Item {
+                        id: taskHeader
+                        Layout.fillWidth: true
+                        implicitHeight: completeButton.implicitHeight
+
+                        TodoItemActionButton {
+                            id: completeButton
+                            anchors.left: parent.left
+                            anchors.verticalCenter: parent.verticalCenter
+                            implicitWidth: taskListRoot.dense ? 30 : 32
+                            implicitHeight: taskListRoot.dense ? 34 : 40
+                            buttonRadius: Appearance.rounding.full
+                            colBackground: activeFocus ? colBackgroundHover : "transparent"
+                            colBackgroundHover: ColorUtils.applyAlpha(todoItem.priorityOnContainer, 0.12)
+                            colBackgroundActive: ColorUtils.applyAlpha(todoItem.priorityOnContainer, 0.2)
+                            colRipple: colBackgroundActive
+                            Accessible.name: (todoItem._optimisticDone ? Translation.tr("Mark as unfinished")
+                                : Translation.tr("Mark as done")) + ": " + todoItem.modelData.content
+                            onClicked: taskListRoot.toggleTask(todoItem.index)
+                            contentItem: TaskShortcutContent {
+                                symbol: todoItem._optimisticDone ? "check_circle" : "radio_button_unchecked"
+                                shortcut: todoItem.index < 9 ? String(todoItem.index + 1) : ""
+                                showHint: taskListRoot.showShortcutHints
+                                circle: true
+                                fill: todoItem._optimisticDone ? 1 : 0
+                                iconSize: Appearance.font.pixelSize.larger
+                                badgeColor: todoItem.priorityOnContainer
+                                badgeTextColor: todoItem.priorityContainer
+                                color: todoItem.taskPriority > 0 ? todoItem.priorityOnContainer
+                                    : todoItem._optimisticDone ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
+                            }
                         }
-                        contentItem: MaterialSymbol {
-                            id: checkIcon
-                            anchors.centerIn: parent
-                            horizontalAlignment: Text.AlignHCenter
-                            text: todoItem._optimisticDone ? "check_circle" : "radio_button_unchecked"
-                            iconSize: Appearance.font.pixelSize.larger
-                            color: todoItem.taskPriority > 0 ? todoItem.priorityOnContainer
-                                : todoItem._optimisticDone ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
-                            
-                            Behavior on color { ColorAnimation { duration: 150 } }
-                            
-                            NumberAnimation {
-                                id: checkIconScaleAnim
-                                target: checkIcon
-                                property: "scale"
-                                from: 0.5
-                                to: 1.0
-                                duration: 400
-                                easing.type: Easing.OutBack
+
+                        StyledText {
+                            id: todoContentText
+                            x: completeButton.width + 2
+                            width: Math.max(0, (dateChip.visible ? dateChip.x - 4 : actionSlot.x) - x)
+                            clip: true
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: todoItem.modelData.content
+                            textFormat: Text.PlainText
+                            elide: Text.ElideRight
+                            font.pixelSize: Appearance.font.pixelSize.normal
+                            font.weight: Font.Medium
+                            font.strikeout: todoItem._optimisticDone
+                            color: todoItem.priorityOnContainer
+                            opacity: todoItem._optimisticDone ? 0.6 : 1
+
+                            HoverHandler { id: titleHover }
+                            StyledToolTip {
+                                extraVisibleCondition: titleHover.hovered && todoContentText.truncated
+                                text: todoContentText.text
+                            }
+                        }
+                        Rectangle {
+                            id: dateChip
+                            visible: todoItem.modelData.hasDate && !!todoItem.modelData.date
+                            anchors.right: actionSlot.left
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: Math.max(0, Math.min(dateContent.implicitWidth + 16,
+                                actionSlot.x - completeButton.width - 2 - Appearance.font.pixelSize.normal * 2))
+                            clip: true
+                            height: dateContent.implicitHeight + 8
+                            radius: Appearance.rounding.full
+                            readonly property bool overdue: {
+                                if (!todoItem.modelData.hasDate || !todoItem.modelData.date || todoItem._optimisticDone)
+                                    return false;
+                                const d = new Date(todoItem.modelData.date);
+                                const t = new Date();
+                                return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+                                    < new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime();
+                            }
+                            color: todoItem.taskPriority > 0 ? ColorUtils.applyAlpha(todoItem.priorityOnContainer, 0.1)
+                                : overdue ? Appearance.colors.colErrorContainer : Appearance.m3colors.m3tertiaryContainer
+
+                            RowLayout {
+                                id: dateContent
+                                anchors.fill: parent
+                                anchors.leftMargin: 8
+                                anchors.rightMargin: 8
+                                spacing: 4
+                                MaterialSymbol {
+                                    text: dateChip.overdue ? "event_busy" : "event"
+                                    iconSize: Appearance.font.pixelSize.small
+                                    color: dateText.color
+                                }
+                                StyledText {
+                                    id: dateText
+                                    Layout.fillWidth: true
+                                    text: dateChip.visible ? Qt.formatDateTime(todoItem.modelData.date, "dd MMM") : ""
+                                    elide: Text.ElideRight
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                    font.weight: Font.Medium
+                                    color: todoItem.taskPriority > 0 ? todoItem.priorityOnContainer
+                                        : dateChip.overdue ? Appearance.colors.colOnErrorContainer : Appearance.m3colors.m3onTertiaryContainer
+                                }
+                            }
+                            HoverHandler { id: dateHover }
+                            StyledToolTip {
+                                extraVisibleCondition: dateHover.hovered
+                                text: (dateChip.overdue ? Translation.tr("Overdue") + " · " : "")
+                                    + (dateChip.visible ? Qt.formatDateTime(todoItem.modelData.date, "dddd, dd MMMM yyyy") : "")
+                            }
+                        }
+
+
+                        // One animated extent drives the date, title elision and
+                        // action reveal together, including interrupted hovers.
+                        Item {
+                            id: actionSlot
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: (actionButtons.implicitWidth + 4) * revealProgress
+                            height: actionButtons.implicitHeight
+                            clip: true
+                            property real revealProgress: todoItemRectangle.engaged ? 1 : 0
+
+                            Behavior on revealProgress {
+                                NumberAnimation {
+                                    duration: Appearance.animation.elementMoveFast.duration
+                                    easing.type: Appearance.animation.elementMoveFast.type
+                                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                                }
+                            }
+                        }
+                        RowLayout {
+                            id: actionButtons
+                            parent: actionSlot
+                            anchors.left: parent.left
+                            anchors.leftMargin: 4
+                            enabled: taskListRoot.dense || todoItemRectangle.engaged
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 4
+                            opacity: actionSlot.revealProgress
+
+                            TodoItemActionButton {
+                                id: editButton
+                                implicitWidth: taskListRoot.dense ? 34 : 36
+                                implicitHeight: implicitWidth
+                                visible: Todo.canEditTask(todoItem.modelData)
+                                enabled: taskListRoot.dense || todoItemRectangle.engaged
+                                hoverEnabled: todoItemRectangle.engaged
+                                useDynamicRadius: true
+                                colBackground: ColorUtils.applyAlpha(todoItem.priorityOnContainer, activeFocus ? 0.2 : 0.08)
+                                colBackgroundHover: ColorUtils.applyAlpha(todoItem.priorityOnContainer, 0.16)
+                                colBackgroundActive: ColorUtils.applyAlpha(todoItem.priorityOnContainer, 0.24)
+                                colRipple: colBackgroundActive
+                                tooltipText: Translation.tr("Edit task")
+                                onClicked: taskListRoot.editRequested(todoItem.modelData)
+
+                                contentItem: MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    horizontalAlignment: Text.AlignHCenter
+                                    text: "edit"
+                                    iconSize: Appearance.font.pixelSize.large
+                                    color: todoItem.priorityOnContainer
+                                }
+                            }
+
+                            TodoItemActionButton {
+                                id: deleteButton
+                                implicitWidth: taskListRoot.dense ? 34 : 36
+                                implicitHeight: implicitWidth
+                                hoverEnabled: todoItemRectangle.engaged
+                                enabled: taskListRoot.dense || todoItemRectangle.engaged
+                                useDynamicRadius: true
+                                colBackground: activeFocus ? colBackgroundHover : Appearance.colors.colErrorContainer
+                                colBackgroundHover: Appearance.colors.colErrorContainerHover
+                                colBackgroundActive: Appearance.colors.colErrorContainerActive
+                                colRipple: colBackgroundActive
+                                tooltipText: Translation.tr("Delete task")
+                                Accessible.name: tooltipText
+                                onClicked: Todo.deleteItem(todoItem.modelData)
+
+                                contentItem: MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    horizontalAlignment: Text.AlignHCenter
+                                    text: "delete"
+                                    iconSize: Appearance.font.pixelSize.large
+                                    color: Appearance.colors.colOnErrorContainer
+                                }
                             }
                         }
                     }
 
                     StyledText {
-                        id: todoContentText
+                        id: descriptionText
                         Layout.fillWidth: true
-                        Layout.alignment: Qt.AlignVCenter
-                        text: todoItem.modelData.content
-                        wrapMode: taskListRoot.dense ? Text.NoWrap : Text.Wrap
-                        elide: taskListRoot.dense ? Text.ElideRight : Text.ElideNone
-                        maximumLineCount: taskListRoot.dense ? 1 : 3
-                        color: todoItem.taskPriority > 0
-                            ? (todoItem._optimisticDone ? ColorUtils.applyAlpha(todoItem.priorityOnContainer, 0.6) : todoItem.priorityOnContainer)
-                            : todoItem._optimisticDone ? Appearance.colors.colOnSurfaceVariant : Appearance.colors.colOnSurface
-                        font.strikeout: todoItem._optimisticDone
+                        Layout.leftMargin: completeButton.implicitWidth + 2
+                        visible: todoItemRectangle.notes.length > 0
+                        text: todoItemRectangle.notes
+                        textFormat: Text.PlainText
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        color: todoItem.taskPriority > 0 ? todoItem.priorityOnContainer : Appearance.colors.colOnSurfaceVariant
+                        opacity: todoItem._optimisticDone ? 0.6 : 1
+                        wrapMode: Text.Wrap
+                        maximumLineCount: taskListRoot.dense ? 1 : 2
+                        elide: Text.ElideRight
 
+                        HoverHandler { id: descriptionHover }
                         StyledToolTip {
-                            extraVisibleCondition: cellHover.hovered && String(todoItem.modelData.notes ?? "").length > 0
-                            text: todoItem.modelData.notes ?? ""
-                        }
-                    }
-
-                    // Priority uses TickTick's scale, which the local schema
-                    // shares, so one flag reads the same on both providers.
-                    MaterialSymbol {
-                        visible: todoItem.modelData.priority > 0
-                        Layout.alignment: Qt.AlignVCenter
-                        text: "flag"
-                        iconSize: Appearance.font.pixelSize.smallie
-                        color: todoItem.taskPriority > 0 ? todoItem.priorityOnContainer
-                            : todoItem.modelData.priority >= 5 ? Appearance.colors.colError
-                            : todoItem.modelData.priority >= 3 ? Appearance.colors.colTertiary
-                            : Appearance.colors.colPrimary
-
-                        StyledToolTip {
-                            extraVisibleCondition: cellHover.hovered
-                            text: todoItem.modelData.priority >= 5 ? Translation.tr("High priority")
-                                : todoItem.modelData.priority >= 3 ? Translation.tr("Medium priority")
-                                : Translation.tr("Low priority")
+                            extraVisibleCondition: descriptionHover.hovered && descriptionText.truncated
+                            text: todoItemRectangle.notes
                         }
                     }
 
                     Flow {
-                        id: tagChipsFlow
-                        visible: !taskListRoot.dense && tagChipsFlow.taskTags.length > 0
-                        Layout.alignment: Qt.AlignVCenter
-                        Layout.maximumWidth: taskListRoot.width * 0.45
+                        id: metadataFlow
+                        Layout.fillWidth: true
+                        Layout.leftMargin: completeButton.implicitWidth + 2
+                        Layout.topMargin: visible ? 4 : 0
+                        visible: todoItem.taskPriority > 0 || tagRepeater.count > 0
                         spacing: 4
 
-                        readonly property var allTags: Array.isArray(todoItem.modelData.tags) ? todoItem.modelData.tags : []
-                        readonly property var taskTags: tagChipsFlow.allTags.slice(0, 2)
-                        readonly property int extraCount: tagChipsFlow.allTags.length - tagChipsFlow.taskTags.length
+
+                        MaterialSymbol {
+                            id: priorityChip
+                            visible: todoItem.taskPriority > 0
+                            height: dateContent.implicitHeight + 8
+                            verticalAlignment: Text.AlignVCenter
+                            text: "flag"
+                            fill: 1
+                            iconSize: Appearance.font.pixelSize.smallie
+                            color: todoItem.priorityOnContainer
+                            HoverHandler { id: priorityHover }
+                            StyledToolTip {
+                                extraVisibleCondition: priorityHover.hovered
+                                text: todoItem.taskPriority >= 5 ? Translation.tr("High priority")
+                                    : todoItem.taskPriority >= 3 ? Translation.tr("Medium priority")
+                                    : Translation.tr("Low priority")
+                            }
+                        }
 
                         Repeater {
-                            model: tagChipsFlow.taskTags
+                            id: tagRepeater
+                            model: taskListRoot.dense ? [] : todoItemRectangle.tags
 
                             Rectangle {
                                 required property var modelData
-                                implicitWidth: tagChipText.implicitWidth + 12
-                                implicitHeight: tagChipText.implicitHeight + 4
+                                width: Math.min(metadataFlow.width, tagText.implicitWidth + 16)
+                                height: dateContent.implicitHeight + 8
                                 radius: Appearance.rounding.full
-                                color: Appearance.colors.colSecondaryContainer
+                                color: todoItem.taskPriority > 0 ? ColorUtils.applyAlpha(todoItem.priorityOnContainer, 0.08)
+                                    : Appearance.colors.colSecondaryContainer
 
                                 StyledText {
-                                    id: tagChipText
-                                    anchors.centerIn: parent
+                                    id: tagText
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 8
+                                    anchors.rightMargin: 8
+                                    verticalAlignment: Text.AlignVCenter
                                     text: "#" + modelData
+                                    textFormat: Text.PlainText
+                                    elide: Text.ElideRight
                                     font.pixelSize: Appearance.font.pixelSize.smaller
                                     font.weight: Font.Medium
-                                    color: Appearance.colors.colOnSecondaryContainer
+                                    color: todoItem.taskPriority > 0 ? todoItem.priorityOnContainer : Appearance.colors.colOnSecondaryContainer
+                                }
+                                HoverHandler { id: tagHover }
+                                StyledToolTip {
+                                    extraVisibleCondition: tagHover.hovered && tagText.truncated
+                                    text: tagText.text
                                 }
                             }
-                        }
-
-                        Rectangle {
-                            visible: tagChipsFlow.extraCount > 0
-                            implicitWidth: extraTagText.implicitWidth + 12
-                            implicitHeight: extraTagText.implicitHeight + 4
-                            radius: Appearance.rounding.full
-                            color: Appearance.m3colors.m3surfaceContainerHighest
-
-                            StyledText {
-                                id: extraTagText
-                                anchors.centerIn: parent
-                                text: "+" + tagChipsFlow.extraCount
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                font.weight: Font.Medium
-                                color: Appearance.colors.colOnSurfaceVariant
-                            }
-                        }
-                    }
-
-                    Rectangle {
-                        id: dateChip
-                        visible: todoItem.modelData.hasDate && !!todoItem.modelData.date
-                        Layout.alignment: Qt.AlignVCenter
-                        implicitWidth: dateText.implicitWidth + 16
-                        implicitHeight: dateText.implicitHeight + 4
-                        radius: Appearance.rounding.full
-                        // A due day in the past on an open task is overdue,
-                        // regardless of provider; the error container pair is
-                        // reserved for exactly this kind of real failure.
-                        readonly property bool overdue: {
-                            if (!todoItem.modelData.hasDate || !todoItem.modelData.date || todoItem._optimisticDone)
-                                return false;
-                            const d = new Date(todoItem.modelData.date);
-                            const t = new Date();
-                            return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
-                                < new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime();
-                        }
-                        color: todoItem.taskPriority > 0 ? "transparent"
-                            : overdue ? Appearance.colors.colErrorContainer : Appearance.m3colors.m3tertiaryContainer
-
-                        Behavior on color { ColorAnimation { duration: 150 } }
-
-                        StyledText {
-                            id: dateText
-                            anchors.centerIn: parent
-                            text: (todoItem.modelData.hasDate && todoItem.modelData.date) ? Qt.formatDateTime(todoItem.modelData.date, "dd/MM") : ""
-                            color: todoItem.taskPriority > 0 ? todoItem.priorityOnContainer
-                                : parent.overdue ? Appearance.colors.colOnErrorContainer : Appearance.m3colors.m3onTertiaryContainer
-                            font.pixelSize: Appearance.font.pixelSize.smaller
-                            font.weight: Font.Medium
-                        }
-
-                        StyledToolTip {
-                            extraVisibleCondition: cellHover.hovered && dateChip.overdue
-                            text: Translation.tr("Overdue")
-                        }
-                    }
-
-                    TodoItemActionButton {
-                        Layout.alignment: Qt.AlignVCenter
-                        implicitWidth: taskListRoot.dense ? 34 : 32
-                        implicitHeight: implicitWidth
-                        // A touchscreen has no hover phase: keep destructive
-                        // task management reachable in the compact tablet host.
-                        opacity: taskListRoot.dense || cellHover.hovered ? 1 : 0
-                        
-                        Behavior on opacity { NumberAnimation { duration: Appearance.animation.elementMoveFast.duration } }
-                        
-                        onClicked: {
-                            Todo.deleteItem(todoItem.modelData);
-                        }
-                        contentItem: MaterialSymbol {
-                            anchors.centerIn: parent
-                            horizontalAlignment: Text.AlignHCenter
-                            text: "close"
-                            iconSize: Appearance.font.pixelSize.larger
-                            color: todoItem.taskPriority > 0 ? todoItem.priorityOnContainer
-                                : cellHover.hovered ? Appearance.m3colors.m3error : Appearance.colors.colOnLayer1
                         }
                     }
                 }
@@ -353,6 +518,28 @@ Item {
         }
     }
 
+    ScrollEdgeFade {
+        id: edgeFade
+        // Match the chat transcript; blur bands exist only while their edge is visible.
+        target: listView
+        blurEdges: true
+        fadeSize: Math.round(Appearance.font.pixelSize.huge * 1.8)
+        color: "transparent"
+    }
+    StyledText {
+        anchors.left: parent.left
+        anchors.bottom: parent.bottom
+        anchors.right: parent.right
+        anchors.rightMargin: taskListRoot.listBottomPadding
+        text: "↑ ↓ · Home · End\nSpace / Enter · Ctrl + 1–9"
+        font.pixelSize: Appearance.font.pixelSize.smallest
+        color: Appearance.colors.colOnSurfaceVariant
+        opacity: taskListRoot.showShortcutHints ? 1 : 0
+        visible: opacity > 0 && taskListRoot.taskList.length > 0
+        Behavior on opacity {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        }
+    }
     Item {
         // Placeholder when list is empty
         visible: opacity > 0

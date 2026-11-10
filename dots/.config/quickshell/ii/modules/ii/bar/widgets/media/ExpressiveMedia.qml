@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import qs.modules.common
+import qs.modules.ii.dynamicIsland.core
 import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.services
@@ -34,7 +35,8 @@ Item {
     readonly property string trackTitle: activePlayer?.trackTitle ?? ""
     readonly property string trackArtist: activePlayer?.trackArtist ?? ""
     readonly property bool isPlaying: activePlayer?.isPlaying ?? false
-    readonly property bool hasTrack: trackTitle.length > 0
+    // Out in a Dynamic Island bubble, the track is shown there and not twice.
+    readonly property bool hasTrack: trackTitle.length > 0 && !IslandGeometry.bubbled("media")
 
     onHasTrackChanged: {
         if (typeof rootItem !== "undefined") {
@@ -50,45 +52,7 @@ Item {
         Qt.callLater(updatePopupRect);
     }
 
-    property string artDownloadLocation: Directories.coverArt
-    property string artFileName: Qt.md5(artUrl)
-    property string artFilePath: `${artDownloadLocation}/${artFileName}`
-    property bool artDownloaded: false
-
-    property string displayedArtFilePath: {
-        if (!root.artDownloaded)
-            return "";
-        if (root.artUrl.startsWith("file://"))
-            return root.artUrl;
-        return Qt.resolvedUrl(artFilePath);
-    }
-
-    onArtFilePathChanged: {
-        if (!root.artUrl || root.artUrl.length === 0) {
-            root.artDownloaded = false;
-            return;
-        }
-        if (root.artUrl.startsWith("file://")) {
-            root.artDownloaded = true;
-            return;
-        }
-        artDownloader.targetFile = root.artUrl;
-        artDownloader.artFilePath = root.artFilePath;
-        artDownloader.artTempPath = root.artFilePath + ".tmp";
-        root.artDownloaded = false;
-        artDownloader.running = true;
-    }
-
-    Process {
-        id: artDownloader
-        property string targetFile: root.artUrl
-        property string artFilePath: root.artFilePath
-        property string artTempPath: root.artFilePath + ".tmp"
-        command: ["bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
-        onExited: {
-            root.artDownloaded = true;
-        }
-    }
+    readonly property string artSource: CoverArt.source(root.artUrl ?? "")
 
     Layout.fillHeight: true
     visible: hasTrack
@@ -144,7 +108,6 @@ Item {
             if (hoverEnabled) {
                 var globalPos = root.mapToItem(null, 0, 0);
                 GlobalStates.mediaPopupRect = Qt.rect(globalPos.x, globalPos.y, root.width, root.height);
-                GlobalStates.mediaControlsOpen = true;
             }
         }
         onExited: {
@@ -185,7 +148,7 @@ Item {
         sourceComponent: ClippedFilledCircularProgress {
             implicitSize: 20
             lineWidth: Appearance.rounding.unsharpen
-            value: (root.activePlayer?.length ?? 0) > 0 ? Math.min(1, Math.max(0, root.activePlayer.position / root.activePlayer.length)) : 0
+            value: MprisController.trackProgressOf(root.activePlayer)
             colPrimary: Appearance.colors.colOnSecondaryContainer
             enableAnimation: false
             Item {
@@ -203,6 +166,18 @@ Item {
         }
     }
 
+    BarWidgetPalette {
+        id: palette
+        colorMode: Config.options.bar.mediaPlayer.colorMode
+    }
+
+    // A neutral step between the card and its text colour, for the secondary
+    // buttons. A palette "container" token cannot do this job: in the container
+    // modes it equals the card's own colour and the button vanishes.
+    readonly property color colSubtle: ColorUtils.mix(palette.colBackground, palette.colOnBackground, 0.86)
+    readonly property color colSubtleHover: ColorUtils.mix(palette.colBackground, palette.colOnBackground, 0.8)
+    readonly property color colSubtleActive: ColorUtils.mix(palette.colBackground, palette.colOnBackground, 0.72)
+
     // Vertical Material
     Loader {
         id: materialCol
@@ -211,8 +186,8 @@ Item {
         anchors.centerIn: parent
         sourceComponent: Rectangle {
             id: cardVert
-            color: Appearance.colors.colSecondaryContainer
-            radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
+            color: palette.colBackground
+            radius: (typeof rootItem !== "undefined" ? rootItem.groupStyle : Config.options.bar.barGroupStyle) === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
             implicitWidth: Appearance.sizes.verticalBarWidth - 8
             implicitHeight: 120 // Increased to fit all elements properly
 
@@ -229,7 +204,7 @@ Item {
                     implicitWidth: innerCol.width - 4
                     implicitHeight: innerCol.width - 4
                     radius: Appearance.rounding.full
-                    color: Appearance.colors.colSecondaryContainer
+                    color: palette.colBackground
 
                     layer.enabled: true
                     layer.effect: OpacityMask {
@@ -242,13 +217,13 @@ Item {
 
                     StyledImage {
                         anchors.fill: parent
-                        source: root.displayedArtFilePath
+                        source: root.artSource
                         fillMode: Image.PreserveAspectCrop
                         cache: false
                         antialiasing: true
                         sourceSize.width: parent.width
                         sourceSize.height: parent.height
-                        visible: root.displayedArtFilePath !== ""
+                        visible: root.artSource !== ""
                     }
 
                     MaterialSymbol {
@@ -256,8 +231,8 @@ Item {
                         fill: 1
                         text: "music_note"
                         iconSize: Appearance.font.pixelSize.normal
-                        color: Appearance.colors.colOnSecondaryContainer
-                        visible: root.displayedArtFilePath === ""
+                        color: palette.colOnBackground
+                        visible: root.artSource === ""
                     }
                 }
 
@@ -267,9 +242,9 @@ Item {
                     implicitWidth: 28
                     implicitHeight: 32
                     buttonRadius: root.isPlaying ? Appearance.rounding.small : height / 2
-                    colBackground: Appearance.colors.colPrimary
-                    colBackgroundHover: Appearance.colors.colPrimaryHover
-                    colRipple: Appearance.colors.colPrimaryActive
+                    colBackground: palette.colBackgroundVariant
+                    colBackgroundHover: palette.colBackgroundVariantHover
+                    colRipple: palette.colBackgroundVariantActive
                     downAction: () => root.activePlayer?.togglePlaying()
 
                     Behavior on buttonRadius {
@@ -286,7 +261,7 @@ Item {
                         fill: 1
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
-                        color: Appearance.colors.colOnPrimary
+                        color: palette.colOnBackgroundVariant
                     }
                 }
 
@@ -296,9 +271,9 @@ Item {
                     implicitWidth: innerCol.width - 4
                     implicitHeight: innerCol.width - 4
                     buttonRadius: height / 2
-                    colBackground: Appearance.colors.colTertiaryContainer
-                    colBackgroundHover: Appearance.colors.colPrimaryContainerHover
-                    colRipple: Appearance.colors.colPrimaryContainerActive
+                    colBackground: root.colSubtle
+                    colBackgroundHover: root.colSubtleHover
+                    colRipple: root.colSubtleActive
                     downAction: () => root.activePlayer?.next()
                     contentItem: MaterialSymbol {
                         anchors.centerIn: parent
@@ -307,7 +282,7 @@ Item {
                         fill: 1
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
-                        color: Appearance.colors.colOnTertiaryContainer
+                        color: palette.colOnBackground
                     }
                 }
             }
@@ -327,7 +302,7 @@ Item {
                 Layout.leftMargin: 3
                 implicitSize: 20
                 lineWidth: Appearance.rounding.unsharpen
-                value: (root.activePlayer?.length ?? 0) > 0 ? Math.min(1, Math.max(0, root.activePlayer.position / root.activePlayer.length)) : 0
+                value: MprisController.trackProgressOf(root.activePlayer)
                 colPrimary: Appearance.colors.colOnSecondaryContainer
                 enableAnimation: false
                 Item {
@@ -366,8 +341,8 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         sourceComponent: Rectangle {
             id: card
-            color: Appearance.colors.colSecondaryContainer
-            radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
+            color: palette.colBackground
+            radius: (typeof rootItem !== "undefined" ? rootItem.groupStyle : Config.options.bar.barGroupStyle) === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
             implicitHeight: Appearance.sizes.baseBarHeight - 8
             height: implicitHeight
             implicitWidth: innerRow.implicitWidth + 8
@@ -388,7 +363,7 @@ Item {
                     implicitWidth: card.height - 6
                     implicitHeight: card.height - 6
                     radius: Appearance.rounding.full
-                    color: Appearance.colors.colSecondaryContainer
+                    color: palette.colBackground
 
                     visible: root.hasTrack
                     scale: visible ? 1 : 0
@@ -422,13 +397,13 @@ Item {
 
                     StyledImage {
                         anchors.fill: parent
-                        source: root.displayedArtFilePath
+                        source: root.artSource
                         fillMode: Image.PreserveAspectCrop
                         cache: false
                         antialiasing: true
                         sourceSize.width: artRect.width
                         sourceSize.height: artRect.height
-                        visible: root.displayedArtFilePath !== ""
+                        visible: root.artSource !== ""
                     }
 
                     MaterialSymbol {
@@ -436,8 +411,8 @@ Item {
                         fill: 1
                         text: "music_note"
                         iconSize: Appearance.font.pixelSize.normal
-                        color: Appearance.colors.colOnSecondaryContainer
-                        visible: root.displayedArtFilePath === ""
+                        color: palette.colOnBackground
+                        visible: root.artSource === ""
                     }
                 }
 
@@ -466,7 +441,7 @@ Item {
                         id: artistText
                         text: root.trackArtist
                         font.pixelSize: Appearance.font.pixelSize.smaller
-                        color: Appearance.colors.colOnSecondaryContainer
+                        color: palette.colOnBackground
                         elide: Text.ElideRight
                         Layout.fillWidth: true
                         Behavior on text {
@@ -497,7 +472,7 @@ Item {
                         Layout.topMargin: !root.activePlayer ? -13 : 0
                         text: StringUtils.cleanMusicTitle(root.trackTitle) || Translation.tr("No media")
                         font.pixelSize: Appearance.font.pixelSize.smallie
-                        color: Appearance.colors.colOnSecondaryContainer
+                        color: palette.colOnBackground
                         elide: Text.ElideRight
                         opacity: 0.7
                         Layout.fillWidth: true
@@ -554,6 +529,7 @@ Item {
                             sourceComponent: LyricsStatic {
                                 anchors.fill: parent
                                 horizontalAlignment: Text.AlignHCenter
+                                color: palette.colOnBackground
                             }
                         }
 
@@ -572,6 +548,8 @@ Item {
                                 downScale: 0.98
                                 rowHeight: 10
                                 gradientDensity: 0.25
+                                activeColor: palette.colOnBackground
+                                inactiveColor: ColorUtils.transparentize(palette.colOnBackground, 0.4)
                             }
                         }
                     }
@@ -583,9 +561,9 @@ Item {
                     implicitWidth: card.height + 8
                     implicitHeight: card.height - 6
                     buttonRadius: root.isPlaying ? Appearance.rounding.small : height / 2
-                    colBackground: Appearance.colors.colPrimary
-                    colBackgroundHover: Appearance.colors.colPrimaryHover
-                    colRipple: Appearance.colors.colPrimaryActive
+                    colBackground: palette.colBackgroundVariant
+                    colBackgroundHover: palette.colBackgroundVariantHover
+                    colRipple: palette.colBackgroundVariantActive
                     downAction: () => root.activePlayer?.togglePlaying()
 
                     Behavior on buttonRadius {
@@ -601,7 +579,7 @@ Item {
                         text: root.isPlaying ? "pause" : "play_arrow"
                         iconSize: Appearance.font.pixelSize.large
                         fill: 1
-                        color: Appearance.colors.colOnPrimary
+                        color: palette.colOnBackgroundVariant
                     }
                 }
 
@@ -612,9 +590,9 @@ Item {
                     implicitHeight: card.height - 6
                     Layout.leftMargin: -2
                     buttonRadius: height / 2
-                    colBackground: Appearance.colors.colTertiaryContainer
-                    colBackgroundHover: Appearance.colors.colPrimaryContainerHover
-                    colRipple: Appearance.colors.colPrimaryContainerActive
+                    colBackground: root.colSubtle
+                    colBackgroundHover: root.colSubtleHover
+                    colRipple: root.colSubtleActive
                     downAction: () => root.activePlayer?.next()
 
                     visible: root.hasTrack
@@ -643,7 +621,7 @@ Item {
                         text: "skip_next"
                         iconSize: Appearance.font.pixelSize.large
                         fill: 1
-                        color: Appearance.colors.colOnTertiaryContainer
+                        color: palette.colOnBackground
                     }
                 }
             }

@@ -38,6 +38,67 @@ class TimetableSportsContractTests(unittest.TestCase):
         self.assertIn("/summary?event=", SPORTS_SERVICE)
         self.assertIn("data: parsed", SPORTS_SERVICE)
 
+    def test_schedule_cache_is_compact_and_details_survive_the_timetable_lifetime(self) -> None:
+        self.assertIn("function compactScheduleEvent", SPORTS_SERVICE)
+        self.assertIn("events.map(root.compactScheduleEvent)", SPORTS_SERVICE)
+        self.assertIn("property bool scheduleCacheLoaded: false", SPORTS_SERVICE)
+        self.assertIn("if (!includeDetails)", SPORTS_SERVICE)
+        self.assertIn("weekly timetable cache can be several MiB", SPORTS_SERVICE)
+        self.assertIn("property bool detailsCacheLoaded: false", SPORTS_SERVICE)
+        self.assertIn("loadDetailsCacheFromDisk", SPORTS_SERVICE)
+        self.assertIn("root.cancelTimetableRequests()", SPORTS_SERVICE)
+        self.assertIn('path: root.timetableActive ? Directories.sportsCachePath : ""', SPORTS_SERVICE)
+        self.assertIn("root.cacheReady = false", SPORTS_SERVICE)
+        self.assertIn("cacheSaveDebounce.stop()", SPORTS_SERVICE)
+        # The raw FileView text goes with the last consumer, but the two parsed,
+        # bounded projections stay: re-parsing the multi-megabyte file on every
+        # open cost a measured 95 ms of the tab's click burst in QV4.
+        release = SPORTS_SERVICE.split("function releaseTimetableSubscriber()", 1)[1] \
+            .split("function acquireWidgetSubscriber", 1)[0]
+        self.assertNotIn("root.scheduleCache = ({})", release)
+        self.assertNotIn("root.detailsCache = ({})", release)
+        load = SPORTS_SERVICE.split("function loadCacheFromDisk(includeDetails)", 1)[1] \
+            .split("function loadDetailsCacheFromDisk", 1)[0]
+        self.assertIn("if (root.scheduleCacheLoaded && root.detailsCacheLoaded) {", load)
+
+    def test_timetable_range_is_fetched_month_by_month(self) -> None:
+        """ESPN rejects `from-to` ranges (`dates=20260830-20261003` answers 400)."""
+        self.assertIn('import "SportsServiceHelpers.js" as SportsCache', SPORTS_SERVICE)
+        self.assertIn("scoreboard?dates=", SPORTS_SERVICE)
+        self.assertIn("SportsCache.espnMonths(fromKey, toKey)", SPORTS_SERVICE)
+        self.assertIn("SportsCache.monthForIndex(request?.months, request?.monthIndex)", SPORTS_SERVICE)
+        self.assertIn("function handleScheduleResponse(key, httpStatus, responseText)", SPORTS_SERVICE)
+        # Months accumulate in the request and only the last one writes the entry.
+        self.assertIn("(request.events ?? []).concat(parsed.events)", SPORTS_SERVICE)
+        self.assertIn("if (nextMonth < months.length)", SPORTS_SERVICE)
+        self.assertIn("{ events: request.events, leagues: request.leagues }", SPORTS_SERVICE)
+        self.assertNotIn("root.espnDate(request.fromKey)}-${root.espnDate(request.toKey)}", SPORTS_SERVICE)
+
+    def test_unchanged_sports_publications_do_not_rebuild_the_grid(self) -> None:
+        """A failed fetch or a refresh tick must not republish identical games:
+        every publication invalidates each month cell's sport list and the week
+        view's day model, so their delegates are rebuilt."""
+        self.assertIn("property string timetableProjectionSignature", SPORTS_SERVICE)
+        self.assertIn("SportsCache.sourceSignature(root.timetableRangeStart", SPORTS_SERVICE)
+        self.assertIn("signature === root.timetableProjectionSignature", SPORTS_SERVICE)
+        self.assertIn("!SportsCache.sameGames(root.timetableGames, games)", SPORTS_SERVICE)
+        self.assertIn("root.timetableGamesByDay = root.stableGamesByDay(games)", SPORTS_SERVICE)
+        # Published, not bound: an unchanged day must keep its array identity,
+        # and a day without games must share one empty array.
+        self.assertIn("property var timetableGamesByDay: ({})", SPORTS_SERVICE)
+        self.assertIn("readonly property var noTimetableGames: []", SPORTS_SERVICE)
+        self.assertIn("SportsCache.gamesByDay(games, value => root.dayKey(value), root.timetableGamesByDay)", SPORTS_SERVICE)
+        self.assertIn("?? root.noTimetableGames", SPORTS_SERVICE)
+        # Dropping the projection drops the signature and the index with it.
+        self.assertIn('timetableProjectionSignature = "";', SPORTS_SERVICE)
+
+    def test_sports_requests_have_cancellation_and_a_finite_timeout(self) -> None:
+        self.assertIn("property int _compactRequestGeneration: 0", SPORTS_SERVICE)
+        self.assertIn("property int _searchRequestGeneration: 0", SPORTS_SERVICE)
+        self.assertIn("root.cancelCompactRequests()", SPORTS_SERVICE)
+        self.assertIn("root.cancelSearchRequests()", SPORTS_SERVICE)
+        self.assertIn("xhr.timeout = 12000", SPORTS_SERVICE)
+
     def test_user_leagues_and_team_filter_drive_the_projection(self) -> None:
         self.assertIn("Config.options.bar.sports.monitoredLeagues", SPORTS_SERVICE)
         self.assertIn("property string teamFilter: Config.options.bar.sports.teamFilter", SPORTS_SERVICE)
@@ -133,6 +194,10 @@ class TimetableSportsContractTests(unittest.TestCase):
 
         self.assertIn("SportsService.acquireTimetableSubscriber()", host)
         self.assertIn("SportsService.releaseTimetableSubscriber()", host)
+        self.assertIn("property bool sportsSurfaceActive", host)
+        self.assertIn("root.activeState && GlobalStates.cheatsheetOpen", host)
+        self.assertIn("!root.sportsSurfaceActive", host)
+        self.assertIn("onCheatsheetOpenChanged", host)
         self.assertIn("id: timetableRefreshTimer", SPORTS_SERVICE)
         self.assertIn("running: root.timetableActive", SPORTS_SERVICE)
         self.assertIn("rangeNeedsLiveRefresh", SPORTS_SERVICE)

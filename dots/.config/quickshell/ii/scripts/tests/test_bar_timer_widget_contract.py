@@ -53,7 +53,8 @@ class BarTimerWidgetContractTest(unittest.TestCase):
         self.assertIn('property string timer: "expressive"', config)
         timer_entry = component_registry.split('id: "timer"', 1)[1].split('id: "weather"', 1)[0]
         self.assertIn('styleConfigKey: "timer"', timer_entry)
-        self.assertIn("styleOptions: defaultStyleOptions", timer_entry)
+        for style in ("default", "expressive", "sculpt"):
+            self.assertIn(f'value: "{style}"', timer_entry)
         self.assertIn('case "timer":', style_registry)
         self.assertIn("ExpressiveTimerWidget", router)
         self.assertIn("vertical: rootItem.vertical", router)
@@ -112,12 +113,14 @@ class BarTimerWidgetContractTest(unittest.TestCase):
         self.assertIn("MaterialShapeWrappedMaterialSymbol", body)
         self.assertIn("id: theme", body)
         self.assertNotIn("id: palette", body)
-        self.assertIn("theme.colContainer", body)
+        # Background / variant pairs: `colContainer` and `colAccent` are the same
+        # colour in `primary` and `primaryContainer`, so the modes looked identical.
+        self.assertIn("theme.colBackground", body)
         self.assertIn("qs.modules.common.functions", body)
-        self.assertIn("ColorUtils.categoryOnColor(theme.colContainer)", body)
-        self.assertNotIn("color: theme.colOnContainer", body)
-        self.assertIn("theme.colAccent", body)
-        self.assertIn("theme.colOnAccent", body)
+        self.assertIn("ColorUtils.categoryOnColor(theme.colBackground)", body)
+        self.assertNotIn("theme.colContainer", body)
+        self.assertIn("theme.colBackgroundVariant", body)
+        self.assertIn("theme.colOnBackgroundVariant", body)
         self.assertNotIn("border.width", body)
         self.assertNotIn("border.color", body)
         self.assertNotIn("loops: Animation.Infinite", body)

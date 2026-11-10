@@ -25,11 +25,15 @@ MouseArea {
     readonly property bool shown: PortWatcher.enabled
         && (!(Config.options.bar.portWatcher.hideWhenEmpty ?? false) || root.portCount > 0)
 
-    readonly property color colContainer: ColorUtils.mix(Appearance.colors.colSecondaryContainer,
-        Appearance.colors.colOnSecondaryContainer, 0.9)
-    readonly property color colOnContainer: Appearance.colors.colOnSecondaryContainer
-    readonly property color colIndicator: Appearance.colors.colSecondary
-    readonly property color colOnIndicator: Appearance.colors.colOnSecondary
+    BarWidgetPalette {
+        id: palette
+        colorMode: Config.options.bar.portWatcher.colorMode
+    }
+
+    readonly property color colContainer: root.containsMouse ? palette.colBackgroundHover : palette.colBackground
+    readonly property color colOnContainer: palette.colOnBackground
+    readonly property color colIndicator: palette.colBackgroundVariant
+    readonly property color colOnIndicator: palette.colOnBackgroundVariant
 
     // Hover is a shape change, nothing else. The spin sells the swap as a
     // morph instead of a hard cut between two silhouettes.
@@ -60,7 +64,7 @@ MouseArea {
 
         visible: !root.vertical
         anchors.centerIn: parent
-        radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
+        radius: (typeof rootItem !== "undefined" ? rootItem.groupStyle : Config.options.bar.barGroupStyle) === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
         implicitHeight: Appearance.sizes.baseBarHeight - 8
         height: implicitHeight
         implicitWidth: countText.implicitWidth + indicator.width + 22
@@ -133,7 +137,7 @@ MouseArea {
 
         visible: root.vertical
         anchors.centerIn: parent
-        radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
+        radius: (typeof rootItem !== "undefined" ? rootItem.groupStyle : Config.options.bar.barGroupStyle) === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
         implicitWidth: Appearance.sizes.verticalBarWidth - 8
         width: implicitWidth
         implicitHeight: countTextVertical.implicitHeight + indicatorVertical.height + 16
@@ -196,8 +200,12 @@ MouseArea {
         }
     }
 
-    PortWatcherPopup {
-        id: popup
-        hoverTarget: root
+    // Lazy: popup controller is only built on approach (same as ExpressiveSports).
+    PopupLoader {
+        active: BarInteraction.enablePopups
+            && (BarInteraction.clickToShow || root.containsMouse || held)
+        sourceComponent: PortWatcherPopup {
+            hoverTarget: root
+        }
     }
 }

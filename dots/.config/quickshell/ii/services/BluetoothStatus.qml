@@ -135,6 +135,11 @@ Singleton {
     property var _previousConnectedAddresses: []
     property bool _initialized: false
 
+    // The timer below alone left a connection unannounced for up to 2 s, so the island's
+    // connection strip landed after the earbuds bubble - and after the keyboard a headset's
+    // AVRCP device registers. The count already watches every device's `connected`.
+    onActiveDeviceCountChanged: Qt.callLater(root._checkConnectionChanges)
+
     // perf: this recompute+connection-check ran at a flat 500 ms (2 Hz) forever
     // while the radio was on, even at idle with nothing observing the lists. The
     // connect/disconnect *sounds* must keep working with no UI open, so the timer
@@ -204,6 +209,15 @@ Singleton {
     property list<var> pairedButNotConnectedDevices: []
     property list<var> unpairedDevices: []
     property list<var> friendlyDeviceList: []
+
+    /**
+     * The first connected phone, for the island's phone bubble. BlueZ names it by icon
+     * ("phone"); "audio-headphones" contains the same word, hence the second test.
+     */
+    readonly property var phoneDevice: root.connectedDevices.find(d => {
+        const icon = d?.icon ?? "";
+        return icon.includes("phone") && !icon.includes("headphones");
+    }) ?? null
 
     function resortDeviceLists(): void {
         const values = Bluetooth.devices.values;

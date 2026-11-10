@@ -1,0 +1,10 @@
+module qs.modules.settings.configs.lockscreen
+LockEffectLayer 1.0 LockEffectLayer.qml
+LockEffectsPane 1.0 LockEffectsPane.qml
+LockHero 1.0 LockHero.qml
+LockPresetStrip 1.0 LockPresetStrip.qml
+LockPreview 1.0 LockPreview.qml
+LockPrivacyPicker 1.0 LockPrivacyPicker.qml
+LockSliderRow 1.0 LockSliderRow.qml
+LockOledCard 1.0 LockOledCard.qml
+LockWidgetLayer 1.0 LockWidgetLayer.qml

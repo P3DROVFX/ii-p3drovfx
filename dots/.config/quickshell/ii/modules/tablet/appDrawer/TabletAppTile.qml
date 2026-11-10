@@ -116,41 +116,52 @@ Item {
              * name the guesser cannot map, a theme still warming up after a reload — so the
              * fallback is a first-letter plate rather than an empty square.
              */
+            // Decoded off the GUI thread: a synchronous decode per delegate is what made a
+            // fast scroll or a rebuilt grid stall. The pixmap cache makes a reopened drawer
+            // instant anyway, so the only visible cost is the first sight of an icon.
             IconImage {
                 id: appIcon
                 anchors.fill: parent
+                asynchronous: true
                 visible: !root.isSystem && appIcon.status === Image.Ready
-                source: Quickshell.iconPath(AppSearch.guessIcon(root.entry?.id ?? ""), "image-missing")
+                source: root.isSystem ? "" : Quickshell.iconPath(AppSearch.guessIcon(root.entry?.id ?? ""), "image-missing")
             }
 
-            Rectangle {
+            // Only built for the tiles that need them; every tile used to carry both. The
+            // letter plate waits for a real failure, not a decode still in flight, or each
+            // icon would flash a letter on its way in.
+            Loader {
                 anchors.fill: parent
-                visible: !root.isSystem && !appIcon.visible
-                radius: width * 0.28
-                color: Appearance.colors.colSecondaryContainer
+                active: !root.isSystem && (appIcon.status === Image.Error || appIcon.status === Image.Null)
+                sourceComponent: Rectangle {
+                    radius: width * 0.28
+                    color: Appearance.colors.colSecondaryContainer
 
-                StyledText {
-                    anchors.centerIn: parent
-                    text: (root.entry?.name ?? "?").trim().charAt(0).toLocaleUpperCase()
-                    font.pixelSize: Math.round(root.iconSize * 0.44)
-                    font.family: Appearance.font.family.title
-                    color: Appearance.colors.colOnSecondaryContainer
+                    StyledText {
+                        anchors.centerIn: parent
+                        text: (root.entry?.name ?? "?").trim().charAt(0).toLocaleUpperCase()
+                        font.pixelSize: Math.round(root.iconSize * 0.44)
+                        font.family: Appearance.font.family.title
+                        color: Appearance.colors.colOnSecondaryContainer
+                    }
                 }
             }
 
             // A shell surface has no application icon, so it gets a symbol on a tinted
             // round plate — visibly a system thing rather than a badly-themed app.
-            Rectangle {
+            Loader {
                 anchors.fill: parent
-                visible: root.isSystem
-                radius: width * 0.28
-                color: Appearance.colors.colPrimaryContainer
+                active: root.isSystem
+                sourceComponent: Rectangle {
+                    radius: width * 0.28
+                    color: Appearance.colors.colPrimaryContainer
 
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: root.systemIcon
-                    iconSize: Math.round(root.iconSize * 0.52)
-                    color: Appearance.colors.colOnPrimaryContainer
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: root.systemIcon
+                        iconSize: Math.round(root.iconSize * 0.52)
+                        color: Appearance.colors.colOnPrimaryContainer
+                    }
                 }
             }
         }

@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
+import Qt5Compat.GraphicalEffects
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
@@ -69,15 +70,187 @@ Item {
         }
         return result;
     }
+    // Model index -> position among the filtered cards. Replaces a per-card
+    // filteredIndices.includes() scan and gives each card its settled row.
+    readonly property var filteredRank: {
+        const rank = {};
+        const indices = root.filteredIndices;
+        for (let i = 0; i < indices.length; i++)
+            rank[indices[i]] = i;
+        return rank;
+    }
+    readonly property bool formShown: commandFormLoader.item !== null && (commandFormLoader.item.isOpen || commandFormLoader.item.isAnimating)
+
+    // The form is built on first use and kept, so a later open keeps its
+    // animation state and costs nothing extra.
+    function openForm(mode, id, command, description, tags) {
+        commandFormLoader.active = true;
+        const form = commandFormLoader.item;
+        form.mode = mode;
+        form.editId = id;
+        form.editCommand = command;
+        form.editDescription = description;
+        form.editTags = tags;
+        form.isOpen = true;
+    }
 
     onFocusChanged: focus => {
         if (focus)
-            filterField.forceActiveFocus();
+            extraOptions.forceActiveFocus();
     }
 
     // Injected by Cheatsheet.qml so the search field can hand focus to
     // cheatsheetBackground when Ctrl is held (enabling Ctrl+N tab switching).
     property Item keyNavTarget: null
+
+    // Keybind hints, revealed while Ctrl is held (injected by Cheatsheet.qml).
+    property bool showShortcutHints: false
+    readonly property bool hintsVisible: root.showShortcutHints && (root.Window.window?.active ?? false)
+    // Keyboard-selected card (model index). Its action buttons and their
+    // hints appear with it (MonthDayCell pattern).
+    property int selectedModelIdx: -1
+    readonly property bool pageKeysEnabled: root.isTabActive && !root.formShown && !qmlFilePicker.visible
+
+    onFilteredIndicesChanged: {
+        if (root.selectedModelIdx >= 0 && root.filteredIndices.indexOf(root.selectedModelIdx) < 0)
+            root.selectedModelIdx = -1;
+    }
+
+    function moveSelection(delta) {
+        const list = root.filteredIndices;
+        if (list.length === 0)
+            return;
+        const pos = list.indexOf(root.selectedModelIdx);
+        const next = pos < 0 ? (delta > 0 ? 0 : list.length - 1)
+            : Math.max(0, Math.min(list.length - 1, pos + delta));
+        root.selectedModelIdx = list[next];
+        root.ensureSelectionVisible();
+    }
+
+    function ensureSelectionVisible() {
+        const card = cardRepeater.itemAt(root.selectedModelIdx);
+        if (!card)
+            return;
+        const top = card.y, bottom = card.y + card.height;
+        const viewTop = cardFlickable.contentY, viewBottom = viewTop + cardFlickable.height;
+        if (top < viewTop)
+            cardFlickable.contentY = Math.max(0, top - 10);
+        else if (bottom > viewBottom)
+            cardFlickable.contentY = Math.min(cardFlickable.contentHeight - cardFlickable.height, bottom - cardFlickable.height + 10);
+    }
+
+    function selectedCommand() {
+        return root.selectedModelIdx >= 0 ? CommandsService.commandsModel.get(root.selectedModelIdx) : null;
+    }
+
+    function copySelected() {
+        const item = root.selectedCommand();
+        if (!item)
+            return;
+        const card = cardRepeater.itemAt(root.selectedModelIdx)?.card;
+        if (card)
+            card.copyCommand();
+        else
+            Quickshell.clipboardText = item.command;
+    }
+
+    function editSelected() {
+        const item = root.selectedCommand();
+        if (!item)
+            return;
+        const tagArr = [];
+        if (item.tags) {
+            for (let i = 0; i < item.tags.count; i++)
+                tagArr.push(item.tags.get(i).modelData);
+        }
+        root.openForm("edit", item.id, item.command, item.description, tagArr.join(", "));
+    }
+
+    function deleteSelected() {
+        const item = root.selectedCommand();
+        if (!item)
+            return;
+        root.selectedModelIdx = -1;
+        CommandsService.deleteCommand(item.id);
+    }
+
+    // ── Keyboard ────────────────────────────────────────────────────────────
+    // Shortcut (not Keys) so every action works no matter which control holds
+    // focus. Ctrl+1..9 and Tab stay with the cheatsheet chrome; the text
+    // editing chords (Ctrl+C/V/…) and "/" typing stay with the filter field.
+    Shortcut {
+        enabled: root.pageKeysEnabled
+        sequence: "Ctrl+F"
+        onActivated: extraOptions.forceActiveFocus()
+    }
+    Shortcut {
+        enabled: root.pageKeysEnabled
+        sequence: "Ctrl+N"
+        onActivated: root.openForm("add", "", "", "", "")
+    }
+    Shortcut {
+        enabled: root.pageKeysEnabled
+        sequence: "Ctrl+I"
+        onActivated: qmlFilePicker.visible = true
+    }
+    Shortcut {
+        enabled: root.pageKeysEnabled
+        sequence: "Down"
+        onActivated: root.moveSelection(1)
+    }
+    Shortcut {
+        enabled: root.pageKeysEnabled
+        sequence: "Up"
+        onActivated: root.moveSelection(-1)
+    }
+    Shortcut {
+        enabled: root.pageKeysEnabled && root.selectedModelIdx >= 0
+        sequences: ["Ctrl+Return", "Ctrl+Enter"]
+        onActivated: root.copySelected()
+    }
+    Shortcut {
+        enabled: root.pageKeysEnabled && root.selectedModelIdx >= 0
+        sequence: "Ctrl+E"
+        onActivated: root.editSelected()
+    }
+    Shortcut {
+        enabled: root.pageKeysEnabled && root.selectedModelIdx >= 0
+        sequence: "Ctrl+D"
+        onActivated: root.deleteSelected()
+    }
+    // Esc steps back first: close the picker, then clear a filled filter.
+    // With nothing to step back from, the shortcut is off and Esc keeps
+    // closing the cheatsheet as usual.
+    Shortcut {
+        enabled: root.isTabActive && !root.formShown && (qmlFilePicker.visible || root.searchText !== "")
+        sequence: "Escape"
+        onActivated: {
+            if (qmlFilePicker.visible)
+                qmlFilePicker.visible = false;
+            else
+                extraOptions.clear();
+        }
+    }
+
+    // Tag filters: Alt+1..9 picks the chip at that position ("All" first),
+    // mirroring its click. Ctrl+digits belong to the cheatsheet's tab bar, so
+    // the in-page modifier is Alt (like DevTools' tool/category steps). The
+    // second sequence mirrors the Workspaces page for number-row layouts
+    // where the digit needs Shift.
+    Repeater {
+        model: 9
+        delegate: Item {
+            id: tagShortcut
+            required property int index
+            readonly property string tagValue: ([""].concat(root.allTags))[tagShortcut.index]
+            readonly property var shiftedDigits: ["&", "é", "\"", "'", "(", "-", "è", "_", "ç"]
+            Shortcut {
+                enabled: root.pageKeysEnabled && tagShortcut.tagValue !== undefined
+                sequences: ["Alt+" + (tagShortcut.index + 1), "Alt+" + tagShortcut.shiftedDigits[tagShortcut.index]]
+                onActivated: root.activeTag = tagShortcut.tagValue === "" ? "" : (root.activeTag === tagShortcut.tagValue ? "" : tagShortcut.tagValue)
+            }
+        }
+    }
 
     function refreshTags() {
         if (CommandsService)
@@ -123,6 +296,21 @@ Item {
 
 
 
+    // Text chip whose label gives way to its keybind hint. The reserved
+    // width (OptionChip rule) keeps the chip row still while Ctrl is held.
+    component TagChip: SelectionGroupButton {
+        id: tagChip
+        property string shortcut: ""
+        property bool hintsVisible: false
+        contentItem: TaskShortcutContent {
+            labelText: tagChip.buttonText
+            shortcut: tagChip.shortcut
+            showHint: tagChip.hintsVisible && tagChip.shortcut.length > 0
+            labelPixelSize: Appearance.font.pixelSize.small
+            color: tagChip.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
+        }
+    }
+
     Component.onCompleted: root.refreshTags()
 
     Rectangle {
@@ -136,8 +324,8 @@ Item {
         id: inboxContent
         anchors.fill: parent
 
-        opacity: (commandForm.isOpen || commandForm.isAnimating || qmlFilePicker.visible) ? 0.0 : 1.0
-        enabled: !commandForm.isOpen && !commandForm.isAnimating && !qmlFilePicker.visible
+        opacity: (root.formShown || qmlFilePicker.visible) ? 0.0 : 1.0
+        enabled: !root.formShown && !qmlFilePicker.visible
 
         Behavior on opacity {
             NumberAnimation {
@@ -180,75 +368,52 @@ Item {
 
                 RippleButton {
                     implicitHeight: 44
-                    implicitWidth: 44
+                    implicitWidth: importRow.implicitWidth + 24
                     buttonRadius: Appearance.rounding.full
                     colBackground: root.importError ? Appearance.colors.colError : (root.importSuccess ? Appearance.colors.colTertiary : Appearance.colors.colSecondaryContainer)
                     colBackgroundHover: root.importError ? Appearance.colors.colErrorHover : (root.importSuccess ? Appearance.colors.colTertiaryHover : Appearance.colors.colSecondaryContainerHover)
                     onClicked: qmlFilePicker.visible = true
 
-                    MaterialSymbol {
-                        id: importIcon
+                    RowLayout {
+                        id: importRow
                         anchors.centerIn: parent
-                        text: root.importError ? "close" : (root.importSuccess ? "done" : "folder_open")
-                        iconSize: Appearance.font.pixelSize.large
-                        color: root.importError ? Appearance.colors.colOnError : (root.importSuccess ? Appearance.colors.colOnTertiary : Appearance.colors.colOnSecondaryContainer)
+                        spacing: 6
+                        TaskShortcutContent {
+                            id: importContent
+                            Layout.alignment: Qt.AlignVCenter
+                            symbol: root.importError ? "close" : (root.importSuccess ? "done" : "folder_open")
+                            labelText: qsTr("Import commands")
+                            shortcut: "Ctrl + I"
+                            showHint: root.hintsVisible
+                            iconSize: Appearance.font.pixelSize.large
+                            labelPixelSize: Appearance.font.pixelSize.small
+                            color: root.importError ? Appearance.colors.colOnError : (root.importSuccess ? Appearance.colors.colOnTertiary : Appearance.colors.colOnSecondaryContainer)
 
-                        Behavior on text {
-                            SequentialAnimation {
-                                NumberAnimation {
-                                    target: importIcon
-                                    property: "scale"
-                                    to: 0
-                                    duration: 100
-                                }
-                                PropertyAction {}
-                                NumberAnimation {
-                                    target: importIcon
-                                    property: "scale"
-                                    to: 1
-                                    duration: 100
+                            Behavior on symbol {
+                                SequentialAnimation {
+                                    NumberAnimation {
+                                        target: importContent
+                                        property: "scale"
+                                        to: 0
+                                        duration: 100
+                                    }
+                                    PropertyAction {}
+                                    NumberAnimation {
+                                        target: importContent
+                                        property: "scale"
+                                        to: 1
+                                        duration: 100
+                                    }
                                 }
                             }
                         }
                     }
 
                     StyledToolTip {
-                        text: qsTr("Import commands")
+                        text: qsTr("Import commands") + " (Ctrl+I)"
                     }
                 }
 
-                RippleButton {
-                    implicitHeight: 44
-                    implicitWidth: addRow.implicitWidth + 24
-                    buttonRadius: Appearance.rounding.full
-                    colBackground: root.colAccent
-                    colBackgroundHover: root.colAccentHover
-                    onClicked: {
-                        commandForm.mode = "add";
-                        commandForm.editId = "";
-                        commandForm.editCommand = "";
-                        commandForm.editDescription = "";
-                        commandForm.editTags = "";
-                        commandForm.isOpen = true;
-                    }
-
-                    RowLayout {
-                        id: addRow
-                        anchors.centerIn: parent
-                        spacing: 6
-                        MaterialSymbol {
-                            text: "add"
-                            horizontalAlignment: Text.AlignHCenter
-                            iconSize: Appearance.font.pixelSize.large
-                            color: root.colOnAccent
-                        }
-                        StyledText {
-                            text: qsTr("Add command")
-                            font.weight: Font.Bold
-                            color: root.colOnAccent
-                        }
-                    }
-                }
             }
 
             RowLayout {
@@ -318,13 +483,15 @@ Item {
                                                 anchors.rightMargin: 12
                                                 spacing: 8
 
-                                                StyledText {
-                                                    text: tagMa.tagValue === "" ? qsTr("All") : tagMa.tagValue
-                                                    font.pixelSize: Appearance.font.pixelSize.normal
-                                                    font.weight: root.activeTag === tagMa.tagValue ? Font.Medium : Font.Normal
+                                                TaskShortcutContent {
+                                                    readonly property int tagPosition: tagMa.tagValue === "" ? 1 : root.allTags.indexOf(tagMa.tagValue) + 2
+                                                    labelText: tagMa.tagValue === "" ? qsTr("All") : tagMa.tagValue
+                                                    shortcut: tagPosition <= 9 ? "Alt + " + tagPosition : ""
+                                                    showHint: root.hintsVisible
+                                                    labelPixelSize: Appearance.font.pixelSize.normal
+                                                    labelFontWeight: root.activeTag === tagMa.tagValue ? Font.Medium : Font.Normal
                                                     color: root.activeTag === tagMa.tagValue ? root.colTitle : root.colSubtitle
                                                     Layout.fillWidth: true
-                                                    elide: Text.ElideRight
                                                 }
 
                                                 Rectangle {
@@ -389,17 +556,19 @@ Item {
                                 spacing: 4
                                 padding: 0
 
-                                SelectionGroupButton {
+                                TagChip {
                                     buttonText: qsTr("All")
                                     toggled: root.activeTag === ""
                                     onClicked: root.activeTag = ""
                                     leftmost: true
                                     rightmost: root.allTags.length === 0
+                                    shortcut: "Alt + 1"
+                                    hintsVisible: root.hintsVisible
                                 }
 
                                 Repeater {
                                     model: root.allTags
-                                    delegate: SelectionGroupButton {
+                                    delegate: TagChip {
                                         required property string modelData
                                         required property int index
                                         buttonText: modelData
@@ -407,26 +576,78 @@ Item {
                                         onClicked: root.activeTag = (root.activeTag === modelData ? "" : modelData)
                                         leftmost: false
                                         rightmost: index === root.allTags.length - 1
+                                        shortcut: index + 2 <= 9 ? "Alt + " + (index + 2) : ""
+                                        hintsVisible: root.hintsVisible
                                     }
                                 }
                             }
                         }
                     }
 
-                    StyledText {
-                        Layout.leftMargin: 20
+                    RowLayout {
+                        Layout.fillWidth: true
                         Layout.bottomMargin: 4
-                        text: root.filteredIndices.length + " " + qsTr("commands")
-                        font.pixelSize: Appearance.font.pixelSize.smaller
-                        color: root.colSubtitle
+
+                        StyledText {
+                            Layout.leftMargin: 20
+                            text: root.filteredIndices.length + " " + qsTr("commands")
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            color: root.colSubtitle
+                        }
+
+                        Item { Layout.fillWidth: true }
+
+                        // Subtle keybind line revealed while Ctrl is held
+                        // (Notes widget pattern); it names the keys that act on
+                        // the list, which have no button to hang a hint on.
+                        StyledText {
+                            Layout.rightMargin: 20
+                            text: root.selectedModelIdx >= 0
+                                ? "↑ / ↓  ·  Ctrl + ↵  ·  Ctrl + E  ·  Ctrl + D"
+                                : "↑ / ↓  ·  Ctrl + N  ·  Ctrl + I  ·  Ctrl + F"
+                            font.pixelSize: Appearance.font.pixelSize.smallest
+                            color: root.colSubtitle
+                            opacity: root.hintsVisible ? 1 : 0
+                            Behavior on opacity {
+                                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                            }
+                        }
                     }
 
-                    StyledFlickable {
-                        id: cardFlickable
+                    Item {
+                        id: cardsViewport
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         Layout.leftMargin: 16
                         Layout.rightMargin: 16
+                        layer.enabled: visible && (Appearance.rounding.normal > 0 || edgeFade.overflowing)
+                        layer.effect: OpacityMask {
+                            maskSource: Rectangle {
+                                id: cardsMask
+                                width: cardsViewport.width
+                                height: cardsViewport.height
+                                radius: Appearance.rounding.normal
+                                readonly property real fadeFraction: Math.min(0.5, edgeFade.fadeSize / Math.max(1, height))
+                                property real topAlpha: edgeFade.overflowing && edgeFade.startGap > edgeFade.edgeTolerance ? 0 : 1
+                                property real bottomAlpha: edgeFade.overflowing && edgeFade.endGap > edgeFade.edgeTolerance ? 0 : 1
+                                Behavior on topAlpha {
+                                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                                }
+                                Behavior on bottomAlpha {
+                                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                                }
+                                gradient: Gradient {
+                                    GradientStop { position: 0; color: Qt.rgba(1, 1, 1, cardsMask.topAlpha) }
+                                    GradientStop { position: cardsMask.fadeFraction; color: "white" }
+                                    GradientStop { position: 1 - cardsMask.fadeFraction; color: "white" }
+                                    GradientStop { position: 1; color: Qt.rgba(1, 1, 1, cardsMask.bottomAlpha) }
+                                }
+                            }
+                        }
+
+                    StyledFlickable {
+                        id: cardFlickable
+                        anchors.fill: parent
                         contentHeight: gridArea.implicitHeight + 100
                         clip: true
                         boundsBehavior: Flickable.StopAtBounds
@@ -506,8 +727,21 @@ Item {
                                     required property var tags
                                     required property int index
 
-                                    property bool hasMatches: root.filteredIndices.includes(index)
+                                    readonly property var filteredRank: root.filteredRank[index]
+                                    property bool hasMatches: filteredRank !== undefined
                                     property bool entered: false
+                                    // Loaded CommandCard, reachable by the keyboard actions.
+                                    readonly property var card: cardLoader.item
+
+                                    // Only cards within a screen of the viewport build their
+                                    // content; the rest stay empty placeholders that still
+                                    // take part in the layout and its animations. The row
+                                    // is the settled one, so the entrance cascade (cards
+                                    // start at y 0) does not make every card look visible.
+                                    readonly property real settledY: hasMatches ? Math.floor(filteredRank / 2) * (180 + gridArea.cardSpacing) : 0
+                                    readonly property bool nearViewport: hasMatches && settledY + 180 >= cardFlickable.contentY - cardFlickable.height && settledY <= cardFlickable.contentY + cardFlickable.height * 2
+                                    property bool contentWanted: false
+                                    onNearViewportChanged: if (nearViewport) contentWanted = true
 
                                     visible: hasMatches || opacity > 0.0
                                     opacity: entered && hasMatches ? 1.0 : 0.0
@@ -563,6 +797,8 @@ Item {
                                         gridArea.recountVisible();
                                     }
                                     Component.onCompleted: {
+                                        if (nearViewport)
+                                            contentWanted = true;
                                         entranceTimer.start();
                                     }
                                     Component.onDestruction: Qt.callLater(gridArea.recountVisible)
@@ -573,14 +809,19 @@ Item {
                                         onTriggered: cardDelegate.entered = true
                                     }
 
-                                    CommandCard {
-                                        id: commandCard
+                                    Loader {
+                                        id: cardLoader
                                         anchors.fill: parent
                                         anchors.margins: 5
-                                        
+                                        active: cardDelegate.contentWanted
+                                        asynchronous: true
+
+                                        sourceComponent: CommandCard {
                                         commandId: cardDelegate.id
                                         command: cardDelegate.command
                                         description: cardDelegate.description
+                                        keyboardSelected: cardDelegate.index === root.selectedModelIdx
+                                        showShortcutHints: root.hintsVisible
                                         tags: {
                                             if (!cardDelegate.tags) return [];
                                             const t = [];
@@ -594,15 +835,11 @@ Item {
                                             for (let i = 0; i < cardDelegate.tags.count; i++)
                                                 tagArr.push(cardDelegate.tags.get(i).modelData);
 
-                                            commandForm.mode = "edit";
-                                            commandForm.editId = cardDelegate.id;
-                                            commandForm.editCommand = cardDelegate.command;
-                                            commandForm.editDescription = cardDelegate.description;
-                                            commandForm.editTags = tagArr.join(", ");
-                                            commandForm.isOpen = true;
+                                            root.openForm("edit", cardDelegate.id, cardDelegate.command, cardDelegate.description, tagArr.join(", "));
                                         }
 
                                         onDeleteClicked: CommandsService.deleteCommand(commandId)
+                                        }
                                     }
                                 }
                             }
@@ -622,6 +859,14 @@ Item {
                         }
 
                         ScrollBar.vertical: StyledScrollBar {}
+                    }
+                        ScrollEdgeFade {
+                            id: edgeFade
+                            target: cardFlickable
+                            blurEdges: true
+                            fadeSize: Math.round(Appearance.font.pixelSize.huge * 1.8)
+                            color: "transparent"
+                        }
                     }
                 }
             }
@@ -645,61 +890,39 @@ Item {
             descriptionHorizontalAlignment: Text.AlignHCenter
         }
 
-        Toolbar {
+        // Floating search pill with the command creation FAB on its left.
+        FloatingSearchBar {
             id: extraOptions
             z: 5
-            enableShadow: false
-            colBackground: Appearance.colors.colSecondaryContainer
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: 8
-
-            transform: Translate {
-                id: searchBarTrans
-                y: (root.visible && swipeView.currentIndex === index) ? 0 : 35
+            tabActive: root.isTabActive
+            blurSourceItem: cardFlickable
+            keyNavTarget: root.keyNavTarget
+            showShortcutHints: root.hintsVisible
+            searchShortcut: "Ctrl\n+ F"
+            fabShortcut: "Ctrl\n+ N"
+            placeholderText: qsTr("Filter commands")
+            fabIcon: "add"
+            fabText: qsTr("Add command")
+            fabTooltip: qsTr("Add command") + " (Ctrl+N)"
+            onFabClicked: {
+                root.openForm("add", "", "", "", "");
             }
-            opacity: (root.visible && swipeView.currentIndex === index) ? 1.0 : 0.0
-
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: 250
-                    easing.type: Easing.OutCubic
-                }
-            }
-            Behavior on transform {
-                NumberAnimation {
-                    duration: 350
-                    easing.type: Easing.OutBack
-                    easing.overshoot: 1.3
-                }
-            }
-
-            ToolbarTextField {
-                id: filterField
-                placeholderText: focus ? qsTr("Filter commands") : qsTr("Hit \"/\" to filter")
-                clip: true
-                font.pixelSize: Appearance.font.pixelSize.small
-                 onTextChanged: root.searchText = text
-                keyNavTarget: root.keyNavTarget
-            }
-
-            IconToolbarButton {
-                implicitWidth: height
-                onClicked: root.searchText = filterField.text = ''
-                text: "close"
-                StyledToolTip {
-                    text: qsTr("Clear filter")
-                }
-            }
+            placeholderTooltip: qsTr("Filter commands") + " (Ctrl+F)"
+            onTextChanged: root.searchText = text
+            onAccepted: root.searchText = text
         }
     }
 
-    CommandForm {
-        id: commandForm
+    Loader {
+        id: commandFormLoader
         anchors.fill: parent
         z: 10
-        visible: isOpen || isAnimating
-        onCloseRequested: refreshTags()
+        active: false
+        visible: root.formShown
+        sourceComponent: CommandForm {
+            showShortcutHints: root.hintsVisible
+            onCloseRequested: root.refreshTags()
+        }
     }
 
     Rectangle {
@@ -742,129 +965,190 @@ Item {
         antialiasing: true
         clip: true
 
-        FolderListModelWithHistory {
-            id: localFolderModel
-            folder: "file://" + (Directories.home ? FileUtils.trimFileProtocol(Directories.home) : "")
-            showDirs: true
-            showDotAndDotDot: false
-            sortField: FolderListModel.Name
-            nameFilters: ["*.json"]
-        }
+        // Only built while the picker is open; the folder survives closing.
+        property url folder: "file://" + (Directories.home ? FileUtils.trimFileProtocol(Directories.home) : "")
 
-        ColumnLayout {
+        Loader {
             anchors.fill: parent
-            anchors.margins: 16
-            spacing: 12
+            active: qmlFilePicker.visible
+            sourceComponent: Item {
+                id: pickerContent
 
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 12
-
-                MaterialSymbol {
-                    text: "attach_file"
-                    iconSize: 20
-                    color: Appearance.colors.colPrimary
+                FolderListModelWithHistory {
+                    id: localFolderModel
+                    folder: qmlFilePicker.folder
+                    onFolderChanged: qmlFilePicker.folder = folder
+                    showDirs: true
+                    showDotAndDotDot: false
+                    sortField: FolderListModel.Name
+                    nameFilters: ["*.json"]
                 }
 
-                StyledText {
-                    text: qsTr("Select JSON to Import")
-                    font.pixelSize: Appearance.font.pixelSize.large
-                    font.weight: Font.Bold
-                    color: Appearance.colors.colOnSurface
-                    Layout.fillWidth: true
+                // Keyboard: rows up/down; Ctrl+Return opens the selected one.
+                // Bare Return stays with the address bar's path input.
+                function moveRow(delta) {
+                    const count = localFileView.count;
+                    if (count === 0)
+                        return;
+                    const pos = localFileView.currentIndex;
+                    const next = pos < 0 ? (delta > 0 ? 0 : count - 1)
+                        : Math.max(0, Math.min(count - 1, pos + delta));
+                    localFileView.currentIndex = next;
+                    localFileView.positionViewAtIndex(next, ListView.Contain);
                 }
 
-                RippleButton {
-                    implicitWidth: 36
-                    implicitHeight: 36
-                    buttonRadius: Appearance.rounding.full
-                    colBackground: Appearance.colors.colLayer2Base
-                    colBackgroundHover: Appearance.colors.colLayer2Hover
-                    onClicked: qmlFilePicker.visible = false
-
-                    MaterialSymbol {
-                        anchors.centerIn: parent
-                        text: "close"
-                        iconSize: 18
-                        color: Appearance.colors.colOnSurface
+                function openRow() {
+                    const item = localFolderModel.get(localFileView.currentIndex);
+                    if (!item)
+                        return;
+                    if (item.fileIsDir) {
+                        localFolderModel.folder = "file://" + item.filePath;
+                    } else {
+                        qmlFilePicker.visible = false;
+                        CommandsService.importCommands(item.filePath);
                     }
                 }
-            }
 
-            AddressBar {
-                id: pickerAddressBar
-                Layout.fillWidth: true
-                directory: localFolderModel.folder ? FileUtils.trimFileProtocol(localFolderModel.folder) : ""
-                onNavigateToDirectory: path => {
-                    if (!path)
-                        return;
-                    localFolderModel.folder = Qt.resolvedUrl(path.startsWith("/") ? "file://" + path : path);
+                Shortcut {
+                    enabled: root.isTabActive
+                    sequence: "Down"
+                    onActivated: pickerContent.moveRow(1)
                 }
-                radius: Appearance.rounding.normal
-            }
+                Shortcut {
+                    enabled: root.isTabActive
+                    sequence: "Up"
+                    onActivated: pickerContent.moveRow(-1)
+                }
+                Shortcut {
+                    enabled: root.isTabActive && localFileView.currentIndex >= 0
+                    sequences: ["Ctrl+Return", "Ctrl+Enter"]
+                    onActivated: pickerContent.openRow()
+                }
 
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                radius: Appearance.rounding.large
-                color: Appearance.colors.colLayer2Base
-                clip: true
-
-                ListView {
-                    id: localFileView
+                ColumnLayout {
                     anchors.fill: parent
-                    anchors.margins: 6
-                    clip: true
-                    spacing: 2
-                    model: localFolderModel
+                    anchors.margins: 16
+                    spacing: 12
 
-                    delegate: MouseArea {
-                        id: fileDelegate
-                        width: localFileView.width
-                        height: 48
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
 
-                        property bool capturedIsDir: fileIsDir
-                        property string capturedPath: filePath
-                        property string capturedName: fileName
-
-                        onClicked: {
-                            if (fileDelegate.capturedIsDir) {
-                                localFolderModel.folder = "file://" + fileDelegate.capturedPath;
-                            } else {
-                                qmlFilePicker.visible = false;
-                                CommandsService.importCommands(fileDelegate.capturedPath);
-                            }
+                        MaterialSymbol {
+                            text: "attach_file"
+                            iconSize: 20
+                            color: Appearance.colors.colPrimary
                         }
 
-                        Rectangle {
-                            anchors.fill: parent
-                            radius: Appearance.rounding.small
-                            color: fileDelegate.pressed ? Appearance.colors.colLayer3Active : fileDelegate.containsMouse ? Appearance.colors.colLayer3Hover : "transparent"
+                        StyledText {
+                            text: qsTr("Select JSON to Import")
+                            font.pixelSize: Appearance.font.pixelSize.large
+                            font.weight: Font.Bold
+                            color: Appearance.colors.colOnSurface
+                            Layout.fillWidth: true
                         }
 
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 12
-                            anchors.rightMargin: 12
-                            spacing: 12
+                        RippleButton {
+                            implicitWidth: 36
+                            implicitHeight: 36
+                            buttonRadius: Appearance.rounding.full
+                            colBackground: Appearance.colors.colLayer2Base
+                            colBackgroundHover: Appearance.colors.colLayer2Hover
+                            onClicked: qmlFilePicker.visible = false
 
-                            MaterialSymbol {
-                                text: fileDelegate.capturedIsDir ? "folder" : "code"
+                            TaskShortcutContent {
+                                anchors.centerIn: parent
+                                symbol: "close"
+                                shortcut: "Esc"
+                                showHint: root.hintsVisible
                                 iconSize: 18
-                                color: fileDelegate.capturedIsDir ? Appearance.colors.colSecondary : Appearance.colors.colPrimary
-                            }
-
-                            StyledText {
-                                text: fileDelegate.capturedName
-                                Layout.fillWidth: true
-                                elide: Text.ElideRight
                                 color: Appearance.colors.colOnSurface
                             }
                         }
                     }
-                    ScrollBar.vertical: StyledScrollBar {}
+
+                    AddressBar {
+                        id: pickerAddressBar
+                        Layout.fillWidth: true
+                        directory: localFolderModel.folder ? FileUtils.trimFileProtocol(localFolderModel.folder) : ""
+                        onNavigateToDirectory: path => {
+                            if (!path)
+                                return;
+                            localFolderModel.folder = Qt.resolvedUrl(path.startsWith("/") ? "file://" + path : path);
+                        }
+                        radius: Appearance.rounding.normal
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        radius: Appearance.rounding.large
+                        color: Appearance.colors.colLayer2Base
+                        clip: true
+
+                        ListView {
+                            id: localFileView
+                            anchors.fill: parent
+                            anchors.margins: 6
+                            clip: true
+                            spacing: 2
+                            model: localFolderModel
+
+                            delegate: MouseArea {
+                                id: fileDelegate
+                                width: localFileView.width
+                                height: 48
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+
+                                property bool capturedIsDir: fileIsDir
+                                property string capturedPath: filePath
+                                property string capturedName: fileName
+
+                                onClicked: {
+                                    if (fileDelegate.capturedIsDir) {
+                                        localFolderModel.folder = "file://" + fileDelegate.capturedPath;
+                                    } else {
+                                        qmlFilePicker.visible = false;
+                                        CommandsService.importCommands(fileDelegate.capturedPath);
+                                    }
+                                }
+
+                                Rectangle {
+                                    anchors.fill: parent
+                                    radius: Appearance.rounding.small
+                                    color: fileDelegate.pressed ? Appearance.colors.colLayer3Active : (fileDelegate.containsMouse || fileDelegate.ListView.isCurrentItem) ? Appearance.colors.colLayer3Hover : "transparent"
+                                }
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 12
+                                    anchors.rightMargin: 12
+                                    spacing: 12
+
+                                    TaskShortcutContent {
+                                        symbol: fileDelegate.capturedIsDir ? "folder" : "code"
+                                        shortcut: "Ctrl\n+ ↵"
+                                        showHint: root.hintsVisible && fileDelegate.ListView.isCurrentItem
+                                        iconSize: 18
+                                        color: fileDelegate.capturedIsDir ? Appearance.colors.colSecondary : Appearance.colors.colPrimary
+                                    }
+
+                                    StyledText {
+                                        text: fileDelegate.capturedName
+                                        Layout.fillWidth: true
+                                        elide: Text.ElideRight
+                                        color: Appearance.colors.colOnSurface
+                                    }
+                                }
+                            }
+                            ScrollBar.vertical: StyledScrollBar {}
+
+                            TouchpadScrollHandler {
+                                flickable: localFileView
+                            }
+                        }
+                    }
                 }
             }
         }

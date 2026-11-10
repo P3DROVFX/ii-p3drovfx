@@ -2,214 +2,275 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
+import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.ii.overlay
 
+/**
+ * The quick notes panel: every note in a list, and a plain text editor for one of them.
+ *
+ * Deliberately not the Notes app. The panel is small and opened mid-game, so it does two
+ * things — jot something down, read what was jotted — and hands anything richer to the
+ * app. Text goes through the service's legacy bridge, which keeps a note's drawing intact
+ * when only its text is edited.
+ */
 OverlayBackground {
     id: root
 
-    property alias content: textInput.text
+    property bool isClickthrough: false
+    /// A note to open straight away instead of the list, for callers that were showing one.
+    property int initialTabIndex: -1
+
+    property string currentNoteId: ""
+    readonly property bool editing: root.currentNoteId.length > 0
+    /// The text last handed to the service, so a reload that brings back our own write
+    /// never replaces what is in the field.
+    property string savedText: ""
+    property bool editable: true
+    /// A note this panel just created. The index lands a moment after `createNote`
+    /// returns, so until then the note is open here without being in the list.
+    property string pendingNoteId: ""
+
     property var copyListEntries: []
     property string lastParsedCopylistText: ""
     property var parsedCopylistLines: []
-    property bool isClickthrough: false
     property real maxCopyButtonSize: 20
-    property int currentTabIndex: Persistent.states.overlay.notes.tabIndex
-    property bool tabEditModeEnabled: false
+
+    /// Block types plain text cannot carry back. A note holding one is shown, not edited.
+    readonly property var richBlockTypes: ["image", "table", "linkPreview", "fileLink", "audio", "embed"]
+
+    readonly property var noteRows: Array.from(NotesService.notes ?? []).sort((a, b) =>
+        (Number(b.pinned) - Number(a.pinned)) || (b.modified - a.modified))
+
+    implicitWidth: 300
+    implicitHeight: 200
+
     Component.onCompleted: {
-        root.tabsData = NotesService.tabsData;
-        root.loadTabContent(root.currentTabIndex);
-        updateCopyListEntries();
+        const noteId = NotesService.noteIdForTab(root.initialTabIndex);
+        if (noteId.length > 0)
+            root.openNote(noteId);
     }
 
     Component.onDestruction: {
         // The debounce timer dies with this widget; commit whatever it was still holding.
         if (saveDebounce.running) {
             saveDebounce.stop();
-            root.saveToFile();
+            root.saveNow();
         }
     }
 
     Connections {
         target: NotesService
         function onDataChanged() {
-            root.tabsData = NotesService.tabsData;
-            root.loadTabContent(root.currentTabIndex);
+            root.syncFromService();
         }
     }
 
-    property var tabsData: NotesService.tabsData
-
-    /**
-     * Whether the sketch editor is covering the note.
-     *
-     * Notes could already hold a drawing — the tablet's live-draw sheet files into one —
-     * but the only way to make one was to draw over the whole screen first. This is the
-     * other direction: open a note and draw in it.
-     */
-    property bool sketchEditorOpen: false
-
-    readonly property string currentSketch: {
-        const tab = root.tabsData.tabs[root.currentTabIndex];
-        return String(tab?.sketch ?? "");
-    }
-
-    property var tabOptions: root.tabsData.tabs.map((tab, index) => ({
-        displayName: tab.title,
-        icon: tab.icon,
-        value: index
-    }))
-
-    function saveToFile() {
-        if (!textInput)
-            return;
-        
-        NotesService.updateTab(currentTabIndex, root.content);
-    }
-
-    function loadTabContent(tabIndex) {
-        if (tabIndex >= 0 && tabIndex < tabsData.tabs.length) {
-            root.content = tabsData.tabs[tabIndex].content || "";
-            updateCopyListEntries();
+    Connections {
+        // Other surfaces point the panel at a note by its position.
+        target: Persistent.states.overlay.notes
+        function onTabIndexChanged() {
+            const noteId = NotesService.noteIdForTab(Persistent.states.overlay.notes.tabIndex);
+            if (noteId.length > 0 && noteId !== root.currentNoteId)
+                root.openNote(noteId);
         }
     }
 
-    function changeCurrentTab(index) {
-        Persistent.states.overlay.notes.tabIndex = index;
+    function tabOf(noteId) {
+        return (NotesService.tabsData.tabs ?? []).find(tab => tab.noteId === noteId) ?? null;
     }
 
-    function addNewTab() {
-        const newTabIndex = root.tabsData.tabs.length;
-        const newTab = {
-            title: "Tab " + (newTabIndex + 1),
-            icon: "article",
-            content: ""
-        };
-        
-        let newTabs = root.tabsData.tabs.slice();
-        newTabs.push(newTab);
-        
-        root.tabsData = { tabs: newTabs };
-        NotesService.replaceTabs(root.tabsData);
-        
-        root.changeCurrentTab(newTabIndex);
-        Qt.callLater(() => {
-            loadTabContent(newTabIndex);
-            focusAtEnd();
-        });
+    function isRich(noteId) {
+        const document = NotesService.documentOf(noteId);
+        return !!document && (document.blocks ?? []).some(item => root.richBlockTypes.includes(item.type));
     }
 
-    function deleteCurrentTab() {
-        if (root.tabsData.tabs.length <= 1) {
-            let newTabs = [{
-                title: "Tab 1",
-                icon: "article",
-                content: ""
-            }];
-            root.tabsData = { tabs: newTabs };
-            Persistent.states.overlay.notes.tabIndex = 0;
-            root.content = "";
-            NotesService.replaceTabs(root.tabsData);
-            Qt.callLater(() => {
-                updateCopyListEntries();
-            });
+    /// What the field shows. A read-only note is rendered as markdown, and its images
+    /// become their captions: the renderer would go and fetch them, local or remote.
+    function shownText(content) {
+        return root.editable ? content : content.replace(/!\[([^\]]*)\]\([^)]*\)/g, "[$1]");
+    }
+
+    function openNote(noteId) {
+        const note = NotesService.noteById(noteId);
+        if (!note && noteId !== root.pendingNoteId)
+            return;
+        // Locked notes stay behind the app's PIN.
+        if (note?.locked) {
+            root.openInApp(noteId);
             return;
         }
-
-        const deletedIndex = currentTabIndex;
-        let newTabs = root.tabsData.tabs.slice();
-        newTabs.splice(deletedIndex, 1);
-
-        const newIndex = Math.min(deletedIndex, newTabs.length - 1);
-
-        root.tabsData = { tabs: newTabs };
-        Persistent.states.overlay.notes.tabIndex = newIndex;
-        root.content = newTabs[newIndex].content || "";
-
-        NotesService.replaceTabs(root.tabsData);
-
-        Qt.callLater(() => {
-            updateCopyListEntries();
-        });
+        if (saveDebounce.running) {
+            saveDebounce.stop();
+            root.saveNow();
+        }
+        const tab = root.tabOf(noteId);
+        root.currentNoteId = noteId;
+        root.editable = !root.isRich(noteId);
+        root.savedText = tab?.content ?? "";
+        textInput.text = root.shownText(root.savedText);
+        titleInput.text = note?.title ?? "";
+        if (note)
+            Persistent.states.overlay.notes.tabIndex = NotesService.noteIndexOf(noteId);
+        root.updateCopyListEntries();
     }
 
+    function closeNote() {
+        if (saveDebounce.running) {
+            saveDebounce.stop();
+            root.saveNow();
+        }
+        root.commitTitle();
+        root.currentNoteId = "";
+        root.pendingNoteId = "";
+        root.copyListEntries = [];
+    }
 
-    function focusAtEnd() {
-        if (!textInput)
+    function newNote() {
+        if (!NotesService.ready)
             return;
-        textInput.forceActiveFocus();
-        const endPos = root.content.length;
-        applySelection(endPos, endPos);
+        root.closeNote();
+        root.pendingNoteId = NotesService.createNote({ title: "" });
+        root.openNote(root.pendingNoteId);
+        Qt.callLater(() => textInput.forceActiveFocus());
     }
 
-    function applySelection(cursorPos, anchorPos) {
-        if (!textInput)
+    function captureNote() {
+        const text = quickInput.text.trim();
+        if (text.length === 0)
             return;
-        const textLength = root.content.length;
-        const cursor = Math.max(0, Math.min(cursorPos, textLength));
-        const anchor = Math.max(0, Math.min(anchorPos, textLength));
-        textInput.select(anchor, cursor);
-        if (cursor === anchor)
-            textInput.deselect();
+        // Keep the draft if the service cannot save it yet.
+        const result = NotesService.create(text.split("\n")[0].slice(0, 80), text, null);
+        if (result.ok)
+            quickInput.text = "";
     }
+
+    function deleteCurrentNote() {
+        const noteId = root.currentNoteId;
+        saveDebounce.stop();
+        root.currentNoteId = "";
+        root.copyListEntries = [];
+        NotesService.deleteNote(noteId);
+    }
+
+    function openInApp(noteId) {
+        root.closeNote();
+        GlobalStates.notesOpen = false;
+        GlobalStates.openNotes(noteId);
+    }
+
+    function saveNow() {
+        if (!root.editing || !root.editable)
+            return;
+        const text = textInput.text;
+        if (text === root.savedText)
+            return;
+        if (root.currentNoteId !== root.pendingNoteId && NotesService.noteIndexOf(root.currentNoteId) < 0)
+            return;
+        root.savedText = text;
+        NotesService.updateTabById(root.currentNoteId, text);
+        NotesService.rebuildProjection();
+    }
+
+    function commitTitle() {
+        if (!root.editing)
+            return;
+        const note = NotesService.noteById(root.currentNoteId);
+        const title = titleInput.text.trim();
+        if (note && note.title !== title)
+            NotesService.updateMeta(root.currentNoteId, { title: title });
+    }
+
+    function syncFromService() {
+        if (!root.editing)
+            return;
+        const note = NotesService.noteById(root.currentNoteId);
+        if (!note && root.currentNoteId === root.pendingNoteId)
+            return;
+        if (note && root.currentNoteId === root.pendingNoteId) {
+            root.pendingNoteId = "";
+            Persistent.states.overlay.notes.tabIndex = NotesService.noteIndexOf(note.id);
+        }
+        if (!note || note.trashedAt !== 0 || note.locked) {
+            // Removed or locked from somewhere else while open here.
+            saveDebounce.stop();
+            root.currentNoteId = "";
+            root.copyListEntries = [];
+            return;
+        }
+        const wasEditable = root.editable;
+        root.editable = !root.isRich(root.currentNoteId);
+        if (!titleInput.activeFocus && titleInput.text !== note.title)
+            titleInput.text = note.title;
+        const content = root.tabOf(root.currentNoteId)?.content ?? "";
+        if (root.editable !== wasEditable) {
+            saveDebounce.stop();
+            root.savedText = content;
+            textInput.text = root.shownText(content);
+            return;
+        }
+        if (saveDebounce.running || content === root.savedText || content === textInput.text)
+            return;
+        // Edited elsewhere: take the new text, keeping the caret where it was.
+        const cursor = textInput.cursorPosition;
+        root.savedText = content;
+        textInput.text = root.shownText(content);
+        textInput.cursorPosition = Math.min(cursor, content.length);
+    }
+
+    // ── Copyable bullets ─────────────────────────────────────────────────
 
     function scheduleCopylistUpdate(immediate = false) {
-        if (!textInput)
-            return;
         if (immediate) {
-            if (copyListDebounce) copyListDebounce.stop();
-            updateCopyListEntries();
+            copyListDebounce.stop();
+            root.updateCopyListEntries();
         } else {
             copyListDebounce.restart();
         }
     }
 
     function updateCopyListEntries() {
-        if (!textInput)
-            return;
-        const textValue = root.content;
-        if (!textValue || textValue.length === 0) {
-            lastParsedCopylistText = "";
-            parsedCopylistLines = [];
+        const textValue = textInput.text;
+        if (!root.editing || !root.editable || textValue.length === 0) {
+            root.lastParsedCopylistText = "";
+            root.parsedCopylistLines = [];
             root.copyListEntries = [];
             return;
         }
 
-        if (textValue !== lastParsedCopylistText) {
+        if (textValue !== root.lastParsedCopylistText) {
             const lineRegex = /(.*?)(\r?\n|$)/g;
             let match = null;
             const parsed = [];
             while ((match = lineRegex.exec(textValue)) !== null) {
                 const lineText = match[1];
-                const newlineText = match[2];
                 const lineStart = match.index;
-                const lineEnd = lineStart + lineText.length;
                 const bulletMatch = lineText.match(/^\s*-\s+(.*\S)\s*$/);
                 if (bulletMatch) {
                     parsed.push({
                         content: bulletMatch[1].trim(),
                         start: lineStart,
-                        end: lineEnd
+                        end: lineStart + lineText.length
                     });
                 }
-                if (newlineText === "")
+                if (match[2] === "")
                     break;
             }
-            lastParsedCopylistText = textValue;
-            parsedCopylistLines = parsed;
+            root.lastParsedCopylistText = textValue;
+            root.parsedCopylistLines = parsed;
             if (parsed.length === 0) {
                 root.copyListEntries = [];
                 return;
             }
         }
 
-        updateCopylistPositions();
+        root.updateCopylistPositions();
     }
 
     function updateCopylistPositions() {
-        if (!textInput || parsedCopylistLines.length === 0)
+        if (root.parsedCopylistLines.length === 0)
             return;
         const rawSelectionStart = textInput.selectionStart;
         const rawSelectionEnd = textInput.selectionEnd;
@@ -218,10 +279,9 @@ OverlayBackground {
         const rangeStart = Math.min(selectionStart, selectionEnd);
         const rangeEnd = Math.max(selectionStart, selectionEnd);
 
-        const entries = parsedCopylistLines.map(line => {
+        root.copyListEntries = root.parsedCopylistLines.map(line => {
             // Don't show copy button if line is (partially) selected
-            const caretIntersects = rangeEnd > line.start && rangeStart <= line.end;
-            if (caretIntersects)
+            if (rangeEnd > line.start && rangeStart <= line.end)
                 return null;
             const startRect = textInput.positionToRectangle(line.start);
             let endRect = textInput.positionToRectangle(line.end);
@@ -230,244 +290,278 @@ OverlayBackground {
             if (!isFinite(endRect.y))
                 endRect = startRect;
             const lineBottom = endRect.y + endRect.height;
-            const rectHeight = Math.max(lineBottom - startRect.y, textInput.font.pixelSize + 8);
             return {
                 content: line.content,
                 y: startRect.y,
-                height: rectHeight
+                height: Math.max(lineBottom - startRect.y, textInput.font.pixelSize + 8)
             };
         }).filter(entry => entry !== null);
-
-        root.copyListEntries = entries;
     }
 
-    implicitWidth: 300
-    implicitHeight: 200
+    Timer {
+        id: saveDebounce
+        interval: 500
+        onTriggered: root.saveNow()
+    }
+
+    Timer {
+        id: copyListDebounce
+        interval: 100
+        onTriggered: root.updateCopylistPositions()
+    }
 
     ColumnLayout {
-        id: contentItem
-        property int margin: Config.options.overlay.notes.showTabs ? 26 : 14
         anchors {
             fill: parent
-            leftMargin: margin
-            rightMargin: margin
-            topMargin: margin 
+            margins: 12
         }
-        spacing: 14
+        spacing: 8
 
-        
-
-        Loader {
+        // ── Header ───────────────────────────────────────────────────────
+        RowLayout {
             Layout.fillWidth: true
-            active: Config.options.overlay.notes.showTabs
-            sourceComponent: RowLayout {
+            spacing: 4
+
+            HeaderButton {
+                visible: root.editing
+                symbol: "arrow_back"
+                tooltip: Translation.tr("All notes")
+                onClicked: root.closeNote()
+            }
+
+            StyledText {
+                visible: !root.editing
                 Layout.fillWidth: true
+                Layout.leftMargin: 4
+                text: Translation.tr("%1 notes").arg(String(root.noteRows.length))
+                font.pixelSize: Appearance.font.pixelSize.small
+                color: Appearance.colors.colSubtext
+            }
 
-                ConfigSelectionArray {
-                    currentValue: root.currentTabIndex
-                    Layout.fillWidth: true
-                    
-                    onSelected: newValue => {
-                        if (root.tabEditModeEnabled) return;
+            StyledTextInput {
+                id: titleInput
+                visible: root.editing
+                Layout.fillWidth: true
+                clip: true
+                readOnly: !root.editable
+                font.pixelSize: Appearance.font.pixelSize.normal
+                font.weight: Font.DemiBold
+                selectByMouse: true
+                onEditingFinished: root.commitTitle()
+                onAccepted: textInput.forceActiveFocus()
 
-                        saveToFile();
-                        root.content = "";
-                        root.changeCurrentTab(newValue);
-
-                        Qt.callLater(() => loadTabContent(newValue));
-                    }
-
-                    options: root.tabOptions
+                StyledText {
+                    anchors.fill: parent
+                    verticalAlignment: Text.AlignVCenter
+                    visible: titleInput.text.length === 0
+                    text: Translation.tr("Untitled note")
+                    font.pixelSize: titleInput.font.pixelSize
+                    font.weight: Font.DemiBold
+                    color: Appearance.colors.colSubtext
                 }
+            }
+
+            HeaderButton {
+                visible: !root.editing
+                enabled: NotesService.ready
+                symbol: "add"
+                tooltip: Translation.tr("New note")
+                onClicked: root.newNote()
+            }
+
+            HeaderButton {
+                visible: root.editing
+                symbol: "delete"
+                tooltip: Translation.tr("Move to trash")
+                onClicked: root.deleteCurrentNote()
+            }
+
+            HeaderButton {
+                symbol: "open_in_new"
+                tooltip: Translation.tr("Open in Notes")
+                onClicked: root.openInApp(root.currentNoteId)
+            }
+        }
+
+        // ── All notes ────────────────────────────────────────────────────
+        Rectangle {
+            visible: !root.editing
+            Layout.fillWidth: true
+            implicitHeight: 38
+            radius: Appearance.rounding.full
+            color: quickInput.activeFocus ? Appearance.m3colors.m3surfaceContainerHighest : Appearance.m3colors.m3surfaceContainerHigh
+
+            Behavior on color {
+                ColorAnimation { duration: Appearance.animation.elementMoveFast.duration }
+            }
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 12
+                anchors.rightMargin: 6
+                spacing: 8
 
                 MaterialSymbol {
-                    text: "info"
-                    iconSize: Appearance.font.pixelSize.large
-                    
-                    color: Appearance.colors.colSubtext
-                    MouseArea {
-                        id: infoMouseArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.WhatsThisCursor
-                        StyledToolTip {
-                            extraVisibleCondition: false
-                            alternativeVisibleCondition: infoMouseArea.containsMouse
-                            text: Translation.tr("You can delete a tab with SHIFT+DELETE")
-                        }
-                    }
+                    text: "edit_note"
+                    iconSize: Appearance.font.pixelSize.larger
+                    color: Appearance.colors.colPrimary
                 }
 
-                ConfigSelectionArray {
-                    currentValue: root.tabEditModeEnabled ? 0 : -1
-                    Layout.fillWidth: false
-                    options: [
-                        {
-                            displayName: "",
-                            icon: "edit",
-                            value: 0,
-                            releaseAction: (() => root.tabEditModeEnabled = !root.tabEditModeEnabled)
-                        },
-                        {
-                            displayName: "",
-                            icon: "add",
-                            value: 1,
-                            releaseAction: (() => root.addNewTab())
-                        },
-                        {
-                            displayName: "",
-                            icon: "delete",
-                            value: 2,
-                            releaseAction: (() => root.deleteCurrentTab())
-                        },
-                        {
-                            displayName: "",
-                            icon: "draw",
-                            value: 3,
-                            releaseAction: (() => root.sketchEditorOpen = true)
-                        },
-                        {
-                            displayName: "",
-                            icon: "open_in_new",
-                            value: 4,
-                            releaseAction: (() => {
-                                const currentTab = root.tabsData.tabs[root.currentTabIndex];
-                                const noteId = currentTab?.noteId ?? "";
-                                GlobalStates.notesOpen = false;
-                                GlobalStates.openNotes(noteId);
-                            })
-                        }
-                    ]
-                }
-            }
-        }
-        
-        Loader {
-            Layout.fillWidth: true
-            active: Config.options.overlay.notes.showTabs
-            sourceComponent: RowLayout {
-                Layout.fillWidth: true
-                Item {
+                StyledTextInput {
+                    id: quickInput
                     Layout.fillWidth: true
-                }
+                    clip: true
+                    selectByMouse: true
+                    Accessible.name: Translation.tr("Quick note")
+                    onAccepted: root.captureNote()
 
-                // Always loaded, and zero pixels tall until it is wanted. Reading the
-                // loaded item's height inside `active` — to keep it alive for the collapse
-                // animation — is a binding that depends on its own result, and Qt said so
-                // on every open.
-                TitleEditComp {
-                    Layout.fillWidth: false
-                }
-            }
-        }
-        
-        Keys.onPressed: event => {
-            if (event.key === Qt.Key_Delete && event.modifiers & Qt.ShiftModifier) {
-                root.deleteCurrentTab();
-            }
-        }
-
-        /**
-         * The drawing, when the note is one.
-         *
-         * A sketch note carries a path rather than pixels — notes.json is rewritten on
-         * every keystroke and a base64 PNG inside it would travel through that loop for
-         * every character typed in an unrelated tab. So the note shows the file, and the
-         * text field underneath stays exactly what it was, for anything the drawing needs
-         * said about it.
-         */
-        Loader {
-            id: sketchLoader
-            readonly property string sketchPath: root.currentSketch
-            Layout.fillWidth: true
-            Layout.maximumHeight: root.height * 0.55
-            active: sketchLoader.sketchPath.length > 0
-
-            sourceComponent: Rectangle {
-                implicitHeight: Math.min(sketchImage.implicitHeight + 20,
-                                         sketchLoader.Layout.maximumHeight)
-                radius: Appearance.rounding.normal
-                color: Appearance.colors.colLayer2
-
-                Image {
-                    id: sketchImage
-                    anchors.fill: parent
-                    anchors.margins: 10
-                    source: `file://${sketchLoader.sketchPath}`
-                    fillMode: Image.PreserveAspectFit
-                    // Drawn on a surface of our own rather than on the wallpaper it was
-                    // made over, so the ink needs somewhere with contrast to sit.
-                    smooth: true
-                    asynchronous: true
-                }
-
-                // A file someone moved or deleted: the note still exists and still says
-                // what it is, instead of showing an empty box.
-                StyledText {
-                    anchors.centerIn: parent
-                    visible: sketchImage.status === Image.Error
-                    text: Translation.tr("This drawing's file is missing.")
-                    color: Appearance.colors.colSubtext
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                }
-
-                // Tap the drawing to carry on with it. The alternative — hunting for the
-                // pencil in the tab row — treats the picture as decoration rather than as
-                // the part of the note you came back to work on.
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root.sketchEditorOpen = true
-                    StyledToolTip {
-                        text: Translation.tr("Tap to keep drawing")
+                    StyledText {
+                        anchors.fill: parent
+                        verticalAlignment: Text.AlignVCenter
+                        visible: quickInput.text.length === 0
+                        text: Translation.tr("Quick note…")
+                        font.pixelSize: quickInput.font.pixelSize
+                        color: Appearance.colors.colSubtext
                     }
+                }
+
+                RippleButton {
+                    implicitWidth: 32
+                    implicitHeight: 26
+                    visible: quickInput.text.trim().length > 0
+                    enabled: NotesService.ready
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: Appearance.colors.colPrimary
+                    colBackgroundHover: Appearance.colors.colPrimaryHover
+                    onClicked: root.captureNote()
+
+                    contentItem: MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "arrow_upward"
+                        iconSize: Appearance.font.pixelSize.normal
+                        color: Appearance.colors.colOnPrimary
+                    }
+
+                    StyledToolTip {
+                        text: Translation.tr("Save note")
+                    }
+                }
+            }
+        }
+
+        Item {
+            visible: !root.editing
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+
+            ColumnLayout {
+                anchors.centerIn: parent
+                visible: root.noteRows.length === 0
+                spacing: 6
+
+                MaterialSymbol {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: "note_stack"
+                    iconSize: 36
+                    color: Appearance.colors.colSubtext
+                }
+
+                StyledText {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: Translation.tr("No notes yet")
+                    color: Appearance.colors.colSubtext
+                }
+            }
+
+            ListView {
+                id: listView
+                anchors.fill: parent
+                clip: true
+                spacing: 4
+                model: root.noteRows
+                boundsBehavior: Flickable.StopAtBounds
+                ScrollBar.vertical: StyledScrollBar {}
+
+                delegate: NoteRow {}
+
+                TouchpadScrollHandler {
+                    flickable: listView
+                }
+            }
+        }
+
+        // ── One note ─────────────────────────────────────────────────────
+        RippleButton {
+            visible: root.editing && !root.editable
+            Layout.fillWidth: true
+            implicitHeight: 32
+            buttonRadius: Appearance.rounding.small
+            colBackground: Appearance.colors.colSecondaryContainer
+            colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+            onClicked: root.openInApp(root.currentNoteId)
+
+            contentItem: RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 10
+                anchors.rightMargin: 10
+                spacing: 8
+
+                MaterialSymbol {
+                    text: "visibility"
+                    iconSize: Appearance.font.pixelSize.normal
+                    color: Appearance.colors.colOnSecondaryContainer
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: Translation.tr("Has tables or media — edit it in Notes")
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: Appearance.colors.colOnSecondaryContainer
+                    elide: Text.ElideRight
                 }
             }
         }
 
         ScrollView {
             id: editorScrollView
+            visible: root.editing
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.topMargin: -12
             clip: true
             ScrollBar.vertical.policy: ScrollBar.AsNeeded
             onWidthChanged: root.scheduleCopylistUpdate(true)
 
-            
-
             StyledTextArea { // This has to be a direct child of ScrollView for proper scrolling
                 id: textInput
-                anchors.fill: parent
                 wrapMode: TextEdit.Wrap
-                implicitWidth: parent.implicitWidth - padding * 2 - 6
-                placeholderText: Translation.tr("Write something here...\nUse '-' to create copyable bullet points, like this:\n\nSheep fricker\n- 4x Slab\n- 1x Boat\n- 4x Redstone Dust\n- 1x Sticky Piston\n- 1x End Rod\n- 4x Redstone Repeater\n- 1x Redstone Torch\n- 1x Sheep")
+                readOnly: !root.editable
+                placeholderText: Translation.tr("Write something…\nLines starting with '-' get a copy button.")
                 selectByMouse: true
                 persistentSelection: true
-                textFormat: TextEdit.PlainText
+                // Read-only notes are shown rendered; plain text is what gets edited.
+                textFormat: root.editable ? TextEdit.PlainText : TextEdit.MarkdownText
                 background: null
-                padding: 12
+                padding: 4
 
                 onTextChanged: {
-                    saveDebounce.restart();
+                    if (root.editing && text !== root.savedText)
+                        saveDebounce.restart();
                     root.scheduleCopylistUpdate(true);
                 }
-
-                Keys.onPressed: event => {
-                    if (event.key === Qt.Key_Delete && event.modifiers & Qt.ShiftModifier) {
-                        root.deleteCurrentTab();
-                    }
-                }
-                
                 onHeightChanged: root.scheduleCopylistUpdate(true)
                 onContentHeightChanged: root.scheduleCopylistUpdate(true)
                 onCursorPositionChanged: root.scheduleCopylistUpdate()
                 onSelectionStartChanged: root.scheduleCopylistUpdate()
                 onSelectionEndChanged: root.scheduleCopylistUpdate()
+
+                TouchpadScrollHandler {
+                    flickable: editorScrollView.contentItem
+                }
             }
 
             Item {
-                anchors.fill: parent
+                width: editorScrollView.availableWidth
+                height: textInput.height
                 visible: root.copyListEntries.length > 0
                 clip: true
 
@@ -479,8 +573,6 @@ OverlayBackground {
                         id: copyButton
                         required property var modelData
                         readonly property real lineHeight: Math.min(Math.max(modelData.height, Appearance.font.pixelSize.normal + 6), root.maxCopyButtonSize)
-                        readonly property real iconSizeLocal: Appearance.font.pixelSize.normal
-                        readonly property real hitPadding: 4
                         property bool justCopied: false
 
                         implicitHeight: lineHeight
@@ -488,15 +580,13 @@ OverlayBackground {
                         buttonRadius: height / 2
                         y: modelData.y
                         anchors.right: parent.right
-                        anchors.rightMargin: -hitPadding
+                        anchors.rightMargin: -4
                         z: 5
 
                         Timer {
                             id: resetState
                             interval: 700
-                            onTriggered: {
-                                copyButton.justCopied = false;
-                            }
+                            onTriggered: copyButton.justCopied = false
                         }
 
                         onClicked: {
@@ -508,10 +598,9 @@ OverlayBackground {
                         contentItem: Item {
                             anchors.centerIn: parent
                             MaterialSymbol {
-                                id: iconItem
                                 anchors.centerIn: parent
                                 text: copyButton.justCopied ? "check" : "content_copy"
-                                iconSize: copyButton.iconSizeLocal
+                                iconSize: Appearance.font.pixelSize.normal
                                 color: Appearance.colors.colOnLayer1
                             }
                         }
@@ -521,115 +610,105 @@ OverlayBackground {
         }
 
         StyledText {
-            id: statusLabel
+            visible: root.editing && root.editable
             Layout.fillWidth: true
-            Layout.margins: 16
             horizontalAlignment: Text.AlignRight
-            text: saveDebounce.running || NotesService.writing || NotesService.pendingData !== null
+            text: saveDebounce.running || NotesService.writing
                 ? Translation.tr("Saving...")
-                : Translation.tr("Saved    ")
+                : Translation.tr("Saved")
+            font.pixelSize: Appearance.font.pixelSize.smaller
             color: Appearance.colors.colSubtext
         }
     }
 
-    Timer {
-        id: saveDebounce
-        interval: 500
-        repeat: false
-        onTriggered: saveToFile()
+    component HeaderButton: RippleButton {
+        id: headerButton
+        property string symbol
+        property string tooltip
+
+        implicitWidth: 30
+        implicitHeight: 30
+        buttonRadius: Appearance.rounding.full
+        colBackgroundHover: Appearance.m3colors.m3surfaceContainerHighest
+
+        contentItem: MaterialSymbol {
+            anchors.centerIn: parent
+            text: headerButton.symbol
+            iconSize: Appearance.font.pixelSize.larger
+            color: Appearance.colors.colOnLayer1
+        }
+
+        StyledToolTip {
+            text: headerButton.tooltip
+        }
     }
 
-    Timer {
-        id: copyListDebounce
-        interval: 100
-        repeat: false
-        onTriggered: updateCopylistPositions()
-    }
-
-    component TitleEditComp: Row {
+    component NoteRow: Rectangle {
         id: row
-        spacing: 4
+        required property var modelData
 
-        property bool editMode: root.tabEditModeEnabled
-        // The height *is* the state: fifty while editing, nothing otherwise, animated
-        // between the two. Nobody has to keep it alive to watch it fold away.
-        height: row.editMode ? 50 : 0
-        clip: true
+        width: ListView.view.width
+        implicitHeight: 48
+        radius: Appearance.rounding.small
+        color: rowArea.containsMouse ? Appearance.m3colors.m3surfaceContainerHighest : Appearance.m3colors.m3surfaceContainerHigh
 
-        function updateTitle(disableEditMode = false) {
-            let newTabs = root.tabsData.tabs.slice();
-            // Everything the tab already carried, with the two edited fields over the top.
-            // Rebuilt from scratch it lost its `noteId`, and a tab with no id is a tab the
-            // service has never seen: renaming one made a *second* note with the same text
-            // and left the first orphaned in the store.
-            newTabs[currentTabIndex] = Object.assign({}, newTabs[currentTabIndex], {
-                title: titleInput.text.split("\n")[0],  // only getting the first line
-                icon: iconInput.text.split("\n")[0]
-            });
-            
-            if (disableEditMode) root.tabEditModeEnabled = false;
-
-            root.tabsData = { tabs: newTabs };
-            NotesService.updateTabMetadata(currentTabIndex, newTabs[currentTabIndex].title, newTabs[currentTabIndex].icon);
+        Behavior on color {
+            ColorAnimation { duration: Appearance.animation.elementMoveFast.duration }
         }
 
-        Behavior on height {
-            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        MouseArea {
+            id: rowArea
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.openNote(row.modelData.id)
         }
 
-        EditInput {
-            id: iconInput
-            visible: Config.options.overlay.notes.allowEditingIcon
-            placeholderText: Translation.tr("Icon")
-            text: root.tabsData.tabs[currentTabIndex].icon
-        }
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 10
+            anchors.rightMargin: 10
+            spacing: 10
 
-        EditInput {
-            id: titleInput
-            placeholderText: Translation.tr("Title")
-            text: root.tabsData.tabs[currentTabIndex].title
-        }        
-
-    }
-
-
-    /**
-     * The sketch editor, over the note it belongs to.
-     *
-     * A Loader so a note nobody is drawing in costs nothing: the editor carries two
-     * canvases and an image, and the notes panel is small and often open.
-     */
-    Loader {
-        anchors.fill: parent
-        active: root.sketchEditorOpen
-        z: 100
-
-        sourceComponent: NotesSketchEditor {
-            existingSketch: root.currentSketch
-
-            onSaved: path => {
-                NotesService.setSketch(root.currentTabIndex, path);
-                root.sketchEditorOpen = false;
+            MaterialSymbol {
+                text: row.modelData.locked ? "lock"
+                    : (row.modelData.icon && row.modelData.icon.length > 0 ? row.modelData.icon : "description")
+                iconSize: Appearance.font.pixelSize.larger
+                color: row.modelData.favorite ? Appearance.colors.colPrimary : Appearance.colors.colSubtext
             }
-            onCancelled: root.sketchEditorOpen = false
-        }
-    }
 
-    component EditInput: MaterialTextArea {
-        property int textAreaPadding: 6
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 0
 
-        implicitWidth: 150
-        implicitHeight: parent.height
-        placeholderTextColor: height >= 40 ? Appearance.m3colors.m3outline : "transparent"  
+                StyledText {
+                    Layout.fillWidth: true
+                    text: row.modelData.title && row.modelData.title.length > 0
+                        ? row.modelData.title
+                        : Translation.tr("Untitled note")
+                    font.weight: Font.DemiBold
+                    color: Appearance.colors.colOnLayer1
+                    elide: Text.ElideRight
+                }
 
-        Keys.onPressed: event => {
-            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                row.updateTitle(true);
+                StyledText {
+                    Layout.fillWidth: true
+                    text: row.modelData.locked ? Translation.tr("Locked")
+                        : (row.modelData.preview && row.modelData.preview.length > 0
+                            ? row.modelData.preview.replace(/\s+/g, " ")
+                            : Translation.tr("Empty note"))
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: Appearance.colors.colSubtext
+                    elide: Text.ElideRight
+                }
+            }
+
+            MaterialSymbol {
+                visible: row.modelData.pinned
+                text: "keep"
+                iconSize: 14
+                color: Appearance.colors.colSubtext
             }
         }
-
-        anchors.top: parent.top
-        anchors.topMargin: -textAreaPadding
-        topInset: textAreaPadding
     }
 }

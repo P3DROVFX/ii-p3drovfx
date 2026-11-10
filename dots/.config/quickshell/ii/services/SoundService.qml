@@ -176,6 +176,10 @@ Singleton {
     }
 
     property int _poolIndex: 0
+    // Reduced from 8000 to 3000: the QtMultimedia backend (ffmpeg + libpulse/PipeWire + VA-API)
+    // keeps 80-100 MB resident while any MediaPlayer exists. 3s is enough to cover
+    // rapid consecutive sounds (notification bursts) without holding the backend idle.
+    readonly property int playersIdleUnloadMs: 3000
     function _playUrl(url, dedicatedPlayerName) {
         const players = root._ensurePlayers();
         let player = dedicatedPlayerName === "blip" ? players.blipPlayer : (dedicatedPlayerName === "preview" ? players.previewPlayer : null);
@@ -186,6 +190,9 @@ Singleton {
         player.stop();
         player.source = url;
         player.play();
+        // Keep a short safety timeout for decode failures, but let playback
+        // state changes cancel it for long custom notification sounds.
+        playersUnloadTimer.restart();
     }
 
     // Continuous ring for alarms; bypasses the master switch on purpose:
@@ -195,6 +202,7 @@ Singleton {
         const url = root._customUrl(category) || root.resolve(events);
         if (url === "") return;
         const players = root._ensurePlayers();
+        playersUnloadTimer.stop();
         players.loopFadeAnim.stop();
         players.loopPlayer.stop();
         players.loopPlayer.volumeScale = 1;
@@ -212,17 +220,20 @@ Singleton {
         if (!playersLoader.item) return;
         playersLoader.item.loopFadeAnim.stop();
         playersLoader.item.loopPlayer.stop();
+        playersUnloadTimer.restart();
     }
 
     // Instantiating MediaPlayer/MediaDevices links QtMultimedia's backend — ffmpeg, VA-API and
     // libpulse — and starts an audio thread, none of which is needed until a sound actually
-    // plays. The pool is therefore built on first playback and then kept for the rest of the
-    // session, exactly as if it had been created at startup.
+    // plays. Keep the pool lazy and tear it down after a quiet period; event sounds are short
+    // and the next playback simply rebuilds the small pool.
     component EventPlayer: MediaPlayer {
         id: eventPlayer
 
         property real volumeScale: 1
         required property var outputDevice
+
+        onPlaybackStateChanged: root._handlePlayerStateChanged(eventPlayer)
 
         audioOutput: AudioOutput {
             // Explicitly follow the system default so event sounds move with
@@ -233,11 +244,21 @@ Singleton {
     }
 
     component SoundPlayers: Item {
-        readonly property list<MediaPlayer> pool: [player0, player1, player2]
+        readonly property list<MediaPlayer> pool: [player0, player1]
+        readonly property list<MediaPlayer> allPlayers: [player0, player1, blip, preview, loop]
         readonly property MediaPlayer blipPlayer: blip
         readonly property MediaPlayer previewPlayer: preview
         readonly property MediaPlayer loopPlayer: loop
         readonly property NumberAnimation loopFadeAnim: loopFade
+
+        function stopAll() {
+            loopFade.stop();
+            player0.stop();
+            player1.stop();
+            blip.stop();
+            preview.stop();
+            loop.stop();
+        }
 
         MediaDevices {
             id: mediaDevices
@@ -245,7 +266,6 @@ Singleton {
 
         EventPlayer { id: player0; outputDevice: mediaDevices.defaultAudioOutput }
         EventPlayer { id: player1; outputDevice: mediaDevices.defaultAudioOutput }
-        EventPlayer { id: player2; outputDevice: mediaDevices.defaultAudioOutput }
 
         EventPlayer { id: blip; outputDevice: mediaDevices.defaultAudioOutput }
 
@@ -280,9 +300,45 @@ Singleton {
         sourceComponent: SoundPlayers {}
     }
 
+    Timer {
+        id: playersUnloadTimer
+        interval: root.playersIdleUnloadMs
+        repeat: false
+        onTriggered: root._releasePlayers()
+    }
+
     function _ensurePlayers() {
+        playersUnloadTimer.stop();
         playersLoader.active = true;
         return playersLoader.item;
+    }
+
+    function _handlePlayerStateChanged(player) {
+        if (!playersLoader.item)
+            return;
+        if (player.playbackState === MediaPlayer.PlayingState) {
+            playersUnloadTimer.stop();
+            return;
+        }
+        root._schedulePlayersUnload();
+    }
+
+    function _schedulePlayersUnload() {
+        const players = playersLoader.item;
+        if (!players)
+            return;
+        const active = Array.from(players.allPlayers)
+            .some(player => player.playbackState === MediaPlayer.PlayingState);
+        if (!active)
+            playersUnloadTimer.restart();
+    }
+
+    function _releasePlayers() {
+        if (!playersLoader.item)
+            return;
+        playersLoader.item.stopAll();
+        playersLoader.active = false;
+        root._poolIndex = 0;
     }
 
     // Screen lock/unlock. No mainstream theme ships screen-locked/unlocked

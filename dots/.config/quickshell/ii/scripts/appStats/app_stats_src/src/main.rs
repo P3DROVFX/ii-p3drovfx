@@ -20,8 +20,10 @@
 
 mod battery;
 mod energy;
+mod exact;
 mod gpu;
 mod hypr;
+mod net;
 mod procs;
 mod store;
 
@@ -43,6 +45,7 @@ const SYSTEM_KEY: &str = "__system";
 
 pub enum Msg {
     WindowsChanged,
+    SocketClosed(net::Sock),
     Stdin(String),
     Tick,
     Shutdown,
@@ -61,6 +64,11 @@ struct Args {
     /// backstop — a new window triggers one immediately, and that is how a newly
     /// launched app is normally picked up.
     gpu_full_every: u32,
+    /// Per-app TCP data, from the socket diagnostics dump. Off skips the dump and
+    /// the fd walk entirely.
+    track_network: bool,
+    /// The eBPF helper to try first; without it the socket counters are used.
+    net_helper: String,
     quiet: bool,
 }
 
@@ -84,6 +92,8 @@ impl Args {
             energy_source: "auto".into(),
             track_headless: true,
             gpu_full_every: 30,
+            track_network: true,
+            net_helper: exact::DEFAULT_PATH.into(),
             quiet: false,
         };
 
@@ -113,6 +123,8 @@ impl Args {
                     a.gpu_full_every = value().parse().unwrap_or(a.gpu_full_every)
                 }
                 "--no-headless" => a.track_headless = false,
+                "--no-network" => a.track_network = false,
+                "--net-helper" => a.net_helper = value(),
                 "--quiet" => a.quiet = true,
                 _ => {}
             }
@@ -196,6 +208,29 @@ struct Tracker {
     ticks_since_full_gpu: u32,
     gpu_rescan_pending: bool,
 
+    /// Last cumulative (rx, tx) of every socket of ours still alive, by cookie.
+    prev_net: HashMap<u64, (u64, u64)>,
+    /// The app each socket was matched to when first seen, by cookie; empty when its
+    /// process is not one the sampler tracks. Only a socket not in here costs an fd
+    /// walk, so a long-lived connection is looked up once.
+    sock_key: HashMap<u64, String>,
+    /// Final bytes of sockets freed since the last tick, by app, from the kernel's
+    /// destroy broadcast.
+    closed_tail: HashMap<String, (u64, u64)>,
+    prev_iface: HashMap<String, (u64, u64)>,
+    uid: u32,
+    /// "exact" with the eBPF helper, "sockets" on the socket counters, "off".
+    net_mode: &'static str,
+    /// Why the helper is not in use, when it is installed but failed.
+    net_error: String,
+    net_helper: Option<exact::Helper>,
+    /// Feeds the socket-close listener, started only once the socket counters are
+    /// the method in use.
+    msg_tx: Option<Sender<Msg>>,
+    /// The next socket-counter pass only takes baselines: after a fallback from the
+    /// helper, every open socket's whole history would otherwise count as new.
+    net_rebase: bool,
+
     clk_tck: u64,
     page_kib: u64,
     start_ticks: u64,
@@ -212,6 +247,9 @@ impl Tracker {
         );
         let energy = energy::Reader::new(&args.energy_source);
         let battery = battery::Reader::new();
+        // Read now rather than left false until the first tick, or the span before
+        // that tick is credited as time on battery.
+        let bat_on_ac = battery.on_ac();
         let now = store::now_ms();
 
         Tracker {
@@ -225,7 +263,7 @@ impl Tracker {
             locked: false,
             idle: false,
             dpms_off: false,
-            bat_on_ac: false,
+            bat_on_ac,
             bat_charging: false,
             last_accrual_ms: now,
             last_tick_ms: now,
@@ -237,6 +275,16 @@ impl Tracker {
             gpu_fds: HashMap::new(),
             ticks_since_full_gpu: u32::MAX,
             gpu_rescan_pending: false,
+            prev_net: HashMap::new(),
+            sock_key: HashMap::new(),
+            closed_tail: HashMap::new(),
+            prev_iface: HashMap::new(),
+            uid: unsafe { libc::getuid() },
+            net_mode: "off",
+            net_error: String::new(),
+            net_helper: None,
+            msg_tx: None,
+            net_rebase: false,
             page_kib: procs::page_size() / 1024,
             start_ticks: uptime_ticks(clk_tck),
             clk_tck,
@@ -476,6 +524,12 @@ impl Tracker {
                 b.out_uwh += uwh;
             }
             self.store.set_bat_full(full_mwh);
+        } else {
+            // The pack could not be read, but the mains line still can: crediting the
+            // next span against a state left over from before would put a night on the
+            // charger down as a night on battery.
+            self.bat_on_ac = self.battery.on_ac();
+            self.bat_charging = false;
         }
 
         let clients = self.clients.clone();
@@ -579,6 +633,21 @@ impl Tracker {
             self.prev_gpu_total = scan.total_cycles;
         }
 
+        // ---- network --------------------------------------------------------------
+        let (net_of_key, sys_rx, sys_tx) = if self.args.track_network {
+            let pids_of_key = agg
+                .iter()
+                .map(|(k, a)| (k.clone(), a.pids.clone()))
+                .collect();
+            if self.net_helper.is_some() {
+                self.sample_network_exact(&sweep, &pids_of_key, resumed)
+            } else {
+                self.sample_network(&sweep, &pids_of_key, resumed)
+            }
+        } else {
+            (HashMap::new(), 0, 0)
+        };
+
         // ---- shares ---------------------------------------------------------------
         let busy_delta = sweep.busy_ticks.saturating_sub(self.prev_busy);
         self.prev_busy = sweep.busy_ticks;
@@ -670,12 +739,20 @@ impl Tracker {
             b.uj_fg += uj_fg;
             b.uj_bg += uj - uj_fg;
 
+            // Split like energy: by how much of the interval the app spent on screen.
+            let (rx, tx) = net_of_key.get(&s.key).copied().unwrap_or((0, 0));
+            let bytes_fg = (rx + tx) * d_fg / span;
+            b.net_rx += rx;
+            b.net_tx += tx;
+            b.net_bg += rx + tx - bytes_fg;
+
             if !self.args.quiet {
                 out_apps.push(serde_json::json!({
                     "k": s.key, "exe": exe, "hl": headless,
                     "fg": d_fg, "bg": d_bg,
                     "cpu": s.cpu_ms, "gpu": s.gpu_ms, "ram": s.ram_mib,
                     "mj": uj / 1000,
+                    "rx": rx, "tx": tx,
                     "sCpu": (s.s_cpu * 1e4).round() / 1e4,
                     "sGpu": (s.s_gpu * 1e4).round() / 1e4,
                     "sMem": (s.s_mem * 1e4).round() / 1e4,
@@ -688,6 +765,38 @@ impl Tracker {
         let system_uj = e.pkg_uj.saturating_sub(attributed_uj);
         if system_uj > 0 {
             self.store.bucket(now, SYSTEM_KEY, SYSTEM_KEY, true).uj_bg += system_uj;
+        }
+        // Data of processes that have no row this tick: ones that exited before the
+        // sweep, credited to their own name. All of it background — nothing of theirs
+        // is on screen any more.
+        for (key, &(rx, tx)) in &net_of_key {
+            if agg.contains_key(key) {
+                continue;
+            }
+            let (exe, headless) = self
+                .apps
+                .get(key)
+                .map(|a| (a.exe.clone(), a.headless))
+                .unwrap_or_else(|| (key.clone(), true));
+            let b = self.store.bucket(now, key, &exe, headless);
+            b.net_rx += rx;
+            b.net_tx += tx;
+            b.net_bg += rx + tx;
+            if !self.args.quiet {
+                out_apps.push(serde_json::json!({
+                    "k": key, "exe": exe, "hl": headless, "rx": rx, "tx": tx,
+                }));
+            }
+        }
+
+        // The data no app could be credited with. With the eBPF helper that is only
+        // traffic of no socket at all (ARP, DHCP, ICMP) and link-layer framing; on the
+        // socket counters also QUIC and other UDP, connections that came and went
+        // between two samples, and other users' daemons.
+        if sys_rx + sys_tx > 0 {
+            let b = self.store.bucket(now, SYSTEM_KEY, SYSTEM_KEY, true);
+            b.net_rx += sys_rx;
+            b.net_tx += sys_tx;
         }
 
         // Apps whose last process exited stop accruing; entries with neither
@@ -709,6 +818,9 @@ impl Tracker {
                 "locked": self.locked, "idle": self.idle, "dpms": !self.dpms_off,
                 "pkgMj": e.pkg_uj / 1000,
                 "systemMj": system_uj / 1000,
+                "sysRx": sys_rx, "sysTx": sys_tx,
+                "netMode": self.net_mode,
+                "netError": self.net_error,
                 "apps": out_apps,
             }));
         }
@@ -717,6 +829,247 @@ impl Tracker {
         if now - self.last_flush_ms >= self.args.flush_ms as i64 {
             self.flush(now);
         }
+    }
+
+    /// Pick the network method: the eBPF helper when it is installed and attaches,
+    /// the socket counters otherwise. Called once, before the first tick.
+    fn start_network(&mut self, tx: Sender<Msg>) {
+        self.msg_tx = Some(tx);
+        if !self.args.track_network {
+            self.net_mode = "off";
+            return;
+        }
+        match exact::Helper::start(&self.args.net_helper) {
+            exact::Start::Ready(h) => {
+                self.net_helper = Some(h);
+                self.net_mode = "exact";
+            }
+            exact::Start::Absent => self.use_socket_counters(),
+            exact::Start::Failed(msg) => {
+                self.net_error = msg;
+                self.use_socket_counters();
+            }
+        }
+    }
+
+    fn use_socket_counters(&mut self) {
+        self.net_helper = None;
+        self.net_mode = "sockets";
+        self.net_rebase = true;
+        self.prev_net.clear();
+        self.sock_key.clear();
+        if let Some(tx) = self.msg_tx.take() {
+            thread::spawn(move || net::watch_closed(|s| tx.send(Msg::SocketClosed(s)).is_ok()));
+        }
+    }
+
+    /// The helper's per-process bytes, folded onto apps. A process still running has
+    /// its row already; one that exited before this tick is placed through the parent
+    /// it had (a curl run from a terminal belongs to the terminal), and failing that
+    /// under its own name. The remainder against the interfaces goes to the device.
+    fn sample_network_exact(
+        &mut self,
+        sweep: &procs::Sweep,
+        pids_of_key: &HashMap<String, Vec<u32>>,
+        resumed: bool,
+    ) -> (HashMap<String, (u64, u64)>, u64, u64) {
+        let dumped = self.net_helper.as_mut().and_then(|h| h.dump());
+        let ifaces = net::iface_counters();
+        let (mut dev_rx, mut dev_tx) = (0u64, 0u64);
+        for (name, &(rx, tx)) in &ifaces {
+            if let Some(&(prx, ptx)) = self.prev_iface.get(name) {
+                if rx >= prx && tx >= ptx {
+                    dev_rx += rx - prx;
+                    dev_tx += tx - ptx;
+                }
+            }
+        }
+        self.prev_iface = ifaces;
+
+        let Some(procs) = dumped else {
+            self.net_error = "the helper stopped answering".into();
+            self.use_socket_counters();
+            return (HashMap::new(), 0, 0);
+        };
+        if resumed {
+            return (HashMap::new(), 0, 0);
+        }
+
+        let mut key_of_pid: HashMap<u32, &String> = HashMap::new();
+        for (key, pids) in pids_of_key {
+            for &p in pids {
+                key_of_pid.insert(p, key);
+            }
+        }
+        let leader = |pid: u32| {
+            sweep
+                .index
+                .get(&pid)
+                .map(|&i| procs::is_session_leader(&sweep.procs[i].comm))
+                .unwrap_or(true)
+        };
+
+        let mut out: HashMap<String, (u64, u64)> = HashMap::new();
+        for p in procs {
+            let key = if let Some(k) = key_of_pid.get(&p.tgid) {
+                Some((*k).clone())
+            } else if sweep.index.contains_key(&p.tgid) {
+                // Alive, but folded onto nothing: an untracked background process.
+                None
+            } else if let Some(k) = key_of_pid.get(&p.ppid).filter(|_| !leader(p.ppid)) {
+                Some((*k).clone())
+            } else if self.args.track_headless && !p.comm.is_empty() {
+                Some(p.comm.clone())
+            } else {
+                None
+            };
+            if let Some(key) = key {
+                let e = out.entry(key).or_insert((0, 0));
+                e.0 += p.rx;
+                e.1 += p.tx;
+            }
+        }
+        let app_rx: u64 = out.values().map(|v| v.0).sum();
+        let app_tx: u64 = out.values().map(|v| v.1).sum();
+        (
+            out,
+            dev_rx.saturating_sub(app_rx),
+            dev_tx.saturating_sub(app_tx),
+        )
+    }
+
+    /// A socket the kernel freed. Its last bytes since the previous dump belong to
+    /// the app already matched to it; a socket never matched (one that came and went
+    /// between two dumps) is not ours to credit and stays in the residual.
+    fn socket_closed(&mut self, s: net::Sock) {
+        let Some((r, t)) = self.prev_net.remove(&s.cookie) else {
+            return;
+        };
+        let key = self.sock_key.remove(&s.cookie).unwrap_or_default();
+        if key.is_empty() {
+            return;
+        }
+        let e = self.closed_tail.entry(key).or_insert((0, 0));
+        e.0 += s.rx.saturating_sub(r);
+        e.1 += s.tx.saturating_sub(t);
+    }
+
+    /// This interval's TCP bytes per app key, plus the device's unattributed
+    /// remainder as (rx, tx). After a resume every counter is rebased and nothing is
+    /// credited, for the same reason the RAPL delta is dropped there.
+    fn sample_network(
+        &mut self,
+        sweep: &procs::Sweep,
+        pids_of_key: &HashMap<String, Vec<u32>>,
+        resumed: bool,
+    ) -> (HashMap<String, (u64, u64)>, u64, u64) {
+        let mut key_of_pid: HashMap<u32, &String> = HashMap::new();
+        for (key, pids) in pids_of_key {
+            for &p in pids {
+                key_of_pid.insert(p, key);
+            }
+        }
+
+        // A socket is ours once it has been seen open under our uid. After that it is
+        // followed by cookie alone: a closing socket loses both its inode and, once
+        // orphaned, its uid.
+        let socks: Vec<net::Sock> = net::dump()
+            .into_iter()
+            .filter(|s| {
+                self.prev_net.contains_key(&s.cookie) || (s.uid == self.uid && s.inode != 0)
+            })
+            .collect();
+
+        // Match every new socket to its process straight away, not only those that
+        // already moved data: one that opens just before a dump and does all its
+        // work before the next would otherwise close unmatched, and its tail with it.
+        let wanted: HashSet<u64> = socks
+            .iter()
+            .filter(|s| s.inode != 0 && !self.sock_key.contains_key(&s.cookie))
+            .map(|s| s.inode)
+            .collect();
+        if !wanted.is_empty() {
+            // App processes first: they hold nearly every socket that moves data, so
+            // the walk usually ends before it reaches the rest of /proc.
+            let mut order: Vec<u32> = pids_of_key.values().flatten().copied().collect();
+            let seen: HashSet<u32> = order.iter().copied().collect();
+            order.extend(
+                sweep
+                    .procs
+                    .iter()
+                    .map(|p| p.pid)
+                    .filter(|p| !seen.contains(p)),
+            );
+            let owners = net::owners(&order, &wanted);
+            for s in socks.iter().filter(|s| wanted.contains(&s.inode)) {
+                // An empty key marks a socket looked for and not placed (its process
+                // is not tracked, or already gone), so it is not looked for again.
+                let key = owners
+                    .get(&s.inode)
+                    .and_then(|pid| key_of_pid.get(pid))
+                    .map(|k| (*k).clone())
+                    .unwrap_or_default();
+                self.sock_key.insert(s.cookie, key);
+            }
+        }
+
+        let mut out: HashMap<String, (u64, u64)> = HashMap::new();
+        for s in &socks {
+            let prev = self.prev_net.insert(s.cookie, (s.rx, s.tx));
+            let (drx, dtx) = match prev {
+                Some((r, t)) => (s.rx.saturating_sub(r), s.tx.saturating_sub(t)),
+                // Opened since the last dump, so everything it carried is new. On the
+                // first tick it may be days old, and is only a baseline.
+                None if self.warm && !self.net_rebase => (s.rx, s.tx),
+                None => (0, 0),
+            };
+            if drx + dtx == 0 {
+                continue;
+            }
+            match self.sock_key.get(&s.cookie) {
+                Some(k) if !k.is_empty() => {
+                    let e = out.entry(k.clone()).or_insert((0, 0));
+                    e.0 += drx;
+                    e.1 += dtx;
+                }
+                _ => {}
+            }
+        }
+        for (key, (rx, tx)) in self.closed_tail.drain() {
+            let e = out.entry(key).or_insert((0, 0));
+            e.0 += rx;
+            e.1 += tx;
+        }
+
+        self.net_rebase = false;
+        let live: HashSet<u64> = socks.iter().map(|s| s.cookie).collect();
+        self.prev_net.retain(|k, _| live.contains(k));
+        self.sock_key.retain(|k, _| live.contains(k));
+
+        // An interface that appeared since the last tick (a tether plugged in) is a
+        // baseline, and one whose counter went backwards was recreated.
+        let ifaces = net::iface_counters();
+        let (mut dev_rx, mut dev_tx) = (0u64, 0u64);
+        for (name, &(rx, tx)) in &ifaces {
+            if let Some(&(prx, ptx)) = self.prev_iface.get(name) {
+                if rx >= prx && tx >= ptx {
+                    dev_rx += rx - prx;
+                    dev_tx += tx - ptx;
+                }
+            }
+        }
+        self.prev_iface = ifaces;
+
+        if resumed {
+            return (HashMap::new(), 0, 0);
+        }
+        let app_rx: u64 = out.values().map(|v| v.0).sum();
+        let app_tx: u64 = out.values().map(|v| v.1).sum();
+        (
+            out,
+            dev_rx.saturating_sub(app_rx),
+            dev_tx.saturating_sub(app_tx),
+        )
     }
 
     fn flush(&mut self, now_ms: i64) {
@@ -817,6 +1170,7 @@ fn main() {
     }
 
     let mut t = Tracker::new(args);
+    t.start_network(tx.clone());
     emit(&serde_json::json!({
         "t": "ready",
         "src": t.energy.source.as_str(),
@@ -826,6 +1180,9 @@ fn main() {
         "retentionMode": if t.args.retention_mode == store::Retention::PreviousMonth { "previous-month" } else { "fixed" },
         "stateDir": t.store.dir().to_string_lossy(),
         "headless": t.args.track_headless,
+        "network": t.args.track_network,
+        "netMode": t.net_mode,
+        "netError": t.net_error,
     }));
 
     t.refresh_windows();
@@ -840,6 +1197,7 @@ fn main() {
     for msg in rx {
         match msg {
             Msg::WindowsChanged => t.refresh_windows(),
+            Msg::SocketClosed(s) => t.socket_closed(s),
             Msg::Tick => t.tick(),
             Msg::Stdin(line) => {
                 let kind = serde_json::from_str::<serde_json::Value>(&line)

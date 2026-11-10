@@ -49,10 +49,16 @@ Item {
      * and Qt reported a binding loop for the width of every image in a note. A plain
      * property, written once on load, cannot loop.
      */
-    property real naturalWidth: 0
-    property real naturalHeight: 0
+    property real naturalWidth: root.editor && root.assetPath.length > 0 && root.editor.imageDimensions[root.assetPath]
+        ? root.editor.imageDimensions[root.assetPath].width
+        : 0
+    property real naturalHeight: root.editor && root.assetPath.length > 0 && root.editor.imageDimensions[root.assetPath]
+        ? root.editor.imageDimensions[root.assetPath].height
+        : 0
 
-    implicitHeight: image.status === Image.Ready ? Math.ceil((frame.height + 22) / NotesMetrics.paperLineHeight) * NotesMetrics.paperLineHeight : 0
+    implicitHeight: (image.status === Image.Ready || (root.naturalWidth > 0 && root.naturalHeight > 0))
+        ? Math.ceil((frame.height + 22) / NotesMetrics.paperLineHeight) * NotesMetrics.paperLineHeight
+        : 0
 
     // A rounded container that clips, rather than a mask effect on the image: a
     // `MultiEffect` mask needs a texture provider, and a plain rectangle is not one.
@@ -88,6 +94,8 @@ Item {
                     return;
                 root.naturalWidth = image.implicitWidth;
                 root.naturalHeight = image.implicitHeight;
+                if (root.editor && root.assetPath.length > 0)
+                    root.editor.imageDimensions[root.assetPath] = { width: image.implicitWidth, height: image.implicitHeight };
             }
         }
 

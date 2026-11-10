@@ -26,6 +26,7 @@ Item {
     anchors.fill: parent
 
     property alias contentY: page.contentY
+    property alias activeSubPage: subPageOverlay.activeSubPage
 
     // People who contributed to this fork, as credited by its author, read
     // from CONTRIBUTORS.json at the top of the ii folder: GitHub login,
@@ -59,6 +60,10 @@ Item {
     property string pendingKind: ""
     property string pendingTarget: ""
     property string pendingLabel: ""
+    // Keep the optional AI graph out of About until the user enables automatic
+    // summaries or explicitly asks for one. The manual action remains visible
+    // without probing the heavyweight Ai singleton just by opening Settings.
+    property bool manualSummaryRequested: false
 
     function confirm(kind, target, label) {
         root.pendingKind = kind;
@@ -96,9 +101,12 @@ Item {
     // With AI summaries on, the summary is the headline and the commit list is
     // detail that folds away; without them the list is all there is to read,
     // so it stays open.
+    readonly property bool summaryRequested: Config.options.update.aiSummary || root.manualSummaryRequested
     readonly property bool listsFold: Config.options.update.aiSummary
     readonly property var listedCommits: root.hasUpdate ? ShellUpdates.commits : ShellUpdates.recentCommits
-    readonly property bool listVisible: root.hasUpdate ? (ShellUpdates.commits.length > 0 || ShellUpdateSummary.current) : (ShellUpdates.recentCommits.length > 0 || ShellUpdates.recentLoading)
+    readonly property bool listVisible: root.hasUpdate
+        ? (ShellUpdates.commits.length > 0 || (root.summaryRequested && ShellUpdateSummary.current))
+        : (ShellUpdates.recentCommits.length > 0 || ShellUpdates.recentLoading)
 
     function refreshRecent() {
         if (!root.visible || root.hasUpdate || root.checking)
@@ -107,6 +115,7 @@ Item {
     }
 
     Component.onCompleted: {
+        FeatureDeps.refresh();
         ShellUpdates.reloadState();
         if (!ShellUpdates.probed)
             ShellUpdates.refresh();
@@ -320,6 +329,7 @@ Item {
         id: page
         anchors.fill: parent
         forceWidth: false
+        opacity: subPageOverlay.slideProgress
         visible: opacity > 0
 
         // ── Identity: fork, branch, commit, and whether the remote moved ──
@@ -569,6 +579,25 @@ Item {
                             onClicked: Qt.openUrlExternally(root.hasUpdate && ShellUpdates.compareUrl !== "" ? ShellUpdates.compareUrl : root.repoUrl)
                         }
 
+                        // Error colours while core packages are missing, so the
+                        // way to install them doesn't hide behind a plain button.
+                        RippleButtonWithIcon {
+                            readonly property bool coreMissing: FeatureDeps.requiredMissing.length > 0
+                            Layout.preferredHeight: 44
+                            buttonRadius: Appearance.rounding.full
+                            colBackground: coreMissing ? Appearance.colors.colErrorContainer : Appearance.colors.colLayer2
+                            colBackgroundHover: coreMissing ? Appearance.colors.colErrorContainerHover : Appearance.colors.colLayer1Hover
+                            colRipple: coreMissing ? Appearance.colors.colErrorContainerActive : Appearance.colors.colLayer1Active
+                            colText: coreMissing ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnSecondaryContainer
+                            materialIcon: coreMissing ? "warning" : "extension"
+                            mainText: Translation.tr("Optional features")
+                            onClicked: root.activeSubPage = Qt.resolvedUrl("widgets/OptionalFeaturesConfig.qml")
+
+                            StyledToolTip {
+                                text: parent.coreMissing ? Translation.tr("Core packages are missing") : Translation.tr("Packages some features need on top of the base install")
+                            }
+                        }
+
                         Item {
                             Layout.fillWidth: true
                         }
@@ -584,11 +613,28 @@ Item {
             title: root.hasUpdate ? Translation.tr("What's new") : Translation.tr("Recent changes")
             tooltip: root.hasUpdate ? Translation.tr("The commits on the remote that this checkout does not have yet, grouped by kind. Click one to open it on GitHub.") : Translation.tr("The newest commits on this branch, grouped by kind. Click one to open it on GitHub.")
 
-            ShellUpdateSummaryCard {
-                visible: root.hasUpdate
+            Loader {
+                active: root.hasUpdate && root.summaryRequested
                 Layout.fillWidth: true
-                showUnavailable: true
-                boxColor: Appearance.colors.colLayer1
+                sourceComponent: ShellUpdateSummaryCard {
+                    showUnavailable: true
+                    boxColor: Appearance.colors.colLayer1
+                }
+            }
+
+            RippleButtonWithIcon {
+                visible: root.hasUpdate && !root.summaryRequested
+                materialIcon: "auto_awesome"
+                mainText: Translation.tr("Summarize")
+                onClicked: {
+                    root.manualSummaryRequested = true;
+                    ShellUpdateSummary.load();
+                    ShellUpdateSummary.summarize(true);
+                }
+
+                StyledToolTip {
+                    text: Translation.tr("Ask the current AI model to summarise these commits")
+                }
             }
 
             RowLayout {
@@ -687,12 +733,12 @@ Item {
 
             ConfigSwitch {
                 buttonIcon: "settings_applications"
-                text: Translation.tr("Also replace Hyprland config")
+                text: Translation.tr("Also update Hyprland config (recommended)")
                 checked: Config.options.update.replaceHyprConfig
                 onCheckedChanged: Config.options.update.replaceHyprConfig = checked
 
                 StyledToolTip {
-                    text: Translation.tr("When enabled, updating also overlays this fork's ~/.config/hypr onto yours (custom/ is never touched, and anything replaced is backed up first). Disable to update only the Quickshell config.")
+                    text: Translation.tr("Updating also brings this fork's ~/.config/hypr up to date. Your own edits in custom/ are never touched, and any file it changes is backed up first. The shell is written against these binds and rules, so features such as the Alt+Tab switcher, the tiling assistant and Modes may not work fully with an older Hyprland config.")
                 }
             }
 
@@ -726,6 +772,8 @@ Item {
                 color: Appearance.colors.colSubtext
                 wrapMode: Text.Wrap
                 text: {
+                    if (!Config.options.update.aiSummary && !root.manualSummaryRequested)
+                        return "";
                     switch (ShellUpdateSummary.unavailableReason) {
                     case "disabled":
                         return Translation.tr("AI is turned off in Policies, so nothing will be summarised until it is enabled.");
@@ -963,6 +1011,12 @@ Item {
                 }
             }
         }
+    }
+
+    ConfigSubPageHost {
+        id: subPageOverlay
+        anchors.fill: parent
+        z: 10
     }
 
     WindowDialog {

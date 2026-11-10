@@ -185,8 +185,14 @@ ContentPage {
             }
         }
 
+        ExpressiveColorModeSubsection {
+            visible: root.style === "expressive"
+            currentValue: Config.options.bar.indicators.record.colorMode
+            onSelected: newValue => Config.options.bar.indicators.record.colorMode = String(newValue)
+        }
+
         ContentSubsection {
-            visible: root.styled
+            visible: root.style !== "expressive" && root.styled
             title: Translation.tr("Colour treatment")
 
             ConfigSelectionArray {

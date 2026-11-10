@@ -21,9 +21,13 @@ Item {
     property var  leftList
     property var  centerList
     property var  rightList
+    // The config's values unless Settings' preview tries others on.
+    property int backgroundStyle: Config.options.bar.barBackgroundStyle
+    property int screenRounding: Config.options.appearance.fakeScreenRounding
 
     property color actualColor: root.showBarBackground
-        ? (Config.options.bar.expressiveColors
+        ? (Config.options.bar.amoledBackground ? "#000000"
+            : Config.options.bar.expressiveColors
             ? root.activeTheme.barBackground
             : Appearance.colors.colLayer0)
         : "transparent"
@@ -32,7 +36,7 @@ Item {
         animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(root)
     }
 
-    readonly property bool isIslandMode: Config.options.bar.barBackgroundStyle === 3
+    readonly property bool isIslandMode: root.backgroundStyle === 3
 
     Rectangle {
         id: barBackground
@@ -58,7 +62,8 @@ Item {
     }
 
     // ── Islands (barBackgroundStyle === 3) ────────────────────────────────────
-    property color islandFillColor: Config.options.bar.expressiveColors
+    property color islandFillColor: Config.options.bar.amoledBackground ? "#000000"
+        : Config.options.bar.expressiveColors
         ? root.activeTheme.barBackground
         : Appearance.colors.colLayer0
 
@@ -252,7 +257,7 @@ Item {
         onScrollDown: if (Config.options.bar.enableBrightnessScroll) Brightness.decreaseBrightness()
         onScrollUp:   if (Config.options.bar.enableBrightnessScroll) Brightness.increaseBrightness()
         onMovedAway:  GlobalStates.osdBrightnessOpen = false
-        onPressed: event => { if (event.button === Qt.LeftButton) GlobalStates.toggleLeftSidebar(root.screen?.name); }
+        onPressed: event => { if (event.button === Qt.LeftButton && Config.options.bar.sidebarClickOpen) GlobalStates.toggleLeftSidebar(root.screen?.name); }
 
         ScrollHint {
             reveal: barLeftSideMouseArea.hovered && Config.options.bar.enableBrightnessScroll
@@ -271,7 +276,7 @@ Item {
         onScrollDown: if (Config.options.bar.enableVolumeScroll) Audio.decrementVolume()
         onScrollUp:   if (Config.options.bar.enableVolumeScroll) Audio.incrementVolume()
         onMovedAway:  GlobalStates.osdVolumeOpen = false
-        onPressed: event => { if (event.button === Qt.LeftButton) GlobalStates.toggleRightSidebar(root.screen?.name); }
+        onPressed: event => { if (event.button === Qt.LeftButton && Config.options.bar.sidebarClickOpen) GlobalStates.toggleRightSidebar(root.screen?.name); }
 
         ScrollHint {
             reveal: barRightSideMouseArea.hovered && Config.options.bar.enableVolumeScroll

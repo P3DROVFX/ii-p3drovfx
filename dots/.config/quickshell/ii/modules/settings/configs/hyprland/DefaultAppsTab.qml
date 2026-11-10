@@ -175,7 +175,7 @@ ContentPage {
         }
 
         Repeater {
-            model: tab.shellApps
+            model: tab.advanced ? tab.shellApps : []
 
             delegate: ConfigTextField {
                 id: shellAppField

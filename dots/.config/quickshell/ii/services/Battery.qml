@@ -54,6 +54,12 @@ Singleton {
     readonly property bool atChargeCeiling: available
         && (chargeLimitReached || (isPluggedIn && (isFullyCharged || percent >= 100)))
 
+    // Full on AC: UPower says fully charged, or the pack reads 100 %. The full threshold is left out on
+    // purpose: its default of 101 means "never full", which is the case the Battery settings option is for.
+    readonly property bool fullOnAc: available && isPluggedIn && (isFullyCharged || percent >= 100)
+    // Opt-in: at full, the indicators drop the charging look (bolt, green fill) for the default one.
+    readonly property bool showDefaultWhenFull: Config.options.battery.defaultStateWhenFull && fullOnAc
+
     property real health: (function() {
         const devList = UPower.devices.values;
         for (let i = 0; i < devList.length; ++i) {
@@ -207,6 +213,7 @@ Singleton {
     FileView {
         id: chargeLimitFile
         path: root.chargeLimitCandidates[root.chargeLimitCandidateIndex]?.path ?? ""
+        printErrors: false // walking the candidate list: a missing node is the expected answer
         onLoaded: {
             const candidate = root.chargeLimitCandidates[root.chargeLimitCandidateIndex];
             if (!candidate) return;
@@ -235,6 +242,7 @@ Singleton {
         id: chargeLimitStartFile
         path: root.chargeLimitStartMissing ? ""
             : (root.chargeLimitCandidates[root.chargeLimitCandidateIndex]?.start ?? "")
+        printErrors: false // most firmware exposes no start threshold; onLoadFailed records it
         onLoaded: {
             root.chargeLimitStartMissing = false;
             root.chargeLimitStart = root.parseChargeStart(text());

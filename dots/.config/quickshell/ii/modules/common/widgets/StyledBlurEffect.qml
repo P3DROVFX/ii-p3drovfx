@@ -1,9 +1,9 @@
 import QtQuick
 import QtQuick.Effects
 
+// Used as a `layer.effect`: the layer assigns `source` itself.
 MultiEffect {
     id: root
-    source: wallpaper
     anchors.fill: source
     saturation: 0.2
     blurEnabled: true

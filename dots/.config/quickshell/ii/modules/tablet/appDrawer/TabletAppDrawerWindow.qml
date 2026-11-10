@@ -86,7 +86,10 @@ PanelWindow {
     mask: Region {
         // Anything but "open or being opened" leaves just the edge strip interactive, so
         // the closing overlay hands the rest of the screen back in the same frame.
-        item: root.holdsInput ? inputRegion : bottomEdgeCaptureStrip
+        // With the shade or Recents up, the bottom 8px are theirs: a swipe that starts at
+        // the very edge to close them was opening the drawer instead.
+        item: root.holdsInput ? inputRegion
+            : (GlobalStates.otherTabletOverlayOnScreen(root.overlayName) ? null : bottomEdgeCaptureStrip)
     }
 
     // Keep the layer mapped while idle. A layer surface that is first mapped in the same
@@ -134,6 +137,25 @@ PanelWindow {
         GlobalStates.setTabletOverlayOnScreen(root.overlayName, false);
     }
 
+    /// An action that needs the keyboard grab gone (raising an already open window). The
+    /// surface stays mapped, so this runs on the close animation releasing the grab, not on
+    /// an unmap that never comes.
+    property var pendingAction: null
+
+    function runAfterClose(action) {
+        root.pendingAction = action;
+        root.dismiss();
+        root.flushPendingAction();
+    }
+
+    function flushPendingAction() {
+        if (!root.pendingAction || root.wantOpen || root.openProgress > 0.5)
+            return;
+        const action = root.pendingAction;
+        root.pendingAction = null;
+        action();
+    }
+
     /// GlobalFocusGrab dismisses by calling this on the registered window.
     function dismiss() {
         GlobalStates.appDrawerOpen = false;
@@ -166,6 +188,7 @@ PanelWindow {
     Component.onCompleted: GlobalStates.setTabletOverlayOnScreen(root.overlayName, root.paintsBackdrop)
 
     onOpenProgressChanged: {
+        root.flushPendingAction();
         // The field is focused only once the drawer has settled, for the same reason the
         // surface takes keyboard focus only then.
         if (root.openProgress > 0.99)
@@ -326,8 +349,12 @@ PanelWindow {
             anchors.fill: parent
             active: root.visible
             sourceComponent: root.contentComponent
-            // Opacity, never `visible`: the tile carrying the drag lives in here, and an
-            // invisible item loses its grab — the drag would be cancelled as it started.
+            // Opacity, never `visible`, for the drag: the tile carrying it lives in here, and
+            // an invisible item loses its grab — the drag would be cancelled as it started.
+            // Hidden only when nothing of it can be on screen, so the resident grid stops
+            // being walked by the scene graph while the drawer is closed.
+            visible: root.openProgress > 0.001 || dragLaunch.active
+                || TabletAppDrawerGestureController.tracking
             opacity: 1 - dragLaunch.fade
             transform: Translate {
                 y: (1 - root.openProgress) * root.height
@@ -338,12 +365,103 @@ PanelWindow {
                     return;
                 contentLoader.item.revealProgress = Qt.binding(() => root.openProgress);
                 contentLoader.item.dismissRequested.connect(root.dismiss);
+                contentLoader.item.deferredRequested.connect(root.runAfterClose);
                 contentLoader.item.appHeld.connect(root.appHeld);
                 contentLoader.item.appDragStarted.connect(dragLaunch.begin);
                 contentLoader.item.appDragMoved.connect(dragLaunch.move);
                 contentLoader.item.appDragEnded.connect(dragLaunch.end);
                 if (root.wantOpen)
                     contentLoader.item.reset();
+            }
+        }
+    }
+
+    /**
+     * Pull the drawer down to close it, following the finger — from the header, from empty
+     * space, or from the grid while it rests at its top, the way Android's drawer closes.
+     *
+     * The handler sits on an item above the content rather than on the content: a handler
+     * on a parent never sees a press a tile already accepted, while one on top takes a
+     * passive grab first and lets the press carry on, so taps, holds and drag-to-launch on
+     * the tiles behave exactly as before. Only a press that becomes a vertical drag is
+     * taken over.
+     *
+     * A grid at its top cannot tell "down" from "up" before the drag starts, so the layer
+     * takes both and forwards an upward one to that grid as an ordinary scroll and fling.
+     * Anything with vertical motion of its own is masked out entirely; see
+     * TabletAppDrawerContent.verticalDragOwnerAt.
+     */
+    Item {
+        id: closeGestureLayer
+        anchors.fill: parent
+        visible: root.wantOpen && root.openProgress > 0.001 && !dragLaunch.active
+
+        containmentMask: QtObject {
+            function contains(point: point): bool {
+                if (closeDrag.active)
+                    return true;
+                const owner = contentLoader.item?.verticalDragOwnerAt(closeGestureLayer, point.x, point.y) ?? "content";
+                return owner !== "content";
+            }
+        }
+
+        DragHandler {
+            id: closeDrag
+            target: null
+            xAxis.enabled: false
+            grabPermissions: PointerHandler.CanTakeOverFromItems
+                | PointerHandler.CanTakeOverFromHandlersOfDifferentType
+
+            property var scrollTarget: null
+            property real scrollStart: 0
+            property real startProgress: 1
+
+            function scrollLimits(flick) {
+                const top = flick.originY - flick.topMargin;
+                const bottom = flick.originY + flick.contentHeight + flick.bottomMargin - flick.height;
+                return [top, Math.max(top, bottom)];
+            }
+
+            onActiveChanged: {
+                if (closeDrag.active) {
+                    const press = closeDrag.centroid.pressPosition;
+                    const owner = contentLoader.item?.verticalDragOwnerAt(closeGestureLayer, press.x, press.y) ?? null;
+                    const flick = (owner && owner !== "content") ? owner : null;
+                    if (flick && closeDrag.translation.y < 0) {
+                        closeDrag.scrollTarget = flick;
+                        closeDrag.scrollStart = flick.contentY;
+                        return;
+                    }
+                    closeDrag.scrollTarget = null;
+                    closeDrag.startProgress = TabletAppDrawerGestureController.progress;
+                    TabletAppDrawerGestureController.startTracking(root.screenName);
+                    return;
+                }
+
+                if (closeDrag.scrollTarget) {
+                    closeDrag.scrollTarget.flick(0, closeDrag.centroid.velocity.y);
+                    closeDrag.scrollTarget = null;
+                    return;
+                }
+                // Opening is upwards, so the controller's velocity is the finger's, negated.
+                TabletAppDrawerGestureController.endTracking(-closeDrag.centroid.velocity.y,
+                                                             closeDrag.startProgress);
+            }
+
+            onTranslationChanged: {
+                if (!closeDrag.active)
+                    return;
+                const flick = closeDrag.scrollTarget;
+                if (flick) {
+                    const limits = closeDrag.scrollLimits(flick);
+                    flick.contentY = Math.max(limits[0], Math.min(limits[1],
+                        closeDrag.scrollStart - closeDrag.translation.y));
+                    return;
+                }
+                TabletAppDrawerGestureController.updateProgress(
+                    closeDrag.startProgress
+                        - closeDrag.translation.y / TabletAppDrawerGestureController.dragDistance(root.height),
+                    -closeDrag.centroid.velocity.y);
             }
         }
     }

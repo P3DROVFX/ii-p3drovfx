@@ -1,3 +1,4 @@
+import qs
 import qs.modules.common
 import qs.modules.common.widgets
 import QtQuick
@@ -10,6 +11,8 @@ RippleButton {
     property string buttonText
     property bool keyboardDown: false
     property real size: 120
+    /** Scales with the button, so a smaller host (the island) keeps the proportion. */
+    property real iconSize: Math.round(button.size * 0.375)
     property int animIndex: 0
     property bool shown: false
 
@@ -23,21 +26,50 @@ RippleButton {
     }
 
     readonly property bool isHovered: hoverHandler.hovered || button.hovered
-    readonly property bool activeState: button.focus || button.isHovered || button.isPressed || button.keyboardDown
+    readonly property bool activeState: button.activeFocus || button.focus || button.isHovered || button.isPressed || button.keyboardDown
 
     property real animScale: button.shown ? 1.0 : 0.7
     property real animTranslateX: button.shown ? 0 : -35
     property real animOpacity: button.shown ? 1.0 : 0.0
 
-    buttonRadius: button.activeState ? size / 2 : Appearance.rounding.verylarge
-    buttonEffectiveRadius: button.down ? button.buttonRadiusPressed : button.buttonRadius
+    /**
+     * Dynamic radius (grouped smart-radius) rounding: the single vertex sitting at the
+     * grid's outer end takes the system's end radius - `min(h/2, large)`, the same rule
+     * as a grouped run's ends - while every other vertex stays at the tight seam radius.
+     * Each corner button has exactly one outer end; the hosts flag which one.
+     */
+    property real outerRadius: Math.min(button.size / 2, Appearance.rounding.large)
+    property bool outerTopLeft: false
+    property bool outerTopRight: false
+    property bool outerBottomLeft: false
+    property bool outerBottomRight: false
 
-    Behavior on buttonEffectiveRadius {
-        NumberAnimation {
-            duration: 140
-            easing.type: Easing.OutCubic
-        }
+    /**
+     * Inner radius while inactive. Outside the dynamic island the buttons are plain
+     * `windowRounding` squares with no dynamic radius at all; the island's menu adopts
+     * the dynamic radius system: tight seams (6) with `outerRadius` at the grid's
+     * outer ends (the outer* flags, set only by IslandSessionMenu).
+     */
+    property real inactiveRadius: (Appearance.rounding.scale === 0)
+        ? 0
+        : (GlobalStates.islandOwnsSession ? 6 : Appearance.rounding.windowRounding)
+
+    readonly property real innerCornerRadius: button.activeState ? button.size / 2 : button.inactiveRadius
+    readonly property real outerCornerRadius: button.activeState ? button.size / 2 : button.outerRadius
+
+    topLeftRadius: button.outerTopLeft ? button.outerCornerRadius : button.innerCornerRadius
+    topRightRadius: button.outerTopRight ? button.outerCornerRadius : button.innerCornerRadius
+    bottomLeftRadius: button.outerBottomLeft ? button.outerCornerRadius : button.innerCornerRadius
+    bottomRightRadius: button.outerBottomRight ? button.outerCornerRadius : button.innerCornerRadius
+
+    component RadiusBehavior: NumberAnimation {
+        duration: 140
+        easing.type: Easing.OutCubic
     }
+    Behavior on topLeftRadius { RadiusBehavior { } }
+    Behavior on topRightRadius { RadiusBehavior { } }
+    Behavior on bottomLeftRadius { RadiusBehavior { } }
+    Behavior on bottomRightRadius { RadiusBehavior { } }
 
     colBackground: button.keyboardDown ? Appearance.colors.colSecondaryContainerActive : 
         button.activeState ? Appearance.colors.colPrimary : 
@@ -119,8 +151,9 @@ RippleButton {
         anchors.fill: parent
         color: button.colText
         horizontalAlignment: Text.AlignHCenter
-        iconSize: 45
+        iconSize: button.iconSize
         text: buttonIcon
+        fill: button.activeState ? 1 : 0
     }
 
     StyledToolTip {

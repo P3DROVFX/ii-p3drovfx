@@ -1,4 +1,5 @@
 import qs.modules.common
+import qs.modules.ii.dynamicIsland.core
 import qs.modules.common.widgets
 import qs.modules.common.utils
 import qs.modules.common.models
@@ -30,7 +31,8 @@ Item {
     readonly property MprisPlayer activePlayer: MprisController.activePlayer
     readonly property string cleanedTitle: StringUtils.cleanMusicTitle(activePlayer?.trackTitle) || Translation.tr("No media")
     readonly property string trackArtist: activePlayer?.trackArtist ?? ""
-    readonly property bool hasTrack: (activePlayer?.trackTitle ?? "").length > 0
+    // Out in a Dynamic Island bubble, the track is shown there and not twice.
+    readonly property bool hasTrack: (activePlayer?.trackTitle ?? "").length > 0 && !IslandGeometry.bubbled("media")
     readonly property bool playing: activePlayer ? activePlayer.playbackState === MprisPlaybackState.Playing : false
 
     property int customSize: Config.options.bar.mediaPlayer.customSize
@@ -45,22 +47,8 @@ Item {
     readonly property int spacing: 4
 
     readonly property string artUrl: MprisController.artUrl
-    readonly property bool isLocalArt: artUrl.startsWith("file://")
-    property string artDownloadLocation: Directories.coverArt
-    property string artFileName: Qt.md5(artUrl)
-    property string artFilePath: `${artDownloadLocation}/${artFileName}`
-    property bool artDownloaded: false
-    readonly property string artSource: {
-        if (!artUrl) return "";
-        if (isLocalArt) return artUrl;
-        return artDownloaded ? Qt.resolvedUrl(artFilePath) : artUrl;
-    }
-
-    readonly property string localArtFilePath: {
-        if (!artUrl || artUrl === "") return "";
-        if (isLocalArt) return FileUtils.trimFileProtocol(artUrl);
-        return artDownloaded ? artFilePath : "";
-    }
+    readonly property string artSource: CoverArt.source(artUrl) || artUrl
+    readonly property string localArtFilePath: CoverArt.localPath(artUrl)
 
     readonly property string resolvedArtPath: localArtFilePath !== "" ? Qt.resolvedUrl(localArtFilePath) : ""
 
@@ -156,28 +144,6 @@ Item {
         Qt.callLater(updatePopupRect);
     }
 
-    onArtFilePathChanged: {
-        if (!artUrl || artUrl.length === 0) {
-            artDownloaded = false;
-            return;
-        }
-        if (isLocalArt) {
-            artDownloaded = true;
-            return;
-        }
-        artDownloaded = false;
-        artDownloader.command = ["bash", "-c", `[ -f '${artFilePath}' ] || (mkdir -p '${artDownloadLocation}' && curl -4 -sSL '${artUrl}' -o '${artFilePath}.tmp' && mv '${artFilePath}.tmp' '${artFilePath}')`]
-        artDownloader.running = true;
-    }
-
-    Process {
-        id: artDownloader
-        running: false
-        onExited: {
-            artDownloaded = true;
-        }
-    }
-
     Timer {
         running: activePlayer?.playbackState == MprisPlaybackState.Playing
         interval: Config.options.resources.updateInterval
@@ -229,7 +195,6 @@ Item {
             if (hoverEnabled) {
                 var globalPos = root.mapToItem(null, 0, 0);
                 GlobalStates.mediaPopupRect = Qt.rect(globalPos.x, globalPos.y, root.width, root.height);
-                GlobalStates.mediaControlsOpen = true;
             }
         }
         onExited: {
@@ -286,49 +251,6 @@ Item {
             visible: false
         }
 
-        // Vignette mask (horizontal + vertical gradients combined)
-        Item {
-            id: contractedVignetteMask
-            anchors.fill: parent
-            visible: true
-
-            Rectangle {
-                id: contractedHMask
-                anchors.fill: parent
-                gradient: Gradient {
-                    orientation: Gradient.Horizontal
-                    GradientStop { position: 0.0; color: "transparent" }
-                    GradientStop { position: 0.08; color: "transparent" }
-                    GradientStop { position: 0.2; color: Qt.rgba(1, 1, 1, 0.3) }
-                    GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
-                    GradientStop { position: 0.45; color: "white" }
-                    GradientStop { position: 0.55; color: "white" }
-                    GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
-                    GradientStop { position: 0.8; color: Qt.rgba(1, 1, 1, 0.3) }
-                    GradientStop { position: 0.92; color: "transparent" }
-                    GradientStop { position: 1.0; color: "transparent" }
-                }
-            }
-
-            Rectangle {
-                anchors.fill: parent
-                gradient: Gradient {
-                    orientation: Gradient.Vertical
-                    GradientStop { position: 0.0; color: "transparent" }
-                    GradientStop { position: 0.15; color: Qt.rgba(1, 1, 1, 0.3) }
-                    GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
-                    GradientStop { position: 0.5; color: "white" }
-                    GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
-                    GradientStop { position: 0.85; color: Qt.rgba(1, 1, 1, 0.3) }
-                    GradientStop { position: 1.0; color: "transparent" }
-                }
-                layer.enabled: true
-                layer.effect: OpacityMask {
-                    maskSource: contractedHMask
-                }
-            }
-        }
-
         // Album art layers (background blurred + sharp foreground with vignette)
         Item {
             anchors.fill: parent
@@ -363,21 +285,61 @@ Item {
                 }
 
                 Item {
+                    id: contractedArtHost1
                     anchors.fill: parent
                     layer.enabled: true
                     layer.effect: OpacityMask {
-                        maskSource: contractedVignetteMask
+                        maskSource: Rectangle {
+                            width: contractedArtHost1.width
+                            height: contractedArtHost1.height
+                            color: "transparent"
+                            gradient: Gradient {
+                                orientation: Gradient.Horizontal
+                                GradientStop { position: 0.0; color: "transparent" }
+                                GradientStop { position: 0.08; color: "transparent" }
+                                GradientStop { position: 0.2; color: Qt.rgba(1, 1, 1, 0.3) }
+                                GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
+                                GradientStop { position: 0.45; color: "white" }
+                                GradientStop { position: 0.55; color: "white" }
+                                GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
+                                GradientStop { position: 0.8; color: Qt.rgba(1, 1, 1, 0.3) }
+                                GradientStop { position: 0.92; color: "transparent" }
+                                GradientStop { position: 1.0; color: "transparent" }
+                            }
+                        }
                     }
 
-                    Image {
+                    Item {
                         anchors.fill: parent
-                        source: root.artSource
-                        fillMode: Image.PreserveAspectCrop
-                        smooth: true
-                        asynchronous: true
-                        cache: false
-                        sourceSize.width: root.artSize * 2
-                        sourceSize.height: root.artSize * 2
+                        layer.enabled: true
+                        layer.effect: OpacityMask {
+                            maskSource: Rectangle {
+                                width: contractedArtHost1.width
+                                height: contractedArtHost1.height
+                                color: "transparent"
+                                gradient: Gradient {
+                                    orientation: Gradient.Vertical
+                                    GradientStop { position: 0.0; color: "transparent" }
+                                    GradientStop { position: 0.15; color: Qt.rgba(1, 1, 1, 0.3) }
+                                    GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
+                                    GradientStop { position: 0.5; color: "white" }
+                                    GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
+                                    GradientStop { position: 0.85; color: Qt.rgba(1, 1, 1, 0.3) }
+                                    GradientStop { position: 1.0; color: "transparent" }
+                                }
+                            }
+                        }
+
+                        Image {
+                            anchors.fill: parent
+                            source: root.artSource
+                            fillMode: Image.PreserveAspectCrop
+                            smooth: true
+                            asynchronous: true
+                            cache: false
+                            sourceSize.width: root.artSize * 2
+                            sourceSize.height: root.artSize * 2
+                        }
                     }
                 }
             }

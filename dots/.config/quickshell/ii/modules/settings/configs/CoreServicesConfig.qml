@@ -125,8 +125,8 @@ Item {
                     cardIcon: "brightness_1"
                     cardHue: 12
                     cardShape: "Cookie12Sided"
-                    title: qsTr("OLED Saver")
-                    description: qsTr("Blackout overlay timing")
+                    title: qsTr("Always On Display")
+                    description: qsTr("Cursor and lock screen timing")
                     onOpenCard: root.openSubPage("widgets/CoreOledSaverConfig.qml")
                 }
             }

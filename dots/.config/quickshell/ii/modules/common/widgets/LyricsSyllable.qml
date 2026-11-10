@@ -171,6 +171,11 @@ Item {
                     }
                 }
             }
+
+            TouchpadScrollHandler {
+                flickable: lyricsList
+                onScrolled: lyricsList.highlightFollowsCurrentItem = false
+            }
         }
     }
 

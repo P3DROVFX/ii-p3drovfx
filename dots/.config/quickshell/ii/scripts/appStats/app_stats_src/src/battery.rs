@@ -56,23 +56,46 @@ pub struct Reader {
     pub full_mwh: u64,
 }
 
+/// The machine's own pack, not a peripheral's.
+///
+/// A Bluetooth mouse, keyboard or game controller registers a `Battery` supply of
+/// its own, with a `status` file but only a `capacity` — no charge or energy pair,
+/// and `scope` set to `Device`. Taking the first `Battery` in directory order picks
+/// one of those whenever it was connected when the sampler started, and then every
+/// read fails for the life of the process.
+pub fn system_battery() -> Option<PathBuf> {
+    for entry in fs::read_dir(POWER_SUPPLY).ok()?.flatten() {
+        let dir = entry.path();
+        if !is_type(&dir, "Battery") || !dir.join("status").exists() {
+            continue;
+        }
+        if read_str(&dir.join("scope")).is_some_and(|s| s == "Device") {
+            continue;
+        }
+        let has_level = (dir.join("charge_now").exists() && dir.join("charge_full").exists())
+            || (dir.join("energy_now").exists() && dir.join("energy_full").exists());
+        if has_level {
+            return Some(dir);
+        }
+    }
+    None
+}
+
 impl Reader {
     pub fn new() -> Reader {
-        let mut battery = None;
         let mut mains = None;
         if let Ok(entries) = fs::read_dir(POWER_SUPPLY) {
             for entry in entries.flatten() {
                 let dir = entry.path();
-                if battery.is_none() && is_type(&dir, "Battery") && dir.join("status").exists() {
-                    battery = Some(dir);
-                } else if mains.is_none() && is_type(&dir, "Mains") {
+                if is_type(&dir, "Mains") {
                     mains = Some(dir);
+                    break;
                 }
             }
         }
 
         let mut r = Reader {
-            dir: battery,
+            dir: system_battery(),
             mains,
             nominal_uv: 0,
             full_mwh: 0,
@@ -100,7 +123,7 @@ impl Reader {
         }
     }
 
-    fn on_ac(&self) -> bool {
+    pub fn on_ac(&self) -> bool {
         match &self.mains {
             Some(dir) => read_u64(&dir.join("online")).unwrap_or(0) == 1,
             // No mains device to ask: fall back to what the pack says about itself.

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
+# exec, so stopping the shell's Process stops the generator itself.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VENV="$(eval echo "$ILLOGICAL_IMPULSE_VIRTUAL_ENV")"
 
-source $(eval echo $ILLOGICAL_IMPULSE_VIRTUAL_ENV)/bin/activate
-GIO_USE_VFS=local "$SCRIPT_DIR/thumbgen.py" "$@"
-THUMBGEN_EXIT_CODE=$?
-deactivate
-
-exit $THUMBGEN_EXIT_CODE
+if [ -n "$VENV" ] && [ -x "$VENV/bin/python" ]; then
+    exec "$VENV/bin/python" "$SCRIPT_DIR/thumbgen.py" "$@"
+fi
+exec python3 "$SCRIPT_DIR/thumbgen.py" "$@"

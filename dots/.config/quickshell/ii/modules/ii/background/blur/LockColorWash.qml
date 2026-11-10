@@ -10,10 +10,13 @@ Item {
     required property var sourceItem
     required property real baseScale
     required property bool lockAnimationActive
+    // Set while the overview-style lock animation owns the look: the effects then
+    // belong to the backing wallpaper, and the zooming plane stays clean.
+    property bool suppressed: false
 
     Loader {
         id: colorWashLoader
-        active: Config.options.lock.colorWash.enable && (GlobalStates.lockLookActive || opacityAnim.running)
+        active: !lockColorWashRoot.suppressed && Config.options.lock.colorWash.enable && (GlobalStates.lockLookActive || opacityAnim.running)
         anchors.fill: parent
         opacity: GlobalStates.lockLookActive ? Config.options.lock.colorWash.amount : 0.0
         Behavior on opacity {

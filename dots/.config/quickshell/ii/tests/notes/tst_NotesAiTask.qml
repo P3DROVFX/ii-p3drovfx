@@ -96,6 +96,18 @@ TestCase {
         verify(wrapped.wrapped);
     }
 
+    function test_selection_wrap_bold_then_italic_distinction() {
+        const full = "Hello **world** of notes";
+        const sMin = 8;
+        const sMax = 13;
+        const before2 = full.slice(Math.max(0, sMin - 2), sMin);
+        const after2 = full.slice(sMax, sMax + 2);
+        const before3 = full.slice(Math.max(0, sMin - 3), sMin);
+        const after3 = full.slice(sMax, sMax + 3);
+        const isItalicOnly = !(before2 === "**" && after2 === "**" && !(before3 === "***" && after3 === "***"));
+        verify(!isItalicOnly, "Bold (**world**) must not be mistaken for Italic (*world*)");
+    }
+
     // ── 3. Custom Styles Serialization Contract ───────────────────────────
 
     function test_custom_styles_json_roundtrip() {

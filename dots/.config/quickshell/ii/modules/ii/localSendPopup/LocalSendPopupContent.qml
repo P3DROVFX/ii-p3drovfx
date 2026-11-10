@@ -39,7 +39,9 @@ Item {
         id: dismissTimer
         interval: 8000
         repeat: false
-        onTriggered: root.dismissed()
+        // Hosted, the activity owns the lifetime: the transfer is still pending after
+        // eight seconds, so nothing should take the face away.
+        onTriggered: if (!root.hosted) root.dismissed()
     }
 
     // Expose contentBackground for mask in parent PanelWindow
@@ -57,13 +59,23 @@ Item {
         return LocalSend.formatFileSize(totalSize);
     }
 
+    /**
+     * Drawn on a host's surface rather than as a floating card of its own.
+     *
+     * Inside the Dynamic Island the island is the card, so the content's own rounded
+     * rectangle, its border and the elevation margin around it would be a panel inside
+     * a panel. Hosted, they go and the content measures itself with no margin.
+     */
+    property bool hosted: false
+    readonly property real surfaceMargin: root.hosted ? 0 : Appearance.sizes.elevationMargin
+
     // Sizing
     property real popupWidth: 320
     property real horizontalPadding: 20
     property real verticalPadding: 20
 
-    implicitWidth: popupWidth + 2 * Appearance.sizes.elevationMargin
-    implicitHeight: contentLayout.implicitHeight + verticalPadding * 2 + 2 * Appearance.sizes.elevationMargin
+    implicitWidth: popupWidth + 2 * root.surfaceMargin
+    implicitHeight: contentLayout.implicitHeight + verticalPadding * 2 + 2 * root.surfaceMargin
 
     // Expose a static, unscaled item for the window input mask to prevent coordinate bugs during scale
     property alias staticMaskTarget: staticMaskTarget
@@ -71,33 +83,38 @@ Item {
         id: staticMaskTarget
         anchors {
             fill: parent
-            margins: Appearance.sizes.elevationMargin
+            margins: root.surfaceMargin
         }
     }
 
     // Shadow
     StyledRectangularShadow {
         target: contentBackground
+        visible: !root.hosted
     }
 
     Rectangle {
         id: contentBackground
         anchors {
             fill: parent
-            margins: Appearance.sizes.elevationMargin
+            margins: root.surfaceMargin
         }
         radius: Appearance.rounding.large
-        color: Config.options.appearance.transparency.popups ? Appearance.colors.colLayer0 : Appearance.m3colors.m3surfaceContainer
-        border.width: 1
+        color: root.hosted ? "transparent"
+            : (Config.options.appearance.transparency.popups ? Appearance.colors.colLayer0 : Appearance.m3colors.m3surfaceContainer)
+        border.width: root.hosted ? 0 : 1
         border.color: Appearance.colors.colLayer0Border
 
-        // Animations applied on the card itself to keep root window input mapping clean
-        opacity: 0
-        scale: 0.85
+        // Animations applied on the card itself to keep root window input mapping clean.
+        // Hosted, the host plays the entrance; the card's own scale-and-fade on top of
+        // the island's arrival read as two separate motions.
+        opacity: root.hosted ? 1 : 0
+        scale: root.hosted ? 1 : 0.85
         transformOrigin: Item.TopRight
 
         Component.onCompleted: {
-            entranceAnim.start()
+            if (!root.hosted)
+                entranceAnim.start();
         }
 
         ParallelAnimation {

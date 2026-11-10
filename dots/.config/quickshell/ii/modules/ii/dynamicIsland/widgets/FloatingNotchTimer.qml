@@ -4,17 +4,48 @@ import qs
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.services
+import qs.modules.ii.bar.widgets.timer
 
 Item {
     id: root
     anchors.fill: parent
 
     property bool isExpanded: false
+    /**
+     * The header glyph and the big time, handed over from the bubble's marker and time
+     * (see AuxiliaryBubble's heroes).
+     */
+    readonly property var heroItems: root.isExpanded ? [headerIcon, bigTime] : []
 
     readonly property bool pomodoroActive: TimerService.pomodoroRunning
     readonly property bool stopwatchActive: TimerService.stopwatchRunning
 
-    readonly property bool isPomodoro: pomodoroActive || (TimerService.pomodoroSecondsLeft < TimerService.focusTime && TimerService.pomodoroSecondsLeft > 0)
+    /**
+     * A countdown on its own: nothing else running, one still ticking. The timer
+     * activity counts it (see TimerSource), so this face has to be able to show it.
+     */
+    TimerBarState {
+        id: countdownState
+    }
+    /** A countdown still ticking; a paused one steps aside for an alarm about to ring. */
+    readonly property bool countdownTicking: countdownState.hasCountdown && !countdownState.countdownPaused
+    readonly property bool isCountdown: !pomodoroActive && !stopwatchActive && countdownState.hasCountdown
+        && (root.countdownTicking || !countdownState.hasUpcomingAlarm)
+    readonly property var countdown: countdownState.primaryCountdown
+
+    readonly property bool isPomodoro: !isCountdown && (pomodoroActive || (TimerService.pomodoroSecondsLeft < TimerService.focusTime && TimerService.pomodoroSecondsLeft > 0))
+
+    /**
+     * Nothing counting, but an alarm (this PC's or the phone's) rings within the window
+     * the clock settings give: the activity shows when, and offers to skip it.
+     */
+    readonly property bool isAlarm: !root.isCountdown && !root.isPomodoro && !root.stopwatchActive
+        && countdownState.hasUpcomingAlarm
+    readonly property bool alarmOnPhone: countdownState.upcomingAlarm?.phone ?? false
+
+    /** Whatever is on show is running (not paused). */
+    readonly property bool timerRunning: root.isCountdown ? !countdownState.countdownPaused
+        : (root.isPomodoro ? TimerService.pomodoroRunning : TimerService.stopwatchRunning)
 
     // Format Pomodoro Time (HH:MM:SS or MM:SS)
     readonly property string pomodoroText: {
@@ -44,6 +75,10 @@ Item {
 
     // Format Stopwatch Time for Expanded (displays hours, minutes, seconds, centiseconds clearly)
     readonly property string expandedTimeText: {
+        if (root.isAlarm)
+            return countdownState.upcomingAlarmText;
+        if (root.isCountdown)
+            return countdownState.countdownText;
         if (root.isPomodoro) {
             return root.pomodoroText;
         } else {
@@ -52,6 +87,10 @@ Item {
     }
 
     readonly property string timerLabel: {
+        if (root.isAlarm)
+            return Translation.tr("in %1 min").arg(countdownState.upcomingAlarmMinutes);
+        if (root.isCountdown)
+            return countdownState.countdownLabel;
         if (root.isPomodoro) {
             return TimerService.pomodoroLongBreak ? Translation.tr("Long break") : TimerService.pomodoroBreak ? Translation.tr("Break") : Translation.tr("Focus");
         }
@@ -84,7 +123,8 @@ Item {
                 spacing: 6
 
                 MaterialSymbol {
-                    text: root.isPomodoro ? "timer" : "schedule"
+                    text: root.isAlarm ? (root.alarmOnPhone ? "phone_android" : "alarm")
+                        : root.isCountdown ? "hourglass_top" : (root.isPomodoro ? "timer" : "schedule")
                     iconSize: 14
                     color: root.isPomodoro
                         ? (TimerService.pomodoroBreak ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnErrorContainer)
@@ -92,7 +132,8 @@ Item {
                 }
 
                 StyledText {
-                    text: root.isPomodoro ? root.pomodoroText : root.stopwatchText
+                    text: root.isAlarm ? countdownState.upcomingAlarmText
+                        : root.isCountdown ? countdownState.countdownText : (root.isPomodoro ? root.pomodoroText : root.stopwatchText)
                     font.family: Appearance.font.family.title
                     font.pixelSize: Appearance.font.pixelSize.smaller
                     font.weight: Font.Bold
@@ -134,13 +175,16 @@ Item {
             spacing: 6
 
             MaterialSymbol {
-                text: root.isPomodoro ? "timer" : "schedule"
+                id: headerIcon
+                text: root.isAlarm ? (root.alarmOnPhone ? "phone_android" : "alarm")
+                    : root.isCountdown ? "hourglass_top" : (root.isPomodoro ? "timer" : "schedule")
                 iconSize: 14
                 color: Appearance.colors.colPrimary
             }
 
             StyledText {
-                text: root.isPomodoro ? Translation.tr("Focus Timer") : Translation.tr("Stopwatch")
+                text: root.isAlarm ? (root.alarmOnPhone ? Translation.tr("Phone alarm") : Translation.tr("Next alarm"))
+                    : root.isCountdown ? Translation.tr("Timer") : (root.isPomodoro ? Translation.tr("Focus Timer") : Translation.tr("Stopwatch"))
                 font.pixelSize: Appearance.font.pixelSize.smallest
                 font.weight: Font.Bold
                 color: Appearance.colors.colOnSurface
@@ -149,7 +193,8 @@ Item {
             Item { Layout.fillWidth: true }
 
             StyledText {
-                text: root.isPomodoro 
+                text: root.isAlarm ? (countdownState.upcomingAlarm?.label ?? "") + " · " + root.timerLabel
+                    : root.isCountdown ? root.timerLabel : root.isPomodoro
                     ? (Translation.tr("Cycle %1").arg(TimerService.pomodoroCycle + 1) + " • " + root.timerLabel)
                     : (TimerService.stopwatchLaps.length > 0 ? Translation.tr("Lap %1").arg(TimerService.stopwatchLaps.length + 1) : root.timerLabel)
                 font.pixelSize: Appearance.font.pixelSize.smallest
@@ -157,9 +202,10 @@ Item {
             }
         }
 
-        // Middle Row: Bold Big Time Text
+        // Middle Row: Bold Big Time Text. As wide as its digits, centred by the layout:
+        // the bubble's time lands on the digits, not on the card's width.
         StyledText {
-            Layout.fillWidth: true
+            id: bigTime
             Layout.alignment: Qt.AlignHCenter
             horizontalAlignment: Text.AlignHCenter
             text: root.expandedTimeText
@@ -181,7 +227,7 @@ Item {
                 Layout.preferredHeight: 26
                 radius: Appearance.rounding.full
                 color: {
-                    const active = root.isPomodoro ? TimerService.pomodoroRunning : TimerService.stopwatchRunning;
+                    const active = root.timerRunning && !root.isAlarm;
                     if (playPauseMa.containsMouse) {
                         return active ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colPrimaryHover;
                     }
@@ -200,24 +246,28 @@ Item {
                     spacing: 4
                     MaterialSymbol {
                         text: {
-                            const active = root.isPomodoro ? TimerService.pomodoroRunning : TimerService.stopwatchRunning;
+                            if (root.isAlarm)
+                                return "alarm";
+                            const active = root.timerRunning;
                             return active ? "pause" : "play_arrow";
                         }
                         iconSize: 12
                         color: {
-                            const active = root.isPomodoro ? TimerService.pomodoroRunning : TimerService.stopwatchRunning;
+                            const active = root.timerRunning && !root.isAlarm;
                             return active ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnPrimary;
                         }
                     }
                     StyledText {
                         text: {
-                            const active = root.isPomodoro ? TimerService.pomodoroRunning : TimerService.stopwatchRunning;
-                            return active ? Translation.tr("Pause") : (TimerService.stopwatchTime === 0 && !root.isPomodoro ? Translation.tr("Start") : Translation.tr("Resume"));
+                            if (root.isAlarm)
+                                return Translation.tr("Open clock");
+                            const active = root.timerRunning;
+                            return active ? Translation.tr("Pause") : (TimerService.stopwatchTime === 0 && !root.isPomodoro && !root.isCountdown ? Translation.tr("Start") : Translation.tr("Resume"));
                         }
                         font.pixelSize: Appearance.font.pixelSize.smallest
                         font.weight: Font.Medium
                         color: {
-                            const active = root.isPomodoro ? TimerService.pomodoroRunning : TimerService.stopwatchRunning;
+                            const active = root.timerRunning && !root.isAlarm;
                             return active ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnPrimary;
                         }
                     }
@@ -229,7 +279,11 @@ Item {
                     cursorShape: Qt.PointingHandCursor
                     hoverEnabled: true
                     onClicked: {
-                        if (root.isPomodoro) {
+                        if (root.isAlarm) {
+                            GlobalStates.openClockApp("alarms");
+                        } else if (root.isCountdown) {
+                            TimerService.toggleCountdown(root.countdown.id);
+                        } else if (root.isPomodoro) {
                             TimerService.togglePomodoro();
                         } else {
                             TimerService.toggleStopwatch();
@@ -245,7 +299,7 @@ Item {
                 Layout.preferredHeight: 26
                 radius: Appearance.rounding.full
                 color: {
-                    const isStopwatchRunning = !root.isPomodoro && TimerService.stopwatchRunning;
+                    const isStopwatchRunning = !root.isPomodoro && !root.isCountdown && TimerService.stopwatchRunning;
                     const containerColor = isStopwatchRunning ? Appearance.colors.colSurfaceContainerHighest : Appearance.m3colors.m3errorContainer;
                     const hoverColor = isStopwatchRunning ? Appearance.colors.colSurfaceContainerHighestHover : Appearance.colors.colErrorContainerHover;
                     return actionMa.containsMouse ? hoverColor : containerColor;
@@ -253,6 +307,10 @@ Item {
 
                 scale: actionMa.pressed ? 0.95 : (actionMa.containsMouse ? 1.02 : 1.0)
                 enabled: {
+                    if (root.isAlarm)
+                        return !root.alarmOnPhone;
+                    if (root.isCountdown)
+                        return true;
                     if (root.isPomodoro) {
                         return (TimerService.pomodoroSecondsLeft < TimerService.pomodoroLapDuration) || TimerService.pomodoroCycle > 0 || TimerService.pomodoroBreak;
                     } else {
@@ -271,24 +329,26 @@ Item {
                     spacing: 4
                     MaterialSymbol {
                         text: {
-                            if (root.isPomodoro) return "restart_alt";
+                            if (root.isAlarm) return "event_busy";
+                            if (root.isPomodoro || root.isCountdown) return "restart_alt";
                             return TimerService.stopwatchRunning ? "flag" : "restart_alt";
                         }
                         iconSize: 12
                         color: {
-                            const isStopwatchRunning = !root.isPomodoro && TimerService.stopwatchRunning;
+                            const isStopwatchRunning = !root.isPomodoro && !root.isCountdown && TimerService.stopwatchRunning;
                             return isStopwatchRunning ? Appearance.colors.colOnSurface : Appearance.m3colors.m3onErrorContainer;
                         }
                     }
                     StyledText {
                         text: {
-                            if (root.isPomodoro) return Translation.tr("Reset");
+                            if (root.isAlarm) return Translation.tr("Skip");
+                            if (root.isPomodoro || root.isCountdown) return Translation.tr("Reset");
                             return TimerService.stopwatchRunning ? Translation.tr("Lap") : Translation.tr("Reset");
                         }
                         font.pixelSize: Appearance.font.pixelSize.smallest
                         font.weight: Font.Medium
                         color: {
-                            const isStopwatchRunning = !root.isPomodoro && TimerService.stopwatchRunning;
+                            const isStopwatchRunning = !root.isPomodoro && !root.isCountdown && TimerService.stopwatchRunning;
                             return isStopwatchRunning ? Appearance.colors.colOnSurface : Appearance.m3colors.m3onErrorContainer;
                         }
                     }
@@ -300,7 +360,13 @@ Item {
                     cursorShape: Qt.PointingHandCursor
                     hoverEnabled: true
                     onClicked: {
-                        if (root.isPomodoro) {
+                        if (root.isAlarm) {
+                            const next = AlarmService.nextAlarm(new Date());
+                            if (next)
+                                AlarmService.skipNext(next.index);
+                        } else if (root.isCountdown) {
+                            TimerService.restartCountdown(root.countdown.id);
+                        } else if (root.isPomodoro) {
                             TimerService.resetPomodoro();
                         } else {
                             if (TimerService.stopwatchRunning) {

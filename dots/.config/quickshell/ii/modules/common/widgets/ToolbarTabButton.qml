@@ -11,6 +11,7 @@ RippleButton {
     required property string materialSymbol
     required property bool current
     property int shortcutIndex: 0
+    property string shortcutText: ""
     property bool showShortcut: false
     // Opt-in for crowded bars: inactive tabs shrink to their icon so three
     // labelled tabs still fit a sidebar-width toolbar.
@@ -26,10 +27,12 @@ RippleButton {
     colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colOnSurface, root.current ? 0.88 : 0.95)
     colRipple: ColorUtils.transparentize(Appearance.colors.colOnSurface, 0.95)
 
+    readonly property bool hasShortcut: root.shortcutText.length > 0 || root.shortcutIndex > 0
+
     contentItem: Row {
         id: contentRow
         anchors.centerIn: parent
-        spacing: root.labelCollapsed ? 0 : 6
+        spacing: (root.materialSymbol && root.materialSymbol.length > 0 && !root.labelCollapsed) ? 6 : 0
 
         Behavior on spacing {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
@@ -38,8 +41,9 @@ RippleButton {
         Item {
             id: iconContainer
             anchors.verticalCenter: parent.verticalCenter
-            width: 22
-            height: 22
+            width: (root.materialSymbol && root.materialSymbol.length > 0) ? 22 : 0
+            height: (root.materialSymbol && root.materialSymbol.length > 0) ? 22 : 0
+            visible: Boolean(root.materialSymbol && root.materialSymbol.length > 0)
 
             MaterialSymbol {
                 id: icon
@@ -47,8 +51,8 @@ RippleButton {
                 iconSize: 22
                 text: root.materialSymbol
                 fill: root.current ? 1.0 : (root.hovered ? 1.0 : 0.0)
-                opacity: root.showShortcut ? 0.0 : 1.0
-                scale: root.showShortcut ? 0.5 : 1.0
+                opacity: (root.showShortcut && root.hasShortcut) ? 0.0 : 1.0
+                scale: (root.showShortcut && root.hasShortcut) ? 0.5 : 1.0
 
                 Behavior on opacity {
                     NumberAnimation {
@@ -73,8 +77,8 @@ RippleButton {
                 height: 20
                 radius: Appearance.rounding.full
                 color: root.current ? Appearance.colors.colPrimary : Appearance.colors.colLayer2
-                opacity: root.showShortcut ? 1.0 : 0.0
-                scale: root.showShortcut ? 1.0 : 0.5
+                opacity: (root.showShortcut && root.hasShortcut) ? 1.0 : 0.0
+                scale: (root.showShortcut && root.hasShortcut) ? 1.0 : 0.5
                 visible: opacity > 0
 
                 Behavior on opacity {
@@ -94,7 +98,7 @@ RippleButton {
 
                 StyledText {
                     anchors.centerIn: parent
-                    text: String(root.shortcutIndex)
+                    text: root.shortcutText.length > 0 ? root.shortcutText : (root.shortcutIndex > 0 ? String(root.shortcutIndex) : "")
                     font.family: Appearance.font.family.numbers
                     font.pixelSize: Appearance.font.pixelSize.smallest
                     font.weight: Font.Bold

@@ -21,11 +21,11 @@ RippleButton {
 
     PointingHandInteraction {}
     onClicked: {
-        let url = Config.options.search.engineBaseUrl + root.query;
+        let terms = String(root.query);
         for (let site of (Config?.options?.search.excludedSites ?? [])) {
-            url += ` -site:${site}`;
+            terms += ` -site:${site}`;
         }
-        Qt.openUrlExternally(url);
+        Qt.openUrlExternally(Config.options.search.engineBaseUrl + encodeURIComponent(terms));
         GlobalStates.sidebarLeftOpen = false;
     }
 

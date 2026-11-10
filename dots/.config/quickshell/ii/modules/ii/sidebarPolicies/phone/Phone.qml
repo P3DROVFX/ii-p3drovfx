@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import QtQuick.Controls
 import QtQuick.Effects
 import Quickshell
+import qs
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
@@ -58,6 +59,15 @@ Item {
 
     property int entranceTrigger: -1
 
+    // ─── Phone media (KDE Connect MPRIS) ───
+    // The KDE Connect daemon mirrors the phone's playback on the session bus as
+    // `org.mpris.MediaPlayer2.kdeconnect` and only publishes it while the phone
+    // actually has a media session — existence is the "has media" gate.
+    readonly property var phoneMprisPlayer: MprisController.players.find(
+        p => p.dbusName?.indexOf("kdeconnect") >= 0) ?? null
+    readonly property bool phoneHasMedia: root.phoneMprisPlayer !== null
+        && (root.phoneMprisPlayer.trackTitle ?? "") !== ""
+
     function triggerContentEntrance(): void {
         root.entranceTrigger++;
         phoneHeader.entranceTrigger = root.entranceTrigger;
@@ -66,10 +76,26 @@ Item {
         phoneFooter.entranceTrigger = root.entranceTrigger;
     }
 
-    Component.onCompleted: {}
+    Component.onCompleted: root.consumeSubPageRequest()
 
     function openSubPage(url: url): void {
         root.activeSubPage = Qt.resolvedUrl(url)
+    }
+
+    /** A sub-page asked for from outside the sidebar, which may well have been
+     *  requested before this tab existed. */
+    function consumeSubPageRequest(): void {
+        const wanted = String(GlobalStates.phoneRequestSubPage || "")
+        if (wanted.length === 0) return
+        GlobalStates.phoneRequestSubPage = ""
+        root.openSubPage(wanted)
+    }
+
+    Connections {
+        target: GlobalStates
+        function onPhoneRequestSubPageChanged() {
+            root.consumeSubPageRequest()
+        }
     }
 
     function closeSubPage(): void {
@@ -314,18 +340,19 @@ Item {
         Item {
             id: deviceMenuOverlay
             anchors.fill: parent
-            visible: false
-            enabled: visible
+            // `open` is the state; `visible` lingers until the close
+            // animation has faded the menu out, so both directions animate.
+            property bool open: false
+            visible: open || deviceMenu.opacity > 0.01
+            enabled: open
             z: 99999
 
-            // Click-outside catcher — must toggle the OVERLAY's
-            // visibility (not just deviceMenu's) so the MouseArea
-            // itself gets disabled. If only deviceMenu.visible is
-            // set to false, the overlay stays visible+enabled and
-            // swallows every click beneath it, freezing the panel.
+            // Click-outside catcher — closing flips `open`, which disables
+            // the overlay at once, so the MouseArea never swallows clicks
+            // beneath it while the menu fades out.
             MouseArea {
                 anchors.fill: parent
-                onClicked: deviceMenuOverlay.visible = false
+                onClicked: deviceMenuOverlay.open = false
                 z: 0
             }
 
@@ -351,14 +378,12 @@ Item {
                 property real deviceMenuOriginX: 4
                 property real deviceMenuOriginY: 0
 
-                // Keep the menu's visibility in sync with the overlay so
-                // there's never a stale Rectangle lingering invisible on
-                // top of the panel content.
-                visible: deviceMenuOverlay.visible
-
-                opacity: visible ? 1.0 : 0.0
-                scale: visible ? 1.0 : 0.96
-                y: visible ? deviceMenuOriginY : deviceMenuOriginY - 6
+                opacity: deviceMenuOverlay.open ? 1.0 : 0.0
+                scale: deviceMenuOverlay.open ? 1.0 : 0.9
+                // Only the offset animates: the anchor point jumps with the
+                // chip, so an open never slides in from the last position.
+                property real slideOffset: deviceMenuOverlay.open ? 0 : -10
+                y: deviceMenuOriginY + slideOffset
 
                 Behavior on opacity {
                     NumberAnimation {
@@ -368,18 +393,10 @@ Item {
                     }
                 }
                 Behavior on scale {
-                    NumberAnimation {
-                        duration: Appearance.animation.elementMoveFast.duration
-                        easing.type: Easing.OutBack
-                        easing.overshoot: 1.2
-                    }
+                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
                 }
-                Behavior on y {
-                    NumberAnimation {
-                        duration: Appearance.animation.elementMoveFast.duration
-                        easing.type: Appearance.animation.elementMoveFast.type
-                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                    }
+                Behavior on slideOffset {
+                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
                 }
 
                 RectangularShadow {
@@ -481,7 +498,7 @@ Item {
                                 }
                                 onClicked: () => {
                                     KdeConnectService.selectDevice(modelData?.id)
-                                    deviceMenuOverlay.visible = false
+                                    deviceMenuOverlay.open = false
                                 }
                             }
                         }
@@ -589,7 +606,7 @@ Item {
                             }
                             onClicked: () => {
                                 KdeConnectService.selectDevice(modelData?.id)
-                                deviceMenuOverlay.visible = false
+                                deviceMenuOverlay.open = false
                             }
                         }
                     }
@@ -627,7 +644,7 @@ Item {
                         }
                         onClicked: {
                             KdeConnectService.refreshDevices()
-                            deviceMenuOverlay.visible = false
+                            deviceMenuOverlay.open = false
                         }
                     }
                 }
@@ -649,7 +666,7 @@ Item {
                 const maxX = deviceMenuOverlay.width - popupWidth - 4
                 deviceMenu.deviceMenuOriginX = Math.max(4, Math.min(maxX, centeredX))
                 deviceMenu.deviceMenuOriginY = p.y
-                deviceMenuOverlay.visible = true
+                deviceMenuOverlay.open = true
             }
         }
 
@@ -675,6 +692,7 @@ Item {
                 id: phoneHeader
                 Layout.fillWidth: true
                 visible: !root.emptyStateVisible
+                onRequestSettings: root.openSubPage("PhoneSettingsPage.qml")
             }
 
             // ───────── PAIRING REQUEST BANNERS ─────────
@@ -813,14 +831,39 @@ Item {
                 Layout.fillHeight: true
                 visible: !root.emptyStateVisible
 
+                // ─── Phone media widget (dashboard 4x2 tile) ───
+                // Sits at the top of the notifications list and only exists while
+                // the phone has an active media session.
+                Loader {
+                    id: phoneMediaLoader
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    active: root.phoneHasMedia
+                    visible: active
+                    sourceComponent: PhoneMediaWidget {
+                        width: phoneMediaLoader.width
+                        player: root.phoneMprisPlayer
+                    }
+                }
+
                 RemoteNotificationListView {
                     id: notifList
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.top: parent.top
+                    anchors.topMargin: phoneMediaLoader.active ? (phoneMediaLoader.height + 8) : 0
                     anchors.bottom: listBottomRow.top
                     anchors.bottomMargin: 8
                     clip: true
+
+                    Behavior on anchors.topMargin {
+                        NumberAnimation {
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Appearance.animation.elementMoveFast.type
+                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                        }
+                    }
                 }
 
                 RowLayout {
@@ -971,9 +1014,13 @@ Item {
                 }
             }
 
-            // Empty state — KDE Connect unavailable / no paired device.
+            // Empty state — KDE Connect disabled / unavailable / no paired device.
             ColumnLayout {
                 id: emptyState
+                // The service skips its install check while disabled, so
+                // `available` is meaningless until it is turned back on.
+                readonly property bool serviceOff: !KdeConnectService.serviceEnabled
+
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.margins: 14
@@ -1031,8 +1078,8 @@ Item {
                 MaterialSymbol {
                     id: emptyIcon
                     Layout.alignment: Qt.AlignHCenter
-                    text: KdeConnectService.available
-                          ? "phonelink_off" : "phonelink_erase"
+                    text: emptyState.serviceOff ? "sync_disabled"
+                          : KdeConnectService.available ? "phonelink_off" : "phonelink_erase"
                     iconSize: 64
                     color: Appearance.colors.colSubtext
 
@@ -1047,7 +1094,8 @@ Item {
                     id: emptyTitle
                     Layout.alignment: Qt.AlignHCenter
                     Layout.preferredWidth: root.width * 0.85
-                    text: KdeConnectService.available
+                    text: emptyState.serviceOff ? Translation.tr("Phone integration is off")
+                          : KdeConnectService.available
                           ? Translation.tr("No device connected")
                           : Translation.tr("KDE Connect not installed")
                     font.pixelSize: Appearance.font.pixelSize.huge
@@ -1064,7 +1112,9 @@ Item {
                     id: emptyDesc
                     Layout.alignment: Qt.AlignHCenter
                     Layout.preferredWidth: root.width * 0.85
-                    text: KdeConnectService.available
+                    text: emptyState.serviceOff
+                          ? Translation.tr("KDE Connect is switched off, so notifications, clipboard and file sharing are paused. Turn it on to reconnect your phone.")
+                          : KdeConnectService.available
                           ? Translation.tr("Pair a device through KDE Connect on your phone — once it shows up here, sync notifications, share clipboard, dump files and launch scrcpy mirror.")
                           : Translation.tr("Install `kdeconnect-cli` and the KDE Connect Android app, then pair a device. After pairing it will mirror here automatically.")
                     font.pixelSize: Appearance.font.pixelSize.small
@@ -1092,19 +1142,24 @@ Item {
                         spacing: 6
                         MaterialSymbol {
                             Layout.alignment: Qt.AlignVCenter
-                            text: "download"
+                            text: emptyState.serviceOff ? "power_settings_new" : "download"
                             iconSize: Appearance.font.pixelSize.normal
                             color: Appearance.colors.colOnPrimaryContainer
                         }
                         StyledText {
                             Layout.alignment: Qt.AlignVCenter
-                            text: Translation.tr("Install KDE Connect")
+                            text: emptyState.serviceOff ? Translation.tr("Turn on KDE Connect")
+                                : Translation.tr("Install KDE Connect")
                             color: Appearance.colors.colOnPrimaryContainer
                             font.pixelSize: Appearance.font.pixelSize.small
                             font.weight: Font.DemiBold
                         }
                     }
                     onClicked: () => {
+                        if (emptyState.serviceOff) {
+                            Config.options.phone.kdeconnectEnabled = true
+                            return
+                        }
                         Quickshell.execDetached(["xdg-open",
                             "https://kdeconnect.kde.org/download.html"])
                     }

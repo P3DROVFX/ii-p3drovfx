@@ -442,6 +442,10 @@ Item {
                         color: Appearance.colors.colSubtext
                     }
                 }
+
+                TouchpadScrollHandler {
+                    flickable: timerGrid
+                }
             }
         }
     }

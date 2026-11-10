@@ -17,6 +17,7 @@ Singleton {
     readonly property string shellOverridesPath: FileUtils.trimFileProtocol(`${Directories.config}/hypr/hyprland/shellOverrides/main.lua`)
     readonly property string customInputPath: FileUtils.trimFileProtocol(`${Directories.config}/hypr/custom/input.lua`)
     property var configWriteQueue: []
+    readonly property bool busy: root.configWriteQueue.length > 0 || configWriterProcess.running
 
     function set(key: string, value: var) {
         root._queueShellOverridesCommand(`${root.configuratorScriptPath} --file ${root.shellOverridesPath} --set "${key}" "${value}"`);
@@ -51,8 +52,7 @@ Singleton {
         return true;
     }
     function _applyKeyboardLayoutRuntime(layout: string, variant: string) {
-        Quickshell.execDetached(["hyprctl", "keyword", "input:kb_layout", layout]);
-        Quickshell.execDetached(["hyprctl", "keyword", "input:kb_variant", variant]);
+        Quickshell.execDetached(["hyprctl", "eval", `hl.config({ input = { kb_layout = ${JSON.stringify(layout)}, kb_variant = ${JSON.stringify(variant)} } })`]);
     }
     function _queueShellOverridesCommand(command: string) {
         root._queueConfigWrite({

@@ -42,6 +42,12 @@ with tempfile.TemporaryDirectory(prefix="ii-tabs-smoke-") as directory:
     controller = toolbar.split("Item {", 1)[1].split("    Layout.alignment:", 1)[0]
     put("ToolbarTabBar.qml", "import QtQuick\nItem {" + controller + "\n property bool showShortcutHints: false\n property bool collapseInactiveLabels: false\n}")
     shutil.copy(ROOT / "modules/common/widgets/RetainedLoader.qml", out / "RetainedLoader.qml")
+    appearance = (ROOT / "modules/common/Appearance.qml").read_text()
+    put("qmldir", "singleton Appearance 1.0 Appearance.qml\n")
+    put("Appearance.qml", "pragma Singleton\nimport QtQuick\nQtObject { id: root; property real animMultiplier: 1; readonly property bool reducedMotion: animMultiplier <= 0.25; property QtObject "
+        + block(appearance, "animationCurves: QtObject {")
+        + "; property QtObject animation: QtObject { "
+        + block(appearance, "property QtObject elementMoveEnter: QtObject {") + " } }")
     put("TabBuilds.js", ".pragma library\nvar counts = ({});\nfunction record(name) { counts[name] = (counts[name] || 0) + 1; }\nfunction reset() { counts = ({}); }\n")
     for page in ["CheatsheetTimetable.qml", "CheatsheetKeybinds.qml", "CheatsheetPeriodicTable.qml",
                  "CheatsheetAminoAcids.qml", "commands/CheatsheetCommands.qml", "CheatsheetWorkspaces.qml",
@@ -54,6 +60,8 @@ import "TabBuilds.js" as TabBuilds
 import QtTest
 Item {
  id: root; width: 1200; height: 700
+ property int sessionTab: -1
+ property string sessionTimetableMode: ""
  property int screenWidth: 1600
  property bool activeState: true
  property bool cachePrepared: false
@@ -74,6 +82,7 @@ Item {
    sourceComponent: Item {
     id: cheatsheetRoot
     property var screen: ({width:root.screenWidth,height:900})
+    Timer { id: registerGrabTimer; interval: 0 }
     property alias view: swipeView
     property alias bar: tabBar
     ''' + selection + '''
@@ -86,7 +95,7 @@ Item {
  }
  TestCase {
   name: "CheatsheetTabs"; when: windowShown
-  function init() { root.activeState=true; root.cachePrepared=false; TabBuilds.reset(); }
+  function init() { root.activeState=true; root.cachePrepared=false; root.sessionTab=-1; root.sessionTimetableMode=""; TabBuilds.reset(); }
   function assertOnlySelectedLoaded(sheet,index) {
    tryCompare(sheet.view.itemAt(index),"status",Loader.Ready);
    for(let i=0;i<sheet.view.count;i++) {
@@ -172,9 +181,23 @@ Item {
    }
    sheet.view.setCurrentIndex(1);
    compare(Persistent.states.cheatsheet.tabIndex,1);
-  Persistent.states.cheatsheet.tabIndex=3;
+   Persistent.states.cheatsheet.tabIndex=3;
   tryCompare(sheet.view,"currentIndex",3); compare(sheet.bar.currentIndex,3);
  }
+  function test_stale_persistence_reload_does_not_revert_selected_tab() {
+   Persistent.states.cheatsheet.tabIndex=0;
+   const frame=createTemporaryObject(frameComponent,root);
+   tryCompare(frame,"status",Loader.Ready);
+   const sheet=frame.item; tryCompare(sheet.view,"selectionReady",true);
+   sheet.bar.setCurrentIndex(3);
+   tryCompare(sheet.view,"currentIndex",3);
+   compare(sheet.selectedTab,3);
+   // Simulate the stale snapshot that a FileView watcher can briefly expose.
+   Persistent.states.cheatsheet.tabIndex=0;
+   compare(sheet.selectedTab,3);
+   compare(sheet.bar.currentIndex,3);
+   compare(sheet.view.currentIndex,3);
+  }
   function test_compact_screen_collapses_inactive_tab_labels() {
    root.screenWidth=800;
    const frame=createTemporaryObject(frameComponent,root);

@@ -16,6 +16,10 @@ QuickToggleModel {
 
     available: BluetoothStatus.available
     toggled: BluetoothStatus.enabled
+    readonly property bool batteryKnown: BluetoothStatus.firstActiveDevice?.batteryAvailable ?? false
+    heroLevel: batteryKnown ? BluetoothStatus.firstActiveDevice.battery : -1
+    heroValue: batteryKnown ? String(Math.round(BluetoothStatus.firstActiveDevice.battery * 100)) : ""
+    heroUnit: batteryKnown ? "%" : ""
     mainAction: () => {
         BluetoothStatus.toggle()
     }

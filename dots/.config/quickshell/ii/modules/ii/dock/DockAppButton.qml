@@ -2,6 +2,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
+import qs.modules.common.dock
 import qs.modules.ii.editMode
 import qs
 import QtQuick
@@ -35,7 +36,7 @@ DockButton {
             return -1;
         for (let i = 0; i < appToplevel.toplevels.length; i++) {
             const toplevel = appToplevel.toplevels[i];
-            if (toplevel.activated && HyprlandData.toplevelOnScreen(toplevel))
+            if (toplevel?.activated && HyprlandData.toplevelOnScreen(toplevel))
                 return i;
         }
         return -1;
@@ -58,66 +59,44 @@ DockButton {
         return Item.Bottom;
     }
 
-    // ── App Launch Bounce Customization Tokens ──
-    readonly property bool enableLaunchBounce: Config.options?.dock?.enableLaunchBounce ?? true
-    readonly property real bounceHeight: Config.options?.dock?.bounceHeight ?? 18
-    readonly property int bounceDuration: 280
-    readonly property int maxBounceCycles: 3
-
-    property real launchBounceY: 0
     readonly property string dockPos: dockContent?.dockPos ?? "bottom"
+    readonly property string launchAnimation: Config.options?.dock?.launchAnimation ?? "bounce"
+    readonly property string notificationAnimation: Config.options?.dock?.notificationAnimation ?? "bounce"
 
-    readonly property real effectiveBounceOffset: {
-        if (root.dockPos === "top")
-            return -root.launchBounceY;
-        if (root.dockPos === "left")
-            return -root.launchBounceY;
-        return root.launchBounceY;
+    transform: [attention.shift, attention.grow, attention.turn]
+
+    DockAttentionAnimation {
+        id: attention
+        host: root
+        dockPos: root.dockPos
     }
 
-    transform: Translate {
-        x: root.isVertical ? root.effectiveBounceOffset : 0
-        y: !root.isVertical ? root.effectiveBounceOffset : 0
+    function playLaunchAnimation() {
+        attention.playLaunch(root.launchAnimation);
     }
 
-    SequentialAnimation {
-        id: launchBounceAnim
-        loops: root.maxBounceCycles
-
-        NumberAnimation {
-            target: root
-            property: "launchBounceY"
-            from: 0
-            to: -root.bounceHeight
-            duration: Math.round(root.bounceDuration * 0.45)
-            easing.type: Easing.OutQuad
-        }
-        NumberAnimation {
-            target: root
-            property: "launchBounceY"
-            from: -root.bounceHeight
-            to: 0
-            duration: Math.round(root.bounceDuration * 0.55)
-            easing.type: Easing.InQuad
-        }
-    }
-
-    function triggerLaunchBounce() {
-        if (!enableLaunchBounce)
-            return;
-        launchBounceAnim.stop();
-        launchBounceY = 0;
-        launchBounceAnim.start();
+    /** The notification animation alone, for the Settings preview. */
+    function playNotificationAnimation() {
+        attention.playNotification(root.notificationAnimation);
     }
 
     onAppIsRunningChanged: {
-        if (appIsRunning && launchBounceAnim.running) {
-            launchBounceAnim.loops = 1;
-        }
+        if (appIsRunning)
+            attention.settle();
     }
 
-    scale: (_pressed ? 0.88 : 1.0) * magScale
-    z: magScale > 1.01 ? Math.round(magScale * 100) : 1
+    property real pressProgress: _pressed ? 1 : 0
+    scale: (1 - pressProgress * 0.12) * magScale
+    Behavior on pressProgress {
+        NumberAnimation {
+            duration: Appearance.animation.elementMoveFast.duration
+            easing.type: Appearance.animation.elementMoveFast.type
+            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+        }
+    }
+    // Two tiers only (see the delegate wrapper's z): the proportional form
+    // re-ordered the render stack on every frame the lens moved.
+    z: magScale > 1.01 ? 2 : 1
     width: root.slotWidth
     height: root.slotHeight
 
@@ -250,20 +229,22 @@ DockButton {
             acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
             preventStealing: true
             cursorShape: Qt.PointingHandCursor
-            property real pressCoord: 0
+            property point pressPoint: Qt.point(0, 0)
+            property int pressButton: Qt.NoButton
             property bool dragActive: false
 
             onPressed: event => {
-                root._pressed = true;
-                if (event.button === Qt.LeftButton) {
-                    pressCoord = root.isVertical ? event.y : event.x;
-                }
+                pressButton = event.button;
+                root._pressed = event.button === Qt.LeftButton;
+                // Local coordinates move under a stationary pointer as the
+                // icon magnifies. Only scene movement can start a real drag.
+                pressPoint = dragOverlay.mapToItem(null, event.x, event.y);
             }
             onPositionChanged: event => {
-                if (!pressed)
+                if (!pressed || pressButton !== Qt.LeftButton)
                     return;
-                var cur = root.isVertical ? event.y : event.x;
-                var dist = Math.abs(cur - pressCoord);
+                const point = dragOverlay.mapToItem(null, event.x, event.y);
+                const dist = Math.max(Math.abs(point.x - pressPoint.x), Math.abs(point.y - pressPoint.y));
                 // Only allow drag when delegateIndex >= 0 (reorderable items)
                 if (!dragActive && dist > 5 && root.delegateIndex >= 0) {
                     dragActive = true;
@@ -299,12 +280,12 @@ DockButton {
                     return;
                 }
                 if (event.button === Qt.MiddleButton) {
-                    root.triggerLaunchBounce();
+                    root.playLaunchAnimation();
                     root.desktopEntry?.execute();
                     return;
                 }
                 if (!appToplevel || appToplevel.toplevels.length === 0) {
-                    root.triggerLaunchBounce();
+                    root.playLaunchAnimation();
                     root.desktopEntry?.execute();
                     return;
                 }
@@ -357,7 +338,7 @@ DockButton {
             var targetName = (root.desktopEntry?.name ?? root.appToplevel?.appId ?? "").toLowerCase();
             var appName = (notif.appName || "").toLowerCase();
             if (targetName !== "" && appName !== "" && (appName === targetName || targetName.includes(appName) || appName.includes(targetName))) {
-                root.triggerLaunchBounce();
+                attention.playNotification(root.notificationAnimation);
             }
         }
     }
@@ -368,8 +349,18 @@ DockButton {
             dockContent.registerContextMenuClose();
     }
 
-    DockAppIndicator {
-        z: -1
+    DockRunningIndicator {
+        // Above the plate: the shape mask covers the bottom of the slot and used
+        // to cut the indicator in half.
+        z: 1
+        toplevels: root.appToplevel?.toplevels ?? []
+        // Reuses the dock's filter for a window Hyprland left activated after
+        // a silent move to another workspace.
+        focusedIndex: root.focusedWindowIndex
+        edge: root.dockPos
+        edgeExtent: (root.isVertical ? root.slotHeight : root.slotWidth) * 0.8
+        scaleFactor: root.dockHeight / 56
+        margin: Math.max(1, (root.dockContent?.dotMarginV ?? 1) * 0.35)
     }
     DockAppIcon {
         z: 0
@@ -383,11 +374,25 @@ DockButton {
         }
     }
 
-    DockTooltip {
-        text: root.desktopEntry?.name ?? (root.appToplevel?.appId ?? "")
-        // Always named while Edit Mode is on: several dock icons are a bare
-        // glyph, and arranging them is easier when they say what they are.
-        showTooltip: ((Config.options?.dock?.enableAppTooltip ?? false) || GlobalStates.editMode)
-            && (hoverAreaLoader.item?.containsMouse ?? false)
+    Loader {
+        id: tooltipLoader
+        // A tooltip is a native popup window, and this is the dock's most
+        // numerous delegate: one per app meant one popup per icon for the whole
+        // session — and again every time the dock model is rebuilt — for a
+        // label only ever shown on one icon at a time. Load it on the first
+        // hover and keep it afterwards: destroying it on every hover would
+        // churn a window under a fast cursor instead.
+        property bool used: false
+        readonly property bool tooltipsEnabled: (Config.options?.dock?.enableAppTooltip ?? false) || GlobalStates.editMode
+        readonly property bool hovered: hoverAreaLoader.item?.containsMouse ?? false
+        // Latched on hover, not onLoaded: writing `used` from onLoaded
+        // re-evaluated `active` while it was being applied (a binding loop).
+        onHoveredChanged: if (hovered && tooltipsEnabled) used = true
+        active: tooltipsEnabled && used
+        sourceComponent: DockTooltip {
+            parentItem: root
+            text: root.desktopEntry?.name ?? (root.appToplevel?.appId ?? "")
+            showTooltip: tooltipLoader.tooltipsEnabled && tooltipLoader.hovered
+        }
     }
 }

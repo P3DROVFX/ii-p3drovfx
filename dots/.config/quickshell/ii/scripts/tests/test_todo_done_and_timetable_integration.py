@@ -51,8 +51,10 @@ class TodoDoneAndTimetableIntegrationTests(unittest.TestCase):
         self.assertIn("const source = Todo.doneTasks ?? []", self.todo_widget_qml)
 
     def test_todo_sync_indicator_does_not_rotate(self):
+        # 12df3ffed made the button a static "refresh" glyph; syncing only changes
+        # the tooltip, so nothing in the button may animate while the bar idles.
         sync_button = self.todo_widget_qml.split("id: syncButton", 1)[1].split("StyledToolTip", 1)[0]
-        self.assertIn('return Todo.syncing ? "sync" : "cloud_done"', sync_button)
+        self.assertIn('text: "refresh"', sync_button)
         self.assertNotIn("RotationAnimation", sync_button)
         self.assertNotIn("loops: Animation.Infinite", sync_button)
 

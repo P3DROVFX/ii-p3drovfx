@@ -30,61 +30,179 @@ function decodeHtmlEntities(text) {
     });
 }
 
-function extractCodes(text) {
-    var codes = [];
-    var codeTerms = "(?:código|codigo|code|token|pin|senha|password|passcode|otp)";
-    var bridgeWords = "(?:is|are|equals|é|e|your|seu|the|o|a|de|do|da|para|for|use|using|below|abaixo|confirmation|confirmação|confirmacao|confirm|verification|verificação|verificacao|security|segurança|seguranca|login|authentication|autenticação|autenticacao|one|time|temporary|access|acesso)";
+// Letters as JS sees them, plus Latin-1 accents (\b and \w are ASCII-only).
+var WORD_CHAR = "A-Za-z0-9\\u00C0-\\u00FF";
 
-    // Keep the label explicit, but allow the natural-language glue used by
-    // real emails: "verification code is", "código de confirmação é", etc.
-    var codeBeforeCandidate = new RegExp(
-        "\\b" + codeTerms + "\\b(?:(?:\\s+" + bridgeWords + ")|(?:\\s*[:=\\-–—])){0,5}\\s*$",
-        "i"
-    );
-    var codeAfterCandidate = new RegExp(
-        "^\\s*(?:(?:" + bridgeWords + ")\\s*){0,5}" + codeTerms + "\\b",
-        "i"
-    );
-    var instructionBeforeCandidate = /\b(?:use|enter|type|input|insira|digite|informe)\s*$/i;
-    var instructionAfterCandidate = /^\s*(?:to|para)\s+(?:verify|verificar|confirm|confirmar|validate|validar|continue|continuar|sign\s+in|login)\b/i;
-    var candidateRegex = /(^|[^A-Za-z0-9])([0-9]{2,4}(?:(?:[ \t]+|[-–—])[0-9]{2,4})+|[A-Za-z0-9]{4,10}(?:[-–—][A-Za-z0-9]{2,10})?)(?![A-Za-z0-9])/g;
-    var commonWords = /^(?:your|you|the|this|that|code|token|pin|passcode|password|access|account|login|verify|verification|confirmation|security|use|enter|here|now|please|email|mail|from|with|for|one|time|is|are|and|to|of|a|an)$/i;
+// Labels that name the code itself: matched anywhere near a candidate.
+var STRONG_LABEL = new RegExp(
+    "(?:^|[^" + WORD_CHAR + "])("
+    + "c[óo]digos?|codes?|passcodes?|otp|pin|tokens?|senha|2fa|mfa|"
+    + "one[ -]?time|uso [úu]nico|steam guard"
+    + ")(?![" + WORD_CHAR + "])", "gi");
+
+// Words that only hint at a code ("verify your login"): a short reach.
+var WEAK_LABEL = new RegExp(
+    "(?:^|[^" + WORD_CHAR + "])("
+    + "verifica(?:tion|r|ção|cao)|verify|confirma(?:tion|r|ção|cao)|confirm|"
+    + "autentica(?:tion|ção|cao)|authentication|authenticate|"
+    + "sign[ -]?in|log[ -]?in|entrar|acesso|access|"
+    + "insira|digite|informe|enter|type|use|utilize|copie|copy"
+    + ")(?![" + WORD_CHAR + "])", "gi");
+
+// Candidate shapes, most specific first:
+//  - single digits split by spaces (table cells per digit): 4 8 2 9 1 3
+//  - digit groups split by a space or dash: 492 018, 384-219
+//  - one alphanumeric token, optionally dashed: 482913, F4K9X, XK2-9PL
+var CANDIDATE = new RegExp(
+    "(^|[^" + WORD_CHAR + "])("
+    + "\\d(?:[ \\t]{1,4}\\d){3,7}"
+    + "|\\d{2,4}(?:(?:[ \\t]|[-–—])\\d{2,4}){1,2}"
+    + "|[A-Za-z0-9]{3,12}(?:[-–—][A-Za-z0-9]{2,8})?"
+    + ")(?![" + WORD_CHAR + "]|[-–—.,/:]\\d)", "g");
+
+var COMMON_WORDS = /^(?:CODE|CODES|TOKEN|PIN|OTP|PASSCODE|PASSWORD|SENHA|CODIGO|LOGIN|EMAIL|HTML|HTTP|HTTPS|HELLO|IMPORTANT|NOTICE|URGENT|ALERT|WARNING|ATTENTION|SECURITY|ACCOUNT|VERIFY|CONFIRM|GOOGLE|APPLE|MICROSOFT|STEAM|DISCORD|NETFLIX|AMAZON|UBER|NUBANK|PIX|CPF|CNPJ|CEP|USD|BRL|EUR|OK)$/;
+
+function codeLabels(text, regex) {
+    var labels = [];
+    var m;
+    regex.lastIndex = 0;
+    while ((m = regex.exec(text)) !== null) {
+        var start = m.index + m[0].length - m[1].length;
+        labels.push({ start: start, end: start + m[1].length });
+        regex.lastIndex = start + m[1].length;
+    }
+    return labels;
+}
+
+// Characters between the candidate and the nearest label, before or after.
+function labelDistance(labels, start, end) {
+    var best = -1;
+    for (var i = 0; i < labels.length; i++) {
+        var d = -1;
+        if (labels[i].end <= start)
+            d = start - labels[i].end;
+        else if (labels[i].start >= end)
+            d = labels[i].start - end;
+        if (d >= 0 && (best < 0 || d < best))
+            best = d;
+    }
+    return best;
+}
+
+function extractCodes(text) {
+    var strong = codeLabels(text, STRONG_LABEL);
+    var weak = codeLabels(text, WEAK_LABEL);
+    var found = [];
     var m;
 
-    function addCandidate(candidate) {
-        var value = candidate.trim().replace(/[ \t]+/g, " ");
-        var compact = value.replace(/[ \t\-–—]/g, "");
+    if (strong.length === 0 && weak.length === 0)
+        return [];
 
-        if (compact.length < 4 || compact.length > 20)
-            return;
+    CANDIDATE.lastIndex = 0;
+    while ((m = CANDIDATE.exec(text)) !== null) {
+        var raw = m[2];
+        var start = m.index + m[1].length;
+        var end = start + raw.length;
+        var compact = raw.replace(/[ \t]/g, "");
+        var digitsOnly = /^[\d\-–—]+$/.test(compact);
+        var digits = compact.replace(/\D/g, "");
+        var lineStart = text.lastIndexOf("\n", start - 1) + 1;
+        var lineEnd = text.indexOf("\n", end);
+        // Context filters stay on the candidate's line: "sua conta:" ending
+        // the previous paragraph must not veto the code below it.
+        var before = text.slice(Math.max(lineStart, start - 24), start);
+        var after = text.slice(end, Math.min(lineEnd === -1 ? text.length : lineEnd, end + 24));
+        var line = text.slice(lineStart, lineEnd === -1 ? text.length : lineEnd).trim();
+        var alone = line === raw.trim();
+        var value;
 
-        // Numeric and mixed codes are the common OTP formats. Letter-only
-        // values are accepted only when visibly uppercase and not a normal
-        // email word, so "your" can never become a key by accident.
-        if (!/\d/.test(compact) && (!/^[A-Z]+$/.test(compact) || commonWords.test(compact)))
-            return;
+        if (digitsOnly) {
+            if (digits.length < 3 || digits.length > 10)
+                continue;
+            // Pure digit codes are typed digit by digit: copy them without separators.
+            value = digits;
+        } else {
+            if (/[-–—]/.test(compact) && !/\d/.test(compact))
+                continue;
+            if (!/\d/.test(compact)) {
+                // Letter-only codes must look like a code, not a shouted word.
+                if (!/^[A-Z]{5,8}$/.test(compact) || COMMON_WORDS.test(compact))
+                    continue;
+            } else if (!/[A-Z]/.test(compact) || /[a-z]/.test(compact)) {
+                // Mixed codes are uppercase (AB12CD); lowercase mixes are ids/hashes.
+                continue;
+            }
+            if (compact.replace(/[-–—]/g, "").length < 4)
+                continue;
+            value = compact;
+        }
 
-        if (codes.indexOf(value) === -1)
-            codes.push(value);
+        // Money, order/ticket numbers, percentages, units, times and phone numbers.
+        if (/(?:R\$|US\$|\$|€|£|#|n[º°o]\.?|nr\.?)\s*$/i.test(before))
+            continue;
+        if (/(?:pedido|order|protocolo|protocol|ticket|fatura|invoice|nota|cpf|cnpj|cep|zip|tel|telefone|phone|celular|whatsapp|ramal|conta|account|ag[êe]ncia|cart[ãa]o|card|room|sala|ref)\b\.?:?\s*$/i.test(before))
+            continue;
+        if (/^\s*(?:%|[,.]\d|reais|real|d[óo]lares|usd|brl|eur|kb|mb|gb|km|kg|min\b|minutos|minutes|horas|hours|segundos|seconds|dias|days|h\b|x\b)/i.test(after))
+            continue;
+        if (/\(\d{2}\)\s*$/.test(before) || /\d[:/]\s*$/.test(before) || /^\s*[:/]\d/.test(after))
+            continue;
+
+        var dStrong = labelDistance(strong, start, end);
+        var dWeak = labelDistance(weak, start, end);
+        var score = -1;
+        if (dStrong >= 0 && dStrong <= 160)
+            score = 100 - dStrong / 2;
+        if (dWeak >= 0 && dWeak <= 60)
+            score = Math.max(score, 70 - dWeak);
+        if (score < 0)
+            continue;
+
+        if (alone)
+            score += 25;
+        if (digitsOnly && digits.length >= 4 && digits.length <= 8)
+            score += 10;
+        if (digitsOnly && digits.length === 4 && /^(?:19|20)\d\d$/.test(digits))
+            score -= 45; // a year
+        if (digitsOnly && digits.length === 3)
+            score -= 15; // short codes need a closer label
+        if (!/\d/.test(compact))
+            score -= 30;
+        // "1500 examples", "3 itens": a quantity, unless the next word is the
+        // glue of a code sentence ("482913 is your code", "é o seu código").
+        var nextWord = /^[ \t]+([a-zà-ÿ]{2,})/.exec(after);
+        if (digitsOnly && nextWord && !/^(?:is|are|was|as|to|and|or|for|use|é|e|ou|para|como|seu|sua|o|a|expires|expira|vence|valid|válido|valido)$/.test(nextWord[1]))
+            score -= 50;
+
+        if (score < 55)
+            continue;
+
+        var existing = -1;
+        for (var i = 0; i < found.length; i++) {
+            if (found[i].value === value)
+                existing = i;
+        }
+        if (existing === -1)
+            found.push({ value: value, score: score, start: start });
+        else if (score > found[existing].score)
+            found[existing].score = score;
     }
 
-    while ((m = candidateRegex.exec(text)) !== null) {
-        var candidate = m[2];
-        var candidateStart = m.index + m[1].length;
-        var before = text.slice(Math.max(0, candidateStart - 140), candidateStart);
-        var after = text.slice(candidateStart + candidate.length, candidateStart + candidate.length + 100);
+    found.sort(function(a, b) {
+        return b.score - a.score || a.start - b.start;
+    });
 
-        if (codeBeforeCandidate.test(before)
-                || codeAfterCandidate.test(after)
-                || (instructionBeforeCandidate.test(before) && instructionAfterCandidate.test(after)))
-            addCandidate(candidate);
+    // An OTP mail carries one code; keep close runners-up (backup codes),
+    // drop footer noise that only scraped past the threshold.
+    var codes = [];
+    for (var j = 0; j < found.length && codes.length < 3; j++) {
+        if (found[j].score >= found[0].score - 30)
+            codes.push(found[j].value);
     }
-
     return codes;
 }
 
-function detectAll(bodyRaw) {
-    if (!bodyRaw) {
+function detectAll(bodyRaw, subject) {
+    if (!bodyRaw && !subject) {
         return {
             meetings: [],
             phones: [],
@@ -92,11 +210,13 @@ function detectAll(bodyRaw) {
         };
     }
 
+    bodyRaw = bodyRaw || "";
     var clean = bodyRaw.replace(/<style[\s\S]*?<\/style>/gi, '')
                        .replace(/<script[\s\S]*?<\/script>/gi, '')
                        .replace(/<br\s*\/?>/gi, '\n')
                        .replace(/<\/p>/gi, '\n')
                        .replace(/<\/div>/gi, '\n')
+                       .replace(/<\/(?:center|h[1-6]|tr|li|table)>/gi, '\n')
                        .replace(/<[^>]*>?/gm, ' ');
     var textNoUrls = decodeHtmlEntities(clean)
         .replace(/\u00a0/g, ' ')
@@ -175,8 +295,9 @@ function detectAll(bodyRaw) {
         }
     }
 
-    // Codes (OTP): only return candidates attached to an explicit code label.
-    var codes = extractCodes(textNoUrls);
+    // Codes (OTP): candidates near a code label, best first. The subject often
+    // carries the code alone ("482913 is your verification code").
+    var codes = extractCodes((subject ? subject + "\n" : "") + textNoUrls);
 
     return {
         meetings: uniqueMeetings,

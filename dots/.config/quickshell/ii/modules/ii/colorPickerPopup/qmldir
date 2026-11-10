@@ -2,3 +2,4 @@ module qs.modules.ii.colorPickerPopup
 
 ColorPickerPopup 1.0 ColorPickerPopup.qml
 ColorPickerPopupContent 1.0 ColorPickerPopupContent.qml
+ColorPickerSchemePage 1.0 ColorPickerSchemePage.qml

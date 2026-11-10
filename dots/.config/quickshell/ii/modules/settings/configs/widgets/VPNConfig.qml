@@ -97,19 +97,73 @@ ContentPage {
         ConfigTextField {
             icon: "location_on"
             text: Translation.tr("Default VPN location")
-            placeholderText: Translation.tr("Optional provider location or server")
+            placeholderText: Translation.tr("Country code or name for NordVPN/Proton VPN (e.g. CH), or a profile name")
             inputText: Config.options.vpn.defaultLocation
             textField.onTextChanged: Config.options.vpn.defaultLocation = textField.text
+        }
+
+        ConfigSwitch {
+            buttonIcon: "shield_lock"
+            text: Translation.tr("Proton VPN Secure Core")
+            description: Translation.tr("Routes through a Secure Core server first; the default location becomes the exit country")
+            enabled: VpnService.protonvpnAvailable
+            checked: Config.options.vpn.protonSecureCore
+            onCheckedChanged: Config.options.vpn.protonSecureCore = checked
         }
 
         ContentSubsectionLabel { text: Translation.tr("Advanced Security") }
 
         ConfigSwitch {
             buttonIcon: "security"
-            text: VpnService.killSwitchSupported ? Translation.tr("VPN kill switch") : Translation.tr("VPN kill switch (unsupported by backend)")
-            checked: Config.options.vpn.killSwitch
-            enabled: VpnService.killSwitchSupported
-            onCheckedChanged: Config.options.vpn.killSwitch = checked
+            text: VpnService.killSwitchSupported ? Translation.tr("Proton VPN kill switch") : Translation.tr("VPN kill switch (unsupported by backend)")
+            description: !VpnService.killSwitchSupported ? ""
+                : VpnService.protonConnected ? Translation.tr("Disconnect Proton VPN to change it")
+                : Translation.tr("Blocks the internet if the VPN drops; disconnecting on purpose restores it")
+            enabled: VpnService.killSwitchSupported && !VpnService.protonConnected && !VpnService.killSwitchPending
+            checked: VpnService.killSwitchEnabled
+            // Proton's settings own this state, so hand the binding back after the click.
+            onCheckedChanged: {
+                if (checked === VpnService.killSwitchEnabled)
+                    return;
+                VpnService.setKillSwitch(checked);
+                checked = Qt.binding(() => VpnService.killSwitchEnabled);
+            }
+        }
+
+        HelperCodeBox {
+            Layout.fillWidth: true
+            visible: !VpnService.staleSocketHookInstalled || VpnService.staleSocketHookOutdated
+            topLeftRadius: Appearance.rounding.large
+            topRightRadius: Appearance.rounding.large
+            bottomLeftRadius: Appearance.rounding.large
+            bottomRightRadius: Appearance.rounding.large
+            icon: "sync_problem"
+            title: VpnService.staleSocketHookOutdated ? Translation.tr("The connection reset hook is out of date")
+                : Translation.tr("Reset connections when the VPN changes")
+            text: Translation.tr("Connections opened before a VPN connects, disconnects or switches server stay tied to the old address and hang until the app gives up, which many apps report as having no internet. This NetworkManager hook resets them so apps reconnect at once. It runs as root, only when a VPN goes up or down.")
+            codeSnippet: VpnService.staleSocketHookInstallCommand
+            actionText: VpnService.staleSocketHookOutdated ? Translation.tr("Update it now") : Translation.tr("Install it now")
+            actionIcon: "download"
+            actionBusy: VpnService.staleSocketHookInstalling
+            busyText: Translation.tr("Installing…")
+            statusIsError: VpnService.staleSocketHookResult === "failed" || VpnService.staleSocketHookResult === "cancelled"
+            statusText: VpnService.staleSocketHookResult === "failed" ? Translation.tr("Installation failed")
+                : VpnService.staleSocketHookResult === "cancelled" ? Translation.tr("Authentication was cancelled")
+                : ""
+            onActionClicked: VpnService.installStaleSocketHook()
+        }
+
+        HelperCodeBox {
+            Layout.fillWidth: true
+            visible: VpnService.staleSocketHookInstalled && !VpnService.staleSocketHookOutdated
+            topLeftRadius: Appearance.rounding.large
+            topRightRadius: Appearance.rounding.large
+            bottomLeftRadius: Appearance.rounding.large
+            bottomRightRadius: Appearance.rounding.large
+            icon: "check_circle"
+            title: Translation.tr("Connections are reset when the VPN changes")
+            text: Translation.tr("Connections a VPN change leaves hanging are reset automatically. To remove the hook, run:")
+            codeSnippet: VpnService.staleSocketHookRemoveCommand
         }
 
         ConfigSwitch {

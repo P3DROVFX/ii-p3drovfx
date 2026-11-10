@@ -21,6 +21,13 @@ Item {
     property bool isAnimating: false
     property bool isClosing: false
 
+    // Message bodies under the pointer or in a selection drag. Counted, since
+    // each expanded message has its own text.
+    property int interactingBodies: 0
+    // Read by the cheatsheet: no tab swipe while the pointer is over the
+    // thread or a text selection drag is running.
+    readonly property bool locksHorizontalSwipe: threadHover.hovered || root.interactingBodies > 0
+
     signal closeStarted
     signal closeRequested
     signal replyRequested(string to, string subject, string body, string threadId, string inReplyTo)
@@ -225,10 +232,17 @@ Item {
                     color: "transparent"
                     clip: true
 
+                    HoverHandler {
+                        id: threadHover
+                    }
+
                     StyledFlickable {
                         anchors.fill: parent
                         contentWidth: width
                         contentHeight: stackCol.implicitHeight
+                        // A mouse drag over a body is a selection, not a
+                        // flick; the wheel and touchpad still scroll.
+                        acceptedButtons: root.interactingBodies > 0 ? Qt.NoButton : Qt.LeftButton
 
                         ColumnLayout {
                             id: stackCol
@@ -270,7 +284,7 @@ Item {
                                     }
 
                                     function updateDetections() {
-                                        var res = EmailDetections.detectAll(model.body);
+                                        var res = EmailDetections.detectAll(model.body, model.subject);
                                         detectedMeetings = res.meetings;
                                         detectedPhones = res.phones;
                                         detectedCodes = res.codes;
@@ -435,18 +449,27 @@ Item {
                                                 color: "transparent"
                                                 clip: true
 
-                                                StyledText {
+                                                SelectableEmailText {
                                                     id: bodyText
                                                     width: parent.width
-                                                    text: model.body
-                                                    textFormat: Text.RichText
-                                                    wrapMode: Text.Wrap
+                                                    enabled: isExpanded
+                                                    html: model.body
                                                     font.family: Appearance.font.family.reading
                                                     font.pixelSize: EmailService.bodyFontSize
                                                     color: Appearance.colors.colOnSurface
-                                                    linkColor: Appearance.colors.colPrimary
-                                                    onLinkActivated: function (link) {
-                                                        Qt.openUrlExternally(link);
+
+                                                    property bool counted: false
+                                                    function syncCount() {
+                                                        const want = interacting;
+                                                        if (want === counted)
+                                                            return;
+                                                        counted = want;
+                                                        root.interactingBodies += want ? 1 : -1;
+                                                    }
+                                                    onInteractingChanged: syncCount()
+                                                    Component.onDestruction: {
+                                                        if (counted)
+                                                            root.interactingBodies -= 1;
                                                     }
                                                 }
                                             }

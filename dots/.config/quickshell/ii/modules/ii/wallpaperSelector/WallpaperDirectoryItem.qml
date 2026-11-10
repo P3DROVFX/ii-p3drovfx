@@ -13,6 +13,11 @@ MouseArea {
     property bool isDirectory: fileModelData.fileIsDir
 
     property bool shouldLoad: true
+    /** Keep decoded thumbnails in the image cache; for views that rebuild cards as they scroll. */
+    property bool cacheThumbnail: false
+    /** Off where the view shows the name itself (the island's carousel has one caption). */
+    property bool showName: true
+    property real thumbnailRadius: Appearance.rounding.small
     property bool isApplied: false
     property string appliedLabel: ""
 
@@ -98,7 +103,7 @@ MouseArea {
                     sourceComponent: StyledRectangularShadow {
                         target: thumbnailImageLoader
                         anchors.fill: undefined
-                        radius: Appearance.rounding.small
+                        radius: root.thumbnailRadius
                     }
                 }
 
@@ -112,7 +117,7 @@ MouseArea {
                         sourcePath: String(fileModelData.filePath || "")
                         thumbnailService: Wallpapers
 
-                        cache: false
+                        cache: root.cacheThumbnail
                         fillMode: Image.PreserveAspectCrop
                         clip: true
 
@@ -121,7 +126,7 @@ MouseArea {
                             maskSource: Rectangle {
                                 width: wallpaperItemImageContainer.width
                                 height: wallpaperItemImageContainer.height
-                                radius: Appearance.rounding.small
+                                radius: root.thumbnailRadius
                             }
                         }
                     }
@@ -140,7 +145,7 @@ MouseArea {
                             maskSource: Rectangle {
                                 width: videoThumbnailFallbackLoader.width
                                 height: videoThumbnailFallbackLoader.height
-                                radius: Appearance.rounding.small
+                                radius: root.thumbnailRadius
                             }
                         }
                     }
@@ -237,7 +242,7 @@ MouseArea {
                             maskSource: Rectangle {
                                 width: apiImageLoader.width
                                 height: apiImageLoader.height
-                                radius: Appearance.rounding.small
+                                radius: root.thumbnailRadius
                             }
                         }
                     }
@@ -246,6 +251,7 @@ MouseArea {
 
             StyledText {
                 id: wallpaperItemName
+                visible: root.showName
                 Layout.fillWidth: true
                 Layout.leftMargin: 10
                 Layout.rightMargin: 10

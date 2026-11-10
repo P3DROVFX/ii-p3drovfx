@@ -15,7 +15,7 @@ AbstractBackgroundWidget {
 
     configEntryName: "month_clock"
 
-    visibleWhenLocked: root.lockBehavior === "keep"
+    visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "custom"
                     || root.lockBehavior === "center"
                     || root.lockBehavior === "lockOnly"
                     || (Config.options.lock.centerWidget === "month_clock")
@@ -63,9 +63,10 @@ AbstractBackgroundWidget {
 
     property int clockSecond: DateTime.clock.seconds
     Timer {
-        running: root.cfgSecondHandStyle !== "hide"
+        running: root.cfgSecondHandStyle !== "hide" && root.live
         repeat: true
         interval: 1000
+        triggeredOnStart: true
         onTriggered: root.clockSecond = new Date().getSeconds()
     }
 

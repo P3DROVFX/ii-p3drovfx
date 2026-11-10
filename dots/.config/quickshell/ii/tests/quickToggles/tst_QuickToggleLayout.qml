@@ -342,4 +342,161 @@ TestCase {
         // Row 2 starts at 56 + 6 + 56 + 6 = 124
         compare(positioned[1].layoutY, 124);
     }
+
+    function test_square_toggle_packing_and_continuous_row_flow() {
+        var items = [
+            item("sq", 0, 1),
+            item("rect", 1, 1)
+        ];
+        var packed = Layout.pack(items, 4, 98, 56, 6);
+        compare(packed.rowsUsed, 1);
+        compare(packedById(packed, "sq").sizeW, 0);
+        compare(packedById(packed, "sq").columnSpan, 1);
+        compare(packedById(packed, "sq").column, 0);
+        compare(packedById(packed, "sq").layoutX, 0);
+        // rect starts right after sq (56px) + 6px spacing = 62px
+        compare(packedById(packed, "rect").layoutX, 62);
+
+        var positioned = Layout.positionedItems(items, packed, 98, 56, 6);
+        compare(positioned[0].sizeW, 0);
+        compare(positioned[0].layoutX, 0);
+        compare(positioned[1].layoutX, 62);
+    }
+
+    function test_square_toggle_continuous_flow_with_wide_item_and_wrap() {
+        var items = [
+            item("sq", 0, 1),
+            item("bluetooth", 2, 1),
+            item("audioIn", 1, 1),
+            item("audioOut", 1, 1)
+        ];
+        var packed = Layout.pack(items, 4, 98, 56, 6);
+        // Total row width: 4 * 98 + 3 * 6 = 410
+        // Base widths: sq=56, bluetooth=202, audioIn=98 -> total = 368px.
+        // Row 0 remaining = 410 - 368 = 42px.
+        // bluetooth (widest rect) flex-grows to 202 + 42 = 244px!
+        // audioIn shifts from 270 to 312px, ending at 312 + 98 = 410px!
+        compare(packed.rowsUsed, 2);
+        compare(packedById(packed, "sq").row, 0);
+        compare(packedById(packed, "sq").layoutX, 0);
+        compare(packedById(packed, "bluetooth").row, 0);
+        compare(packedById(packed, "bluetooth").layoutX, 62);
+        compare(packedById(packed, "bluetooth").pixelWidth, 244);
+        compare(packedById(packed, "audioIn").row, 0);
+        compare(packedById(packed, "audioIn").layoutX, 312);
+        compare(packedById(packed, "audioOut").row, 1);
+        compare(packedById(packed, "audioOut").layoutX, 0);
+
+        var positioned = Layout.positionedItems(items, packed, 98, 56, 6);
+        compare(positioned[0].layoutX, 0);
+        compare(positioned[1].layoutX, 62);
+        compare(positioned[1].pixelWidth, 244);
+        compare(positioned[2].layoutX, 312);
+        compare(positioned[3].layoutX, 0);
+        compare(positioned[3].layoutY, 62);
+    }
+
+    function test_row_with_six_square_toggles_justifies_spacing() {
+        var items = [
+            item("sq1", 0, 1), item("sq2", 0, 1), item("sq3", 0, 1),
+            item("sq4", 0, 1), item("sq5", 0, 1), item("sq6", 0, 1)
+        ];
+        var packed = Layout.pack(items, 4, 98, 56, 6);
+        compare(packed.rowsUsed, 1);
+        // 6 * 56 = 336px. Total: 410px. Remaining for 5 gaps: 74px -> 14.8px per gap.
+        compare(packedById(packed, "sq1").layoutX, 0);
+        compare(packedById(packed, "sq2").layoutX, 70.8);
+        compare(packedById(packed, "sq3").layoutX, 141.6);
+        compare(packedById(packed, "sq4").layoutX, 212.4);
+        compare(packedById(packed, "sq5").layoutX, 283.2);
+        compare(packedById(packed, "sq6").layoutX, 354);
+        compare(packedById(packed, "sq6").layoutX + packedById(packed, "sq6").pixelWidth, 410);
+
+        var positioned = Layout.positionedItems(items, packed, 98, 56, 6);
+        compare(positioned[0].layoutX, 0);
+        compare(positioned[5].layoutX, 354);
+    }
+
+    function test_row_with_square_toggles_and_2x1_flex_grows_wide_toggle() {
+        var items = [
+            item("sq1", 0, 1), item("sq2", 0, 1), item("sq3", 0, 1),
+            item("bluetooth", 2, 1)
+        ];
+        var packed = Layout.pack(items, 4, 98, 56, 6);
+        compare(packed.rowsUsed, 1);
+        // 3 * 56 + 3 * 6 + 202 = 388px. Remaining: 22px.
+        // bluetooth flex-grows from 202 to 224px, touching 410px.
+        compare(packedById(packed, "sq1").layoutX, 0);
+        compare(packedById(packed, "sq2").layoutX, 62);
+        compare(packedById(packed, "sq3").layoutX, 124);
+        compare(packedById(packed, "bluetooth").layoutX, 186);
+        compare(packedById(packed, "bluetooth").pixelWidth, 224);
+        compare(packedById(packed, "bluetooth").layoutX + packedById(packed, "bluetooth").pixelWidth, 410);
+
+        var positioned = Layout.positionedItems(items, packed, 98, 56, 6);
+        compare(positioned[0].layoutX, 0);
+        compare(positioned[3].layoutX, 186);
+        compare(positioned[3].pixelWidth, 224);
+    }
+
+    function test_multi_row_widget_does_not_overlap_with_square_toggles() {
+        var items = [
+            item("bluetooth", 2, 2),
+            item("sq1", 0, 1), item("sq2", 0, 1), item("sq3", 0, 1),
+            item("sq4", 0, 1), item("sq5", 0, 1), item("sq6", 0, 1)
+        ];
+        var packed = Layout.pack(items, 4, 98, 56, 6);
+        verify(Layout.validateNoOverlap(packed, 4));
+        compare(packed.rowsUsed, 2);
+
+        // bluetooth occupies row 0-1, columns 0-1 (x: 0 to 202)
+        var bt = packedById(packed, "bluetooth");
+        compare(bt.row, 0);
+        compare(bt.rowSpan, 2);
+        compare(bt.layoutX, 0);
+        compare(bt.pixelWidth, 202);
+
+        // Row 0 square toggles fit in zone [208, 410]
+        compare(packedById(packed, "sq1").row, 0);
+        compare(packedById(packed, "sq1").layoutX, 208);
+        compare(packedById(packed, "sq2").row, 0);
+        compare(packedById(packed, "sq2").layoutX, 281);
+        compare(packedById(packed, "sq3").row, 0);
+        compare(packedById(packed, "sq3").layoutX, 354);
+        compare(packedById(packed, "sq3").layoutX + packedById(packed, "sq3").pixelWidth, 410);
+
+        // Row 1 square toggles MUST NOT overlap bluetooth [0, 202], must start at 208
+        compare(packedById(packed, "sq4").row, 1);
+        compare(packedById(packed, "sq4").layoutX, 208);
+        compare(packedById(packed, "sq5").row, 1);
+        compare(packedById(packed, "sq5").layoutX, 281);
+        compare(packedById(packed, "sq6").row, 1);
+        compare(packedById(packed, "sq6").layoutX, 354);
+        compare(packedById(packed, "sq6").layoutX + packedById(packed, "sq6").pixelWidth, 410);
+
+        var positioned = Layout.positionedItems(items, packed, 98, 56, 6);
+        compare(positioned[0].layoutX, 0);
+        compare(positioned[4].layoutX, 208);
+        compare(positioned[6].layoutX, 354);
+    }
+
+    function test_multi_row_widget_with_mixed_rect_and_square_toggles() {
+        var items = [
+            item("media", 2, 2),
+            item("sq", 0, 1),
+            item("rect", 1, 1)
+        ];
+        var packed = Layout.pack(items, 4, 98, 56, 6);
+        verify(Layout.validateNoOverlap(packed, 4));
+
+        compare(packedById(packed, "media").layoutX, 0);
+        compare(packedById(packed, "media").pixelWidth, 202);
+        compare(packedById(packed, "sq").layoutX, 208);
+        compare(packedById(packed, "sq").pixelWidth, 56);
+        // rect flex-grows in zone [208, 410] to touch 410
+        compare(packedById(packed, "rect").layoutX, 270);
+        compare(packedById(packed, "rect").pixelWidth, 140);
+        compare(packedById(packed, "rect").layoutX + packedById(packed, "rect").pixelWidth, 410);
+    }
 }
+

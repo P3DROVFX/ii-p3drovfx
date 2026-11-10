@@ -15,7 +15,7 @@ AbstractBackgroundWidget {
 
     configEntryName: "triple_ring_clock"
 
-    visibleWhenLocked: root.lockBehavior === "keep"
+    visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "custom"
                     || root.lockBehavior === "center"
                     || root.lockBehavior === "lockOnly"
                     || (Config.options.lock.centerWidget === "triple_ring_clock")

@@ -103,9 +103,11 @@ Singleton {
             return;
         }
 
-        if (isSuppressed(mac))
+        if (isSuppressed(mac) || root._inFlight[mac])
             return;
 
+        // One helper per headset: a second one loses the profile registration race and keeps retrying
+        root._inFlight[mac] = true;
         // Spawn a lightweight, isolated process to poll the specific headset
         processComponent.createObject(root, {
             "mac": mac
@@ -143,22 +145,35 @@ Singleton {
                     if (modeLine) {
                         root.updateDeviceMode(proc.mac, modeLine);
                     }
-                    proc.destroy(); // Auto-free memory upon completion
                 }
+            }
+
+            onExited: {
+                delete root._inFlight[proc.mac];
+                proc.destroy(); // Auto-free memory upon completion
             }
         }
     }
 
+    property var _inFlight: ({})
+
+    // A fresh connection flips connectedDevices before BudsLinkService.legacyDeferred catches up, so an
+    // immediate refresh slips past isSuppressed(). Let the bindings (and the audio profiles) settle first.
+    Timer {
+        id: settleTimer
+        interval: 2500
+        onTriggered: root.refreshAllConnected()
+    }
+
     onIsConnectedChanged: {
-        if (isConnected) {
-            refreshAllConnected();
-        }
+        if (isConnected)
+            settleTimer.restart();
     }
 
     // BudsLink turned out to be unavailable (or was disabled): take over the connected earbuds now
     readonly property bool legacyDeferred: BudsLinkService.legacyDeferred
     onLegacyDeferredChanged: {
         if (!legacyDeferred)
-            refreshAllConnected();
+            settleTimer.restart();
     }
 }

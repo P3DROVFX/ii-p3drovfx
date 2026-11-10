@@ -139,13 +139,44 @@ Scope {
         }
     }
 
+    // Same latch as the classic OSD (OnScreenDisplay.qml): the window stays loaded for the
+    // fade-out, and `active` changes only in the handler (open) or the timer (after the fade),
+    // never in the close notification itself, or the window is destroyed before it fades.
+    property bool osdWindowAlive: false
+    Component.onCompleted: root.osdWindowAlive = GlobalStates.osdVolumeOpen
+
+    Timer {
+        id: osdCloseTimer
+        // The fade is 200 ms (the Tuner's card); a little longer so it always lands.
+        interval: 250
+        onTriggered: root.osdWindowAlive = false
+    }
+
+    Connections {
+        target: GlobalStates
+        function onOsdVolumeOpenChanged() {
+            if (GlobalStates.osdVolumeOpen) {
+                osdCloseTimer.stop();
+                root.osdWindowAlive = true;
+            } else {
+                osdCloseTimer.restart();
+            }
+        }
+    }
+
     Loader {
         id: osdLoader
-        active: GlobalStates.osdVolumeOpen
+        active: root.osdWindowAlive
 
         sourceComponent: PanelWindow {
             id: osdRoot
             color: "transparent"
+
+            // The Tuner's popup motion (TunerOsdWindow's card): the window is created with
+            // `appeared` false, so the fade and grow run on the first frame too.
+            property bool appeared: false
+            readonly property bool revealed: osdRoot.appeared && GlobalStates.osdVolumeOpen
+            Component.onCompleted: osdRoot.appeared = true
 
             Connections {
                 target: root
@@ -178,6 +209,21 @@ Scope {
             ColumnLayout {
                 id: columnLayout
                 anchors.horizontalCenter: parent.horizontalCenter
+                opacity: osdRoot.revealed ? 1 : 0
+                scale: osdRoot.revealed ? 1 : 0.9
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: 200
+                        easing.type: Easing.OutCubic
+                    }
+                }
+                Behavior on scale {
+                    NumberAnimation {
+                        duration: 200
+                        easing.type: Easing.OutCubic
+                    }
+                }
 
                 Item {
                     id: osdValuesWrapper

@@ -45,8 +45,13 @@ MouseArea {
         }
     }
 
-    WeatherPopup {
-        compact: Config.options.bar.tooltips.compactPopups
-        hoverTarget: root
+    // Lazy: popup controller is only built on approach (same as ExpressiveSports).
+    PopupLoader {
+        active: BarInteraction.enablePopups
+            && (BarInteraction.clickToShow || root.containsMouse || held)
+        sourceComponent: WeatherPopup {
+            compact: Config.options.bar.tooltips.compactPopups
+            hoverTarget: root
+        }
     }
 }

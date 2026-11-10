@@ -8,23 +8,33 @@ import qs.services
 RowLayout {
     id: root
     anchors.fill: parent
-    anchors.leftMargin: 12
-    anchors.rightMargin: 12
-    spacing: 12
+    /**
+     * One padding for every side.
+     *
+     * It used to inset 12px at the sides and nothing at the top or bottom, and the
+     * shape was sized `height - 4` - so it nearly touched both edges while the text
+     * beside it sat in far more air than it needed. Now the shape takes the height
+     * less its own margin, which is the same margin it has at the edge.
+     */
+    readonly property real padding: 8
+    anchors.margins: root.padding
+    spacing: 10
 
     // Left side: Keyboard Icon inside Clover/Cookie shape
     MaterialShape {
         id: iconShape
         shapeString: "Cookie12Sided"
         color: Appearance.colors.colPrimaryContainer
-        implicitWidth: Math.max(16, Math.min(32, root.height - 4))
-        implicitHeight: Math.max(16, Math.min(32, root.height - 4))
+        // The root is already inset by `padding` through its margins, so the shape
+        // fills the whole inner row; subtracting it again shrank it to the floor.
+        implicitWidth: Math.max(18, root.height)
+        implicitHeight: Math.max(18, root.height)
         Layout.alignment: Qt.AlignVCenter
 
         MaterialSymbol {
             anchors.centerIn: parent
             text: "keyboard"
-            iconSize: Math.max(10, Math.min(16, iconShape.implicitHeight - 16))
+            iconSize: Math.max(11, Math.round(iconShape.implicitHeight * 0.58))
             color: Appearance.colors.colOnPrimaryContainer
         }
     }
@@ -36,8 +46,13 @@ RowLayout {
         Layout.fillHeight: true
         Layout.alignment: Qt.AlignVCenter
 
-        readonly property int itemWidth: 70
         readonly property int spacingValue: 4
+        readonly property int count: HyprlandXkb.layoutCodes.length
+        // Cells share the container: never wider than the design's 70px, never wide
+        // enough to spill past the island's edge whatever the layout count is.
+        readonly property int itemWidth: count > 0
+            ? Math.max(40, Math.min(70, Math.floor((width - (count - 1) * spacingValue) / count)))
+            : 70
         
         // Track active indexes
         readonly property int activeIndex: getActiveIndex()

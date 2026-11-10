@@ -16,7 +16,11 @@ import Quickshell
  * monitor shows the legacy values. The first move or resize on a monitor forks
  * it into the map, and this shell never writes the legacy values again for
  * that entry. The lock map forks the same way from whatever the desktop
- * shows, and a lock surface without a fork follows the desktop. An older
+ * shows, and a lock surface without a fork follows the desktop. The lock map
+ * is only read for a widget whose lockBehavior gives it a lock placement of
+ * its own ("custom", or "lockOnly", which has no desktop one); "keep" always
+ * follows the desktop, so a fork left behind by an earlier custom placement
+ * waits there until the widget is made custom again. An older
  * shell keeps reading and writing the legacy values and carries both maps
  * along untouched (every writer clones the whole entry), so neither side
  * loses the other's layout.
@@ -29,6 +33,13 @@ Singleton {
 
     function _mapKey(lock) {
         return lock ? "lockPositions" : "positions";
+    }
+
+    // Whether `entry` places itself on the lock screen rather than following
+    // the desktop there.
+    function ownsLockPlacement(entry) {
+        const behavior = entry ? (entry.lockBehavior || "hide") : "hide";
+        return behavior === "custom" || behavior === "lockOnly";
     }
 
     function fork(entry, monitorName, lock = false) {
@@ -63,6 +74,7 @@ Singleton {
     function resolve(entry, monitorName, lock = false, screenW = 0, screenH = 0) {
         if (!entry)
             return { "x": 0, "y": 0, "scale": 1.0, "forked": false };
+        lock = lock && root.ownsLockPlacement(entry);
         const localDesktop = root.fork(entry, monitorName, false);
         const localLock = lock ? root.fork(entry, monitorName, true) : null;
         const hasLocalFork = (lock ? localLock : localDesktop) !== null;
@@ -76,9 +88,11 @@ Singleton {
         let rawY = Number(src.y ?? base.y ?? entry.y ?? 0);
         let rawScale = Number(src.scale ?? base.scale ?? entry.scale ?? 1.0);
 
-        // If this monitor does NOT have its own fork (i.e. using a fallback from an
-        // imported preset or other monitor), adapt to screen proportions if screenW/H are provided:
-        if (!hasLocalFork && screenW > 0 && screenH > 0) {
+        // A lock without its own placement can inherit this monitor's desktop
+        // coordinates. They are already local, even though hasLocalFork is false.
+        // Only legacy or other-monitor coordinates need resolution adaptation.
+        const inheritsLocalDesktop = lock && lockFork === null && localDesktop !== null;
+        if (!hasLocalFork && !inheritsLocalDesktop && screenW > 0 && screenH > 0) {
             const refW = Number(entry.refWidth || (typeof Config !== "undefined" && Config.options && Config.options.background && Config.options.background.referenceResolution ? Config.options.background.referenceResolution.width : 0) || 1920);
             const refH = Number(entry.refHeight || (typeof Config !== "undefined" && Config.options && Config.options.background && Config.options.background.referenceResolution ? Config.options.background.referenceResolution.height : 0) || 1080);
             if (refW > 0 && refH > 0 && (screenW !== refW || screenH !== refH)) {
@@ -151,6 +165,26 @@ Singleton {
         if (!monitorName)
             return;
         root._ensureFork(entry, monitorName, lock).scale = scale;
+    }
+
+    // Moving or resizing a widget on the lock surface gives it a lock
+    // placement of its own: a "keep" or "center" widget turns "custom", its
+    // fork on this monitor seeded from what the desktop shows so claiming
+    // never moves anything (a stale fork from an earlier custom placement is
+    // replaced). The caller writes the new position or scale right after.
+    function claimLockPlacement(entry, monitorName) {
+        if (!entry || root.ownsLockPlacement(entry))
+            return;
+        entry.lockBehavior = "custom";
+        if (!monitorName)
+            return;
+        const desktop = root.resolve(entry, monitorName, false);
+        const forked = { "x": desktop.x, "y": desktop.y };
+        if (entry.scale !== undefined || root.fork(entry, monitorName, false)?.scale !== undefined)
+            forked.scale = desktop.scale;
+        if (!entry.lockPositions || typeof entry.lockPositions !== "object")
+            entry.lockPositions = {};
+        entry.lockPositions[monitorName] = forked;
     }
 
     // Drops the monitor's fork so it follows the legacy values (or, for the

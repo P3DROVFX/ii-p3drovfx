@@ -23,8 +23,12 @@ RippleButton { // Right sidebar button
     topRightRadius: endRadius
     bottomRightRadius: endRadius
 
-    implicitWidth: Math.max(0, indicatorsRowLayout.implicitWidth - indicatorsRowLayout.realSpacing) + 10
-    implicitHeight: Math.max(indicatorsRowLayout.implicitHeight, Appearance.font.pixelSize.larger) + 10
+    property real horizontalMargin: 12
+
+    implicitWidth: Math.max(0, indicatorsRowLayout.implicitWidth - indicatorsRowLayout.realSpacing) + horizontalMargin * 2
+    // At least the group's plate (bar height less its 4px margins), so hover and
+    // active fill the pill instead of floating inside it.
+    implicitHeight: Math.max(Math.max(indicatorsRowLayout.implicitHeight, Appearance.font.pixelSize.larger) + 10, Appearance.sizes.baseBarHeight - 8)
 
     colBackgroundHover: Appearance.colors.colLayer1Hover
     colRipple: Appearance.colors.colLayer1Active
@@ -50,6 +54,8 @@ RippleButton { // Right sidebar button
     DashboardIconDriver {
         id: iconDriver
         wifiIcon: wifiIcon
+        ethernetIcon: ethernetIcon
+        hotspotIcon: hotspotIcon
         bluetoothIcon: bluetoothIcon
         volumeIcon: volumeIcon
         micIcon: micIcon
@@ -63,7 +69,7 @@ RippleButton { // Right sidebar button
     RowLayout {
         id: indicatorsRowLayout
         anchors.centerIn: parent
-        property real realSpacing: 15
+        property real realSpacing: 7
         spacing: 0
 
         DashboardIconRevealer {
@@ -110,6 +116,7 @@ RippleButton { // Right sidebar button
                 running: iconDriver.countdownRunning
                 paused: iconDriver.countdownPaused
                 finished: iconDriver.countdownFinished
+                progress: iconDriver.countdownProgress
             }
         }
 
@@ -149,22 +156,31 @@ RippleButton { // Right sidebar button
             Layout.fillHeight: true
 
             Item {
-                implicitWidth: netFgIcon.implicitWidth
-                implicitHeight: netFgIcon.implicitHeight
+                implicitWidth: rightSidebarButton.iconPixelSize
+                implicitHeight: rightSidebarButton.iconPixelSize
 
-                MaterialSymbol {
-                    id: netFgIcon
+                EthernetIcon {
+                    id: ethernetIcon
                     anchors.centerIn: parent
-                    visible: Network.ethernet && !GlobalStates.dashboardWifiDialogOpen
-                    text: "lan"
+                    visible: iconDriver.shownNetworkKind === "ethernet"
                     iconSize: rightSidebarButton.iconPixelSize
                     color: rightSidebarButton.colText
+                    linked: Network.ethernet
+                }
+
+                HotspotIcon {
+                    id: hotspotIcon
+                    anchors.centerIn: parent
+                    visible: iconDriver.shownNetworkKind === "hotspot"
+                    iconSize: rightSidebarButton.iconPixelSize
+                    color: rightSidebarButton.colText
+                    active: NetworkState.accessPointMode
                 }
 
                 WifiIcon {
                     id: wifiIcon
                     anchors.centerIn: parent
-                    visible: !Network.ethernet || GlobalStates.dashboardWifiDialogOpen
+                    visible: iconDriver.shownNetworkKind === "wifi"
                     iconSize: rightSidebarButton.iconPixelSize
                     color: rightSidebarButton.colText
                     bars: {

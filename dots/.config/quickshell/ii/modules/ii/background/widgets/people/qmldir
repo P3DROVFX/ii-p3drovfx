@@ -1,0 +1,9 @@
+module qs.modules.ii.background.widgets.people
+
+BirthdaySource 1.0 BirthdaySource.qml
+PersonAvatar 1.0 PersonAvatar.qml
+NextBirthdayWidget 1.0 NextBirthdayWidget.qml
+BirthdayTimelineWidget 1.0 BirthdayTimelineWidget.qml
+HolidayWidget 1.0 HolidayWidget.qml
+CountdownsWidget 1.0 CountdownsWidget.qml
+FavoritePeopleWidget 1.0 FavoritePeopleWidget.qml

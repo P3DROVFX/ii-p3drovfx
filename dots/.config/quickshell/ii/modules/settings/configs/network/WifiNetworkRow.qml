@@ -60,7 +60,8 @@ Rectangle {
         const panel = actionsLoader.item;
         if (!panel)
             return;
-        if (root.enterprise && panel.identityText.length === 0) {
+        // A saved 802.1X profile already has an identity, kept when left empty.
+        if (root.enterprise && !root.isSaved && panel.identityText.length === 0) {
             panel.focusIdentity();
             return;
         }
@@ -68,7 +69,10 @@ Rectangle {
             panel.focusPassword();
             return;
         }
-        Network.connectWithPassword(root.ssid, panel.passwordText, root.enterprise ? panel.identityText : "");
+        if (root.enterprise)
+            Network.connectWithPassword(root.ssid, panel.passwordText, panel.identityText.trim(), false, panel.domainText.trim());
+        else
+            Network.connectWithPassword(root.ssid, panel.passwordText);
     }
 
     onAskingPasswordChanged: if (root.askingPassword) root.expanded = true
@@ -268,15 +272,30 @@ Rectangle {
 
                     property alias identityText: identityField.text
                     property alias passwordText: passwordField.text
+                    property alias domainText: domainField.text
 
                     function focusIdentity(): void { identityField.forceActiveFocus(); }
                     function focusPassword(): void { passwordField.forceActiveFocus(); }
+
+                    // Show the saved profile's values again each time it asks,
+                    // until they are edited.
+                    Connections {
+                        target: root
+                        function onAskingPasswordChanged(): void {
+                            if (!root.askingPassword)
+                                return;
+                            identityField.text = Qt.binding(() => root.accessPoint?.savedIdentity ?? "");
+                            domainField.text = Qt.binding(() => root.accessPoint?.savedDomain ?? "");
+                        }
+                    }
 
                     MaterialTextField {
                         id: identityField
                         Layout.fillWidth: true
                         visible: root.enterprise && (root.needsSecret || root.askingPassword)
+                        text: root.accessPoint?.savedIdentity ?? ""
                         placeholderText: Translation.tr("Identity (username)")
+                        inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
                         onAccepted: root.submit()
                     }
 
@@ -305,6 +324,25 @@ Rectangle {
                         StyledSwitch {
                             id: revealSecret
                         }
+                    }
+
+                    MaterialTextField {
+                        id: domainField
+                        Layout.fillWidth: true
+                        visible: identityField.visible
+                        text: root.accessPoint?.savedDomain ?? ""
+                        placeholderText: Translation.tr("Server domain (optional)")
+                        inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText | Qt.ImhUrlCharactersOnly
+                        onAccepted: root.submit()
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        visible: domainField.visible && domainField.text.trim().length === 0 && !(root.accessPoint?.savedCaCert ?? false)
+                        wrapMode: Text.Wrap
+                        text: Translation.tr("Without a server domain the network's certificate is not checked, so a look-alike network could collect your password.")
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        color: Appearance.colors.colSubtext
                     }
 
                     StyledText {

@@ -40,10 +40,12 @@ MouseArea {
     readonly property bool isFull: Battery.isFull
     readonly property bool isLow: percentage <= Config.options.battery.low / 100
     readonly property bool isCritical: percentage <= Config.options.battery.critical / 100
-    readonly property bool effectivelyCharging: root.isCharging || root.isPluggedIn
+    readonly property bool effectivelyCharging: (root.isCharging || root.isPluggedIn) && !Battery.showDefaultWhenFull
     readonly property bool chargeLimitReached: Battery.chargeLimitReached
     readonly property bool showCheck: root.chargeLimitReached || (root.isFull && root.effectivelyCharging)
     property color colText: Appearance.colors.colOnSurface
+    // One UI draws the percentage (and the charging bolt) inside the pill; "Show Percentage" only toggles it.
+    readonly property bool oneuiShowPercentage: (Config.options.bar.battery.showPercentage ?? "off") !== "off"
 
     readonly property bool colorByPowerProfile: Config.options.bar.battery.colorByPowerProfile ?? true
     readonly property bool isPowerSaving: root.colorByPowerProfile && (PowerProfiles.profile === PowerProfile.PowerSaver)
@@ -103,35 +105,34 @@ MouseArea {
                         weight: text.length > 2 ? Font.Medium : Font.DemiBold
                     }
 
+                    // Bolt + percentage punched out of the fill. Both follow the "Show Percentage" setting.
                     textMask: Item {
                         width: oneuiBattery.valueBarWidth
                         height: oneuiBattery.valueBarHeight
 
-                        ColumnLayout {
+                        Column {
                             anchors.centerIn: parent
-                            width: parent.width
-                            spacing: 2
+                            spacing: 1
+                            visible: root.oneuiShowPercentage
 
                             MaterialSymbol {
-                                Layout.alignment: Qt.AlignHCenter
+                                anchors.horizontalCenter: parent.horizontalCenter
                                 fill: 1
                                 renderType: Text.QtRendering
-                                text: "bolt"
+                                text: root.showCheck ? "check" : "bolt"
                                 iconSize: Appearance.font.pixelSize.smaller
-                                visible: root.isCharging || root.isPluggedIn
+                                visible: (root.effectivelyCharging || root.showCheck) && root.percentage < 1
                             }
 
+                            // Rotated text: the box is sized swapped so the Column centres what is drawn.
                             Item {
-                                Layout.alignment: Qt.AlignHCenter
-                                width: parent.width
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                width: percentageText.implicitHeight
                                 height: percentageText.implicitWidth
 
                                 StyledText {
                                     id: percentageText
                                     anchors.centerIn: parent
-                                    anchors.verticalCenterOffset: 1
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
                                     renderType: Text.QtRendering
                                     font: oneuiBattery.font
                                     text: oneuiBattery.text

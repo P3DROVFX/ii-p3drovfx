@@ -71,44 +71,4 @@ ContentPage {
         }
     }
 
-    ContentSection {
-        icon: "memory"
-        title: Translation.tr("Settings Window Memory")
-
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 8
-
-            ConfigSwitch {
-                id: settingsUnloadSwitch
-                Layout.fillWidth: true
-                buttonIcon: "memory"
-                text: Translation.tr("Free Settings memory after closing")
-                checked: Config.options.settingsApp.unloadAfterSeconds > 0
-                onCheckedChanged: {
-                    Config.options.settingsApp.unloadAfterSeconds = checked ? 5 : 0
-                }
-            }
-
-            Item {
-                Layout.preferredWidth: 24
-                Layout.preferredHeight: 24
-
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "help"
-                    iconSize: Appearance.font.pixelSize.normal
-                    color: Appearance.colors.colOnLayer2
-                }
-
-                HoverHandler { id: helpHover }
-
-                StyledToolTip {
-                    parent: parent
-                    extraVisibleCondition: helpHover.hovered
-                    text: Translation.tr("When enabled, the Settings app is removed from memory 5 seconds after it is closed. The next opening will have a short cold-start delay.")
-                }
-            }
-        }
-    }
 }

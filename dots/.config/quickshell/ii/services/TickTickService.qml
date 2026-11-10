@@ -17,6 +17,9 @@ Singleton {
 
     // ── State ─────────────────────────────────────────────────────
     property bool available: root.accessToken.length > 0
+    // TickTick can also serve the AI contract, but the normal task refresh
+    // should not run when the user selected Local or Google Tasks.
+    readonly property bool selectedProvider: Config.options?.todo?.provider === "ticktick"
     property bool syncing: false
     property var tasks: []
     property string inboxProjectId: "inbox"
@@ -27,6 +30,7 @@ Singleton {
     /** Emitted with the id TickTick assigned, so a caller can point at it. */
     signal taskCreated(string taskId, string title)
     signal requestFailed(string operation, string reason)
+    signal taskUpdated(var task)
     /** Correlated provider contract used by the AI adapter. */
     signal aiOperationFinished(string operationId, string operation, bool ok, var data, string error)
 
@@ -42,8 +46,8 @@ Singleton {
     readonly property string envPath: Quickshell.shellPath(".env")
     readonly property string helperPath: FileUtils.trimFileProtocol(Quickshell.shellPath("scripts/ticktick/api.py"))
 
-    // ── Refresh interval (5 minutes) ──────────────────────────────
-    readonly property int refreshInterval: 5 * 60 * 1000
+    // ── Refresh interval (5 minutes by default) ──────────────────
+    readonly property int refreshInterval: Math.max(1, Config.options?.todo?.refreshIntervalMinutes ?? 5) * 60 * 1000
 
     // ── Public API ────────────────────────────────────────────────
 
@@ -73,7 +77,7 @@ Singleton {
     }
 
     function refresh() {
-        if (!root.available)
+        if (!root.available || root.syncing || fetchTasksProcess.running)
             return;
         root.syncing = true;
         root.fetchTasksFromInbox();
@@ -123,6 +127,59 @@ Singleton {
             taskId: String(taskId ?? ""),
             projectId: resolvedProjectId
         });
+    }
+
+    /** TickTick's Open API priority scale is 0 none / 1 low / 3 medium / 5 high. */
+    function _clampPriority(value) {
+        const raw = Number(value) || 0;
+        return raw <= 0 ? 0 : (raw <= 2 ? 1 : (raw <= 4 ? 3 : 5));
+    }
+
+    function _ticktickDueDate(value) {
+        const date = value instanceof Date ? value : new Date(value);
+        if (isNaN(date.getTime()))
+            return null;
+        return Qt.formatDate(date, "yyyy-MM-dd") + "T00:00:00.000Z";
+    }
+
+    /**
+     * Edits an existing TickTick task through its own id — nothing here
+     * creates a task. `changes` holds only fields that actually differ;
+     * an explicit null due date is forwarded rather than omitted.
+     */
+    function updateTask(task, changes) {
+        if (!task || !task.id)
+            return false;
+        const payload = {
+            op: "update",
+            taskId: String(task.id),
+            projectId: task.containerId || task.projectId || root.inboxProjectId
+        };
+        if (changes?.content !== undefined)
+            payload.title = String(changes.content);
+        if (changes?.notes !== undefined)
+            payload.content = String(changes.notes);
+        if (changes?.date !== undefined) {
+            const due = changes.date === null ? null : root._ticktickDueDate(changes.date);
+            if (changes.date !== null && !due)
+                return false;
+            payload.dueDate = due;
+        }
+        if (changes?.priority !== undefined)
+            payload.priority = root._clampPriority(changes.priority);
+        if (!root.send(updateTaskProcess, payload))
+            return false;
+        const updated = Object.assign({}, task);
+        for (const field of ["content", "notes", "priority", "tags"]) {
+            if (changes?.[field] !== undefined)
+                updated[field] = changes[field];
+        }
+        if (changes?.date !== undefined) {
+            updated.date = changes.date;
+            updated.hasDate = changes.date !== null;
+        }
+        updateTaskProcess.updatedTask = updated;
+        return true;
     }
 
     function _localDueDate(value) {
@@ -241,7 +298,7 @@ Singleton {
                 if (!tokenChanged)
                     return;
                 console.log("[TickTick] Credentials loaded from Gnome Keyring.");
-                if (root.available) {
+                if (root.available && root.selectedProvider) {
                     root.refresh();
                 }
                 return;
@@ -290,7 +347,7 @@ Singleton {
             root.clientId = envClientId;
             root.clientSecret = envClientSecret;
             root.accessToken = envAccessToken;
-            if (root.available) {
+            if (root.available && root.selectedProvider) {
                 console.log("[TickTick] Credentials loaded from .env (fallback), fetching tasks...");
                 root.refresh();
             } else {
@@ -352,7 +409,7 @@ Singleton {
                         "tags": Array.isArray(task.tags) ? task.tags.map(String) : []
                     });
                 }
-                root.tasks = parsed;
+                root.tasks = root.selectedProvider ? parsed : [];
                 console.log("[TickTick] Fetched " + parsed.length + " tasks.");
             }
         }
@@ -413,6 +470,25 @@ Singleton {
             }
         }
     }
+
+    // Update task
+    Process {
+        id: updateTaskProcess
+        command: ["python3", root.helperPath]
+        stdinEnabled: true
+        property var updatedTask: null
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (!root.readReply(text, "update")) {
+                    root.requestFailed("update", root.lastError);
+                    return;
+                }
+                console.log("[TickTick] Task updated. Refreshing...");
+                root.taskUpdated(updateTaskProcess.updatedTask);
+                root.refresh();
+            }
+        }
+    }
     // One correlated request for the AI provider contract. The broker keeps
     // mutations serial, so one process is sufficient and late replies retain
     // their operation id instead of being guessed from the active UI task.
@@ -445,9 +521,19 @@ Singleton {
 
     // ── Auto-refresh timer ────────────────────────────────────────
     Timer {
-        running: root.available
+        running: root.available && root.selectedProvider
         repeat: true
         interval: root.refreshInterval
         onTriggered: root.refresh()
+    }
+
+    onSelectedProviderChanged: {
+        if (root.selectedProvider) {
+            if (root.available)
+                root.refresh();
+        } else {
+            root.tasks = [];
+            root.syncing = false;
+        }
     }
 }

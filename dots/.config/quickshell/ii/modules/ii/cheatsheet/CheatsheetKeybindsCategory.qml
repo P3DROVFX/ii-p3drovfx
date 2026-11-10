@@ -57,7 +57,9 @@ Rectangle {
 
     Timer {
         id: entryTimer
-        interval: Math.min(sectionIndex * 35, 400)
+        // The last card lands with the tab's own fade-in (~460 ms) rather
+        // than 700 ms after the page was ready.
+        interval: Math.min(sectionIndex * 20, 160)
         repeat: false
         onTriggered: {
             entryAnim.start();
@@ -185,7 +187,8 @@ Rectangle {
             font.pixelSize: Config.options.cheatsheet.fontSize.comment || Appearance.font.pixelSize.smaller
             color: Appearance.colors.colOnSurface
             opacity: 0.7
-            text: bindRow.modelData.comment || ""
+            // The section title already names the category; drop the "Utilities: " prefix.
+            text: (bindRow.modelData.comment || "").replace(/^[A-Z][A-Za-z]*: /, "")
         }
     }
 

@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 
+import qs
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
@@ -27,9 +28,16 @@ Item {
         id: rootHover
     }
 
+    /**
+     * Drawn on a host's surface rather than as a floating card of its own; see
+     * LocalSendPopupContent.hosted for why.
+     */
+    property bool hosted: false
+    readonly property real surfaceMargin: root.hosted ? 0 : Appearance.sizes.elevationMargin
+
     // Border gap = elevationMargin (Bug 4), same as BluetoothConnectionPopupContent
-    implicitWidth: contentBackground.implicitWidth + 2 * Appearance.sizes.elevationMargin
-    implicitHeight: contentBackground.implicitHeight + 2 * Appearance.sizes.elevationMargin
+    implicitWidth: contentBackground.implicitWidth + 2 * root.surfaceMargin
+    implicitHeight: contentBackground.implicitHeight + 2 * root.surfaceMargin
 
     // Computed color properties
     readonly property var colorRgb: {
@@ -77,7 +85,15 @@ Item {
     readonly property color onColor: getContrastColor(root.colorHex)
 
     property var palette: null
-    property var surfacePalette: null
+
+    /// The scheme sub-page: the color an apply button was pressed on, shown
+    /// as every Material scheme, to apply or save as a theme.
+    property bool schemePageOpen: false
+    property string schemeSeed: root.colorHex
+    function openSchemePage(hex) {
+        root.schemeSeed = hex;
+        root.schemePageOpen = true;
+    }
 
     readonly property color copiedBgColor: "#1E4620"
     readonly property color copiedOnColor: "#A8E3A9"
@@ -125,24 +141,36 @@ Item {
     Process {
         id: matugenProcess
         command: {
-            return ["matugen", "color", "hex", "--dry-run", "-j", "hex", "-t", "scheme-content", root.colorHex];
+            return ["bash", `${Directories.scriptPath}/colors/matugen.sh`, "color", "hex", "--dry-run", "-j", "hex",
+                "-t", "scheme-content", root.colorHex];
         }
         running: true
-        stdout: SplitParser {
-            onRead: data => {
-                if (data.startsWith("{")) {
-                    try {
-                        let json = JSON.parse(data);
-                        let useDarkTheme = Qt.color(root.colorHex).hslLightness >= 0.45;
-                        root.palette = useDarkTheme ? json.colors.dark : json.colors.light;
-                        root.surfacePalette = json.colors.dark;
-                    } catch (e) {}
+        // matugen 4.x pretty-prints JSON across many lines; SplitParser only ever saw the
+        // first "{" and JSON.parse threw, so palette stayed null and the cards silently fell
+        // back to Qt.darker(copiedColor). Collect the whole stream and parse once (no polling,
+        // buffer freed by the collector on the next run/component destruction).
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    let scheme = JSON.parse(this.text).colors;
+                    // Same selection rule as before: light seed color → dark scheme, dark seed → light scheme
+                    let mode = Qt.color(root.colorHex).hslLightness >= 0.45 ? "dark" : "light";
+                    root.palette = {
+                        primary: scheme.primary[mode].color,
+                        secondary: scheme.secondary[mode].color,
+                        tertiary: scheme.tertiary[mode].color,
+                        surface_variant: scheme.surface_variant[mode].color,
+                        secondary_container: scheme.secondary_container[mode].color
+                    };
+                } catch (e) {
+                    root.palette = null;
                 }
             }
         }
     }
 
     onColorHexChanged: {
+        root.schemePageOpen = false;
         matugenProcess.running = false;
         Qt.callLater(() => {
             matugenProcess.running = true;
@@ -174,7 +202,7 @@ Item {
     Timer {
         id: dismissTimer
         interval: 6000
-        running: !root.isHovered && !matugenProcess.running
+        running: !root.isHovered && !matugenProcess.running && !root.schemePageOpen
         repeat: false
         onTriggered: root.dismissed()
     }
@@ -290,7 +318,8 @@ Item {
         if (headerCard.children.length > 1) {
             headerCard.children[1].scale = 0;
         }
-        entranceAnim.start()
+        if (!root.hosted)
+            entranceAnim.start();
     }
 
     // === BACKGROUND with shadow and rounding (mask target) ===
@@ -298,17 +327,26 @@ Item {
         id: contentBackground
         anchors {
             fill: parent
-            margins: Appearance.sizes.elevationMargin
+            margins: root.surfaceMargin
         }
         implicitWidth: mainLayout.implicitWidth + root.contentPadding * 2
-        implicitHeight: mainLayout.implicitHeight + root.contentPadding * 2
+        implicitHeight: (root.schemePageOpen && schemePageLoader.item ? schemePageLoader.item.implicitHeight : mainLayout.implicitHeight)
+            + root.contentPadding * 2
+
+        Behavior on implicitHeight {
+            enabled: !Appearance.reducedMotion
+            animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+        }
 
         radius: Appearance.rounding.large
-        color: Config.options.appearance.transparency.popups ? Appearance.colors.colLayer0 : Appearance.m3colors.m3surfaceContainer
+        color: root.hosted ? "transparent"
+            : (Config.options.appearance.transparency.popups ? Appearance.colors.colLayer0 : Appearance.m3colors.m3surfaceContainer)
 
-        // Animations applied on the card itself to keep root window input mapping clean
-        opacity: 0
-        scale: 0.88
+        // Animations applied on the card itself to keep root window input mapping clean.
+        // Hosted, the host plays the entrance, so the card starts in place: its own
+        // scale-and-fade on top of the island's arrival read as two separate motions.
+        opacity: root.hosted ? 1 : 0
+        scale: root.hosted ? 1 : 0.88
         transformOrigin: Item.TopRight
 
         ParallelAnimation {
@@ -348,6 +386,11 @@ Item {
                 margins: root.contentPadding
             }
             spacing: 12
+            visible: opacity > 0
+            opacity: root.schemePageOpen ? 0 : 1
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
 
             // ═══ SECTION 1: HeroCard ═══
             HeroCard {
@@ -805,9 +848,7 @@ Item {
                                     if (c.length === 9 && c.startsWith("#FF")) {
                                         c = "#" + c.substring(3);
                                     }
-                                    Quickshell.execDetached([Directories.wallpaperSwitchScriptPath, "--noswitch", "--color", c]);
-                                    variantCard.applied = true;
-                                    cardAppliedTimer.restart();
+                                    root.openSchemePage(c);
                                 }
                             }
                         }
@@ -867,6 +908,27 @@ Item {
                         }
                     }
                 }
+            }
+        }
+
+        // ═══ Scheme sub-page ═══
+        Loader {
+            id: schemePageLoader
+            anchors {
+                left: parent.left
+                right: parent.right
+                top: parent.top
+                margins: root.contentPadding
+            }
+            active: root.schemePageOpen
+            visible: opacity > 0
+            opacity: root.schemePageOpen ? 1 : 0
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+            sourceComponent: ColorPickerSchemePage {
+                seedHex: root.schemeSeed
+                onBack: root.schemePageOpen = false
             }
         }
     }

@@ -10,10 +10,13 @@ Item {
     required property var sourceItem
     required property real baseScale
     required property bool lockAnimationActive
+    // Set while the overview-style lock animation owns the look: the effects then
+    // belong to the backing wallpaper, and the zooming plane stays clean.
+    property bool suppressed: false
 
     Loader {
         id: vignetteLoader
-        active: Config.options.lock.vignette.enable && (GlobalStates.lockLookActive || (typeof vignetteAnim !== "undefined" && vignetteAnim ? vignetteAnim.running : false))
+        active: !lockVignetteRoot.suppressed && Config.options.lock.vignette.enable && (GlobalStates.lockLookActive || (typeof vignetteAnim !== "undefined" && vignetteAnim ? vignetteAnim.running : false))
         anchors.fill: parent
         sourceComponent: Item {
             anchors.fill: parent

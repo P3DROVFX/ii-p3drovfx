@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Layouts
 
 import qs.services
+import qs.services.ai
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.ii.notes
@@ -34,6 +35,144 @@ Item {
     signal revisionsRequested()
     signal focusModeToggled()
 
+    property bool aiPromptOpen: false
+    property string aiErrorText: ""
+    property string aiRequestNoteId: ""
+    property bool aiGenerationActive: false
+    property bool aiResultApplying: false
+
+    // An idle task or a model tooltip otherwise instantiates the shared AI
+    // singleton, which outlives this window. Match the editor's opt-in loader.
+    property bool aiLoaded: false
+    readonly property var aiCreateTask: aiCreateLoader.item
+    readonly property bool aiTaskRunning: root.aiCreateTask?.running ?? false
+
+    readonly property bool aiEnabled: Number(Config.options?.policies?.ai ?? 1) !== 0
+    readonly property bool aiBusy: root.aiGenerationActive || root.aiResultApplying || editor.aiBusy
+    readonly property string aiTaskScriptName: "notes_create_" + root.noteId.replace(/[^A-Za-z0-9_-]/g, "_")
+    readonly property string currentAiModelName: {
+        if (!root.aiLoaded)
+            return "";
+        const entry = Ai.currentModelEntry;
+        if (!entry)
+            return Translation.tr("No model selected");
+        const title = String(entry.title ?? "").trim();
+        if (title.length > 0)
+            return title;
+        const name = String(entry.name ?? "").trim();
+        return name.length > 0 ? name : String(Ai.currentModel ?? "");
+    }
+
+    /**
+     * This task is deliberately a direct writer: the user typed the instruction in the
+     * note's own AI field, so the response can become a new block without opening the
+     * rewrite menu. Existing blocks stay untouched; an empty starter paragraph is filled.
+     */
+    readonly property string aiWritingSystemPrompt:
+        "You are the writing assistant inside a notes application.\n"
+        + "The user has explicitly given you permission to write the requested content.\n"
+        + "Follow the request directly and produce the complete finished text, not advice about how to write it.\n"
+        + "Return only the finished text in the same language as the request unless another language is requested.\n"
+        + "When the request asks about local shell data, use the available read-only tools to retrieve exact current values before writing. For calendar requests, call calendar_list_events with the requested ISO date range; never invent, generalize, or replace real events with placeholders.\n"
+        + "Use the note's native writing tools through Markdown when useful: headings with #, bullet/numbered/task lists, blockquotes, GitHub alerts such as > [!NOTE] for callouts, fenced code, tables, horizontal dividers, inline links, and a standalone [label](https://...) link for a link card.\n"
+        + "Do not wrap the answer in JSON, do not describe the formatting, and do not add a greeting, preface, quotation marks, or commentary."
+
+    function openAiPrompt(): void {
+        if (!root.aiEnabled || root.trash || root.noteId.length === 0 || root.aiTaskRunning)
+            return;
+        root.aiPromptOpen = true;
+        root.aiLoaded = true;
+        root.aiErrorText = "";
+        root.aiRequestNoteId = root.noteId;
+        editor.clearTextFocus();
+        paperPicker.visible = false;
+        noteMenu.visible = false;
+        reminderMenu.visible = false;
+        lockSheet.visible = false;
+        aiPromptBar.text = "";
+        Qt.callLater(() => {
+            if (root && root.aiPromptOpen)
+                aiPromptBar.focusInput();
+        });
+    }
+
+    function sendAiPrompt(prompt): void {
+        const request = String(prompt ?? "").trim();
+        if (!root.aiEnabled || request.length === 0 || root.trash || root.noteId.length === 0
+                || !root.aiCreateTask || root.aiTaskRunning)
+            return;
+        root.aiErrorText = "";
+        root.aiRequestNoteId = root.noteId;
+        root.aiGenerationActive = true;
+        if (!root.aiCreateTask.start(root.aiWritingSystemPrompt, request)) {
+            root.aiGenerationActive = false;
+            root.aiErrorText = root.aiCreateTask.errorText;
+        }
+    }
+
+    function cancelAiPrompt(): void {
+        if (root.aiTaskRunning)
+            root.aiCreateTask.cancel();
+        root.aiGenerationActive = false;
+        root.aiResultApplying = false;
+        root.aiPromptOpen = false;
+        root.aiErrorText = "";
+        root.aiRequestNoteId = "";
+        aiPromptBar.text = "";
+    }
+
+    function acceptAiWrittenText(result): void {
+        root.aiResultApplying = true;
+        if (root.trash || root.aiRequestNoteId !== root.noteId) {
+            root.aiGenerationActive = false;
+            root.aiResultApplying = false;
+            return;
+        }
+        const text = String(result ?? "").trim();
+        if (text.length === 0) {
+            root.aiGenerationActive = false;
+            root.aiResultApplying = false;
+            root.aiErrorText = Translation.tr("The model returned no text. Try again.");
+            return;
+        }
+        if (!editor.insertGeneratedText(text)) {
+            root.aiGenerationActive = false;
+            root.aiResultApplying = false;
+            root.aiErrorText = Translation.tr("The note could not accept the generated text.");
+            return;
+        }
+        root.aiGenerationActive = false;
+        root.aiResultApplying = false;
+        root.aiPromptOpen = false;
+        root.aiErrorText = "";
+        root.aiRequestNoteId = "";
+        aiPromptBar.text = "";
+    }
+
+    Loader {
+        id: aiCreateLoader
+        active: root.aiLoaded
+        sourceComponent: AiTextTask {
+            taskName: "notes_create"
+            scriptName: root.aiTaskScriptName
+            toolMode: Ai.responseProfile.toolMode
+
+            onFinished: result => root.acceptAiWrittenText(result)
+            onFailed: error => {
+                root.aiGenerationActive = false;
+                root.aiResultApplying = false;
+                if (root.aiRequestNoteId === root.noteId)
+                    root.aiErrorText = error;
+            }
+            onStatusChanged: {
+                if (status === "aborted") {
+                    root.aiGenerationActive = false;
+                    root.aiResultApplying = false;
+                }
+            }
+        }
+    }
+
     // Clipped at the pane's own bounds.
     //
     // The slab below is a *sibling* of the content, so its own `clip` contains nothing —
@@ -44,6 +183,56 @@ Item {
     /// Puts the caret in the note. Called when one is created, not when one is selected.
     function focusEditor() {
         editor.requestAutoFocus();
+    }
+
+    readonly property bool hasActiveTextFocus: titleField.activeFocus || root.aiPromptOpen || editor.hasActiveTextFocus
+
+    function clearTextFocus(): bool {
+        if (root.aiPromptOpen) {
+            root.cancelAiPrompt();
+            return true;
+        }
+        if (titleField.activeFocus) {
+            root.titleEdited(titleField.text);
+            titleField.focus = false;
+            return true;
+        }
+        if (editor.hasActiveTextFocus) {
+            editor.clearTextFocus();
+            return true;
+        }
+        return false;
+    }
+
+    function dismissTransientSurface(): bool {
+        if (editor.aiCompareOpen) {
+            editor.aiCompareOpen = false;
+            return true;
+        }
+        if (editor.aiMenuOpen) {
+            editor.aiMenuOpen = false;
+            return true;
+        }
+        if (editor.editingInk.length > 0) {
+            editor.editInk("");
+            return true;
+        }
+        if (editor.viewingImage.length > 0) {
+            editor.viewImage("");
+            return true;
+        }
+        if (exportSheet.visible) {
+            exportSheet.visible = false;
+            return true;
+        }
+        if (paperPicker.visible || noteMenu.visible || reminderMenu.visible || lockSheet.visible) {
+            paperPicker.visible = false;
+            noteMenu.visible = false;
+            reminderMenu.visible = false;
+            lockSheet.visible = false;
+            return true;
+        }
+        return false;
     }
 
     /// Asked for by the table of contents, which knows a block id and nothing else.
@@ -131,8 +320,22 @@ Item {
     property bool unlockedThisSession: false
 
     onNoteIdChanged: {
+        if (root.aiTaskRunning)
+            root.aiCreateTask.cancel();
+        root.aiGenerationActive = false;
+        root.aiResultApplying = false;
+        root.aiPromptOpen = false;
+        root.aiErrorText = "";
+        root.aiRequestNoteId = "";
+        if (aiPromptBar)
+            aiPromptBar.text = "";
         root.unlockedThisSession = false;
         noteEntrance.restart();
+    }
+
+    onTrashChanged: {
+        if (root.trash)
+            root.cancelAiPrompt();
     }
 
     readonly property string reminderLabel: root.reminderAt > 0
@@ -465,6 +668,7 @@ Item {
             spacing: 4
 
             Item {
+                visible: !root.aiPromptOpen
                 Layout.fillWidth: true
                 Layout.preferredHeight: titleField.implicitHeight
 
@@ -497,6 +701,20 @@ Item {
                 }
             }
 
+            NotesAiPromptBar {
+                id: aiPromptBar
+                visible: root.aiPromptOpen
+                Layout.fillWidth: true
+                Layout.preferredHeight: NotesMetrics.iconButtonSize
+                running: root.aiTaskRunning
+                errorText: root.aiErrorText
+                modelName: root.currentAiModelName
+
+                onSubmitted: prompt => root.sendAiPrompt(prompt)
+                onCancelled: root.cancelAiPrompt()
+                onDismissed: root.cancelAiPrompt()
+            }
+
             /**
              * Four, and then a menu.
              *
@@ -512,7 +730,7 @@ Item {
                     ? Translation.tr("Remove from favourites")
                     : Translation.tr("Add to favourites")
                 colIcon: root.note && root.note.favorite ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
-                visible: !root.trash
+                visible: !root.trash && !root.aiPromptOpen
                 onTriggered: root.favoriteToggled()
             }
 
@@ -522,7 +740,7 @@ Item {
                     ? Translation.tr("Unpin")
                     : Translation.tr("Pin to the top of the list")
                 colIcon: root.note && root.note.pinned ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
-                visible: !root.trash
+                visible: !root.trash && !root.aiPromptOpen
                 onTriggered: root.pinToggled()
             }
 
@@ -530,7 +748,7 @@ Item {
                 symbol: "grid_on"
                 tooltipText: Translation.tr("Page style")
                 colIcon: root.paperStyle !== "plain" ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
-                visible: !root.trash
+                visible: !root.trash && !root.aiPromptOpen
                 toggled: paperPicker.visible
                 colBackgroundToggled: Appearance.colors.colSecondaryContainer
                 onTriggered: {
@@ -540,10 +758,20 @@ Item {
             }
 
             NotesIconButton {
+                visible: !root.trash && !root.aiPromptOpen && root.aiEnabled
+                iconSource: "spark-symbolic.svg"
+                symbol: ""
+                tooltipText: Translation.tr("Ask AI")
+                    + (root.currentAiModelName.length > 0 ? " · " + root.currentAiModelName : "")
+                colIcon: Appearance.colors.colTertiary
+                onTriggered: root.openAiPrompt()
+            }
+
+            NotesIconButton {
                 symbol: "more_vert"
                 tooltipText: Translation.tr("Everything else")
                 colIcon: Appearance.colors.colOnLayer1
-                visible: !root.trash
+                visible: !root.trash && !root.aiPromptOpen
                 toggled: noteMenu.visible
                 colBackgroundToggled: Appearance.colors.colSecondaryContainer
                 onTriggered: {
@@ -760,6 +988,7 @@ Item {
                 id: editor
                 anchors.fill: parent
                 noteId: root.noteId
+                externalAiGenerationActive: root.aiGenerationActive
             }
 
             // Floating at the foot of the page rather than pinned above it: it belongs to

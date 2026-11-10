@@ -13,6 +13,10 @@ RippleButton {
     property real baseSize: 56
     property real iconSize: 26
     property real elementSpacing: 5
+    // Opt-in keybind hint (NavigationRailButton pattern): while showShortcutHints
+    // is on, the icon gives way to the shortcut text without moving the button.
+    property string shortcut: ""
+    property bool showShortcutHints: false
     clip: true
 
     padding: 0
@@ -44,12 +48,26 @@ RippleButton {
     Layout.preferredHeight: implicitHeight
 
     readonly property bool sharpMode: Config.options.appearance.sharpMode
-    buttonRadius: sharpMode ? 0 : baseSize / 14 * 4
+    // Animate the public radius so the background, ripple mask and attached
+    // shadows follow the same shape, with only one animation in the chain.
+    radiusBehaviorEnabled: false
+    buttonRadius: sharpMode ? 0 : (root.down ? baseSize / 2 : baseSize / 14 * 4)
+
+    Behavior on buttonRadius {
+        enabled: root.animationsEnabled && !root.sharpMode
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
+    }
     
     colBackground: Appearance.colors.colPrimaryContainer
     colBackgroundHover: Appearance.colors.colPrimaryContainerHover
+    colBackgroundActive: Appearance.colors.colPrimaryContainerActive
     colRipple: Appearance.colors.colPrimaryContainerActive
     property color colOnBackground: Appearance.colors.colOnPrimaryContainer
+
+    Behavior on colOnBackground {
+        enabled: root.animationsEnabled
+        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(root)
+    }
 
     contentItem: Row {
         id: contentRowLayout
@@ -61,16 +79,37 @@ RippleButton {
         }
         spacing: 0
 
-        MaterialSymbol {
+        TaskShortcutContent {
             id: icon
             anchors.verticalCenter: parent.verticalCenter
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            iconSize: root.iconSize
             width: root.iconSize
             height: root.iconSize
+            symbol: root.iconText
+            shortcut: root.shortcut
+            showHint: root.showShortcutHints && root.shortcut.length > 0
+            iconSize: root.iconSize
             color: root.colOnBackground
-            text: root.iconText
+
+            Behavior on symbol {
+                enabled: root.animationsEnabled
+                SequentialAnimation {
+                    NumberAnimation {
+                        target: icon
+                        property: "opacity"
+                        to: 0
+                        duration: Appearance.animation.elementMoveFast.duration / 2
+                        easing.type: Easing.InOutQuad
+                    }
+                    PropertyAction {}
+                    NumberAnimation {
+                        target: icon
+                        property: "opacity"
+                        to: 1
+                        duration: Appearance.animation.elementMoveFast.duration / 2
+                        easing.type: Easing.InOutQuad
+                    }
+                }
+            }
         }
 
         Item {

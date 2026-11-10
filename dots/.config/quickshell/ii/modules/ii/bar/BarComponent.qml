@@ -30,6 +30,8 @@ import qs.modules.ii.bar.widgets.timer
 import qs.modules.ii.bar.widgets.indicators
 import qs.modules.ii.bar.widgets.dockToPanel
 import qs.modules.ii.bar.widgets.portWatcher
+import qs.modules.ii.bar.widgets.passwordManager
+import qs.modules.ii.bar.widgets.networkSpeed
 import qs.modules.ii.bar.widgets.privacy
 import qs.modules.ii.bar.widgets.aiPlanUsage
 import "widgets/search"
@@ -268,6 +270,9 @@ Item {
     // period once the widget actually has something to show.
     Connections {
         target: itemLoader.item
+        function onVisibleChanged() {
+            Qt.callLater(rootItem.syncLoadedItemVisible);
+        }
         function onImplicitWidthChanged() {
             rootItem.unlatchLayout();
         }
@@ -319,7 +324,22 @@ Item {
     // draws itself as though it were active. One that stays blank is still
     // skipped, exactly as before.
     readonly property bool selfVisibleOrEditing: rootItem.widgetSelfVisible || GlobalStates.editMode
-    readonly property bool loadedItemVisible: itemLoader.item ? itemLoader.item.visible : false
+    // Not a binding: `item.visible` is effective visibility, so it follows this
+    // component's own `visible`, which is decided from `hasLayoutContent` - reading
+    // it straight was a binding loop on `hasLayoutContent`/`editPlaceholderShown`.
+    // Synced a turn later, and only while this component shows: hidden, the item
+    // reads invisible whatever it would draw.
+    property bool loadedItemVisible: false
+    function syncLoadedItemVisible() {
+        const loadedItem = itemLoader.item;
+        if (!loadedItem) {
+            rootItem.loadedItemVisible = false;
+            return;
+        }
+        if (rootItem.visible)
+            rootItem.loadedItemVisible = loadedItem.visible;
+    }
+    onVisibleChanged: Qt.callLater(rootItem.syncLoadedItemVisible)
     // A widget drawing nothing is invisible to the layout, and in the mode that
     // left it with no drag handle, no badge and no catalogue row - unreachable
     // in every direction. The stand-in chip gives it a body while the mode is
@@ -377,38 +397,54 @@ Item {
     // not the persisted layout flags. A configured widget can stay in the
     // model while its loaded component is invisible (for example, an idle timer).
     readonly property bool hasActiveLeftNeighbor: {
+        console.log("[DEBUG NEIGHBOR]", modelData?.id, "isDefault:", rootItem.isDefault, "hasContent:", rootItem.hasActiveLayoutContent, "parent:", rootItem.parent, "childrenCount:", rootItem.parent?.children?.length);
+        if (!rootItem.isDefault || !rootItem.hasActiveLayoutContent)
+            return false;
+
         const parentItem = rootItem.parent;
         if (!parentItem || !parentItem.children)
             return false;
 
-        const siblings = parentItem.children;
-        for (let i = 0; i < siblings.length; ++i) {
-            const sibling = siblings[i];
+        let closestVisibleSibling = null;
+        for (const sibling of parentItem.children) {
             if (sibling === rootItem)
-                return false;
-            if (sibling && sibling.hasOwnProperty("hasActiveLayoutContent") && sibling.hasActiveLayoutContent)
-                return true;
+                break;
+            if (sibling && sibling.hasOwnProperty("hasActiveLayoutContent") && sibling.hasActiveLayoutContent) {
+                closestVisibleSibling = sibling;
+            }
         }
-        return false;
+
+        if (!closestVisibleSibling)
+            return false;
+
+        return Boolean(closestVisibleSibling.hasOwnProperty("isDefault") ? closestVisibleSibling.isDefault : false);
     }
 
     readonly property bool hasActiveRightNeighbor: {
+        if (!rootItem.isDefault || !rootItem.hasActiveLayoutContent)
+            return false;
+
         const parentItem = rootItem.parent;
         if (!parentItem || !parentItem.children)
             return false;
 
-        const siblings = parentItem.children;
         let afterSelf = false;
-        for (let i = 0; i < siblings.length; ++i) {
-            const sibling = siblings[i];
+        let closestVisibleSibling = null;
+        for (const sibling of parentItem.children) {
             if (sibling === rootItem) {
                 afterSelf = true;
                 continue;
             }
-            if (afterSelf && sibling && sibling.hasOwnProperty("hasActiveLayoutContent") && sibling.hasActiveLayoutContent)
-                return true;
+            if (afterSelf && sibling && sibling.hasOwnProperty("hasActiveLayoutContent") && sibling.hasActiveLayoutContent) {
+                closestVisibleSibling = sibling;
+                break;
+            }
         }
-        return false;
+
+        if (!closestVisibleSibling)
+            return false;
+
+        return Boolean(closestVisibleSibling.hasOwnProperty("isDefault") ? closestVisibleSibling.isDefault : false);
     }
 
     // This box only animates when the widget appears, disappears or changes notch
@@ -572,11 +608,11 @@ Item {
             return true;
         if (modelData.id === "utility_buttons" && Config.options.bar.styles.utilButtons !== "default")
             return true;
-        if (modelData.id === "weather" && (Config.options.bar.styles.weather === "expressive" || Config.options.bar.styles.weather === "horizon" || Config.options.bar.styles.weather === "tessera"))
+        if (modelData.id === "weather" && (Config.options.bar.styles.weather === "expressive" || Config.options.bar.styles.weather === "horizon" || Config.options.bar.styles.weather === "tessera" || Config.options.bar.styles.weather === "sculpt"))
             return true;
         if (modelData.id === "dashboard_panel_button" && Config.options.bar.styles.dashboard !== "default")
             return true;
-        if (modelData.id === "system_monitor" && Config.options.bar.styles.resources === "expressive")
+        if (modelData.id === "system_monitor" && (Config.options.bar.styles.resources === "expressive" || Config.options.bar.styles.resources === "sculpt"))
             return true;
         if (modelData.id === "policies_panel_button" && Config.options.bar.styles.policies !== "default")
             return true;
@@ -586,9 +622,9 @@ Item {
             return true;
         if (modelData.id === "system_tray" && Config.options.bar.styles.systray === "expressive")
             return true;
-        if (modelData.id === "bluetooth_devices" && Config.options.bar.styles.bluetooth === "expressive")
+        if (modelData.id === "bluetooth_devices" && (Config.options.bar.styles.bluetooth === "expressive" || Config.options.bar.styles.bluetooth === "sculpt"))
             return true;
-        if (modelData.id === "keyboard_layout" && Config.options.bar.styles.keyboard === "expressive")
+        if (modelData.id === "keyboard_layout" && (Config.options.bar.styles.keyboard === "expressive" || Config.options.bar.styles.keyboard === "sculpt"))
             return true;
         if (modelData.id === "sports" && Config.options.bar.styles.sports === "expressive")
             return true;
@@ -607,15 +643,21 @@ Item {
             return true;
         if (modelData.id === "mode_indicator")
             return true;
+        if (modelData.id === "easyeffects_indicator")
+            return true;
         if (modelData.id === "port_watcher" && Config.options.bar.styles.portWatcher === "expressive")
+            return true;
+        if (modelData.id === "password_manager" && Config.options.bar.styles.passwordManager === "expressive")
             return true;
         if (modelData.id === "ai_plan_usage" && Config.options.bar.styles.aiPlanUsage === "expressive")
             return true;
-        if (modelData.id === "search" && (Config.options.bar.styles.search === "expressive" || Config.options.bar.styles.search === "neural"))
+        if (modelData.id === "network_speed" && Config.options.bar.styles.networkSpeed === "expressive")
+            return true;
+        if (modelData.id === "search" && ["expressive", "neural", "sculpt"].includes(Config.options.bar.styles.search))
             return true;
         if (modelData.id === "date" && (Config.options.bar.styles.date === "expressive" || Config.options.bar.styles.date === "neural"))
             return true;
-        if (modelData.id === "timer" && Config.options.bar.styles.timer === "expressive")
+        if (modelData.id === "timer" && (Config.options.bar.styles.timer === "expressive" || Config.options.bar.styles.timer === "sculpt"))
             return true;
         if (modelData.id === "clock" && (Config.options.bar.styles.clock === "neural" || Config.options.bar.styles.clock === "relief"))
             return true;
@@ -624,6 +666,7 @@ Item {
             return true;
         return false;
     }
+    readonly property bool isDefault: !rootItem.isExpressive && !rootItem.isMaterial && !rootItem.isMinimal && (rootItem.widgetStyle === "default" || rootItem.widgetStyle === "classic")
 
     // ── Radius convenience aliases (from upstream/dev) ──────────────────────
     property real startRadius: groupTheme.startRadius
@@ -684,21 +727,13 @@ Item {
             id: itemLoader
             active: true
             sourceComponent: resolveComponent(modelData.id, rootItem.vertical, rootItem.widgetStyle)
+            onItemChanged: Qt.callLater(rootItem.syncLoadedItemVisible)
             onLoaded: {
                 if (item) {
                     rootItem.layoutReady = false;
                     readyTimer.restart();
                     if (item.hasOwnProperty("onActivatedColor")) {
                         item.onActivatedColor = Qt.binding(() => groupTheme.colOnBackgroundHighlight);
-                    }
-                    if (item.hasOwnProperty("groupBgColor")) {
-                        item.groupBgColor = Qt.binding(() => rootItem.groupBgColor);
-                    }
-                    if (item.hasOwnProperty("groupStartRadius")) {
-                        item.groupStartRadius = Qt.binding(() => rootItem.groupStartRadius);
-                    }
-                    if (item.hasOwnProperty("groupEndRadius")) {
-                        item.groupEndRadius = Qt.binding(() => rootItem.groupEndRadius);
                     }
                     if (!rootItem.vertical) {
                         if (item.Layout !== undefined && item.Layout.fillHeight) {
@@ -774,6 +809,8 @@ Item {
                 return workspaceCompDock;
             if (style === "index")
                 return workspaceCompIndex;
+            if (style === "pills")
+                return workspaceCompPills;
             return workspaceComp;
         case "music_player":
             if (isExp)
@@ -788,6 +825,8 @@ Item {
         case "system_monitor":
             if (isExp)
                 return systemMonitorCompExpressive;
+            if (style === "sculpt")
+                return systemMonitorCompSculpt;
             return isVert ? systemMonitorCompVert : systemMonitorComp;
         case "clock":
             if (isExp)
@@ -804,10 +843,14 @@ Item {
         case "keyboard_layout":
             if (isExp)
                 return keyboardCompExpressive;
+            if (style === "sculpt")
+                return keyboardCompSculpt;
             return isVert ? keyboardCompVert : keyboardComp;
         case "utility_buttons":
             if (style === "segments")
                 return utilityButtonsCompSegments;
+            if (style === "sculpt")
+                return utilityButtonsCompSculpt;
             if (isExp)
                 return utilityButtonsCompExpressive;
             return utilityButtonsComp;
@@ -826,6 +869,8 @@ Item {
                 return weatherCompHorizon;
             if (style === "tessera")
                 return weatherCompTessera;
+            if (style === "sculpt")
+                return weatherCompSculpt;
             return weatherComp;
         case "policies_panel_button":
             if (style === "outline")
@@ -836,12 +881,16 @@ Item {
         case "dashboard_panel_button":
             if (style === "orbs")
                 return isVert ? dashboardPanelButtonOrbsVert : dashboardPanelButtonOrbs;
+            if (style === "sculpt")
+                return isVert ? dashboardPanelButtonSculptVert : dashboardPanelButtonSculpt;
             if (isExp)
                 return isVert ? dashboardPanelButtonExpressiveVert : dashboardPanelButtonExpressive;
             return isVert ? dashboardPanelButtonVert : dashboardPanelButton;
         case "bluetooth_devices":
             if (isExp)
                 return bluetoothCompExpressive;
+            if (style === "sculpt")
+                return bluetoothCompSculpt;
             return isVert ? bluetoothCompVert : bluetoothComp;
         case "sports":
             if (isExp)
@@ -855,6 +904,10 @@ Item {
             if (isExp)
                 return powerCompExpressive;
             return powerComp;
+        case "network_speed":
+            if (isExp)
+                return networkSpeedCompExpressive;
+            return networkSpeedComp;
         case "date":
             if (isExp)
                 return dateCompExpressive;
@@ -864,6 +917,8 @@ Item {
         case "timer":
             if (isExp)
                 return timerCompExpressive;
+            if (style === "sculpt")
+                return timerCompSculpt;
             return isVert ? timerCompVert : timerComp;
         case "record_indicator":
             return recordIndicatorComp;
@@ -875,6 +930,8 @@ Item {
             return shellUpdateIndicatorComp;
         case "mode_indicator":
             return modeIndicatorComp;
+        case "easyeffects_indicator":
+            return easyEffectsIndicatorComp;
         case "screen_share_indicator":
             return screenshareIndicatorComp;
         case "dock_to_panel":
@@ -883,6 +940,10 @@ Item {
             if (isExp)
                 return portWatcherCompExpressive;
             return portWatcherComp;
+        case "password_manager":
+            if (isExp)
+                return passwordManagerCompExpressive;
+            return passwordManagerComp;
         case "ai_plan_usage":
             if (isExp)
                 return aiPlanUsageCompExpressive;
@@ -894,6 +955,8 @@ Item {
                 return searchCompExpressive;
             if (style === "neural")
                 return searchCompNeural;
+            if (style === "sculpt")
+                return searchCompSculpt;
             return searchComp;
         default:
             return null;
@@ -902,24 +965,32 @@ Item {
 
     function toggleVisible(visibility) {
         rootItem.widgetSelfVisible = visibility;
-        let item = null;
-        if (barSection == 0)
-            item = Config.options.bar.layouts.left[originalIndex];
-        else if (barSection == 1)
-            item = Config.options.bar.layouts.center[originalIndex];
-        else if (barSection == 2)
-            item = Config.options.bar.layouts.right[originalIndex];
-        if (item !== undefined && item !== null) {
-            if (item.visible !== visibility) {
-                item.visible = visibility;
-                if (barSection == 0)
-                    Config.options.bar.layouts.left = Config.options.bar.layouts.left;
-                else if (barSection == 1)
-                    Config.options.bar.layouts.center = Config.options.bar.layouts.center;
-                else if (barSection == 2)
-                    Config.options.bar.layouts.right = Config.options.bar.layouts.right;
-            }
-        }
+        // Widgets call this from Component.onCompleted, i.e. while the style's
+        // Repeater is still building from the layout list. Re-assigning that list
+        // right away re-runs the list binding mid-build (a binding loop), so the
+        // persisted flag is written on the next tick. The closure only touches
+        // Config: the delegate may be gone by then.
+        const section = barSection;
+        const index = originalIndex;
+        Qt.callLater(() => {
+            const layouts = Config.options.bar.layouts;
+            let item = null;
+            if (section == 0)
+                item = layouts.left[index];
+            else if (section == 1)
+                item = layouts.center[index];
+            else if (section == 2)
+                item = layouts.right[index];
+            if (item === undefined || item === null || item.visible === visibility)
+                return;
+            item.visible = visibility;
+            if (section == 0)
+                layouts.left = layouts.left;
+            else if (section == 1)
+                layouts.center = layouts.center;
+            else if (section == 2)
+                layouts.right = layouts.right;
+        });
     }
 
     // ── Edit Mode overlay ─────────────────────────────────────────────────
@@ -934,6 +1005,22 @@ Item {
         }
         return null;
     }
+
+    // ── Settings preview ──────────────────────────────────────────────────
+    // Settings' live bar (BarPreviewStage) can try a group style on its own copy of the
+    // bar without touching the config; found by walking up, null on the real bar. Widgets
+    // read `rootItem.groupStyle` instead of the config for the same reason.
+    readonly property var previewOverrides: {
+        let p = rootItem.parent;
+        while (p) {
+            if (p.barPreviewOverrides !== undefined)
+                return p.barPreviewOverrides;
+            p = p.parent;
+        }
+        return null;
+    }
+    readonly property int groupStyle: (rootItem.previewOverrides?.groupStyle ?? -1) >= 0
+        ? rootItem.previewOverrides.groupStyle : Config.options.bar.barGroupStyle
 
     // ── Edit Mode drop preview ─────────────────────────────────────────────
     readonly property bool isBeingDragged: rootItem.editController !== null
@@ -1004,6 +1091,10 @@ Item {
         activated: itemLoader.item?.activated ?? false
         activeTheme: rootItem.activeTheme
         widgetId: modelData.id
+        barGroupStyle: rootItem.groupStyle
+        hasActiveLeftNeighbor: rootItem.hasActiveLeftNeighbor
+        hasActiveRightNeighbor: rootItem.hasActiveRightNeighbor
+        isDefault: rootItem.isDefault
     }
 
     // ── Widget Components ─────────────────────────────────────────────────────
@@ -1059,6 +1150,12 @@ Item {
     Component {
         id: modeIndicatorComp
         ModeIndicator {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: easyEffectsIndicatorComp
+        EasyEffectsIndicator {
             vertical: rootItem.vertical
         }
     }
@@ -1209,6 +1306,8 @@ Item {
         id: powerComp
         PowerButton {
             vertical: rootItem.vertical
+            startRadius: rootItem.startRadius
+            endRadius: rootItem.endRadius
         }
     }
     Component {
@@ -1226,6 +1325,30 @@ Item {
     Component {
         id: portWatcherCompExpressive
         ExpressivePortWatcher {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: passwordManagerComp
+        PasswordManagerWidget {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: passwordManagerCompExpressive
+        ExpressivePasswordManager {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: networkSpeedComp
+        NetworkSpeedWidget {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: networkSpeedCompExpressive
+        ExpressiveNetworkSpeed {
             vertical: rootItem.vertical
         }
     }
@@ -1265,6 +1388,12 @@ Item {
             vertical: rootItem.vertical
         }
     }
+    Component {
+        id: searchCompSculpt
+        SculptSearchBarWidget {
+            vertical: rootItem.vertical
+        }
+    }
 
     // Expressive variants
     Component {
@@ -1282,6 +1411,24 @@ Item {
     Component {
         id: weatherCompTessera
         TesseraWeatherWidget {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: weatherCompSculpt
+        SculptWeatherWidget {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: timerCompSculpt
+        SculptTimerWidget {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: systemMonitorCompSculpt
+        SculptResources {
             vertical: rootItem.vertical
         }
     }
@@ -1340,6 +1487,12 @@ Item {
         }
     }
     Component {
+        id: workspaceCompPills
+        PillsWorkspaces {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
         id: systemMonitorCompExpressive
         ExpressiveResources {
             vertical: rootItem.vertical
@@ -1376,6 +1529,18 @@ Item {
         }
     }
     Component {
+        id: dashboardPanelButtonSculpt
+        SculptDashboardPanelButton {
+            vertical: false
+        }
+    }
+    Component {
+        id: dashboardPanelButtonSculptVert
+        SculptDashboardPanelButton {
+            vertical: true
+        }
+    }
+    Component {
         id: policiesPanelButtonOutline
         OutlinePoliciesPanelButton {
             vertical: rootItem.vertical
@@ -1384,6 +1549,12 @@ Item {
     Component {
         id: utilityButtonsCompSegments
         SegmentedUtilButtons {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: utilityButtonsCompSculpt
+        SculptUtilButtons {
             vertical: rootItem.vertical
         }
     }
@@ -1426,6 +1597,18 @@ Item {
     Component {
         id: keyboardCompExpressive
         ExpressiveKeyboardLayout {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: keyboardCompSculpt
+        SculptKeyboardLayout {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: bluetoothCompSculpt
+        SculptBluetoothDevices {
             vertical: rootItem.vertical
         }
     }

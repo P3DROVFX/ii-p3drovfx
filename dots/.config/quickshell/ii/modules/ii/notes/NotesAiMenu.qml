@@ -927,6 +927,10 @@ Item {
                         }
                     }
                 }
+
+                TouchpadScrollHandler {
+                    flickable: flick
+                }
             }
 
             // ── Footer: Ask in Sidebar Chat ───────────────────────────────

@@ -37,6 +37,9 @@ AnimatedIcon {
         anchors.fill: parent
         preferredRendererType: Shape.CurveRenderer
         opacity: root.dimmed
+        // Each dot settles itself: a deferred applyRest() on the root can land after a same-tick
+        // teardown has invalidated the icon's context, and throws there.
+        Component.onCompleted: dot.opacity = (root.connected && dot.solid) ? 1.0 : root.dimmed
 
         // The colour change is the sweep; the lean is what keeps it from being
         // a pure fade. Both live on the dot so the sweep can just poke it.
@@ -107,8 +110,6 @@ AnimatedIcon {
         if (!root.busy)
             root.applyRest();
     }
-
-    Component.onCompleted: Qt.callLater(root.applyRest)
 
     Repeater {
         id: dotRepeater

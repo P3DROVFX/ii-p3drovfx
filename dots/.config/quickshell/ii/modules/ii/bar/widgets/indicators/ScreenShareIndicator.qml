@@ -37,11 +37,27 @@ MouseArea {
     // with a heartbeat, so the several instances this widget spawns (per bar
     // section, per monitor, per reload) collapse into ONE live pw-dump loop —
     // the 2026-09-08 audit measured eight coexisting, unkillable producers.
-    // The flock makes a loser exit in milliseconds instead of stacking.
+    //
+    // Restart backoff: `running: true` alone re-spawned a loser the instant it
+    // exited — a continuous bash spawn loop per hidden instance, since a loser
+    // only ever exits when a live holder is beating. Retrying every 15 s keeps
+    // takeover of a dead holder bounded while idle instances spawn nothing.
+    property bool producerWanted: true
     Process {
         id: screenShareProc
-        running: true
+        running: producerWanted
         command: ["bash", Directories.screenshareStateScript]
+        onExited: {
+            if (producerWanted) {
+                producerWanted = false;
+                producerBackoff.restart();
+            }
+        }
+    }
+    Timer {
+        id: producerBackoff
+        interval: 15000
+        onTriggered: indicator.producerWanted = true
     }
 
     FileView {
@@ -77,8 +93,12 @@ MouseArea {
         }
     }
 
-    StyledPopup {
+    // Lazy: popup controller is only built on approach (same as ExpressiveSports).
+    PopupLoader {
+        active: BarInteraction.enablePopups && (BarInteraction.clickToShow || indicator.containsMouse || held)
+        sourceComponent: StyledPopup {
         id: sharePopup
+        popupId: "screenShare"
         hoverTarget: indicator
         animate: false
         contentItem: HeroCard {
@@ -93,5 +113,6 @@ MouseArea {
             pillText: Translation.tr("Sharing..")
             pillIcon: "screen_share"
         }
+    } // end Loader
     }
 }

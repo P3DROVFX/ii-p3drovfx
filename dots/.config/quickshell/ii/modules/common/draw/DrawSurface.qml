@@ -30,6 +30,28 @@ Item {
     /// 0..0.95. See StrokeGeometry.smoothed.
     property real smoothing: 0.55
     property bool eraser: false
+    /**
+     * How hard a mouse or finger stroke is steadied, 0..1 (0 = off).
+     *
+     * A hand on a mouse trembles in a way a hand on a pen does not, and the exponential
+     * filter alone only trades that tremble for lag. This is a "lazy brush": the ink
+     * hangs on a short string behind the pointer and only moves when the string goes
+     * taut, so small wobbles never reach the line while the stroke still goes exactly
+     * where it is pulled. The string is up to 18 px long. A pen is never steadied: it is
+     * precise already, and a string would just make it feel late.
+     */
+    property real mouseSmoothing: 0
+
+    /**
+     * What the pen makes: "pen", "highlighter", "laser", or a shape — "line", "arrow",
+     * "rect", "ellipse". A shape is a drag from one corner to the other; the laser is a
+     * trail that fades and is never kept. See StrokeGeometry for each.
+     */
+    property string tool: "pen"
+    /// Held Shift: shapes snap (lines to 15°, boxes to squares and circles).
+    property bool constrain: false
+    readonly property bool shapeTool: ["line", "arrow", "rect", "ellipse"].indexOf(root.tool) >= 0
+    readonly property real stringLength: Math.max(0, Math.min(1, root.mouseSmoothing)) * 18
     readonly property real eraserRadius: Math.max(20, root.strokeWidth * 3)
 
     /**
@@ -42,6 +64,8 @@ Item {
      * the point here is what lets the toolbar's own handlers see it.
      */
     property Item excludeItem: null
+    /// More of the same: everything else that floats over the sheet (a settings popup).
+    property list<Item> excludeItems: []
 
     /// True once a device has reported a pressure strictly between the ends, which is a
     /// device that is actually measuring rather than a mouse reporting 1.
@@ -54,43 +78,133 @@ Item {
     property var livePoints: []
     property var smoothPoint: null
 
-    function currentStrokeRecord() {
-        return {
-            points: root.livePoints,
-            color: root.color,
-            width: root.strokeWidth,
-            usePressure: root.usePressure
-        };
-    }
+    /// The record the canvas draws while the pen is down. Its `points` is `livePoints`
+    /// itself, appended to in place: copying the array on every sample made a long
+    /// stroke quadratic in its own length.
+    property var liveRecord: null
 
-    function beginStroke(x, y, pressure) {
+    /// Whether the stroke in progress is steadied (see `mouseSmoothing`), the string's
+    /// end the ink follows, and the last place the pointer actually was.
+    property bool steadied: false
+    property var brush: null
+    property var lastRaw: null
+
+    function beginStroke(x, y, pressure, steady) {
         const first = StrokeGeometry.point(x, y, pressure);
+        if (root.shapeTool) {
+            root.steadied = false;
+            root.livePoints = [first, first];
+            root.liveRecord = {
+                tool: root.tool,
+                points: root.livePoints,
+                color: root.color,
+                width: root.strokeWidth,
+                usePressure: false
+            };
+            canvas.liveStroke = root.liveRecord;
+            canvas.refreshLive();
+            return;
+        }
+        root.steadied = steady === true && root.stringLength > 0.5;
+        root.brush = first;
+        root.lastRaw = first;
         root.smoothPoint = first;
         root.livePoints = [first];
-        canvas.liveStroke = root.currentStrokeRecord();
+        root.liveRecord = {
+            tool: root.tool,
+            points: root.livePoints,
+            color: root.color,
+            // The laser is meant to be seen across a room: never a hairline.
+            width: root.tool === "laser" ? Math.max(6, root.strokeWidth) : root.strokeWidth,
+            usePressure: root.tool === "pen" && root.usePressure
+        };
+        canvas.liveStroke = root.liveRecord;
         canvas.refreshLive();
+    }
+
+    /// Feeds one point through the filter into the stroke.
+    function _append(sample) {
+        // Smoothed before the distance test, so the filter sees every sample and the
+        // thinning only decides what is worth keeping afterwards.
+        root.smoothPoint = StrokeGeometry.smoothed(root.smoothPoint, sample, root.smoothing);
+        const points = root.liveRecord.points;
+        if (!StrokeGeometry.shouldAppend(points[points.length - 1], root.smoothPoint))
+            return false;
+        points.push(root.smoothPoint);
+        return true;
     }
 
     function extendStroke(x, y, pressure) {
-        if (root.livePoints.length === 0)
+        if (!root.liveRecord)
             return;
         const raw = StrokeGeometry.point(x, y, pressure);
-        // Smoothed before the distance test, so the filter sees every sample and the
-        // thinning only decides what is worth keeping afterwards.
-        root.smoothPoint = StrokeGeometry.smoothed(root.smoothPoint, raw, root.smoothing);
-        const last = root.livePoints[root.livePoints.length - 1];
-        if (!StrokeGeometry.shouldAppend(last, root.smoothPoint))
+        if (StrokeGeometry.isShape(root.liveRecord)) {
+            const points = root.liveRecord.points;
+            points[1] = root.constrain ? StrokeGeometry.constrained(root.liveRecord.tool, points[0], raw) : raw;
+            root.lastRaw = raw;
+            canvas.refreshLive();
             return;
-        root.livePoints = root.livePoints.concat([root.smoothPoint]);
-        canvas.liveStroke = root.currentStrokeRecord();
-        canvas.refreshLive();
+        }
+        root.lastRaw = raw;
+        let sample = raw;
+        if (root.steadied) {
+            sample = StrokeGeometry.pulled(root.brush, raw, root.stringLength);
+            if (!sample)
+                return;
+            root.brush = sample;
+        }
+        if (root._append(sample))
+            canvas.refreshLive();
+    }
+
+    /// Shift pressed or released mid-drag re-snaps the shape at once.
+    onConstrainChanged: {
+        if (root.liveRecord && StrokeGeometry.isShape(root.liveRecord) && root.lastRaw) {
+            const points = root.liveRecord.points;
+            points[1] = root.constrain ? StrokeGeometry.constrained(root.liveRecord.tool, points[0], root.lastRaw) : root.lastRaw;
+            canvas.refreshLive();
+        }
     }
 
     function endStroke() {
-        if (root.livePoints.length > 0)
-            root.strokeFinished(root.currentStrokeRecord());
+        const finished = root.liveRecord;
+        if (finished && StrokeGeometry.isShape(finished)) {
+            root.liveRecord = null;
+            root.livePoints = [];
+            root.lastRaw = null;
+            // A click without a drag is not a shape anyone meant to draw.
+            if (StrokeGeometry.distance(finished.points[0], finished.points[1]) >= 3)
+                root.strokeFinished(finished);
+            canvas.liveStroke = null;
+            canvas.refreshLive();
+            return;
+        }
+        if (finished && finished.tool === "laser") {
+            root.liveRecord = null;
+            root.livePoints = [];
+            root.smoothPoint = null;
+            root.brush = null;
+            root.lastRaw = null;
+            canvas.liveStroke = null;
+            canvas.releaseLaser(finished);
+            return;
+        }
+        // The string's slack is taken up on release: the line ends where the pointer let
+        // go, which is the point of an arrow drawn at something.
+        if (finished && root.steadied && root.lastRaw) {
+            for (const step of [0.5, 1])
+                root._append(StrokeGeometry.point(
+                    root.brush.x + (root.lastRaw.x - root.brush.x) * step,
+                    root.brush.y + (root.lastRaw.y - root.brush.y) * step,
+                    root.lastRaw.p));
+        }
+        root.liveRecord = null;
         root.livePoints = [];
         root.smoothPoint = null;
+        root.brush = null;
+        root.lastRaw = null;
+        if (finished && finished.points.length > 0)
+            root.strokeFinished(finished);
         canvas.liveStroke = null;
         canvas.refreshLive();
     }
@@ -98,6 +212,7 @@ Item {
     /// Drops a stroke in progress without committing it. For a host that leaves drawing
     /// mode mid-stroke.
     function abandonStroke() {
+        root.liveRecord = null;
         root.livePoints = [];
         root.smoothPoint = null;
         canvas.liveStroke = null;
@@ -133,14 +248,21 @@ Item {
         function contains(point: point): bool {
             if (!root.drawing)
                 return false;
-            const exclude = root.excludeItem;
-            if (!exclude || !exclude.visible)
-                return true;
-            const local = exclude.mapFromItem(root, point.x, point.y);
-            const inside = local.x >= 0 && local.y >= 0
-                && local.x <= exclude.width && local.y <= exclude.height;
-            return !inside;
+            if (root._covers(root.excludeItem, point))
+                return false;
+            for (const item of root.excludeItems) {
+                if (root._covers(item, point))
+                    return false;
+            }
+            return true;
         }
+    }
+
+    function _covers(item, point) {
+        if (!item || !item.visible)
+            return false;
+        const local = item.mapFromItem(root, point.x, point.y);
+        return local.x >= 0 && local.y >= 0 && local.x <= item.width && local.y <= item.height;
     }
 
     /**
@@ -152,50 +274,65 @@ Item {
      * of and shows how wide it will be, which is what every drawing application puts
      * under the pen for the same reason.
      */
+    /**
+     * The system's crosshair instead of the ring.
+     *
+     * The ring is drawn by this surface, so every pointer move — drawing or not — is a
+     * new frame of a screen-sized window (~15 % of a core while the pointer just moves
+     * around in drawing mode). The crosshair is the compositor's: moving it costs this
+     * surface nothing at all.
+     */
+    property bool nativeCursor: false
+
     HoverHandler {
         id: hover
         enabled: root.drawing
         // The system pointer would otherwise sit inside the ring, which is one pointer
         // too many.
-        cursorShape: Qt.BlankCursor
+        cursorShape: root.nativeCursor ? Qt.CrossCursor : Qt.BlankCursor
     }
 
-    Item {
-        id: brushCursor
-
-        readonly property real diameter: root.eraser
-            ? root.eraserRadius * 2
-            : Math.max(8, root.strokeWidth)
-
-        visible: root.drawing && hover.hovered
-        width: brushCursor.diameter
-        height: brushCursor.diameter
-        x: hover.point.position.x - brushCursor.diameter / 2
-        y: hover.point.position.y - brushCursor.diameter / 2
+    // Built only while it is wanted: an invisible ring still re-evaluates its position on
+    // every pointer move.
+    Loader {
+        active: !root.nativeCursor && root.drawing && hover.hovered
         z: 10
+        sourceComponent: Item {
+            id: brushCursor
 
-        /**
-         * Two filled discs rather than an outlined ring.
-         *
-         * An outline would be a `border`, which this shell does not draw anywhere — and
-         * the pair says more anyway: the wide translucent disc is exactly how wide the
-         * stroke will be, and the opaque dot at its centre is exactly where the ink will
-         * come out. Both carry the current colour, so the cursor also answers "what am I
-         * about to draw with" without a glance at the toolbar.
-         */
-        Rectangle {
-            anchors.fill: parent
-            radius: width / 2
-            color: root.eraser ? Appearance.colors.colSubtext : root.color
-            opacity: 0.28
-        }
+            readonly property real diameter: root.eraser
+                ? root.eraserRadius * 2
+                : Math.max(8, root.tool === "highlighter" ? Math.max(12, root.strokeWidth * 3) : root.strokeWidth)
 
-        Rectangle {
-            anchors.centerIn: parent
-            width: Math.min(4, brushCursor.diameter * 0.5)
-            height: width
-            radius: width / 2
-            color: root.eraser ? Appearance.colors.colSubtext : root.color
+            width: brushCursor.diameter
+            height: brushCursor.diameter
+            x: hover.point.position.x - brushCursor.diameter / 2
+            y: hover.point.position.y - brushCursor.diameter / 2
+            z: 10
+
+            /**
+             * Two filled discs rather than an outlined ring.
+             *
+             * An outline would be a `border`, which this shell does not draw anywhere — and
+             * the pair says more anyway: the wide translucent disc is exactly how wide the
+             * stroke will be, and the opaque dot at its centre is exactly where the ink will
+             * come out. Both carry the current colour, so the cursor also answers "what am I
+             * about to draw with" without a glance at the toolbar.
+             */
+            Rectangle {
+                anchors.fill: parent
+                radius: width / 2
+                color: root.eraser ? Appearance.colors.colSubtext : root.color
+                opacity: 0.28
+            }
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: Math.min(4, brushCursor.diameter * 0.5)
+                height: width
+                radius: width / 2
+                color: root.eraser ? Appearance.colors.colSubtext : root.color
+            }
         }
     }
 
@@ -217,6 +354,10 @@ Item {
 
         readonly property bool eraserTip: pen.point.device?.pointerType === PointerDevice.Eraser
         readonly property bool erasing: pen.eraserTip || root.eraser
+        /// A stylus of any end. Everything else — a mouse, a touchpad, a finger — gets
+        /// the lazy brush.
+        readonly property bool isPen: pen.point.device?.pointerType === PointerDevice.Pen
+            || pen.point.device?.pointerType === PointerDevice.Eraser
 
         /// Measured from the values rather than asked of the device: a mouse and a finger
         /// both report exactly 1, and anything strictly between the ends is a device that
@@ -237,8 +378,9 @@ Item {
                 if (pen.erasing)
                     root.eraseRequested(pen.point.position.x, pen.point.position.y);
                 else
-                    root.beginStroke(pen.point.position.x, pen.point.position.y, pen.point.pressure);
-            } else if (root.livePoints.length > 0) {
+                    root.beginStroke(pen.point.position.x, pen.point.position.y, pen.point.pressure,
+                                     !pen.isPen);
+            } else if (root.liveRecord) {
                 root.endStroke();
             }
         }

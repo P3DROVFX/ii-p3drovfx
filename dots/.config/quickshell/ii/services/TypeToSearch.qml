@@ -116,13 +116,26 @@ Singleton {
      */
     readonly property bool shellSurfaceFocused: GlobalStates.overviewOpen
         || GlobalStates.searchOpen || GlobalStates.cheatsheetOpen || GlobalStates.sessionOpen
-        || GlobalStates.screenLocked || GlobalStates.usageOpen || GlobalStates.modesOpen
+        || GlobalStates.screenLocked
         || GlobalStates.oskOpen || GlobalStates.overlayOpen || GlobalStates.settingsOpen
         || GlobalStates.dashboardPanelOpen || GlobalStates.policiesPanelOpen
         || GlobalStates.scratchpadOpen
+        // Edit Mode owns the keyboard even before its catalogue search field is focused.
+        // Its own search bars must receive printable keys instead of the Overview's
+        // compositor-level type-to-search binds consuming them.
+        || GlobalStates.editMode
+        // The desktop icon menu and its rename field type into a layer surface too.
+        || GlobalStates.desktopDialogOpen
+        // The wallpaper search field takes the keys too, island-hosted or not: an empty
+        // desktop would otherwise arm the binds under it and open the launcher instead.
+        || GlobalStates.wallpaperSelectorOpen
+        // A bar popup that takes typing (Passwords): hovering it may hand it the keyboard.
+        || GlobalStates.barPopupTypingOpen
 
+    // Not under an open Alt+Tab: its typing submap binds the bare letters, and arming or
+    // disarming here (hl.unbind reaches into every submap) would take them away mid-search.
     readonly property bool armed: root.enabled && !PanelFamily.isTablet
-        && !root.focusedWindowOnScreen && !root.shellSurfaceFocused
+        && !root.focusedWindowOnScreen && !root.shellSurfaceFocused && !WindowSwitcher.active
         && (root.trigger === "noFocusedWindow" || root.workspaceEmpty)
 
     // ------------------------------------------------------------------ typing
@@ -207,14 +220,27 @@ Singleton {
     readonly property bool launcherOpen: PanelFamily.isWaffle ? GlobalStates.searchOpen : GlobalStates.overviewSurfaceOpen
 
     onLauncherOpenChanged: {
-        if (root.launcherOpen)
+        if (root.launcherOpen) {
+            // The ii launchers read the opening character while they open, before the
+            // connection below is attached, so that query is never reported to it. Without
+            // this, deleting a one-letter query left the launcher open.
+            if (root.openedByTyping && !PanelFamily.isWaffle && !GlobalStates.overviewUsesAppDrawer
+                    && GlobalStates.activeSearchQuery === "" && LauncherSearch.query.length > 0)
+                root.typedQuerySeen = true;
             return;
+        }
         root.openedByTyping = false;
         root.typedQuerySeen = false;
     }
 
+    // Lazily attached: targeting LauncherSearch eagerly constructs it (and the
+    // whole search stack: QuickToggleRegistry, BrowserSites, the Settings
+    // index chain) wherever this service is created — e.g. from the Overview
+    // scope's `armed` read, before any panel exists. The launcher constructs
+    // LauncherSearch itself the moment it opens, which is exactly when this
+    // connection becomes necessary.
     Connections {
-        target: LauncherSearch
+        target: root.launcherOpen ? LauncherSearch : null
         function onQueryChanged() {
             if (!root.openedByTyping || !root.launcherOpen)
                 return;

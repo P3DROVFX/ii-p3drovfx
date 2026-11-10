@@ -643,6 +643,10 @@ Item {
                                                         }
                                                     }
                                                 }
+
+                                                TouchpadScrollHandler {
+                                                    flickable: emojiGridView
+                                                }
                                             }
 
                                             // Empty state for when no emojis are found

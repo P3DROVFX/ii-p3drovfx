@@ -1,0 +1,8 @@
+module qs.modules.ii.background.widgets.wellbeing
+
+WellbeingAppIcon 1.0 WellbeingAppIcon.qml
+ScreenTimeRingWidget 1.0 ScreenTimeRingWidget.qml
+ScreenTimeLimitsWidget 1.0 ScreenTimeLimitsWidget.qml
+BedtimeWidget 1.0 BedtimeWidget.qml
+BreakWidget 1.0 BreakWidget.qml
+DayBalanceWidget 1.0 DayBalanceWidget.qml

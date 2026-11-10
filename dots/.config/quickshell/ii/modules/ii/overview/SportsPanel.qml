@@ -261,6 +261,10 @@ Item {
                     }
                 }
             }
+
+            TouchpadScrollHandler {
+                flickable: gamesList
+            }
         }
 
         ColumnLayout {

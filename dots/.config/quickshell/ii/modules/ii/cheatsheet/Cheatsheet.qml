@@ -9,9 +9,15 @@ import Quickshell
 import Quickshell.Wayland
 import Quickshell.Hyprland
 import "timetable"
+import "settings"
 
 Scope {
     id: root
+    // Small session-only overrides protect a recent user choice from a stale
+    // FileView notification. The durable value is still written to Persistent;
+    // these scalars disappear with the shell and do not retain page trees.
+    property int sessionTab: -1
+    property string sessionTimetableMode: ""
     property var tabButtonList: {
         let list = [];
         if (Config.options.cheatsheet.enableTimetable) {
@@ -54,6 +60,13 @@ Scope {
                 "name": Translation.tr("Workspaces")
             });
         }
+        if (Config.options.cheatsheet.enableFootball && (Config.options.bar.sports.apiEnabled ?? true)) {
+            list.push({
+                "id": "football",
+                "icon": "sports_soccer",
+                "name": Translation.tr("Football")
+            });
+        }
         if (Config.options.cheatsheet.enableGmail) {
             list.push({
                 "id": "email",
@@ -89,6 +102,7 @@ Scope {
         const index = root.indexOfTab(pendingTab);
         GlobalStates.cheatsheetPendingTab = "";
         if (index >= 0) {
+            root.sessionTab = index;
             Persistent.states.cheatsheet.tabIndex = index;
             if (cheatsheetLoader.item && typeof cheatsheetLoader.item.selectTab === "function") {
                 cheatsheetLoader.item.selectTab(index);
@@ -117,6 +131,15 @@ Scope {
     // Opt-in diagnostic; normal sessions have no sampler or diagnostic timers.
     readonly property bool cacheProbeEnabled: Quickshell.env("II_CHEATSHEET_CACHE_PROBE") === "1"
     readonly property bool cacheWanted: Config.ready && Persistent.ready && Config.options.cheatsheet.keepLastTabLoaded
+    onActiveStateChanged: {
+        if (!root.activeState) {
+            // Once the surface is closed, let the next opening read the durable
+            // value again so external open requests (Gmail, Welcome, etc.) can
+            // choose a different page while the window is hidden.
+            root.sessionTab = -1;
+            root.sessionTimetableMode = "";
+        }
+    }
     function prepareCache() {
         root.cachePrepared = true;
     }
@@ -139,17 +162,8 @@ Scope {
         }
     }
 
-    Timer {
-        id: closeTimer
-        interval: 400
-        repeat: false
-        onTriggered: {
-            root.activeState = false;
-        }
-    }
 
     function requestOpen() {
-        closeTimer.stop();
         root.activeState = true;
         if (!GlobalStates.cheatsheetOpen) {
             GlobalStates.cheatsheetOpen = true;
@@ -160,7 +174,7 @@ Scope {
         if (GlobalStates.cheatsheetOpen) {
             GlobalStates.cheatsheetOpen = false;
         }
-        closeTimer.restart();
+        if (!cheatsheetLoader.item) root.activeState = false;
     }
 
     function requestToggle() {
@@ -175,23 +189,65 @@ Scope {
         const timetableIndex = root.tabButtonList.findIndex(tab => tab.id === "timetable");
         if (timetableIndex < 0)
             return;
+        root.sessionTab = timetableIndex;
+        root.sessionTimetableMode = "month";
         if (Persistent.states.cheatsheet.tabIndex !== timetableIndex)
             Persistent.states.cheatsheet.tabIndex = timetableIndex;
+        if (cheatsheetLoader.item && typeof cheatsheetLoader.item.selectTab === "function")
+            cheatsheetLoader.item.selectTab(timetableIndex);
+        Persistent.states.cheatsheet.timetableView = "month";
         root.requestOpen();
     }
 
     RetainedLoader {
         id: cheatsheetLoader
         // Keep the window chrome and only the last selected tab.
-        // With caching disabled, closing releases the window immediately.
+        // With caching disabled, the closed window is kept for a minute, then released.
         requested: root.activeState || root.cachePrepared
-        retainFor: 0
+        retainFor: 60000
 
         sourceComponent: PanelWindow {
             id: cheatsheetRoot
             visible: root.activeState
-            property int selectedTab: Math.max(0, Math.min(root.tabButtonList.length - 1, Persistent.states.cheatsheet.tabIndex))
+            property int selectedTab: 0
+            property int protectedTab: -1
+            property int previousTab: -1
+            // Id of the tab whose own settings cover the page, "" when closed.
+            property string settingsTab: ""
+            readonly property string currentTabId: root.tabButtonList[cheatsheetRoot.selectedTab]?.id ?? ""
+            readonly property var settingsPages: ({
+                "keybinds": "settings/KeybindsSettings.qml",
+                "timetable": "settings/TimetableSettings.qml",
+                "aminoAcids": "settings/AminoAcidsSettings.qml",
+                "commands": "settings/CommandsSettings.qml"
+            })
+            readonly property bool currentTabHasSettings: cheatsheetRoot.settingsPages[cheatsheetRoot.currentTabId] !== undefined
+
+            function toggleSettings() {
+                cheatsheetRoot.settingsTab = cheatsheetRoot.settingsTab.length > 0 || !cheatsheetRoot.currentTabHasSettings
+                    ? "" : cheatsheetRoot.currentTabId;
+            }
+            onSettingsTabChanged: {
+                if (cheatsheetRoot.settingsTab.length > 0)
+                    return;
+                cheatsheetBackground.forceActiveFocus();
+                initialFocusTimer.restart();
+            }
             readonly property bool pageReady: swipeView.selectionReady && swipeView.currentItem?.isCurrent === true && swipeView.currentItem?.status === Loader.Ready && (swipeView.currentItem.item?.lookupReady ?? true)
+
+            function clampTab(index) {
+                return Math.max(0, Math.min(root.tabButtonList.length - 1, Number(index) || 0));
+            }
+
+            function initializeSelection() {
+                const next = root.sessionTab >= 0
+                    ? cheatsheetRoot.clampTab(root.sessionTab)
+                    : cheatsheetRoot.clampTab(Persistent.states.cheatsheet.tabIndex);
+                root.sessionTab = next;
+                cheatsheetRoot.protectedTab = -1;
+                cheatsheetRoot.previousTab = -1;
+                cheatsheetRoot.selectedTab = next;
+            }
 
             // Persistence is changed only by a navigation request. SwipeView
             // adjusts its index while Repeater inserts children asynchronously;
@@ -199,15 +255,61 @@ Scope {
             function selectTab(index) {
                 if (index < 0 || index >= root.tabButtonList.length)
                     return;
+                cheatsheetRoot.previousTab = cheatsheetRoot.selectedTab;
+                cheatsheetRoot.protectedTab = index;
+                root.sessionTab = index;
+                if (cheatsheetRoot.selectedTab !== index)
+                    cheatsheetRoot.selectedTab = index;
                 if (Persistent.states.cheatsheet.tabIndex !== index)
                     Persistent.states.cheatsheet.tabIndex = index;
                 swipeView.restoreSelection();
             }
-            onSelectedTabChanged: Qt.callLater(swipeView.restoreSelection)
+            onSelectedTabChanged: {
+                cheatsheetRoot.settingsTab = "";
+                Qt.callLater(swipeView.restoreSelection);
+            }
+
+            Component.onCompleted: {
+                cheatsheetRoot.initializeSelection();
+                Qt.callLater(swipeView.restoreSelection);
+                // Built ahead of time while hidden: onVisibleChanged drives the
+                // open from here on.
+                if (!visible)
+                    return;
+                registerGrabTimer.start();
+            }
+
+            Connections {
+                target: Persistent.states.cheatsheet
+                function onTabIndexChanged() {
+                    const next = cheatsheetRoot.clampTab(Persistent.states.cheatsheet.tabIndex);
+                    if (cheatsheetRoot.protectedTab >= 0) {
+                        if (next === cheatsheetRoot.protectedTab)
+                            return;
+                        if (next === cheatsheetRoot.previousTab) {
+                            Persistent.states.cheatsheet.tabIndex = cheatsheetRoot.protectedTab;
+                            return;
+                        }
+                        cheatsheetRoot.protectedTab = -1;
+                        cheatsheetRoot.previousTab = -1;
+                    }
+                    root.sessionTab = next;
+                    if (cheatsheetRoot.selectedTab !== next)
+                        cheatsheetRoot.selectedTab = next;
+                }
+            }
 
             Connections {
                 target: root
                 function onTabButtonListChanged() {
+                    if (root.sessionTab >= 0) {
+                        const next = cheatsheetRoot.clampTab(root.sessionTab);
+                        root.sessionTab = next;
+                        if (cheatsheetRoot.selectedTab !== next)
+                            cheatsheetRoot.selectedTab = next;
+                        if (Persistent.states.cheatsheet.tabIndex !== next)
+                            Persistent.states.cheatsheet.tabIndex = next;
+                    }
                     swipeView.selectionReady = false;
                     Qt.callLater(swipeView.restoreSelection);
                 }
@@ -239,6 +341,7 @@ Scope {
             color: "transparent"
 
             mask: Region {
+                id: cheatsheetProbeMask
                 item: cheatsheetInputMask
             }
 
@@ -253,15 +356,17 @@ Scope {
 
             onVisibleChanged: {
                 if (visible) {
+                    cheatsheetRoot.initializeSelection();
                     Qt.callLater(swipeView.restoreSelection);
                     initialFocusTimer.restart();
                     registerGrabTimer.restart();
-                    animInTimer.restart();
                     return;
                 }
                 registerGrabTimer.stop();
                 GlobalFocusGrab.removeDismissable(cheatsheetRoot);
-                cheatsheetBackground.animateIn = false;
+                cheatsheetRoot.protectedTab = -1;
+                cheatsheetRoot.previousTab = -1;
+                cheatsheetRoot.settingsTab = "";
                 cheatsheetBackground.ctrlPressed = false;
             }
 
@@ -278,14 +383,6 @@ Scope {
                 }
             }
 
-            Component.onCompleted: {
-                // Built ahead of time while hidden: onVisibleChanged drives the
-                // open from here on.
-                if (!visible)
-                    return;
-                registerGrabTimer.start();
-                animInTimer.start();
-            }
             Component.onDestruction: {
                 registerGrabTimer.stop();
                 GlobalFocusGrab.removeDismissable(cheatsheetRoot);
@@ -304,15 +401,15 @@ Scope {
                 anchors.centerIn: parent
             }
 
-            Item {
+
+            WindowAnimationSurface {
                 id: dialogWrap
                 anchors.fill: parent
-                // A reference sheet must be readable on its first frame.
-                opacity: GlobalStates.cheatsheetOpen ? 1.0 : 0.0
-                Behavior on opacity {
-                    enabled: !GlobalStates.cheatsheetOpen
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(dialogWrap)
-                }
+                open: GlobalStates.cheatsheetOpen
+                mapped: cheatsheetRoot.visible
+                panelWidth: cheatsheetBackground.width
+                panelHeight: cheatsheetBackground.height
+                onClosed: if (!GlobalStates.cheatsheetOpen) root.activeState = false
 
                 StyledRectangularShadow {
                     target: cheatsheetBackground
@@ -320,18 +417,16 @@ Scope {
 
                 Rectangle {
                     id: cheatsheetBackground
+
+                    ShellRegionTarget {
+                        target: cheatsheetBackground
+                        label: Translation.tr("Cheatsheet")
+                        namespace: "quickshell:cheatsheet"
+                    }
                     anchors.centerIn: parent
                     color: Appearance.colors.colLayer0
                     radius: Appearance.rounding.windowRounding
                     property real padding: 20
-                    property bool animateIn: false
-
-                    Timer {
-                        id: animInTimer
-                        interval: 0
-                        repeat: false
-                        onTriggered: cheatsheetBackground.animateIn = true
-                    }
 
                     property real maxBgWidth: cheatsheetRoot.screen ? cheatsheetRoot.screen.width * 0.95 : 1900
                     property real maxBgHeight: cheatsheetRoot.screen ? cheatsheetRoot.screen.height * 0.80 : 1000
@@ -348,7 +443,7 @@ Scope {
                             cheatsheetBackground.ctrlPressed = true;
                         }
 
-                        if (event.modifiers & Qt.ControlModifier) {
+                        if (event.modifiers === Qt.ControlModifier) {
                             if (event.key >= Qt.Key_1 && event.key <= Qt.Key_9) {
                                 const targetIndex = event.key - Qt.Key_1;
                                 if (targetIndex >= 0 && targetIndex < root.tabButtonList.length) {
@@ -366,28 +461,79 @@ Scope {
                                 event.accepted = true;
                                 return;
                             }
+                            if (timetableViewSwitch.visible && event.key === Qt.Key_V && !event.isAutoRepeat) {
+                                timetableViewSwitch.cycleMode();
+                                event.accepted = true;
+                                return;
+                            }
+                        }
+
+                        if (timetableViewSwitch.visible && (event.modifiers === (Qt.ControlModifier | Qt.ShiftModifier)) && !event.isAutoRepeat) {
+                            if (event.key === Qt.Key_D || event.key === Qt.Key_1) {
+                                timetableViewSwitch.modeRequested("day");
+                                event.accepted = true;
+                                return;
+                            } else if (event.key === Qt.Key_3 || event.key === Qt.Key_2) {
+                                timetableViewSwitch.modeRequested("threeDay");
+                                event.accepted = true;
+                                return;
+                            } else if (event.key === Qt.Key_W || event.key === Qt.Key_3) {
+                                timetableViewSwitch.modeRequested("week");
+                                event.accepted = true;
+                                return;
+                            } else if (event.key === Qt.Key_M || event.key === Qt.Key_4) {
+                                timetableViewSwitch.modeRequested("month");
+                                event.accepted = true;
+                                return;
+                            }
                         }
 
                         if (event.key === Qt.Key_Escape) {
+                            if (cheatsheetRoot.settingsTab.length > 0) {
+                                cheatsheetRoot.settingsTab = "";
+                                event.accepted = true;
+                                return;
+                            }
+                            if (swipeView.currentItem?.item?.handleEscape?.()) {
+                                event.accepted = true;
+                                return;
+                            }
                             cheatsheetRoot.hide();
                             event.accepted = true;
+                            return;
                         } else if (event.key === Qt.Key_Slash) {
+                            if (cheatsheetRoot.settingsTab.length > 0)
+                                return;
                             if (swipeView.currentItem && swipeView.currentItem.item) {
                                 swipeView.currentItem.item.forceActiveFocus();
                             }
                             event.accepted = true;
+                            return;
                         } else if (event.key === Qt.Key_Tab) {
                             tabBar.setCurrentIndex((tabBar.currentIndex + 1) % root.tabButtonList.length);
                             event.accepted = true;
+                            return;
                         } else if (event.key === Qt.Key_Backtab) {
                             tabBar.setCurrentIndex((tabBar.currentIndex - 1 + root.tabButtonList.length) % root.tabButtonList.length);
                             event.accepted = true;
+                            return;
+                        }
+
+                        // The page under an open settings sheet takes no keys.
+                        if (cheatsheetRoot.settingsTab.length === 0 && swipeView.currentItem?.item && typeof swipeView.currentItem.item.handleKey === "function") {
+                            if (swipeView.currentItem.item.handleKey(event)) {
+                                event.accepted = true;
+                                return;
+                            }
                         }
                     }
 
                     Keys.onReleased: event => {
                         if (event.key === Qt.Key_Control || !(event.modifiers & Qt.ControlModifier)) {
                             cheatsheetBackground.ctrlPressed = false;
+                        }
+                        if (swipeView.currentItem?.item && typeof swipeView.currentItem.item.releaseKey === "function") {
+                            swipeView.currentItem.item.releaseKey(event);
                         }
                     }
 
@@ -403,41 +549,56 @@ Scope {
                             rightMargin: 20
                         }
 
-                        scale: cheatsheetBackground.animateIn ? 1.0 : 0.0
-                        Behavior on scale {
-                            NumberAnimation {
-                                duration: 300
-                                easing.type: Easing.OutBack
-                                easing.overshoot: 1.5
-                            }
-                        }
 
                         onClicked: {
                             cheatsheetRoot.hide();
                         }
 
-                        contentItem: MaterialSymbol {
-                            anchors.centerIn: parent
-                            horizontalAlignment: Text.AlignHCenter
-                            font.pixelSize: Appearance.font.pixelSize.title
-                            text: "close"
-                            rotation: closeButton.isHovered ? 90 : 0
-                            Behavior on rotation {
-                                NumberAnimation {
-                                    duration: 200
-                                    easing.type: Easing.OutBack
-                                    easing.overshoot: 1.5
-                                }
-                            }
+                        contentItem: TaskShortcutContent {
+                            symbol: "close"
+                            shortcut: "Esc"
+                            showHint: cheatsheetBackground.ctrlPressed
+                            color: Appearance.colors.colOnSurface
+                            iconSize: Appearance.font.pixelSize.title
                         }
+
+                        StyledToolTip {
+                            extraVisibleCondition: closeButton.hovered
+                            text: Translation.tr("Close") + " (Esc)"
+                        }
+                    }
+
+                    // The current tab's own settings (Keybinds, Timetable, Amino
+                    // acids, Commands).
+                    AppSettingsButton {
+                        id: settingsButton
+                        open: cheatsheetRoot.settingsTab.length > 0
+                        visible: cheatsheetRoot.currentTabHasSettings
+                        label: Translation.tr("%1 settings").arg(root.tabButtonList[cheatsheetRoot.selectedTab]?.name ?? "")
+                        anchors {
+                            top: closeButton.top
+                            right: closeButton.left
+                            rightMargin: 8
+                        }
+                        onClicked: cheatsheetRoot.toggleSettings()
                     }
 
                     // Left counterpart of the close button: only the timetable tab
                     // has two shapes to choose between, so it only appears there.
                     TimetableViewSwitch {
                         id: timetableViewSwitch
+                        sessionMode: root.sessionTimetableMode
+                        showShortcutHints: cheatsheetBackground.ctrlPressed
+                        onModeRequested: mode => {
+                            root.sessionTimetableMode = mode;
+                            Persistent.states.cheatsheet.timetableView = mode;
+                            if (swipeView.currentItem?.item && typeof swipeView.currentItem.item.setMode === "function") {
+                                swipeView.currentItem.item.setMode(mode);
+                            }
+                        }
                         visible: Boolean(root.tabButtonList[swipeView.currentIndex] && root.tabButtonList[swipeView.currentIndex].icon === "calendar_month")
-                        animateIn: cheatsheetBackground.animateIn && timetableViewSwitch.visible
+                        enabled: cheatsheetRoot.settingsTab.length === 0
+                        animateIn: timetableViewSwitch.visible && cheatsheetRoot.settingsTab.length === 0
                         compact: cheatsheetBackground.width < 1100
                         // Anchored to the column (a sibling) rather than the tab
                         // bar itself: an anchor may only target a parent or a
@@ -447,6 +608,22 @@ Scope {
                             leftMargin: 20
                             top: cheatsheetColumnLayout.top
                             topMargin: Math.max(0, (topToolbar.height - timetableViewSwitch.height) / 2)
+                        }
+                    }
+
+                    // The current tab's settings over its page, below the tab bar.
+                    AppSettingsHost {
+                        id: settingsHost
+                        z: 1
+                        open: cheatsheetRoot.settingsTab.length > 0
+                        source: open ? Qt.resolvedUrl(cheatsheetRoot.settingsPages[cheatsheetRoot.settingsTab] ?? "") : ""
+                        onCloseRequested: cheatsheetRoot.settingsTab = ""
+                        anchors {
+                            left: cheatsheetColumnLayout.left
+                            right: cheatsheetColumnLayout.right
+                            bottom: cheatsheetColumnLayout.bottom
+                            top: cheatsheetColumnLayout.top
+                            topMargin: topToolbar.height + cheatsheetColumnLayout.spacing + 5
                         }
                     }
 
@@ -463,25 +640,6 @@ Scope {
                             Layout.maximumWidth: cheatsheetColumnLayout.width
                             enableShadow: false
 
-                            transform: Translate {
-                                id: toolbarTrans
-                                y: cheatsheetBackground.animateIn ? 0 : -20
-                            }
-                            opacity: cheatsheetBackground.animateIn ? 1.0 : 0.0
-
-                            Behavior on opacity {
-                                NumberAnimation {
-                                    duration: 280
-                                    easing.type: Easing.OutCubic
-                                }
-                            }
-                            Behavior on transform {
-                                NumberAnimation {
-                                    duration: 320
-                                    easing.type: Easing.OutBack
-                                    easing.overshoot: 1.3
-                                }
-                            }
 
                             ToolbarTabBar {
                                 id: tabBar
@@ -504,6 +662,11 @@ Scope {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             property bool selectionReady: false
+                            opacity: 1 - settingsHost.progress
+                            enabled: cheatsheetRoot.settingsTab.length === 0
+
+                            property bool hadRevealedPage: false
+
                             function restoreSelection() {
                                 if (count !== root.tabButtonList.length)
                                     return;
@@ -555,8 +718,7 @@ Scope {
                             Layout.preferredHeight: Math.min(850, calculatedHeight)
                             Layout.maximumHeight: calculatedHeight
                             spacing: 10
-                            currentIndex: cheatsheetRoot.selectedTab
-                            readonly property bool currentPageLocksHorizontalSwipe: currentItem && currentItem.status === Loader.Ready && currentItem.item && currentItem.item.timetableDragActive === true
+                            readonly property bool currentPageLocksHorizontalSwipe: currentItem && currentItem.status === Loader.Ready && currentItem.item && (currentItem.item.timetableDragActive === true || currentItem.item.horizontalSwipeLocked === true)
                             interactive: !swipeView.currentPageLocksHorizontalSwipe
                             onCurrentIndexChanged: {
                                 if (selectionReady && count === root.tabButtonList.length && cheatsheetRoot.selectedTab !== currentIndex)
@@ -585,15 +747,53 @@ Scope {
                                     // inserts children and adjusts its own index.
                                     readonly property bool isCurrent: cheatsheetRoot.selectedTab === index
                                     // Selection replaces the cache; closing preserves it.
-                                    active: isCurrent && (root.activeState || root.cachePrepared)
+                                    active: isCurrent && (root.activeState || root.cachePrepared || cheatsheetLoader.retained)
                                     visible: isCurrent && root.activeState
                                     enabled: isCurrent && root.activeState && GlobalStates.cheatsheetOpen
-                                    asynchronous: true
+                                    // Only the hidden preload incubates. While anything
+                                    // animates (the tab indicator, at least) the window's
+                                    // incubation controller grants about a third of each
+                                    // frame, so a page asked for on screen took 3-4x its
+                                    // build cost in wall time; one pass is far shorter.
+                                    asynchronous: !root.activeState
+
+                                    // Readiness can change again inside a loaded module
+                                    // (e.g. Keybinds navigation). Only its first ready
+                                    // content reveals; internal loading never hides it.
+                                    property bool revealed: false
+                                    readonly property bool revealMotionEnabled: visible && GlobalStates.cheatsheetOpen && !Appearance.reducedMotion
+                                    onRevealMotionEnabledChanged: if (!revealMotionEnabled) revealAnimation.complete()
+                                    readonly property bool contentReady: status === Loader.Ready && (item?.lookupReady ?? true)
+                                    onContentReadyChanged: {
+                                        if (!contentReady || revealed)
+                                            return;
+                                        revealed = true;
+                                        if (swipeView.hadRevealedPage && revealMotionEnabled)
+                                            revealAnimation.restart();
+                                        else
+                                            opacity = 1;
+                                        swipeView.hadRevealedPage = true;
+                                    }
+                                    opacity: 0
+                                    NumberAnimation {
+                                        id: revealAnimation
+                                        target: tabDelegate
+                                        property: "opacity"
+                                        from: 0
+                                        to: 1
+                                        duration: Appearance.animation.elementMoveEnter.duration
+                                        easing.type: Appearance.animation.elementMoveEnter.type
+                                        easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+                                    }
 
                                     onStatusChanged: {
                                         if (status === Loader.Ready) {
                                             if (swipeView.currentIndex === index && cheatsheetRoot.visible)
                                                 item.forceActiveFocus();
+                                        } else {
+                                            revealed = false;
+                                            revealAnimation.stop();
+                                            opacity = 0;
                                         }
                                     }
 
@@ -602,6 +802,28 @@ Scope {
                                         property: "keyNavTarget"
                                         value: cheatsheetBackground
                                         when: tabDelegate.status === Loader.Ready && tabDelegate.item.hasOwnProperty("keyNavTarget")
+                                    }
+
+                                    // Pages with nested loaders follow the same rule.
+                                    Binding {
+                                        target: tabDelegate.item
+                                        property: "incubateAsync"
+                                        value: tabDelegate.asynchronous
+                                        when: tabDelegate.status === Loader.Ready && tabDelegate.item.hasOwnProperty("incubateAsync")
+                                    }
+
+                                    Binding {
+                                        target: tabDelegate.item
+                                        property: "sessionMode"
+                                        value: root.sessionTimetableMode
+                                        when: tabDelegate.status === Loader.Ready && tabDelegate.item.hasOwnProperty("sessionMode")
+                                    }
+
+                                    Binding {
+                                        target: tabDelegate.item
+                                        property: "showShortcutHints"
+                                        value: cheatsheetBackground.ctrlPressed
+                                        when: tabDelegate.status === Loader.Ready && tabDelegate.item.hasOwnProperty("showShortcutHints")
                                     }
 
                                     source: {
@@ -620,6 +842,8 @@ Scope {
                                             return "CheatsheetWorkspaces.qml";
                                         case "mail":
                                             return "CheatsheetEmail.qml";
+                                        case "sports_soccer":
+                                            return "CheatsheetFootball.qml";
                                         case "speed":
                                             return "CheatsheetTypingTest.qml";
                                         case "handyman":

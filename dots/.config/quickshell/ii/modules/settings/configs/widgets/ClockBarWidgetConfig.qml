@@ -15,7 +15,7 @@ ContentPage {
     forceWidth: false
 
     readonly property string style: Config.options.bar.styles.clock ?? "default"
-    readonly property bool styled: root.style === "neural" || root.style === "relief"
+    readonly property bool styled: root.style === "neural" || root.style === "relief" || root.style === "expressive"
 
     RowLayout {
         spacing: Appearance.rounding.small
@@ -66,6 +66,8 @@ ContentPage {
                             return neuralHorizontalPreview;
                         if (root.style === "relief")
                             return reliefHorizontalPreview;
+                        if (root.style === "expressive")
+                            return expressiveHorizontalPreview;
                         return null;
                     }
                 }
@@ -73,7 +75,7 @@ ContentPage {
                 StyledText {
                     anchors.centerIn: parent
                     visible: !root.styled
-                    text: Translation.tr("Preview available for Neural and Relief")
+                    text: Translation.tr("Preview available for Expressive, Neural and Relief")
                     font.pixelSize: Appearance.font.pixelSize.small
                     color: Appearance.colors.colOnLayer1
                     opacity: 0.6
@@ -94,6 +96,8 @@ ContentPage {
                             return neuralVerticalPreview;
                         if (root.style === "relief")
                             return reliefVerticalPreview;
+                        if (root.style === "expressive")
+                            return expressiveVerticalPreview;
                         return null;
                     }
                 }
@@ -158,7 +162,7 @@ ContentPage {
         }
 
         ContentSubsection {
-            visible: root.styled
+            visible: root.style === "neural" || root.style === "relief"
             title: Translation.tr("Colour treatment")
 
             ConfigSelectionArray {
@@ -172,13 +176,21 @@ ContentPage {
             }
         }
 
+        ExpressiveColorModeSubsection {
+            visible: root.style === "expressive"
+            currentValue: Config.options.bar.clockWidget.colorMode
+            onSelected: newValue => {
+                Config.options.bar.clockWidget.colorMode = String(newValue);
+                if (Config.options.bar.clock) Config.options.bar.clock.colorMode = String(newValue);
+            }
+        }
+
         ConfigSwitch {
             // Only Orbit and Inlay have a slot to put it in; the rest are two
             // numerals and nothing else, by design.
-            visible: root.styled
-                && (root.style === "neural"
+            visible: (root.style === "neural"
                     ? Config.options.bar.clockWidget.neuralVariant === "orbit"
-                    : Config.options.bar.clockWidget.reliefVariant === "seam")
+                    : (root.style === "relief" && Config.options.bar.clockWidget.reliefVariant === "seam"))
             buttonIcon: "schedule"
             text: Translation.tr("Show AM/PM when the clock is 12-hour")
             checked: Config.options.bar.clockWidget.showMeridiem
@@ -238,6 +250,20 @@ ContentPage {
     Component {
         id: reliefVerticalPreview
         ReliefClockWidget {
+            vertical: true
+        }
+    }
+
+    Component {
+        id: expressiveHorizontalPreview
+        ExpressiveClockWidget {
+            vertical: false
+        }
+    }
+
+    Component {
+        id: expressiveVerticalPreview
+        ExpressiveClockWidget {
             vertical: true
         }
     }

@@ -6,11 +6,13 @@ import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.services
 import qs.modules.ii.regionSelector.annotations
+import "../../common/draw/StrokeGeometry.js" as StrokeGeometry
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Qt.labs.synchronizer
 import QtQuick.Shapes
+import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -63,7 +65,7 @@ PanelWindow {
     property bool exporting: false
     // Monotonic source for annotation ids and z-order; reset in clearEditor().
     property int annotationCounter: 0
-    // "rect", "arrow", "line", "circle", "star", "pencil", "highlighter", "text", "number", "blur", "gaussblur", "recrop", "none"
+    // "rect", "ellipse", "arrow", "line", "ruler", "circle", "star", "pencil", "highlighter", "eraser", "text", "number", "blur", "gaussblur", "recrop", "none"
     property string currentTool: "none"
     property color currentColor: "#ff3b30"
     property list<color> presetColors: ["#ff3b30", "#ffcc00", "#34c759", "#007aff", "#af52de", "#ffffff", "#000000"]
@@ -107,11 +109,11 @@ PanelWindow {
         if (root.currentTool !== "none")
             root.selectedId = null;
     }
-    // Toolbar color/width edits retarget the selected annotation (blur keeps its
-    // fixed masking style). Each edit is one undo step.
+    // Toolbar color/width edits retarget the selected annotation (blur and the
+    // ruler keep their fixed styling). Each edit is one undo step.
     onCurrentColorChanged: {
         var sel = root.selectedAnnotation();
-        if (!sel || sel.type === "blur" || sel.type === "gaussblur")
+        if (!sel || sel.type === "blur" || sel.type === "gaussblur" || sel.type === "ruler")
             return;
         root.pushUndo();
         root.restyleSelected("stroke", String(root.currentColor));
@@ -121,7 +123,7 @@ PanelWindow {
     }
     onCurrentLineWidthChanged: {
         var sel = root.selectedAnnotation();
-        if (!sel || sel.type === "blur" || sel.type === "gaussblur")
+        if (!sel || sel.type === "blur" || sel.type === "gaussblur" || sel.type === "ruler")
             return;
         root.pushUndo();
         root.restyleSelected("strokeWidth", root.currentLineWidth);
@@ -129,10 +131,58 @@ PanelWindow {
     // Toggling fill retargets a selected closed shape (rect/circle/star).
     onFillEnabledChanged: {
         var sel = root.selectedAnnotation();
-        if (!sel || (sel.type !== "rect" && sel.type !== "circle" && sel.type !== "star"))
+        if (!sel || (sel.type !== "rect" && sel.type !== "ellipse" && sel.type !== "circle" && sel.type !== "star"))
             return;
         root.pushUndo();
         root.restyleSelected("fill", root.fillEnabled ? String(root.currentColor) : null);
+    }
+
+    /// The thickness steps the toolbar offers, thinnest first.
+    readonly property var lineWidthSteps: [2, 4, 8, 14]
+
+    /**
+     * Live draw's tool shortcuts, in the screenshot editor: always Ctrl+key, so a
+     * letter typed into a text annotation is a letter.
+     *   Ctrl+P pencil · Ctrl+H highlighter · Ctrl+A arrow · Ctrl+R rectangle
+     *   Ctrl+O ellipse · Ctrl+I line · Ctrl+E eraser · Ctrl+1–9 colour
+     *   Ctrl+[ / Ctrl+] thinner / thicker
+     */
+    function drawShortcut(event) {
+        const tools = {};
+        tools[Qt.Key_P] = "pencil";
+        tools[Qt.Key_H] = "highlighter";
+        tools[Qt.Key_A] = "arrow";
+        tools[Qt.Key_R] = "rect";
+        tools[Qt.Key_O] = "ellipse";
+        tools[Qt.Key_I] = "line";
+        tools[Qt.Key_E] = "eraser";
+        const tool = tools[event.key];
+        if (tool) {
+            root.currentTool = root.currentTool === tool ? "none" : tool;
+            if (tool === "ellipse")
+                root.shapePopupVisible = true;
+            return true;
+        }
+        // By position as well as by symbol, for layouts whose number row types
+        // something else without Shift (AZERTY).
+        const scan = event.nativeScanCode;
+        const digit = (event.key >= Qt.Key_1 && event.key <= Qt.Key_9) ? event.key - Qt.Key_1
+            : (scan >= 10 && scan <= 18 ? scan - 10 : -1);
+        if (digit >= 0) {
+            if (digit < root.presetColors.length)
+                root.currentColor = root.presetColors[digit];
+            return true;
+        }
+        if (event.key === Qt.Key_BracketLeft || event.key === Qt.Key_BracketRight) {
+            const steps = root.lineWidthSteps;
+            let i = steps.indexOf(root.currentLineWidth);
+            if (i < 0)
+                i = 0;
+            i = Math.max(0, Math.min(steps.length - 1, i + (event.key === Qt.Key_BracketRight ? 1 : -1)));
+            root.currentLineWidth = steps[i];
+            return true;
+        }
+        return false;
     }
 
     function pushUndo() {
@@ -196,38 +246,43 @@ PanelWindow {
         for (var i = 0; i < newList.length; i++) {
             if (newList[i].id !== root.selectedId)
                 continue;
-            var ann = AnnotationModel.clone(newList[i]);
-            var g = ann.geom;
-            switch (ann.type) {
-            case "rect":
-            case "circle":
-            case "star":
-            case "text":
-            case "number":
-                g.x += dx;
-                g.y += dy;
-                break;
-            case "arrow":
-            case "line":
-                g.x1 += dx;
-                g.y1 += dy;
-                g.x2 += dx;
-                g.y2 += dy;
-                break;
-            case "pencil":
-            case "blur":
-            case "gaussblur":
-            case "highlighter":
-                for (var p = 0; p < g.points.length; p++) {
-                    g.points[p].x += dx;
-                    g.points[p].y += dy;
-                }
-                break;
-            }
-            newList[i] = ann;
+            newList[i] = AnnotationModel.translate(AnnotationModel.clone(newList[i]), dx, dy);
             break;
         }
         root.annotations = newList;
+    }
+
+    // Swap an annotation for a new version of itself (matched by id).
+    function replaceAnnotation(ann) {
+        var newList = root.annotations.slice();
+        for (var i = 0; i < newList.length; i++) {
+            if (newList[i].id === ann.id) {
+                newList[i] = ann;
+                break;
+            }
+        }
+        root.annotations = newList;
+    }
+
+    // Annotations live in region-local coords, so when the region's origin
+    // moves (drag, resize from the top/left, recrop) they have to shift the
+    // other way to stay on the part of the screenshot they were drawn on. The
+    // undo/redo snapshots shift too, or undoing would put things back at
+    // pre-move positions.
+    function shiftScene(dx, dy) {
+        if (dx === 0 && dy === 0)
+            return;
+        var shiftAll = function (anns) {
+            return Array.from(anns).map(function (a) {
+                return AnnotationModel.translate(AnnotationModel.clone(a), dx, dy);
+            });
+        };
+        if (root.annotations.length > 0)
+            root.annotations = shiftAll(root.annotations);
+        if (root.undoStack.length > 0)
+            root.undoStack = Array.from(root.undoStack).map(shiftAll);
+        if (root.redoStack.length > 0)
+            root.redoStack = Array.from(root.redoStack).map(shiftAll);
     }
 
     function restyleSelected(key, value) {
@@ -280,6 +335,7 @@ PanelWindow {
         y1 = Math.max(0, y1);
         x2 = Math.min(root.screen.width, x2);
         y2 = Math.min(root.screen.height, y2);
+        root.shiftScene(root.editorRegionX - x1, root.editorRegionY - y1);
         root.editorRegionX = x1;
         root.editorRegionY = y1;
         root.editorRegionW = x2 - x1;
@@ -600,34 +656,64 @@ PanelWindow {
     property list<point> points: []
     property var mouseButton: null
     property var imageRegions: []
-    readonly property list<var> windowRegions: RegionFunctions.filterWindowRegionsByLayers(root.windows.filter(w => w.workspace.id === root.activeWorkspaceId), root.layerRegions).map(window => {
+    // Windows on the active workspace, plus the special workspace when one is
+    // shown on top of it.
+    readonly property int specialWorkspaceId: root.hyprlandMonitor.lastIpcObject?.specialWorkspace?.id ?? 0
+    readonly property list<var> windowRegions: RegionFunctions.filterWindowRegionsByLayers(root.windows.filter(w => w.workspace.id === root.activeWorkspaceId || (root.specialWorkspaceId !== 0 && w.workspace.id === root.specialWorkspaceId)).map(window => {
         return {
             at: [window.at[0] - root.monitorOffsetX, window.at[1] - root.monitorOffsetY],
             size: [window.size[0], window.size[1]],
             class: window.class,
-            title: window.title
+            title: window.title,
+            special: window.workspace.id === root.specialWorkspaceId
         };
+    }), root.layerRegions).sort((a, b) => {
+        // Special-workspace windows sit above the regular ones (stable sort
+        // keeps floating-before-tiled inside each group).
+        return (b.special ? 1 : 0) - (a.special ? 1 : 0);
     })
+    // Shell layers that are not a target by themselves: helpers, input
+    // catchers, the selector itself, and chrome that spans the whole edge.
+    readonly property var ignoredLayerNamespaces: ["quickshell", "quickshell:bar", "quickshell:verticalBar", "quickshell:dock", "quickshell:regionSelector", "quickshell:screenCorners", "quickshell:screenshotOverlay", "quickshell:policiesDismissCatcher", "quickshell:pinReserver", "quickshell:idleDim", "quickshell:oledSaver", "quickshell:workspaceBlurOverlay", "quickshell:gestureFeedback", "quickshell:overviewWindowTransition", "quickshell:tiling_stack_badges", "quickshell:tiling_assistant", "quickshell:editMode", "quickshell:topLayer", "quickshell:sleepShade"]
+    function layerLabel(namespace) {
+        const name = String(namespace).replace(/^quickshell:/, "");
+        return name.length > 0 ? name.charAt(0).toUpperCase() + name.slice(1) : name;
+    }
     readonly property list<var> layerRegions: {
-        const layersOfThisMonitor = root.layers[root.hyprlandMonitor.name];
-        const topLayers = layersOfThisMonitor?.levels["2"];
-        if (!topLayers)
+        const levels = root.layers[root.hyprlandMonitor.name]?.levels;
+        if (!levels)
             return [];
-        const nonBarTopLayers = topLayers.filter(layer => !(layer.namespace.includes(":bar") || layer.namespace.includes(":verticalBar") || layer.namespace.includes(":dock"))).map(layer => {
+        const screenArea = root.screen.width * root.screen.height;
+        // Real layer geometry is only meaningful for surfaces sized to their
+        // content; full-screen shell surfaces report their card through
+        // ShellRegions instead.
+        const sized = [...(levels["2"] ?? []), ...(levels["3"] ?? [])].filter(layer => {
+            if (root.ignoredLayerNamespaces.includes(layer.namespace))
+                return false;
+            if (layer.w < 24 || layer.h < 24)
+                return false;
+            return layer.w * layer.h < screenArea * 0.85;
+        }).map(layer => {
             return {
-                at: [layer.x, layer.y],
+                at: [layer.x - root.monitorOffsetX, layer.y - root.monitorOffsetY],
                 size: [layer.w, layer.h],
-                namespace: layer.namespace
+                namespace: root.layerLabel(layer.namespace)
             };
         });
-        const offsetAdjustedLayers = nonBarTopLayers.map(layer => {
+        const shell = ShellRegions.frozen.filter(region => region.screen === root.screen.name).map(region => {
+            // Clip to the monitor; a card can hang off an edge mid-animation.
+            const x1 = Math.max(0, region.at[0] - root.monitorOffsetX);
+            const y1 = Math.max(0, region.at[1] - root.monitorOffsetY);
+            const x2 = Math.min(root.screen.width, region.at[0] - root.monitorOffsetX + region.size[0]);
+            const y2 = Math.min(root.screen.height, region.at[1] - root.monitorOffsetY + region.size[1]);
             return {
-                at: [layer.at[0] - root.monitorOffsetX, layer.at[1] - root.monitorOffsetY],
-                size: layer.size,
-                namespace: layer.namespace
+                at: [x1, y1],
+                size: [x2 - x1, y2 - y1],
+                namespace: region.label
             };
-        });
-        return offsetAdjustedLayers;
+        }).filter(region => region.size[0] >= 8 && region.size[1] >= 8);
+        // Smallest first, so a card nested in a bigger surface wins the hover.
+        return [...shell, ...sized].sort((a, b) => a.size[0] * a.size[1] - b.size[0] * b.size[1]);
     }
 
     // Config
@@ -889,7 +975,10 @@ PanelWindow {
             });
         }
         // Trigger screenshot overlay
-        if (!isRecording && (Config.options.regionSelector.enableOverlay ?? true)) {
+        // Lens and text recognition hand the shot off to another tool; a
+        // screenshot preview on top of that is noise.
+        const isHandoff = snipAction === RegionSelection.SnipAction.Search || snipAction === RegionSelection.SnipAction.CharRecognition;
+        if (!isRecording && !isHandoff && (Config.options.regionSelector.enableOverlay ?? true)) {
             GlobalStates.screenshotOverlayMonitor = root.screen?.name ?? ""
             GlobalStates.screenshotOverlayImagePath = root.screenshotPath;
             GlobalStates.screenshotOverlayRegionX = rx * root.monitorScale;
@@ -1130,6 +1219,8 @@ PanelWindow {
         Row {
             id: regionSelectionControls
             z: 10
+            width: implicitWidth
+            height: implicitHeight
             visible: root.phase === RegionSelection.Phase.Select && !root.inlineEditorActive
             anchors {
                 horizontalCenter: parent.horizontalCenter
@@ -1197,6 +1288,13 @@ PanelWindow {
             // editorContent is scoped to this Component, so grabAnnotated() on
             // the outer root can only reach it through the Loader's item.
             readonly property Item grabTarget: editorContent
+
+            readonly property bool editorToolbarAtBottom: {
+                var tbHeight = (editorToolbarRow && editorToolbarRow.height > 0) ? editorToolbarRow.height : 50;
+                var topClearance = root.editorRegionY;
+                var bottomClearance = root.screen.height - (root.editorRegionY + root.editorRegionH);
+                return (topClearance < tbHeight + 32) && (bottomClearance > topClearance);
+            }
         Keys.onPressed: event => {
             if (event.key === Qt.Key_Escape) {
                 root.dismiss();
@@ -1211,6 +1309,8 @@ PanelWindow {
                 event.accepted = true;
             } else if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_C) {
                 root.finalizeScreenshot(false);
+                event.accepted = true;
+            } else if ((event.modifiers & Qt.ControlModifier) && root.editingTextId === null && root.drawShortcut(event)) {
                 event.accepted = true;
             } else if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) {
                 root.deleteSelected();
@@ -1250,6 +1350,10 @@ PanelWindow {
                 RectAnnotationComponent {}
             }
             Component {
+                id: ellipseAnnotationComp
+                EllipseAnnotationComponent {}
+            }
+            Component {
                 id: arrowAnnotationComp
                 ArrowAnnotationComponent {}
             }
@@ -1270,6 +1374,12 @@ PanelWindow {
                 LineAnnotationComponent {}
             }
             Component {
+                id: rulerAnnotationComp
+                RulerAnnotationComponent {
+                    captureScale: root.captureScale
+                }
+            }
+            Component {
                 id: textAnnotationComp
                 TextAnnotationComponent {}
             }
@@ -1283,10 +1393,15 @@ PanelWindow {
                 model: root.annotations
                 delegate: Loader {
                     required property var modelData
+                    // Highlighter under every other mark, as on live draw: a pass of
+                    // marker over an arrow must not cover the arrow.
+                    z: modelData.type === "highlighter" ? 0 : 0.5
                     sourceComponent: {
                         switch (modelData.type) {
                         case "rect":
                             return rectAnnotationComp;
+                        case "ellipse":
+                            return ellipseAnnotationComp;
                         case "arrow":
                             return arrowAnnotationComp;
                         case "circle":
@@ -1298,6 +1413,8 @@ PanelWindow {
                             return pencilAnnotationComp;
                         case "line":
                             return lineAnnotationComp;
+                        case "ruler":
+                            return rulerAnnotationComp;
                         case "text":
                             return textAnnotationComp;
                         case "number":
@@ -1397,22 +1514,20 @@ PanelWindow {
                     var ctx = getContext("2d");
                     ctx.clearRect(0, 0, width, height);
 
+                    // Pixelation only. The blur is a real Gaussian blur (gaussBlur
+                    // below): upscaling the same downscaled image with smoothing on was
+                    // supposed to blur, but a Canvas ignores the hint and the result was
+                    // a second pixelation.
                     var pixelateAnns = [];
-                    var gaussAnns = [];
                     for (var i = 0; i < root.annotations.length; i++) {
-                        var t = root.annotations[i].type;
-                        if (t === "blur")
+                        if (root.annotations[i].type === "blur")
                             pixelateAnns.push(root.annotations[i]);
-                        else if (t === "gaussblur")
-                            gaussAnns.push(root.annotations[i]);
                     }
                     var temp = drawingArea.tempAnnotation;
                     if (temp && temp.type === "blur")
                         pixelateAnns.push(temp);
-                    else if (temp && temp.type === "gaussblur")
-                        gaussAnns.push(temp);
 
-                    if (pixelateAnns.length === 0 && gaussAnns.length === 0)
+                    if (pixelateAnns.length === 0)
                         return;
 
                     // Downscaled screenshot region, shared by both groups.
@@ -1421,7 +1536,6 @@ PanelWindow {
                     smallCtx.drawImage(editorImage, root.editorRegionX, root.editorRegionY, width, height, 0, 0, smallCanvas.width, smallCanvas.height);
 
                     paintMaskedGroup(pixelateAnns, false);
-                    paintMaskedGroup(gaussAnns, true);
                 }
                 Connections {
                     target: root
@@ -1444,6 +1558,92 @@ PanelWindow {
                     }
                 }
             }
+            // --- Gaussian blur ---
+            // The screenshot blurred for real (MultiEffect, on the GPU) and shown only
+            // under the blur strokes, which are drawn white into a mask. A binary mask
+            // is exactly what MultiEffect's thresholded mask is good at. Built only
+            // while there is a blur stroke; the strength chips set the radius.
+            readonly property var gaussAnns: {
+                var list = [];
+                for (var i = 0; i < root.annotations.length; i++) {
+                    if (root.annotations[i].type === "gaussblur")
+                        list.push(root.annotations[i]);
+                }
+                var temp = drawingArea.tempAnnotation;
+                if (temp && temp.type === "gaussblur")
+                    list.push(temp);
+                return list;
+            }
+
+            Loader {
+                id: gaussBlur
+                anchors.fill: parent
+                z: 1
+                active: root.inlineEditorActive && editorContent.gaussAnns.length > 0
+
+                sourceComponent: Item {
+                    // Sampled with a margin of the screenshot all round: a blur reads
+                    // the pixels around each one, and at the region's edge those would
+                    // otherwise be transparent, darkening the blur where it meets it.
+                    readonly property real pad: 64
+
+                    // The mask: every blur stroke, white, in editor coordinates.
+                    Item {
+                        id: blurMask
+                        x: -parent.pad
+                        y: -parent.pad
+                        width: editorContent.width + parent.pad * 2
+                        height: editorContent.height + parent.pad * 2
+                        layer.enabled: true
+                        visible: false
+
+                        Item {
+                            x: blurMask.parent.pad
+                            y: blurMask.parent.pad
+                            width: editorContent.width
+                            height: editorContent.height
+
+                            Repeater {
+                                model: editorContent.gaussAnns
+                                delegate: PencilAnnotationComponent {
+                                    required property var modelData
+                                    annData: modelData
+                                    canvasWidth: editorContent.width
+                                    canvasHeight: editorContent.height
+                                }
+                            }
+                        }
+                    }
+
+                    // The part of the screenshot the editor shows, and the margin.
+                    ShaderEffectSource {
+                        id: regionSource
+                        width: blurMask.width
+                        height: blurMask.height
+                        sourceItem: editorImage
+                        sourceRect: Qt.rect(root.editorRegionX - parent.pad, root.editorRegionY - parent.pad,
+                                            blurMask.width, blurMask.height)
+                        visible: false
+                    }
+
+                    MultiEffect {
+                        x: blurMask.x
+                        y: blurMask.y
+                        width: blurMask.width
+                        height: blurMask.height
+                        source: regionSource
+                        blurEnabled: true
+                        blur: 1.0
+                        blurMax: 64
+                        // 12 / 24 / 48 on the strength chips: soft, medium, heavy.
+                        blurMultiplier: Math.max(0.25, root.blurStrength / 24)
+                        autoPaddingEnabled: false
+                        maskEnabled: true
+                        maskSource: blurMask
+                    }
+                }
+            }
+
             // ----------------------------------------
 
             // Drawing area
@@ -1456,7 +1656,7 @@ PanelWindow {
                 cursorShape: {
                     if (root.currentTool === "text")
                         return Qt.IBeamCursor;
-                    if (root.currentTool === "pencil" || root.currentTool === "blur" || root.currentTool === "gaussblur" || root.currentTool === "highlighter")
+                    if (root.currentTool === "pencil" || root.currentTool === "blur" || root.currentTool === "gaussblur" || root.currentTool === "highlighter" || root.currentTool === "eraser")
                         return Qt.CrossCursor;
                     return Qt.ArrowCursor;
                 }
@@ -1464,9 +1664,86 @@ PanelWindow {
                 property real startY: 0
                 property var tempAnnotation: null
 
+                // ── Live draw's pen engine (pencil and highlighter) ─────────────
+                // Pressure from a stylus (the handler below), an exponential filter
+                // and thinning on every sample, and for a mouse, touchpad or finger the
+                // lazy brush: the line hangs on a short string behind the pointer so a
+                // shaky hand never reaches it. Same numbers as live draw.
+                property var smoothPoint: null
+                property var brush: null
+                property var lastRaw: null
+                property bool steadied: false
+                property bool erasedAny: false
+                readonly property real stringLength: LiveDraw.mouseSmoothing * 18
+                readonly property real eraserRadius: Math.max(10, root.currentLineWidth * 3)
+
+                function pressure() {
+                    return stylus.active ? stylus.point.pressure : 1;
+                }
+
+                function freehandTool(tool) {
+                    return tool === "pencil" || tool === "highlighter";
+                }
+
+                // Feeds one sample into the stroke being drawn; false when it was too
+                // close to the last one to keep.
+                function appendSmoothed(sample) {
+                    smoothPoint = StrokeGeometry.smoothed(smoothPoint, sample, LiveDraw.smoothing);
+                    var pts = tempAnnotation.geom.points;
+                    if (!StrokeGeometry.shouldAppend(pts[pts.length - 1], smoothPoint))
+                        return false;
+                    var next = pts.slice();
+                    next.push({ "x": smoothPoint.x, "y": smoothPoint.y, "p": smoothPoint.p });
+                    tempAnnotation = AnnotationModel.make(tempAnnotation.type, tempAnnotation.id, tempAnnotation.z, {
+                        "points": next
+                    }, tempAnnotation.style);
+                    return true;
+                }
+
+                function eraseAt(x, y) {
+                    var kept = [];
+                    var hit = false;
+                    var list = Array.from(root.annotations);
+                    for (var i = 0; i < list.length; i++) {
+                        if (AnnotationModel.hitBy(list[i], x, y, eraserRadius))
+                            hit = true;
+                        else
+                            kept.push(list[i]);
+                    }
+                    if (!hit)
+                        return;
+                    // One undo step for the whole rub, taken at the first thing it hit.
+                    if (!erasedAny)
+                        root.pushUndo();
+                    erasedAny = true;
+                    root.annotations = kept;
+                }
+
+                // The end of a shape drag, snapped while Shift is held.
+                function shapeEnd(mouse) {
+                    if (!(mouse.modifiers & Qt.ShiftModifier))
+                        return { "x": mouse.x, "y": mouse.y };
+                    return AnnotationModel.constrained(root.currentTool, startX, startY, mouse.x, mouse.y);
+                }
+
+                /// A stylus, for its pressure. Passive: the strokes still come in through
+                /// this MouseArea (Qt synthesises mouse events from the tablet's), the
+                /// handler only answers how hard the pen is pressed.
+                PointHandler {
+                    id: stylus
+                    acceptedDevices: PointerDevice.Stylus
+                    enabled: drawingArea.freehandTool(root.currentTool)
+                }
+
                 onPressed: mouse => {
                     startX = mouse.x;
                     startY = mouse.y;
+                    if (root.currentTool === "eraser") {
+                        erasedAny = false;
+                        eraseAt(mouse.x, mouse.y);
+                        tempAnnotation = null;
+                        return;
+                    }
                     root.pushUndo();
                     var id = "a" + root.annotationCounter;
                     var z = root.annotationCounter;
@@ -1505,8 +1782,15 @@ PanelWindow {
                         tempAnnotation = null;
                         return;
                     }
-                    if (root.currentTool === "rect") {
-                        tempAnnotation = AnnotationModel.make("rect", id, z, {
+                    if (freehandTool(root.currentTool)) {
+                        var first = StrokeGeometry.point(startX, startY, drawingArea.pressure());
+                        smoothPoint = first;
+                        brush = first;
+                        lastRaw = first;
+                        steadied = !stylus.active && stringLength > 0.5;
+                    }
+                    if (root.currentTool === "rect" || root.currentTool === "ellipse") {
+                        tempAnnotation = AnnotationModel.make(root.currentTool, id, z, {
                             "x": startX,
                             "y": startY,
                             "w": 0,
@@ -1526,6 +1810,13 @@ PanelWindow {
                             "x2": startX,
                             "y2": startY
                         }, style);
+                    } else if (root.currentTool === "ruler") {
+                        tempAnnotation = AnnotationModel.make("ruler", id, z, {
+                            "x1": startX,
+                            "y1": startY,
+                            "x2": startX,
+                            "y2": startY
+                        }, style);
                     } else if (root.currentTool === "highlighter") {
                         var hlStyle = AnnotationModel.defaultStyle(root.currentColor, root.currentLineWidth * 4);
                         hlStyle.opacity = Config.options.regionSelector.annotation.highlighterOpacity;
@@ -1533,7 +1824,8 @@ PanelWindow {
                             "points": [
                                 {
                                     "x": startX,
-                                    "y": startY
+                                    "y": startY,
+                                    "p": 1
                                 }
                             ]
                         }, hlStyle);
@@ -1551,11 +1843,15 @@ PanelWindow {
                             "innerR": 0
                         }, style);
                     } else if (root.currentTool === "pencil") {
+                        // Pressure shapes the line only for a pen, and only when live
+                        // draw's pressure setting is on — the same preference.
+                        style.usePressure = stylus.active && LiveDraw.usePressure;
                         tempAnnotation = AnnotationModel.make("pencil", id, z, {
                             "points": [
                                 {
                                     "x": startX,
-                                    "y": startY
+                                    "y": startY,
+                                    "p": drawingArea.pressure()
                                 }
                             ]
                         }, style);
@@ -1572,31 +1868,44 @@ PanelWindow {
                     }
                 }
                 onPositionChanged: mouse => {
+                    if (root.currentTool === "eraser") {
+                        if (pressed)
+                            eraseAt(mouse.x, mouse.y);
+                        return;
+                    }
                     if (!tempAnnotation)
                         return;
                     var id = tempAnnotation.id;
                     var z = tempAnnotation.z;
                     var style = tempAnnotation.style;
-                    if (root.currentTool === "rect") {
-                        tempAnnotation = AnnotationModel.make("rect", id, z, {
-                            "x": Math.min(startX, mouse.x),
-                            "y": Math.min(startY, mouse.y),
-                            "w": Math.abs(mouse.x - startX),
-                            "h": Math.abs(mouse.y - startY)
+                    var end = shapeEnd(mouse);
+                    if (root.currentTool === "rect" || root.currentTool === "ellipse") {
+                        tempAnnotation = AnnotationModel.make(root.currentTool, id, z, {
+                            "x": Math.min(startX, end.x),
+                            "y": Math.min(startY, end.y),
+                            "w": Math.abs(end.x - startX),
+                            "h": Math.abs(end.y - startY)
                         }, style);
                     } else if (root.currentTool === "arrow") {
                         tempAnnotation = AnnotationModel.make("arrow", id, z, {
                             "x1": startX,
                             "y1": startY,
-                            "x2": mouse.x,
-                            "y2": mouse.y
+                            "x2": end.x,
+                            "y2": end.y
                         }, style);
                     } else if (root.currentTool === "line") {
                         tempAnnotation = AnnotationModel.make("line", id, z, {
                             "x1": startX,
                             "y1": startY,
-                            "x2": mouse.x,
-                            "y2": mouse.y
+                            "x2": end.x,
+                            "y2": end.y
+                        }, style);
+                    } else if (root.currentTool === "ruler") {
+                        tempAnnotation = AnnotationModel.make("ruler", id, z, {
+                            "x1": startX,
+                            "y1": startY,
+                            "x2": end.x,
+                            "y2": end.y
                         }, style);
                     } else if (root.currentTool === "circle") {
                         var dx = mouse.x - startX;
@@ -1618,7 +1927,18 @@ PanelWindow {
                             "outerR": outerRadius,
                             "innerR": innerRadius
                         }, style);
-                    } else if (root.currentTool === "pencil" || root.currentTool === "blur" || root.currentTool === "gaussblur" || root.currentTool === "highlighter") {
+                    } else if (freehandTool(root.currentTool)) {
+                        var raw = StrokeGeometry.point(mouse.x, mouse.y, drawingArea.pressure());
+                        lastRaw = raw;
+                        var sample = raw;
+                        if (steadied) {
+                            sample = StrokeGeometry.pulled(brush, raw, stringLength);
+                            if (!sample)
+                                return;
+                            brush = sample;
+                        }
+                        appendSmoothed(sample);
+                    } else if (root.currentTool === "blur" || root.currentTool === "gaussblur") {
                         var pts = tempAnnotation.geom.points;
                         var lastPoint = pts[pts.length - 1];
                         var dxP = mouse.x - lastPoint.x;
@@ -1636,15 +1956,26 @@ PanelWindow {
                     }
                 }
                 onReleased: mouse => {
+                    if (root.currentTool === "eraser") {
+                        erasedAny = false;
+                        return;
+                    }
                     if (!tempAnnotation)
                         return;
+                    // The lazy brush's slack is taken up: the line ends where the
+                    // pointer let go.
+                    if (freehandTool(tempAnnotation.type) && steadied && lastRaw) {
+                        for (var step of [0.5, 1])
+                            appendSmoothed(StrokeGeometry.point(brush.x + (lastRaw.x - brush.x) * step,
+                                                                brush.y + (lastRaw.y - brush.y) * step, lastRaw.p));
+                    }
                     var g = tempAnnotation.geom;
-                    if (root.currentTool === "rect") {
+                    if (root.currentTool === "rect" || root.currentTool === "ellipse") {
                         if (g.w < 2 || g.h < 2) {
                             tempAnnotation = null;
                             return;
                         }
-                    } else if (root.currentTool === "arrow" || root.currentTool === "line") {
+                    } else if (root.currentTool === "arrow" || root.currentTool === "line" || root.currentTool === "ruler") {
                         if (Math.abs(g.x2 - g.x1) < 2 && Math.abs(g.y2 - g.y1) < 2) {
                             tempAnnotation = null;
                             return;
@@ -1659,7 +1990,7 @@ PanelWindow {
                             tempAnnotation = null;
                             return;
                         }
-                    } else if (root.currentTool === "pencil" || root.currentTool === "blur" || root.currentTool === "gaussblur" || root.currentTool === "highlighter") {
+                    } else if (root.currentTool === "blur" || root.currentTool === "gaussblur") {
                         if (g.points.length < 2) {
                             tempAnnotation = null;
                             return;
@@ -1678,12 +2009,19 @@ PanelWindow {
                 RectAnnotationComponent {
                     annData: drawingArea.tempAnnotation?.type === "rect" ? drawingArea.tempAnnotation : null
                 }
+                EllipseAnnotationComponent {
+                    annData: drawingArea.tempAnnotation?.type === "ellipse" ? drawingArea.tempAnnotation : null
+                }
 
                 ArrowAnnotationComponent {
                     annData: drawingArea.tempAnnotation?.type === "arrow" ? drawingArea.tempAnnotation : null
                 }
                 LineAnnotationComponent {
                     annData: drawingArea.tempAnnotation?.type === "line" ? drawingArea.tempAnnotation : null
+                }
+                RulerAnnotationComponent {
+                    annData: drawingArea.tempAnnotation?.type === "ruler" ? drawingArea.tempAnnotation : null
+                    captureScale: root.captureScale
                 }
                 CircleAnnotationComponent {
                     annData: drawingArea.tempAnnotation?.type === "circle" ? drawingArea.tempAnnotation : null
@@ -1776,6 +2114,7 @@ PanelWindow {
                     newX = Math.max(0, Math.min(newX, root.screen.width - root.editorRegionW));
                     newY = Math.max(0, Math.min(newY, root.screen.height - root.editorRegionH));
 
+                    root.shiftScene(root.editorRegionX - newX, root.editorRegionY - newY);
                     root.editorRegionX = newX;
                     root.editorRegionY = newY;
 
@@ -1783,55 +2122,6 @@ PanelWindow {
                     root.dragStartY = newY;
                     root.draggingX = newX + root.editorRegionW;
                     root.draggingY = newY + root.editorRegionH;
-                }
-            }
-
-            // Selection outline + delete affordance for the selected annotation.
-            // Sits above the move area so its chip wins the click; hidden during
-            // export so it never bakes into the PNG.
-            Item {
-                id: selectionOverlay
-                z: 6
-                readonly property var sel: root.selectedAnnotation()
-                readonly property var bb: sel ? AnnotationModel.boundingBox(sel) : null
-                readonly property real pad: (sel && sel.style ? (sel.style.strokeWidth ?? 2) : 2) / 2 + 4
-                visible: sel !== null && !root.exporting
-                x: bb ? bb.x - pad : 0
-                y: bb ? bb.y - pad : 0
-                width: bb ? bb.w + pad * 2 : 0
-                height: bb ? bb.h + pad * 2 : 0
-
-                Rectangle {
-                    anchors.fill: parent
-                    color: "transparent"
-                    radius: 4
-                    border.width: 1.5
-                    border.color: Appearance.colors.colPrimary
-                }
-
-                Rectangle {
-                    id: deleteChip
-                    width: 22
-                    height: 22
-                    radius: width / 2
-                    color: Appearance.colors.colPrimary
-                    anchors.left: parent.right
-                    anchors.bottom: parent.top
-                    anchors.leftMargin: -width / 2
-                    anchors.bottomMargin: -height / 2
-
-                    MaterialSymbol {
-                        anchors.centerIn: parent
-                        text: "close"
-                        iconSize: 16
-                        color: Appearance.colors.colOnPrimary
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.deleteSelected()
-                    }
                 }
             }
 
@@ -1967,8 +2257,7 @@ PanelWindow {
             delegate: Item {
                 required property var modelData
 
-                readonly property int hitSize: 26
-                readonly property int gripSize: 12
+                readonly property int hitSize: 30
                 // The dashed selection border is drawn 6px outside the true
                 // region (borderWidth 1 + 5, see RectCornersSelectionDetails);
                 // centre the grips on that visible line, not the raw edge.
@@ -1980,15 +2269,62 @@ PanelWindow {
                 x: (root.editorRegionX - outset) + (root.editorRegionW + outset * 2) * modelData.ax - width / 2
                 y: (root.editorRegionY - outset) + (root.editorRegionH + outset * 2) * modelData.ay - height / 2
 
-                // Small square grip (Spectacle-style) rather than a round dot.
-                Rectangle {
-                    anchors.centerIn: parent
-                    width: parent.gripSize
-                    height: parent.gripSize
-                    radius: 2
-                    color: Appearance.colors.colPrimary
-                    border.width: 1
-                    border.color: Appearance.colors.colOnPrimary
+                // Crop-style grips: corners are thick L brackets hugging the
+                // selection, edge midpoints a short bar along the edge. A soft
+                // dark halo under each keeps them readable on light captures.
+                id: regionGrip
+                readonly property bool corner: modelData.ax !== 0.5 && modelData.ay !== 0.5
+                readonly property bool horizontalEdge: modelData.ax === 0.5
+                readonly property int thickness: 5
+                readonly property int arm: 22
+                readonly property int bar: 30
+                // Arms point into the selection.
+                readonly property int dirX: modelData.ax === 0 ? 1 : -1
+                readonly property int dirY: modelData.ay === 0 ? 1 : -1
+                readonly property real c: hitSize / 2
+                readonly property real armRadius: Appearance.rounding.scale === 0 ? 0 : thickness / 2
+
+                Repeater {
+                    // [halo spread, colour]: the halo pass first, the grip on top.
+                    model: [[1.5, Qt.rgba(0, 0, 0, 0.28)], [0, Appearance.colors.colPrimary]]
+
+                    delegate: Item {
+                        id: gripLayer
+                        required property var modelData
+                        readonly property real s: modelData[0]
+                        anchors.fill: parent
+
+                        // Corner: horizontal arm
+                        Rectangle {
+                            visible: regionGrip.corner
+                            width: regionGrip.arm + gripLayer.s * 2
+                            height: regionGrip.thickness + gripLayer.s * 2
+                            radius: regionGrip.armRadius + gripLayer.s
+                            color: gripLayer.modelData[1]
+                            x: (regionGrip.dirX > 0 ? regionGrip.c - regionGrip.thickness / 2 : regionGrip.c + regionGrip.thickness / 2 - regionGrip.arm) - gripLayer.s
+                            y: regionGrip.c - regionGrip.thickness / 2 - gripLayer.s
+                        }
+                        // Corner: vertical arm
+                        Rectangle {
+                            visible: regionGrip.corner
+                            width: regionGrip.thickness + gripLayer.s * 2
+                            height: regionGrip.arm + gripLayer.s * 2
+                            radius: regionGrip.armRadius + gripLayer.s
+                            color: gripLayer.modelData[1]
+                            x: regionGrip.c - regionGrip.thickness / 2 - gripLayer.s
+                            y: (regionGrip.dirY > 0 ? regionGrip.c - regionGrip.thickness / 2 : regionGrip.c + regionGrip.thickness / 2 - regionGrip.arm) - gripLayer.s
+                        }
+                        // Edge midpoint bar
+                        Rectangle {
+                            visible: !regionGrip.corner
+                            width: (regionGrip.horizontalEdge ? regionGrip.bar : regionGrip.thickness) + gripLayer.s * 2
+                            height: (regionGrip.horizontalEdge ? regionGrip.thickness : regionGrip.bar) + gripLayer.s * 2
+                            radius: regionGrip.armRadius + gripLayer.s
+                            color: gripLayer.modelData[1]
+                            x: regionGrip.c - width / 2
+                            y: regionGrip.c - height / 2
+                        }
+                    }
                 }
 
                 MouseArea {
@@ -2115,212 +2451,208 @@ PanelWindow {
             }
         }
 
+        // Selection outline, delete chip and resize grips for the selected
+        // annotation. Kept outside editorContent so they aren't clipped when
+        // an annotation touches the region edge and never reach grabToImage.
+        // Same z as the region grips but declared later, so an annotation
+        // grip wins where the two overlap.
+        Item {
+            id: selectionOverlay
+            z: 9999
+            readonly property var sel: root.selectedAnnotation()
+            readonly property var bb: sel ? AnnotationModel.boundingBox(sel) : null
+            readonly property real pad: (sel && sel.style ? (sel.style.strokeWidth ?? 2) : 2) / 2 + 4
+            visible: sel !== null && !root.exporting
+            x: root.editorRegionX + (bb ? bb.x - pad : 0)
+            y: root.editorRegionY + (bb ? bb.y - pad : 0)
+            width: bb ? bb.w + pad * 2 : 0
+            height: bb ? bb.h + pad * 2 : 0
+
+            Rectangle {
+                anchors.fill: parent
+                color: "transparent"
+                radius: 4
+                border.width: 1.5
+                border.color: Appearance.colors.colPrimary
+            }
+
+            // Sits just off the top-right corner so it clears that grip.
+            // Destructive, so it speaks in the error voice; hovering squares it
+            // off before the click lands.
+            Rectangle {
+                id: deleteChip
+                width: 28
+                height: 28
+                radius: Appearance.rounding.scale === 0 ? 0 : (deleteHover.hovered ? 9 : width / 2)
+                color: deleteHover.hovered ? Appearance.colors.colErrorContainerHover : Appearance.colors.colErrorContainer
+                anchors.left: parent.right
+                anchors.bottom: parent.top
+                anchors.leftMargin: 4
+                anchors.bottomMargin: 4
+
+                Behavior on radius {
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                }
+                Behavior on color {
+                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                }
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "delete"
+                    iconSize: 18
+                    fill: deleteHover.hovered ? 1 : 0
+                    color: Appearance.colors.colOnErrorContainer
+                }
+
+                HoverHandler {
+                    id: deleteHover
+                    cursorShape: Qt.PointingHandCursor
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.deleteSelected()
+                }
+            }
+        }
+
+        // One delegate per grip slot (see AnnotationModel.gripSlots). The model
+        // is a fixed count so the delegates, and the pressed MouseArea, survive
+        // the annotation being replaced on every motion event of a drag.
+        Item {
+            id: annotationGrips
+            z: 9999
+            x: root.editorRegionX
+            y: root.editorRegionY
+            visible: selectionOverlay.visible && root.currentTool === "none" && root.editingTextId === null
+
+            Repeater {
+                model: AnnotationModel.gripSlots.length
+
+                delegate: Item {
+                    id: grip
+                    required property int index
+                    readonly property var slot: AnnotationModel.gripSlots[index]
+                    readonly property var pos: AnnotationModel.gripPosition(selectionOverlay.sel, slot,
+                                                                            selectionOverlay.pad)
+                    readonly property bool endpoint: slot.id === "p1" || slot.id === "p2"
+                    visible: pos !== null
+                    width: 20
+                    height: 20
+                    x: (pos?.x ?? 0) - width / 2
+                    y: (pos?.y ?? 0) - height / 2
+
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: 10
+                        height: 10
+                        radius: grip.endpoint ? width / 2 : 2
+                        color: Appearance.colors.colOnPrimary
+                        border.width: 1.5
+                        border.color: Appearance.colors.colPrimary
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        preventStealing: true
+                        cursorShape: {
+                            switch (grip.slot.id) {
+                            case "tl":
+                            case "br":
+                                return Qt.SizeFDiagCursor;
+                            case "tr":
+                            case "bl":
+                                return Qt.SizeBDiagCursor;
+                            case "t":
+                            case "b":
+                                return Qt.SizeVerCursor;
+                            case "l":
+                            case "r":
+                                return Qt.SizeHorCursor;
+                            default:
+                                return Qt.CrossCursor;
+                            }
+                        }
+
+                        property var startAnn: null
+                        property real startPx: 0
+                        property real startPy: 0
+
+                        // Map to editorOverlay: this grip moves with the
+                        // annotation, so its own coords shift mid-drag.
+                        onPressed: mouse => {
+                            var p = mapToItem(editorOverlay, mouse.x, mouse.y);
+                            startPx = p.x;
+                            startPy = p.y;
+                            startAnn = null;
+                        }
+                        onPositionChanged: mouse => {
+                            if (!pressed || !selectionOverlay.sel)
+                                return;
+                            if (startAnn === null) {
+                                // First motion: one undo step per drag.
+                                root.pushUndo();
+                                startAnn = AnnotationModel.clone(selectionOverlay.sel);
+                            }
+                            var p = mapToItem(editorOverlay, mouse.x, mouse.y);
+                            var dx = p.x - startPx;
+                            var dy = p.y - startPy;
+                            root.replaceAnnotation(AnnotationModel.resized(startAnn, grip.slot, dx, dy));
+                        }
+                        onReleased: startAnn = null
+                    }
+                }
+            }
+        }
+
         // Middle action bar (Spectacle-style): selection size + terminal
         // actions. Lives outside editorContent so grabToImage never captures
         // it; z sits above the handles so the Export menu isn't occluded.
-        Toolbar {
+        EditorActionBar {
             id: actionBar
             z: 9999
-            spacing: 6
-
-            readonly property int physW: Math.round(root.editorRegionW * root.captureScale)
-            readonly property int physH: Math.round(root.editorRegionH * root.captureScale)
-            property bool exportMenuOpen: false
-
-            function fmt(n) {
-                var str = String(n);
-                var out = "";
-                for (var i = 0; i < str.length; i++) {
-                    if (i > 0 && (str.length - i) % 3 === 0)
-                        out += ",";
-                    out += str[i];
-                }
-                return out;
-            }
-
+            menuParent: editorOverlay
+            physW: Math.round(root.editorRegionW * root.captureScale)
+            physH: Math.round(root.editorRegionH * root.captureScale)
             visible: root.inlineEditorActive && !root.exporting && root.currentTool !== "recrop" && root.editingTextId === null && root.editorRegionW > 0 && root.editorRegionH > 0
-            opacity: visible ? 1 : 0
-            Behavior on opacity {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-            }
-
             x: Math.max(8, Math.min(root.editorRegionX + root.editorRegionW / 2 - width / 2, root.screen.width - width - 8))
             y: {
                 var gap = 12;
+                var barHeight = height > 0 ? height : 56;
+
+                // Determine vertical boundaries to avoid screen edges and editorToolbarRow
+                var topBound = 8;
+                var bottomBound = root.screen.height - 8;
+                if (editorOverlay.editorToolbarAtBottom) {
+                    bottomBound = Math.min(bottomBound, editorToolbarRow.y - 8);
+                } else {
+                    topBound = Math.max(topBound, editorToolbarRow.y + editorToolbarRow.height + 8);
+                }
+
+                // 1. Preferred: position below the selected region
                 var below = root.editorRegionY + root.editorRegionH + gap;
-                if (below + height <= root.screen.height - 8)
+                if (below + barHeight <= bottomBound)
                     return below;
-                // No room below the selection: tuck the bar just inside its
-                // bottom edge instead of flinging it to the top of the screen.
-                return Math.max(8, root.editorRegionY + root.editorRegionH - height - gap);
+
+                // 2. Alternative: position above the selected region
+                var above = root.editorRegionY - barHeight - gap;
+                if (above >= topBound)
+                    return above;
+
+                // 3. Fallback: tuck inside the selection without colliding with topBound/bottomBound
+                return Math.max(topBound, Math.min(bottomBound - barHeight, root.editorRegionY + root.editorRegionH - barHeight - gap));
             }
 
-            component ActionButton: RippleButton {
-                property string symbolName: ""
-                property string labelText: ""
-                Layout.alignment: Qt.AlignVCenter
-                implicitHeight: 36
-                implicitWidth: abRow.implicitWidth + 24
-                buttonRadius: height / 2
-
-                colBackground: Appearance.colors.colSurfaceContainerHigh
-                colBackgroundHover: Appearance.colors.colSurfaceContainerHighest
-                colBackgroundToggled: Appearance.colors.colSecondaryContainer
-                colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
-                colRippleToggled: Appearance.colors.colSecondaryContainerActive
-
-                property color colText: toggled ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurface
-
-                contentItem: Row {
-                    id: abRow
-                    anchors.centerIn: parent
-                    spacing: 6
-
-                    MaterialSymbol {
-                        anchors.verticalCenter: parent.verticalCenter
-                        iconSize: 20
-                        text: symbolName
-                        fill: parent.parent.toggled ? 1 : 0
-                        color: parent.parent.colText
-                        animateChange: true
-                    }
-                    StyledText {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: labelText
-                        color: parent.parent.colText
-                    }
-                }
-            }
-
-            StyledText {
-                Layout.leftMargin: 6
-                Layout.rightMargin: 2
-                Layout.alignment: Qt.AlignVCenter
-                text: actionBar.fmt(actionBar.physW) + " \u00d7 " + actionBar.fmt(actionBar.physH)
-                color: Appearance.colors.colSubtext
-            }
-
-            Rectangle {
-                Layout.alignment: Qt.AlignVCenter
-                implicitWidth: 1
-                implicitHeight: 24
-                color: Appearance.colors.colOutlineVariant
-            }
-
-            ActionButton {
-                symbolName: "content_copy"
-                labelText: Translation.tr("Copy")
-                onClicked: root.finalizeScreenshot(false)
-            }
-            ActionButton {
-                symbolName: "save"
-                labelText: Translation.tr("Save")
-                onClicked: root.finalizeScreenshot(true)
-            }
-            ActionButton {
-                symbolName: "save_as"
-                labelText: Translation.tr("Save As...")
-                onClicked: root.finalizeScreenshotAs()
-            }
-            ActionButton {
-                symbolName: "document_scanner"
-                labelText: Translation.tr("Extract Text")
-                onClicked: root.extractText()
-            }
-            ActionButton {
-                symbolName: "block"
-                labelText: Translation.tr("Cancel")
-                onClicked: root.dismiss()
-            }
-
-            Item {
-                id: exportContainer
-                Layout.alignment: Qt.AlignVCenter
-                implicitWidth: exportBtn.implicitWidth
-                implicitHeight: exportBtn.implicitHeight
-
-                ActionButton {
-                    id: exportBtn
-                    anchors.fill: parent
-                    symbolName: "ios_share"
-                    labelText: Translation.tr("Export")
-                    toggled: actionBar.exportMenuOpen
-                    onClicked: actionBar.exportMenuOpen = !actionBar.exportMenuOpen
-                }
-
-                Rectangle {
-                    id: exportMenu
-                    visible: actionBar.exportMenuOpen
-                    width: exportCol.implicitWidth + 8
-                    height: exportCol.implicitHeight + 8
-                    radius: Appearance.rounding.small
-                    color: Appearance.m3colors.m3surfaceContainerHigh
-                    border.width: 1
-                    border.color: Appearance.colors.colOutlineVariant
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.bottom: parent.top
-                    anchors.bottomMargin: 8
-
-                    component MenuItem: RippleButton {
-                        property string symbolName: ""
-                        property string labelText: ""
-                        implicitWidth: Math.max(200, miRow.implicitWidth + 24)
-                        implicitHeight: 36
-                        buttonRadius: Appearance.rounding.small
-
-                        contentItem: Row {
-                            id: miRow
-                            anchors.left: parent.left
-                            anchors.leftMargin: 12
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: 10
-
-                            MaterialSymbol {
-                                anchors.verticalCenter: parent.verticalCenter
-                                iconSize: 20
-                                text: symbolName
-                                color: Appearance.colors.colOnSurface
-                            }
-                            StyledText {
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: labelText
-                                color: Appearance.colors.colOnSurface
-                            }
-                        }
-                    }
-
-                    Column {
-                        id: exportCol
-                        anchors.centerIn: parent
-                        spacing: 2
-
-                        MenuItem {
-                            symbolName: "open_in_new"
-                            labelText: Translation.tr("Open with default app")
-                            onClicked: {
-                                actionBar.exportMenuOpen = false;
-                                root.exportOpenWith();
-                            }
-                        }
-                        MenuItem {
-                            symbolName: "image_search"
-                            labelText: Translation.tr("Reverse image search")
-                            onClicked: {
-                                actionBar.exportMenuOpen = false;
-                                root.exportSearch();
-                            }
-                        }
-                        MenuItem {
-                            symbolName: "link"
-                            labelText: Translation.tr("Copy file path")
-                            onClicked: {
-                                actionBar.exportMenuOpen = false;
-                                root.exportCopyPath();
-                            }
-                        }
-                    }
-                }
-            }
+            onCopyRequested: root.finalizeScreenshot(false)
+            onSaveRequested: root.finalizeScreenshot(true)
+            onSaveAsRequested: root.finalizeScreenshotAs()
+            onExtractTextRequested: root.extractText()
+            onOpenWithRequested: root.exportOpenWith()
+            onSearchRequested: root.exportSearch()
+            onCopyPathRequested: root.exportCopyPath()
+            onCancelRequested: root.dismiss()
         }
 
         // Click-away catcher that closes the Export menu.
@@ -2370,6 +2702,7 @@ PanelWindow {
                     root.currentTool = "none";
                     return;
                 }
+                root.shiftScene(root.editorRegionX - recropRect.x, root.editorRegionY - recropRect.y);
                 root.editorRegionX = recropRect.x;
                 root.editorRegionY = recropRect.y;
                 root.editorRegionW = recropRect.width;
@@ -2398,15 +2731,20 @@ PanelWindow {
             id: editorToolbarRow
             z: 10
             spacing: 6
+            width: implicitWidth
+            height: implicitHeight
             focus: root.inlineEditorActive
-            anchors {
-                horizontalCenter: parent.horizontalCenter
-                top: parent.top
-                topMargin: root.inlineEditorActive ? 8 : -height
+            anchors.horizontalCenter: parent.horizontalCenter
+
+            y: {
+                if (!root.inlineEditorActive) {
+                    return editorOverlay.editorToolbarAtBottom ? root.screen.height : -height;
+                }
+                return editorOverlay.editorToolbarAtBottom ? (root.screen.height - height - 8) : 8;
             }
             opacity: root.inlineEditorActive ? 1 : 0
-            Behavior on anchors.topMargin {
-                animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+            Behavior on y {
+                animation: Appearance.animation.elementMove.numberAnimation.createObject(editorToolbarRow)
             }
             Behavior on opacity {
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)

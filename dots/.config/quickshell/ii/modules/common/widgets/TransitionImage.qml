@@ -1,4 +1,5 @@
 import QtQuick
+import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -10,6 +11,9 @@ Item {
     required property string imageSource
 
     readonly property int status: imgAIsBack ? imgA.status : imgB.status
+    // True from a source change until the new image is fully shown; `status` reports the
+    // outgoing image until then.
+    readonly property bool transitioning: pendingTransition || fadeAnim.running || shaderProgressAnim.running
 
     property int animationDuration: 1000
     property var fillMode: Image.PreserveAspectCrop
@@ -37,11 +41,22 @@ Item {
     Component.onCompleted: imgA.source = imageSource
 
     function fadeTo(newSrc) {
+        // quietChange describes this change only, whichever path it takes.
+        root._quietPending = root.quietChange;
+        root.quietChange = false;
         var back = imgAIsBack ? imgA : imgB;
         var front = imgAIsBack ? imgB : imgA;
 
-        if (newSrc === back.source)
+        // A real change outranks a re-decode of the picture it replaces.
+        if (root.refreshing) {
+            root.refreshing = false;
+            front.source = "";
+        }
+
+        if (newSrc === back.source) {
+            root.releasePins();
             return;
+        }
 
         // No previous wallpaper loaded — load directly onto the back image
         // instead of crossfading, which would swap an empty image on top.
@@ -68,6 +83,7 @@ Item {
             front = root.imgAIsBack ? imgB : imgA;
         }
 
+        front.pinned = false;
         front.source = newSrc;
         front.z = 1;
         back.z = 0;
@@ -94,7 +110,55 @@ Item {
 
     property bool pendingTransition: false
 
+    // ── Re-decoding the picture on screen ────────────────────────────────────
+    // The decode is frozen at source-set (below), which is right for a plane
+    // whose size only settles, and wrong for one the user zooms into: a
+    // picture decoded at the plane's size and then shown at twice it is
+    // visibly soft. refreshDecode() takes the current sourceSize anyway, the
+    // way a change of wallpaper would - in the idle image, behind the shown
+    // one - and swaps the two only once the new decode is ready. Same picture
+    // on both sides, so the swap has nothing to animate and never blanks.
+    property bool refreshing: false
+
+    function refreshDecode() {
+        if (root.refreshing || root.pendingTransition || fadeAnim.running || shaderProgressAnim.running || root.pinActive)
+            return;
+        const back = root.imgAIsBack ? imgA : imgB;
+        const front = root.imgAIsBack ? imgB : imgA;
+        if (String(back.source) === "" || back.status !== Image.Ready)
+            return;
+        const size = root._captureDecodeSize();
+        if (size.width === back.frozenSize.width && size.height === back.frozenSize.height)
+            return;
+        root.refreshing = true;
+        front.opacity = 0;
+        front.z = 1;
+        back.z = 0;
+        front.source = back.source;
+        if (front.status === Image.Ready)
+            root._finishRefresh();
+    }
+
+    function _finishRefresh() {
+        const back = root.imgAIsBack ? imgA : imgB;
+        const front = root.imgAIsBack ? imgB : imgA;
+        root.refreshing = false;
+        front.opacity = 1;
+        back.source = "";
+        root.imgAIsBack = !root.imgAIsBack;
+    }
+
     function onFrontStatusChanged(image) {
+        if (root.refreshing && image === root.toImage) {
+            if (image.status === Image.Ready) {
+                root._finishRefresh();
+            } else if (image.status === Image.Error) {
+                // The shown picture is untouched; drop the attempt.
+                root.refreshing = false;
+                image.source = "";
+            }
+            return;
+        }
         if (!root.pendingTransition || image !== root.toImage)
             return;
         if (image.status !== Image.Ready && image.status !== Image.Error)
@@ -103,7 +167,40 @@ Item {
         root.startTransition();
     }
 
+    // A preset holding motion: the transition would play through its stalls.
+    // It starts once the hold releases.
+    Connections {
+        target: GlobalStates
+        function onPresetHoldMotionChanged() {
+            if (GlobalStates.presetHoldMotion || !root.pendingTransition)
+                return;
+            const image = root.toImage;
+            if (image.status === Image.Ready || image.status === Image.Error) {
+                root.pendingTransition = false;
+                root.startTransition();
+            }
+        }
+    }
+
+    // The next change shows the same picture (a file rewritten in place):
+    // swapped as soon as it has decoded, with no transition to play.
+    property bool quietChange: false
+    property bool _quietPending: false
+
     function startTransition() {
+        if (root._quietPending) {
+            root._quietPending = false;
+            const shown = root.toImage;
+            const old = root.fromImage;
+            shown.opacity = 1;
+            old.source = "";
+            root.imgAIsBack = !root.imgAIsBack;
+            return;
+        }
+        if (root.animated && GlobalStates.presetHoldMotion) {
+            root.pendingTransition = true;
+            return;
+        }
         var front = root.toImage;
         var back = root.fromImage;
         if (root.animated) {
@@ -176,7 +273,9 @@ Item {
 
             ShaderEffectSource {
                 id: fromSource
-                sourceItem: root.imgAIsBack ? imgA : imgB
+                // The slot, not the Image: a held picture is moved/turned
+                // inside it, and only the slot's capture includes that.
+                sourceItem: root.imgAIsBack ? slotA : slotB
                 hideSource: shaderProgressAnim.running
                 live: shaderProgressAnim.running
                 visible: false
@@ -184,7 +283,7 @@ Item {
 
             ShaderEffectSource {
                 id: toSource
-                sourceItem: root.imgAIsBack ? imgB : imgA
+                sourceItem: root.imgAIsBack ? slotB : slotA
                 hideSource: shaderProgressAnim.running
                 live: shaderProgressAnim.running
                 visible: false
@@ -219,39 +318,167 @@ Item {
     // updates it in a visible band (the "stretched duplicate"). An empty size
     // falls back to native. sourceSize is already stable when the incoming image
     // is set, so it captures a sound size at once.
+    //
+    // mipmap is frozen the same way: a mid-flight change (the next wallpaper
+    // using a different decode policy) would reload the image that is on
+    // screen — the old layer blanking under the crossfade. Each image keeps
+    // the value its own decode was taken with.
     function _captureDecodeSize() {
         const s = root.sourceSize;
         return (s && s.width !== 0 && s.height !== 0) ? s : Qt.size(-1, -1);
     }
 
-    Image {
-        id: imgA
-        anchors.fill: parent
-        fillMode: root.fillMode
-        property size frozenSize: Qt.size(-1, -1)
-        sourceSize: frozenSize
-        onSourceChanged: imgA.frozenSize = root._captureDecodeSize()
-        cache: root.cache
-        antialiasing: root.antialiasing
-        asynchronous: root.asynchronous
-        smooth: root.smooth
-        mipmap: root.mipmap
-        onStatusChanged: root.onFrontStatusChanged(imgA)
+    // ── Holding the outgoing picture where it is ─────────────────────────────
+    // The plane this item fills is laid out from the wallpaper FILE's
+    // dimensions, and those change the moment the new file's size is known -
+    // before the new picture has decoded, and for the whole transition. Filling
+    // the new plane, the old picture was re-cropped, zoomed and re-centred at
+    // the click. pinOutgoing() records where each shown picture sits in
+    // `pinReference`'s coordinates; until its source is cleared (the transition
+    // that replaces it finishes) it is laid out back onto that spot, whatever
+    // the plane does around it.
+    property Item pinReference: null
+    readonly property bool pinActive: imgA.pinned || imgB.pinned
+
+    function pinOutgoing() {
+        if (!root.pinReference)
+            return;
+        root._pin(imgA);
+        root._pin(imgB);
+        if (root.pinActive)
+            pinSafety.restart();
     }
 
-    Image {
-        id: imgB
+    function releasePins() {
+        imgA.pinned = false;
+        imgB.pinned = false;
+        pinSafety.stop();
+    }
+
+    function _pin(img) {
+        if (img.pinned || String(img.source) === "")
+            return;
+        // Three corners: enough for any move, scale, turn or mirror.
+        img.pinO = img.mapToItem(root.pinReference, 0, 0);
+        img.pinU = img.mapToItem(root.pinReference, img.width, 0);
+        img.pinV = img.mapToItem(root.pinReference, 0, img.height);
+        img.pinned = true;
+    }
+
+    // Everything between `pinReference` and this item that can move it: the
+    // owner lists those values here so the held rect is re-mapped in the same
+    // binding pass that moves the plane. Following them per frame instead let
+    // a frame render between the plane's change and the correction (flicker).
+    property var pinDependencies: null
+
+    // The held corners in this item's coordinates, as a size and the matrix
+    // that lays a picture of that size onto them.
+    function _mapPin(img, deps) {
+        if (!root.pinReference)
+            return { "w": root.width, "h": root.height, "m": Qt.matrix4x4() };
+        const o = root.pinReference.mapToItem(root, img.pinO.x, img.pinO.y);
+        const u = root.pinReference.mapToItem(root, img.pinU.x, img.pinU.y);
+        const v = root.pinReference.mapToItem(root, img.pinV.x, img.pinV.y);
+        const w = Math.max(1e-3, Math.hypot(u.x - o.x, u.y - o.y));
+        const h = Math.max(1e-3, Math.hypot(v.x - o.x, v.y - o.y));
+        return {
+            "w": w,
+            "h": h,
+            "m": Qt.matrix4x4((u.x - o.x) / w, (v.x - o.x) / h, 0, o.x,
+                              (u.y - o.y) / w, (v.y - o.y) / h, 0, o.y,
+                              0, 0, 1, 0,
+                              0, 0, 0, 1)
+        };
+    }
+
+    // A path change that never becomes a change of picture (same file, a video
+    // painted elsewhere) must not leave the old picture held forever.
+    Timer {
+        id: pinSafety
+        interval: 4000
+        repeat: false
+        onTriggered: {
+            if (root.transitioning)
+                restart();
+            else
+                root.releasePins();
+        }
+    }
+
+    // Each picture in a slot of its own: the shader captures the slot, so a
+    // held picture is captured where it is drawn.
+    Item {
+        id: slotA
         anchors.fill: parent
-        opacity: 0
-        fillMode: root.fillMode
-        property size frozenSize: Qt.size(-1, -1)
-        sourceSize: frozenSize
-        onSourceChanged: imgB.frozenSize = root._captureDecodeSize()
-        cache: root.cache
-        antialiasing: root.antialiasing
-        asynchronous: root.asynchronous
-        smooth: root.smooth
-        mipmap: root.mipmap
-        onStatusChanged: root.onFrontStatusChanged(imgB)
+        z: imgA.z
+        Image {
+            id: imgA
+            property bool pinned: false
+            property point pinO
+            property point pinU
+            property point pinV
+            readonly property var pin: pinned
+                ? root._mapPin(imgA, [root.pinDependencies, root.width, root.height])
+                : null
+            width: pin ? pin.w : root.width
+            height: pin ? pin.h : root.height
+            transform: Matrix4x4 {
+                matrix: imgA.pin ? imgA.pin.m : Qt.matrix4x4()
+            }
+            fillMode: root.fillMode
+            property size frozenSize: Qt.size(-1, -1)
+            property bool frozenMipmap: root.mipmap
+            sourceSize: frozenSize
+            mipmap: frozenMipmap
+            onSourceChanged: {
+                if (String(imgA.source) === "")
+                    imgA.pinned = false;
+                imgA.frozenSize = root._captureDecodeSize()
+                imgA.frozenMipmap = root.mipmap
+            }
+            cache: root.cache
+            antialiasing: root.antialiasing
+            asynchronous: root.asynchronous
+            smooth: root.smooth
+            onStatusChanged: root.onFrontStatusChanged(imgA)
+        }
+    }
+
+    Item {
+        id: slotB
+        anchors.fill: parent
+        z: imgB.z
+        Image {
+            id: imgB
+            property bool pinned: false
+            property point pinO
+            property point pinU
+            property point pinV
+            readonly property var pin: pinned
+                ? root._mapPin(imgB, [root.pinDependencies, root.width, root.height])
+                : null
+            width: pin ? pin.w : root.width
+            height: pin ? pin.h : root.height
+            transform: Matrix4x4 {
+                matrix: imgB.pin ? imgB.pin.m : Qt.matrix4x4()
+            }
+            opacity: 0
+            fillMode: root.fillMode
+            property size frozenSize: Qt.size(-1, -1)
+            property bool frozenMipmap: root.mipmap
+            sourceSize: frozenSize
+            mipmap: frozenMipmap
+            onSourceChanged: {
+                if (String(imgB.source) === "")
+                    imgB.pinned = false;
+                imgB.frozenSize = root._captureDecodeSize()
+                imgB.frozenMipmap = root.mipmap
+            }
+            cache: root.cache
+            antialiasing: root.antialiasing
+            asynchronous: root.asynchronous
+            smooth: root.smooth
+            onStatusChanged: root.onFrontStatusChanged(imgB)
+        }
     }
 }

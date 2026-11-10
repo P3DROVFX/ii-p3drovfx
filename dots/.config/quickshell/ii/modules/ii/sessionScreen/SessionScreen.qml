@@ -44,7 +44,9 @@ Scope {
 
     Loader {
         id: sessionLoader
-        active: root.activeState
+        // The island draws the menu itself when it owns it; two surfaces answering the
+        // same flag is the duplicate-surface bug. See IslandPolicy.ownsSession.
+        active: root.activeState && !GlobalStates.islandOwnsSession
         onActiveChanged: {
             if (sessionLoader.active)
                 SessionWarnings.refresh();
@@ -259,11 +261,7 @@ Scope {
                         buttonText: Translation.tr("OLED Saver")
                         onClicked: {
                             sessionRoot.hide();
-                            const name = Hyprland.focusedMonitor?.name || (Quickshell.screens.length > 0 ? Quickshell.screens[0].name : "");
-                            if (name) {
-                                const monitors = GlobalStates.oledSaverMonitors;
-                                GlobalStates.oledSaverMonitors = monitors.includes(name) ? monitors.filter(n => n !== name) : [...monitors, name];
-                            }
+                            GlobalStates.toggleOledSaver();
                         }
                         onFocusChanged: {
                             if (focus)

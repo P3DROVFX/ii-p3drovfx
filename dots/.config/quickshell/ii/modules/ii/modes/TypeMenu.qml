@@ -3,24 +3,35 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
+import qs.modules.ii.clock.components
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
+import "../../../services/modes/ModeSchema.js" as ModeSchema
 
 /**
- * The "add condition" / "add action" menu: a grouped, filterable list of
- * kinds. Rows that cannot be added here stay visible but greyed, with the
- * reason — hiding them would make the catalogue look smaller than it is.
+ * The "Add condition" / "Add action" catalogue, as a side sheet: a search field and a
+ * grouped list of kinds. Rows that cannot be added here stay visible but greyed, with
+ * the reason — hiding them would make the catalogue look smaller than it is.
  *
- * `choices`: [{ key, label, icon, group, enabled, hint }]
+ * Built by a ClockSidePanel (`show(component, { title, choices })`); `picked(key)` fires
+ * once and the sheet closes. Enter in the search takes the first row that can be added.
+ *
+ * `choices`: [{ key, label, icon, group, enabled, hint, shape? }]
  */
-Popup {
+ClockSheet {
     id: root
 
     property var choices: []
     property string query: ""
+    /// "trigger" | "action"; empty infers it from the keys (every key a condition type).
+    property string kind: ""
 
     signal picked(string key)
+
+    // Some keys name both a condition and an action (media, keyboardLayout…), so the
+    // inference asks whether *every* key is a condition type.
+    readonly property bool triggerMenu: root.kind.length ? root.kind === "trigger"
+        : (root.choices.length > 0 && root.choices.every(c => ModeSchema.TRIGGER_TYPES[c.key] !== undefined))
 
     readonly property var filtered: {
         const q = root.query.trim().toLowerCase();
@@ -28,201 +39,167 @@ Popup {
             ? root.choices.filter(c => c.label.toLowerCase().indexOf(q) !== -1
                 || (c.group ?? "").toLowerCase().indexOf(q) !== -1)
             : root.choices;
-        // Flatten into rows with group headers where the group changes.
+        // Flatten into rows with group headers where the group changes; each row knows
+        // whether it starts or ends its group, for the grouped corners.
         const out = [];
         let last = null;
         for (const c of list) {
             if ((c.group ?? "") !== last && (c.group ?? "").length) {
+                if (out.length && !out[out.length - 1].header)
+                    out[out.length - 1].last = true;
                 out.push({ header: true, label: c.group });
                 last = c.group;
             }
-            out.push(Object.assign({ header: false }, c));
+            const first = out.length === 0 || out[out.length - 1].header;
+            out.push(Object.assign({ header: false, first: first, last: false }, c));
         }
+        if (out.length && !out[out.length - 1].header)
+            out[out.length - 1].last = true;
         return out;
     }
 
-    function openAt(item) {
-        const pos = item.mapToItem(root.parent, 0, item.height);
-        const width = 360;
-        const height = Math.min(440, root.implicitHeight);
-        root.x = Math.max(8, Math.min(root.parent.width - width - 8, pos.x));
-        // Below the button if it fits, else above it.
-        root.y = pos.y + height + 8 <= root.parent.height ? pos.y + 4 : Math.max(8, pos.y - item.height - height - 4);
-        root.query = "";
-        root.open();
-        Qt.callLater(() => searchField.forceActiveFocus());
+    function choose(key: string): void {
+        root.picked(key);
+        root.close();
     }
 
-    width: 360
-    height: Math.min(440, implicitHeight)
-    implicitHeight: contentColumn.implicitHeight + 24
-    padding: 12
-    modal: false
-    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+    scrollable: false
 
-    enter: Transition {
-        NumberAnimation {
-            property: "opacity"
-            from: 0
-            to: 1
-            duration: 150
-        }
-        NumberAnimation {
-            property: "scale"
-            from: 0.96
-            to: 1
-            duration: 200
-            easing.type: Easing.OutCubic
+    Component.onCompleted: Qt.callLater(search.focusInput)
+
+    ClockFormField {
+        id: search
+        symbol: "search"
+        shapeKind: MaterialShape.Shape.Cookie12Sided
+        caption: Translation.tr("Search")
+        placeholder: Translation.tr("Filter by name or group")
+        onTextChanged: root.query = text
+        onAccepted: {
+            const first = root.filtered.find(c => !c.header && c.enabled !== false);
+            if (first)
+                root.choose(first.key);
         }
     }
 
-    exit: Transition {
-        NumberAnimation {
-            property: "opacity"
-            to: 0
-            duration: 120
-        }
-    }
+    StyledListView {
+        id: list
+        Layout.fillWidth: true
+        Layout.fillHeight: true
+        clip: true
+        spacing: 2
+        popin: false
+        animateAppearance: false
+        animatePopulate: false
+        model: root.filtered
 
-    background: Rectangle {
-        radius: Appearance.rounding.normal
-        color: Appearance.m3colors.m3surfaceContainerHigh
+        delegate: Item {
+            id: row
+            required property var modelData
+            required property int index
 
-        StyledRectangularShadow {
-            target: parent
-        }
-    }
+            width: list.width
+            implicitHeight: row.modelData.header ? (row.index === 0 ? 26 : 38) : 54
 
-    contentItem: ColumnLayout {
-        id: contentColumn
-        spacing: 8
-
-        Rectangle {
-            Layout.fillWidth: true
-            implicitHeight: 40
-            radius: Appearance.rounding.full
-            color: Appearance.colors.colLayer2
-
-            RowLayout {
+            StyledText {
+                visible: row.modelData.header
                 anchors {
-                    fill: parent
-                    leftMargin: 12
-                    rightMargin: 12
+                    left: parent.left
+                    leftMargin: ClockStyle.gapSmall
+                    bottom: parent.bottom
+                    bottomMargin: ClockStyle.gapTiny + 2
                 }
-                spacing: 8
-
-                MaterialSymbol {
-                    text: "search"
-                    iconSize: 20
-                    color: Appearance.colors.colSubtext
-                }
-
-                StyledTextInput {
-                    id: searchField
-                    Layout.fillWidth: true
-                    text: root.query
-                    onTextChanged: root.query = text
-                    color: Appearance.colors.colOnLayer2
-                    Keys.onPressed: event => {
-                        if (event.key === Qt.Key_Escape) {
-                            root.close();
-                            event.accepted = true;
-                        } else if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter)) {
-                            const first = root.filtered.find(c => !c.header && c.enabled);
-                            if (first) {
-                                root.picked(first.key);
-                                root.close();
-                            }
-                            event.accepted = true;
-                        }
-                    }
-
-                    StyledText {
-                        anchors.fill: parent
-                        visible: !searchField.text.length
-                        text: Translation.tr("Search")
-                        color: Appearance.colors.colSubtext
-                    }
-                }
+                text: row.modelData.label ?? ""
+                font.pixelSize: ClockStyle.textSmall
+                font.weight: Font.Bold
+                color: ClockStyle.colPrimary
             }
-        }
 
-        StyledListView {
-            id: list
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.preferredHeight: Math.min(360, contentHeight)
-            clip: true
-            spacing: 2
-            popin: false
-            animateAppearance: false
-            animatePopulate: false
-            model: root.filtered
+            RippleButton {
+                id: choice
+                visible: !row.modelData.header
+                anchors.fill: parent
+                enabled: row.modelData.enabled !== false
+                opacity: enabled ? 1 : 0.5
+                // One grouped shape per group: large outer corners, tight joins.
+                buttonRadius: Appearance.rounding.verysmall
+                topLeftRadius: row.modelData.first ? Appearance.rounding.large : Appearance.rounding.verysmall
+                topRightRadius: topLeftRadius
+                bottomLeftRadius: row.modelData.last ? Appearance.rounding.large : Appearance.rounding.verysmall
+                bottomRightRadius: bottomLeftRadius
+                colBackground: ClockStyle.colField
+                colBackgroundHover: ClockStyle.colFieldHover
+                colRipple: ClockStyle.colSurfaceActive
+                onClicked: root.choose(row.modelData.key)
 
-            delegate: Item {
-                id: row
-                required property var modelData
-
-                width: list.width
-                implicitHeight: row.modelData.header ? 28 : 44
-
-                StyledText {
-                    visible: row.modelData.header
+                contentItem: RowLayout {
                     anchors {
-                        left: parent.left
-                        leftMargin: 10
-                        verticalCenter: parent.verticalCenter
+                        fill: parent
+                        leftMargin: ClockStyle.gapSmall + 2
+                        rightMargin: ClockStyle.gap
                     }
-                    text: row.modelData.label
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    font.weight: Font.Medium
-                    color: Appearance.colors.colPrimary
-                }
+                    spacing: ClockStyle.gap - 2
 
-                RippleButton {
-                    visible: !row.modelData.header
-                    anchors.fill: parent
-                    enabled: row.modelData.enabled !== false
-                    opacity: enabled ? 1 : 0.5
-                    buttonRadius: Appearance.rounding.small
-                    colBackground: "transparent"
-                    colBackgroundHover: Appearance.colors.colLayer2Hover
-                    colRipple: Appearance.colors.colLayer2Active
-                    onClicked: {
-                        root.picked(row.modelData.key);
-                        root.close();
+                    // The same shape the row will wear in the editor, morphing on hover.
+                    MaterialShapeWrappedMaterialSymbol {
+                        text: row.modelData.icon ?? "bolt"
+                        iconSize: 18
+                        padding: 8
+                        shape: row.modelData.shape ?? (root.triggerMenu
+                            ? ModeUi.triggerShape(row.modelData.key, choice.hovered)
+                            : ModeUi.actionShape(row.modelData.key, choice.hovered))
+                        color: ClockStyle.colPrimaryContainer
+                        colSymbol: ClockStyle.colOnPrimaryContainer
                     }
 
-                    contentItem: RowLayout {
-                        anchors {
-                            fill: parent
-                            leftMargin: 10
-                            rightMargin: 10
-                        }
-                        spacing: 10
-
-                        MaterialSymbol {
-                            text: row.modelData.icon ?? "bolt"
-                            iconSize: 20
-                            color: Appearance.colors.colOnLayer2
-                        }
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 0
 
                         StyledText {
                             Layout.fillWidth: true
-                            text: row.modelData.label
+                            text: row.modelData.label ?? ""
                             elide: Text.ElideRight
-                            color: Appearance.colors.colOnLayer2
+                            font.pixelSize: ClockStyle.textNormal
+                            font.weight: Font.DemiBold
+                            color: ClockStyle.colOnSurface
                         }
 
                         StyledText {
+                            id: hintText
+                            Layout.fillWidth: true
                             visible: (row.modelData.hint ?? "").length > 0
                             text: row.modelData.hint ?? ""
-                            font.pixelSize: Appearance.font.pixelSize.smaller
-                            color: Appearance.colors.colSubtext
+                            elide: Text.ElideRight
+                            font.pixelSize: ClockStyle.textSmall
+                            color: ClockStyle.colOnSurfaceVariant
+
+                            HoverHandler {
+                                id: hintHover
+                            }
+
+                            StyledToolTip {
+                                extraVisibleCondition: hintHover.hovered && hintText.truncated
+                                text: hintText.text
+                            }
                         }
+                    }
+
+                    MaterialSymbol {
+                        visible: choice.enabled
+                        text: "add"
+                        iconSize: ClockStyle.iconSmall
+                        color: ClockStyle.colPrimary
                     }
                 }
             }
+        }
+
+        StyledText {
+            anchors.centerIn: parent
+            visible: list.count === 0
+            text: Translation.tr("Nothing matches")
+            font.pixelSize: ClockStyle.textNormal
+            color: ClockStyle.colSubtext
         }
     }
 }

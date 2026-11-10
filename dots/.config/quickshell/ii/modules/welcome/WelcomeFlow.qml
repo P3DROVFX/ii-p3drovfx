@@ -62,6 +62,7 @@ Item {
     signal openAudioOutput()
     signal trySidebar()
     signal trySearch()
+    signal trySearchPanel(string panelId)
     signal openEditMode()
 
     // Page content may intentionally overhang its body stage. The top-level
@@ -321,6 +322,10 @@ Item {
 
                 function onTrySearch() {
                     root.trySearch();
+                }
+
+                function onTrySearchPanel(panelId) {
+                    root.trySearchPanel(panelId);
                 }
 
                 function onOpenEditMode() {

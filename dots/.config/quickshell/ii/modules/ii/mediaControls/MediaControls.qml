@@ -30,13 +30,33 @@ Scope {
     property bool popupHovered: false
     property bool stickyActive: false
     property bool openedViaHover: false
+    property bool _openingFromHover: false
+    readonly property bool hoverOpens: BarInteraction.enablePopups && !BarInteraction.clickToShow
+
+    // Same open debounce as StyledPopup: a pointer crossing the widget does not
+    // flash the popup.
+    Timer {
+        id: hoverOpenDebounce
+        interval: 60
+        repeat: false
+        onTriggered: {
+            if (!root.targetHovered || !root.hoverOpens || GlobalStates.mediaControlsOpen)
+                return;
+            // Set before opening: the Loader may build the window before the
+            // Connections below run, and the window picks its grab from this.
+            root._openingFromHover = true;
+            root.openedViaHover = true;
+            GlobalStates.mediaControlsOpen = true;
+            root._openingFromHover = false;
+        }
+    }
 
     Timer {
         id: hoverGraceTimer
         interval: 100 + Math.max(0, Config.options?.bar?.tooltips?.closeDelay ?? 0)
         repeat: false
         onTriggered: {
-            if (!GlobalStates.mediaControlsPinned && !root.targetHovered && !root.popupHovered) {
+            if (!GlobalStates.mediaControlsPinned && !GlobalStates.isBarPopupOpen("media") && !root.targetHovered && !root.popupHovered) {
                 root.stickyActive = false;
                 GlobalStates.mediaControlsOpen = false;
             }
@@ -44,7 +64,7 @@ Scope {
     }
 
     function evaluateHoverState() {
-        if (!root.openedViaHover || GlobalStates.mediaControlsPinned)
+        if (!root.openedViaHover || GlobalStates.mediaControlsPinned || GlobalStates.isBarPopupOpen("media"))
             return;
         if (root.targetHovered || root.popupHovered) {
             root.stickyActive = true;
@@ -54,14 +74,20 @@ Scope {
         }
     }
 
-    onTargetHoveredChanged: evaluateHoverState()
+    onTargetHoveredChanged: {
+        if (root.targetHovered && root.hoverOpens)
+            hoverOpenDebounce.restart();
+        else
+            hoverOpenDebounce.stop();
+        evaluateHoverState();
+    }
     onPopupHoveredChanged: evaluateHoverState()
 
     Connections {
         target: GlobalStates
         function onMediaControlsOpenChanged() {
             if (GlobalStates.mediaControlsOpen) {
-                root.openedViaHover = GlobalStates.mediaWidgetHovered;
+                root.openedViaHover = root._openingFromHover;
                 if (root.openedViaHover) {
                     root.stickyActive = true;
                     root.evaluateHoverState();
@@ -91,7 +117,7 @@ Scope {
             // Find duplicates by trackTitle prefix
             for (let j = i + 1; j < players.length; ++j) {
                 let p2 = players[j];
-                if (p1.trackTitle && p2.trackTitle && (p1.trackTitle.includes(p2.trackTitle) || p2.trackTitle.includes(p1.trackTitle)) || (p1.position - p2.position <= 2 && p1.length - p2.length <= 2)) {
+                if (p1.trackTitle && p2.trackTitle && (p1.trackTitle.includes(p2.trackTitle) || p2.trackTitle.includes(p1.trackTitle)) || (Math.abs(p1.position - p2.position) <= 2 && Math.abs(p1.length - p2.length) <= 2)) {
                     group.push(j);
                 }
             }
@@ -202,16 +228,38 @@ Scope {
                 item: scaledContent
             }
 
-            Component.onCompleted: {
-                GlobalFocusGrab.addDismissable(panelWindow);
+            // Hover-opened, it behaves like a StyledPopup in hover mode: it only joins
+            // the shared grab as persistent, so input still reaches it over an open
+            // sidebar. Starting a dismissable grab here took the pointer away from the
+            // bar (TopLayerPanel is not a grab member), the widget saw a leave, the
+            // grace closed the popup, the grab ended, the pointer re-entered the bar
+            // and the popup reopened — over and over while hovering.
+            // Opened any other way (click, shortcut, IPC, dock) it keeps closing on an
+            // outside press through the dismissable grab.
+            readonly property bool dismissable: !root.openedViaHover
+
+            function updateGrabMembership() {
+                if (panelWindow.dismissable) {
+                    GlobalFocusGrab.removePersistent(panelWindow);
+                    GlobalFocusGrab.addDismissable(panelWindow);
+                } else {
+                    GlobalFocusGrab.removeDismissable(panelWindow);
+                    GlobalFocusGrab.addPersistent(panelWindow);
+                }
             }
+
+            onDismissableChanged: updateGrabMembership()
+            Component.onCompleted: updateGrabMembership()
             Component.onDestruction: {
                 GlobalFocusGrab.removeDismissable(panelWindow);
+                GlobalFocusGrab.removePersistent(panelWindow);
             }
             Connections {
                 target: GlobalFocusGrab
                 function onDismissed() {
-                    GlobalStates.mediaControlsOpen = false;
+                    if (!GlobalStates.mediaControlsPinned && !GlobalStates.isBarPopupOpen("media")) {
+                        GlobalStates.mediaControlsOpen = false;
+                    }
                 }
             }
 
@@ -232,7 +280,10 @@ Scope {
                     width: implicitWidth
                     height: implicitHeight
                     scale: panelWindow.layoutScale
-                    spacing: -Appearance.sizes.elevationMargin // Shadow overlap okay
+                    // Positive gap: each card carries its own shadow (StyledRectangularShadow
+                    // bleeding past the card bounds), and a negative spacing here made the
+                    // card surfaces themselves overlap when two or more players are open.
+                    spacing: Appearance.sizes.elevationMargin
 
                 Repeater {
                     model: ScriptModel {
@@ -333,17 +384,17 @@ Scope {
         target: "mediaControls"
 
         function toggle(): void {
-            mediaControlsLoader.active = !mediaControlsLoader.active;
+            GlobalStates.toggleBarPopup("media");
             if (mediaControlsLoader.active)
                 Notifications.timeoutAll();
         }
 
         function close(): void {
-            mediaControlsLoader.active = false;
+            GlobalStates.closeBarPopup("media");
         }
 
         function open(): void {
-            mediaControlsLoader.active = true;
+            GlobalStates.openBarPopup("media");
             Notifications.timeoutAll();
         }
     }

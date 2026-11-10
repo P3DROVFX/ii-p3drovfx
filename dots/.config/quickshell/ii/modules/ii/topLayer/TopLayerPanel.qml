@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
@@ -6,6 +7,7 @@ import Quickshell.Hyprland
 import qs
 import qs.services
 import qs.modules.common
+import qs.modules.ii.dynamicIsland.core
 import qs.modules.common.widgets
 import qs.modules.ii.bar as Bar
 import qs.modules.ii.bar.shared
@@ -97,8 +99,66 @@ PanelWindow {
 
     readonly property bool isDynamicIslandTop: !topPanel.barVertical && !topPanel.barBottom && BarInteraction.cornerStyle === 3 && hasBarOnThisMonitor
     readonly property bool isDynamicIslandBottom: !topPanel.barVertical && topPanel.barBottom && BarInteraction.cornerStyle === 3 && hasBarOnThisMonitor
-    readonly property real sidebarTopOffset: isDynamicIslandTop ? (Appearance.sizes.barHeight + Appearance.sizes.hyprlandGapsOut) : ((!topPanel.barVertical && !topPanel.barBottom && (BarInteraction.cornerStyle === 0 || BarInteraction.cornerStyle === 2) && hasBarOnThisMonitor) ? Appearance.sizes.barHeight : 0)
-    readonly property real sidebarBottomOffset: isDynamicIslandBottom ? (Appearance.sizes.barHeight + Appearance.sizes.hyprlandGapsOut) : ((!topPanel.barVertical && topPanel.barBottom && (BarInteraction.cornerStyle === 0 || BarInteraction.cornerStyle === 2) && hasBarOnThisMonitor) ? Appearance.sizes.barHeight : 0)
+    // A pinned dock on the top or bottom edge is a separate surface under nothing here: the
+    // sidebars, the vertical bar and the wrapped frame ran on beneath it. Its exclusive zone
+    // is treated as part of that edge instead - they stop where the windows do.
+    readonly property var dockInset: GlobalStates.dockInsets[topPanel.screen.name] ?? null
+    readonly property bool dockShapesShell: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate
+    readonly property real dockTopZone: (dockShapesShell && dockInset && dockInset.side === "top") ? (dockInset.reserved ?? 0) : 0
+    readonly property real dockBottomZone: (dockShapesShell && dockInset && dockInset.side === "bottom") ? (dockInset.reserved ?? 0) : 0
+    // The frame's band under the dock: the reserved zone, or a full-width tray while it shows.
+    // It follows the tray's reveal slide, which is what the dock no longer paints.
+    // Only a full-width dock joins the frame: `shown` is its tray while it shows. Any other
+    // style keeps its own design and only gets pushed.
+    readonly property real dockTopBandTarget: (dockShapesShell && dockInset && dockInset.side === "top") ? (dockInset.shown ?? 0) : 0
+    readonly property real dockBottomBandTarget: (dockShapesShell && dockInset && dockInset.side === "bottom") ? (dockInset.shown ?? 0) : 0
+    readonly property real dockLeftBandTarget: (dockShapesShell && dockInset && dockInset.side === "left") ? (dockInset.shown ?? 0) : 0
+    readonly property real dockRightBandTarget: (dockShapesShell && dockInset && dockInset.side === "right") ? (dockInset.shown ?? 0) : 0
+    property real dockLeftBand: dockLeftBandTarget
+    property real dockRightBand: dockRightBandTarget
+    Behavior on dockLeftBand {
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(topPanel)
+    }
+    Behavior on dockRightBand {
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(topPanel)
+    }
+    property real dockTopBand: dockTopBandTarget
+    property real dockBottomBand: dockBottomBandTarget
+    Behavior on dockTopBand {
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(topPanel)
+    }
+    Behavior on dockBottomBand {
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(topPanel)
+    }
+    // While search is open this layer climbs to Overlay and Hyprland stacks it over the
+    // dock: the band would cover the dock's content. The dock paints its own tray then,
+    // switched at once both ways so there is no frame with neither.
+    readonly property bool dockUnderThisLayer: !topPanel.searchOpenOnMonitor
+    // Without the wrapped frame the band is a plain strip (dockBandPlain) in the sidebar's colour.
+    // The wrapped frame keeps its band through search (hollow, see dockBandHollow); only the
+    // plain strip still hands the tray back to the dock.
+    readonly property bool dockOnFrameBand: dockShapesShell && (frameLoader.active || (!usingWrappedFrame && dockUnderThisLayer))
+    onDockOnFrameBandChanged: GlobalStates.setDockBand(topPanel.screen.name, topPanel.dockOnFrameBand)
+    // Over the dock the band would hide its content: the frame keeps the band's geometry
+    // (the joins stay rounded) but does not paint it, and the dock paints its tray in the
+    // frame's colour instead.
+    readonly property bool dockBandHollow: frameLoader.active && dockShapesShell && !dockUnderThisLayer
+    // An opaque frame colour is handed over all the time: the dock's tray then already
+    // covers the band, identical, before search lifts this layer, and nothing on the dock
+    // changes in that frame (two surfaces never commit in sync; a hand-off showed a hole).
+    readonly property var dockBandCoverColor: {
+        if (!frameLoader.active || !dockShapesShell || !frameLoader.item)
+            return null;
+        const color = frameLoader.item.baseColor;
+        return (dockBandHollow || color.a >= 0.999) ? color : null;
+    }
+    onDockBandCoverColorChanged: GlobalStates.setDockBandCover(topPanel.screen.name, topPanel.dockBandCoverColor)
+    // The dock sits inside the frame's ring when nothing else holds that edge.
+    readonly property real ringThickness: usingWrappedFrame ? Config.options.appearance.wrappedFrameThickness : 0
+    readonly property real sidebarTopOffset: sidebarTopBarOffset + (dockTopZone > 0 ? dockTopZone + (sidebarTopBarOffset > 0 ? 0 : ringThickness) : 0)
+    readonly property real sidebarBottomOffset: sidebarBottomBarOffset + (dockBottomZone > 0 ? dockBottomZone + (sidebarBottomBarOffset > 0 ? 0 : ringThickness) : 0)
+    readonly property real sidebarTopBarOffset: isDynamicIslandTop ? (Appearance.sizes.barHeight + Appearance.sizes.hyprlandGapsOut) : ((!topPanel.barVertical && !topPanel.barBottom && (BarInteraction.cornerStyle === 0 || BarInteraction.cornerStyle === 2) && hasBarOnThisMonitor) ? Appearance.sizes.barHeight : 0)
+    readonly property real sidebarBottomBarOffset: isDynamicIslandBottom ? (Appearance.sizes.barHeight + Appearance.sizes.hyprlandGapsOut) : ((!topPanel.barVertical && topPanel.barBottom && (BarInteraction.cornerStyle === 0 || BarInteraction.cornerStyle === 2) && hasBarOnThisMonitor) ? Appearance.sizes.barHeight : 0)
 
     property real leftSidebarMaskWidth: 0
     property real rightSidebarMaskWidth: 0
@@ -144,6 +204,7 @@ PanelWindow {
             topPanel.rightSidebarMaskWidth = GlobalStates.rightSidebarTargetWidth;
         }
         topPanel.updateFocusGrab();
+        GlobalStates.setDockBand(topPanel.screen.name, topPanel.dockOnFrameBand);
     }
 
     readonly property bool leftSidebarOpenOnMonitor: GlobalStates.sidebarLeftOpen && screen.name === GlobalStates.effectiveLeftMonitor
@@ -174,7 +235,7 @@ PanelWindow {
     }
     readonly property bool searchDropSuppressed: (Config.ready && Config.options.bar.dynamicIsland.notchMode.enable) || GlobalStates.floatingNotchOwnsSearch || !GlobalStates.searchConnectActive
     readonly property bool searchOpenOnMonitor: (GlobalStates.overviewOpen || (searchDropLoader.item && searchDropLoader.item.openProgress > 0.001)) && GlobalStates.searchConnectActive && screen.name === GlobalStates.activeSearchMonitor && !topPanel.searchDropSuppressed
-    readonly property bool osdOpenOnMonitor: GlobalStates.osdVolumeOpen && GlobalStates.osdConnectActive && !(Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material")) && !(Config.ready && BarInteraction.cornerStyle === 3) && screen.name === (Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? Quickshell.screens[0])?.name && !(Config.ready && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar))
+    readonly property bool osdOpenOnMonitor: GlobalStates.osdVolumeOpen && GlobalStates.osdConnectActive && !(Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material" || Config.options.osd.style === "tuner")) && !(Config.ready && !BarPlacement.vertical && BarInteraction.cornerStyle === 3) && screen.name === (Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? Quickshell.screens[0])?.name && !IslandPolicy.ownsOsd
 
     readonly property bool hasFullscreenWindowOnMonitor: {
         const monitorData = HyprlandData.monitors.find(m => m.name === topPanel.screen.name);
@@ -226,6 +287,34 @@ PanelWindow {
     // Float bar gaps: the bar is visually offset from screen edges by hyprlandGapsOut.
     // SearchDrop/OsdDrop need this offset so they emerge from the bar's visual top edge.
     readonly property real barMargin: BarInteraction.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0
+
+    // A Float bar leaves no screen edge for a sidebar to run along, so each embedded sidebar
+    // is a card floating at the bar's gaps, and the one on the bar's side fuses with the bar
+    // into a single rounded shape (barFusedFill). Horizontal Float bars keep their sidebars
+    // as separate windows (GlobalStates.connectSidebarsSeparate).
+    readonly property bool floatSidebarCards: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && BarInteraction.cornerStyle === 1
+    readonly property real floatSidebarGap: floatSidebarCards ? Appearance.sizes.hyprlandGapsOut : 0
+    // The bar's own pill radius, so the fused shape is rounded alike at both ends.
+    readonly property real floatSidebarRadius: Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut
+    readonly property color floatSidebarColor: Config.options.bar.amoledBackground ? "#000000" : (Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0)
+    readonly property bool floatSidebarShadow: Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
+    // Only a seated bar with a background of its own fuses: island bars have none, and a bar
+    // sliding off the edge hands the card its own fill back first.
+    readonly property bool barCanFuse: floatSidebarCards && !!verticalBarLoader.item && topPanel.shellHide === 0
+        && Config.options.bar.barBackgroundStyle !== 3
+    readonly property bool leftSidebarFusesBar: barCanFuse && barOnLeft && leftSidebarActiveOnMonitor
+    readonly property bool rightSidebarFusesBar: barCanFuse && barOnRight && rightSidebarActiveOnMonitor
+
+    // With the wrapped frame on, a welded vertical bar's plate (WrappedFrameVisuals
+    // leftBarPlate / rightBarPlate) already spans totalLeftPush / totalRightPush,
+    // painting the sidebar and the bar as one continuous fill. Keep the sidebar's
+    // own rectangle transparent then so translucent backgrounds are not blended twice.
+    readonly property bool barWeldedToFrame: topPanel.usingWrappedFrame && topPanel.shellSeated
+        && (BarInteraction.cornerStyle === 0 || BarInteraction.cornerStyle === 2)
+        && Config.options.bar.barBackgroundStyle !== 3
+        && (verticalBarLoader.item ? verticalBarLoader.item.showBarBackground : false)
+    readonly property bool leftSidebarWeldedToBar: barWeldedToFrame && barOnLeft
+    readonly property bool rightSidebarWeldedToBar: barWeldedToFrame && barOnRight
 
     // ── Shell edge slide ─────────────────────────────────────────────────────
     // Fullscreen and media mode used to drop the bar and the frame in a single
@@ -304,6 +393,11 @@ PanelWindow {
 
             sidebarTopOffset: topPanel.sidebarTopOffset
             sidebarBottomOffset: topPanel.sidebarBottomOffset
+            dockTopInset: topPanel.dockTopBand
+            dockBottomInset: topPanel.dockBottomBand
+            dockLeftInset: topPanel.dockLeftBand
+            dockRightInset: topPanel.dockRightBand
+            dockBandHollow: topPanel.dockBandHollow
         }
     }
 
@@ -486,7 +580,7 @@ PanelWindow {
                                     leftMargin: topPanel.leftSidebarActiveOnMonitor ? GlobalStates.animatedLeftSidebarWidth : 0
                                 }
                                 implicitSize: Appearance.rounding.screenRounding
-                                color: hBarItem.showBarBackground ? (Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
+                                color: hBarItem.showBarBackground ? (Config.options.bar.amoledBackground ? "#000000" : Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
                                 corner: RoundCorner.CornerEnum.TopLeft
                                 states: State {
                                     name: "bottom"
@@ -506,7 +600,7 @@ PanelWindow {
                                     rightMargin: topPanel.rightSidebarActiveOnMonitor ? GlobalStates.animatedRightSidebarWidth : 0
                                 }
                                 implicitSize: Appearance.rounding.screenRounding
-                                color: hBarItem.showBarBackground ? (Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
+                                color: hBarItem.showBarBackground ? (Config.options.bar.amoledBackground ? "#000000" : Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
                                 corner: RoundCorner.CornerEnum.TopRight
                                 states: State {
                                     name: "bottom"
@@ -626,9 +720,34 @@ PanelWindow {
                         }
                     }
 
+                    // A Float card fused with the bar: one fill from the card's outer edge to
+                    // the bar's, standing in for the bar's own pill and shadow. At zero width
+                    // it is exactly that pill, so the hand-over never shows.
+                    RectangularShadow {
+                        anchors.fill: barFusedFill
+                        visible: barFusedFill.visible && topPanel.floatSidebarShadow
+                        radius: barFusedFill.radius
+                        blur: 32
+                        offset: Qt.vector2d(topPanel.barOnRight ? -4 : 4, 0)
+                        color: Qt.rgba(0, 0, 0, 0.28)
+                    }
+
+                    Rectangle {
+                        id: barFusedFill
+                        readonly property real gap: Appearance.sizes.hyprlandGapsOut
+                        visible: topPanel.leftSidebarFusesBar || topPanel.rightSidebarFusesBar
+                        x: topPanel.barOnRight ? barContent.x + gap : gap
+                        y: barContent.y + gap
+                        width: topPanel.barOnRight ? parent.width - barContent.x - 2 * gap : barContent.x + barContent.width - 2 * gap
+                        height: barContent.height - 2 * gap
+                        radius: topPanel.floatSidebarRadius
+                        color: topPanel.floatSidebarColor
+                    }
+
                     VBar.VerticalBarContent {
                         id: barContent
                         monitorIndex: vBarItem.monitorIndex
+                        fusedToSidebar: barFusedFill.visible
                         implicitWidth: Appearance.sizes.verticalBarWindowWidth
                         width: implicitWidth
                         anchors {
@@ -636,6 +755,10 @@ PanelWindow {
                             bottom: parent.bottom
                             left: undefined
                             right: undefined
+                            // The column ends at a top/bottom dock and the frame's band carries
+                            // on under it; without the frame there is no band, so it runs on.
+                            topMargin: (topPanel.usingWrappedFrame && topPanel.dockTopZone > 0) ? topPanel.dockTopZone + topPanel.ringThickness : 0
+                            bottomMargin: (topPanel.usingWrappedFrame && topPanel.dockBottomZone > 0) ? topPanel.dockBottomZone + topPanel.ringThickness : 0
                         }
 
                         x: {
@@ -692,7 +815,7 @@ PanelWindow {
                                     top: parent.top
                                 }
                                 implicitSize: Appearance.rounding.screenRounding
-                                color: vBarItem.showBarBackground ? (Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
+                                color: vBarItem.showBarBackground ? (Config.options.bar.amoledBackground ? "#000000" : Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
                                 corner: RoundCorner.CornerEnum.TopLeft
                                 states: State {
                                     name: "bottom"
@@ -711,7 +834,7 @@ PanelWindow {
                                     right: topPanel.barBottom ? parent.right : undefined
                                 }
                                 implicitSize: Appearance.rounding.screenRounding
-                                color: vBarItem.showBarBackground ? (Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
+                                color: vBarItem.showBarBackground ? (Config.options.bar.amoledBackground ? "#000000" : Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
                                 corner: RoundCorner.CornerEnum.BottomLeft
                                 states: State {
                                     name: "bottom"
@@ -750,7 +873,7 @@ PanelWindow {
     }
 
     // Space reserver for pinned sidebar in Connect Mode
-    // Disabled in Float+Connect mode — sidebars remain separate PanelWindows with own space
+    // Disabled with a horizontal Float bar — sidebars remain separate PanelWindows with own space
     PanelWindow {
         id: pinSpaceReserver
         WlrLayershell.namespace: "quickshell:pinReserver"
@@ -763,27 +886,103 @@ PanelWindow {
             left: topPanel.policiesOnLeft
             right: !topPanel.policiesOnLeft
         }
-        implicitWidth: GlobalStates.policiesWidth
-        exclusiveZone: implicitWidth - ((topPanel.barVertical && ((topPanel.barOnLeft && topPanel.policiesOnLeft) || (topPanel.barOnRight && !topPanel.policiesOnLeft))) ? 0 : (Appearance.sizes.hyprlandGapsOut + Appearance.sizes.elevationMargin))
+        readonly property bool besideBar: topPanel.barVertical && ((topPanel.barOnLeft && topPanel.policiesOnLeft) || (topPanel.barOnRight && !topPanel.policiesOnLeft))
+        // A Float card standing alone ends a gap further out; one beside the bar ends at it.
+        implicitWidth: GlobalStates.policiesWidth + (besideBar ? 0 : topPanel.floatSidebarGap)
+        exclusiveZone: implicitWidth - (besideBar ? 0 : (Appearance.sizes.hyprlandGapsOut + Appearance.sizes.elevationMargin))
+    }
+
+    // The dock's tray without the wrapped frame: painted here, like the frame's band, so it
+    // blurs with the sidebars instead of on its own surface, rides on a sidebar pushing the
+    // dock in the same frames, and leaves the screen corners above it (the dock's own tray
+    // covered them). It starts past the bar's zone on that edge, as the dock's window does.
+    readonly property bool barHoldsZones: hasBarOnThisMonitor && GlobalStates.barOpen
+        && !(Config.options.bar.autoHide.enable && !Config.options.bar.autoHide.pushWindows)
+    readonly property real hBarZone: (barHoldsZones && !barVertical) ? Math.max(0, Appearance.sizes.baseBarHeight + (BarInteraction.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0) - hBarHiddenAmount) : 0
+    readonly property real vBarZone: (barHoldsZones && barVertical) ? Math.max(0, Appearance.sizes.baseVerticalBarWidth + (BarInteraction.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0) - vBarHiddenAmount) : 0
+    readonly property real leftCornerShift: dockBandPlain.side === "left" ? dockBandPlain.cornerShift : 0
+    readonly property real rightCornerShift: dockBandPlain.side === "right" ? dockBandPlain.cornerShift : 0
+    Rectangle {
+        id: dockBandPlain
+        readonly property string side: topPanel.dockInset ? topPanel.dockInset.side : ""
+        readonly property real band: side === "left" ? topPanel.dockLeftBand
+            : side === "right" ? topPanel.dockRightBand
+            : side === "top" ? topPanel.dockTopBand
+            : side === "bottom" ? topPanel.dockBottomBand : 0
+        readonly property real zoneLeft: topPanel.barOnLeft ? topPanel.vBarZone : 0
+        readonly property real zoneRight: topPanel.barOnRight ? topPanel.vBarZone : 0
+        readonly property real zoneTop: (!topPanel.barVertical && !topPanel.barBottom) ? topPanel.hBarZone : 0
+        readonly property real zoneBottom: (!topPanel.barVertical && topPanel.barBottom) ? topPanel.hBarZone : 0
+        readonly property real pushLeft: topPanel.leftSidebarActiveOnMonitor ? Math.round(GlobalStates.animatedLeftSidebarWidth) : 0
+        readonly property real pushRight: topPanel.rightSidebarActiveOnMonitor ? Math.round(GlobalStates.animatedRightSidebarWidth) : 0
+        visible: !topPanel.usingWrappedFrame && topPanel.dockOnFrameBand && band > 0 && !topPanel.hasFullscreenWindowOnMonitor
+        // Where a sidebar pushes the dock, the band sits against the sidebar's edge: the
+        // sidebar's outer corners move past it, or they paint over the band - a darker wedge.
+        readonly property real cornerShift: visible ? band + ((side === "left") ? zoneLeft : zoneRight) : 0
+        color: Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0
+        x: side === "left" ? zoneLeft + pushLeft
+            : side === "right" ? topPanel.width - zoneRight - pushRight - band
+            : zoneLeft
+        y: side === "top" ? zoneTop
+            : side === "bottom" ? topPanel.height - zoneBottom - band
+            : zoneTop
+        width: (side === "left" || side === "right") ? band : Math.max(0, topPanel.width - zoneLeft - zoneRight)
+        height: (side === "left" || side === "right") ? Math.max(0, topPanel.height - zoneTop - zoneBottom) : band
+    }
+
+    // The full-width rounded style curves into the screen at both ends of its tray; the
+    // dock drew those in its own tray colour, which is empty on the band.
+    Repeater {
+        model: (dockBandPlain.visible && (topPanel.dockInset?.concave ?? 0) > 0) ? 2 : 0
+        delegate: RoundCorner {
+            required property int index
+            readonly property string pos: dockBandPlain.side
+            readonly property bool startEnd: index === 0
+            implicitSize: Math.max(1, topPanel.dockInset?.concave ?? 0)
+            color: dockBandPlain.color
+            corner: pos === "top" ? (startEnd ? RoundCorner.CornerEnum.TopLeft : RoundCorner.CornerEnum.TopRight)
+                : pos === "left" ? (startEnd ? RoundCorner.CornerEnum.TopLeft : RoundCorner.CornerEnum.BottomLeft)
+                : pos === "right" ? (startEnd ? RoundCorner.CornerEnum.TopRight : RoundCorner.CornerEnum.BottomRight)
+                : (startEnd ? RoundCorner.CornerEnum.BottomLeft : RoundCorner.CornerEnum.BottomRight)
+            x: pos === "left" ? dockBandPlain.x + dockBandPlain.width
+                : pos === "right" ? dockBandPlain.x - width
+                : (startEnd ? dockBandPlain.x : dockBandPlain.x + dockBandPlain.width - width)
+            y: pos === "bottom" ? dockBandPlain.y - height
+                : pos === "top" ? dockBandPlain.y + dockBandPlain.height
+                : (startEnd ? dockBandPlain.y : dockBandPlain.y + dockBandPlain.height - height)
+        }
+    }
+
+    // A Float card standing alone casts the bar's shadow; a fused one is shadowed with the bar.
+    RectangularShadow {
+        anchors.fill: leftSidebar
+        visible: leftSidebar.visible && topPanel.floatSidebarCards && !topPanel.leftSidebarFusesBar && topPanel.floatSidebarShadow
+        radius: topPanel.floatSidebarRadius
+        blur: 32
+        offset: Qt.vector2d(4, 0)
+        color: Qt.rgba(0, 0, 0, 0.28)
     }
 
     // Left Sidebar Policies Content
-    // Disabled in Float+Connect mode (cornerStyle 1) — sidebars remain separate PanelWindows
+    // Disabled with a horizontal Float bar — sidebars remain separate PanelWindows
+    // A Float card grows from its outer edge, clipping the content that rides its inner one.
     Rectangle {
         id: leftSidebar
-        x: -(width - GlobalStates.animatedLeftSidebarWidth)
-        y: topPanel.sidebarTopOffset
-        width: Math.round(Math.max(topPanel.leftContentWidth, GlobalStates.animatedLeftSidebarWidth))
-        height: Math.max(0, Math.round(parent.height - topPanel.sidebarTopOffset - topPanel.sidebarBottomOffset))
-        color: Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0
+        x: topPanel.floatSidebarCards ? topPanel.floatSidebarGap : -(width - GlobalStates.animatedLeftSidebarWidth)
+        y: topPanel.sidebarTopOffset + topPanel.floatSidebarGap
+        width: topPanel.floatSidebarCards ? Math.round(GlobalStates.animatedLeftSidebarWidth) : Math.round(Math.max(topPanel.leftContentWidth, GlobalStates.animatedLeftSidebarWidth))
+        height: Math.max(0, Math.round(parent.height - topPanel.sidebarTopOffset - topPanel.sidebarBottomOffset - 2 * topPanel.floatSidebarGap))
+        color: topPanel.floatSidebarCards ? (topPanel.leftSidebarFusesBar ? "transparent" : topPanel.floatSidebarColor) : (topPanel.leftSidebarWeldedToBar ? "transparent" : (Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0))
+        clip: topPanel.floatSidebarCards
         readonly property bool isConnectDynamicIslandTop: GlobalStates.connectModeActive && topPanel.isDynamicIslandTop
         readonly property bool isConnectDynamicIslandBottom: GlobalStates.connectModeActive && topPanel.isDynamicIslandBottom
-        readonly property real defaultRadius: (GlobalStates.connectModeActive && !topPanel.isDynamicIslandTop && !topPanel.isDynamicIslandBottom) ? 0 : Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
+        readonly property bool connectSheet: GlobalStates.connectModeActive && !topPanel.floatSidebarCards
+        readonly property real defaultRadius: topPanel.floatSidebarCards ? topPanel.floatSidebarRadius : (GlobalStates.connectModeActive && !topPanel.isDynamicIslandTop && !topPanel.isDynamicIslandBottom) ? 0 : Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
         radius: 0
         topLeftRadius: isConnectDynamicIslandTop ? 0 : defaultRadius
         topRightRadius: isConnectDynamicIslandBottom ? 0 : defaultRadius
-        bottomLeftRadius: (isConnectDynamicIslandBottom) ? 0 : (GlobalStates.connectModeActive ? 0 : defaultRadius)
-        bottomRightRadius: isConnectDynamicIslandBottom ? defaultRadius : (GlobalStates.connectModeActive ? 0 : defaultRadius)
+        bottomLeftRadius: (isConnectDynamicIslandBottom) ? 0 : (connectSheet ? 0 : defaultRadius)
+        bottomRightRadius: isConnectDynamicIslandBottom ? defaultRadius : (connectSheet ? 0 : defaultRadius)
         visible: topPanel.leftSidebarActiveOnMonitor && !GlobalStates.connectSidebarsSeparate
 
         // GPU compositing during animation: prevents per-frame mask/Region recalc
@@ -793,12 +992,19 @@ PanelWindow {
         // because every minor visual change (timer ticks, notification syncs,
         // infinite pulse animations, gradient behaviors) forced a full FBO
         // re-render of the entire Phone tab subtree.
-        layer.enabled: GlobalStates.leftSidebarAnimating
+        // A Float card changes size every frame, so its constant-size content takes the layer.
+        layer.enabled: GlobalStates.leftSidebarAnimating && !topPanel.floatSidebarCards
 
         Loader {
             id: leftSidebarContentLoader
             active: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && topPanel.leftSidebarContentWanted && !(GlobalStates.policiesDetached && topPanel.policiesRenderedOnLeft)
-            anchors.fill: parent
+            anchors {
+                top: parent.top
+                bottom: parent.bottom
+                right: parent.right
+            }
+            width: Math.round(Math.max(topPanel.leftContentWidth, GlobalStates.animatedLeftSidebarWidth))
+            layer.enabled: GlobalStates.leftSidebarAnimating && topPanel.floatSidebarCards
             sourceComponent: {
                 const pos = Config.options.sidebar.position;
                 if (pos === "inverted") {
@@ -890,23 +1096,34 @@ PanelWindow {
         }
     }
 
+    RectangularShadow {
+        anchors.fill: rightSidebar
+        visible: rightSidebar.visible && topPanel.floatSidebarCards && !topPanel.rightSidebarFusesBar && topPanel.floatSidebarShadow
+        radius: topPanel.floatSidebarRadius
+        blur: 32
+        offset: Qt.vector2d(-4, 0)
+        color: Qt.rgba(0, 0, 0, 0.28)
+    }
+
     // Right Sidebar Dashboard Content
-    // Disabled in Float+Connect mode (cornerStyle 1) — sidebars remain separate PanelWindows
+    // Disabled with a horizontal Float bar — sidebars remain separate PanelWindows
     Rectangle {
         id: rightSidebar
-        x: parent.width - Math.round(GlobalStates.animatedRightSidebarWidth)
-        y: topPanel.sidebarTopOffset
-        width: Math.round(Math.max(topPanel.rightContentWidth, GlobalStates.animatedRightSidebarWidth))
-        height: Math.max(0, Math.round(parent.height - topPanel.sidebarTopOffset - topPanel.sidebarBottomOffset))
-        color: Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0
+        x: parent.width - topPanel.floatSidebarGap - Math.round(GlobalStates.animatedRightSidebarWidth)
+        y: topPanel.sidebarTopOffset + topPanel.floatSidebarGap
+        width: topPanel.floatSidebarCards ? Math.round(GlobalStates.animatedRightSidebarWidth) : Math.round(Math.max(topPanel.rightContentWidth, GlobalStates.animatedRightSidebarWidth))
+        height: Math.max(0, Math.round(parent.height - topPanel.sidebarTopOffset - topPanel.sidebarBottomOffset - 2 * topPanel.floatSidebarGap))
+        color: topPanel.floatSidebarCards ? (topPanel.rightSidebarFusesBar ? "transparent" : topPanel.floatSidebarColor) : (topPanel.rightSidebarWeldedToBar ? "transparent" : (Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0))
+        clip: topPanel.floatSidebarCards
         readonly property bool isConnectDynamicIslandTop: GlobalStates.connectModeActive && topPanel.isDynamicIslandTop
         readonly property bool isConnectDynamicIslandBottom: GlobalStates.connectModeActive && topPanel.isDynamicIslandBottom
-        readonly property real defaultRadius: (GlobalStates.connectModeActive && !topPanel.isDynamicIslandTop && !topPanel.isDynamicIslandBottom) ? 0 : Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
+        readonly property bool connectSheet: GlobalStates.connectModeActive && !topPanel.floatSidebarCards
+        readonly property real defaultRadius: topPanel.floatSidebarCards ? topPanel.floatSidebarRadius : (GlobalStates.connectModeActive && !topPanel.isDynamicIslandTop && !topPanel.isDynamicIslandBottom) ? 0 : Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
         radius: 0
         topRightRadius: isConnectDynamicIslandTop ? 0 : defaultRadius
         topLeftRadius: isConnectDynamicIslandBottom ? 0 : defaultRadius
-        bottomRightRadius: (isConnectDynamicIslandBottom) ? 0 : (GlobalStates.connectModeActive ? 0 : defaultRadius)
-        bottomLeftRadius: isConnectDynamicIslandBottom ? defaultRadius : (GlobalStates.connectModeActive ? 0 : defaultRadius)
+        bottomRightRadius: (isConnectDynamicIslandBottom) ? 0 : (connectSheet ? 0 : defaultRadius)
+        bottomLeftRadius: isConnectDynamicIslandBottom ? defaultRadius : (connectSheet ? 0 : defaultRadius)
         visible: topPanel.rightSidebarActiveOnMonitor && (!topPanel.hasFullscreenWindowOnMonitor || topPanel.rightSidebarActiveOnMonitor) && !GlobalStates.connectSidebarsSeparate
 
         // GPU compositing during animation: prevents per-frame mask/Region recalc
@@ -915,12 +1132,19 @@ PanelWindow {
         // statically open. Keeping it on while open caused visible seam artifacts
         // at the corner junctions because the FBO edge anti-aliasing differs from
         // direct rendering of the RoundCorner overlays.
-        layer.enabled: GlobalStates.rightSidebarAnimating
+        // A Float card changes size every frame, so its constant-size content takes the layer.
+        layer.enabled: GlobalStates.rightSidebarAnimating && !topPanel.floatSidebarCards
 
         Loader {
             id: rightSidebarContentLoader
             active: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && topPanel.rightSidebarContentWanted && !(GlobalStates.policiesDetached && topPanel.policiesRenderedOnRight)
-            anchors.fill: parent
+            anchors {
+                top: parent.top
+                bottom: parent.bottom
+                left: parent.left
+            }
+            width: Math.round(Math.max(topPanel.rightContentWidth, GlobalStates.animatedRightSidebarWidth))
+            layer.enabled: GlobalStates.rightSidebarAnimating && topPanel.floatSidebarCards
             sourceComponent: {
                 const pos = Config.options.sidebar.position;
                 if (pos === "inverted") {
@@ -947,7 +1171,7 @@ PanelWindow {
         id: leftSidebarTopCornerLoader
         active: topPanel.leftSidebarActiveOnMonitor && BarInteraction.cornerStyle !== 1 && !topPanel.isDynamicIslandTop && !topPanel.usingWrappedFrame && (topPanel.barBottom || BarInteraction.cornerStyle !== 0 || !hasBarOnThisMonitor)
         visible: !topPanel.hasFullscreenWindowOnMonitor || topPanel.leftSidebarOpenOnMonitor
-        x: GlobalStates.animatedLeftSidebarWidth
+        x: GlobalStates.animatedLeftSidebarWidth + topPanel.leftCornerShift
         y: topPanel.sidebarTopOffset
         width: Appearance.rounding.screenRounding
         height: Appearance.rounding.screenRounding
@@ -990,8 +1214,9 @@ PanelWindow {
         id: leftSidebarBottomCornerLoader
         active: topPanel.leftSidebarActiveOnMonitor && (!topPanel.barBottom || !hasBarOnThisMonitor) && BarInteraction.cornerStyle !== 1 && !topPanel.usingWrappedFrame && (topPanel.barVertical === topPanel.barBottom || BarInteraction.cornerStyle !== 0 || !hasBarOnThisMonitor)
         visible: !topPanel.hasFullscreenWindowOnMonitor || topPanel.leftSidebarOpenOnMonitor
-        x: GlobalStates.animatedLeftSidebarWidth
+        x: GlobalStates.animatedLeftSidebarWidth + topPanel.leftCornerShift
         anchors.bottom: parent.bottom
+        anchors.bottomMargin: topPanel.sidebarBottomOffset
         width: Appearance.rounding.screenRounding
         height: Appearance.rounding.screenRounding
         sourceComponent: RoundCorner {
@@ -1006,7 +1231,7 @@ PanelWindow {
         active: topPanel.rightSidebarActiveOnMonitor && BarInteraction.cornerStyle !== 1 && !topPanel.isDynamicIslandTop && !topPanel.usingWrappedFrame && (topPanel.barVertical !== topPanel.barBottom || BarInteraction.cornerStyle !== 0 || !hasBarOnThisMonitor)
         visible: !topPanel.hasFullscreenWindowOnMonitor || topPanel.rightSidebarOpenOnMonitor
         anchors.right: parent.right
-        anchors.rightMargin: GlobalStates.animatedRightSidebarWidth
+        anchors.rightMargin: GlobalStates.animatedRightSidebarWidth + topPanel.rightCornerShift
         y: topPanel.sidebarTopOffset
         width: Appearance.rounding.screenRounding
         height: Appearance.rounding.screenRounding
@@ -1050,8 +1275,9 @@ PanelWindow {
         active: topPanel.rightSidebarActiveOnMonitor && (!topPanel.barBottom || !hasBarOnThisMonitor) && BarInteraction.cornerStyle !== 1 && !topPanel.usingWrappedFrame
         visible: !topPanel.hasFullscreenWindowOnMonitor || topPanel.rightSidebarOpenOnMonitor
         anchors.right: parent.right
-        anchors.rightMargin: GlobalStates.animatedRightSidebarWidth
+        anchors.rightMargin: GlobalStates.animatedRightSidebarWidth + topPanel.rightCornerShift
         anchors.bottom: parent.bottom
+        anchors.bottomMargin: topPanel.sidebarBottomOffset
         width: Appearance.rounding.screenRounding
         height: Appearance.rounding.screenRounding
         sourceComponent: RoundCorner {
@@ -1065,7 +1291,7 @@ PanelWindow {
         id: leftSidebarBottomBarCornerLoader
         active: topPanel.leftSidebarActiveOnMonitor && !topPanel.barVertical && topPanel.barBottom && (BarInteraction.cornerStyle === 0 || BarInteraction.cornerStyle === 2) && !topPanel.usingWrappedFrame && hasBarOnThisMonitor
         visible: !topPanel.hasFullscreenWindowOnMonitor || topPanel.leftSidebarOpenOnMonitor
-        x: GlobalStates.animatedLeftSidebarWidth
+        x: GlobalStates.animatedLeftSidebarWidth + topPanel.leftCornerShift
         y: parent.height - topPanel.sidebarBottomOffset - Appearance.rounding.screenRounding
         width: Appearance.rounding.screenRounding
         height: Appearance.rounding.screenRounding
@@ -1081,7 +1307,7 @@ PanelWindow {
         active: topPanel.rightSidebarActiveOnMonitor && !topPanel.barVertical && topPanel.barBottom && (BarInteraction.cornerStyle === 0 || BarInteraction.cornerStyle === 2) && !topPanel.usingWrappedFrame && hasBarOnThisMonitor
         visible: !topPanel.hasFullscreenWindowOnMonitor || topPanel.rightSidebarOpenOnMonitor
         anchors.right: parent.right
-        anchors.rightMargin: GlobalStates.animatedRightSidebarWidth
+        anchors.rightMargin: GlobalStates.animatedRightSidebarWidth + topPanel.rightCornerShift
         y: parent.height - topPanel.sidebarBottomOffset - Appearance.rounding.screenRounding
         width: Appearance.rounding.screenRounding
         height: Appearance.rounding.screenRounding
@@ -1183,7 +1409,8 @@ PanelWindow {
     Loader {
         id: osdDropLoader
         z: 11
-        active: GlobalStates.osdConnectActive && !GlobalStates.screenLocked && !(Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material")) && !(Config.ready && BarInteraction.cornerStyle === 3) && !(Config.ready && Config.options.bar.dynamicIsland.notchMode.enable) && !(Config.ready && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar))
+        // Only the horizontal Dynamic Island renders its own OSD.
+        active: GlobalStates.osdConnectActive && !GlobalStates.screenLocked && !(Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material" || Config.options.osd.style === "tuner")) && !(Config.ready && !BarPlacement.vertical && BarInteraction.cornerStyle === 3) && !(Config.ready && Config.options.bar.dynamicIsland.notchMode.enable) && !IslandPolicy.ownsOsd
         sourceComponent: Component {
             OsdConnect.OsdDrop {
                 screen: topPanel.screen
@@ -1213,7 +1440,7 @@ PanelWindow {
         id: leftSidebarMaskItem
         x: 0
         y: topPanel.sidebarTopOffset
-        width: (GlobalStates.animatedLeftSidebarWidth > 0 && topPanel.leftSidebarWarmOnMonitor) ? topPanel.leftSidebarMaskWidth : 0
+        width: (GlobalStates.animatedLeftSidebarWidth > 0 && topPanel.leftSidebarWarmOnMonitor) ? topPanel.leftSidebarMaskWidth + topPanel.floatSidebarGap : 0
         height: parent.height - topPanel.sidebarTopOffset - topPanel.sidebarBottomOffset
     }
 
@@ -1221,7 +1448,7 @@ PanelWindow {
         id: rightSidebarMaskItem
         x: parent.width - width
         y: topPanel.sidebarTopOffset
-        width: (GlobalStates.animatedRightSidebarWidth > 0 && topPanel.rightSidebarWarmOnMonitor) ? topPanel.rightSidebarMaskWidth : 0
+        width: (GlobalStates.animatedRightSidebarWidth > 0 && topPanel.rightSidebarWarmOnMonitor) ? topPanel.rightSidebarMaskWidth + topPanel.floatSidebarGap : 0
         height: parent.height - topPanel.sidebarTopOffset - topPanel.sidebarBottomOffset
     }
 
@@ -1229,7 +1456,7 @@ PanelWindow {
     Item {
         id: leftSidebarTopCornerMaskItem
         x: topPanel.leftSidebarMaskWidth
-        y: 0
+        y: topPanel.sidebarTopOffset
         width: leftSidebarTopCornerLoader.active ? Appearance.rounding.screenRounding : 0
         height: leftSidebarTopCornerLoader.active ? Appearance.rounding.screenRounding : 0
     }
@@ -1245,7 +1472,7 @@ PanelWindow {
     Item {
         id: leftSidebarBottomCornerMaskItem
         x: topPanel.leftSidebarMaskWidth
-        y: topPanel.height - (leftSidebarBottomCornerLoader.active ? Appearance.rounding.screenRounding : 0)
+        y: topPanel.height - topPanel.sidebarBottomOffset - (leftSidebarBottomCornerLoader.active ? Appearance.rounding.screenRounding : 0)
         width: leftSidebarBottomCornerLoader.active ? Appearance.rounding.screenRounding : 0
         height: leftSidebarBottomCornerLoader.active ? Appearance.rounding.screenRounding : 0
     }
@@ -1253,7 +1480,7 @@ PanelWindow {
     Item {
         id: rightSidebarTopCornerMaskItem
         x: topPanel.width - topPanel.rightSidebarMaskWidth - width
-        y: 0
+        y: topPanel.sidebarTopOffset
         width: rightSidebarTopCornerLoader.active ? Appearance.rounding.screenRounding : 0
         height: rightSidebarTopCornerLoader.active ? Appearance.rounding.screenRounding : 0
     }
@@ -1269,7 +1496,7 @@ PanelWindow {
     Item {
         id: rightSidebarBottomCornerMaskItem
         x: topPanel.width - topPanel.rightSidebarMaskWidth - width
-        y: topPanel.height - height
+        y: topPanel.height - topPanel.sidebarBottomOffset - height
         width: rightSidebarBottomCornerLoader.active ? Appearance.rounding.screenRounding : 0
         height: rightSidebarBottomCornerLoader.active ? Appearance.rounding.screenRounding : 0
     }
@@ -1311,22 +1538,22 @@ PanelWindow {
         id: searchDropMaskItem
         visible: searchDropLoader.active && searchDropLoader.item && searchDropLoader.item.isWidgetActive
         x: {
-            if (searchDropLoader.item && searchDropLoader.item.isOverviewVisible)
+            if (searchDropLoader.item && searchDropLoader.item.coversScreen)
                 return 0;
             return searchDropLoader.item ? searchDropLoader.item.x + (searchDropLoader.item.maskItem ? searchDropLoader.item.maskItem.x : 0) : 0;
         }
         y: {
-            if (searchDropLoader.item && searchDropLoader.item.isOverviewVisible)
+            if (searchDropLoader.item && searchDropLoader.item.coversScreen)
                 return 0;
             return searchDropLoader.item ? searchDropLoader.item.y + (searchDropLoader.item.maskItem ? searchDropLoader.item.maskItem.y : 0) : 0;
         }
         width: {
-            if (searchDropLoader.item && searchDropLoader.item.isOverviewVisible)
+            if (searchDropLoader.item && searchDropLoader.item.coversScreen)
                 return topPanel.width;
             return searchDropLoader.item ? (searchDropLoader.item.maskItem ? searchDropLoader.item.maskItem.width : 0) : 0;
         }
         height: {
-            if (searchDropLoader.item && searchDropLoader.item.isOverviewVisible)
+            if (searchDropLoader.item && searchDropLoader.item.coversScreen)
                 return topPanel.height;
             return searchDropLoader.item ? (searchDropLoader.item.maskItem ? searchDropLoader.item.maskItem.height : 0) : 0;
         }
@@ -1439,7 +1666,11 @@ PanelWindow {
         }
     }
 
-    Component.onDestruction: GlobalFocusGrab.removeDismissable(topPanel)
+    Component.onDestruction: {
+        GlobalFocusGrab.removeDismissable(topPanel);
+        GlobalStates.setDockBand(topPanel.screen.name, false);
+        GlobalStates.setDockBandCover(topPanel.screen.name, null);
+    }
 
     Connections {
         target: GlobalStates
@@ -1480,6 +1711,44 @@ PanelWindow {
                 } else if (!GlobalStates.policiesDetached && (!GlobalStates.policiesPinned && GlobalStates.policiesHoldOpen === 0)) {
                     GlobalStates.sidebarLeftOpen = false;
                 }
+            }
+        }
+    }
+
+    // A pinned vertical dock pushed by a sidebar, drawn here for the slide so it moves
+    // in the same frames as the sidebar (see GlobalStates.dockPushCopies).
+    Image {
+        id: dockPushCopy
+        readonly property var copy: GlobalStates.dockPushCopies[topPanel.screen.name] ?? null
+        visible: !!copy
+        z: 1000
+        source: copy ? copy.url : ""
+        cache: false
+        asynchronous: false
+        width: copy ? copy.width : 0
+        height: copy ? copy.height : 0
+        y: copy ? copy.y : 0
+        x: {
+            if (!copy)
+                return 0;
+            if (copy.side === "left")
+                return copy.inset + Math.round(GlobalStates.animatedLeftSidebarWidth);
+            return topPanel.width - copy.inset - copy.width - Math.round(GlobalStates.animatedRightSidebarWidth);
+        }
+        readonly property bool ready: visible && status === Image.Ready
+        // A swapped frame is not yet a presented one: the dock hid a frame early and blinked.
+        property int framesOut: 0
+        onReadyChanged: {
+            framesOut = 0;
+            if (!ready)
+                GlobalStates.setDockPushCopyShown(topPanel.screen.name, false);
+        }
+
+        Connections {
+            target: dockPushCopy.ready && !GlobalStates.dockPushCopyShown[topPanel.screen.name] ? dockPushCopy.Window.window : null
+            function onFrameSwapped() {
+                if (++dockPushCopy.framesOut >= 2)
+                    GlobalStates.setDockPushCopyShown(topPanel.screen.name, true);
             }
         }
     }

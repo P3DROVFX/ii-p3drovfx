@@ -15,6 +15,16 @@
       "sha256": "f9e758f06aa1ccaa34a6564c1ef70ce87bb69582da25678ba6bef818b830b057"
     },
     {
+      "id": "english_1k_extended",
+      "label": "English",
+      "file": "languages/english_1k_extended.json",
+      "bcp47": "en",
+      "rightToLeft": false,
+      "joiningScript": false,
+      "wordCount": 9941,
+      "sha256": "cca0e654a9b491df4464284b7a786fa3df41f3922eb7ba9375c4d5343271ce67"
+    },
+    {
       "id": "portuguese",
       "label": "Português",
       "file": "languages/portuguese.json",
@@ -23,6 +33,16 @@
       "joiningScript": false,
       "wordCount": 1000,
       "sha256": "363e5d10e7d3ff4e9c75057b708eb41e16b2becf7aacb87fb9e4b4bd8897ff63"
+    },
+    {
+      "id": "portuguese_extended",
+      "label": "Português",
+      "file": "languages/portuguese_extended.json",
+      "bcp47": "pt-BR",
+      "rightToLeft": false,
+      "joiningScript": false,
+      "wordCount": 5916,
+      "sha256": "6edba3bf1bbc6704692a555a57fcb6da8a7dacab3117f3e0e6474f436ec0388b"
     },
     {
       "id": "spanish",
@@ -35,6 +55,16 @@
       "sha256": "18439d3e194ca5320b598961201c9e76bdcc8c7f77cb8ec692b6222a43f51217"
     },
     {
+      "id": "spanish_extended",
+      "label": "Español",
+      "file": "languages/spanish_extended.json",
+      "bcp47": "es-ES",
+      "rightToLeft": false,
+      "joiningScript": false,
+      "wordCount": 9898,
+      "sha256": "316d290d294220327c6f86d7b99b1c79f8eff7f50a39d567fff5395de46a2c02"
+    },
+    {
       "id": "french",
       "label": "Français",
       "file": "languages/french.json",
@@ -43,6 +73,16 @@
       "joiningScript": false,
       "wordCount": 1394,
       "sha256": "f2958393a566b13cc4137ff1d16a5432b6bea2ef1159f3b92c90f6d7c9a5f86b"
+    },
+    {
+      "id": "french_extended",
+      "label": "Français",
+      "file": "languages/french_extended.json",
+      "bcp47": "fr-FR",
+      "rightToLeft": false,
+      "joiningScript": false,
+      "wordCount": 10187,
+      "sha256": "494dcff38611d655bac187b5274cd42f3db31fd52867dce1d30db1e577a82977"
     },
     {
       "id": "german",
@@ -55,6 +95,16 @@
       "sha256": "a0ecdd9690a06292102357c8e18757f1049c66eff5bd8c8c814fdea2ef1c2994"
     },
     {
+      "id": "german_extended",
+      "label": "Deutsch",
+      "file": "languages/german_extended.json",
+      "bcp47": "de-DE",
+      "rightToLeft": false,
+      "joiningScript": false,
+      "wordCount": 9197,
+      "sha256": "9d7e23a26d5d8fd574e480eefe714a1aad55cef43d5677f7cf6aa883ece68881"
+    },
+    {
       "id": "italian",
       "label": "Italiano",
       "file": "languages/italian.json",
@@ -65,6 +115,16 @@
       "sha256": "cd3c452ad4920b672630b389559949c5d2ceb31240b2c5be298962d815d948d1"
     },
     {
+      "id": "italian_extended",
+      "label": "Italiano",
+      "file": "languages/italian_extended.json",
+      "bcp47": "it-IT",
+      "rightToLeft": false,
+      "joiningScript": false,
+      "wordCount": 91411,
+      "sha256": "7486c7ac788eacb89acfaa3e548507b2e007f1a6496c89757e4cd494712cda25"
+    },
+    {
       "id": "russian",
       "label": "Русский",
       "file": "languages/russian.json",
@@ -73,6 +133,16 @@
       "joiningScript": false,
       "wordCount": 996,
       "sha256": "0a5f5bcd79c5ac9682f5b1015e269bc6577c99dad949ec9fbd1aedf5eb3d0a1f"
+    },
+    {
+      "id": "russian_extended",
+      "label": "Русский",
+      "file": "languages/russian_extended.json",
+      "bcp47": "ru-RU",
+      "rightToLeft": false,
+      "joiningScript": false,
+      "wordCount": 9866,
+      "sha256": "a3a2781fe3b0b44df8fe11867ce463d88b5027ba875ac96c6704dc018e260aaf"
     }
   ]
 }

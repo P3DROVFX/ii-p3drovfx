@@ -25,9 +25,12 @@ Item {
     readonly property int clockMinute: DateTime.clock.minutes
     property int clockSecond: DateTime.clock.seconds
 
+    /** Set by the widget hosting this dial: false while the desktop is covered. */
+    property bool live: true
+
     Timer {
         interval: 1000
-        running: true
+        running: root.live
         repeat: true
         triggeredOnStart: true
         onTriggered: root.clockSecond = new Date().getSeconds()

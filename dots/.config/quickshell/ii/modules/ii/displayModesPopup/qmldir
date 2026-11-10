@@ -1,0 +1,5 @@
+module qs.modules.ii.displayModesPopup
+
+DisplayModesPopup 1.0 DisplayModesPopup.qml
+DisplayModesPopupContent 1.0 DisplayModesPopupContent.qml
+DisplayArrangementStage 1.0 DisplayArrangementStage.qml

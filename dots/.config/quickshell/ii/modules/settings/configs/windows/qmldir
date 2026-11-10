@@ -1,0 +1,5 @@
+module qs.modules.settings.configs.windows
+
+WindowsChoiceCards 1.0 WindowsChoiceCards.qml
+WindowsLookPreview 1.0 WindowsLookPreview.qml
+WindowsSwitcherPreview 1.0 WindowsSwitcherPreview.qml

@@ -93,11 +93,8 @@ Item { // Fullscreen MediaMode instance
     property string artUrl: applicationsSource
         ? MprisController.artUrl
         : (LocalMediaService.player?.trackArtUrl ?? "")
-    property string artDownloadLocation: Directories.coverArt
-    property string artFileName: Qt.md5(artUrl)
-    property string artFilePath: `${artDownloadLocation}/${artFileName}`
-    property bool downloaded: false
-    property string displayedArtFilePath: ""
+    readonly property string displayedArtFilePath: CoverArt.source(root.artUrl)
+    readonly property bool downloaded: root.displayedArtFilePath !== ""
     property bool fileBrowserOpen: false
     property bool showAudioOutputDialog: false
     readonly property bool immersive: Config.options.background.mediaMode.immersive ?? false
@@ -111,9 +108,10 @@ Item { // Fullscreen MediaMode instance
     readonly property string trackTitle: root.player?.trackTitle || ""
 
     // Music video mode state
+    // Only once mpv is really playing: until then the overlay stays opaque, so a
+    // search or a failed load never reveals the windows behind Media Mode.
     readonly property bool videoActive: applicationsSource
-        && Config.options.background.mediaMode.musicVideo.enable
-        && MusicVideoService.videoPlaying
+        && MusicVideoService.videoReady
 
     // Dynamic Color Palette Logic
     property bool dynamicColorEnabled: Config.options.background.mediaMode.changeShellColor
@@ -145,7 +143,10 @@ Item { // Fullscreen MediaMode instance
     }
 
     // Mode state options (Bound to Config.options.background.mediaMode)
-    property int visualizerMode: Config.options.background.mediaMode.visualizerMode ?? 1 // 0: Off, 1: Waves, 2: Bars, 3: Radial
+    property int visualizerMode: Config.options.background.mediaMode.visualizerMode ?? 1 // 0: Off, 1: Waves, 2: Bars, 3: Radial, 4: Halo, 5: Spectrum
+    readonly property var visualizerModeNames: [Translation.tr("Off"), Translation.tr("Waves"), Translation.tr("Bars"),
+        Translation.tr("Radial"), Translation.tr("Halo"), Translation.tr("Spectrum")]
+    readonly property var visualizerModeIcons: ["equalizer", "waves", "bar_chart", "blur_circular", "fit_screen", "flare"]
     property bool showLyricsPanel: Config.options.background.mediaMode.showLyrics ?? true
     property bool showPlayerSwitcher: Config.options.background.mediaMode.showPlayerSwitcher ?? true
 
@@ -219,55 +220,25 @@ Item { // Fullscreen MediaMode instance
         if (videoActive) {
             Quickshell.execDetached(["hyprctl", "keyword", "layerrule", "unset,quickshell:background"]);
         }
+        if (!Idle.inhibit) {
+            GlobalStates.mediaModeActivatedKeepAwake = true;
+            Idle.toggleInhibit(true);
+        }
     }
     Component.onDestruction: {
         Quickshell.execDetached(["hyprctl", "keyword", "layerrule", "blur,quickshell:background"]);
+        if (GlobalStates.mediaModeActivatedKeepAwake && Idle.inhibit && !Idle.timed) {
+            if (GlobalStates.mediaModeCount <= 1) {
+                GlobalStates.mediaModeActivatedKeepAwake = false;
+                Idle.toggleInhibit(false);
+            }
+        }
     }
 
     onTrackTitleChanged: Persistent.states.background.mediaMode.userScrollOffset = 0
 
-    function updateArt() {
-        if (!root.artUrl) {
-            root.displayedArtFilePath = "";
-            root.downloaded = false;
-            return;
-        }
-        if (root.artUrl && root.artUrl.startsWith("file://")) {
-            root.displayedArtFilePath = root.artUrl;
-            root.downloaded = true;
-            return;
-        }
-
-        coverArtDownloader.targetFile = root.artUrl;
-        coverArtDownloader.artFilePath = root.artFilePath;
-        root.downloaded = false;
-        coverArtDownloader.running = true;
-    }
-
     function refreshArtwork() {
-        root.displayedArtFilePath = "";
-        root.updateArt();
-    }
-
-    onArtFilePathChanged: {
-        if (!root.artUrl || root.artUrl.length == 0) {
-            root.displayedArtFilePath = "";
-            return;
-        }
-        updateArt();
-    }
-
-    Process { // Cover art downloader
-        id: coverArtDownloader
-        property string targetFile: root.artUrl
-        property string artFilePath: root.artFilePath
-        command: ["bash", "-c", `[ -f '${artFilePath}' ] || curl -sSL '${targetFile}' -o '${artFilePath}'`]
-        onExited: (exitCode, exitStatus) => {
-            if (exitCode === 0) {
-                root.displayedArtFilePath = Qt.resolvedUrl(root.artFilePath);
-                root.downloaded = true;
-            }
-        }
+        CoverArt.retry(root.artUrl);
     }
 
     ColorQuantizer {
@@ -502,11 +473,7 @@ Item { // Fullscreen MediaMode instance
 
             // Music video mode state
             readonly property bool videoActive: root.videoActive
-            readonly property bool videoSearching: root.applicationsSource
-                && Config.options.background.mediaMode.musicVideo.enable
-                && MusicVideoService.searchFailed === false
-                && !MusicVideoService.videoPlaying
-                && MusicVideoService.lastSearchQuery !== ""
+            readonly property bool videoSearching: root.applicationsSource && MusicVideoService.searching
 
             // Fullscreen Background Base
             Rectangle {
@@ -652,6 +619,31 @@ Item { // Fullscreen MediaMode instance
                     }
                 }
 
+                // Screen-edge halo and outward circle spectrum (shaders)
+                HaloVisualizer {
+                    anchors.fill: parent
+                    visible: root.visualizerMode === 4
+                    z: 3
+                    live: root.player?.isPlaying ?? false
+                    points: root.visualizerPoints
+                    coreColor: root.dynamicAccentColor
+                    colorA: Appearance.colors.colPrimary
+                    colorB: Appearance.colors.colTertiary
+                }
+
+                CircleSpectrumVisualizer {
+                    anchors.centerIn: parent
+                    width: Math.min(parent.width, parent.height) * 0.7
+                    height: width
+                    visible: root.visualizerMode === 5
+                    z: 3
+                    live: root.player?.isPlaying ?? false
+                    points: root.visualizerPoints
+                    coreColor: root.dynamicAccentColor
+                    colorA: Appearance.colors.colPrimary
+                    colorB: Appearance.colors.colTertiary
+                }
+
                 // Main Fullscreen Content Column
                 ColumnLayout {
                     anchors.fill: parent
@@ -698,11 +690,11 @@ Item { // Fullscreen MediaMode instance
                                         MaterialSymbol {
                                             iconSize: 16
                                             color: playerChip.isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
-                                            text: modelData.isPlaying ? "graphic_eq" : "music_note"
+                                            text: modelData?.isPlaying ? "graphic_eq" : "music_note"
                                         }
 
                                         StyledText {
-                                            text: modelData.identity || modelData.desktopEntry || Translation.tr("Player")
+                                            text: modelData?.identity || modelData?.desktopEntry || Translation.tr("Player")
                                             font.pixelSize: Appearance.font.pixelSize.small
                                             font.weight: playerChip.isActive ? Font.Bold : Font.Medium
                                             color: playerChip.isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
@@ -717,7 +709,7 @@ Item { // Fullscreen MediaMode instance
                                     }
 
                                     StyledToolTip {
-                                        text: Translation.tr("Switch active player to ") + (modelData.identity || modelData.desktopEntry || Translation.tr("Player"))
+                                        text: Translation.tr("Switch active player to ") + (modelData?.identity || modelData?.desktopEntry || Translation.tr("Player"))
                                     }
                                 }
 
@@ -898,24 +890,16 @@ Item { // Fullscreen MediaMode instance
                                     anchors.centerIn: parent
                                     iconSize: 20
                                     color: root.dynamicOnAccentContainer
-                                    text: {
-                                        if (root.visualizerMode === 1)
-                                            return "waves";
-                                        if (root.visualizerMode === 2)
-                                            return "bar_chart";
-                                        if (root.visualizerMode === 3)
-                                            return "blur_circular";
-                                        return "equalizer";
-                                    }
+                                    text: root.visualizerModeIcons[root.visualizerMode] ?? "equalizer"
                                 }
 
                                 onClicked: {
-                                    var nextMode = (root.visualizerMode + 1) % 4;
+                                    var nextMode = (root.visualizerMode + 1) % root.visualizerModeNames.length;
                                     Config.options.background.mediaMode.visualizerMode = nextMode;
                                 }
 
                                 PopupToolTip {
-                                    text: Translation.tr("Visualizer Mode: ") + (root.visualizerMode === 1 ? Translation.tr("Waves") : (root.visualizerMode === 2 ? Translation.tr("Bars") : (root.visualizerMode === 3 ? Translation.tr("Radial") : Translation.tr("Off"))))
+                                    text: Translation.tr("Visualizer Mode: ") + (root.visualizerModeNames[root.visualizerMode] ?? Translation.tr("Off"))
                                 }
                             }
 
@@ -994,12 +978,15 @@ Item { // Fullscreen MediaMode instance
                                         text: "remove"
                                     }
 
+                                    autoRepeat: true
+                                    autoRepeatDelay: 400
+                                    autoRepeatInterval: 90
                                     onClicked: {
-                                        Config.options.background.mediaMode.lyricsOffsetMs = (Config.options.background.mediaMode.lyricsOffsetMs ?? 0) - 250;
+                                        Config.options.background.mediaMode.lyricsOffsetMs = (Config.options.background.mediaMode.lyricsOffsetMs ?? 0) - 50;
                                     }
 
                                     PopupToolTip {
-                                        text: Translation.tr("Nudge Lyrics -250ms (Earlier)")
+                                        text: Translation.tr("Delay lyrics by 50 ms")
                                     }
                                 }
 
@@ -1018,12 +1005,15 @@ Item { // Fullscreen MediaMode instance
                                         text: "add"
                                     }
 
+                                    autoRepeat: true
+                                    autoRepeatDelay: 400
+                                    autoRepeatInterval: 90
                                     onClicked: {
-                                        Config.options.background.mediaMode.lyricsOffsetMs = (Config.options.background.mediaMode.lyricsOffsetMs ?? 0) + 250;
+                                        Config.options.background.mediaMode.lyricsOffsetMs = (Config.options.background.mediaMode.lyricsOffsetMs ?? 0) + 50;
                                     }
 
                                     PopupToolTip {
-                                        text: Translation.tr("Nudge Lyrics +250ms (Later)")
+                                        text: Translation.tr("Advance lyrics by 50 ms")
                                     }
                                 }
                             }
@@ -1044,17 +1034,10 @@ Item { // Fullscreen MediaMode instance
                                     text: videoActive ? "play_circle" : (videoSearching ? "hourglass_top" : "music_video")
                                 }
 
-                                onClicked: {
-                                    Config.options.background.mediaMode.musicVideo.enable = !Config.options.background.mediaMode.musicVideo.enable;
-                                    if (Config.options.background.mediaMode.musicVideo.enable) {
-                                        MusicVideoService.tryPlayCurrent();
-                                    } else {
-                                        MusicVideoService.stopVideo();
-                                    }
-                                }
+                                onClicked: MusicVideoService.toggle()
 
                                 PopupToolTip {
-                                    text: Config.options.background.mediaMode.musicVideo.enable ? Translation.tr("Music Video Background: ON (click to disable)") : Translation.tr("Music Video Background: OFF (click to enable)")
+                                    text: MusicVideoService.active ? Translation.tr("Music Video Background: ON (click to disable)") : Translation.tr("Music Video Background: OFF (click to enable)")
                                 }
                             }
 
@@ -1201,6 +1184,66 @@ Item { // Fullscreen MediaMode instance
         onTrackPlayed: root.fileBrowserOpen = false
         onFolderPlayed: root.fileBrowserOpen = false
     }
+    // Short notice when the music video mode turns itself off (no result, load error).
+    Rectangle {
+        id: musicVideoNotice
+        property string message: ""
+        property bool shown: false
+        z: 120
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: Appearance.sizes.elevationMargin * 4 + (shown ? 0 : -Appearance.sizes.elevationMargin * 2)
+        implicitWidth: noticeRow.implicitWidth + Appearance.sizes.elevationMargin * 4
+        implicitHeight: Appearance.sizes.minimumTouchTarget
+        radius: Appearance.rounding.full
+        color: Appearance.m3colors.m3inverseSurface
+        opacity: shown ? 1 : 0
+        visible: opacity > 0
+        Behavior on opacity {
+            NumberAnimation {
+                duration: Appearance.animation.elementMoveFast.duration
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+            }
+        }
+        Behavior on anchors.bottomMargin {
+            NumberAnimation {
+                duration: Appearance.animation.elementMoveFast.duration
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+            }
+        }
+        RowLayout {
+            id: noticeRow
+            anchors.centerIn: parent
+            spacing: Appearance.sizes.elevationMargin
+            MaterialSymbol {
+                text: "videocam_off"
+                iconSize: Appearance.font.pixelSize.larger
+                color: Appearance.m3colors.m3inverseOnSurface
+            }
+            StyledText {
+                text: musicVideoNotice.message
+                color: Appearance.m3colors.m3inverseOnSurface
+                font.pixelSize: Appearance.font.pixelSize.normal
+                font.weight: Font.DemiBold
+            }
+        }
+        Timer {
+            id: musicVideoNoticeTimer
+            interval: 3200
+            onTriggered: musicVideoNotice.shown = false
+        }
+        Connections {
+            target: MusicVideoService
+            function onFailed(message) {
+                musicVideoNotice.message = message;
+                musicVideoNotice.shown = true;
+                musicVideoNoticeTimer.restart();
+            }
+        }
+    }
+
     DialogHostLoader {
         owner: root
         shownPropertyString: "showAudioOutputDialog"

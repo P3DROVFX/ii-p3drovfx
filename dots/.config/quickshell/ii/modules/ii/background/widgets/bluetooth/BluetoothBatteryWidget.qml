@@ -8,6 +8,7 @@ import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.modules.ii.background.widgets
+import qs.modules.ii.background.overview
 
 AbstractBackgroundWidget {
     id: root
@@ -57,94 +58,48 @@ AbstractBackgroundWidget {
             anchors.fill: parent
 
             // === 1. PERCENTAGE TEXT AT BOTTOM (Vertical Progressive Blur) ===
+            // The figure sinks below the card's bottom edge and blurs harder the
+            // lower it goes. One layer, blurred by a shader whose radius grows
+            // along y: the old sharp/blurred pair crossfaded through two
+            // gradient masks only faded the text out, and FastBlur clipped the
+            // glyphs to a box shorter than the type.
             Item {
                 id: percentageContainer
+                // Room around the glyphs for the blur to spread into; the card
+                // clips what falls past its edge.
+                readonly property real blurPadding: 24
+                readonly property real textBoxHeight: 105
+                readonly property real sinkBelowCard: 32
+                // The card's bottom edge, as a fraction of this item's height.
+                readonly property real cardEdgeAt: (height - blurPadding - sinkBelowCard) / height
+
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
-                anchors.bottomMargin: -32
-                height: 105
+                anchors.bottomMargin: -(sinkBelowCard + blurPadding)
+                height: textBoxHeight + blurPadding * 2
                 visible: root.isConnected
 
-                // Raw Text Source Component
-                Item {
-                    id: textSourceItem
-                    anchors.fill: parent
-                    visible: false
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: root.batteryPercent + "%"
-                        color: root.textColorOnBg
-                        font {
-                            pixelSize: 100
-                            weight: Font.Black
-                            bold: true
-                            family: "Google Sans Flex"
-                            variableAxes: ({ "wght": 900, "ROND": 100 })
-                        }
+                Text {
+                    anchors.centerIn: parent
+                    text: root.batteryPercent + "%"
+                    color: root.textColorOnBg
+                    font {
+                        pixelSize: 100
+                        weight: Font.Black
+                        bold: true
+                        family: "Google Sans Flex"
+                        variableAxes: ({ "wght": 900, "ROND": 100 })
                     }
                 }
 
-                // Blurred Text Source (Heavy Blur for the bottom portion)
-                FastBlur {
-                    id: blurredTextSource
-                    anchors.fill: parent
-                    source: textSourceItem
-                    radius: 28
-                    visible: false
-                }
-
-                // Sharp Text (Visible mainly on upper half)
-                OpacityMask {
-                    anchors.fill: parent
-                    source: textSourceItem
-                    maskSource: sharpMask
-                }
-
-                // Blurred Text (Visible mainly on lower half, fading down)
-                OpacityMask {
-                    anchors.fill: parent
-                    source: blurredTextSource
-                    maskSource: blurMask
-                }
-
-                // Gradient mask for Sharp Top Portion (100% top -> 0% bottom, shifted down)
-                Item {
-                    id: sharpMask
-                    anchors.fill: parent
-                    visible: false
-
-                    LinearGradient {
-                        anchors.fill: parent
-                        start: Qt.point(0, 0)
-                        end: Qt.point(0, parent.height)
-                        gradient: Gradient {
-                            GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 1.0) }
-                            GradientStop { position: 0.50; color: Qt.rgba(1, 1, 1, 1.0) }
-                            GradientStop { position: 0.72; color: Qt.rgba(1, 1, 1, 0.35) }
-                            GradientStop { position: 0.95; color: Qt.rgba(1, 1, 1, 0.0) }
-                        }
-                    }
-                }
-
-                // Gradient mask for Blurred Bottom Portion (shifted down)
-                Item {
-                    id: blurMask
-                    anchors.fill: parent
-                    visible: false
-
-                    LinearGradient {
-                        anchors.fill: parent
-                        start: Qt.point(0, 0)
-                        end: Qt.point(0, parent.height)
-                        gradient: Gradient {
-                            GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.0) }
-                            GradientStop { position: 0.52; color: Qt.rgba(1, 1, 1, 0.15) }
-                            GradientStop { position: 0.80; color: Qt.rgba(1, 1, 1, 0.95) }
-                            GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, 0.25) }
-                        }
-                    }
+                layer.enabled: visible
+                layer.smooth: true
+                layer.effect: ProgressiveBlur {
+                    blurStart: (percentageContainer.blurPadding + percentageContainer.textBoxHeight * 0.1) / percentageContainer.height
+                    blurEnd: percentageContainer.cardEdgeAt
+                    maxRadius: 12
+                    endOpacity: 0.6
                 }
             }
 

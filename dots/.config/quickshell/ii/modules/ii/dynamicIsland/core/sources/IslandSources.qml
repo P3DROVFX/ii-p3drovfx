@@ -1,0 +1,96 @@
+pragma ComponentBehavior: Bound
+
+import QtQuick
+
+/**
+ * Every source the island has, in one place.
+ *
+ * The controller stays generic: it asks this object for the source of an activity id and
+ * never knows what a clipboard or a workspace is. Adding an activity is a descriptor in
+ * IslandRegistry, a source here, and a presentation - no edits to the arbitration.
+ *
+ * The clock has no source: there is no event that makes a clock happen, it is simply
+ * what the centre shows when nothing else needs it. The controller synthesises it.
+ */
+Item {
+    id: sources
+
+    visible: false
+
+    readonly property list<QtObject> all: [
+        // Interrupts first, only because it reads in priority order here; the actual
+        // arbitration is IslandRegistry's tier, not this list.
+        windowSwitcher, askpass, search, wallpaper, session, colorPicker, displayModes, notification, osd, phoneCall, alarm, reminder, fingerprint,
+        // Live and ambient.
+        ai, media, timer, recording, dictation, localSend, shelf, progress, songRec, teleprompter,
+        // Side glances.
+        earbuds, btPhone, weather, batteryGlance, reminderSoon, privacy, discordVoice, phoneMirror, phoneLink, sports, phoneLive,
+        // Announcements.
+        health, phoneMirrorError, phoneKeyboard, workspaces, clipboard, battery, wifi, bluetooth, keyboard, mode, update, vpn, systemTray,
+        easyEffects
+    ]
+
+    readonly property WindowSwitcherSource windowSwitcher: WindowSwitcherSource {}
+    readonly property AskpassSource askpass: AskpassSource {}
+    readonly property SearchSource search: SearchSource {}
+    readonly property WallpaperSource wallpaper: WallpaperSource {}
+    readonly property SessionSource session: SessionSource {}
+    readonly property ColorPickerSource colorPicker: ColorPickerSource {}
+    readonly property DisplayModesSource displayModes: DisplayModesSource {}
+    readonly property NotificationSource notification: NotificationSource {}
+    readonly property OsdSource osd: OsdSource {}
+    readonly property PhoneCallSource phoneCall: PhoneCallSource {}
+    readonly property FingerprintSource fingerprint: FingerprintSource {}
+    readonly property AlarmSource alarm: AlarmSource {}
+    readonly property ReminderSource reminder: ReminderSource {}
+    readonly property ReminderSoonSource reminderSoon: ReminderSoonSource {}
+    readonly property SongRecSource songRec: SongRecSource {}
+    readonly property SportsSource sports: SportsSource {}
+    readonly property PhoneLiveSource phoneLive: PhoneLiveSource {}
+    readonly property VpnSource vpn: VpnSource {}
+    readonly property AiSource ai: AiSource {}
+    readonly property MediaSource media: MediaSource {}
+    readonly property TimerSource timer: TimerSource {}
+    readonly property RecordingSource recording: RecordingSource {}
+    readonly property TeleprompterSource teleprompter: TeleprompterSource {}
+    readonly property DictationSource dictation: DictationSource {}
+    readonly property LocalSendSource localSend: LocalSendSource {}
+    readonly property ShelfSource shelf: ShelfSource {}
+    readonly property ProgressSource progress: ProgressSource {}
+    readonly property EarbudsSource earbuds: EarbudsSource {}
+    readonly property BluetoothPhoneSource btPhone: BluetoothPhoneSource {}
+    readonly property WeatherSource weather: WeatherSource {}
+    readonly property BatteryGlanceSource batteryGlance: BatteryGlanceSource {}
+    readonly property PrivacySource privacy: PrivacySource {}
+    readonly property DiscordVoiceSource discordVoice: DiscordVoiceSource {}
+    readonly property PhoneMirrorSource phoneMirror: PhoneMirrorSource {}
+    readonly property PhoneMirrorErrorSource phoneMirrorError: PhoneMirrorErrorSource {}
+    readonly property PhoneKeyboardSource phoneKeyboard: PhoneKeyboardSource {}
+    readonly property PhoneLinkSource phoneLink: PhoneLinkSource {}
+    readonly property WorkspaceSource workspaces: WorkspaceSource {}
+    readonly property ClipboardSource clipboard: ClipboardSource {}
+    readonly property BatterySource battery: BatterySource {}
+    readonly property WifiSource wifi: WifiSource {}
+    readonly property BluetoothSource bluetooth: BluetoothSource {}
+    readonly property KeyboardLayoutSource keyboard: KeyboardLayoutSource {}
+    readonly property ModeSource mode: ModeSource {}
+    readonly property UpdateSource update: UpdateSource {}
+    readonly property SystemTraySource systemTray: SystemTraySource {}
+    readonly property EasyEffectsSource easyEffects: EasyEffectsSource {}
+    readonly property HealthSource health: HealthSource {}
+
+    function sourceFor(activityId) {
+        for (let i = 0; i < sources.all.length; i++) {
+            if (sources.all[i].activityId === activityId)
+                return sources.all[i];
+        }
+        return null;
+    }
+
+    /** Tell every source whether the pointer is on its activity, to hold TTLs open. */
+    function setHovered(activityId, hovered) {
+        const source = sources.sourceFor(activityId);
+        if (source)
+            source.hovered = hovered;
+    }
+}

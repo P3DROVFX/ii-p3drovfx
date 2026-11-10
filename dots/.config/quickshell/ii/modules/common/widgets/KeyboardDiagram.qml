@@ -125,26 +125,38 @@ Item {
                     }
                 }
             }
-            RippleButton {
-                id: keyButton
+            // A full button per cap is most of the diagram's cost, and only the
+            // caps under the pointer ever show one. The first hover builds it
+            // and keeps it; touch-first families have no hover, so they get
+            // every button up front as before.
+            property bool buttonWanted: false
+            HoverHandler {
+                enabled: (root.interactive || root.hintTooltips) && !cap.buttonWanted
+                onHoveredChanged: if (hovered) cap.buttonWanted = true
+            }
+            Loader {
                 anchors.fill: parent
-                visible: root.interactive || root.hintTooltips
-                focusPolicy: root.preserveInputFocus ? Qt.NoFocus : Qt.StrongFocus
-                readonly property string keyDescription: (cap.entry.label || Translation.tr("Unassigned key"))
-                    + (cap.hint.name ? " · " + cap.hint.name : (cap.entry.description ? ": " + cap.entry.description : ""))
-                onHoveredChanged: {
-                    if (hovered) root.hoveredKeyButton = keyButton;
-                    else if (root.hoveredKeyButton === keyButton) root.hoveredKeyButton = null;
+                active: (root.interactive || root.hintTooltips) && (cap.buttonWanted || PanelFamily.touchFirst)
+                sourceComponent: RippleButton {
+                    id: keyButton
+                    anchors.fill: parent
+                    focusPolicy: root.preserveInputFocus ? Qt.NoFocus : Qt.StrongFocus
+                    readonly property string keyDescription: (cap.entry.label || Translation.tr("Unassigned key"))
+                        + (cap.hint.name ? " · " + cap.hint.name : (cap.entry.description ? ": " + cap.entry.description : ""))
+                    onHoveredChanged: {
+                        if (hovered) root.hoveredKeyButton = keyButton;
+                        else if (root.hoveredKeyButton === keyButton) root.hoveredKeyButton = null;
+                    }
+                    Component.onDestruction: {
+                        if (root && root.hoveredKeyButton === keyButton) root.hoveredKeyButton = null;
+                    }
+                    scale: 1
+                    buttonRadius: Appearance.rounding.verysmall
+                    colBackground: "transparent"
+                    colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.82)
+                    Accessible.name: (cap.entry.label || Translation.tr("Unassigned key")) + (cap.entry.description ? ": " + cap.entry.description : "")
+                    onClicked: if (root.interactive) root.keyClicked(cap.index)
                 }
-                Component.onDestruction: {
-                    if (root && root.hoveredKeyButton === keyButton) root.hoveredKeyButton = null;
-                }
-                scale: 1
-                buttonRadius: Appearance.rounding.verysmall
-                colBackground: "transparent"
-                colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.82)
-                Accessible.name: (cap.entry.label || Translation.tr("Unassigned key")) + (cap.entry.description ? ": " + cap.entry.description : "")
-                onClicked: if (root.interactive) root.keyClicked(cap.index)
             }
         }
     }

@@ -1,5 +1,6 @@
 import qs
 import qs.modules.common
+import qs.services
 import qs.modules.common.widgets
 import QtQuick
 import QtQuick.Layouts
@@ -15,6 +16,11 @@ Item {
     property bool vertical: BarPlacement.vertical
     property bool isMaterial: true
 
+    BarWidgetPalette {
+        id: widgetPalette
+        colorMode: Config.options.bar.utilButtons.colorMode
+    }
+
     implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : pill.implicitWidth
     implicitHeight: vertical ? pill.implicitHeight : Appearance.sizes.baseBarHeight
     width: implicitWidth
@@ -23,10 +29,14 @@ Item {
     Rectangle {
         id: pill
         anchors.centerIn: parent
-        color: isMaterial ? Appearance.colors.colPrimaryContainer : "transparent"
-        radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
+        color: isMaterial ? widgetPalette.colBackground : "transparent"
+        radius: (typeof rootItem !== "undefined" ? rootItem.groupStyle : Config.options.bar.barGroupStyle) === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
         implicitWidth: isMaterial && !root.vertical ? flow.implicitWidth + 10 : root.vertical ? Appearance.sizes.verticalBarWidth - 8 : flow.implicitWidth + 4
         implicitHeight: isMaterial && root.vertical ? flow.implicitHeight + 10 : isMaterial ? Appearance.sizes.baseBarHeight - 8 : root.vertical ? flow.implicitHeight + 4 : Appearance.sizes.baseBarHeight
+
+        Behavior on color {
+            ColorAnimation { duration: Appearance.animation.elementMoveFast.duration }
+        }
 
 
 
@@ -58,6 +68,34 @@ Item {
                         fill: 1; text: "screenshot_region"
                         iconSize: Appearance.font.pixelSize.large
                         color: Appearance.colors.colOnPrimaryContainer
+                    }
+                }
+            }
+
+            Loader {
+                active: Config.options.bar.utilButtons.showLiveDraw && LiveDraw.enabled
+                visible: active
+                sourceComponent: isMaterial ? liveDrawM3 : legacyLiveDraw
+            }
+            Component {
+                id: liveDrawM3
+                UtilButton {
+                    vertical: root.vertical
+                    iconText: "draw"
+                    forceHovered: LiveDraw.trayOpen
+                    onClicked: LiveDraw.toggle()
+                }
+            }
+            Component {
+                id: legacyLiveDraw
+                CircleUtilButton {
+                    onClicked: LiveDraw.toggle()
+                    MaterialSymbol {
+                        horizontalAlignment: Qt.AlignHCenter
+                        fill: LiveDraw.trayOpen ? 1 : 0
+                        text: "draw"
+                        iconSize: Appearance.font.pixelSize.large
+                        color: Appearance.colors.colOnLayer2
                     }
                 }
             }
@@ -129,7 +167,7 @@ Item {
                         id: btn
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
-                        colBackground: recordingItem.isRecording ? Appearance.colors.colPrimaryContainer : "transparent"
+                        colBackground: recordingItem.isRecording ? widgetPalette.colBackgroundVariant : "transparent"
                         buttonRadius: recordingItem.isRecording ? Appearance.rounding.normal : implicitHeight / 2
                         onClicked: Quickshell.execDetached(recordingItem.isRecording
                             ? [Directories.recordScriptPath]
@@ -146,7 +184,7 @@ Item {
                             fill: 1
                             text: recordingItem.isRecording ? "stop" : "screen_record"
                             iconSize: Appearance.font.pixelSize.large
-                            color: recordingItem.isRecording ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer2
+                            color: recordingItem.isRecording ? widgetPalette.colOnBackgroundVariant : Appearance.colors.colOnLayer2
                             Behavior on color { ColorAnimation { duration: 200 } }
                         }
                     }
@@ -374,6 +412,34 @@ Item {
                             case PowerProfile.Balanced: return "airwave"
                             case PowerProfile.Performance: return "local_fire_department"
                         }
+                        iconSize: Appearance.font.pixelSize.large
+                        color: Appearance.colors.colOnLayer2
+                    }
+                }
+            }
+
+            Loader {
+                active: Config.options.bar.utilButtons.showPhoneMirror
+                visible: active
+                sourceComponent: isMaterial ? phoneMirrorM3 : legacyPhoneMirror
+            }
+            Component {
+                id: phoneMirrorM3
+                UtilButton {
+                    vertical: root.vertical
+                    iconText: GlobalStates.phoneMirrorRunning ? "screen_share" : "smartphone"
+                    forceHovered: GlobalStates.phoneMirrorRunning
+                    onClicked: PhoneScrcpyService.openMirrorWindow()
+                }
+            }
+            Component {
+                id: legacyPhoneMirror
+                CircleUtilButton {
+                    onClicked: PhoneScrcpyService.openMirrorWindow()
+                    MaterialSymbol {
+                        horizontalAlignment: Qt.AlignHCenter
+                        fill: GlobalStates.phoneMirrorRunning ? 1 : 0
+                        text: GlobalStates.phoneMirrorRunning ? "screen_share" : "smartphone"
                         iconSize: Appearance.font.pixelSize.large
                         color: Appearance.colors.colOnLayer2
                     }

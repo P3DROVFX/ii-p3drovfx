@@ -176,6 +176,10 @@ Item {
                 width: flickable.width - 12
                 spacing: 16
             }
+
+            TouchpadScrollHandler {
+                flickable: flickable
+            }
         }
     }
 }

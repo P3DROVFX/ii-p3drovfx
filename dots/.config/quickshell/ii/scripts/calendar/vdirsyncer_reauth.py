@@ -29,11 +29,12 @@ from pathlib import Path
 from typing import Any
 
 
-DEFAULT_SCOPES = (
-    "https://www.googleapis.com/auth/calendar "
-    "https://www.googleapis.com/auth/calendar.events "
-    "email profile"
-)
+# Must equal GoogleCalendarStorage.scope in vdirsyncer. Google answers every
+# refresh with the scope set of the original grant, and oauthlib aborts the
+# refresh ("Scope has changed") when it differs from the scope vdirsyncer asks
+# for, so any extra scope here breaks sync once the first access token expires.
+VDIRSYNCER_SCOPE = "https://www.googleapis.com/auth/calendar"
+DEFAULT_SCOPES = VDIRSYNCER_SCOPE
 
 
 def default_vdirsyncer_config() -> Path | None:
@@ -382,22 +383,10 @@ def run_reauth(
                     self._send_page(400, _error_html("Google did not return a refresh token."))
                     return
 
-                email = ""
-                try:
-                    userinfo_req = urllib.request.Request(
-                        "https://www.googleapis.com/oauth2/v2/userinfo",
-                        headers={"Authorization": f"Bearer {access_token}"},
-                    )
-                    with urllib.request.urlopen(userinfo_req, timeout=10) as u_resp:
-                        userinfo = json.loads(u_resp.read().decode("utf-8"))
-                        email = str(userinfo.get("email") or "")
-                except Exception:
-                    pass
-
                 vdirsyncer_token = {
                     "access_token": access_token,
                     "expires_in": expires_in,
-                    "scope": ["https://www.googleapis.com/auth/calendar"],
+                    "scope": str(tokens.get("scope") or scopes).split(),
                     "token_type": token_type,
                     "expires_at": time.time() + expires_in,
                     "refresh_token": refresh_token,
@@ -406,11 +395,8 @@ def run_reauth(
 
                 exchange_state["result"] = {
                     "ok": True,
-                    "email": email,
                     "token_file": str(token_file),
                     "expires_in": expires_in,
-                    "refresh_token": refresh_token,
-                    "access_token": access_token,
                 }
                 exchange_state["done"] = True
 

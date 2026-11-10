@@ -17,6 +17,8 @@ Item {
     default property alias toolbarData: toolbarLayout.data
     implicitWidth: background.implicitWidth
     implicitHeight: background.implicitHeight
+    width: implicitWidth
+    height: implicitHeight
     property alias radius: background.radius
 
     Loader {

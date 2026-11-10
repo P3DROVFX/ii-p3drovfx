@@ -32,6 +32,25 @@ Singleton {
             ]
         },
         {
+            channel: "ethernet",
+            title: "Ethernet",
+            icon: "lan",
+            cues: [
+                { name: "connecting", label: "Connecting" },
+                { name: "connected", label: "Cable connected" },
+                { name: "disconnected", label: "Cable unplugged" }
+            ]
+        },
+        {
+            channel: "hotspot",
+            title: "Hotspot",
+            icon: "wifi_tethering",
+            cues: [
+                { name: "started", label: "Hotspot on" },
+                { name: "stopped", label: "Hotspot off" }
+            ]
+        },
+        {
             channel: "bluetooth",
             title: "Bluetooth",
             icon: "bluetooth",

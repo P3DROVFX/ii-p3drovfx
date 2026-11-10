@@ -23,11 +23,13 @@
 #   list-branches [fork]    Show a fork's remote branches
 #   restart                 Restart Quickshell (alias: run)
 #   doctor                  Report resolved paths, active state and tooling
+#   deps [add|remove|list]  Show, install or remove optional feature packages
 #   hyprset <args>          Write a Hyprland key or animation
 #   hyprmerge <args>        Merge a Hyprland config into the local one
 #   remove-cli              Remove the ii-p3drovfx symlink
 #   help                    Print the full surface (alias: -h, --help)
-#   version                 Print the version (alias: -V, --version)
+#   version                 Print the deployed fork, branch and commit
+#                           (alias: -V, --version)
 #   demo                    Render every UI primitive and exit
 #
 # ── Options ──────────────────────────────────────────────────────────────────
@@ -42,12 +44,16 @@
 #       --no-backup           Discard the replaced config instead
 #       --keep-config         Never reset ~/.config/illogical-impulse/config.json
 #       --reset-config        Always reset it (a backup is kept)
+#       --force               Redeploy even when already on the remote commit
 #       --no-restart          Leave Quickshell alone when finished
-#       --hypr                Install the fork's ~/.config/hypr files
+#       --hypr                Install the fork's ~/.config/hypr files (recommended)
 #       --no-hypr             Never install them, never ask
 #       --rebuild-quickshell  Rebuild Quickshell from source first
 #       --skip-base-check     Do not require illogical-impulse to be present
 #       --ii-subdir <name>    Override ii* auto-detection in the clone
+#       --add <ids>           deps: install these features ("core": the required set)
+#       --remove <ids>        deps: uninstall what deps installed for them
+#       --list                deps: print the table and exit
 #       --log-file <path>     Write the run log elsewhere
 #       --no-log              Do not write a run log
 #       --ascii               ASCII glyphs only
@@ -58,6 +64,15 @@
 # and prints the --local line to re-run, so a stale checkout is never silently
 # redeployed.
 #
+# `install` always takes the base from end-4's own ./setup (github.com/end-4/
+# dots-hyprland), never from a copy in this repository, and then deploys the
+# fork's config — or the --local one — on top.
+#
+# install and update (and every other deployment) finish by offering the core
+# packages listed in defaults/dependencies.json. Optional ones, one group per
+# feature, are only ever installed through `deps`; `deps --remove` uninstalls
+# only what `deps` itself installed, recorded in ~/.local/state/ii-p3drovfx.
+#
 # On Arch, `install` ends by putting the AUR quickshell-git back: the base
 # installer builds its own pinned quickshell and this fork is written against
 # master. That happens before any config lands, and asks first unless -y.
@@ -66,14 +81,21 @@
 # updates and branch hops and reset on fork switches, where the schema changes.
 #
 # apply, install, update and switch offer to overlay the fork's Hyprland config
-# on ~/.config/hypr. Given neither --hypr nor --no-hypr it is a question, and
-# -y answers it "no" rather than "yes": the Settings update button runs
-# unattended and must not rewrite Hyprland underneath you. --hypr is the way to
-# ask for it in a script.
+# on ~/.config/hypr, which is recommended: the shell is written against its
+# binds and rules. Given neither --hypr nor --no-hypr it is a question, which
+# -y answers "yes" like any other. The Settings update button passes one of the
+# two from its toggle; --no-hypr is the way to keep it out of a script.
 #
 # Every successful config deployment opens the in-shell Welcome over IPC except
 # `update`. This does not depend on installing the fork's Hyprland files; their
 # Welcome rule only controls whether the compositor floats the window.
+#
+# Remote sources are fetched into a shallow cache repo under
+# ~/.cache/ii-p3drovfx/repos, so an update downloads only what changed. A cache
+# that fails any check is deleted and fetched again once; it holds nothing that
+# cannot be rebuilt. `update` compares the remote commit with the deployed one
+# first and, when they match, asks before redeploying (-y declines, --force
+# accepts).
 #
 # Options take --flag=value as well as --flag value, and everything after a
 # bare -- is passed through to hyprset/hyprmerge.
@@ -84,8 +106,6 @@
 # --update, --switch, --list-forks, --list-branches, --demo.
 
 set -Eeuo pipefail
-
-SETUP_VERSION="2.0.0"
 
 # ── Resolve this script's real directory (follows symlinks) ──────────────────
 _source="${BASH_SOURCE[0]}"
@@ -105,7 +125,9 @@ unset _source _dir
 XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
+XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
 
+CACHE_DIR="$XDG_CACHE_HOME/ii-p3drovfx/repos" # shallow repos, one per remote
 MIRROR_DIR="$XDG_DATA_HOME/ii-p3drovfx"       # installed copy of this script + libs
 SETUP_STATE_DIR="$XDG_STATE_HOME/ii-p3drovfx" # logs and backups
 BACKUP_BASE_DIR="$SETUP_STATE_DIR/backups"
@@ -150,16 +172,27 @@ declare -A PRESET_CANONICAL=(
 FALLBACK_URL="https://github.com/P3DROVFX/ii-p3drovfx"
 FALLBACK_BRANCH="main"
 
+# Where `install` gets the base illogical-impulse dotfiles from. Always end-4's
+# own installer: the fork only layers its Quickshell config on top.
+BASE_INSTALLER_URL="${PRESET_URLS[end4]}"
+BASE_INSTALLER_BRANCH="${PRESET_BRANCHES[end4]}"
+
 # Files carried across a replace, relative to the Quickshell config dir.
 PROTECTED_PATTERNS=(
     ".env"
     "*.env"
     "user/generated/*.json"
-    "scripts/hyprland/workspace_compactor"
+    "scripts/hyprland/workspace_arranger"
     "scripts/hyprland/workspace_profile_manager"
     "scripts/osk/osk_autoshow"
     "scripts/appStats/app_stats"
     "scripts/touchGestures/touch_gestures"
+    "scripts/tray/sni_watcher"
+    "scripts/health/health_watch"
+    # What each of those was built from. Carried for the same reason the binaries
+    # are: without it every helper reads as "never verified" after every update,
+    # and a warning that fires every time is one nobody reads.
+    "scripts/*/.*.stamp"
 )
 
 # ── The fork's Hyprland config ───────────────────────────────────────────────
@@ -189,7 +222,8 @@ OPT_KEEP_CONFIG="" # "" = per-command default, true/false = explicit
 OPT_REBUILD_QS=false
 OPT_II_SUBDIR=""
 OPT_RESTART=true
-OPT_HYPR="" # "" = ask (and -y declines), true/false = explicit
+OPT_FORCE=false
+OPT_HYPR="" # "" = ask (and -y accepts), true/false = explicit
 OPT_SKIP_BASE_CHECK=false
 OPT_ASCII=false
 OPT_NO_COLOR=false
@@ -197,6 +231,9 @@ OPT_LOG=true
 LOG_FILE="$DEFAULT_LOG_FILE"
 LOG_READY=false
 PASSTHRU_ARGS=()
+DEPS_ACTION=""       # deps: "" (table, then pick) | list | add | remove
+DEPS_IDS=""          # deps: comma-separated feature ids
+DEPS_PRECONFIRMED=false
 
 # ── Run state (used by the exit trap) ────────────────────────────────────────
 STAGE_DIR=""
@@ -205,7 +242,10 @@ LOCAL_SRC=""  # resolved --local path; empty means "clone from GitHub"
 LOCAL_KIND="" # repo | ii
 DISPLACED_DIR=""
 SWAP_STATE="none" # none | moved-away | done
-START_EPOCH="$SECONDS"
+TARGET_SHA=""      # the commit a deployment is about to land, once resolved
+HYPR_CHANGED=false # the Hyprland overlay wrote something, so reload once
+CONFIRMED=false    # the run already asked for and got a yes to redeploy
+CACHE_LOCK_FD=""
 
 #══════════════════════════════════════════════════════════════════════════════
 # UI layer
@@ -222,6 +262,9 @@ UI_LIVE=false # a step line is currently held open on the terminal
 UI_STEP_LABEL=""
 UI_STEP_US=0       # start of the open step, in microseconds
 UI_PIPE_MARK=0     # last milestone emitted by the non-TTY progress backend
+UI_PROG_PCT=-1     # last percentage drawn by the TTY progress backend
+START_US=0         # run start, in microseconds; set once main starts
+PROMPT_US=0        # time spent waiting on the user, kept out of the elapsed
 UI_ROW_FD=1        # stream ui_row writes to; ui_fail flips it to stderr
 ERR_REPORTED=false # a failure has already been surfaced to the user
 
@@ -335,6 +378,10 @@ ui_icon() {
         Removed) printf '%s' $'' ;;                   # trash
         Reset) printf '%s' $'' ;;                     # undo
         Queried) printf '%s' $'' ;;                   # git-branch
+        Stopped) printf '%s' $'\uf04d' ;;             # stop
+        Started) printf '%s' $'\uf04b' ;;             # play
+        Hyprland) printf '%s' $'\uf2d2' ;;            # window-restore
+        Current) printf '%s' $'\uf058' ;;             # check-circle
         Deps | Configured | Compiled | Installed)
             printf '%s' $'' # package
             ;;
@@ -469,10 +516,9 @@ ui_banner() {
     local title="$1" sub="${2:-}"
     ui_logline "== $title ${sub:+- $sub}"
     [[ "$OPT_QUIET" == true ]] && return 0
-    local right="" left="$title"
+    # The right-hand label names what the run is about to land, when it knows.
+    local right="${3:-}" left="$title"
     [[ -n "$sub" ]] && left="$title  $sub"
-    # `help` already puts the version in the subtitle; don't print it twice.
-    [[ "$sub" =~ ^v[0-9] ]] || right="v$SETUP_VERSION"
     left="$(ui_trunc "$left" $((UI_WIDTH - ${#right} - 2)))"
     printf '\n%s%s%s%s%s%s%s%s%s\n' \
         "$C_B$C_HEAD" "$title" "$C_RST" \
@@ -580,6 +626,7 @@ ui_step() {
     UI_STEP_LABEL="$1"
     UI_STEP_US="$(ui_now_us)"
     UI_PIPE_MARK=0
+    UI_PROG_PCT=-1
     ui_logline "step: $1"
     [[ "$OPT_QUIET" == true ]] && return 0
     if [[ "$UI_TTY" == true ]]; then
@@ -599,6 +646,11 @@ ui_progress() {
     ((pct > 100)) && pct=100
 
     if [[ "$UI_TTY" == true ]]; then
+        # Producers report far more often than the bar can change: rsync and git
+        # emit thousands of lines, and every redraw costs a handful of forks.
+        # Only a new percentage is worth drawing.
+        ((pct == UI_PROG_PCT)) && return 0
+        UI_PROG_PCT=$pct
         local cells=12
         # Eighth-blocks so the bar advances smoothly instead of in 8% jumps.
         local eighths=$((pct * cells * 8 / 100))
@@ -722,20 +774,21 @@ ui_confirm() {
     ui_clear_line
     printf '  %s%-*s%s %s %s%s%s ' \
         "$C_WARN" "$G_W" "$G_WARN" "$C_RST" "$1" "$C_SUB" "$hint" "$C_RST"
-    local reply
+    local reply asked_us
+    asked_us="$(ui_now_us)"
+    # The cursor is hidden for the spinner; show it while typing.
+    [[ "$UI_TTY" == true ]] && printf '\033[?25h'
     read -r reply || reply=""
+    [[ "$UI_TTY" == true ]] && printf '\033[?25l'
+    PROMPT_US=$((PROMPT_US + $(ui_now_us) - asked_us))
     printf '\n'
     [[ -z "$reply" && "$default_yes" == true ]] && return 0
     [[ "$reply" =~ ^[Yy]$ ]]
 }
 
+# Working time only: seconds spent sitting at a prompt are not the script's.
 ui_elapsed() {
-    local secs=$((SECONDS - START_EPOCH))
-    if ((secs < 60)); then
-        printf '%ds' "$secs"
-    else
-        printf '%dm%02ds' $((secs / 60)) $((secs % 60))
-    fi
+    ui_fmt_dur $(($(ui_now_us) - START_US - PROMPT_US))
 }
 
 # ── Demo ─────────────────────────────────────────────────────────────────────
@@ -806,6 +859,7 @@ on_exit() {
         fi
     fi
 
+    [[ -n "$SUDO_KEEPALIVE_PID" ]] && kill "$SUDO_KEEPALIVE_PID" 2>/dev/null
     [[ -n "$STAGE_DIR" && -d "$STAGE_DIR" ]] && rm -rf "$STAGE_DIR"
     [[ -n "$CLONE_DIR" && -d "$CLONE_DIR" ]] && rm -rf "$CLONE_DIR"
     return "$rc"
@@ -847,6 +901,44 @@ run_logged() {
         "$@" >>"$LOG_FILE" 2>&1 || rc=$?
     fi
     return "$rc"
+}
+
+# sudo_prime — ask for the sudo password once, then keep it cached for the run.
+#
+# A full install calls sudo from the base installer, pacman, the AUR helper and
+# the dependency step, and a long AUR build outlives sudo's five-minute cache
+# between them — so without this the password is asked for again and again.
+# The keepalive only refreshes a timestamp that already exists (sudo -n), and
+# stops with this script.
+SUDO_KEEPALIVE_PID=""
+sudo_prime() {
+    ((EUID == 0)) && return 0
+    [[ -n "$SUDO_KEEPALIVE_PID" ]] && return 0
+    have sudo || return 0
+    if ! sudo -n true 2>/dev/null; then
+        # No terminal, no password prompt: let each command fail on its own terms.
+        [[ -t 0 ]] || return 0
+        ui_clear_line
+        ui_info "sudo is needed; asking once for the whole run."
+        local asked_us
+        asked_us="$(ui_now_us)"
+        [[ "$UI_TTY" == true ]] && printf '\033[?25h'
+        local rc=0
+        sudo -v || rc=$?
+        [[ "$UI_TTY" == true ]] && printf '\033[?25l'
+        PROMPT_US=$((PROMPT_US + $(ui_now_us) - asked_us))
+        ((rc == 0)) || {
+            ui_warn "sudo was not granted."
+            return 1
+        }
+    fi
+    (
+        while kill -0 "$$" 2>/dev/null && sudo -n -v 2>/dev/null; do
+            sleep 45
+        done
+    ) </dev/null >/dev/null 2>&1 &
+    SUDO_KEEPALIVE_PID=$!
+    return 0
 }
 
 normalize_url() {
@@ -945,6 +1037,27 @@ read_state() {
     printf '%s|%s|%s' "$remote" "$branch" "$fork"
 }
 
+# read_state_file <remote|branch|fork|commit|local> — one .active-* file, or empty
+read_state_file() {
+    local v=""
+    [[ -f "$TARGET_DIR/.active-$1" ]] && v="$(<"$TARGET_DIR/.active-$1")"
+    printf '%s' "${v//[$'\r\n']/}"
+}
+
+# What is deployed right now, as "branch · 21d72917", or empty when unknown.
+deployed_label() {
+    local branch commit local_src
+    local_src="$(read_state_file local)"
+    branch="$(read_state_file branch)"
+    commit="$(read_state_file commit)"
+    if [[ -n "$local_src" ]]; then
+        printf 'local %s' "$(tilde "$local_src")"
+        return 0
+    fi
+    [[ -n "$branch$commit" ]] || return 0
+    printf '%s%s' "${branch:-?}" "${commit:+ $G_SEP ${commit:0:8}}"
+}
+
 # The local path the active config was deployed from, or empty.
 read_local_state() {
     local p=""
@@ -1015,7 +1128,7 @@ open_log() {
                 mv "$LOG_FILE.trim" "$LOG_FILE"
         fi
     fi
-    ui_logline "--- $SCRIPT_SELF $SETUP_VERSION | ${COMMAND:-apply} | args: ${ORIGINAL_ARGS[*]:-} ---"
+    ui_logline "--- $SCRIPT_SELF | deployed: $(deployed_label) | ${COMMAND:-apply} | args: ${ORIGINAL_ARGS[*]:-} ---"
 }
 
 #══════════════════════════════════════════════════════════════════════════════
@@ -1071,32 +1184,671 @@ clone_repo() {
 }
 
 # copy_tree <src>/ <dst>/
+#
+# No progress bar: a local copy of the whole config takes a fraction of a
+# second, and parsing rsync's per-file progress used to cost nine of them.
 copy_tree() {
-    local src="$1" dst="$2"
+    local src="$1" dst="$2" rc=0
     ui_step "Copying"
     mkdir -p "$dst"
     if have rsync; then
-        local rc=0
-        set +o pipefail
-        rsync -a --info=progress2 --exclude='.git' --exclude='.gitmodules' \
-            "$src/" "$dst/" 2>&1 | tr '\r' '\n' | while IFS= read -r line; do
-            [[ "$line" =~ ([0-9]+)% ]] && ui_progress "${BASH_REMATCH[1]}" 100 ""
-        done
-        rc=${PIPESTATUS[0]}
-        set -o pipefail
-        ((rc == 0)) || {
-            ui_fail "Copy failed" "rsync exited $rc"
-            return 1
-        }
+        rsync -a --exclude='.git' --exclude='.gitmodules' "$src/" "$dst/" >>"$LOG_FILE" 2>&1 || rc=$?
     else
-        cp -a "$src/." "$dst/" || {
-            ui_fail "Copy failed" "cp exited $?"
-            return 1
-        }
-        find "$dst" -name '.git' -maxdepth 3 -exec rm -rf {} + 2>/dev/null || true
+        cp -a "$src/." "$dst/" >>"$LOG_FILE" 2>&1 || rc=$?
+        find "$dst" -maxdepth 3 \( -name '.git' -o -name '.gitmodules' \) -exec rm -rf {} + 2>/dev/null || true
     fi
-    ui_ok "Copied" "$(find "$dst" -type f 2>/dev/null | wc -l) files staged"
+    if ((rc != 0)); then
+        ui_fail "Copy failed" "exited $rc (see $(tilde "$LOG_FILE"))"
+        return 1
+    fi
+    ui_ok "Copied" "$(tree_stats "$dst")"
     return 0
+}
+
+#══════════════════════════════════════════════════════════════════════════════
+# Source cache
+#══════════════════════════════════════════════════════════════════════════════
+#
+# One shallow bare repo per remote. Only a single ref is kept (refs/ii/target),
+# so whatever an older deployment fetched becomes unreachable and gc can drop
+# it; the reflog is off for the same reason. There is no working tree: the
+# commit is exported with `git archive`, which reads and checks every blob it
+# writes, so a damaged cache fails the export instead of deploying garbage.
+#
+# Everything in here can be rebuilt from the remote, so the answer to any
+# inconsistency is to delete the repo and fetch it again, once. A second
+# failure is a real problem (network, disk, remote) and is reported as one.
+
+TARGET_BRANCH=""
+FETCHED_SHA=""
+FETCH_DETAIL=""
+
+# cache_repo_for <url> — the cache path for one remote
+cache_repo_for() {
+    local url
+    url="$(normalize_url "$1")"
+    printf '%s/%s.git' "$CACHE_DIR" "$(path_slug "${url#https://}")"
+}
+
+# Serialises the cache between concurrent runs (a terminal and the Settings
+# button). Released as soon as the export is done: every process started after
+# that — the Welcome poll, Quickshell itself — would inherit the descriptor and
+# hold the lock for as long as it lives.
+cache_lock() {
+    [[ -n "$CACHE_LOCK_FD" ]] && return 0
+    have flock || return 0
+    mkdir -p "$CACHE_DIR"
+    exec {CACHE_LOCK_FD}>"$CACHE_DIR/.lock"
+    flock -n "$CACHE_LOCK_FD" && return 0
+    ui_info "Another run is using the source cache — waiting for it."
+    flock -w 300 "$CACHE_LOCK_FD" && return 0
+    ui_fail "Cache busy" "another run held it for 5 minutes"
+    return 1
+}
+
+cache_unlock() {
+    [[ -n "$CACHE_LOCK_FD" ]] || return 0
+    exec {CACHE_LOCK_FD}>&-
+    CACHE_LOCK_FD=""
+}
+
+cache_git() {
+    # No auto-gc mid-fetch (it is done explicitly), never a credential prompt,
+    # and give up on a transfer that stalls instead of hanging the terminal.
+    GIT_TERMINAL_PROMPT=0 git -C "$1" -c gc.auto=0 -c core.logAllRefUpdates=false \
+        -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=30 "${@:2}"
+}
+
+# cache_valid <repo> <url> — a bare repo git can read, belonging to this remote
+cache_valid() {
+    local repo="$1" url="$2" got
+    [[ -d "$repo" && -f "$repo/HEAD" ]] || return 1
+    [[ "$(git -C "$repo" rev-parse --is-bare-repository 2>/dev/null)" == true ]] || return 1
+    got="$(git -C "$repo" config --get remote.origin.url 2>/dev/null)" || return 1
+    [[ "$(normalize_url "$got")" == "$(normalize_url "$url")" ]]
+}
+
+cache_init() {
+    local repo="$1" url="$2"
+    rm -rf "$repo"
+    mkdir -p "$(dirname "$repo")"
+    git init -q --bare "$repo" >>"$LOG_FILE" 2>&1 &&
+        git -C "$repo" config remote.origin.url "$url" &&
+        git -C "$repo" config core.logAllRefUpdates false &&
+        git -C "$repo" config gc.auto 0
+}
+
+# Lock files are only ever left behind by a git that was killed, and the cache
+# lock guarantees no other git is inside this repo right now.
+cache_clear_locks() {
+    find "$1" -name '*.lock' -type f -delete 2>/dev/null || true
+}
+
+# remote_head <url> <branch> — prints the commit a branch points at. "default"
+# asks for the remote's HEAD and prints "sha branch" instead.
+# Returns 1 when the remote is unreachable and 2 when the branch is missing.
+remote_head() {
+    local url="$1" branch="$2" out rc=0
+    if [[ "$branch" == "default" ]]; then
+        out="$(GIT_TERMINAL_PROMPT=0 timeout 30 git ls-remote --symref "$url" HEAD 2>>"$LOG_FILE")" || rc=$?
+        ((rc == 0)) || return 1
+        local sym sha
+        sym="$(sed -n 's@^ref: refs/heads/\(.*\)[[:space:]]HEAD$@\1@p' <<<"$out")"
+        sha="$(awk '$2 == "HEAD" && $1 !~ /^ref:/ {print $1; exit}' <<<"$out")"
+        [[ -n "$sha" ]] || return 2
+        printf '%s %s' "$sha" "${sym:-main}"
+        return 0
+    fi
+    out="$(GIT_TERMINAL_PROMPT=0 timeout 30 git ls-remote "$url" "refs/heads/$branch" 2>>"$LOG_FILE")" || rc=$?
+    ((rc == 0)) || return 1
+    out="${out%%[[:space:]]*}"
+    [[ -n "$out" ]] || return 2
+    printf '%s' "$out"
+}
+
+# resolve_target <url> <branch> — sets TARGET_SHA, and TARGET_BRANCH to the
+# real name when <branch> was "default". Failing here is failing early: the
+# fetch would fail the same way, only after the banner promised a commit.
+resolve_target() {
+    local url="$1" branch="$2" out rc=0
+    TARGET_SHA="" TARGET_BRANCH="$branch"
+    out="$(remote_head "$url" "$branch")" || rc=$?
+    case "$rc" in
+        0) ;;
+        2)
+            ui_fail "No such branch" "'$branch' on ${url#https://}"
+            ui_note "List what exists with: $SCRIPT_SELF list-branches"
+            return 1
+            ;;
+        *)
+            ui_fail "Remote unreachable" "${url#https://}"
+            ui_note "Check the URL and the network; git's message is in $(tilde "$LOG_FILE")."
+            return 1
+            ;;
+    esac
+    TARGET_SHA="${out%% *}"
+    [[ "$branch" == "default" ]] && TARGET_BRANCH="${out#* }"
+    return 0
+}
+
+# cache_fetch_once <repo> <branch> — fetch the branch into refs/ii/target
+cache_fetch_once() {
+    local repo="$1" branch="$2" out rc
+    # git's own status travels as the last line, since PIPESTATUS does not
+    # survive the command substitution. Progress goes to stderr, which is the
+    # terminal, because stdout is captured here.
+    out="$({
+        s=0
+        cache_git "$repo" fetch --depth=1 --no-tags --progress origin \
+            "+refs/heads/$branch:refs/ii/target" 2>&1 || s=$?
+        printf '\nrc=%s\n' "$s"
+    } | tr '\r' '\n' | {
+        received="" status=1
+        while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
+            case "$line" in
+                rc=*)
+                    status="${line#rc=}"
+                    continue
+                    ;;
+                Receiving*) received="$line" ;;
+            esac
+            printf '%s\n' "$line" >>"$LOG_FILE" 2>/dev/null || true
+            case "$line" in
+                # "Receiving objects:  63% (812/1284), 4.20 MiB | 2.00 MiB/s"
+                Receiving* | Resolving*)
+                    frag="${line#*\(}"
+                    frag="${frag%%\)*}"
+                    if [[ "$frag" == */* && "$frag" != *[!0-9/]* ]]; then
+                        ui_progress "${frag%%/*}" "${frag##*/}" "${line%%:*}" >&2
+                    fi
+                    ;;
+            esac
+        done
+        printf '%s\n%s' "$status" "$received"
+    })"
+    rc="${out%%$'\n'*}"
+    [[ "$rc" == 0 ]] || return 1
+    out="${out#*$'\n'}"
+    # "Receiving objects: 100% (12/12), 3.40 KiB | ..." -> "12 objects, 3.40 KiB"
+    if [[ "$out" =~ \(([0-9]+)/[0-9]+\)(,\ ([0-9.]+\ [KMG]i?B))? ]]; then
+        FETCH_DETAIL="${BASH_REMATCH[1]} objects${BASH_REMATCH[3]:+, ${BASH_REMATCH[3]}}"
+    else
+        FETCH_DETAIL="nothing new"
+    fi
+    return 0
+}
+
+# cache_export_once <repo> <sha> <dest> — the commit's tree, submodules included
+cache_export_once() {
+    local repo="$1" sha="$2" dest="$3" st
+    git -C "$repo" cat-file -e "$sha^{commit}" 2>/dev/null || return 1
+    mkdir -p "$dest" || return 1
+    # Both ends are checked: a corrupt object fails git archive, a full disk tar.
+    git -C "$repo" archive --format=tar "$sha" 2>>"$LOG_FILE" | tar -x -C "$dest" 2>>"$LOG_FILE"
+    st="${PIPESTATUS[*]}"
+    [[ "$st" == "0 0" ]] || return 1
+    export_submodules "$repo" "$sha" "$dest"
+}
+
+# git archive leaves submodules out. Each one is fetched into a cache repo of
+# its own at the commit the superproject pins and exported in place. GitHub
+# serves any reachable commit by id, so no branch is involved.
+export_submodules() {
+    local repo="$1" sha="$2" dest="$3"
+    [[ -f "$dest/.gitmodules" ]] || return 0
+    local key path url pin sub
+    while read -r key path; do
+        key="${key%.path}"
+        url="$(git config -f "$dest/.gitmodules" --get "$key.url" 2>/dev/null)" || continue
+        url="$(normalize_url "$url")"
+        pin="$(git -C "$repo" ls-tree "$sha" -- "$path" 2>/dev/null | awk '$2 == "commit" {print $3}')"
+        [[ -n "$pin" ]] || continue
+        sub="$(cache_repo_for "$url")"
+        cache_valid "$sub" "$url" || cache_init "$sub" "$url" || return 1
+        if ! git -C "$sub" cat-file -e "$pin^{commit}" 2>/dev/null; then
+            cache_clear_locks "$sub"
+            cache_git "$sub" fetch -q --depth=1 --no-tags origin "+$pin:refs/ii/target" \
+                >>"$LOG_FILE" 2>&1 || return 1
+        fi
+        cache_git "$sub" update-ref refs/ii/target "$pin" >>"$LOG_FILE" 2>&1 || return 1
+        cache_export_once "$sub" "$pin" "$dest/$path" || return 1
+    done < <(git config -f "$dest/.gitmodules" --get-regexp '^submodule\..*\.path$' 2>/dev/null)
+    return 0
+}
+
+# Fetches leave superseded packs behind. Collect them once they add up rather
+# than on every run: a gc is seconds, counting packs is milliseconds.
+cache_maintain() {
+    local repo="$1" packs
+    packs="$(find "$repo/objects/pack" -name '*.pack' 2>/dev/null | wc -l)"
+    ((packs > 8)) || return 0
+    cache_git "$repo" gc --prune=now --quiet >>"$LOG_FILE" 2>&1 ||
+        ui_verbose "cache gc failed; a later check rebuilds the cache if it matters"
+}
+
+# fetch_source <url> <branch> <sha> <dest> — sets FETCHED_SHA
+#
+# Brings the branch into the cache and exports it to <dest>. <sha> is what
+# resolve_target saw; a branch that moved in between is deployed as it is now.
+fetch_source() {
+    local url="$1" branch="$2" want="$3" dest="$4" repo
+    repo="$(cache_repo_for "$url")"
+    cache_lock || return 1
+
+    ui_step "Fetching"
+    local rc=0
+    fetch_source_locked "$url" "$branch" "$want" "$dest" "$repo" || rc=$?
+    cache_unlock
+    return "$rc"
+}
+
+fetch_source_locked() {
+    local url="$1" branch="$2" want="$3" dest="$4" repo="$5" attempt
+    for attempt in 1 2; do
+        if ((attempt == 2)); then
+            ui_warn "Source cache failed a check — rebuilding it."
+            rm -rf "$dest"
+            cache_init "$repo" "$url" || break
+            ui_step "Fetching"
+        elif ! cache_valid "$repo" "$url"; then
+            cache_init "$repo" "$url" || break
+        fi
+        cache_clear_locks "$repo"
+
+        FETCHED_SHA=""
+        if [[ -n "$want" ]] && git -C "$repo" cat-file -e "$want^{commit}" 2>/dev/null; then
+            # Already holds the exact commit: nothing to download.
+            FETCH_DETAIL="from cache"
+            cache_git "$repo" update-ref refs/ii/target "$want" >>"$LOG_FILE" 2>&1 || continue
+        elif ! cache_fetch_once "$repo" "$branch"; then
+            # A failed fetch into a sound repo is the network or the remote,
+            # not the cache: say so instead of throwing a good cache away.
+            if cache_valid "$repo" "$url" &&
+                git -C "$repo" fsck --connectivity-only --no-dangling >>"$LOG_FILE" 2>&1; then
+                ui_fail "Fetch failed" "branch '$branch' on ${url#https://}"
+                ui_note "See $(tilde "$LOG_FILE") for git's own message."
+                return 1
+            fi
+            continue
+        fi
+
+        FETCHED_SHA="$(git -C "$repo" rev-parse --verify -q 'refs/ii/target^{commit}' 2>/dev/null)" || continue
+        cache_export_once "$repo" "$FETCHED_SHA" "$dest" || continue
+
+        [[ -n "$want" && "$FETCHED_SHA" != "$want" ]] &&
+            ui_note "$branch moved while fetching; deploying ${FETCHED_SHA:0:8}."
+        cache_maintain "$repo"
+        ui_ok "Fetched" "$FETCH_DETAIL $G_SEP $(tree_stats "$dest")"
+        return 0
+    done
+
+    ui_fail "Fetch failed" "the source cache could not be rebuilt"
+    ui_note "Delete $(tilde "$CACHE_DIR") and retry; details in $(tilde "$LOG_FILE")."
+    return 1
+}
+
+#══════════════════════════════════════════════════════════════════════════════
+# Rust helpers
+#══════════════════════════════════════════════════════════════════════════════
+# Five of the shell's helpers ship as source and are compiled on the machine that
+# runs them. Their binaries are carried across a replace, which is what keeps a
+# working shell working — and is also the one way a helper can quietly fall
+# behind: the sources are replaced, the binary is not, and nothing on screen says
+# the gesture daemon is running code from three updates ago.
+#
+# scripts/rust-helpers.sh stamps every binary it builds with a hash of the
+# sources it came from, so the staged tree can be asked which ones no longer
+# match. Asked before the shell goes down, built after it comes back: nobody
+# should be watching a dead panel while cargo runs.
+
+HELPERS_TO_BUILD=()
+
+# The exception to the `missing` rule below. The others are features to opt into,
+# and compiling one nobody asked for would be a surprise; the tray watcher is a
+# fix that does nothing at all until it exists, and a shell without it loses its
+# tray icons on every restart. Offered, never forced — the prompt still asks.
+# System Health is on by default and shows only its setup page until its helper
+# exists, so the helper is offered the same way.
+HELPERS_OFFERED_WHEN_MISSING=("sni_watcher" "health_watch")
+
+offered_when_missing() {
+    local name
+    for name in "${HELPERS_OFFERED_WHEN_MISSING[@]}"; do
+        [[ "$name" == "$1" ]] && return 0
+    done
+    return 1
+}
+
+# plan_helper_rebuild <stage_dir> — fills HELPERS_TO_BUILD, asking first.
+plan_helper_rebuild() {
+    local stage="$1" script="$1/scripts/rust-helpers.sh"
+    HELPERS_TO_BUILD=()
+    # A fork without the script, or an older one. Nothing to say about it.
+    [[ -f "$script" ]] || return 0
+
+    local -a names=() reasons=()
+    local name state
+    while read -r name state; do
+        case "$state" in
+        stale) reasons+=("behind its sources") ;;
+        unknown) reasons+=("build not recorded") ;;
+        # `missing` is left alone on purpose: a helper nobody ever compiled is
+        # one nobody asked for, and compiling it here would be a surprise. The
+        # list above is what that rule does not apply to.
+        missing)
+            offered_when_missing "$name" || continue
+            reasons+=("not built yet")
+            ;;
+        *) continue ;;
+        esac
+        names+=("$name")
+    done < <(bash "$script" status 2>>"$LOG_FILE")
+    ((${#names[@]} > 0)) || return 0
+
+    ui_frame_open "Helpers"
+    local i
+    for i in "${!names[@]}"; do ui_kv "${names[$i]}" "${reasons[$i]}"; done
+    ui_frame_close
+    ui_note "Compiled here: an update replaces their sources, not the binary."
+
+    if ! have cargo; then
+        ui_warn "Rust is not installed, so they cannot be rebuilt here"
+        ui_note "Install rust, then run:"
+        ui_note "$(tilde "$TARGET_DIR")/scripts/rust-helpers.sh build-outdated"
+        return 0
+    fi
+    # Default yes: the reason they are listed is that they are behind, and the
+    # cost of saying yes is a minute of cargo against a helper that stays wrong.
+    local count=${#names[@]}
+    if ui_confirm "Rebuild $count helper$((($count == 1)) || printf 's')? About a minute each." yes; then
+        HELPERS_TO_BUILD=("${names[@]}")
+    else
+        ui_note "Left as they are. Settings can rebuild them later."
+    fi
+    return 0
+}
+
+# offer_qt_hook <target_dir> — offer the pacman hook that says, during the update
+# itself, when a Qt update leaves Quickshell needing a rebuild: the running shell
+# keeps working until it restarts, so that is the moment to rebuild. Default yes
+# (it only reads and warns), asked once: a "no" is remembered, and Settings can
+# install it later. An installed hook from an older ii is updated after asking.
+offer_qt_hook() {
+    local script="$1/scripts/quickshell-guard/install-hook.sh" status
+    local declined="$SETUP_STATE_DIR/qt-hook-declined"
+    [[ -f "$script" ]] || return 0
+    status="$(bash "$script" status 2>/dev/null)"
+    case "$status" in
+    installed | unsupported | "") return 0 ;;
+    missing) [[ -f "$declined" ]] && return 0 ;;
+    esac
+    [[ "$OPT_ASSUME_YES" == true || ! -t 0 ]] && {
+        ui_note "Recommended: Settings > System Health can install a pacman hook that warns when Quickshell needs a rebuild for a new Qt."
+        return 0
+    }
+    if [[ "$status" == outdated ]]; then
+        ui_confirm "Update the pacman hook that checks Quickshell after Qt updates?" yes || return 0
+    else
+        ui_note "After a Qt update, Quickshell needs a rebuild or the shell may not start."
+        ui_note "A pacman hook can say so during the update itself, while the shell still runs."
+        if ! ui_confirm "Install it? Recommended (Settings can remove it)" yes; then
+            mkdir -p "$SETUP_STATE_DIR" && : >"$declined"
+            return 0
+        fi
+    fi
+    if sudo_prime && sudo bash "$script" install >>"$LOG_FILE" 2>&1; then
+        ui_ok "pacman hook" "checks Quickshell after Qt updates"
+    else
+        ui_warn "Not installed — see $(tilde "$LOG_FILE")"
+    fi
+    return 0
+}
+
+# offer_crash_access <health_dir> — once System Health's helper is built, offer
+# the one privileged extra it has: read access for this account to the crash
+# dumps of system programs (root-owned files in /var/lib/systemd/coredump).
+# A dump is a copy of a program's memory and can hold passwords or keys, so it is
+# asked in words, defaults to no, and is never assumed by --yes. Settings can
+# grant or revoke it later; crash-access.sh does the work either way.
+offer_crash_access() {
+    local dir="$1" script="$1/crash-access.sh" user
+    user="$(id -un)"
+    [[ -f "$script" ]] || return 0
+    have setfacl || return 0
+    [[ "$(bash "$script" status "$user" 2>/dev/null)" == "granted" ]] && return 0
+    [[ "$OPT_ASSUME_YES" == true || ! -t 0 ]] && {
+        ui_note "System Health: crash dumps of system programs stay root-only. Settings can allow them."
+        return 0
+    }
+    ui_note "System Health can let your account read crash dumps of system programs."
+    ui_note "A dump is a copy of a program's memory and can contain passwords or keys."
+    ui_note "They never leave this computer, and the assistant never sees them."
+    if ui_confirm "Allow it? (Settings can revoke it any time)" no; then
+        if sudo_prime && sudo bash "$script" grant "$user" >>"$LOG_FILE" 2>&1; then
+            ui_ok "crash dumps" "readable by $user"
+        else
+            ui_warn "Not granted — see $(tilde "$LOG_FILE")"
+        fi
+    else
+        ui_note "Left root-only. The journal's stack traces still show on the Crashes page."
+    fi
+    return 0
+}
+
+# run_helper_rebuild <target_dir> — builds what plan_helper_rebuild collected.
+run_helper_rebuild() {
+    local target="$1" script="$1/scripts/rust-helpers.sh"
+    ((${#HELPERS_TO_BUILD[@]} > 0)) || return 0
+    [[ -f "$script" ]] || return 0
+
+    local name dir lock total done_units crate rc built=0 failed=0
+    for name in "${HELPERS_TO_BUILD[@]}"; do
+        dir="$(bash "$script" dir "$name" 2>>"$LOG_FILE")" || continue
+        lock="$dir/${name}_src/Cargo.lock"
+        total=0
+        done_units=0
+        ui_step "Building $name"
+        # Cargo narrates itself, one "Compiling <crate>" per unit, and writes the
+        # lockfile before the first of them — so the bar has a real denominator
+        # rather than an invented one. A warm cache compiles fewer than that and
+        # finishes short of the end, which is honest: it skipped the work.
+        # A pipeline rather than a process substitution, because the build's own
+        # exit status is the whole point and only a pipeline reports it back —
+        # and inside an `if`, because a helper that fails to compile is a line in
+        # the log, not a reason to abort an update that has already landed.
+        rc=0
+        if ! bash "$script" build "$name" 2>&1 | while IFS= read -r line; do
+            printf '%s\n' "$line" >>"$LOG_FILE"
+            [[ "$line" =~ ^[[:space:]]*Compiling[[:space:]]+([^[:space:]]+) ]] || continue
+            crate="${BASH_REMATCH[1]}"
+            done_units=$((done_units + 1))
+            ((total == 0)) && total="$(grep -c '^\[\[package\]\]' "$lock" 2>/dev/null || printf '0')"
+            ui_progress "$done_units" "$total" "$crate"
+        done; then
+            rc=1
+        fi
+        if ((rc == 0)); then
+            ui_ok "$name" "rebuilt"
+            built=$((built + 1))
+            [[ "$name" == "health_watch" ]] && offer_crash_access "$dir"
+        else
+            ui_fail "$name" "build failed — see $(tilde "$LOG_FILE")"
+            failed=$((failed + 1))
+        fi
+    done
+    ((failed > 0)) && ui_note "The old binary is still in place, so nothing stopped working."
+    ui_logline "helpers: $built rebuilt, $failed failed"
+    return 0
+}
+
+#══════════════════════════════════════════════════════════════════════════════
+# Dependencies
+#══════════════════════════════════════════════════════════════════════════════
+# The base installer brings everything illogical-impulse itself needs. What this
+# fork uses on top of that is listed in defaults/dependencies.json, and
+# scripts/deps/deps.py is the one place that reads it: the setup script asks it
+# what to install, Settings asks it what to show.
+#
+# Required packages are small, packaged everywhere, and each one silently breaks
+# a handful of features when it is missing, so install and update offer them.
+# Optional ones belong to a single feature each and are only ever installed on
+# request, through `deps` or its button in Settings. Whatever this script
+# installs is recorded, so `deps --remove` takes back only what it put there.
+
+# deps_run <root> <args...> — deps.py against the manifest under <root>
+deps_run() {
+    local root="$1"
+    shift
+    python3 "$root/scripts/deps/deps.py" --manifest "$root/defaults/dependencies.json" "$@"
+}
+
+# deps_available <root> — the tree ships a manifest this script can read
+deps_available() {
+    [[ -f "$1/scripts/deps/deps.py" && -f "$1/defaults/dependencies.json" ]] && have python3
+}
+
+# deps_pm_has <distro> <package>
+deps_pm_has() {
+    case "$1" in
+        arch) pacman -Qq "$2" >/dev/null 2>&1 ;;
+        fedora) rpm -q --quiet "$2" >/dev/null 2>&1 ;;
+        *) return 1 ;;
+    esac
+}
+
+# deps_install <root> <title> <plan args...> — install what `deps.py plan` lists.
+#
+# Stays quiet when nothing is missing. Returns 1 only when the package manager
+# ran and failed; a skipped or declined install is not a failure of the run.
+deps_install() {
+    local root="$1" title="$2"
+    shift 2
+
+    local env distro helper
+    env="$(deps_run "$root" env 2>>"$LOG_FILE")" || return 0
+    distro="${env%%$'\t'*}"
+    helper="${env#*$'\t'}"
+
+    local kind feature pkg known
+    local -a repo_pkgs=() aur=() unpackaged=() fresh=() order=()
+    local -A pkgs_of=() feature_of=()
+    while IFS=$'\t' read -r kind feature pkg known; do
+        [[ -n "$pkg" ]] || continue
+        [[ -n "${pkgs_of[$feature]+x}" ]] || order+=("$feature")
+        pkgs_of[$feature]+="${pkgs_of[$feature]:+ }$pkg"
+        feature_of[$pkg]="$feature"
+        case "$kind" in
+            repo) repo_pkgs+=("$pkg") ;;
+            aur)
+                if [[ -n "$helper" ]]; then
+                    aur+=("$pkg")
+                else
+                    unpackaged+=("$pkg")
+                fi
+                ;;
+            *) unpackaged+=("$pkg") ;;
+        esac
+        [[ "$known" == "0" ]] && fresh+=("$pkg")
+    done < <(deps_run "$root" plan "$@" 2>>"$LOG_FILE" || true)
+    ((${#order[@]} > 0)) || return 0
+
+    ui_frame_open "$title"
+    for feature in "${order[@]}"; do ui_kv "$feature" "${pkgs_of[$feature]}"; done
+    ui_frame_close
+
+    if ((${#unpackaged[@]} > 0)); then
+        if [[ "$distro" == "other" ]]; then
+            ui_warn "Unknown distro — install these yourself:"
+        elif [[ "$distro" == "arch" && -z "$helper" ]]; then
+            ui_warn "AUR packages, and no yay or paru found:"
+        else
+            ui_warn "Not packaged for $distro — install yourself:"
+        fi
+        ui_note "${unpackaged[*]}"
+    fi
+
+    local -a install=("${repo_pkgs[@]}" "${aur[@]}")
+    ((${#install[@]} > 0)) || return 0
+
+    local -a elevate=(sudo)
+    ((EUID == 0)) && elevate=()
+    # sudo needs somewhere to ask for the password. The Settings buttons all run
+    # this in a terminal, so the only caller without one is a script.
+    if [[ ! -t 0 && ${#elevate[@]} -gt 0 ]]; then
+        ui_warn "Installing packages needs a terminal for sudo."
+        ui_note "In a terminal: $CLI_NAME deps add ${order[*]}"
+        return 0
+    fi
+    local count=${#install[@]}
+    if [[ "$DEPS_PRECONFIRMED" != true ]]; then
+        ui_confirm "Install $count package$( ((count == 1)) || printf 's')?" yes || {
+            ui_note "Skipped — $CLI_NAME deps installs them later."
+            return 0
+        }
+    fi
+
+    ((${#elevate[@]} == 0)) || sudo_prime || {
+        ui_note "Skipped — $CLI_NAME deps installs them later."
+        return 0
+    }
+    ui_info "Installing ${install[*]} — the package manager's own output follows."
+    printf '\n'
+    local rc=0
+    case "$distro" in
+        arch)
+            # Asked once above; pacman asking again adds nothing. AUR builds keep
+            # their own prompts unless -y, since those are where a PKGBUILD is read.
+            if ((${#repo_pkgs[@]} > 0)); then
+                "${elevate[@]}" pacman -S --needed --noconfirm "${repo_pkgs[@]}" || rc=$?
+            fi
+            if ((rc == 0 && ${#aur[@]} > 0)); then
+                local -a flags=(-S --needed)
+                [[ "$OPT_ASSUME_YES" == true ]] && flags+=(--noconfirm)
+                "$helper" "${flags[@]}" "${aur[@]}" || rc=$?
+            fi
+            ;;
+        fedora)
+            "${elevate[@]}" dnf install -y "${repo_pkgs[@]}" || rc=$?
+            ;;
+    esac
+    printf '\n'
+
+    # Only what was not there before and is there now is ours to take back later.
+    local -A record=()
+    for pkg in "${fresh[@]}"; do
+        deps_pm_has "$distro" "$pkg" || continue
+        record[${feature_of[$pkg]}]+="${record[${feature_of[$pkg]}]:+ }$pkg"
+    done
+    for feature in "${!record[@]}"; do
+        # shellcheck disable=SC2086 # a space-separated package list, split on purpose
+        deps_run "$root" record "$feature" ${record[$feature]} 2>>"$LOG_FILE" ||
+            ui_verbose "could not record $feature"
+    done
+
+    if ((rc != 0)); then
+        ui_warn "Package install failed (exit $rc) — see the output above."
+        return 1
+    fi
+    ui_ok "Installed" "$count package$( ((count == 1)) || printf 's')"
+    return 0
+}
+
+# deps_hint <root> — one line pointing at optional features, never a question
+deps_hint() {
+    local root="$1" summary optional
+    summary="$(deps_run "$root" summary 2>>"$LOG_FILE")" || return 0
+    optional="${summary#*$'\t'}"
+    [[ "$optional" =~ ^[0-9]+$ ]] && ((optional > 0)) || return 0
+    ui_note "$optional optional feature$( ((optional == 1)) || printf 's') available: $CLI_NAME deps"
+}
+
+# deps_required_step <root> — what install and update run before the shell restarts
+deps_required_step() {
+    local root="$1"
+    deps_available "$root" || return 0
+    deps_install "$root" "Core dependencies" --tier required || true
+    deps_hint "$root"
 }
 
 #══════════════════════════════════════════════════════════════════════════════
@@ -1110,16 +1862,20 @@ carry_protected() {
         printf '0'
         return 0
     }
+    # One walk of the live tree for every pattern, not one per pattern.
+    local -a expr=()
     local pattern f rel
     for pattern in "${PROTECTED_PATTERNS[@]}"; do
-        while IFS= read -r -d '' f; do
-            rel="${f#"$live"/}"
-            mkdir -p "$stage/$(dirname "$rel")"
-            cp -a "$f" "$stage/$rel"
-            ui_verbose "carried $rel"
-            n=$((n + 1))
-        done < <(find "$live" -path "$live/$pattern" -type f -print0 2>/dev/null)
+        ((${#expr[@]} > 0)) && expr+=(-o)
+        expr+=(-path "$live/$pattern")
     done
+    while IFS= read -r -d '' f; do
+        rel="${f#"$live"/}"
+        mkdir -p "$stage/$(dirname "$rel")"
+        cp -a "$f" "$stage/$rel"
+        ui_verbose "carried $rel"
+        n=$((n + 1))
+    done < <(find "$live" -type f \( "${expr[@]}" \) -print0 2>/dev/null)
     printf '%s' "$n"
 }
 
@@ -1305,12 +2061,15 @@ ensure_quickshell_git() {
     local before after
     before="$(pacman -Qdtq 2>/dev/null | sort || true)"
 
-    ui_info "Running $helper -S quickshell-git — its own output follows."
+    sudo_prime || true
+    ui_info "Running $helper -S aur/quickshell-git — its own output follows."
     printf '\n'
     local -a flags=(-S --needed)
     [[ "$OPT_ASSUME_YES" == true ]] && flags+=(--noconfirm)
     local rc=0
-    "$helper" "${flags[@]}" quickshell-git || rc=$?
+    # aur/: a repository package may provide quickshell-git (CachyOS's
+    # noctalia-qs), and --noconfirm would take it over the AUR's.
+    "$helper" "${flags[@]}" aur/quickshell-git || rc=$?
     printf '\n'
     if ((rc != 0)); then
         ui_warn "quickshell-git install failed (exit $rc) — fix it before starting the shell."
@@ -1341,6 +2100,7 @@ qt_mismatch() {
 }
 
 build_quickshell() {
+    sudo_prime || true
     ui_step "Deps"
     if [[ -f /etc/arch-release ]]; then
         run_logged sudo pacman -Sy --needed --noconfirm cmake extra-cmake-modules \
@@ -1417,16 +2177,51 @@ build_quickshell() {
 # reload onto half the new config with the old process' state still loaded —
 # which is how config.json ends up rewritten with defaults. Every path that
 # touches the tree stops the shell first and starts it again afterwards.
-# `qs` is a symlink to `quickshell`, and the process name follows whichever one
-# was used to launch it, so both have to be matched. Missing one leaves a second
-# instance alive writing its own schema over config.json.
-quickshell_running() {
-    pgrep -x qs >/dev/null 2>&1 || pgrep -x quickshell >/dev/null 2>&1
+# Only this config's instances are touched. Other shells run under the same
+# qs/quickshell process name (an OSD, a second rice), so matching on the name
+# alone takes them down too. `qs list` knows which config each instance runs;
+# a build too old for it falls back to reading the launch command lines.
+quickshell_pids() {
+    local bin="" out
+    have qs && bin="qs"
+    [[ -n "$bin" ]] || { have quickshell && bin="quickshell"; }
+
+    if [[ -n "$bin" ]] &&
+        out="$("$bin" list --path "$TARGET_DIR" --any-display -j 2>/dev/null)"; then
+        grep -oE '"pid": *[0-9]+' <<<"$out" | grep -oE '[0-9]+$' || true
+        return 0
+    fi
+
+    local name=""
+    [[ "$TARGET_DIR" == "$QS_DIR/ii" ]] && name="ii"
+    ps -eo pid=,comm=,args= 2>/dev/null | awk -v dir="${TARGET_DIR%/}" -v name="$name" '
+        $2 != "qs" && $2 != "quickshell" { next }
+        {
+            hit = 0
+            for (i = 4; i <= NF; i++) {
+                if ($i == "ipc" || $i == "kill" || $i == "list" || $i == "log") { hit = 0; break }
+                if (($i == "-c" || $i == "--config") && name != "" && $(i + 1) == name) hit = 1
+                if (($i == "-p" || $i == "--path") && ($(i + 1) == dir || $(i + 1) == dir "/" ||
+                    $(i + 1) == dir "/shell.qml")) hit = 1
+            }
+            if (hit) print $1
+        }'
+    return 0
+}
+
+pids_alive() {
+    local pid
+    for pid in "$@"; do
+        kill -0 "$pid" 2>/dev/null && return 0
+    done
+    return 1
 }
 
 stop_quickshell() {
     [[ "$OPT_RESTART" == true ]] || return 0
-    quickshell_running || return 0
+    local -a pids
+    mapfile -t pids < <(quickshell_pids)
+    ((${#pids[@]})) || return 0
 
     # A signalled Quickshell exits without reaping the processes it spawned, so
     # each restart leaves its long-lived children — the nmcli monitor above all —
@@ -1449,22 +2244,23 @@ stop_quickshell() {
 
     # `kill` returns once the request is sent, not once the shell is gone.
     local waited=0
-    while [[ "$stopped" == true ]] && (( waited < 30 )) && quickshell_running; do
+    while [[ "$stopped" == true ]] && (( waited < 30 )) && pids_alive "${pids[@]}"; do
         sleep 0.1
         waited=$((waited + 1))
     done
 
     # Wedged, or too old to answer over IPC: the blunt path, which is the one
-    # that strands children, so it is only taken when it has to be.
+    # that strands children, so it is only taken when it has to be. It signals
+    # the PIDs found above, never every process called qs.
     local killed=false
-    if quickshell_running; then
-        for name in qs quickshell; do
-            pkill -x "$name" 2>/dev/null && killed=true
-        done
+    if pids_alive "${pids[@]}"; then
+        kill "${pids[@]}" 2>/dev/null && killed=true
         [[ "$killed" == true ]] && sleep 0.5
     fi
 
-    [[ "$stopped" == true || "$killed" == true ]] && ui_ok "Stopped" "running Quickshell instance"
+    local what="Quickshell instance"
+    ((${#pids[@]} > 1)) && what="${#pids[@]} Quickshell instances"
+    [[ "$stopped" == true || "$killed" == true ]] && ui_ok "Stopped" "$what ($(tilde "$TARGET_DIR"))"
     return 0
 }
 
@@ -1484,15 +2280,49 @@ start_quickshell() {
     fi
 
     ui_step "Starting"
-    if [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] && have hyprctl; then
-        hyprctl reload >>"$LOG_FILE" 2>&1 || ui_warn "hyprctl reload failed."
+    # One reload, and only when something needs it: the overlay changed files
+    # Hyprland does not watch, or `restart` asked for a clean slate. Each reload
+    # fans out into several configreloaded events the new shell reacts to.
+    if [[ "$HYPR_CHANGED" == true || "$COMMAND" == restart || "$COMMAND" == run ]] &&
+        [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] && have hyprctl; then
+        if ! hyprctl reload >>"$LOG_FILE" 2>&1; then
+            ui_warn "hyprctl reload failed — relog to apply the Hyprland files."
+        fi
         sleep 0.5
     fi
-    if [[ "$TARGET_DIR" == "$QS_DIR/ii" ]]; then
-        nohup "$bin" -c ii >/dev/null 2>&1 &
+    # Something that does not restart has to hold the tray's bus name, or every
+    # app with a tray icon loses it here: the protocol cannot tell a client that
+    # its watcher changed, so some apps never come back and some tear their icon
+    # down for good. Started before the shell, which then hosts against it
+    # instead of registering a watcher of its own. See scripts/tray/README.md.
+    local watcher="$TARGET_DIR/scripts/tray/sni_watcher"
+    if [[ -x "$watcher" ]] && ! { have pgrep && pgrep -x sni_watcher >/dev/null 2>&1; }; then
+        nohup "$watcher" >/dev/null 2>&1 &
+        disown 2>/dev/null || true
+        ui_ok "Started" "tray watcher"
+    fi
+
+    # A Quickshell built for another Qt may not start at all; said here, where the
+    # user is reading, as well as by the guard below once it fails.
+    local guard="$TARGET_DIR/scripts/quickshell-guard/qs-guard.sh"
+    if ! "$bin" --private-check-compat >/dev/null 2>&1; then
+        ui_warn "Quickshell was built for another Qt and may not start. Rebuild it: $(tilde "$TARGET_DIR")/scripts/quickshell-guard/qs-rebuild.sh"
+    fi
+
+    # MALLOC_CONF: the allocator setting the session start uses (hyprland/execs.lua);
+    # without it a shell restarted from here runs ~100 MB heavier until the next login.
+    # Through the guard when there is one, as at login: it says so when the shell
+    # cannot start, since the shell is the notification daemon.
+    local args=(-c ii)
+    [[ "$TARGET_DIR" == "$QS_DIR/ii" ]] || args=(--path "$TARGET_DIR")
+    if [[ -x "$guard" ]]; then
+        MALLOC_CONF=narenas:1 nohup setsid -f "$guard" "${args[@]}" >/dev/null 2>&1
+    else
+        MALLOC_CONF=narenas:1 nohup "$bin" "${args[@]}" >/dev/null 2>&1 &
+    fi
+    if [[ "${args[0]}" == -c ]]; then
         ui_ok "Started" "$bin -c ii"
     else
-        nohup "$bin" --path "$TARGET_DIR" >/dev/null 2>&1 &
         ui_ok "Started" "$bin --path $(tilde "$TARGET_DIR")"
     fi
     return 0
@@ -1511,14 +2341,17 @@ open_welcome_after_start() {
         return 0
     fi
 
-    for attempt in {1..50}; do
-        if "$ipc_bin" -c ii ipc call welcome open >/dev/null 2>&1; then
-            return 0
-        fi
-        sleep 0.2
-    done
-
-    ui_warn "Welcome couldn't be opened yet. Once Quickshell is ready, run: $ipc_bin -c ii ipc call welcome open"
+    # A cold shell takes seconds to answer IPC, and nothing after this needs
+    # it, so poll in the background instead of holding the summary back.
+    (
+        for attempt in {1..75}; do
+            "$ipc_bin" -c ii ipc call welcome open >/dev/null 2>&1 && exit 0
+            sleep 0.2
+        done
+        ui_logline "warn: Welcome did not answer over IPC within 15 s"
+    ) </dev/null >/dev/null 2>&1 &
+    disown 2>/dev/null || true
+    ui_note "Welcome opens once the shell is up."
     return 0
 }
 
@@ -1614,6 +2447,9 @@ remove_cli() {
 # The pipeline
 #══════════════════════════════════════════════════════════════════════════════
 
+# backup_hyprland_config — snapshots ~/.config/hypr and prints the snapshot's
+# name, or nothing when backups are off. Messages go to stderr: stdout is the
+# caller's return value.
 backup_hyprland_config() {
     local dest="$XDG_CONFIG_HOME/hypr"
     [[ -d "$dest" ]] || return 0
@@ -1626,7 +2462,7 @@ backup_hyprland_config() {
     # glob, or pruning replaced files would age these out too.
     backup_dir="$(next_backup_dir "hyprland_")"
     mkdir -p "$backup_dir" || {
-        ui_warn "Could not create Hyprland backup directory: $(tilde "$backup_dir")"
+        ui_warn "Could not create Hyprland backup directory: $(tilde "$backup_dir")" >&2
         return 1
     }
 
@@ -1634,15 +2470,15 @@ backup_hyprland_config() {
     # are backups themselves, and copying them would nest one inside the next.
     while IFS= read -r -d '' entry; do
         cp -a "$entry" "$backup_dir/" || {
-            ui_warn "Could not back up Hyprland config entry: $(basename "$entry")"
+            ui_warn "Could not back up Hyprland config entry: $(basename "$entry")" >&2
             return 1
         }
     done < <(find "$dest" -mindepth 1 -maxdepth 1 -print0 2>/dev/null | while IFS= read -r -d '' entry; do
         [[ "$(basename "$entry")" == hyprland_backup_* ]] || printf '%s\0' "$entry"
     done)
 
-    prune_backups "hyprland_"
-    ui_note "Hyprland backup: $(tilde "$backup_dir")"
+    prune_backups "hyprland_" >&2
+    basename "$backup_dir"
 }
 
 # install_hypr_config <repo_root>
@@ -1669,23 +2505,19 @@ install_hypr_config() {
     fi
 
     if [[ -z "$OPT_HYPR" ]]; then
-        # -y declines this one instead of accepting it. The Settings update
-        # button runs unattended, and unattended is no time to rewrite the
-        # compositor's config underneath somebody. --hypr is the explicit yes.
-        if [[ "$OPT_ASSUME_YES" == true ]]; then
-            ui_note "Left $(tilde "$dest") alone. Pass --hypr to install it."
-            return 0
-        fi
-        ui_confirm "Also install this fork's Hyprland config into $(tilde "$dest")?" yes || {
-            ui_note "Left $(tilde "$dest") alone."
+        # -y accepts this like every other question. The Settings update button
+        # always passes --hypr or --no-hypr from its toggle, so it never lands here.
+        ui_confirm "Also install this fork's Hyprland config into $(tilde "$dest")? (recommended)" yes || {
+            ui_note "Left $(tilde "$dest") alone. Features that rely on its binds and rules will not work until it is installed (--hypr)."
             return 0
         }
     fi
-    backup_hyprland_config || return 1
-
     ui_step "Hyprland"
-    local backup_dir="" added=0 replaced=0 seeded=0 kept=0 same=0
+    # Plan first, write second: the snapshot is only worth taking, and the
+    # compositor only worth reloading, when at least one file differs.
+    local added=0 replaced=0 seeded=0 kept=0 same=0
     local f rel excluded seed d
+    local -a writes=()
 
     while IFS= read -r -d '' f; do
         rel="${f#"$src"/}"
@@ -1717,53 +2549,60 @@ install_hypr_config() {
                 same=$((same + 1))
                 continue
             fi
-            if [[ "$OPT_BACKUP" == true ]]; then
-                [[ -n "$backup_dir" ]] || {
-                    backup_dir="$(next_backup_dir "hypr_")"
-                    mkdir -p "$backup_dir"
-                }
-                mkdir -p "$backup_dir/$(dirname "$rel")"
-                cp -a "$dest/$rel" "$backup_dir/$rel"
-            fi
             replaced=$((replaced + 1))
         elif [[ "$seed" == true ]]; then
             seeded=$((seeded + 1))
         else
             added=$((added + 1))
         fi
-
-        mkdir -p "$dest/$(dirname "$rel")"
-        cp -a "$f" "$dest/$rel"
-        [[ "$rel" == *.sh ]] && chmod +x "$dest/$rel" 2>/dev/null
-        ui_verbose "wrote $rel"
+        writes+=("$rel")
     done < <(find "$src" -mindepth 1 -type f -print0 2>/dev/null | sort -z)
 
-    local touched=$((added + replaced + seeded))
-    if ((touched == 0)); then
-        ui_ok "Hyprland" "already current $G_DOT $((same + kept)) files unchanged"
+    if ((${#writes[@]} == 0)); then
+        ui_ok "Hyprland" "already current $G_SEP $((same + kept)) files unchanged"
         return 0
     fi
 
-    [[ -n "$backup_dir" ]] && prune_backups "hypr_"
+    # The snapshot holds every file about to be replaced, so it is the only
+    # backup taken. A failed snapshot stops here, before anything is written.
+    local snapshot=""
+    if ((replaced > 0)); then
+        snapshot="$(backup_hyprland_config)" || return 1
+    fi
+
+    for rel in "${writes[@]}"; do
+        mkdir -p "$dest/$(dirname "$rel")"
+        cp -a "$src/$rel" "$dest/$rel"
+        [[ "$rel" == *.sh ]] && chmod +x "$dest/$rel" 2>/dev/null
+        ui_verbose "wrote $rel"
+    done
+    HYPR_CHANGED=true
+
     local detail="$replaced replaced, $added new"
     ((seeded > 0)) && detail="$detail, $seeded seeded"
     ((kept > 0)) && detail="$detail, $kept generated kept"
     ui_ok "Hyprland" "$detail"
-    [[ -n "$backup_dir" ]] && ui_note "Replaced files: $(tilde "$backup_dir")"
+    [[ -n "$snapshot" ]] && ui_note "backup $G_ARROW $snapshot"
 
     # Sub-files of the config are not watched, so nothing would pick these up
-    # until the next relog. No-op when Hyprland is not the session, which is
-    # exactly the case mid-install on a bare machine.
-    if [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] && have hyprctl; then
+    # until the next relog. start_quickshell reloads once when it runs; without
+    # a restart it never does, so reload here instead. No-op when Hyprland is
+    # not the session, which is exactly the case mid-install on a bare machine.
+    if [[ "$OPT_RESTART" != true && -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] && have hyprctl; then
         hyprctl reload >/dev/null 2>&1 || ui_warn "hyprctl reload failed — relog to apply."
     fi
     return 0
 }
 
 # apply_config <url> <branch> <fork_id> <verb>
+#
+# Prints the banner itself unless the caller already did (install does, before
+# the base installer runs), because the banner names the commit this run is
+# about to land and that is only known once the remote has been asked.
+BANNER_SHOWN=false
 apply_config() {
     local url="$1" branch="$2" fork="$3" verb="$4"
-    local head="" source_dir="" dirty=""
+    local head="" source_dir="" dirty="" label=""
 
     if [[ -n "$LOCAL_SRC" ]]; then
         # A local deploy has no remote to speak of, so everything the state
@@ -1776,12 +2615,23 @@ apply_config() {
         [[ -z "$branch" || "$branch" == "HEAD" ]] && branch="nobranch"
         head="$(git -C "$LOCAL_SRC" rev-parse HEAD 2>/dev/null || true)"
         git -C "$LOCAL_SRC" diff --quiet HEAD 2>/dev/null || dirty="uncommitted changes"
+        label="$branch${head:+ $G_SEP ${head:0:8}}${dirty:+*}"
     else
         url="$(normalize_url "$url")"
         [[ -z "$fork" ]] && fork="$(fork_id_from_url "$url")"
         [[ -z "$branch" ]] && branch="$FALLBACK_BRANCH"
+        resolve_target "$url" "$branch" || return 1
+        branch="$TARGET_BRANCH"
+        head="$TARGET_SHA"
+        label="$branch${head:+ $G_SEP ${head:0:8}}"
     fi
 
+    [[ "$BANNER_SHOWN" == true ]] || ui_banner "ii-p3drovfx" "$verb" "$label"
+
+    # Read before the swap replaces the files it comes from.
+    local current prev_fork
+    current="$(deployed_label)"
+    prev_fork="$(read_state_file fork)"
     ui_frame_open "Resolve"
     if [[ -n "$LOCAL_SRC" ]]; then
         ui_kv "source" "local $LOCAL_KIND"
@@ -1793,11 +2643,34 @@ apply_config() {
         ui_kv "remote" "${url#https://}"
         ui_kv "branch" "$branch"
     fi
+    ui_kv "deployed" "${current:-nothing}"
     ui_kv "target" "$(tilde "$TARGET_DIR")"
     ui_kv "backup" "$([[ "$OPT_BACKUP" == true ]] && printf '%s' "$(tilde "$BACKUP_BASE_DIR")" || printf 'disabled')"
     ui_frame_close
 
-    if [[ "$OPT_ASSUME_YES" != true ]]; then
+    # Nothing new upstream. The terminal is still the place to redeploy from
+    # (a damaged tree, a reset config), so ask, but default to leaving it be.
+    if [[ "$verb" == update && -z "$LOCAL_SRC" && -n "$head" && "$head" == "$(read_state_file commit)" &&
+        "$(normalize_url "$(read_state_file remote)")" == "$url" ]]; then
+        ui_ok "Current" "already on $branch @ ${head:0:8}"
+        # No redeploy still gets the core dependencies: a manifest that gained
+        # a package since the last update is exactly the case this is for.
+        if [[ "$OPT_FORCE" == true ]]; then
+            ui_note "Redeploying anyway (--force)."
+        elif [[ "$OPT_ASSUME_YES" == true ]]; then
+            deps_required_step "$TARGET_DIR"
+            ui_result ok "already up to date $G_SEP $(ui_elapsed)" "Pass --force to redeploy."
+            return 0
+        elif ui_confirm "Redeploy anyway?"; then
+            CONFIRMED=true
+        else
+            deps_required_step "$TARGET_DIR"
+            ui_result ok "already up to date $G_SEP $(ui_elapsed)" "$(tilde "$TARGET_DIR") left as it was."
+            return 0
+        fi
+    fi
+
+    if [[ "$OPT_ASSUME_YES" != true && "$CONFIRMED" != true ]]; then
         local with="$fork/$branch"
         [[ -n "$LOCAL_SRC" ]] && with="$(tilde "$LOCAL_SRC")"
         ui_confirm "Replace $(tilde "$TARGET_DIR") with $with?" yes || {
@@ -1806,31 +2679,34 @@ apply_config() {
         }
     fi
 
+    mkdir -p "$QS_DIR"
+    # Not created yet: the source tree is renamed onto this path when it can be.
+    STAGE_DIR="$QS_DIR/.ii-stage-$$-$RANDOM"
+
+    local repo_root=""
     if [[ -n "$LOCAL_SRC" ]]; then
         if [[ "$LOCAL_KIND" == "repo" ]]; then
             source_dir="$(detect_ii_subdir "$LOCAL_SRC")" || return 1
+            repo_root="$LOCAL_SRC"
         else
             source_dir="$LOCAL_SRC"
         fi
-        ui_ok "Sourced" "$(tree_stats "$source_dir")"
         ui_verbose "source: $source_dir"
+        copy_tree "$source_dir" "$STAGE_DIR" || return 1
     else
-        CLONE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ii-clone-XXXXXX")"
-        clone_repo "$url" "$branch" "$CLONE_DIR" || return 1
-
-        # Clone with branch "default" resolves to whatever HEAD points at.
-        if [[ "$branch" == "default" ]]; then
-            branch="$(git -C "$CLONE_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || printf 'main')"
-        fi
-        head="$(git -C "$CLONE_DIR" rev-parse HEAD 2>/dev/null || true)"
-
+        # Exported next to the target, on the same filesystem, so the config
+        # dir moves into the stage with a rename instead of a copy.
+        CLONE_DIR="$(mktemp -d "$QS_DIR/.ii-source-XXXXXX")"
+        fetch_source "$url" "$branch" "$head" "$CLONE_DIR" || return 1
+        head="$FETCHED_SHA"
+        repo_root="$CLONE_DIR"
         source_dir="$(detect_ii_subdir "$CLONE_DIR")" || return 1
         ui_verbose "source: ${source_dir#"$CLONE_DIR"/}"
+        mv "$source_dir" "$STAGE_DIR" || {
+            ui_fail "Staging failed" "could not move the export into place"
+            return 1
+        }
     fi
-
-    mkdir -p "$QS_DIR"
-    STAGE_DIR="$(mktemp -d "$QS_DIR/.ii-stage-XXXXXX")"
-    copy_tree "$source_dir" "$STAGE_DIR" || return 1
 
     ui_step "Staging"
     local carried
@@ -1844,6 +2720,7 @@ apply_config() {
         # Copied from a source tree that may itself have been deployed locally.
         rm -f "$STAGE_DIR/.active-local"
     fi
+    rm -f "$STAGE_DIR/.active-commit"
     [[ -n "$head" ]] && printf '%s\n' "$head" >"$STAGE_DIR/.active-commit"
     if [[ -d "$STAGE_DIR/scripts" ]]; then
         find "$STAGE_DIR/scripts" -type f \
@@ -1853,21 +2730,26 @@ apply_config() {
     chmod 0755 "$STAGE_DIR"
     ui_ok "Staged" "$carried protected file$([[ "$carried" == "1" ]] || printf 's') carried"
 
+    # Asked here, while the shell is still up and the user is still reading, and
+    # acted on after it comes back. The staged tree is the right thing to ask:
+    # new sources, and the binaries that were just carried onto them.
+    plan_helper_rebuild "$STAGE_DIR"
+
+    # Installed now rather than after the restart: the shell probes for most of
+    # these once, when it starts, and would come up thinking they are missing.
+    deps_required_step "$STAGE_DIR"
+
     # Mirror before the swap, never after. The settings panel runs the mirrored
     # copy, so a fault in swap_in used to be self-perpetuating: the swap failed,
     # the mirror was never refreshed, and the panel kept running the same broken
-    # script with no way to heal itself. A clone that reached this point is
+    # script with no way to heal itself. A source that reached this point is
     # sound, so its manager is always safe to install.
     # The hypr dots sit beside the ii config dir rather than inside it, so the
     # source tree has to survive until they have been read out of it.
-    local repo_root=""
-    if [[ -n "$LOCAL_SRC" ]]; then
-        [[ "$LOCAL_KIND" == "repo" ]] && repo_root="$LOCAL_SRC"
-        mirror_scripts "$LOCAL_SRC"
-    else
-        repo_root="$CLONE_DIR"
-        mirror_scripts "$CLONE_DIR"
-    fi
+    # An ii dir passed to --local ships no scripts; mirror_scripts then keeps
+    # the running copy. Never the running copy's own directory as the source:
+    # that is the mirror itself when launched from Settings.
+    mirror_scripts "${repo_root:-$LOCAL_SRC}"
 
     # Stop before the swap, not after. swap_in moves the live tree aside and
     # deletes it, and a running Quickshell reacts to that by hot-reloading onto
@@ -1883,14 +2765,20 @@ apply_config() {
     # so a half-applied pair of configs is not a state you can end up in.
     install_hypr_config "$repo_root"
 
-    if [[ -z "$LOCAL_SRC" && -n "$CLONE_DIR" ]]; then
+    if [[ -n "$CLONE_DIR" ]]; then
         rm -rf "$CLONE_DIR"
         CLONE_DIR=""
     fi
 
-    handle_base_config "$verb"
+    handle_base_config "$verb" "$prev_fork" "$fork"
 
     start_quickshell
+
+    # After the restart on purpose. A helper build takes about a minute, and the
+    # shell spends none of it down: the running helpers keep going on their old
+    # binaries, and each rebuild installs through a rename that the shell notices.
+    run_helper_rebuild "$TARGET_DIR"
+    offer_qt_hook "$TARGET_DIR"
 
     # Applying again is still an installation experience, and switching a fork
     # introduces a potentially different shell. Only an in-place update should
@@ -1902,7 +2790,7 @@ apply_config() {
 
     local summary="$fork/$branch${head:+ @ ${head:0:8}}"
     [[ -n "$LOCAL_SRC" ]] && summary="local $G_ARROW $(tilde "$LOCAL_SRC")"
-    ui_result ok "$verb complete $G_DOT $(ui_elapsed)" \
+    ui_result ok "$verb complete $G_SEP $(ui_elapsed)" \
         "$summary" \
         "$(tilde "$TARGET_DIR")"
     return 0
@@ -1911,13 +2799,15 @@ apply_config() {
 # The real user config lives outside the Quickshell dir, so replacing ii never
 # touches it. Reset it only when the schema is likely to have changed.
 handle_base_config() {
-    local verb="$1"
+    local verb="$1" prev_fork="${2:-}" fork="${3:-}"
     [[ -f "$BASE_CONFIG_FILE" ]] || return 0
 
     local keep="$OPT_KEEP_CONFIG"
     if [[ -z "$keep" ]]; then
-        # Fork switches change the option schema; updates and branch hops do not.
-        [[ "$verb" == "switch" ]] && keep=false || keep=true
+        # Fork switches change the option schema; updates and branch hops do
+        # not. `branch` reaches here as a switch too, so compare the forks.
+        keep=true
+        [[ "$verb" == "switch" && "$prev_fork" != "$fork" ]] && keep=false
     fi
     if [[ "$keep" == true ]]; then
         ui_note "Kept $(tilde "$BASE_CONFIG_FILE")."
@@ -1959,21 +2849,11 @@ cmd_apply() {
     }
     [[ -n "$OPT_BRANCH" ]] && branch="$OPT_BRANCH"
 
-    ui_banner "ii-p3drovfx" "apply"
     apply_config "$url" "$branch" "$fork" "apply"
 }
 
 cmd_install() {
     load_local_src
-    if [[ -n "$LOCAL_SRC" && "$LOCAL_KIND" != "repo" ]]; then
-        ui_fail "Not a fork checkout" "$(tilde "$LOCAL_SRC") is an ii config dir"
-        ui_note "install runs ./setup from the repository root. Point --local at that."
-        exit 1
-    fi
-
-    ui_banner "ii-p3drovfx" "install"
-    ui_note "Installs illogical-impulse first, then this fork's Quickshell config."
-    printf '\n'
 
     local origin url branch fork
     origin="$(local_origin)"
@@ -1990,13 +2870,20 @@ cmd_install() {
     fi
     [[ -n "$OPT_BRANCH" ]] && branch="$OPT_BRANCH"
 
-    ui_frame_open "Base install"
-    if [[ -n "$LOCAL_SRC" ]]; then
-        ui_kv "source" "$(tilde "$LOCAL_SRC")"
-    else
-        ui_kv "source" "${url#https://}"
-        ui_kv "branch" "$branch"
+    local label="local"
+    if [[ -z "$LOCAL_SRC" ]]; then
+        resolve_target "$url" "$branch" || return 1
+        branch="$TARGET_BRANCH"
+        label="$branch $G_SEP ${TARGET_SHA:0:8}"
     fi
+    ui_banner "ii-p3drovfx" "install" "$label"
+    BANNER_SHOWN=true
+    ui_note "Installs illogical-impulse first, then this fork's Quickshell config."
+    printf '\n'
+
+    ui_frame_open "Base install"
+    ui_kv "source" "${BASE_INSTALLER_URL#https://}"
+    ui_kv "branch" "$BASE_INSTALLER_BRANCH"
     ui_kv "runs" "./setup install"
     ui_frame_close
 
@@ -2007,40 +2894,26 @@ cmd_install() {
         }
     fi
 
-    # The base installer lives in the repository, not in the ii config dir, so
-    # it comes from a fresh clone rather than from a possibly stale mirror —
-    # unless a local checkout was named, which is the whole point of --local.
-    local base_root
-    if [[ -n "$LOCAL_SRC" ]]; then
-        base_root="$LOCAL_SRC"
-    else
-        CLONE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ii-base-XXXXXX")"
-        clone_repo "$url" "$branch" "$CLONE_DIR" || return 1
-        base_root="$CLONE_DIR"
+    # The base always comes from end-4's own installer, whichever fork or local
+    # checkout the config is deployed from afterwards. A copy of it kept in this
+    # repository would have to follow every upstream change to stay correct;
+    # running the original never falls behind. Fetched fresh each time, since a
+    # base install is rare and a stale installer is worse than a slow one.
+    # Once, up front: the base installer, the Quickshell swap and the core
+    # dependencies all need it, and would otherwise each ask on their own.
+    sudo_prime || true
+    CLONE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ii-base-XXXXXX")"
+    clone_repo "$BASE_INSTALLER_URL" "$BASE_INSTALLER_BRANCH" "$CLONE_DIR" || return 1
+    if [[ ! -f "$CLONE_DIR/setup" ]]; then
+        ui_fail "No base installer" "${BASE_INSTALLER_URL#https://} has no ./setup"
+        return 1
     fi
-
-    local -a runner=(./setup install)
-    if [[ ! -x "$base_root/setup" ]]; then
-        if [[ ! -f "$base_root/setup" ]]; then
-            if [[ -n "$LOCAL_SRC" ]]; then
-                ui_fail "No base installer" "$(tilde "$base_root") has no ./setup"
-            else
-                ui_fail "No base installer" "$url has no ./setup at $branch"
-            fi
-            return 1
-        fi
-        if [[ -n "$LOCAL_SRC" ]]; then
-            # Never chmod somebody's working tree just to run their installer.
-            runner=(bash ./setup install)
-        else
-            chmod +x "$base_root/setup"
-        fi
-    fi
+    chmod +x "$CLONE_DIR/setup"
 
     ui_info "Handing over to ./setup install — its own output follows."
     printf '\n'
     local rc=0
-    (cd "$base_root" && "${runner[@]}") || rc=$?
+    (cd "$CLONE_DIR" && ./setup install) || rc=$?
     printf '\n'
     if ((rc != 0)); then
         ui_fail "Base install failed" "./setup install exited $rc"
@@ -2048,10 +2921,10 @@ cmd_install() {
     fi
     ui_ok "Base ready" "illogical-impulse installed"
 
-    if [[ -z "$LOCAL_SRC" ]]; then
-        rm -rf "$CLONE_DIR"
-        CLONE_DIR=""
-    fi
+    # Its job is done. apply_config fetches the fork into a CLONE_DIR of its own
+    # and would otherwise leave this one behind in /tmp.
+    rm -rf "$CLONE_DIR"
+    CLONE_DIR=""
 
     # Before any config files land, so the shell the user ends up looking at
     # is running the Quickshell this fork was written against.
@@ -2091,7 +2964,6 @@ cmd_update() {
     fi
     [[ -n "$OPT_BRANCH" ]] && branch="$OPT_BRANCH"
 
-    ui_banner "ii-p3drovfx" "update"
     apply_config "$url" "$branch" "$fork" "update"
 }
 
@@ -2127,7 +2999,6 @@ cmd_switch() {
     fi
     [[ -n "$OPT_BRANCH" ]] && branch="$OPT_BRANCH"
 
-    ui_banner "ii-p3drovfx" "switch"
     apply_config "$url" "$branch" "$fork" "switch"
 }
 
@@ -2208,6 +3079,7 @@ cmd_doctor() {
     ui_frame_open "Active config"
     ui_kv "fork" "${fork:-unknown}"
     ui_kv "branch" "${branch:-unknown}"
+    ui_kv "commit" "$(read_state_file commit | cut -c1-8)"
     if [[ -n "$active_local" ]]; then
         ui_kv "local" "$(tilde "$active_local")"
     else
@@ -2219,6 +3091,8 @@ cmd_doctor() {
     ui_frame_open "Paths"
     ui_kv "base" "$([[ -d "$BASE_DIR" ]] && tilde "$BASE_DIR" || printf 'missing')"
     ui_kv "mirror" "$([[ -d "$MIRROR_DIR" ]] && tilde "$MIRROR_DIR" || printf 'missing')"
+    ui_kv "cache" "$([[ -d "$CACHE_DIR" ]] && printf '%s %s %s' "$(tilde "$CACHE_DIR")" "$G_SEP" \
+        "$(du -sh "$CACHE_DIR" 2>/dev/null | cut -f1)" || printf 'empty')"
     ui_kv "backups" "$({ find "$BACKUP_BASE_DIR" -maxdepth 1 -type d -name 'ii_*' 2>/dev/null || true; } | wc -l) kept"
     ui_kv "log" "$(tilde "$LOG_FILE")"
     ui_frame_close
@@ -2231,12 +3105,280 @@ cmd_doctor() {
     ui_kv "cli" "$([[ -L "$BIN_DIR/$CLI_NAME" ]] && readlink "$BIN_DIR/$CLI_NAME" || printf 'not linked')"
     ui_frame_close
 
+    if deps_available "$TARGET_DIR"; then
+        local core optional
+        core="$(deps_run "$TARGET_DIR" status 2>>"$LOG_FILE" |
+            awk -F'\t' '$1 == "required" && $3 != "installed" { printf "%s%s", sep, $6; sep = " " }')"
+        optional="$(deps_run "$TARGET_DIR" summary 2>>"$LOG_FILE" | cut -f2)"
+        ui_frame_open "Dependencies"
+        ui_kv "core" "${core:+missing: }${core:-all installed}"
+        ui_kv "optional" "${optional:-0} installable feature$([[ "$optional" == 1 ]] || printf 's') not installed"
+        ui_kv "manage" "$CLI_NAME deps"
+        ui_frame_close
+    fi
+
     ui_frame_open "Renderer"
     ui_kv "glyphs" "$UI_GLYPHS"
     ui_kv "colour" "$UI_COLOR"
     ui_kv "tty" "$UI_TTY"
     ui_kv "width" "$UI_WIDTH"
     ui_frame_close
+}
+
+# deps_table <root> — every feature with its state, all numbered in one run.
+# Fills DEPS_ROWS with the id behind each number, DEPS_STATE with each id's
+# state (installed, partial, missing, blocked, unpackaged), and DEPS_PICK with
+# the optional ones "all" installs.
+DEPS_ROWS=()
+DEPS_PICK=()
+declare -A DEPS_STATE=()
+deps_table() {
+    local root="$1" env distro
+    env="$(deps_run "$root" env 2>>"$LOG_FILE")" || return 1
+    distro="${env%%$'\t'*}"
+    DEPS_ROWS=() DEPS_PICK=() DEPS_STATE=()
+
+    local tier id status installable label missing last_tier="" col glyph word detail state
+    local opt_total=0 opt_have=0
+    # The id is what `deps add` takes, so it is the column; the label explains it.
+    # The state is spelled out: a glyph alone doesn't survive every font or a paste.
+    local idw=18 ww=9 room
+    while IFS=$'\t' read -r tier id status installable label missing; do
+        if [[ "$tier" != "$last_tier" ]]; then
+            [[ -n "$last_tier" ]] && printf '\n'
+            ui_rule "$([[ "$tier" == required ]] && printf 'Core' || printf 'Optional')"
+            last_tier="$tier"
+        fi
+        detail="$missing"
+        case "$status" in
+            installed)
+                state=installed col="$C_OK" glyph="$G_OK" word="installed" detail=""
+                ;;
+            partial | missing)
+                state="$status" word="$status"
+                col="$C_WARN" glyph="$G_ERR"
+                [[ "$status" == partial ]] && glyph="$G_DOT"
+                if [[ "$installable" != 1 ]]; then
+                    state=blocked col="$C_SUB" word="blocked"
+                    if [[ "$distro" == arch ]]; then
+                        detail="needs yay or paru${missing:+ $G_SEP $missing}"
+                    else
+                        detail="the rest isn't packaged for $distro"
+                    fi
+                elif [[ "$tier" == optional ]]; then
+                    DEPS_PICK+=("$id")
+                fi
+                ;;
+            *)
+                state=unpackaged col="$C_SUB" glyph="-" word="n/a" detail="not packaged for $distro"
+                ;;
+        esac
+        if [[ "$tier" == optional ]]; then
+            opt_total=$((opt_total + 1))
+            [[ "$state" == installed ]] && opt_have=$((opt_have + 1))
+        fi
+        DEPS_ROWS+=("$id")
+        DEPS_STATE[$id]="$state"
+        room=$((UI_WIDTH - 12 - G_W - idw - ww))
+        detail="$(ui_trunc "$label${detail:+ $G_SEP $detail}" "$room")"
+        # Split back apart so only the label is in the foreground colour.
+        printf '  %s%-*s%s %3s  %-*s %s%-*s%s %s%s%s%s\n' \
+            "$col" "$G_W" "$glyph" "$C_RST" "${#DEPS_ROWS[@]}" "$idw" "$id" \
+            "$col" "$ww" "$word" "$C_RST" \
+            "${detail:0:${#label}}" "$C_SUB" "${detail:${#label}}" "$C_RST"
+    done < <(deps_run "$root" status 2>>"$LOG_FILE")
+    printf '\n'
+    ui_note "$opt_have of $opt_total optional features installed."
+}
+
+# deps_ids_valid <root> <ids> — every id is in the manifest, or explain and fail
+deps_ids_valid() {
+    local root="$1" ids="$2" known id
+    known=" $(deps_run "$root" status 2>>"$LOG_FILE" | cut -f2 | tr '\n' ' ') "
+    for id in ${ids//,/ }; do
+        [[ "$id" == core ]] && continue
+        [[ "$known" == *" $id "* ]] && continue
+        ui_fail "Unknown feature" "$id"
+        ui_note "The list: $CLI_NAME deps --list"
+        return 1
+    done
+}
+
+# deps_add <root> <ids> — "core" in the list stands for every required package
+deps_add() {
+    local root="$1" ids="$2" id rc=0
+    local -a features=()
+    for id in ${ids//,/ }; do
+        if [[ "$id" == core ]]; then
+            deps_install "$root" "Core dependencies" --tier required || rc=1
+        else
+            features+=("$id")
+        fi
+    done
+    if ((${#features[@]} > 0)); then
+        deps_install "$root" "Features" --features "$(
+            IFS=,
+            printf '%s' "${features[*]}"
+        )" || rc=1
+    fi
+    return "$rc"
+}
+
+# deps_remove <root> <ids> — uninstall what this script installed for them
+deps_remove() {
+    local root="$1" ids="$2" id tier env distro
+    env="$(deps_run "$root" env 2>>"$LOG_FILE")" || return 1
+    distro="${env%%$'\t'*}"
+    local -a pkgs=() owned=()
+    local -A from=()
+    for id in ${ids//,/ }; do
+        tier="$(deps_run "$root" status 2>>"$LOG_FILE" | awk -F'\t' -v id="$id" '$2 == id { print $1 }')"
+        if [[ "$tier" == required || "$id" == core ]]; then
+            ui_warn "$id is core: the shell needs it, so it stays."
+            continue
+        fi
+        mapfile -t owned < <(deps_run "$root" owned "$id" 2>>"$LOG_FILE")
+        if ((${#owned[@]} == 0)); then
+            ui_note "$id: nothing deps installed to remove."
+            continue
+        fi
+        pkgs+=("${owned[@]}")
+        from[$id]="${owned[*]}"
+    done
+    ((${#pkgs[@]} > 0)) || return 0
+
+    ui_frame_open "Remove"
+    for id in "${!from[@]}"; do ui_kv "$id" "${from[$id]}"; done
+    ui_frame_close
+    ui_note "Only what deps installed, and no other feature uses."
+
+    local -a elevate=(sudo)
+    ((EUID == 0)) && elevate=()
+    if [[ ! -t 0 && ${#elevate[@]} -gt 0 ]]; then
+        ui_warn "Removing packages needs a terminal for sudo."
+        return 0
+    fi
+    ui_confirm "Remove ${#pkgs[@]} package$( ((${#pkgs[@]} == 1)) || printf 's')?" || {
+        ui_note "Kept."
+        return 0
+    }
+    ((${#elevate[@]} == 0)) || sudo_prime || return 0
+    printf '\n'
+    local rc=0
+    case "$distro" in
+        arch) "${elevate[@]}" pacman -Rs --noconfirm "${pkgs[@]}" || rc=$? ;;
+        fedora) "${elevate[@]}" dnf remove -y "${pkgs[@]}" || rc=$? ;;
+        *) rc=1 ;;
+    esac
+    printf '\n'
+
+    # Forget exactly what is gone, whatever the exit status said.
+    local -a gone=()
+    local p
+    for id in "${!from[@]}"; do
+        gone=()
+        for p in ${from[$id]}; do
+            deps_pm_has "$distro" "$p" || gone+=("$p")
+        done
+        ((${#gone[@]} > 0)) && deps_run "$root" forget "$id" "${gone[@]}" 2>>"$LOG_FILE"
+    done
+    if ((rc != 0)); then
+        ui_warn "Package removal failed (exit $rc) — see the output above."
+        return 1
+    fi
+    ui_ok "Removed" "${#pkgs[@]} package$( ((${#pkgs[@]} == 1)) || printf 's')"
+}
+
+cmd_deps() {
+    ui_banner "ii-p3drovfx" "deps"
+    local root="$TARGET_DIR"
+    if ! deps_available "$root"; then
+        have python3 || ui_die "python3 not found" "deps.py needs the system python3"
+        ui_fail "No dependency list" "$(tilde "$root") ships no defaults/dependencies.json"
+        ui_note "Update to a version of the fork that has one:  $CLI_NAME update"
+        exit 1
+    fi
+
+    case "$DEPS_ACTION" in
+        add)
+            deps_ids_valid "$root" "$DEPS_IDS" || exit 1
+            deps_add "$root" "$DEPS_IDS" || exit 1
+            return 0
+            ;;
+        remove)
+            deps_ids_valid "$root" "$DEPS_IDS" || exit 1
+            deps_remove "$root" "$DEPS_IDS" || exit 1
+            return 0
+            ;;
+    esac
+
+    deps_table "$root" || ui_die "deps.py failed" "see $(tilde "$LOG_FILE")"
+    [[ "$DEPS_ACTION" == list ]] && return 0
+
+    local summary required
+    summary="$(deps_run "$root" summary 2>>"$LOG_FILE")" || summary=$'0\t0'
+    required="${summary%%$'\t'*}"
+
+    # A picker needs someone to answer it; -y and a pipe just get the table.
+    if [[ "$OPT_ASSUME_YES" == true || ! -t 0 ]]; then
+        ((required > 0)) && ui_note "Core packages: $CLI_NAME deps add core"
+        ((${#DEPS_PICK[@]} > 0)) && ui_note "A feature:     $CLI_NAME deps add <id>..."
+        return 0
+    fi
+    if ((required == 0 && ${#DEPS_PICK[@]} == 0)); then
+        ui_ok "Current" "everything this system can install is installed"
+        return 0
+    fi
+
+    local hint="numbers or ids"
+    ((${#DEPS_PICK[@]} > 1)) && hint+=", all"
+    ((required > 0)) && hint+=", core"
+    printf '  %s%-*s%s %s %s(%s; Enter to skip)%s ' \
+        "$C_STEP" "$G_W" "$G_STEP" "$C_RST" "Install which?" "$C_SUB" "$hint" "$C_RST"
+    local reply asked_us
+    asked_us="$(ui_now_us)"
+    [[ "$UI_TTY" == true ]] && printf '\033[?25h'
+    read -r reply || reply=""
+    [[ "$UI_TTY" == true ]] && printf '\033[?25l'
+    PROMPT_US=$((PROMPT_US + $(ui_now_us) - asked_us))
+    printf '\n'
+
+    local -a chosen=()
+    local tok id
+    for tok in ${reply//,/ }; do
+        if [[ "$tok" == all ]]; then
+            chosen+=("${DEPS_PICK[@]}")
+            continue
+        fi
+        id="$tok"
+        if [[ "$tok" =~ ^[0-9]+$ ]]; then
+            if ((tok < 1 || tok > ${#DEPS_ROWS[@]})); then
+                ui_warn "No row $tok in the list."
+                continue
+            fi
+            id="${DEPS_ROWS[tok - 1]}"
+        fi
+        # Unknown ids fall through to deps_ids_valid, which names them.
+        case "${DEPS_STATE[$id]:-}" in
+            installed) ui_note "$id is already installed." ;;
+            blocked) ui_note "$id can't be installed from here (see its row)." ;;
+            unpackaged) ui_note "$id isn't packaged for this system." ;;
+            *) chosen+=("$id") ;;
+        esac
+    done
+    if ((${#chosen[@]} == 0)); then
+        ui_note "Nothing installed."
+        return 0
+    fi
+    local ids
+    ids="$(
+        IFS=,
+        printf '%s' "${chosen[*]}"
+    )"
+    deps_ids_valid "$root" "$ids" || exit 1
+    # Picking them was the confirmation; asking again right after is noise.
+    DEPS_PRECONFIRMED=true
+    deps_add "$root" "$ids" || exit 1
 }
 
 cmd_hypr() {
@@ -2262,7 +3404,7 @@ show_help() {
     local me="$SCRIPT_SELF"
     invoked_as_cli && me="$INVOKED_AS"
 
-    ui_banner "ii-p3drovfx" "v$SETUP_VERSION"
+    ui_banner "ii-p3drovfx" "help"
 
     ui_rule "Usage"
     printf '  %s [command] [options]\n\n' "$me"
@@ -2278,10 +3420,11 @@ show_help() {
     printf '  %s%-16s%s %s\n' "$C_OK" "list-branches" "$C_RST" "Show remote branches of a fork"
     printf '  %s%-16s%s %s\n' "$C_OK" "restart" "$C_RST" "Restart Quickshell (alias: run)"
     printf '  %s%-16s%s %s\n' "$C_OK" "doctor" "$C_RST" "Report resolved paths, state and tooling"
+    printf '  %s%-16s%s %s\n' "$C_OK" "deps" "$C_RST" "Show and install optional feature packages"
     printf '  %s%-16s%s %s\n' "$C_OK" "hyprset" "$C_RST" "Write a Hyprland key/animation"
     printf '  %s%-16s%s %s\n' "$C_OK" "hyprmerge" "$C_RST" "Merge a Hyprland config into the local one"
     printf '  %s%-16s%s Remove the %s symlink\n' "$C_OK" "remove-cli" "$C_RST" "$CLI_NAME"
-    printf '  %s%-16s%s %s\n' "$C_OK" "help, version" "$C_RST" "This message / the version"
+    printf '  %s%-16s%s %s\n' "$C_OK" "help, version" "$C_RST" "This message / what is deployed"
     printf '  %s%-16s%s %s\n' "$C_OK" "demo" "$C_RST" "Render every UI primitive and exit"
     printf '\n'
 
@@ -2296,14 +3439,18 @@ show_help() {
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --no-backup" "$C_RST" "Discard the previous config instead of keeping it"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --keep-config" "$C_RST" "Never reset ~/.config/illogical-impulse/config.json"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --reset-config" "$C_RST" "Always reset it (a backup is kept)"
+    printf '  %s%-24s%s %s\n' "$C_STEP" "    --force" "$C_RST" "Redeploy even when already up to date"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --no-restart" "$C_RST" "Leave Quickshell alone when finished"
-    printf '  %s%-24s%s %s\n' "$C_STEP" "    --hypr" "$C_RST" "Install the fork's ~/.config/hypr files"
+    printf '  %s%-24s%s %s\n' "$C_STEP" "    --hypr" "$C_RST" "Install the fork's ~/.config/hypr files (recommended)"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --no-hypr" "$C_RST" "Never install them, never ask"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --rebuild-quickshell" "$C_RST" "Rebuild Quickshell from source first"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --skip-base-check" "$C_RST" "Do not require illogical-impulse to be present"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --ii-subdir <name>" "$C_RST" "Override ii* auto-detection in the clone"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --log-file <path>" "$C_RST" "Write the run log elsewhere"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --no-log" "$C_RST" "Do not write a run log"
+    printf '  %s%-24s%s %s\n' "$C_STEP" "    --add <ids>" "$C_RST" "deps: install these features (core: required)"
+    printf '  %s%-24s%s %s\n' "$C_STEP" "    --remove <ids>" "$C_RST" "deps: uninstall what deps installed for them"
+    printf '  %s%-24s%s %s\n' "$C_STEP" "    --list" "$C_RST" "deps: print the table and exit"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --ascii" "$C_RST" "ASCII glyphs only"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --no-color" "$C_RST" "Strip ANSI colour"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --demo" "$C_RST" "Render every UI primitive and exit"
@@ -2313,6 +3460,10 @@ show_help() {
     printf '  %s--local takes a fork checkout or an ii config dir; either way nothing%s\n' "$C_SUB" "$C_RST"
     printf '  %sis cloned. update will not guess the path back: it refuses and prints%s\n' "$C_SUB" "$C_RST"
     printf '  %sthe --local line to re-run.%s\n' "$C_SUB" "$C_RST"
+    printf '  %sinstall always runs end-4'"'"'s own ./setup for the base, then deploys the%s\n' "$C_SUB" "$C_RST"
+    printf '  %sfork (or --local) config on top.%s\n' "$C_SUB" "$C_RST"
+    printf '  %sinstall and update offer the fork'"'"'s core packages; optional ones are%s\n' "$C_SUB" "$C_RST"
+    printf '  %sonly installed through deps. deps --remove takes back only what it added.%s\n' "$C_SUB" "$C_RST"
     printf '  %sOn Arch, install swaps the base installer'"'"'s pinned quickshell for the%s\n' "$C_SUB" "$C_RST"
     printf '  %sAUR quickshell-git this fork targets, before any config lands.%s\n' "$C_SUB" "$C_RST"
     printf '  %sGiven neither --keep-config nor --reset-config, config.json is kept on%s\n' "$C_SUB" "$C_RST"
@@ -2320,11 +3471,12 @@ show_help() {
     printf '  %schanges.%s\n' "$C_SUB" "$C_RST"
     printf '  %sapply, install, update and switch offer to overlay the fork'"'"'s Hyprland%s\n' "$C_SUB" "$C_RST"
     printf '  %sconfig on ~/.config/hypr, leaving custom/ and anything the repo does%s\n' "$C_SUB" "$C_RST"
-    printf '  %snot ship alone. -y answers that question no, not yes; --hypr is the%s\n' "$C_SUB" "$C_RST"
-    printf '  %sexplicit yes and --no-hypr the permanent no.%s\n' "$C_SUB" "$C_RST"
+    printf '  %snot ship alone. -y answers that question yes; --no-hypr is the%s\n' "$C_SUB" "$C_RST"
+    printf '  %spermanent no. Installing it is recommended: the shell is written%s\n' "$C_SUB" "$C_RST"
+    printf '  %sagainst its binds and rules.%s\n' "$C_SUB" "$C_RST"
     printf '  %sEvery successful apply, install or switch opens Welcome through the shell;%s\n' "$C_SUB" "$C_RST"
-    printf '  %supdate is the only deployment that keeps it closed. Hyprland files are%s\n' "$C_SUB" "$C_RST"
-    printf '  %soptional: their rule only makes the Welcome window float.%s\n' "$C_SUB" "$C_RST"
+    printf '  %supdate is the only deployment that keeps it closed, with or without the%s\n' "$C_SUB" "$C_RST"
+    printf '  %sfork'"'"'s Hyprland files.%s\n' "$C_SUB" "$C_RST"
     printf '  %sOptions take --flag=value as well as --flag value, and everything after%s\n' "$C_SUB" "$C_RST"
     printf '  %sa bare -- is passed through to hyprset/hyprmerge.%s\n' "$C_SUB" "$C_RST"
     printf '  %sAliases: --no-confirm/--noconfirm (-y), --preserve-config (--keep-config),%s\n' "$C_SUB" "$C_RST"
@@ -2339,6 +3491,7 @@ show_help() {
     printf '  %s%s branch dev%s               %shop branches on the active fork%s\n' "$C_ACC" "$me" "$C_RST" "$C_SUB" "$C_RST"
     printf '  %s%s switch -f mine -b main%s   %sboth at once%s\n' "$C_ACC" "$me" "$C_RST" "$C_SUB" "$C_RST"
     printf '  %s%s apply --local .%s          %sdeploy the checkout you stand in%s\n' "$C_ACC" "$me" "$C_RST" "$C_SUB" "$C_RST"
+    printf '  %s%s deps add calendar%s        %sinstall one optional feature%s\n' "$C_ACC" "$me" "$C_RST" "$C_SUB" "$C_RST"
     printf '\n'
     printf '%sLog: %s%s\n' "$C_SUB" "$(tilde "$DEFAULT_LOG_FILE")" "$C_RST"
     printf '%sDocs: %shttps://ii.clsty.link%s\n\n' "$C_SUB" "$C_UL" "$C_RST"
@@ -2397,6 +3550,16 @@ parse_args() {
                 LOG_FILE="$2"
                 shift 2
                 ;;
+            --add | --remove)
+                need_value "$1" "${2:-}"
+                DEPS_ACTION="${1#--}"
+                DEPS_IDS="$2"
+                shift 2
+                ;;
+            --list)
+                DEPS_ACTION="list"
+                shift
+                ;;
             -v | --verbose)
                 OPT_VERBOSE=true
                 shift
@@ -2431,6 +3594,10 @@ parse_args() {
                 ;;
             --no-restart)
                 OPT_RESTART=false
+                shift
+                ;;
+            --force)
+                OPT_FORCE=true
                 shift
                 ;;
             --hypr | --hypr-config)
@@ -2517,7 +3684,7 @@ parse_args() {
         local first="${positional[0]}"
         case "$first" in
             apply | install | update | switch | fork | branch | list-forks | list-branches | \
-                restart | run | doctor | remove-cli | hyprset | hyprmerge | help | version | demo)
+                restart | run | doctor | deps | remove-cli | hyprset | hyprmerge | help | version | demo)
                 COMMAND="$first"
                 positional=("${positional[@]:1}")
                 ;;
@@ -2543,12 +3710,31 @@ parse_args() {
         hyprset | hyprmerge)
             PASSTHRU_ARGS=("${positional[@]}" "${PASSTHRU_ARGS[@]+"${PASSTHRU_ARGS[@]}"}")
             ;;
+        deps)
+            # `deps add phone calendar` reads as well as `deps --add phone,calendar`.
+            if ((${#positional[@]} > 0)); then
+                case "${positional[0]}" in
+                    add | remove | list) DEPS_ACTION="${positional[0]}" ;;
+                    *) arg_error "deps takes add, remove or list, not \"${positional[0]}\"" ;;
+                esac
+                local extra
+                for extra in "${positional[@]:1}"; do DEPS_IDS+="${DEPS_IDS:+,}$extra"; done
+            fi
+            if [[ "$DEPS_ACTION" == add || "$DEPS_ACTION" == remove ]] && [[ -z "$DEPS_IDS" ]]; then
+                arg_error "deps $DEPS_ACTION requires feature ids (see deps --list)"
+            fi
+            ;;
         *)
             if ((${#positional[@]} > 0)); then
                 arg_error "Unexpected argument \"${positional[0]}\""
             fi
             ;;
     esac
+
+    if [[ -n "$DEPS_ACTION" && "$COMMAND" != deps ]]; then
+        arg_error "--add, --remove and --list belong to the deps command"
+    fi
+    return 0
 }
 
 #══════════════════════════════════════════════════════════════════════════════
@@ -2556,6 +3742,7 @@ parse_args() {
 #══════════════════════════════════════════════════════════════════════════════
 
 main() {
+    START_US="$(ui_now_us)"
     parse_args "$@"
 
     # Bare `ii-p3drovfx` is a CLI, not an installer: show the surface instead of acting.
@@ -2580,7 +3767,18 @@ main() {
             exit 0
             ;;
         version)
-            printf '%s %s\n' "$SCRIPT_SELF" "$SETUP_VERSION"
+            # There are no releases; what is deployed is the only version.
+            local deployed_fork deployed_commit
+            deployed_fork="$(read_state_file fork)"
+            deployed_commit="$(read_state_file commit)"
+            if [[ -n "$(read_state_file local)" ]]; then
+                printf '%s %s\n' "$CLI_NAME" "$(deployed_label)"
+            elif [[ -n "$deployed_commit" ]]; then
+                printf '%s %s/%s @ %s\n' "$CLI_NAME" "${deployed_fork:-unknown}" \
+                    "$(read_state_file branch)" "${deployed_commit:0:8}"
+            else
+                printf '%s (nothing deployed)\n' "$CLI_NAME"
+            fi
             exit 0
             ;;
         demo)
@@ -2610,6 +3808,7 @@ main() {
             remove_cli
             ;;
         doctor) cmd_doctor ;;
+        deps) cmd_deps ;;
         list-forks) cmd_list_forks ;;
         list-branches) cmd_list_branches ;;
         apply | install | update | switch)
@@ -2635,4 +3834,6 @@ main() {
     esac
 }
 
-main "$@"
+# Same line on purpose: an update rewrites this file while it runs, and bash
+# would otherwise read the next command from the new file at the old offset.
+main "$@"; exit

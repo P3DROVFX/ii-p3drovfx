@@ -68,8 +68,12 @@ MouseArea {
 
     // Hover / click popup, in the bar's own style (click-to-show is honoured
     // by the popup itself).
-    StyledPopup {
+    // Lazy: popup controller is only built on approach (same as ExpressiveSports).
+    PopupLoader {
+        active: BarInteraction.enablePopups && (BarInteraction.clickToShow || indicator.containsMouse || held)
+        sourceComponent: StyledPopup {
         id: modePopup
+        popupId: "mode"
         hoverTarget: indicator
         stickyHover: true
         popupRadius: Appearance.rounding.large
@@ -220,6 +224,7 @@ MouseArea {
                 }
             }
         }
+    } // end Loader
     }
 
     RowLayout {

@@ -197,5 +197,9 @@ Rectangle {
                 }
             }
         }
+
+        TouchpadScrollHandler {
+            flickable: menuScroll
+        }
     }
 }

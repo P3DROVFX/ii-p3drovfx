@@ -10,6 +10,7 @@ import qs.modules.common.models.quickToggles
 import qs.modules.common.widgets
 import qs.modules.waffle.looks
 import qs.modules.waffle.actionCenter.bluetooth
+import qs.modules.waffle.actionCenter.easyEffects
 import qs.modules.waffle.actionCenter.idleInhibitor
 import qs.modules.waffle.actionCenter.nightLight
 import qs.modules.waffle.actionCenter.screenShader
@@ -79,6 +80,9 @@ DelegateChooser {
         ActionCenterToggleButton {
             toggleModel: EasyEffectsToggle {}
             icon: "device-eq"
+            menu: Component {
+                EasyEffectsControl {}
+            }
         }
     }
     DelegateChoice {

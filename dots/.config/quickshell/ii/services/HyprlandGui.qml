@@ -61,6 +61,8 @@ Singleton {
     readonly property var targetForKind: ({
         config: "general",
         device: "general",
+        curve: "general",
+        animation: "general",
         windowrule: "rules",
         layerrule: "rules",
         workspacerule: "rules",
@@ -94,7 +96,8 @@ Singleton {
         "decoration:blur:popups": "windows",
         "decoration:blur:popups_ignorealpha": "windows",
         "decoration:blur:input_methods": "windows",
-        "decoration:blur:input_methods_ignorealpha": "windows"
+        "decoration:blur:input_methods_ignorealpha": "windows",
+        "decoration:blur:enabled": "windows"
     })
 
     property bool ready: false
@@ -204,14 +207,59 @@ Singleton {
     /// Called by a page that wants live data for as long as it is on screen.
     function attach() {
         root.subscribers += 1;
-        if (root.subscribers === 1 && root.ready) root.refresh();
+        if (root.subscribers === 1) root.refresh();
     }
 
     function detach() {
         root.subscribers = Math.max(0, root.subscribers - 1);
         // Diff callbacks are closures owned by the page that asked. With nobody left watching,
         // delivering them would only reach objects that are being torn down.
-        if (root.subscribers === 0) root._diffQueue = [];
+        if (root.subscribers === 0) {
+            root._diffQueue = [];
+            dropProc.callback = null;
+            root.watchedKeys = [];
+            root._watchedSet = ({});
+            root._optionQueue = [];
+            optionDebounce.stop();
+            releaseTimer.restart();
+        }
+    }
+
+    // Never discard staged changes or interrupt a write. Read jobs finish
+    // normally; their completion schedules another release attempt.
+    function releaseIdleData() {
+        if (root.watching || root.dirty || root.busy || readProc.running
+                || root._optionBusy || diffProc.running || dropProc.running
+                || root._writeQueue.length > 0 || root._awaitingReload)
+            return;
+        root.ready = false;
+        root.files = ({});
+        root.effective = ({});
+        root.shadowed = ({});
+        root._stored = ({});
+        root._storedIndex = ({});
+        root._desired = ({});
+        root._batchDesired = ({});
+        root._effectiveDraft = null;
+        root._readTargets = [];
+        root._reindex();
+        root._published = ({});
+        readProc.command = [];
+        optionProc.command = [];
+        diffProc.payload = "";
+        diffProc.diff = "";
+        dropProc.result = null;
+        writeProc.job = null;
+        writeProc.result = null;
+        writeProc.payload = "";
+        writeProc.stderrText = "";
+        gc();
+    }
+
+    Timer {
+        id: releaseTimer
+        interval: 0
+        onTriggered: root.releaseIdleData()
     }
 
     /**
@@ -304,6 +352,14 @@ Singleton {
         return live === undefined ? fallback : live.value;
     }
 
+    /// A Lua global as a control should show it: what this page set, else the last hand-written
+    /// assignment, else `fallback`. Globals have no hyprctl answer, so there is no live layer.
+    function globalValue(name: string, fallback: var): var {
+        if (root.managedGlobals.hasOwnProperty(name)) return root.managedGlobals[name];
+        const inherited = root.inheritedGlobals[name];
+        return inherited === undefined ? fallback : inherited.value;
+    }
+
     /// The managed block of one file exactly as it sits on disk, for the review dialog.
     function regionText(target: string): string {
         return root.files[target]?.regionText ?? "";
@@ -330,6 +386,31 @@ Singleton {
             return;
         }
         root._upsert({ kind: "config", id: key, key: key, value: value });
+    }
+
+    /// Windows animations page: only animation entries; the Hyprland page's other drafts stay pending.
+    /// Bypasses _flush(), which would send every staged target.
+    function saveAnimations(entries: var) {
+        if (!root.ready || root.busy || root._writeQueue.length > 0) return;
+        const animations = entries.filter(entry => entry.kind === "curve" || entry.kind === "animation");
+        if (animations.length === 0) return;
+        const saved = (root._stored.general ?? []).filter(entry =>
+            !animations.some(animation => animation.kind === entry.kind && animation.id === entry.id));
+        root.batch(() => {
+            for (const entry of animations) root._upsert(entry);
+        });
+        root._writeQueue = [{ target: "general", strip: false, sent: null, reloadTick: 0,
+            entries: saved.concat(animations) }];
+        root._drainWrites();
+    }
+
+    function animationsSaved(entries: var): bool {
+        if (!root.ready) return false;
+        const stored = root._stored.general ?? [];
+        return entries.every(entry => {
+            const saved = stored.find(item => item.kind === entry.kind && item.id === entry.id);
+            return saved !== undefined && ObjectUtils.canon(saved) === ObjectUtils.canon(entry);
+        });
     }
 
     /// Stop managing a key. What it goes back to is whatever a hand-written line above the
@@ -827,6 +908,10 @@ Singleton {
 
     function _finishRead() {
         root.busy = false;
+        if (!root.watching) {
+            root._refreshAgain = false;
+            releaseTimer.restart();
+        }
         root.ready = true;
         root.changed();
         if (!root._refreshAgain) return;
@@ -906,6 +991,7 @@ Singleton {
             root._effectiveDraft = null;
         }
         root.changed();
+        if (!root.watching) releaseTimer.restart();
     }
 
     /// hyprctl --batch answers with bare JSON objects separated by blank lines, not an array.
@@ -972,6 +1058,7 @@ Singleton {
         root._diffQueue = root._diffQueue.slice(1);
         if (job?.callback) job.callback(diffProc.target, diffProc.diff);
         root._drainDiffs();
+        if (!root.watching) releaseTimer.restart();
     }
 
     function _drainWrites() {
@@ -991,7 +1078,7 @@ Singleton {
         } else {
             // Held by reference: every edit replaces the whole array, so if what is staged is
             // still this same array when the write comes back, nothing was edited meanwhile.
-            job.sent = root._entriesFor(job.target);
+            job.sent = job.entries ?? root._entriesFor(job.target);
             writeProc.payload = JSON.stringify({ version: 1, entries: job.sent });
             writeProc.command = [root.scriptPath, "write", "--file", root.targetFiles[job.target],
                 "--json", "-", "--custom-dir", root.customDir];
@@ -1015,6 +1102,7 @@ Singleton {
             root._rereadAfterWrite = false;
             root.refresh();
         }
+        if (!root.watching) releaseTimer.restart();
     }
 
     function _afterWrite(job: var, result: var) {
@@ -1182,6 +1270,7 @@ Singleton {
             if (dropProc.callback) dropProc.callback(result);
             dropProc.callback = null;
             if (!dropProc.dryRun && result.ok) root.refresh();
+            if (!root.watching) releaseTimer.restart();
         })
     }
 
@@ -1197,6 +1286,7 @@ Singleton {
             root._awaitingReload = false;
             logProc.target = canaryTimer.target;
             logProc.running = true;
+            if (!root.watching) releaseTimer.restart();
         }
     }
 
@@ -1241,7 +1331,10 @@ Singleton {
             root._selfWrites = ({});
             root._selfWriteAt = 0;
             root.reloaded(own, targets);
-            if (root.subscribers === 0) return;
+            if (!root.watching) {
+                releaseTimer.restart();
+                return;
+            }
             // A reload this side caused changed nothing this side does not already hold: the
             // write handed back the file in full. Reading all five again on every click was
             // most of what made a setting feel slow to apply.
@@ -1250,5 +1343,4 @@ Singleton {
         }
     }
 
-    Component.onCompleted: root.refresh()
 }

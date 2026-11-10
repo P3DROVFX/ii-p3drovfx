@@ -521,7 +521,12 @@ def run_receive(args):
         if stdin_fd in rlist:
             chunk = os.read(stdin_fd, 4096)
             if not chunk:
-                continue
+                # stdin EOF: the shell that spawned us is gone (restart/crash).
+                # A closed fd stays readable, so `continue` here busy-looped
+                # select() at 100% CPU. Stop the CLI (frees the port) and exit.
+                bridge.child.terminate()
+                parser.flush()
+                return 0
             stdin_buf += chunk
             while b"\n" in stdin_buf:
                 line, stdin_buf = stdin_buf.split(b"\n", 1)

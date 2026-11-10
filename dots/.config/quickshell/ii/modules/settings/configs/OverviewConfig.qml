@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -11,17 +12,13 @@ ContentPage {
     forceWidth: false
     readonly property bool overviewLockedByAppList: Config.options.search.alwaysListApps
 
-    readonly property bool videoWallpaper: {
-        const background = Config.options && Config.options.background ? Config.options.background : null;
-        if (!background)
-            return false;
-        return background.useWallpaperEngine === true || Wallpapers.isVideoFile(background.wallpaperPath || "");
-    }
+    // Locked only while another process paints the video (see Wallpapers).
+    readonly property bool videoWallpaper: Wallpapers.videoWallpaperActive
 
     readonly property string overviewBackgroundStyle: {
         const background = Config.options.background;
         const style = background.overviewBackgroundStyle;
-        if (["gnome", "soft-focus", "camera-push", "depth", "card-lift", "desaturate", "directional", "material-shape"].indexOf(style) >= 0)
+        if (["gnome", "real-gnome", "soft-focus", "camera-push", "depth", "card-lift", "desaturate", "directional", "material-shape"].indexOf(style) >= 0)
             return style;
         switch (background.zoomOutStyle) {
         case 0:
@@ -34,7 +31,17 @@ ContentPage {
         }
     }
 
-    readonly property bool windowTransitionAvailable: overviewBackgroundStyle === "gnome" || overviewBackgroundStyle === "soft-focus"
+    // The scrolling layouts' overview is the scrolloverview plugin: no zoom there.
+    readonly property bool scrollingLayout: GlobalStates.scrollingLayoutActive
+    readonly property bool windowTransitionAvailable: !scrollingLayout && (overviewBackgroundStyle === "gnome" || overviewBackgroundStyle === "real-gnome" || overviewBackgroundStyle === "soft-focus")
+
+    /**
+     * The Dynamic Island lays the overview out itself when it owns it: a fixed 2x3 grid
+     * at a fixed scale, opening with the island. Nothing here reads the grid, the scale
+     * or the animation settings while that is on, so they are locked rather than left
+     * looking as though they still do something.
+     */
+    readonly property bool islandOwnsLayout: GlobalStates.islandOwnsOverview
 
     KeyboardShortcutBox {
         Layout.fillWidth: true
@@ -52,6 +59,13 @@ ContentPage {
             visible: page.overviewLockedByAppList
             materialIcon: "lock"
             text: Translation.tr("Overview is disabled while 'Always list apps on empty query' is active. Disable it in Launcher settings to enable the Overview again.")
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: page.islandOwnsLayout
+            materialIcon: "lock"
+            text: Translation.tr("The Dynamic Island draws the Overview in its own fixed layout: a small 2x3 grid that opens with the island. The grid, scale and animation settings below do nothing while that is on - turn off 'Overview in the island' in Dynamic Island settings to use them.")
         }
 
         // Group 1: General Options
@@ -112,7 +126,7 @@ ContentPage {
             spacing: 4
 
             ConfigSwitch {
-                enabled: Config.options.overview.enable
+                enabled: Config.options.overview.enable && !page.islandOwnsLayout
                 buttonIcon: "tune"
                 text: Translation.tr("Manual Scale (Override Auto-Scale)")
                 checked: Config.options.overview.enableManualScale
@@ -122,7 +136,7 @@ ContentPage {
             }
 
             ConfigSpinBox {
-                enabled: Config.options.overview.enable && !Config.options.overview.enableManualScale
+                enabled: Config.options.overview.enable && !Config.options.overview.enableManualScale && !page.islandOwnsLayout
                 icon: "zoom_in_map"
                 text: Translation.tr("Auto-Scale Factor (%)")
                 value: (Config.options.overview.autoScaleFactor ?? 1.0) * 100
@@ -135,7 +149,7 @@ ContentPage {
             }
 
             ConfigSpinBox {
-                enabled: Config.options.overview.enable && Config.options.overview.enableManualScale
+                enabled: Config.options.overview.enable && Config.options.overview.enableManualScale && !page.islandOwnsLayout
                 icon: "aspect_ratio"
                 text: Translation.tr("Custom Scale (%)")
                 value: Config.options.overview.scale * 100
@@ -148,7 +162,7 @@ ContentPage {
             }
 
             ConfigSwitch {
-                enabled: Config.options.overview.enable
+                enabled: Config.options.overview.enable && !page.islandOwnsLayout
                 buttonIcon: "block"
                 text: Translation.tr("Disable all animations")
                 description: Translation.tr("Disables entrance, sliding and cascade motion, opening the overview and search instantly.")
@@ -166,7 +180,8 @@ ContentPage {
                 title: Translation.tr("Animation Style")
                 icon: "animation"
                 Layout.fillWidth: true
-                opacity: Config.options.overview.animationStyle === "none" ? 0.6 : 1.0
+                enabled: !page.islandOwnsLayout
+                opacity: (Config.options.overview.animationStyle === "none" || page.islandOwnsLayout) ? 0.6 : 1.0
 
                 RowLayout {
                     Layout.fillWidth: true
@@ -212,7 +227,7 @@ ContentPage {
             }
 
             ConfigSwitch {
-                enabled: Config.options.overview.enable && Config.options.overview.animationStyle !== "none"
+                enabled: Config.options.overview.enable && Config.options.overview.animationStyle !== "none" && !page.islandOwnsLayout
                 buttonIcon: "auto_awesome"
                 text: Translation.tr("Cascade Workspace Entrance")
                 description: Config.options.overview.animationStyle === "none" ? Translation.tr("Disabled while Animation Style is set to None") : ""
@@ -234,6 +249,33 @@ ContentPage {
             Layout.fillWidth: true
             spacing: Appearance.rounding.small
 
+            ContentSubsection {
+                Layout.fillWidth: true
+                title: Translation.tr("Window cards")
+                icon: "view_carousel"
+                tooltip: Translation.tr("Recents puts an app chip on every window, with a menu for screenshot, float, fullscreen, pin and close")
+
+                ConfigSelectionArray {
+                    Layout.fillWidth: true
+                    currentValue: Config.options.overview.cardDesign ?? "classic"
+                    onSelected: newValue => {
+                        Config.options.overview.cardDesign = newValue;
+                    }
+                    options: [
+                        {
+                            displayName: Translation.tr("Classic"),
+                            icon: "grid_view",
+                            value: "classic"
+                        },
+                        {
+                            displayName: Translation.tr("Recents"),
+                            icon: "view_carousel",
+                            value: "recents"
+                        }
+                    ]
+                }
+            }
+
             GridLayout {
                 id: classicControls
                 Layout.fillWidth: true
@@ -244,6 +286,7 @@ ContentPage {
                 ConfigSpinBox {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
+                    enabled: !page.islandOwnsLayout
                     icon: "view_agenda"
                     text: Translation.tr("Rows")
                     value: Config.options.overview.rows
@@ -262,6 +305,7 @@ ContentPage {
                 ConfigSpinBox {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
+                    enabled: !page.islandOwnsLayout
                     icon: "view_column"
                     text: Translation.tr("Columns")
                     value: Config.options.overview.columns
@@ -360,9 +404,23 @@ ContentPage {
 
         NoticeBox {
             Layout.fillWidth: true
+            visible: page.scrollingLayout && !(Config.options.background.useBackgroundOverviewAlways ?? false)
+            materialIcon: "view_carousel"
+            text: Translation.tr("On the scrolling layouts the overview behind the search is the scrolloverview plugin, so the wallpaper never zooms. Install it and set its zoom in Hyprland → Layout → Overview.")
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
             visible: page.videoWallpaper
             materialIcon: "movie"
             text: Translation.tr("Video wallpaper is active: image-based effects use a safe fallback.")
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: (Config.options.background.useBackgroundOverviewAlways ?? false) && !page.videoWallpaper
+            materialIcon: "dashboard_customize"
+            text: Translation.tr("Overview background design is set to always active in Background settings. The style remains permanently applied and static on the desktop.")
         }
 
         ConfigSwitch {
@@ -376,7 +434,7 @@ ContentPage {
         }
 
         ContentSubsection {
-            visible: Config.options.background.zoomOutEnabled || page.videoWallpaper
+            visible: (Config.options.background.zoomOutEnabled || page.videoWallpaper) && !page.scrollingLayout
             title: Translation.tr("Zoom background style")
             icon: "style"
             Layout.fillWidth: true
@@ -391,7 +449,7 @@ ContentPage {
                     currentValue: page.overviewBackgroundStyle
                     onSelected: newValue => {
                         Config.options.background.overviewBackgroundStyle = newValue;
-                        Config.options.background.zoomOutStyle = newValue === "gnome" ? 0 : newValue === "soft-focus" ? 1 : 2;
+                        Config.options.background.zoomOutStyle = (newValue === "gnome" || newValue === "real-gnome") ? 0 : newValue === "soft-focus" ? 1 : 2;
                     }
                     options: [
                         {
@@ -400,6 +458,13 @@ ContentPage {
                             tooltip: Translation.tr("Zooms the wallpaper out with rounded corners, shadow and a blurred backing."),
                             enabled: !page.videoWallpaper,
                             value: "gnome"
+                        },
+                        {
+                            displayName: Translation.tr("Real Gnome"),
+                            icon: "auto_awesome_mosaic",
+                            tooltip: Translation.tr("Gnome Like reworked after GNOME Shell: windows spread into a non-overlapping picker under small workspace thumbnails, eased motion, neighbouring workspaces at the edges and a vignetted backing."),
+                            enabled: !page.videoWallpaper,
+                            value: "real-gnome"
                         },
                         {
                             displayName: Translation.tr("Soft Focus"),
@@ -457,7 +522,19 @@ ContentPage {
         }
 
         ConfigSwitch {
-            visible: Config.options.background.zoomOutEnabled && page.overviewBackgroundStyle === "material-shape" && !page.videoWallpaper
+            visible: Config.options.background.zoomOutEnabled && page.overviewBackgroundStyle === "real-gnome" && !page.scrollingLayout
+                && !(Config.options.background.useBackgroundOverviewAlways ?? false)
+            buttonIcon: "desktop_windows"
+            text: Translation.tr("Real Gnome on every monitor")
+            checked: Config.options.background.realGnomeAllMonitors === true
+            onCheckedChanged: Config.options.background.realGnomeAllMonitors = checked
+            StyledToolTip {
+                text: Translation.tr("Also zoom the wallpaper and show a window picker on the other monitors. Off, only the monitor where the overview opens animates.")
+            }
+        }
+
+        ConfigSwitch {
+            visible: Config.options.background.zoomOutEnabled && page.overviewBackgroundStyle === "material-shape" && !page.videoWallpaper && !page.scrollingLayout
             enabled: !page.videoWallpaper
             buttonIcon: "wb_twilight"
             text: Translation.tr("Material Shape drop-shadow")
@@ -469,7 +546,7 @@ ContentPage {
         }
 
         ConfigSlider {
-            visible: Config.options.background.zoomOutEnabled && page.overviewBackgroundStyle === "material-shape" && !page.videoWallpaper
+            visible: Config.options.background.zoomOutEnabled && page.overviewBackgroundStyle === "material-shape" && !page.videoWallpaper && !page.scrollingLayout
             enabled: !page.videoWallpaper
             buttonIcon: "aspect_ratio"
             text: Translation.tr("Material Shape scale (%)")

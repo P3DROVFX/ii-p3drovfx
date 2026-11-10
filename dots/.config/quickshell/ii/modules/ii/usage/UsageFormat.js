@@ -68,6 +68,29 @@ function memory(mib) {
     return `${(value / 1024).toFixed(1)} GiB`;
 }
 
+/// Bytes in decimal SI units ("840 kB", "1.2 GB"), as network data is quoted: a
+/// gigabyte of traffic is 10^9 bytes, unlike a gibibyte of memory.
+function bytes(b) {
+    const value = b ?? 0;
+    if (value <= 0)
+        return "—";
+    const units = ["B", "kB", "MB", "GB", "TB"];
+    let unit = 0;
+    let scaled = value;
+    while (scaled >= 1000 && unit < units.length - 1) {
+        scaled /= 1000;
+        unit++;
+    }
+    if (unit === 0)
+        return `${Math.round(scaled)} B`;
+    return `${scaled < 10 ? scaled.toFixed(1) : Math.round(scaled)} ${units[unit]}`;
+}
+
+/// KiB as stored by the sampler.
+function bytesFromKib(kib) {
+    return bytes((kib ?? 0) * 1024);
+}
+
 function count(n) {
     return (n ?? 0) <= 0 ? "—" : `${Math.round(n)}`;
 }

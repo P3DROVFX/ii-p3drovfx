@@ -35,6 +35,8 @@ Item {
 
     property bool isOpen: false
     property bool isAnimating: false
+    // Keybind hints (already gated upstream by the page's Ctrl-hold state).
+    property bool showShortcutHints: false
     property string mode: "add"
     property string editId: ""
     property string editCommand: ""
@@ -112,6 +114,18 @@ Item {
         id: saveFeedbackTimer
         interval: 2000
         onTriggered: root.isSavedFeedback = false
+    }
+
+    // Save from anywhere in the form; Esc steps back to the list.
+    Shortcut {
+        enabled: root.isOpen
+        sequences: ["Ctrl+Return", "Ctrl+Enter"]
+        onActivated: root.confirmSave()
+    }
+    Shortcut {
+        enabled: root.isOpen
+        sequence: "Escape"
+        onActivated: root.startClose()
     }
 
     function confirmSave() {
@@ -246,15 +260,13 @@ Item {
                         RowLayout {
                             id: saveRow
                             anchors.centerIn: parent; spacing: 8
-                            MaterialSymbol {
-                                text: root.isSavedFeedback ? "check" : "save"
-                                horizontalAlignment: Text.AlignHCenter
+                            TaskShortcutContent {
+                                symbol: root.isSavedFeedback ? "check" : "save"
+                                labelText: root.isSavedFeedback ? qsTr("Saved!") : qsTr("Save")
+                                shortcut: "Ctrl + ↵"
+                                showHint: root.showShortcutHints
                                 iconSize: Appearance.font.pixelSize.normal
-                                color: (commandField.text.trim().length > 0 || root.isSavedFeedback) ? (root.isSavedFeedback ? root.colSaveFeedbackText : root.colSaveBtnText) : root.colSaveBtnDisabledText
-                            }
-                            StyledText {
-                                text: root.isSavedFeedback ? qsTr("Saved!") : qsTr("Save")
-                                font.weight: Font.Bold
+                                labelPixelSize: Appearance.font.pixelSize.small
                                 color: (commandField.text.trim().length > 0 || root.isSavedFeedback) ? (root.isSavedFeedback ? root.colSaveFeedbackText : root.colSaveBtnText) : root.colSaveBtnDisabledText
                             }
                         }
@@ -266,9 +278,12 @@ Item {
                         colBackground: root.colCloseBtnBg
                         colBackgroundHover: root.colCloseBtnBgHover
                         onClicked: root.startClose()
-                        MaterialSymbol {
-                            anchors.centerIn: parent; text: "close"
-                            horizontalAlignment: Text.AlignHCenter; iconSize: Appearance.font.pixelSize.large
+                        TaskShortcutContent {
+                            anchors.centerIn: parent
+                            symbol: "close"
+                            shortcut: "Esc"
+                            showHint: root.showShortcutHints
+                            iconSize: Appearance.font.pixelSize.large
                             color: root.colCloseBtnIcon
                         }
                     }

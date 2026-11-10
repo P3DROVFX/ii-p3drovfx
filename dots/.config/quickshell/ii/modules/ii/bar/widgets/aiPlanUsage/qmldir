@@ -4,3 +4,5 @@ ExpressiveAiPlanUsage 1.0 ExpressiveAiPlanUsage.qml
 AiQuotaIndicator 1.0 AiQuotaIndicator.qml
 AiQuotaArcGauge 1.0 AiQuotaArcGauge.qml
 AiQuotaTransition 1.0 AiQuotaTransition.qml
+AiQuotaCombined 1.0 AiQuotaCombined.qml
+AiQuotaPalette 1.0 AiQuotaPalette.qml

@@ -72,8 +72,12 @@ Item {
 
     readonly property string processedBody: root.displayBody
 
+    // Read by the cheatsheet: no tab swipe while the pointer is in the email
+    // body or a text selection drag is running.
+    readonly property bool locksHorizontalSwipe: readingPaneHover.hovered || bodyText.interacting || quotedText.interacting
+
     function updateDetections() {
-        var res = EmailDetections.detectAll(root.body);
+        var res = EmailDetections.detectAll(root.body, root.subject);
         root.detectedMeetings = res.meetings;
         root.detectedPhones = res.phones;
         root.detectedCodes = res.codes;
@@ -603,12 +607,21 @@ Item {
                     color: Appearance.colors.colLayer4Base
                     clip: true
 
+                    // Inside the reading pane a horizontal drag selects text:
+                    // the cheatsheet's tab swipe must not take it.
+                    HoverHandler {
+                        id: readingPaneHover
+                    }
+
                     StyledFlickable {
                         anchors.fill: parent
                         anchors.margins: 20
                         contentWidth: width
                         contentHeight: contentColInsideFlickable.implicitHeight
                         clip: true
+                        // A mouse drag over the text is a selection, not a
+                        // flick; the wheel and touchpad still scroll.
+                        acceptedButtons: (bodyText.interacting || quotedText.interacting) ? Qt.NoButton : Qt.LeftButton
 
                         ColumnLayout {
                             id: contentColInsideFlickable
@@ -639,29 +652,15 @@ Item {
                                 }
                             }
 
-                            StyledText {
+                            SelectableEmailText {
                                 id: bodyText
                                 Layout.fillWidth: true
                                 visible: !root.loadingBody
-                                text: root.loadingBody ? "" : root.processedBody
-                                textFormat: Text.RichText
+                                html: root.loadingBody ? "" : root.processedBody
                                 font.family: Appearance.font.family.reading
                                 font.pixelSize: EmailService.bodyFontSize
                                 font.weight: Font.Normal
                                 color: Appearance.colors.colOnSurface
-                                wrapMode: Text.Wrap
-                                linkColor: Appearance.colors.colPrimary
-                                onLinkActivated: link => {
-                                    if (link.startsWith("copy:")) {
-                                        Quickshell.clipboardText = link.substring(5);
-                                    } else {
-                                        Qt.openUrlExternally(link);
-                                    }
-                                }
-
-                                HoverHandler {
-                                    cursorShape: parent.hoveredLink ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                }
                             }
 
                             // Quoted text section
@@ -698,11 +697,11 @@ Item {
                                         }
                                     }
 
-                                    StyledText {
+                                    SelectableEmailText {
                                         id: quotedText
                                         width: parent.width
-                                        text: root.quotedBody
-                                        textFormat: Text.RichText
+                                        enabled: root.showQuoted
+                                        html: root.quotedBody
                                         font.family: Appearance.font.family.reading
                                         font.pixelSize: EmailService.bodyFontSize - 1
                                         font.weight: Font.Normal
@@ -710,15 +709,6 @@ Item {
                                         opacity: root.showQuoted ? 0.7 : 0
                                         Behavior on opacity {
                                             NumberAnimation { duration: 250 }
-                                        }
-                                        wrapMode: Text.Wrap
-                                        linkColor: Appearance.colors.colPrimary
-                                        onLinkActivated: link => {
-                                            if (link.startsWith("copy:")) {
-                                                Quickshell.clipboardText = link.substring(5);
-                                            } else {
-                                                Qt.openUrlExternally(link);
-                                            }
                                         }
                                     }
                                 }

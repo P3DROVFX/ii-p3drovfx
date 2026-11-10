@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Effects
+import Qt5Compat.GraphicalEffects as GE
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Hyprland
@@ -18,10 +19,13 @@ import qs.modules.ii.background.lockscreen
 import qs.modules.ii.background.parallax
 import qs.modules.ii.background.overview
 import qs.modules.ii.background.blur
+import qs.modules.ii.background.depth
 import qs.modules.ii.lock
 import qs.modules.common.panels.lock
 import qs.modules.ii.editMode
+import qs.modules.ii.oledSaver
 
+import qs.modules.ii.background.shortcuts
 PanelWindow {
     id: bgWidgetsWindow
 
@@ -44,6 +48,22 @@ PanelWindow {
     screen: modelData
     readonly property var overviewController: GlobalStates.overviewBackgroundControllerFor(bgWidgetsWindow.screen ? bgWidgetsWindow.screen.name : "")
     readonly property bool isGnomeLikeOverview: overviewController && overviewController.isGnomeLike
+    // The window's NET content scale: the product of every transform the
+    // scene graph stacks over layer coordinates before pixels reach the
+    // monitor — the gnome-like opening ratio, the overview's Scale (camera-
+    // push holds 1.09 while it is up, and the always-on background overview
+    // keeps it up permanently), and Edit Mode's shrink. Modal cards undo
+    // this one number to land at exactly 1:1; cancelling only the edit
+    // matrix left the menu sampled at the overview's 1.09 — off its native
+    // grid, jagged text and icons, which is what the 2026-09-18 editMode
+    // screenshot showed. Mirrors transformContainer's three transforms
+    // term for term; if one of them changes, this changes with it.
+    readonly property real contentScale:
+        (bgWidgetsWindow.isGnomeLikeOverview && !bgWidgetsWindow.isScrollingLayout
+            ? bgWidgetsWindow.defaultRatio : 1.0)
+        * (bgWidgetsWindow.overviewController && bgWidgetsWindow.overviewController.followWidgetsScale
+            ? bgWidgetsWindow.overviewController.scale : 1.0)
+        * bgWidgetsWindow.editTransform.scale
 
     // Edit Mode's viewport: the same pure function, on the same inputs, on the same scalar as the
     // wallpaper surface (BackgroundRoot), so the canvas and the wallpaper shrink as one rectangle
@@ -65,7 +85,9 @@ PanelWindow {
         0, 0, 0, 1)
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: WlrLayer.Bottom
-    WlrLayershell.namespace: "quickshell:backgroundWidgets"
+    // One namespace per screen: the compositor blur rule is per namespace, and a screen whose
+    // widgets blur themselves under windows must not strip the glass off the others.
+    WlrLayershell.namespace: "quickshell:backgroundWidgets:" + bgWidgetsWindow.editScreenName
     // Wayland gives no client the global key stream: without keyboard focus,
     // Qt's modifier state stays empty and mouse.modifiers is always 0, which
     // makes the Ctrl-to-bypass-snap drag gesture undetectable. While a widget
@@ -110,8 +132,42 @@ PanelWindow {
                 bgWidgetsWindow.seedEditFocus();
         }
     }
-    WlrLayershell.keyboardFocus: bgWidgetsWindow.editFocusSeed ? WlrKeyboardFocus.Exclusive
-        : ((widgetCanvas.draggingActive || widgetCanvas.keyboardFocusHeld) ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None)
+    // A widget's text field on this screen wants the keyboard. Same seed as Edit
+    // Mode: Exclusive for a beat so the keys arrive at once, then OnDemand so a
+    // click elsewhere takes them away again.
+    readonly property bool widgetTyping: GlobalStates.widgetTypingOwner.length > 0
+        && GlobalStates.widgetTypingOwner.startsWith(bgWidgetsWindow.editScreenName + "|")
+    property bool typingFocusSeed: false
+    Timer {
+        id: typingFocusSeedTimer
+        interval: 120
+        onTriggered: bgWidgetsWindow.typingFocusSeed = false
+    }
+    onWidgetTypingChanged: {
+        bgWidgetsWindow.typingFocusSeed = bgWidgetsWindow.widgetTyping;
+        if (bgWidgetsWindow.widgetTyping)
+            typingFocusSeedTimer.restart();
+    }
+    // An icon's menu or rename opened from another surface (the desktop
+    // menu's New folder) has no click on this one to earn OnDemand focus.
+    readonly property bool iconsDialogOpen: desktopIcons.item?.dialogOpen ?? false
+    onIconsDialogOpenChanged: {
+        if (!bgWidgetsWindow.iconsDialogOpen)
+            return;
+        bgWidgetsWindow.typingFocusSeed = true;
+        typingFocusSeedTimer.restart();
+    }
+    // A launch-pad caption renamed in place: the double-click that opened it
+    // came before OnDemand, so it earned no focus either.
+    readonly property bool iconsCaptionEditing: desktopIcons.item?.captionEditing ?? false
+    onIconsCaptionEditingChanged: {
+        if (!bgWidgetsWindow.iconsCaptionEditing)
+            return;
+        bgWidgetsWindow.typingFocusSeed = true;
+        typingFocusSeedTimer.restart();
+    }
+    WlrLayershell.keyboardFocus: (bgWidgetsWindow.editFocusSeed || bgWidgetsWindow.typingFocusSeed) ? WlrKeyboardFocus.Exclusive
+        : ((bgWidgetsWindow.widgetTyping || widgetCanvas.draggingActive || widgetCanvas.keyboardFocusHeld || desktopIcons.item?.dialogOpen || desktopIcons.item?.hasSelection || desktopIcons.item?.captionEditing) ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None)
     color: "transparent"
 
     anchors {
@@ -145,9 +201,69 @@ PanelWindow {
             activeId = GlobalStates._editSavedWorkspace;
         else if (activeId > 1000000)
             activeId = 2147483647 - activeId;
-        return HyprlandData.windowList.some(function (w) {
-            return w.workspace.id === activeId;
+        return HyprlandData.specialWindowsShown(monName) || HyprlandData.windowList.some(function (w) {
+            return HyprlandData.sameWorkspace(w.workspace.id, activeId);
         });
+    }
+    // Widgets stop their clocks, repeating timers and endless animations while windows
+    // cover the desktop: this layer is full screen, so one ticking widget re-renders every
+    // widget on every frame for nobody to see. Never while the desktop itself is the point
+    // (lock screen, Edit Mode, overview). See AbstractBackgroundWidget.live.
+    readonly property bool widgetsPaused: hasWindowsInActiveWorkspace && !GlobalStates.screenLocked
+        && !GlobalStates.lockAnimationActive && !GlobalStates.editMode && !GlobalStates.overviewOpen
+
+    // Paused-render watchdog. A widget that keeps animating while paused (one that does
+    // not gate on `live`, or a shared component inside it that animates on its own) shows
+    // up as frames this layer keeps swapping with nothing new to show. Counted only while
+    // paused and once the pause has settled; a burst (a cover crossfade, a weather update)
+    // stays under it, three busy 5 s windows in a row do not. One warning per pause.
+    property int _pausedFrames: 0
+    property int _busyPausedWindows: 0
+    property bool _pauseSettled: false
+    property bool _pauseWarned: false
+    onWidgetsPausedChanged: {
+        bgWidgetsWindow._pausedFrames = 0;
+        bgWidgetsWindow._busyPausedWindows = 0;
+        bgWidgetsWindow._pauseSettled = false;
+        bgWidgetsWindow._pauseWarned = false;
+        pausedFrameWindow.stop();
+        if (bgWidgetsWindow.widgetsPaused)
+            pauseSettleTimer.restart();
+        else
+            pauseSettleTimer.stop();
+    }
+    Timer {
+        id: pauseSettleTimer
+        interval: 2000
+        onTriggered: {
+            bgWidgetsWindow._pausedFrames = 0;
+            bgWidgetsWindow._pauseSettled = true;
+            pausedFrameWindow.restart();
+        }
+    }
+    Timer {
+        id: pausedFrameWindow
+        interval: 5000
+        repeat: true
+        onTriggered: {
+            const frames = bgWidgetsWindow._pausedFrames;
+            bgWidgetsWindow._pausedFrames = 0;
+            bgWidgetsWindow._busyPausedWindows = frames > 10 ? bgWidgetsWindow._busyPausedWindows + 1 : 0;
+            if (bgWidgetsWindow._busyPausedWindows < 3)
+                return;
+            bgWidgetsWindow._pauseWarned = true;
+            stop();
+            console.warn("[BackgroundWidgets] The widget layer on", bgWidgetsWindow.screen?.name ?? "?",
+                "kept rendering while paused (" + frames + " frames in the last 5 s): a desktop widget animates without",
+                "gating on `live`. Remove widgets one by one to find it; see tests/background/widget_live.test.cjs.");
+        }
+    }
+    Connections {
+        target: transformContainer.Window.window
+        enabled: bgWidgetsWindow._pauseSettled && !bgWidgetsWindow._pauseWarned
+        function onFrameSwapped() {
+            bgWidgetsWindow._pausedFrames++;
+        }
     }
     property bool deferredFullscreen: false
     Timer {
@@ -177,6 +293,8 @@ PanelWindow {
         if (GlobalStates.editMode)
             return true;
         if (bgWidgetsWindow.canvasOverlay !== null)
+            return true;
+        if (PanelFamily.isIi && DesktopShortcuts.itemsFor(bgWidgetsWindow.editScreenName).length > 0)
             return true;
         if (!hasWidgets)
             return false;
@@ -210,9 +328,27 @@ PanelWindow {
     Component.onCompleted: {
         updateSurfaceNeed();
         updateWallpaperSize();
+        Appearance.setWidgetSelfBlur(bgWidgetsWindow.editScreenName, bgWidgetsWindow.widgetSelfBlurShown);
+        // Already blurred at startup: no fade.
+        if (bgWidgetsWindow.windowBlurActive)
+            bgWidgetsWindow.windowBlurProgress = 1;
     }
 
-    visible: isTargetMonitor && widgetsNeedSurface && (GlobalStates.screenLocked || !bgWidgetsWindow.deferredFullscreen || !(Config && Config.options && Config.options.background && Config.options.background.hideWhenFullscreen))
+    // ── Edit Mode's wallpaper framing ────────────────────────────────────────
+    // While the Wallpaper catalogue is open over this screen the card belongs
+    // to the picture: the overlay below takes the pointer and the widgets step
+    // back. Also the one reason a screen that shows no widgets
+    // (`showOnlyOnSingleMonitor`) needs this surface at all.
+    readonly property bool wallpaperFramingHere: bgWidgetsWindow.isEditMonitor
+        && WallpaperLayout.liveScreen !== ""
+        && WallpaperLayout.liveScreen === bgWidgetsWindow.editScreenName
+    property real wallpaperFramingProgress: bgWidgetsWindow.wallpaperFramingHere ? 1 : 0
+    Behavior on wallpaperFramingProgress {
+        enabled: !Appearance.reducedMotion
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(bgWidgetsWindow)
+    }
+
+    visible: (isTargetMonitor || bgWidgetsWindow.wallpaperFramingHere) && widgetsNeedSurface && (GlobalStates.screenLocked || !bgWidgetsWindow.deferredFullscreen || !(Config && Config.options && Config.options.background && Config.options.background.hideWhenFullscreen))
 
     // Z-ordering fix: when BackgroundRoot transitions from WlrLayer.Overlay back to
     // WlrLayer.Bottom after media mode closes, the compositor re-stacks it at the top
@@ -230,7 +366,7 @@ PanelWindow {
                     bgWidgetsWindow.visible = false;
                     Qt.callLater(function() {
                         bgWidgetsWindow.visible = Qt.binding(function() {
-                            return isTargetMonitor && widgetsNeedSurface && (GlobalStates.screenLocked || !bgWidgetsWindow.deferredFullscreen || !(Config && Config.options && Config.options.background && Config.options.background.hideWhenFullscreen));
+                            return (isTargetMonitor || bgWidgetsWindow.wallpaperFramingHere) && widgetsNeedSurface && (GlobalStates.screenLocked || !bgWidgetsWindow.deferredFullscreen || !(Config && Config.options && Config.options.background && Config.options.background.hideWhenFullscreen));
                         });
                     });
                 }
@@ -241,7 +377,7 @@ PanelWindow {
     // Monitor & Workspaces calculations
     property HyprlandMonitor monitor: Hyprland.monitorFor(modelData)
     readonly property bool isMonitorFocused: (Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "") == (monitor ? monitor.name : "")
-    readonly property bool loopEnabled: !wallpaperIsVideo && Config.options.background.parallax.loop
+    readonly property bool loopEnabled: !videoEffectsDisabled && Config.options.background.parallax.loop
     readonly property var intensitySpans: [20, 15, 12, 10, 8, 7, 5, 4, 3, 2]
     readonly property int chunkSize: {
         let intensity = Config.options.background.parallax.intensity;
@@ -252,7 +388,7 @@ PanelWindow {
     }
     readonly property bool useWorkspaceMap: Config.options.bar.workspaces.useWorkspaceMap
     readonly property var workspaceMap: Config.options.bar.workspaces.workspaceMap
-    readonly property int monitorIndex: Quickshell.screens.indexOf(modelData)
+    readonly property int monitorIndex: HyprlandData.workspaceMapIndex(modelData.name)
     readonly property int workspaceOffset: useWorkspaceMap ? workspaceMap[monitorIndex] : 0
     readonly property int workspaceGroup: {
         if (!loopEnabled)
@@ -281,12 +417,46 @@ PanelWindow {
     property int lastWorkspaceId: workspaceOffset + (workspaceGroup + 1) * chunkSize
 
     // Wallpaper options & bounds
+    // This screen's own wallpaper and framing, the same reading BackgroundRoot
+    // makes (services/WallpaperLayout.qml): the widgets' parallax travels the
+    // plane the wallpaper is actually drawn in.
+    readonly property string ownWallpaperPath: WallpaperLayout.ownPathFor(bgWidgetsWindow.editScreenName)
+    readonly property string framingSourcePath: WallpaperLayout.sourcePathFor(bgWidgetsWindow.editScreenName)
+    readonly property bool wallpaperFramed: {
+        const name = bgWidgetsWindow.editScreenName;
+        const path = bgWidgetsWindow.framingSourcePath;
+        return !CF.WallpaperFraming.isIdentity(WallpaperLayout.framingFor(name, path))
+            || Math.abs(WallpaperLayout.angleFor(name, path) % 360) > 0.001;
+    }
+    // Same plane as BackgroundRoot.framedVerticalSweep: vertical parallax on a
+    // framed picture travels the picture's whole height.
+    readonly property real framedPictureAspect: CF.WallpaperFraming.isSideways(WallpaperLayout.angleFor(bgWidgetsWindow.editScreenName, bgWidgetsWindow.framingSourcePath))
+        ? wallpaperWidth / Math.max(1, wallpaperHeight)
+        : wallpaperHeight / Math.max(1, wallpaperWidth)
+    readonly property bool framedVerticalSweep: {
+        if (!bgWidgetsWindow.wallpaperFramed || bgWidgetsWindow.videoEffectsDisabled
+                || WallpaperLayout.centeringFor(bgWidgetsWindow.editScreenName, bgWidgetsWindow.framingSourcePath) > 0.001)
+            return false;
+        const p = Config.options.background.parallax;
+        if (!p.enableWorkspace || wallpaperWidth <= 0 || wallpaperHeight <= 0)
+            return false;
+        return p.vertical || (p.autoVertical && bgWidgetsWindow.framedPictureAspect > 1);
+    }
+    readonly property real wallpaperBoxWidth: bgWidgetsWindow.wallpaperFramed ? screen.width : wallpaperWidth
+    readonly property real wallpaperBoxHeight: !bgWidgetsWindow.wallpaperFramed ? wallpaperHeight
+        : bgWidgetsWindow.framedVerticalSweep ? Math.max(screen.height, screen.width * bgWidgetsWindow.framedPictureAspect)
+        : screen.height
     property bool wallpaperIsVideo: {
+        if (bgWidgetsWindow.ownWallpaperPath !== "")
+            return false;
         const path = Config.options && Config.options.background && Config.options.background.wallpaperPath ? Config.options.background.wallpaperPath : "";
         return Wallpapers.isVideoFile(path);
     }
-    readonly property bool videoEffectsDisabled: wallpaperIsVideo || Config.options.background.useWallpaperEngine
+    // Matches BackgroundRoot: a video the shell plays itself keeps the effects.
+    readonly property bool videoEffectsDisabled: (wallpaperIsVideo && !Wallpapers.videoRenderedByShell) || Config.options.background.useWallpaperEngine
     property string wallpaperPath: {
+        if (bgWidgetsWindow.ownWallpaperPath !== "")
+            return bgWidgetsWindow.ownWallpaperPath;
         const rawPath = wallpaperIsVideo ? (Config.options && Config.options.background && Config.options.background.thumbnailPath ? Config.options.background.thumbnailPath : "") : (Config.options && Config.options.background && Config.options.background.wallpaperPath ? Config.options.background.wallpaperPath : "");
         if (rawPath !== "")
             return rawPath;
@@ -318,6 +488,9 @@ PanelWindow {
         getWallpaperSizeProc.running = true;
     }
     onWallpaperPathChanged: updateWallpaperSize()
+    // The same file rewritten in place (a quarter turn written into it).
+    readonly property int wallpaperRevision: WallpaperLayout.revisionOf(bgWidgetsWindow.wallpaperPath)
+    onWallpaperRevisionChanged: updateWallpaperSize()
 
     property bool wallpaperSafetyTriggered: {
         const enabled = Config.options.workSafety.enable.wallpaper;
@@ -326,20 +499,20 @@ PanelWindow {
         return enabled && sensitiveWallpaper && sensitiveNetwork;
     }
 
-    property real wallpaperToScreenRatio: Math.min(wallpaperWidth / screen.width, wallpaperHeight / screen.height)
+    property real wallpaperToScreenRatio: Math.min(wallpaperBoxWidth / screen.width, wallpaperBoxHeight / screen.height)
     property real preferredWallpaperScale: videoEffectsDisabled ? 1.0 : Config.options.background.parallax.workspaceZoom
-    property real movableXSpace: ((wallpaperWidth / wallpaperToScreenRatio * baseWallpaperScale) - screen.width) / 2
-    property real movableYSpace: ((wallpaperHeight / wallpaperToScreenRatio * baseWallpaperScale) - screen.height) / 2
+    property real movableXSpace: ((wallpaperBoxWidth / wallpaperToScreenRatio * baseWallpaperScale) - screen.width) / 2
+    property real movableYSpace: ((wallpaperBoxHeight / wallpaperToScreenRatio * baseWallpaperScale) - screen.height) / 2
 
     readonly property real minSafeScale: {
-        const w = wallpaperWidth / wallpaperToScreenRatio * baseWallpaperScale;
-        const h = wallpaperHeight / wallpaperToScreenRatio * baseWallpaperScale;
+        const w = wallpaperBoxWidth / wallpaperToScreenRatio * baseWallpaperScale;
+        const h = wallpaperBoxHeight / wallpaperToScreenRatio * baseWallpaperScale;
         if (w <= 0 || h <= 0)
             return 1.0;
         return Math.max(screen.width / w, screen.height / h);
     }
 
-    readonly property bool verticalParallax: !videoEffectsDisabled && ((Config.options.background.parallax.autoVertical && wallpaperHeight > wallpaperWidth) || Config.options.background.parallax.vertical)
+    readonly property bool verticalParallax: !videoEffectsDisabled && ((Config.options.background.parallax.autoVertical && wallpaperBoxHeight > wallpaperBoxWidth) || Config.options.background.parallax.vertical)
 
     function recalcWallpaperScale() {
         const width = bgWidgetsWindow.wallpaperWidth;
@@ -428,7 +601,7 @@ PanelWindow {
 
     readonly property bool zoomInStyle: !videoEffectsDisabled && Config.options.overview.scrollingStyle.zoomStyle === "in"
     readonly property bool showOpeningAnimation: Config.options.overview.showOpeningAnimation && Config.options.overview.animationStyle !== "none"
-    readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
+    readonly property bool isScrollingLayout: GlobalStates.scrollingLayoutActive
     readonly property var zoomLevels: ({
         "in": { default: 1.04, zoomed: 1 },
         "out": { default: 1, zoomed: 1.01 }
@@ -438,12 +611,69 @@ PanelWindow {
 
     // The window blur stays on through the launcher and the overview - the overview composes its
     // own dim on top of the blurred wallpaper rather than replacing it.
-    readonly property bool windowBlurActive: !videoEffectsDisabled && Config.options.background.blurWhenWindowsOpen && hasWindowsInActiveWorkspace && !GlobalStates.screenLocked
+    // Always On Display over the lock on this screen (see OledSaver.qml).
+    property real lockAodProgress: GlobalStates.screenLocked && GlobalStates.oledSaverMonitors.includes(bgWidgetsWindow.editScreenName) ? 1 : 0
+    Behavior on lockAodProgress {
+        animation: Appearance.animation.elementMoveSlow.numberAnimation.createObject(bgWidgetsWindow)
+    }
+    // Edit Mode's AOD tab drains the card the same way, at the tab's own pace.
+    readonly property real aodProgress: Math.max(bgWidgetsWindow.lockAodProgress,
+        bgWidgetsWindow.isEditMonitor ? GlobalStates.editAodProgress : 0)
+    // Same gate as WindowBlur: the widgets live in their own layer surface, so the wallpaper's
+    // capture never reaches them and they are blurred here instead. The edit card stays sharp.
+    readonly property bool windowBlurActive: !videoEffectsDisabled && Config.options.background.blurWhenWindowsOpen && hasWindowsInActiveWorkspace && !GlobalStates.screenLocked && !GlobalStates.editMode
+    Binding {
+        target: Appearance
+        property: "widgetBackgroundAlpha"
+        value: WidgetColorScheme.backgroundAlpha
+    }
+    // Compositor blur behind the widgets steps aside while they blur themselves.
+    readonly property bool widgetSelfBlurShown: bgWidgetsWindow.visible && bgWidgetsWindow.windowBlurActive
+    onWidgetSelfBlurShownChanged: Appearance.setWidgetSelfBlur(bgWidgetsWindow.editScreenName, bgWidgetsWindow.widgetSelfBlurShown)
+    Component.onDestruction: Appearance.forgetWidgetScreen(bgWidgetsWindow.editScreenName)
+    // Fades in alongside the wallpaper's blur and drops at once with it, like WindowBlur. It is
+    // the cross-fade's weight, never the radius: the wallpaper fades a fully blurred copy in over
+    // the sharp one, so the widgets do the same (see widgetBlurLoader). A growing radius read as
+    // a different, stepping animation next to the wallpaper's, and baked a shader per frame.
+    //
+    // An animation started by hand, not a Behavior gated on windowBlurActive: the gate and
+    // the value both follow that flag, and when the value was re-evaluated first the Behavior
+    // still caught the drop and played it over 400 ms - the blurred widgets lingered over the
+    // already sharp wallpaper and its depth subject (recorded: ~8 frames).
+    property real windowBlurProgress: 0
+    NumberAnimation {
+        id: windowBlurFadeIn
+        target: bgWidgetsWindow
+        property: "windowBlurProgress"
+        to: 1
+        duration: 400
+        easing.type: Easing.OutCubic
+    }
+    function syncWindowBlur() {
+        windowBlurFadeIn.stop();
+        if (!bgWidgetsWindow.windowBlurActive)
+            bgWidgetsWindow.windowBlurProgress = 0;
+        else if (GlobalStates.presetRecoloring)
+            bgWidgetsWindow.windowBlurProgress = 1;
+        else
+            windowBlurFadeIn.start();
+    }
+    onWindowBlurActiveChanged: bgWidgetsWindow.syncWindowBlur()
+    // A true Gaussian, as in LockBlur: MultiEffect blurs large radii from upsampled mip levels,
+    // which on the widgets' transparent edges shows up as blocky, grainy halos. Radius scales
+    // like the wallpaper's MultiEffect (blurMax 64), on the same half-resolution texture.
+    readonly property real windowBlurRadius: 64 * Config.options.background.blurWhenWindowsOpenRadius / 100.0
+    property Component aodEffect: MultiEffect {
+        saturation: -bgWidgetsWindow.aodProgress
+    }
     readonly property bool overviewAnimationVisible: overviewController && (overviewController.active || overviewController.progress > 0.001)
     readonly property bool isMaterialShapeOverview: overviewController && overviewController.isMaterialShape && overviewAnimationVisible
 
     Item {
         id: transformContainer
+        // Desktop-icon menus spill past the Edit Mode shrink: every level from
+        // here down to them carries one (see PointerBoundsEscape).
+        PointerBoundsEscape {}
         anchors.fill: parent
 
         // Match the wallpaper's stable layer lifetime: opening only changes
@@ -453,7 +683,13 @@ PanelWindow {
             controller: bgWidgetsWindow.overviewController
         }
 
+        // Real Gnome keeps them on its plane (followWidgetsScale shrinks them with it,
+        // as Edit Mode does) and steps them out only while a workspace slide hands the
+        // plane to the strip's cards, which carry the wallpaper and windows alone:
+        // per-workspace widgets would otherwise swap in place under the slide.
         opacity: GlobalStates.isMediaModeActiveForScreen(bgWidgetsWindow.screen ? bgWidgetsWindow.screen.name : "")
+                || (bgWidgetsWindow.overviewController && bgWidgetsWindow.overviewController.isRealGnome && bgWidgetsWindow.overviewController.active
+                    && Boolean(GlobalStates.realGnomePlaneHiddenScreens[bgWidgetsWindow.screen ? bgWidgetsWindow.screen.name : ""]))
             ? 0.0
             : (bgWidgetsWindow.isGnomeLikeOverview
                 ? 1.0
@@ -461,7 +697,9 @@ PanelWindow {
         visible: opacity > 0
         Behavior on opacity {
             NumberAnimation {
-                duration: Math.round(350 * Appearance.animMultiplier)
+                // Real Gnome's slide hands the plane over in 40 ms: a short fade keeps
+                // the widgets from lingering over the cards.
+                duration: Math.round((bgWidgetsWindow.overviewController && bgWidgetsWindow.overviewController.isRealGnome ? 140 : 350) * Appearance.animMultiplier)
                 easing.type: Easing.OutCubic
             }
         }
@@ -487,9 +725,10 @@ PanelWindow {
             }
         ]
 
-        scale: bgWidgetsWindow.isGnomeLikeOverview
-            ? (!videoEffectsDisabled && showOpeningAnimation && overviewOpen && isScrollingLayout ? zoomedRatio : defaultRatio)
-            : 1.0
+        // No opening ratio on the scrolling layouts: the scrolloverview plugin
+        // draws that overview, and the old 1% zoom in read as a glitch.
+        scale: bgWidgetsWindow.isGnomeLikeOverview && !bgWidgetsWindow.isScrollingLayout
+            ? bgWidgetsWindow.defaultRatio : 1.0
         Behavior on scale {
             animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(transformContainer)
         }
@@ -526,25 +765,148 @@ PanelWindow {
             }
         }
 
+        // Edit Mode's AOD tab with one of the AOD's own clocks: drawn here, inside the
+        // shrunk desktop, where the lock draws it in LockSurface. The widgets fade out
+        // under it (widgetCanvas' opacity).
+        Loader {
+            anchors.fill: parent
+            z: 5
+            active: GlobalStates.aodUsesClockFace && bgWidgetsWindow.isEditMonitor && GlobalStates.editAodProgress > 0.001
+            visible: active
+            sourceComponent: AodClockFace {
+                running: GlobalStates.editAodPreview
+                opacity: GlobalStates.editAodProgress
+            }
+        }
+
+        // The wallpaper's subject over the widgets (services/DepthEffect.qml),
+        // painted only where the canvas has pixels: above every widget and
+        // icon, under the lock preview and the framing overlay. Built only
+        // while the effect is on.
+        // Under the canvas: the wallpaper itself, painted here only while a
+        // parallax slide moves it, so the cutout above cannot drift off it
+        // (DepthWallpaperCopy.qml). Kept loaded while parallax is on.
+        Loader {
+            anchors.fill: parent
+            z: -1
+            active: depthCutoutLoader.item !== null
+                && (Config.options.background.parallax.enableWorkspace || Config.options.background.parallax.enableSidebar)
+            visible: depthCutoutLoader.item?.copyActive ?? false
+            sourceComponent: DepthWallpaperCopy {
+                plane: DepthEffect.planes[bgWidgetsWindow.editScreenName] ?? null
+                overviewController: bgWidgetsWindow.overviewController
+                containerEditMatrix: bgWidgetsWindow.editMatrix
+                containerScale: transformContainer.scale
+            }
+        }
+
+        // The desktop as the window blur sees it: the canvas and the subject
+        // over it, one item. The blur below captures this (the subject stays
+        // in front of the blurred widgets) and the sharp half of its
+        // cross-fade is this item's opacity. The two are parented here by
+        // `parent:`, in window coordinates as before. Input is not gated by
+        // opacity, so the desktop keeps every click while blurred.
+        Item {
+            id: desktopStack
+            anchors.fill: parent
+            opacity: (1 - bgWidgetsWindow.windowBlurProgress)
+
+            // The canvas is a screen-sized MouseArea moved by the widgets'
+            // parallax, so a long travel (a tall picture's vertical sweep) pulls
+            // it off a strip of the screen. Behind it, fixed to the screen,
+            // this keeps the desktop menu reachable on that strip.
+            MouseArea {
+                anchors.fill: parent
+                z: -1
+                visible: widgetCanvas.visible && widgetCanvas.enabled
+                // Filtered by hand: the TapHandler below widens acceptedButtons.
+                acceptedButtons: Qt.RightButton
+                onClicked: mouse => {
+                    if (mouse.button !== Qt.RightButton)
+                        return;
+                    const p = mapToItem(null, mouse.x, mouse.y);
+                    GlobalStates.openDesktopMenu(bgWidgetsWindow.editScreenName, p.x, p.y);
+                }
+                TapHandler {
+                    id: desktopStripLongPress
+                    gesturePolicy: TapHandler.WithinBounds
+                    onLongPressed: {
+                        const pos = desktopStripLongPress.point.position;
+                        const p = desktopStripLongPress.parent.mapToItem(null, pos.x, pos.y);
+                        GlobalStates.openDesktopMenu(bgWidgetsWindow.editScreenName, p.x, p.y);
+                    }
+                }
+            }
+        }
+
+        Loader {
+            id: depthCutoutLoader
+            parent: desktopStack
+            anchors.fill: parent
+            z: 1
+            active: DepthEffect.active && bgWidgetsWindow.isTargetMonitor
+            sourceComponent: DepthCutoutLayer {
+                screenName: bgWidgetsWindow.editScreenName
+                canvas: widgetCanvas
+                overviewController: bgWidgetsWindow.overviewController
+                containerEditMatrix: bgWidgetsWindow.editMatrix
+                containerScale: transformContainer.scale
+                aodProgress: bgWidgetsWindow.aodProgress
+                editProgress: bgWidgetsWindow.editProgress
+                windowBlurProgress: bgWidgetsWindow.windowBlurProgress
+                dragging: widgetCanvas.draggingActive
+                // The marquee's band (a plain click is a zero-size band:
+                // nothing), the align bar, an icon's dialog: each uncovers
+                // only itself.
+                holeRects: [
+                    widgetCanvas.marqueeActive
+                        ? Qt.rect(Math.min(widgetCanvas.marqueeAnchorX, widgetCanvas.mouseX) + widgetCanvas.x - 2,
+                            Math.min(widgetCanvas.marqueeAnchorY, widgetCanvas.mouseY) + widgetCanvas.y - 2,
+                            Math.abs(widgetCanvas.mouseX - widgetCanvas.marqueeAnchorX) + 4,
+                            Math.abs(widgetCanvas.mouseY - widgetCanvas.marqueeAnchorY) + 4)
+                        : Qt.rect(0, 0, 0, 0),
+                    alignBar.active
+                        ? Qt.rect(alignBar.x + alignBar.width * (1 - alignBar.scale) / 2 + widgetCanvas.x,
+                            alignBar.y + (alignBar.below ? 0 : alignBar.height * (1 - alignBar.scale)) + widgetCanvas.y,
+                            alignBar.width * alignBar.scale, alignBar.height * alignBar.scale)
+                        : Qt.rect(0, 0, 0, 0)
+                ]
+                holeItem: desktopIcons.item?.modalItem ?? null
+            }
+        }
+
         WidgetCanvas {
             id: widgetCanvas
-            // Cross-fade the two faces from the same scalar.  Hiding the
-            // desktop once the lock preview is settled avoids rendering a
-            // complete widget canvas underneath an opaque lock surface, while
-            // the threshold leaves a clean hand-off in both directions.
-            // Keep the desktop visible at full opacity until an asynchronous
-            // lock preview has a real frame.  Otherwise a slow first load can
-            // reach progress 1 with both faces hidden for a frame.
-            opacity: lockPreview.status === Loader.Ready
-                ? 1.0 - GlobalStates.editTabProgress : 1.0
-            visible: GlobalStates.editTabProgress < 0.999
-                || lockPreview.status !== Loader.Ready
-            layer.enabled: false
+            PointerBoundsEscape {}
+            parent: desktopStack
+            // A screen that shows no widgets only maps this surface for the
+            // wallpaper framing below; the canvas stays off it.
+            visible: bgWidgetsWindow.isTargetMonitor
+            // The widgets step back while the wallpaper is being framed: still
+            // there to frame the picture around, not in the way of it.
+            // The window blur's sharp half is desktopStack's opacity.
+            // An AOD drawing its own clock (LockSurface) fades the widgets out instead.
+            opacity: (1 - 0.75 * bgWidgetsWindow.wallpaperFramingProgress)
+                * (GlobalStates.aodUsesClockFace ? 1 - bgWidgetsWindow.aodProgress : 1)
+            // Faded out under an AOD clock on the AOD tab: nothing left to drag there.
+            enabled: !(GlobalStates.aodUsesClockFace && GlobalStates.editAodPreview && bgWidgetsWindow.isEditMonitor)
+            // The canvas STAYS visible under the lock preview. The preview's
+            // LockSurface only draws the islands over a transparent surface -
+            // the lock wallpaper lives in the background window, and the
+            // widgets in their lock state (keep/center/lockOnly, the centered
+            // ones force-centered by `editLockPreview`) are this canvas. A
+            // cross-fade here blanked the lock tab: do not re-add one. (The
+            // window blur's is off while locked and in the mode, so it never runs there.)
             antialiasing: true
             smooth: true
+            // Always On Display over the lock: the widgets stay where the lock put them,
+            // drained of colour. The layer only exists while that is on screen.
+            layer.enabled: bgWidgetsWindow.aodProgress > 0
+            layer.smooth: true
+            layer.effect: aodEffect
             gridOverlayEnabled: Config.options.background.widgets.enableGrid ?? false
             alignmentGridStep: 10
-            visualGridStep: 40
+            visualGridStep: 28
             // In the mode the lattice is drawn on a card, not on a screen: the
             // card is this window's own rect, and its corner is the one the wallpaper's card
             // draws, divided back out of the shrink so both curves match.
@@ -598,7 +960,7 @@ PanelWindow {
                     && !widgetCanvas.draggingActive
                     && bgWidgetsWindow.isEditMonitor
 
-                readonly property real counterScale: 1 / Math.max(0.05, bgWidgetsWindow.editTransform.scale)
+                readonly property real counterScale: 1 / Math.max(0.05, bgWidgetsWindow.contentScale)
                 readonly property rect selection: widgetCanvas.selectionRect
                 readonly property real gap: 12 * alignBar.counterScale
                 readonly property real barHeight: alignBar.item ? alignBar.item.implicitHeight : 0
@@ -618,12 +980,22 @@ PanelWindow {
 
                 sourceComponent: EditAlignBar {
                     count: widgetCanvas.selectedWidgets.length
-                    onRequested: mode => widgetCanvas.alignSelection(mode)
+                    onRequested: mode => {
+                        if (mode === "menu") {
+                            const first = widgetCanvas.selectedWidgets[0];
+                            if (first && first.widgetInstance) {
+                                const p = widgetCanvas.mapToItem(null, alignBar.x + alignBar.width / 2, alignBar.y + (alignBar.below ? alignBar.barHeight + 8 : -8));
+                                GlobalStates.openEditWidgetMenu(widgetCanvas, first.widgetInstance.id, bgWidgetsWindow.monitor ? bgWidgetsWindow.monitor.name : "", p.x, p.y);
+                            }
+                        } else {
+                            widgetCanvas.alignSelection(mode);
+                        }
+                    }
                 }
             }
 
-            x: bgWidgetsWindow.widgetParallaxX
-            y: bgWidgetsWindow.widgetParallaxY
+            x: bgWidgetsWindow.widgetParallaxX + (bgWidgetsWindow.aodProgress > 0 ? GlobalStates.aodBurnInShiftX : 0)
+            y: bgWidgetsWindow.widgetParallaxY + (bgWidgetsWindow.aodProgress > 0 ? GlobalStates.aodBurnInShiftY : 0)
             width: parent.width
             height: parent.height
 
@@ -635,9 +1007,11 @@ PanelWindow {
             // ramping, so the 450ms chase stacked on top of the scalar and the
             // desktop slid twice, arriving late. Reading the scalar instead of
             // the boolean makes the entry and the exit the same movement.
+            // Off while the sidebar parallax runs too — the offset is then already animated.
             Behavior on x {
                 enabled: !bgWidgetsWindow.overviewAnimationVisible
                     && bgWidgetsWindow.editProgress <= 0.001
+                    && !GlobalStates.sidebarParallaxAnimating
                 NumberAnimation {
                     duration: Math.round(450 * Appearance.animMultiplier)
                     easing.type: Easing.OutCubic
@@ -671,6 +1045,38 @@ PanelWindow {
                 sourceComponent: bgWidgetsWindow.canvasOverlay
             }
 
+            Loader {
+                id: desktopIcons
+                PointerBoundsEscape {}
+                anchors.fill: parent
+                // The widget Repeater is declared after this Loader, so at equal z
+                // a placed widget buries the context menu and the editor. Raise the
+                // layer only while one of those modal surfaces is open (above the
+                // align bar's 200); at rest it stays under the widgets, so a desktop
+                // icon never covers one the user placed.
+                z: desktopIcons.item?.dialogOpen ? 1000 : 0
+                active: PanelFamily.isIi && !GlobalStates.screenLocked
+                    && DesktopShortcuts.itemsFor(bgWidgetsWindow.editScreenName).length > 0
+                visible: !GlobalStates.isMediaModeActiveForScreen(bgWidgetsWindow.editScreenName)
+                sourceComponent: DesktopShortcutsLayer {
+                    screenName: bgWidgetsWindow.editScreenName
+                    // The window's NET content scale (overview + edit
+                    // shrink included), handed in so the modal cards undo
+                    // all of it and draw at exactly 1:1 (their counterScale).
+                    surfaceScale: bgWidgetsWindow.contentScale
+                    // The canvas owns the press on empty desktop (its marquee
+                    // predates the icons); it hands the settled band over so
+                    // one rubber band selects widgets and icons alike.
+                    canvas: widgetCanvas
+                }
+            }
+
+            DesktopShortcutDropArea {
+                anchors.fill: parent
+                screenName: bgWidgetsWindow.editScreenName
+                iconsLayer: desktopIcons.item
+            }
+
             Repeater {
                 model: widgetStateManager.model
                 delegate: WidgetDelegate {
@@ -683,7 +1089,121 @@ PanelWindow {
                     wallpaperScale: lockAnim.effectiveWallpaperScale
                     wallpaperSafetyTriggered: bgWidgetsWindow.wallpaperSafetyTriggered
                     lockAnimationActive: lockAnim.lockAnimationActive
+                    widgetsPaused: bgWidgetsWindow.widgetsPaused
                 }
+            }
+        }
+
+        // The blurred half of the window blur, WindowBlur's method on the widgets: one capture
+        // blurred at the full radius, faded in over the sharp canvas (whose opacity takes the
+        // rest), and gone the instant the blur ends. The radius never moves, so the kernel is
+        // built once. Half resolution, the trade WindowBlur makes, so the same radius reads the
+        // same here as on the wallpaper beneath. Nothing in it takes the pointer: clicks fall
+        // through to the canvas. It captures desktopStack - the canvas with the
+        // depth subject over it - so the blurred widgets stay behind the subject.
+        //
+        // Blurring spreads each widget well past its edges, over the subject
+        // around it, where the sharp cutout (painted only on widget pixels)
+        // cannot follow. So with a subject on screen the subject's silhouette,
+        // blurred by the same kernel, is cut out of the blurred widgets: the
+        // blurred wallpaper shows through there, its own blurred subject in
+        // front, colours and all.
+        //
+        // The whole chain runs on a half-size plane drawn at twice its size:
+        // every pass and buffer is a quarter of the screen's pixels, the
+        // radius and taps half, and a blur scaled up looks the same. At full
+        // size the chain held ~170 MB of GPU memory while blurred.
+        //
+        // The capture is taken once and held through the fade: the subject's
+        // dim (the cutout shader's uniform) moves every frame of it, and a
+        // live capture re-ran both blurs on each one (~0.3 s of GPU time per
+        // fade). It follows the desktop again once the fade has settled.
+        Loader {
+            id: widgetBlurLoader
+            anchors.fill: parent
+            active: widgetCanvas.visible && bgWidgetsWindow.windowBlurProgress > 0
+            opacity: bgWidgetsWindow.windowBlurProgress
+            sourceComponent: Item {
+                id: widgetBlurRoot
+                readonly property Item subject: depthCutoutLoader.item && depthCutoutLoader.item.opacity > 0.01
+                    ? depthCutoutLoader.item.subjectItem : null
+                readonly property bool settled: bgWidgetsWindow.windowBlurProgress >= 1
+                readonly property real radius: bgWidgetsWindow.windowBlurRadius / 2
+                readonly property int samples: Math.max(3, Math.round(widgetBlurRoot.radius * 2 + 1))
+                Item {
+                    width: widgetBlurRoot.width / 2
+                    height: widgetBlurRoot.height / 2
+                    scale: 2
+                    transformOrigin: Item.TopLeft
+                    ShaderEffectSource {
+                        id: widgetBlurSource
+                        anchors.fill: parent
+                        sourceItem: desktopStack
+                        live: widgetBlurRoot.settled
+                        smooth: true
+                        visible: false
+                    }
+                    GE.GaussianBlur {
+                        id: widgetBlur
+                        anchors.fill: parent
+                        source: widgetBlurSource
+                        radius: widgetBlurRoot.radius
+                        samples: widgetBlurRoot.samples
+                        transparentBorder: true
+                        visible: widgetBlurRoot.subject === null
+                    }
+                    Loader {
+                        anchors.fill: parent
+                        active: widgetBlurRoot.subject !== null
+                        sourceComponent: Item {
+                            ShaderEffectSource {
+                                id: subjectSource
+                                anchors.fill: parent
+                                sourceItem: widgetBlurRoot.subject
+                                live: widgetBlurRoot.settled
+                                smooth: true
+                                visible: false
+                            }
+                            GE.GaussianBlur {
+                                id: subjectBlur
+                                anchors.fill: parent
+                                source: subjectSource
+                                radius: widgetBlurRoot.radius
+                                samples: widgetBlurRoot.samples
+                                transparentBorder: true
+                                visible: false
+                            }
+                            GE.OpacityMask {
+                                anchors.fill: parent
+                                source: widgetBlur
+                                maskSource: subjectBlur
+                                invert: true
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Edit Mode's wallpaper, moved by hand. Over the canvas (which it
+        // dims), in the same coordinates, so a drag on the card is a drag on
+        // the desktop the picture is drawn behind.
+        FadeLoader {
+            id: wallpaperFramingOverlay
+            anchors.fill: parent
+            z: 300
+            shown: bgWidgetsWindow.wallpaperFramingHere
+            // Built for the mode and gone after its fade: nothing of it stays
+            // resident on a desktop that is not being edited.
+            active: bgWidgetsWindow.wallpaperFramingHere || wallpaperFramingOverlay.opacity > 0
+            // Fading out, it no longer takes the pointer from the widgets.
+            enabled: bgWidgetsWindow.wallpaperFramingHere
+            sourceComponent: EditWallpaperFramingOverlay {
+                screenName: bgWidgetsWindow.editScreenName
+                contentScale: bgWidgetsWindow.contentScale
+                shown: bgWidgetsWindow.wallpaperFramingHere
+                // EditModeCard's corner, in screen pixels.
+                cardRadius: Appearance.rounding.verylarge * bgWidgetsWindow.editProgress
             }
         }
     }

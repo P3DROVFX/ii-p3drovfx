@@ -17,6 +17,7 @@ ORBS = ROOT / "modules/ii/bar/widgets/dashboard/OrbsDashboardPanelButton.qml"
 ORB = ROOT / "modules/ii/bar/widgets/dashboard/OrbIconWrapper.qml"
 SEGMENTS = ROOT / "modules/ii/bar/widgets/utilButtons/SegmentedUtilButtons.qml"
 SEGMENT = ROOT / "modules/ii/bar/widgets/utilButtons/UtilSegment.qml"
+UTIL_ACTIONS = ROOT / "modules/ii/bar/widgets/utilButtons/UtilButtonActions.qml"
 EVERY = (OUTLINE, ORBS, ORB, SEGMENTS, SEGMENT)
 # The two files where drawing with a stroke is sanctioned, because "a ring with
 # no background" is the request and a fill would be the other design.
@@ -87,7 +88,8 @@ class BarPanelButtonDesignsContractTest(unittest.TestCase):
     def test_only_the_buttons_that_latch_report_an_active_state(self):
         # A snip is over the moment it starts; lighting its segment would say
         # something untrue.
-        body = SEGMENTS.read_text(encoding="utf-8")
+        body = UTIL_ACTIONS.read_text(encoding="utf-8")
+        self.assertIn("UtilButtonActions {", SEGMENTS.read_text(encoding="utf-8"))
         active = body.split("function activeFor(key)", 1)[1].split("function invoke", 1)[0]
         for key in ("record", "keyboard", "wallpaper", "mic", "darkMode", "performance"):
             self.assertIn(f'case "{key}":', active)

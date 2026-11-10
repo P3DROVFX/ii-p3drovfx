@@ -12,7 +12,6 @@ use std::fs;
 use std::path::PathBuf;
 
 const RAPL_ROOT: &str = "/sys/class/powercap";
-const POWER_SUPPLY: &str = "/sys/class/power_supply";
 
 /// Fraction of package energy assigned to each sub-domain when only whole-battery
 /// draw is observable. Crude by construction — the UI labels this source so the
@@ -100,21 +99,10 @@ fn read_name(dir: &PathBuf) -> String {
 }
 
 fn find_battery() -> Option<PathBuf> {
-    for entry in fs::read_dir(POWER_SUPPLY).ok()?.flatten() {
-        let dir = entry.path();
-        let is_battery = fs::read_to_string(dir.join("type"))
-            .map(|t| t.trim() == "Battery")
-            .unwrap_or(false);
-        if !is_battery {
-            continue;
-        }
-        // BAT1 on this machine reports charge, not power: there is no power_now, so
-        // draw has to be derived from current × voltage.
-        if dir.join("power_now").exists() || dir.join("current_now").exists() {
-            return Some(dir);
-        }
-    }
-    None
+    // BAT1 on this machine reports charge, not power: there is no power_now, so
+    // draw has to be derived from current × voltage.
+    crate::battery::system_battery()
+        .filter(|dir| dir.join("power_now").exists() || dir.join("current_now").exists())
 }
 
 impl Reader {

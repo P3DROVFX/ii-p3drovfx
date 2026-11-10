@@ -14,8 +14,8 @@ MouseArea {
     // Standard desktop alignment grid snaps to 10px regardless of monitor.
     property int alignmentGridStep: 10
     onAlignmentGridStepChanged: dotGrid.requestPaint()
-    // Visual grid points are spaced further apart (e.g. 40px) to prevent screen pollution.
-    property int visualGridStep: 40
+    // Visual grid points are spaced further apart than the snap step (28px).
+    property int visualGridStep: 28
     onVisualGridStepChanged: dotGrid.requestPaint()
 
     // The area the lattice belongs to, and the corner it is cut to, in canvas
@@ -60,6 +60,11 @@ MouseArea {
     signal canvasContextMenuRequested(real atX, real atY)
     // A long press on the wallpaper / background: opens the desktop context menu.
     signal canvasLongPressed(real atX, real atY)
+    // The settled marquee band, announced once the canvas has taken its own
+    // widgets from it. Other desktop surfaces (icons) cannot anchor a band of
+    // their own without swallowing this MouseArea's presses, so they select
+    // from the same gesture. Canvas coordinates.
+    signal marqueeFinished(rect band)
     acceptedButtons: Qt.LeftButton | Qt.RightButton
 
     TapHandler {
@@ -373,7 +378,9 @@ MouseArea {
     function selectWidgetsInRect(rect) {
         const picked = [];
         for (const widget of root.widgetsUnder(root, [])) {
-            if (!widget.draggable || !widget.visible)
+            if (!widget.visible || widget.isPreview)
+                continue;
+            if (!widget.draggable && !(root.editMode && widget.pinned))
                 continue;
             const box = root.widgetVisualRect(widget);
             if (box.x < rect.x + rect.width && box.x + box.width > rect.x && box.y < rect.y + rect.height && box.y + box.height > rect.y)
@@ -518,7 +525,9 @@ MouseArea {
         if (!root.marqueeActive)
             return;
         root.marqueeActive = false;
-        root.selectWidgetsInRect(Qt.rect(marqueeRect.x, marqueeRect.y, marqueeRect.width, marqueeRect.height));
+        const band = Qt.rect(marqueeRect.x, marqueeRect.y, marqueeRect.width, marqueeRect.height);
+        root.selectWidgetsInRect(band);
+        root.marqueeFinished(band);
     }
     onCanceled: root.marqueeActive = false
 
@@ -545,6 +554,7 @@ MouseArea {
         let deltaMaxX = Infinity;
         let deltaMinY = -Infinity;
         let deltaMaxY = Infinity;
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         const followers = [];
         for (const member of members) {
             // Each member's own clamp, in its own frame: the bounds are how
@@ -554,6 +564,11 @@ MouseArea {
             deltaMaxX = Math.min(deltaMaxX, member.dragMaximumX() - member.x);
             deltaMinY = Math.max(deltaMinY, member.dragMinimumY() - member.y);
             deltaMaxY = Math.min(deltaMaxY, member.dragMaximumY() - member.y);
+            const box = root.widgetVisualRect(member);
+            minX = Math.min(minX, box.x);
+            minY = Math.min(minY, box.y);
+            maxX = Math.max(maxX, box.x + box.width);
+            maxY = Math.max(maxY, box.y + box.height);
             if (member !== widget) {
                 member.groupDragging = true;
                 followers.push({
@@ -567,10 +582,15 @@ MouseArea {
         widget.groupDragMaxX = widget.x + deltaMaxX;
         widget.groupDragMinY = widget.y + deltaMinY;
         widget.groupDragMaxY = widget.y + deltaMaxY;
+        // Freeze the visual bounding-box centre relative to the leader once:
+        // snap must not rescan the selection or follow rendered positions.
+        const leaderPos = widget.parent.mapToItem(root, widget.x, widget.y);
         root.groupDrag = {
             "leader": widget,
             "startX": widget.x,
             "startY": widget.y,
+            "centerOffsetX": (minX + maxX) / 2 - leaderPos.x,
+            "centerOffsetY": (minY + maxY) / 2 - leaderPos.y,
             "followers": followers
         };
     }
@@ -685,16 +705,22 @@ MouseArea {
         // dots in for a shrink never applied there.
         readonly property bool modeSettled: !root.editMode
             || Appearance.reducedMotion || root.editProgress >= 1
+        // Only while it is of use: a widget being dragged, or the Widgets
+        // catalogue open (where widgets are picked to be placed). The rest of
+        // the mode - the bar, the dock, the wallpaper - has nothing to align
+        // to it, and a lattice over the whole card was just noise there.
+        readonly property bool widgetsCatalogueOpen: GlobalStates.editDrawerOpen
+            && GlobalStates.editDrawerSection === "widgets"
         readonly property bool wanted: (root.draggingActive
-            || (root.editMode && modeSettled)) && root.gridOverlayEnabled
+            || (root.editMode && modeSettled && widgetsCatalogueOpen)) && root.gridOverlayEnabled
         visible: wanted && opacity > 0.001
-        opacity: wanted ? 0.55 : 0
+        opacity: wanted ? 0.4 : 0
 
         readonly property bool animating: root.editProgress > 0 && root.editProgress < 1
 
-        property real dotSize: 2.0
+        property real dotSize: 2.6
         onDotSizeChanged: { if (wanted && !animating) requestPaint(); }
-        readonly property color dotColor: Appearance.colors.colPrimary
+        readonly property color dotColor: Appearance.colors.colOnSurface
 
         // Uniform on purpose. A radial falloff around the dragged widget was
         // tried and reverted: it repainted this full-screen canvas on every

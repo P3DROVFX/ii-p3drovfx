@@ -80,6 +80,26 @@ RippleButton {
     visible: root.entryShown
     // Hosts override this; it is the inset the row keeps from the panel edge.
     property int horizontalMargin: Appearance.sizes.elevationMargin
+    // How far the surface the row lives on (the expressive pane) sits inside the
+    // row's own width. Sliding action chips are clipped to that surface, not to
+    // the full list width, or they spill out past the pane's rounded edge.
+    property real clipInset: 0
+    readonly property real innerMargin: root.horizontalMargin - root.clipInset
+    /**
+     * Material 3 Expressive rows (Settings › Launcher › Panel appearance).
+     *
+     * Taller rows; the icon sits on a Material shape that morphs from a circle
+     * to a scalloped cookie when the row is selected; the name is set in the
+     * rounded title face and gains weight with the arrival accent; the
+     * selection is the tonal primary container instead of solid primary, so
+     * the shape-backed icon is the strongest thing on the row; the selected
+     * row closes with an enter chip naming what Enter does.
+     */
+    property string resultsStyle: Config.options.search.appearance.resultsStyle
+    readonly property bool expressive: root.resultsStyle === "expressive"
+    readonly property color colSelectedFill: root.expressive ? Appearance.colors.colPrimaryContainer : Appearance.colors.colPrimary
+    readonly property color colSelectedFillActive: root.expressive ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colPrimaryActive
+    readonly property color colOnSelected: root.expressive ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnPrimary
     property int buttonHorizontalPadding: 10
     property int buttonVerticalPadding: 8
     /**
@@ -90,7 +110,23 @@ RippleButton {
      * animated — so they take the multiplier directly instead of ignoring it,
      * which is the part that actually mattered.
      */
-    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
+    // Set by a list that recycles its rows while one is being handed a new
+    // result; nothing may animate from the previous result's state.
+    property bool recycling: false
+    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none" || root.recycling
+
+    /** Drop everything the previous result left open on a recycled row. */
+    function resetTransientState(): void {
+        root.actionPanelOpen = false;
+        root.actionSelectedIndex = 0;
+        root.keyboardDown = false;
+        root.keybindCaptureOpen = false;
+        root.aliasCaptureOpen = false;
+        root.capturedLetter = "";
+        root.captureNotice = "";
+        root.aliasText = "";
+        root.aliasNotice = "";
+    }
 
     function scaledDuration(milliseconds: int): int {
         if (root.animationsDisabled)
@@ -145,12 +181,24 @@ RippleButton {
         ? Math.max(0, root.indicatorClipBottom - root.indicatorClipTop) / root.height
         : (root.isSelected ? 1 : 0)
 
+    /**
+     * Whether the selection just landed here without the user moving it.
+     *
+     * Typing re-anchors the cursor on the top row of a list that changes on
+     * every keystroke; animating that arrival replayed the accent, the corner
+     * morph and the key hint on the row the user is reading, once per letter.
+     * Only a move the user made animates. Hosts that do not set this keep
+     * every selection animated.
+     */
+    property bool snapSelection: false
+    readonly property bool animateSelection: !root.animationsDisabled && !root.snapSelection
+
     // The corners a neighbour opens towards the selected row. These are the
     // only animated selection values: they are shape, not position.
     property real neighbourTopOpen: root.isBelowSelected ? 1 : 0
     property real neighbourBottomOpen: root.isAboveSelected ? 1 : 0
     Behavior on neighbourTopOpen {
-        enabled: !root.animationsDisabled
+        enabled: root.animateSelection
         NumberAnimation {
             duration: root.selectionMotionDuration
             easing.type: Easing.BezierSpline
@@ -158,7 +206,7 @@ RippleButton {
         }
     }
     Behavior on neighbourBottomOpen {
-        enabled: !root.animationsDisabled
+        enabled: root.animateSelection
         NumberAnimation {
             duration: root.selectionMotionDuration
             easing.type: Easing.BezierSpline
@@ -174,7 +222,7 @@ RippleButton {
      */
     property real selectionAccent: root.isSelected ? 1 : 0
     Behavior on selectionAccent {
-        enabled: !root.animationsDisabled
+        enabled: root.animateSelection
         NumberAnimation {
             duration: Appearance.animation.elementMoveSmall.duration
             easing.type: Easing.BezierSpline
@@ -189,16 +237,21 @@ RippleButton {
         return from + (to - from) * progress;
     }
 
-    readonly property real restTopRadius: root.isFirst
+    // Expressive rows sit inside their group's pane with no surface of their
+    // own: every edge is the pill the selection and hover draw.
+    readonly property real restTopRadius: root.expressive ? root.pillRadius : root.isFirst
         ? Appearance.rounding.large
         : root.mixReal(Appearance.rounding.small, root.pillRadius, root.topOpenProgress)
-    readonly property real restBottomRadius: root.isLast
+    readonly property real restBottomRadius: root.expressive ? root.pillRadius : root.isLast
         ? Appearance.rounding.large
         : root.mixReal(Appearance.rounding.small, root.pillRadius, root.bottomOpenProgress)
 
     readonly property real contractedWidth: 160
     readonly property real actionBtnSpacing: 4
     readonly property real actionBtnPadY: 4
+    // A long list cannot show every label inside the card, so only the chosen
+    // action keeps its label and the rest shrink to their icon.
+    readonly property bool compactActions: root.allActionItems.length >= 4
 
     property var allActionItems: {
         // Lazy: only compute when this item is selected or the panel is open.
@@ -277,16 +330,25 @@ RippleButton {
         : Translation.tr("Type the alias · Enter saves · Esc cancels")
     readonly property string activeCaptureNotice: root.aliasCaptureOpen ? root.aliasNotice : root.captureNotice
 
+    function aliasField(): var {
+        return keybindCaptureLoader.item?.aliasField ?? null;
+    }
+
     function openAliasCapture() {
         root.actionPanelOpen = false;
         root.keybindCaptureOpen = false;
         root.aliasText = String(LauncherSearch.aliasForResult(root.entry)?.alias ?? "");
-        aliasInput.text = root.aliasText;
         root.aliasNotice = "";
         root.aliasCaptureOpen = true;
+        const field = root.aliasField();
+        if (field)
+            field.text = root.aliasText;
         Qt.callLater(() => {
-            aliasInput.forceActiveFocus();
-            aliasInput.selectAll();
+            const input = root.aliasField();
+            if (!input)
+                return;
+            input.forceActiveFocus();
+            input.selectAll();
         });
     }
 
@@ -312,9 +374,12 @@ RippleButton {
     function clearActiveCapture() {
         if (root.aliasCaptureOpen) {
             root.aliasText = "";
-            aliasInput.text = "";
             root.aliasNotice = "";
-            aliasInput.forceActiveFocus();
+            const field = root.aliasField();
+            if (field) {
+                field.text = "";
+                field.forceActiveFocus();
+            }
             return;
         }
         root.capturedLetter = "";
@@ -329,8 +394,8 @@ RippleButton {
         }
     }
 
-    property real normalHeight: 52
-    readonly property real rowHeight: 52
+    property real normalHeight: root.expressive ? 60 : 52
+    readonly property real rowHeight: root.expressive ? 60 : 52
     onActionPanelOpenChanged: {
         if (actionPanelOpen) {
             normalHeight = root.height > 0 ? root.height : contentRow.implicitHeight + buttonVerticalPadding * 2;
@@ -362,11 +427,11 @@ RippleButton {
         let btnX = root.contractedWidth + root.actionBtnSpacing;
         for (let i = 0; i < root.actionSelectedIndex; i++) {
             const btn = actionRepeater.itemAt(i);
-            btnX += (btn ? btn.width : 0) + root.actionBtnSpacing;
+            btnX += (btn ? btn.targetWidth : 0) + root.actionBtnSpacing;
         }
         const selBtn = actionRepeater.itemAt(root.actionSelectedIndex);
-        const selRight = btnX + (selBtn ? selBtn.width : 0);
-        return Math.min(root.horizontalMargin, root.width - 4 - selRight);
+        const selRight = btnX + (selBtn ? selBtn.targetWidth : 0);
+        return Math.min(root.innerMargin, root.width - 2 * root.clipInset - root.innerMargin - selRight);
     }
     property real actionScrollX: root.actionOpenX
     Behavior on actionScrollX {
@@ -415,8 +480,8 @@ RippleButton {
     readonly property color colRestForeground: root.isBuiltinItem ? Appearance.colors.colOnTertiaryContainer : Appearance.m3colors.m3onSurface
     readonly property color colRestSubtext: root.isBuiltinItem ? Appearance.colors.colOnTertiaryContainer : Appearance.colors.colSubtext
     // Foreground follows the fill as it grows underneath, on the same progress.
-    property color colForeground: ColorUtils.mix(Appearance.colors.colOnPrimary, root.colRestForeground, root.selectionProgress)
-    property color colSubtextForeground: ColorUtils.mix(Appearance.colors.colOnPrimary, root.colRestSubtext, root.selectionProgress)
+    property color colForeground: ColorUtils.mix(root.colOnSelected, root.colRestForeground, root.selectionProgress)
+    property color colSubtextForeground: ColorUtils.mix(root.colOnSelected, root.colRestSubtext, root.selectionProgress)
 
     readonly property string highlightPrefix: `<u><font color="${Appearance.colors.colPrimary}">`
     readonly property string highlightSuffix: `</font></u>`
@@ -481,8 +546,8 @@ RippleButton {
     background: Rectangle {
         id: bgRect
         anchors.fill: root
-        anchors.leftMargin: 0
-        anchors.rightMargin: 0
+        anchors.leftMargin: root.clipInset
+        anchors.rightMargin: root.clipInset
         color: "transparent"
         antialiasing: true
         clip: true
@@ -500,11 +565,11 @@ RippleButton {
             anchors.bottom: parent.bottom
             spacing: root.actionBtnSpacing
 
-            x: root.mixReal(root.horizontalMargin, root.actionScrollX, root.actionProgress)
+            x: root.mixReal(root.innerMargin, root.actionScrollX, root.actionProgress)
 
             Rectangle {
                 id: itemRect
-                width: root.mixReal(bgRect.width - root.horizontalMargin * 2, root.contractedWidth, root.actionProgress)
+                width: root.mixReal(bgRect.width - root.innerMargin * 2, root.contractedWidth, root.actionProgress)
                 height: slideRow.height
                 y: 0
                 topLeftRadius: bgRect.topLeftRadius
@@ -513,7 +578,10 @@ RippleButton {
                 bottomRightRadius: root.mixReal(bgRect.bottomRightRadius, root.animatedActionTrailingRadius, root.actionProgress)
                 // The resting surface never changes colour on selection: the
                 // sliding pill passes over it instead.
-                color: root.colBackground
+                color: !root.expressive || root.isBuiltinItem ? root.colBackground
+                    : (root.down || root.keyboardDown) ? Appearance.colors.colPrimaryContainerActive
+                    : root.hovered ? Appearance.colors.colSurfaceContainerHighest
+                    : ColorUtils.transparentize(Appearance.colors.colSurfaceContainerHighest, 1)
                 clip: true
                 antialiasing: true
 
@@ -547,7 +615,7 @@ RippleButton {
                     topRightRadius: Math.min(enteredFromTop ? itemRect.topRightRadius : endRadius, span / 2)
                     bottomLeftRadius: Math.min(exitsAtBottom ? itemRect.bottomLeftRadius : endRadius, span / 2)
                     bottomRightRadius: Math.min(exitsAtBottom ? itemRect.bottomRightRadius : endRadius, span / 2)
-                    color: (root.down || root.keyboardDown) ? Appearance.colors.colPrimaryActive : Appearance.colors.colPrimary
+                    color: (root.down || root.keyboardDown) ? root.colSelectedFillActive : root.colSelectedFill
                     antialiasing: true
                 }
 
@@ -567,10 +635,16 @@ RippleButton {
 
                     Item {
                         id: iconContainer
-                        Layout.preferredWidth: iconVisible ? 36 : 0
-                        Layout.preferredHeight: 36
+                        Layout.preferredWidth: iconVisible ? size : 0
+                        Layout.preferredHeight: size
                         visible: iconVisible
                         readonly property bool iconVisible: root.iconType !== LauncherSearchResult.IconType.None
+                        readonly property real size: root.expressive ? 44 : 36
+                        // Expressive rows stand app and symbol icons on a shape
+                        // instead of the clipping circle.
+                        readonly property bool onShape: root.expressive
+                            && (root.iconType === LauncherSearchResult.IconType.System
+                                || root.iconType === LauncherSearchResult.IconType.Material)
                         // Lifts past its size on the overshooting accent curve and
                         // settles at a slightly larger resting size while selected.
                         transform: Scale {
@@ -584,9 +658,46 @@ RippleButton {
                         // fill almost all of it, so a square icon with no
                         // rounding of its own has its corners cut to the circle
                         // instead of poking out past it.
+                        // Shape is state: a circle at rest morphs into a
+                        // scalloped cookie in primary when the row is selected.
+                        Loader {
+                            anchors.fill: parent
+                            active: iconContainer.onShape
+                            visible: active
+                            sourceComponent: Component {
+                                MaterialShape {
+                                    readonly property bool lit: root.isSelected && !root.actionPanelOpen
+                                    shape: lit ? MaterialShape.Shape.Cookie9Sided : MaterialShape.Shape.Circle
+                                    color: lit ? Appearance.colors.colPrimary
+                                        : root.isBuiltinItem ? Appearance.colors.colTertiaryContainerActive
+                                        : Appearance.colors.colSurfaceContainerHighest
+                                    Behavior on color {
+                                        enabled: root.animateSelection
+                                        ColorAnimation {
+                                            duration: root.selectionMotionDuration
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Loader {
+                            anchors.centerIn: parent
+                            active: iconContainer.onShape && root.iconType === LauncherSearchResult.IconType.System
+                            visible: active
+                            sourceComponent: Component {
+                                IconImage {
+                                    source: Quickshell.iconPath(root.iconName, "image-missing")
+                                    implicitSize: 28
+                                    smooth: true
+                                    asynchronous: true
+                                }
+                            }
+                        }
+
                         ClippingRectangle {
                             anchors.fill: parent
-                            visible: root.iconType === LauncherSearchResult.IconType.System
+                            visible: root.iconType === LauncherSearchResult.IconType.System && !iconContainer.onShape
                             radius: width / 2
                             color: ColorUtils.mix(Appearance.colors.colPrimaryContainer, Appearance.colors.colSurfaceContainerHighest, root.actionPanelOpen ? 1 : root.selectionProgress)
 
@@ -595,6 +706,11 @@ RippleButton {
                                 anchors.centerIn: parent
                                 implicitSize: Math.round(parent.width * 0.84)
                                 smooth: true
+                                // Rasterizing an app icon (usually an SVG) on the
+                                // UI thread cost about a millisecond per row every
+                                // time typing brought a new app into view. An icon
+                                // already in the pixmap cache still shows at once.
+                                asynchronous: true
                             }
                         }
 
@@ -605,9 +721,11 @@ RippleButton {
                             text: root.iconType === LauncherSearchResult.IconType.Image
                                 ? (root.fallbackIconName.length > 0 ? root.fallbackIconName : "link")
                                 : root.materialSymbol
-                            iconSize: 26
+                            iconSize: root.expressive ? 24 : 26
                             fill: root.isSelected ? 1.0 : 0.0
-                            color: root.colForeground
+                            color: iconContainer.onShape
+                                ? (root.isSelected && !root.actionPanelOpen ? Appearance.colors.colOnPrimary : root.colRestForeground)
+                                : root.colForeground
                             Behavior on iconSize {
                                 enabled: !root.animationsDisabled
                                 NumberAnimation {
@@ -643,27 +761,34 @@ RippleButton {
                             }
                         }
 
-                        Item {
+                        // Built only for rows that show a text glyph.
+                        Loader {
                             anchors.fill: parent
-                            visible: root.iconType === LauncherSearchResult.IconType.Text
+                            active: root.iconType === LauncherSearchResult.IconType.Text
+                            visible: active
+                            sourceComponent: Component {
+                                Item {
+                                    MaterialShape {
+                                        anchors.fill: parent
+                                        shape: MaterialShape.Shape.Sunny
+                                        // On the expressive tonal pill a primary
+                                        // container shape would vanish into it.
+                                        color: root.isSelected ? (root.expressive ? Appearance.colors.colPrimary : Appearance.colors.colPrimaryContainer) : Appearance.colors.colSurfaceContainerHighest
+                                        Behavior on color {
+                                            enabled: root.animateSelection
+                                            ColorAnimation {
+                                                duration: root.scaledDuration(80)
+                                            }
+                                        }
+                                    }
 
-                            MaterialShape {
-                                anchors.fill: parent
-                                shape: MaterialShape.Shape.Sunny
-                                color: root.isSelected ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHighest
-                                Behavior on color {
-                                    enabled: !root.animationsDisabled
-                                    ColorAnimation {
-                                        duration: root.scaledDuration(80)
+                                    StyledText {
+                                        anchors.centerIn: parent
+                                        text: root.bigText
+                                        font.pixelSize: root.actionPanelOpen ? Appearance.font.pixelSize.smaller : Appearance.font.pixelSize.normal
+                                        color: root.isSelected ? (root.expressive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnPrimaryContainer) : root.colForeground
                                     }
                                 }
-                            }
-
-                            StyledText {
-                                anchors.centerIn: parent
-                                text: root.bigText
-                                font.pixelSize: root.actionPanelOpen ? Appearance.font.pixelSize.smaller : Appearance.font.pixelSize.normal
-                                color: root.isSelected ? Appearance.colors.colOnPrimaryContainer : root.colForeground
                             }
                         }
                     }
@@ -755,8 +880,14 @@ RippleButton {
                                 id: nameText
                                 Layout.fillWidth: true
                                 textFormat: Text.StyledText
-                                font.pixelSize: Appearance.font.pixelSize.small
-                                font.family: (root.fontType === "monospace" || root.contentType === "json") ? Appearance.font.family.monospace : Appearance.font.family.main
+                                readonly property bool monospaced: root.fontType === "monospace" || root.contentType === "json"
+                                font.pixelSize: root.expressive ? Appearance.font.pixelSize.normal : Appearance.font.pixelSize.small
+                                font.family: monospaced ? Appearance.font.family.monospace : root.expressive ? Appearance.font.family.title : Appearance.font.family.main
+                                // Weight eases up with the arrival accent instead
+                                // of swapping to bold.
+                                font.variableAxes: root.expressive && !monospaced
+                                    ? ({ "wght": Appearance.font.variableAxes.blend(480, 700, root.selectionAccent), "ROND": 100 })
+                                    : Appearance.font.variableAxes.main
                                 color: root.colForeground
                                 horizontalAlignment: Text.AlignLeft
                                 elide: Text.ElideMiddle
@@ -771,10 +902,15 @@ RippleButton {
 
                             StyledText {
                                 text: root.itemType
-                                color: root.colSubtextForeground
+                                // Expressive: a bold caption in the accent, the
+                                // row's second voice next to the plain comment.
+                                color: root.expressive && !root.isBuiltinItem
+                                    ? ColorUtils.mix(root.colOnSelected, Appearance.colors.colPrimary, root.selectionProgress)
+                                    : root.colSubtextForeground
                                 font.pixelSize: Appearance.font.pixelSize.smaller
                                 font.family: Appearance.font.family.main
-                                opacity: root.isSelected ? 0.7 : (root.isBuiltinItem ? 1.0 : 0.7)
+                                font.weight: root.expressive ? Font.Bold : Font.Normal
+                                opacity: root.expressive ? 1.0 : root.isSelected ? 0.7 : (root.isBuiltinItem ? 1.0 : 0.7)
                                 visible: root.itemType && root.itemType != Translation.tr("App") && !root.entry?.isMath
                             }
 
@@ -800,52 +936,58 @@ RippleButton {
                         }
 
                         // Structured Math & Unit Conversion breakdown
-                        ColumnLayout {
+                        // Built only for math rows.
+                        Loader {
                             Layout.fillWidth: true
-                            visible: !!root.entry?.isMath
-                            spacing: 4
+                            active: !!root.entry?.isMath
+                            visible: active
+                            sourceComponent: Component {
+                                ColumnLayout {
+                                    spacing: 4
 
-                            StyledText {
-                                text: Translation.tr("Math & Unit Converter")
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                color: root.isSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colSubtext
-                                font.family: Appearance.font.family.main
-                                opacity: 0.7
-                            }
-
-                            RowLayout {
-                                spacing: 8
-                                Layout.fillWidth: true
-
-                                // Input Expression
-                                StyledText {
-                                    text: {
-                                        let parsed = root.formatMathResult(root.itemName);
-                                        return parsed.expression || root.query;
+                                    StyledText {
+                                        text: Translation.tr("Math & Unit Converter")
+                                        font.pixelSize: Appearance.font.pixelSize.smaller
+                                        color: root.isSelected ? root.colOnSelected : Appearance.colors.colSubtext
+                                        font.family: Appearance.font.family.main
+                                        opacity: 0.7
                                     }
-                                    font.pixelSize: Appearance.font.pixelSize.small
-                                    font.family: Appearance.font.family.monospace
-                                    color: root.isSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colSubtext
-                                }
 
-                                // Elegant Arrow Indicator
-                                MaterialSymbol {
-                                    text: "arrow_forward"
-                                    iconSize: Appearance.font.pixelSize.small
-                                    color: root.isSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colPrimary
-                                }
+                                    RowLayout {
+                                        spacing: 8
+                                        Layout.fillWidth: true
 
-                                // Evaluated Result
-                                StyledText {
-                                    Layout.fillWidth: true
-                                    text: {
-                                        let parsed = root.formatMathResult(root.itemName);
-                                        return parsed.value;
+                                        // Input Expression
+                                        StyledText {
+                                            text: {
+                                                let parsed = root.formatMathResult(root.itemName);
+                                                return parsed.expression || root.query;
+                                            }
+                                            font.pixelSize: Appearance.font.pixelSize.small
+                                            font.family: Appearance.font.family.monospace
+                                            color: root.isSelected ? root.colOnSelected : Appearance.colors.colSubtext
+                                        }
+
+                                        // Elegant Arrow Indicator
+                                        MaterialSymbol {
+                                            text: "arrow_forward"
+                                            iconSize: Appearance.font.pixelSize.small
+                                            color: root.isSelected ? root.colOnSelected : Appearance.colors.colPrimary
+                                        }
+
+                                        // Evaluated Result
+                                        StyledText {
+                                            Layout.fillWidth: true
+                                            text: {
+                                                let parsed = root.formatMathResult(root.itemName);
+                                                return parsed.value;
+                                            }
+                                            font.pixelSize: Appearance.font.pixelSize.small
+                                            font.family: Appearance.font.family.monospace
+                                            font.bold: true
+                                            color: root.isSelected ? root.colOnSelected : Appearance.colors.colPrimary
+                                        }
                                     }
-                                    font.pixelSize: Appearance.font.pixelSize.small
-                                    font.family: Appearance.font.family.monospace
-                                    font.bold: true
-                                    color: root.isSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colPrimary
                                 }
                             }
                         }
@@ -870,7 +1012,7 @@ RippleButton {
                         font.pixelSize: Appearance.font.pixelSize.small
                         font.family: Appearance.font.family.main
                         font.weight: Font.Medium
-                        color: root.isSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
+                        color: root.isSelected ? root.colOnSelected : Appearance.colors.colOnSecondaryContainer
                         elide: Text.ElideMiddle
                     }
 
@@ -887,47 +1029,110 @@ RippleButton {
                             x: (1 - actionIndicator.opacity) * Appearance.sizes.elevationMargin
                         }
                         Behavior on opacity {
-                            enabled: !root.animationsDisabled
+                            enabled: root.animateSelection
                             NumberAnimation {
                                 id: indicatorAnim
                                 duration: root.scaledDuration(100)
                                 easing.type: Easing.OutQuad
                             }
                         }
-                        KeyHint {
+                        Loader {
                             anchors.centerIn: parent
-                            keys: ["Ctrl", "K"]
-                            surface: root.selectionProgress > 0.5 ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHigh
-                            onSurface: root.selectionProgress > 0.5 ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                            active: actionIndicator.visible
+                            sourceComponent: Component {
+                                KeyHint {
+                                    keys: ["Ctrl", "K"]
+                                    surface: root.selectionProgress > 0.5 ? root.colSelectedFill : Appearance.colors.colSurfaceContainerHigh
+                                    onSurface: root.selectionProgress > 0.5 ? root.colOnSelected : Appearance.colors.colOnSurface
+                                }
+                            }
                         }
                     }
 
-                    KeyHint {
-                        visible: !root.actionPanelOpen && (root.entry?.keyHints?.length ?? 0) > 0
+                    // Expressive: what Enter does, on the selected row only. Its
+                    // opacity rides the selection pill's coverage, so it arrives
+                    // and leaves with the pill instead of on a curve of its own.
+                    Loader {
                         Layout.alignment: Qt.AlignVCenter
-                        keys: root.entry?.keyHints ?? []
-                        surface: root.selectionProgress > 0.5 ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHigh
-                        onSurface: root.selectionProgress > 0.5 ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                        active: root.expressive && !root.actionPanelOpen && !root.hasInlineSwitch
+                            && root.selectionProgress > 0.01 && root.itemClickActionName.length > 0
+                        visible: active
+                        sourceComponent: Component {
+                            Rectangle {
+                                implicitWidth: enterChipRow.implicitWidth + 20
+                                implicitHeight: 28
+                                radius: Math.min(height / 2, Appearance.rounding.large)
+                                color: Appearance.colors.colPrimary
+                                opacity: root.selectionProgress
+                                transform: Translate {
+                                    x: (1 - root.selectionProgress) * Appearance.sizes.elevationMargin
+                                }
+
+                                RowLayout {
+                                    id: enterChipRow
+                                    anchors.centerIn: parent
+                                    spacing: 4
+
+                                    StyledText {
+                                        Layout.maximumWidth: 110
+                                        text: root.itemClickActionName
+                                        elide: Text.ElideRight
+                                        font.pixelSize: Appearance.font.pixelSize.smaller
+                                        font.weight: Font.DemiBold
+                                        color: Appearance.colors.colOnPrimary
+                                    }
+
+                                    MaterialSymbol {
+                                        text: "keyboard_return"
+                                        iconSize: Appearance.font.pixelSize.normal
+                                        color: Appearance.colors.colOnPrimary
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Loader {
+                        Layout.alignment: Qt.AlignVCenter
+                        active: !root.actionPanelOpen && (root.entry?.keyHints?.length ?? 0) > 0
+                        visible: active
+                        sourceComponent: Component {
+                            KeyHint {
+                                keys: root.entry?.keyHints ?? []
+                                surface: root.selectionProgress > 0.5 ? root.colSelectedFill : Appearance.colors.colSurfaceContainerHigh
+                                onSurface: root.selectionProgress > 0.5 ? root.colOnSelected : Appearance.colors.colOnSurface
+                            }
+                        }
                     }
 
                     // The user's own Ctrl+letter for this result.
-                    KeyHint {
-                        visible: !!root.itemKeybind && LauncherSearch.resultKeybindsEnabled && !root.actionPanelOpen && !root.keybindCaptureOpen
+                    Loader {
                         Layout.alignment: Qt.AlignVCenter
-                        keys: ["Ctrl", String(root.itemKeybind?.letter ?? "").toUpperCase()]
-                        surface: root.selectionProgress > 0.5 ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHigh
-                        onSurface: root.selectionProgress > 0.5 ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                        active: !!root.itemKeybind && LauncherSearch.resultKeybindsEnabled && !root.actionPanelOpen && !root.keybindCaptureOpen
+                        visible: active
+                        sourceComponent: Component {
+                            KeyHint {
+                                keys: ["Ctrl", String(root.itemKeybind?.letter ?? "").toUpperCase()]
+                                surface: root.selectionProgress > 0.5 ? root.colSelectedFill : Appearance.colors.colSurfaceContainerHigh
+                                onSurface: root.selectionProgress > 0.5 ? root.colOnSelected : Appearance.colors.colOnSurface
+                            }
+                        }
                     }
 
-                    StyledSwitch {
-                        visible: root.hasInlineSwitch && !root.actionPanelOpen
+                    Loader {
                         Layout.alignment: Qt.AlignVCenter
-                        sizeScale: 0.62
-                        checked: Boolean(root.entry?.controlValue)
-                        onToggled: {
-                            if (typeof root.itemExecute === "function") {
-                                root.itemExecute();
-                                root.resultExecuted(String(root.entry?.feedbackText ?? ""));
+                        active: root.hasInlineSwitch && !root.actionPanelOpen
+                        visible: active
+                        sourceComponent: Component {
+                            StyledSwitch {
+                                sizeScale: 0.62
+                                checked: Boolean(root.entry?.controlValue)
+                                onToggled: {
+                                    if (typeof root.itemExecute === "function") {
+                                        root.itemExecute();
+                                        root.resultExecuted(String(root.entry?.feedbackText ?? ""));
+                                    }
+                                }
                             }
                         }
                     }
@@ -946,7 +1151,20 @@ RippleButton {
                     readonly property int hIdx: index + 1
                     readonly property bool isBtnActive: root.isSelected && isActionSelected
 
-                    width: actionBtnContent.implicitWidth + 24
+                    // 0 = icon only, 1 = icon and label. The scroll target reads
+                    // targetWidth, so it does not chase the animated width.
+                    readonly property bool compact: root.compactActions && !isActionSelected
+                    readonly property real labelWidth: Math.min(120, actionLabel.implicitWidth)
+                    readonly property real targetWidth: 36 + 24 + (compact ? 0 : 8 + labelWidth)
+                    property real labelProgress: compact ? 0 : 1
+                    Behavior on labelProgress {
+                        enabled: root.actionPanelOpen && !root.animationsDisabled
+                        NumberAnimation {
+                            duration: root.scaledDuration(140)
+                            easing.type: Easing.OutQuad
+                        }
+                    }
+                    width: 36 + 24 + labelProgress * (8 + labelWidth)
                     height: slideRow.height
                     y: 0
                     topLeftRadius: hIdx === root.activeHIndex || (hIdx - 1) === root.activeHIndex ? root.pillRadius : Appearance.rounding.small
@@ -1010,9 +1228,7 @@ RippleButton {
                     RowLayout {
                         id: actionBtnContent
                         anchors.centerIn: parent
-                        spacing: 8
-                        Layout.leftMargin: 6
-                        Layout.rightMargin: 10
+                        spacing: 0
 
                         Item {
                             Layout.preferredWidth: 36
@@ -1055,12 +1271,17 @@ RippleButton {
                         }
 
                         StyledText {
+                            id: actionLabel
                             text: actionBtn.modelData.name
                             font.pixelSize: Appearance.font.pixelSize.small
                             font.family: Appearance.font.family.main
                             font.weight: Font.Medium
                             color: actionBtn.isBtnActive ? Appearance.colors.colOnPrimaryContainer : Appearance.m3colors.m3onSurface
                             elide: Text.ElideRight
+                            clip: true
+                            opacity: actionBtn.labelProgress
+                            Layout.leftMargin: 8 * actionBtn.labelProgress
+                            Layout.preferredWidth: actionBtn.labelProgress * actionBtn.labelWidth
                             Layout.maximumWidth: 120
                             Behavior on color {
                                 enabled: !root.animationsDisabled
@@ -1076,189 +1297,199 @@ RippleButton {
     }
 
     // ── Keybind capture row ──
-    Rectangle {
-        id: keybindCapture
+    // Built only while a capture is open: every result row used to carry
+    // this recorder (a text input, buttons, key labels) hidden, which was a
+    // large part of what each row cost to create while typing.
+    Loader {
+        id: keybindCaptureLoader
         anchors.fill: parent
-        anchors.leftMargin: root.horizontalMargin
-        anchors.rightMargin: root.horizontalMargin
         z: 20
-        visible: root.keybindCaptureOpen || root.aliasCaptureOpen
-        radius: root.pillRadius
-        color: Appearance.colors.colSecondaryContainer
-
-        // Swallows clicks, so the result underneath never runs.
-        MouseArea {
-            anchors.fill: parent
-            acceptedButtons: Qt.AllButtons
-            onClicked: root.aliasCaptureOpen ? aliasInput.forceActiveFocus() : root.forceActiveFocus()
-        }
-
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: Appearance.sizes.elevationMargin * 1.2
-            anchors.rightMargin: Appearance.sizes.elevationMargin * 0.6
-            spacing: Appearance.sizes.elevationMargin
-
-            MaterialSymbol {
-                text: root.aliasCaptureOpen ? "label" : "keyboard_command_key"
-                iconSize: Appearance.font.pixelSize.large
-                color: Appearance.colors.colOnSecondaryContainer
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 0
-
-                StyledText {
-                    Layout.fillWidth: true
-                    text: root.aliasCaptureOpen
-                        ? Translation.tr("Alias for %1").arg(root.itemName)
-                        : Translation.tr("Keybind for %1").arg(root.itemName)
-                    elide: Text.ElideRight
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    font.weight: Font.Medium
-                    color: Appearance.colors.colOnSecondaryContainer
-                }
-                StyledText {
-                    Layout.fillWidth: true
-                    text: root.aliasCaptureOpen ? root.aliasHint : root.captureHint
-                    elide: Text.ElideRight
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    color: root.activeCaptureNotice.length > 0 ? Appearance.colors.colError : Appearance.colors.colOnSecondaryContainer
-                    opacity: root.activeCaptureNotice.length > 0 ? 1 : 0.75
-                }
-            }
-
-            // The alias field takes the letter slot's place.
+        active: root.keybindCaptureOpen || root.aliasCaptureOpen
+        sourceComponent: Component {
             Rectangle {
-                visible: root.aliasCaptureOpen
-                implicitWidth: Math.max(Appearance.sizes.elevationMargin * 12, aliasInput.contentWidth + Appearance.sizes.elevationMargin * 2)
-                implicitHeight: Appearance.sizes.elevationMargin * 3
-                radius: Appearance.rounding.small
-                color: Appearance.colors.colSurfaceContainerHighest
+                id: keybindCapture
+                property alias aliasField: aliasInput
+                anchors.fill: parent
+                anchors.leftMargin: root.horizontalMargin
+                anchors.rightMargin: root.horizontalMargin
+                radius: root.pillRadius
+                color: Appearance.colors.colSecondaryContainer
 
-                TextInput {
-                    id: aliasInput
+                // Swallows clicks, so the result underneath never runs.
+                MouseArea {
                     anchors.fill: parent
-                    anchors.leftMargin: Appearance.sizes.elevationMargin * 0.7
-                    anchors.rightMargin: Appearance.sizes.elevationMargin * 0.7
-                    verticalAlignment: TextInput.AlignVCenter
-                    clip: true
-                    maximumLength: 32
-                    font.family: Appearance.font.family.monospace
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    color: Appearance.colors.colOnSurface
-                    selectionColor: Appearance.colors.colPrimary
-                    selectedTextColor: Appearance.colors.colOnPrimary
-                    onTextEdited: {
-                        root.aliasText = text;
-                        root.aliasNotice = "";
+                    acceptedButtons: Qt.AllButtons
+                    onClicked: root.aliasCaptureOpen ? aliasInput.forceActiveFocus() : root.forceActiveFocus()
+                }
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: Appearance.sizes.elevationMargin * 1.2
+                    anchors.rightMargin: Appearance.sizes.elevationMargin * 0.6
+                    spacing: Appearance.sizes.elevationMargin
+
+                    MaterialSymbol {
+                        text: root.aliasCaptureOpen ? "label" : "keyboard_command_key"
+                        iconSize: Appearance.font.pixelSize.large
+                        color: Appearance.colors.colOnSecondaryContainer
                     }
-                    Keys.onPressed: event => {
-                        if (event.key === Qt.Key_Escape) {
-                            root.closeAliasCapture();
-                            event.accepted = true;
-                        } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                            root.saveAliasCapture();
-                            event.accepted = true;
-                        } else if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab
-                                || event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
-                            event.accepted = true;
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 0
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: root.aliasCaptureOpen
+                                ? Translation.tr("Alias for %1").arg(root.itemName)
+                                : Translation.tr("Keybind for %1").arg(root.itemName)
+                            elide: Text.ElideRight
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            font.weight: Font.Medium
+                            color: Appearance.colors.colOnSecondaryContainer
+                        }
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: root.aliasCaptureOpen ? root.aliasHint : root.captureHint
+                            elide: Text.ElideRight
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            color: root.activeCaptureNotice.length > 0 ? Appearance.colors.colError : Appearance.colors.colOnSecondaryContainer
+                            opacity: root.activeCaptureNotice.length > 0 ? 1 : 0.75
                         }
                     }
-                }
 
-                StyledText {
-                    anchors.left: parent.left
-                    anchors.leftMargin: Appearance.sizes.elevationMargin * 0.7
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: root.aliasText.length === 0
-                    text: Translation.tr("alias")
-                    font.family: Appearance.font.family.monospace
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    color: Appearance.colors.colSubtext
-                }
-            }
+                    // The alias field takes the letter slot's place.
+                    Rectangle {
+                        visible: root.aliasCaptureOpen
+                        implicitWidth: Math.max(Appearance.sizes.elevationMargin * 12, aliasInput.contentWidth + Appearance.sizes.elevationMargin * 2)
+                        implicitHeight: Appearance.sizes.elevationMargin * 3
+                        radius: Appearance.rounding.small
+                        color: Appearance.colors.colSurfaceContainerHighest
 
-            // Ctrl is fixed; the letter slot waits for the press.
-            RowLayout {
-                visible: root.keybindCaptureOpen
-                spacing: 4
+                        TextInput {
+                            id: aliasInput
+                            anchors.fill: parent
+                            anchors.leftMargin: Appearance.sizes.elevationMargin * 0.7
+                            anchors.rightMargin: Appearance.sizes.elevationMargin * 0.7
+                            verticalAlignment: TextInput.AlignVCenter
+                            clip: true
+                            maximumLength: 32
+                            font.family: Appearance.font.family.monospace
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            color: Appearance.colors.colOnSurface
+                            selectionColor: Appearance.colors.colPrimary
+                            selectedTextColor: Appearance.colors.colOnPrimary
+                            onTextEdited: {
+                                root.aliasText = text;
+                                root.aliasNotice = "";
+                            }
+                            Keys.onPressed: event => {
+                                if (event.key === Qt.Key_Escape) {
+                                    root.closeAliasCapture();
+                                    event.accepted = true;
+                                } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                                    root.saveAliasCapture();
+                                    event.accepted = true;
+                                } else if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab
+                                        || event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
+                                    event.accepted = true;
+                                }
+                            }
+                        }
 
-                Rectangle {
-                    implicitWidth: ctrlKeyLabel.implicitWidth + Appearance.sizes.elevationMargin * 1.2
-                    implicitHeight: Appearance.sizes.elevationMargin * 3
-                    radius: Appearance.rounding.small
-                    color: Appearance.colors.colSurfaceContainerHighest
-
-                    StyledText {
-                        id: ctrlKeyLabel
-                        anchors.centerIn: parent
-                        text: "Ctrl"
-                        font.family: Appearance.font.family.monospace
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        color: Appearance.colors.colOnSurface
+                        StyledText {
+                            anchors.left: parent.left
+                            anchors.leftMargin: Appearance.sizes.elevationMargin * 0.7
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: root.aliasText.length === 0
+                            text: Translation.tr("alias")
+                            font.family: Appearance.font.family.monospace
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            color: Appearance.colors.colSubtext
+                        }
                     }
-                }
-                StyledText {
-                    text: "+"
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    color: Appearance.colors.colOnSecondaryContainer
-                }
-                Rectangle {
-                    implicitHeight: Appearance.sizes.elevationMargin * 3
-                    implicitWidth: Math.max(implicitHeight, letterKeyLabel.implicitWidth + Appearance.sizes.elevationMargin * 1.2)
-                    radius: Appearance.rounding.small
-                    color: root.capturedLetter.length > 0 ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHighest
 
-                    StyledText {
-                        id: letterKeyLabel
-                        anchors.centerIn: parent
-                        text: root.capturedLetter.length > 0 ? root.capturedLetter.toUpperCase() : "?"
-                        font.family: Appearance.font.family.monospace
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        font.weight: Font.DemiBold
-                        color: root.capturedLetter.length > 0 ? Appearance.colors.colOnPrimary : Appearance.colors.colSubtext
+                    // Ctrl is fixed; the letter slot waits for the press.
+                    RowLayout {
+                        visible: root.keybindCaptureOpen
+                        spacing: 4
+
+                        Rectangle {
+                            implicitWidth: ctrlKeyLabel.implicitWidth + Appearance.sizes.elevationMargin * 1.2
+                            implicitHeight: Appearance.sizes.elevationMargin * 3
+                            radius: Appearance.rounding.small
+                            color: Appearance.colors.colSurfaceContainerHighest
+
+                            StyledText {
+                                id: ctrlKeyLabel
+                                anchors.centerIn: parent
+                                text: "Ctrl"
+                                font.family: Appearance.font.family.monospace
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                color: Appearance.colors.colOnSurface
+                            }
+                        }
+                        StyledText {
+                            text: "+"
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            color: Appearance.colors.colOnSecondaryContainer
+                        }
+                        Rectangle {
+                            implicitHeight: Appearance.sizes.elevationMargin * 3
+                            implicitWidth: Math.max(implicitHeight, letterKeyLabel.implicitWidth + Appearance.sizes.elevationMargin * 1.2)
+                            radius: Appearance.rounding.small
+                            color: root.capturedLetter.length > 0 ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHighest
+
+                            StyledText {
+                                id: letterKeyLabel
+                                anchors.centerIn: parent
+                                text: root.capturedLetter.length > 0 ? root.capturedLetter.toUpperCase() : "?"
+                                font.family: Appearance.font.family.monospace
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                font.weight: Font.DemiBold
+                                color: root.capturedLetter.length > 0 ? Appearance.colors.colOnPrimary : Appearance.colors.colSubtext
+                            }
+                        }
                     }
-                }
-            }
 
-            RippleButton {
-                implicitWidth: clearKeyLabel.implicitWidth + Appearance.sizes.elevationMargin * 2
-                implicitHeight: Appearance.sizes.elevationMargin * 3.2
-                buttonRadius: Appearance.rounding.full
-                enabled: root.aliasCaptureOpen ? root.aliasText.length > 0 : root.capturedLetter.length > 0
-                opacity: enabled ? 1 : 0.45
-                colBackground: Appearance.colors.colSurfaceContainerHighest
-                colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
-                colRipple: Appearance.colors.colSurfaceContainerHighestActive
-                onClicked: root.clearActiveCapture()
+                    RippleButton {
+                        implicitWidth: clearKeyLabel.implicitWidth + Appearance.sizes.elevationMargin * 2
+                        implicitHeight: Appearance.sizes.elevationMargin * 3.2
+                        buttonRadius: Appearance.rounding.full
+                        enabled: root.aliasCaptureOpen ? root.aliasText.length > 0 : root.capturedLetter.length > 0
+                        opacity: enabled ? 1 : 0.45
+                        colBackground: Appearance.colors.colSurfaceContainerHighest
+                        colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
+                        colRipple: Appearance.colors.colSurfaceContainerHighestActive
+                        onClicked: root.clearActiveCapture()
 
-                StyledText {
-                    id: clearKeyLabel
-                    anchors.centerIn: parent
-                    text: Translation.tr("Clear")
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    color: Appearance.colors.colOnSurface
-                }
-            }
+                        StyledText {
+                            id: clearKeyLabel
+                            anchors.centerIn: parent
+                            text: Translation.tr("Clear")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            color: Appearance.colors.colOnSurface
+                        }
+                    }
 
-            RippleButton {
-                implicitWidth: doneKeyLabel.implicitWidth + Appearance.sizes.elevationMargin * 2
-                implicitHeight: Appearance.sizes.elevationMargin * 3.2
-                buttonRadius: Appearance.rounding.full
-                colBackground: Appearance.colors.colPrimary
-                colBackgroundHover: Appearance.colors.colPrimaryHover
-                colRipple: Appearance.colors.colPrimaryActive
-                onClicked: root.aliasCaptureOpen ? root.saveAliasCapture() : root.saveKeybindCapture()
+                    RippleButton {
+                        implicitWidth: doneKeyLabel.implicitWidth + Appearance.sizes.elevationMargin * 2
+                        implicitHeight: Appearance.sizes.elevationMargin * 3.2
+                        buttonRadius: Appearance.rounding.full
+                        colBackground: Appearance.colors.colPrimary
+                        colBackgroundHover: Appearance.colors.colPrimaryHover
+                        colRipple: Appearance.colors.colPrimaryActive
+                        onClicked: root.aliasCaptureOpen ? root.saveAliasCapture() : root.saveKeybindCapture()
 
-                StyledText {
-                    id: doneKeyLabel
-                    anchors.centerIn: parent
-                    text: Translation.tr("Done")
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    font.weight: Font.Medium
-                    color: Appearance.colors.colOnPrimary
+                        StyledText {
+                            id: doneKeyLabel
+                            anchors.centerIn: parent
+                            text: Translation.tr("Done")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            font.weight: Font.Medium
+                            color: Appearance.colors.colOnPrimary
+                        }
+                    }
                 }
             }
         }
@@ -1276,11 +1507,16 @@ RippleButton {
             && LauncherSearch.confirmKey !== cmdKey;
         const isModeSwitch = root.keepsOverviewOpen || (root.entry?.key?.startsWith("mock:") && root.entry?.key !== "mock:settings") || (root.entry?.key?.startsWith("shortcut:") && root.entry?.key !== "shortcut:openSettings") || root.itemType === Translation.tr("Folder Alias");
 
+        // Closing clears the result model synchronously, which nulls `entry`
+        // (and so `itemExecute`) before the next line could run it.
+        const execute = root.itemExecute;
+        const feedbackText = String(root.entry?.feedbackText ?? "");
         if (!isConfirming && !isModeSwitch) {
             GlobalStates.overviewOpen = false;
         }
-        root.itemExecute();
-        root.resultExecuted(String(root.entry?.feedbackText ?? ""));
+        if (typeof execute === "function")
+            execute();
+        root.resultExecuted(feedbackText);
     }
 
     Keys.onPressed: event => {
@@ -1293,7 +1529,7 @@ RippleButton {
             else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
                 root.saveAliasCapture();
             else
-                aliasInput.forceActiveFocus();
+                root.aliasField()?.forceActiveFocus();
             return;
         }
         // While recording a keybind, every key belongs to the recorder.

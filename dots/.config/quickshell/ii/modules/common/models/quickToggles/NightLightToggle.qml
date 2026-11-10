@@ -13,6 +13,10 @@ QuickToggleModel {
     statusText: (auto ? Translation.tr("Auto, ") : "") + (toggled ? Translation.tr("Active") : Translation.tr("Inactive"))
 
     toggled: Hyprsunset.temperatureActive
+    heroValue: toggled ? String(Hyprsunset.colorTemperature) : ""
+    // Warmer is more filter: 6500 K (neutral) is empty, 1000 K is full.
+    heroLevel: Math.max(0, Math.min(1, (6500 - Hyprsunset.colorTemperature) / 5500))
+    heroUnit: toggled ? "K" : ""
     icon: auto ? "night_sight_auto" : "bedtime"
     
     mainAction: () => {

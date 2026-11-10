@@ -21,7 +21,7 @@ AbstractBackgroundWidget {
 
     configEntryName: "media"
 
-    visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "center" || root.lockBehavior === "lockOnly" || (Config.options.lock.centerWidget === "media")
+    visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "custom" || root.lockBehavior === "center" || root.lockBehavior === "lockOnly" || (Config.options.lock.centerWidget === "media")
 
     property real lastStaticWidth: 240
     property real lastStaticHeight: 240
@@ -52,10 +52,7 @@ AbstractBackgroundWidget {
     property var filteredPlayerList: playerList.filter(player => player != null && player.trackAlbum != "")
 
     property MprisPlayer currentPlayer: MprisController.activePlayer
-    property var artUrl: MprisController.artUrl
-    property string artDownloadLocation: Directories.coverArt
-    property string artFileName: Qt.md5(artUrl)
-    property string artFilePath: `${artDownloadLocation}/${artFileName}`
+    property string artUrl: MprisController.artUrl
 
     property real widgetSize: 240
     property real controlsSize: 55
@@ -102,8 +99,8 @@ AbstractBackgroundWidget {
         return legacy[raw] ?? raw;
     }
 
-    property bool downloaded: false
-    property string displayedArtFilePath: root.downloaded ? Qt.resolvedUrl(artFilePath) : ""
+    readonly property string displayedArtFilePath: CoverArt.source(root.artUrl)
+    readonly property bool downloaded: root.displayedArtFilePath !== ""
 
     property list<real> visualizerPoints: Config.options.background.widgets.media.visualizer.enable ? CavaService.visualizerPoints : []
 
@@ -124,29 +121,9 @@ AbstractBackgroundWidget {
         }
     }
 
-    onArtFilePathChanged: updateArt()
 
     function nextPlayer() {
         root.currentPlayer = root.playerList[(root.playerList.indexOf(root.currentPlayer) + 1) % root.playerList.length];
-    }
-
-    function updateArt() {
-        coverArtDownloader.targetFile = root.artUrl;
-        coverArtDownloader.artFilePath = root.artFilePath;
-        coverArtDownloader.artTempPath = root.artFilePath + ".tmp";
-        root.downloaded = false;
-        coverArtDownloader.running = true;
-    }
-
-    Process { // Cover art downloader
-        id: coverArtDownloader
-        property string targetFile: root.artUrl
-        property string artFilePath: root.artFilePath
-        property string artTempPath: root.artFilePath + ".tmp"
-        command: ["bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
-        onExited: (exitCode, exitStatus) => {
-            root.downloaded = true;
-        }
     }
 
 

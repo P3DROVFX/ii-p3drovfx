@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import qs.modules.common
+import qs.modules.ii.dynamicIsland.core
 import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.services
@@ -19,7 +20,12 @@ Item {
 
     property bool vertical: false
 
-    readonly property bool compVisible: timerState.visible
+    /**
+     * Out in one of the Dynamic Island's auxiliary bubbles right now, so the bar
+     * leaves it to the bubble instead of showing it twice.
+     */
+    readonly property bool bubbled: IslandGeometry.bubbled("timer")
+    readonly property bool compVisible: timerState.visible && !root.bubbled
     readonly property real thickness: root.vertical
         ? Appearance.sizes.verticalBarWidth - 8
         : Appearance.sizes.baseBarHeight - 8
@@ -58,7 +64,7 @@ Item {
 
     BarWidgetPalette {
         id: theme
-        colorMode: "tonal"
+        colorMode: Config.options.bar.timers.colorMode ?? "primary"
     }
 
     GridLayout {
@@ -121,6 +127,22 @@ Item {
                 onTriggered: timerState.toggleCountdown()
             }
         }
+
+        Loader {
+            active: timerState.hasUpcomingAlarm
+            visible: active
+            Layout.alignment: Qt.AlignCenter
+            sourceComponent: ExpressiveReadout {
+                vertical: root.vertical
+                thickness: root.thickness
+                contentRotation: root.contentRotation
+                iconName: timerState.upcomingAlarm?.phone ? "phone_android" : "alarm"
+                value: timerState.upcomingAlarmText
+                markerShape: MaterialShape.Shape.Cookie7Sided
+                tooltip: timerState.upcomingAlarmTooltip
+                onTriggered: timerState.openUpcomingAlarm()
+            }
+        }
     }
 
     component ExpressiveReadout: RippleButton {
@@ -143,13 +165,13 @@ Item {
             ? content.implicitHeight + 12
             : readout.thickness
 
-        buttonRadius: Config.options.bar.barGroupStyle === 1
+        buttonRadius: (typeof rootItem !== "undefined" ? rootItem.groupStyle : Config.options.bar.barGroupStyle) === 1
             ? Appearance.rounding.windowRounding
             : Appearance.rounding.full
-        colBackground: theme.colContainer
-        colBackgroundHover: Appearance.colors.colTertiaryContainerHover
-        colBackgroundActive: Appearance.colors.colTertiaryContainerActive
-        colRipple: Appearance.colors.colTertiaryContainerActive
+        colBackground: theme.colBackground
+        colBackgroundHover: theme.colBackgroundHover
+        colBackgroundActive: theme.colBackgroundActive
+        colRipple: theme.colBackgroundActive
         onPressed: readout.triggered()
 
         GridLayout {
@@ -167,8 +189,8 @@ Item {
                 iconSize: Appearance.font.pixelSize.normal
                 padding: 3
                 text: readout.iconName
-                color: theme.colAccent
-                colSymbol: theme.colOnAccent
+                color: theme.colBackgroundVariant
+                colSymbol: theme.colOnBackgroundVariant
             }
 
             Item {
@@ -186,7 +208,7 @@ Item {
                     font.pixelSize: Appearance.font.pixelSize.small
                     font.weight: Font.DemiBold
                     font.features: ({ "tnum": 1 })
-                    color: ColorUtils.categoryOnColor(theme.colContainer)
+                    color: ColorUtils.categoryOnColor(theme.colBackground)
                 }
             }
 
@@ -196,14 +218,14 @@ Item {
                 implicitWidth: 18
                 implicitHeight: 18
                 radius: Appearance.rounding.full
-                color: theme.colAccent
+                color: theme.colBackgroundVariant
 
                 StyledText {
                     anchors.centerIn: parent
                     text: String(readout.badgeCount)
                     font.pixelSize: Appearance.font.pixelSize.smallest
                     font.weight: Font.Bold
-                    color: theme.colOnAccent
+                    color: theme.colOnBackgroundVariant
                 }
             }
         }

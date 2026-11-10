@@ -24,49 +24,15 @@ Item {
     property list<real> visualizerPoints: []
 
     readonly property bool playing: player ? player.playbackState === MprisPlaybackState.Playing : false
-    readonly property string artUrl: MprisController.artUrl
+    // Per-player art, not the active player's. Every popup instance in the column
+    // receives its own `player`; reading MprisController.artUrl here replicated the
+    // active source's cover onto all of them.
+    readonly property string artUrl: player?.trackArtUrl ?? ""
     readonly property string trackTitle: StringUtils.cleanMusicTitle(player?.trackTitle) || Translation.tr("No media")
     readonly property string trackArtist: player?.trackArtist || Translation.tr("Unknown Artist")
     readonly property string identity: player ? (player.identity ?? "") : ""
 
-    property bool isLocalArt: artUrl.startsWith("file://")
-    property string artDownloadLocation: Directories.coverArt
-    property string artFileName: Qt.md5(artUrl)
-    property string artFilePath: `${artDownloadLocation}/${artFileName}`
-    property bool artDownloaded: false
-
-    readonly property string artSource: {
-        if (!artUrl) return "";
-        if (isLocalArt) return artUrl;
-        return artDownloaded ? Qt.resolvedUrl(artFilePath) : "";
-    }
-
-    onArtFilePathChanged: {
-        if (!artUrl || artUrl.length === 0) {
-            artDownloaded = false;
-            return;
-        }
-        if (isLocalArt) {
-            artDownloaded = true;
-            return;
-        }
-        artDownloader.targetFile = artUrl;
-        artDownloader.artFilePath = artFilePath;
-        artDownloader.artTempPath = artFilePath + ".tmp";
-        artDownloaded = false;
-        artDownloader.running = true;
-    }
-
-    Process {
-        id: artDownloader
-        property string targetFile: root.artUrl
-        property string artFilePath: root.artFilePath
-        property string artTempPath: root.artFilePath + ".tmp"
-        command: ["bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
-        onExited: {
-            artDownloaded = true;
-        }
-    }
+    readonly property string artSource: CoverArt.source(root.artUrl)
 
     property string activeLyricText: ""
     property real lyricOpacity: 1.0
@@ -76,7 +42,6 @@ Item {
     property real titleOpacity: 1.0
     property real titleYOffset: 0.0
 
-    property real artVignetteBlur: root.playing ? 50 : 90
 
     readonly property bool useDynamicColors: Config.options.media.dynamicAlbumColors && root.artSource !== ""
 
@@ -99,12 +64,6 @@ Item {
     readonly property color artTextColor: Appearance.colors.colOnSurface
     readonly property color artSubtextColor: Appearance.colors.colOnSurfaceVariant
 
-    Behavior on artVignetteBlur {
-        NumberAnimation {
-            duration: 500
-            easing.type: Easing.OutCubic
-        }
-    }
 
     readonly property string displaySongText: {
         if (LyricsService.hasSyncedLines && LyricsService.statusText !== "") {
@@ -196,98 +155,34 @@ Item {
         radius: Appearance.rounding.windowRounding
         clip: true
 
-        layer.enabled: true
-        layer.effect: OpacityMask {
-            maskSource: Rectangle {
-                width: mainBg.width
-                height: mainBg.height
-                radius: mainBg.radius
+        // Only the artwork is rounded-clipped. A layer on mainBg would also
+        // rasterize the texts below, which come out soft at fractional offsets.
+        Item {
+            id: artClip
+            anchors.fill: parent
+            layer.enabled: true
+            layer.effect: OpacityMask {
+                maskSource: Rectangle {
+                    width: mainBg.width
+                    height: mainBg.height
+                    radius: mainBg.radius
+                }
+            }
+
+            AndroidMediaArtwork {
+                id: artwork
+                anchors.fill: parent
+                artSource: root.artUrl
+                trackKey: JSON.stringify([root.player?.uniqueId ?? "", root.player?.trackTitle ?? "",
+                    root.player?.trackArtist ?? "", root.player?.trackAlbum ?? ""])
+                hasPlayer: !!root.player
+                playing: root.playing
+                wide: 1
             }
         }
-
-        Item {
-            anchors.fill: parent
-
-            Image {
-                id: artBlurredUnderlay
-                anchors.fill: parent
-                source: root.artSource
-                fillMode: Image.PreserveAspectCrop
-                visible: root.artSource !== ""
-                layer.enabled: root.artVignetteBlur > 0
-                layer.effect: MultiEffect {
-                    blurEnabled: root.artVignetteBlur > 0
-                    blurMax: 128
-                    blur: root.artVignetteBlur / 128
-                }
-            }
-
-            Item {
-                id: vignetteMask
-                anchors.fill: parent
-
-                RadialGradient {
-                    anchors.fill: parent
-                    gradient: Gradient {
-                        GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 1) }
-                        GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0) }
-                    }
-                    horizontalRadius: width * 0.65
-                    verticalRadius: height * 0.65
-                }
-            }
-
-            Item {
-                anchors.fill: parent
-                layer.enabled: true
-                layer.effect: OpacityMask {
-                    maskSource: vignetteMask
-                }
-
-                Image {
-                    id: artExpanded
-                    anchors.fill: parent
-                    source: root.artSource
-                    fillMode: Image.PreserveAspectCrop
-                    opacity: 0.85
-                    visible: root.artSource !== ""
-                }
-            }
-        }
-
-        Item {
-            anchors.fill: parent
-            opacity: root.playing ? 0.55 : 0.75
-
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: 400
-                    easing.type: Easing.OutCubic
-                }
-            }
-
-            Rectangle {
-                anchors.fill: parent
-                gradient: Gradient {
-                    GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0.0) }
-                    GradientStop { position: 0.5; color: Qt.rgba(0, 0, 0, 0.05) }
-                    GradientStop { position: 0.8; color: Qt.rgba(0, 0, 0, 0.25) }
-                    GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.45) }
-                }
-            }
-
-            Rectangle {
-                anchors.fill: parent
-                color: Qt.rgba(0, 0, 0, 0.3)
-                opacity: root.playing ? 0.0 : 0.5
-
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: 500
-                        easing.type: Easing.OutCubic
-                    }
-                }
-            }
+        Connections {
+            target: root.player
+            function onPostTrackChanged(): void { artwork.requestArt(true); }
         }
 
         ColumnLayout {
@@ -377,12 +272,7 @@ Item {
                         return "volume_up";
                     }
 
-                    onClicked: {
-                        GlobalStates.openRightSidebar();
-                        Qt.callLater(() => {
-                            GlobalStates.requestVolumeDialog = true;
-                        });
-                    }
+                    onClicked: GlobalStates.openAudioOutputSettings()
 
                     contentItem: RowLayout {
                         id: audioPillLayout
@@ -584,8 +474,10 @@ Item {
                     colRipple: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
 
                     onClicked: {
-                        if (root.player)
+                        if (root.player?.canGoPrevious) {
+                            artwork.beginChange();
                             root.player.previous();
+                        }
                     }
 
                     contentItem: Item {
@@ -616,16 +508,22 @@ Item {
                     Loader {
                         id: sliderLoader
                         anchors.fill: parent
-                        active: root.player ? (root.player.canSeek ?? false) : false
+                        active: root.player?.canSeek ?? false
                         sourceComponent: StyledSlider {
                             configuration: StyledSlider.Configuration.Wavy
                             animateWave: root.playing && root.visible
                             highlightColor: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
                             trackColor: Qt.rgba(1, 1, 1, 0.2)
                             handleColor: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
-                            value: (root.player && root.player.length > 0) ? Math.min(1, Math.max(0, root.player.position / root.player.length)) : 0
-                            onMoved: if (root.player)
-                                root.player.position = value * root.player.length
+                            value: MprisController.trackProgressOf(root.player)
+                            // Nothing to seek to while the player publishes no length.
+                            enabled: MprisController.hasTrackLength(root.player)
+                            onMoved: MprisController.seekFraction(root.player, value)
+                            // QQuickSlider writes `value` itself while the user drags, which destroys
+                            // the binding below it. Without this the bar froze where the drag left it
+                            // and never followed the track again.
+                            onPressedChanged: if (!pressed)
+                                value = Qt.binding(() => MprisController.trackProgressOf(root.player))
                         }
                     }
 
@@ -636,13 +534,13 @@ Item {
                             left: parent.left
                             right: parent.right
                         }
-                        active: root.player ? !(root.player.canSeek ?? false) : false
+                        active: !!root.player && !sliderLoader.active
                         sourceComponent: StyledProgressBar {
                             wavy: root.player ? root.playing : false
                             animateWave: root.playing && root.visible
                             highlightColor: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
                             trackColor: Qt.rgba(1, 1, 1, 0.2)
-                            value: (root.player && root.player.length > 0) ? Math.min(1, Math.max(0, root.player.position / root.player.length)) : 0
+                            value: MprisController.trackProgressOf(root.player)
                         }
                     }
                 }
@@ -657,8 +555,10 @@ Item {
                     colRipple: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
 
                     onClicked: {
-                        if (root.player)
+                        if (root.player?.canGoNext) {
+                            artwork.beginChange();
                             root.player.next();
+                        }
                     }
 
                     contentItem: Item {

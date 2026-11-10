@@ -7,9 +7,11 @@ import QtQuick.Shapes
  * Countdown timer, drawn as a filled hourglass with separately articulated
  * caps, rails and sand.
  *
- * Running drains the upper chamber grain by grain and then turns the glass to
- * restart the flow. Pause mechanically catches the sand, completion deposits
- * it in the lower chamber, and removal closes the frame around the waist.
+ * The sand level is the countdown's real progress: the upper chamber drains as
+ * the time runs out, stepping only when the level visibly moves. A looping
+ * flow kept the bar repainting every frame for as long as a timer ran (~18% of
+ * a core here). Pause mechanically catches the sand, completion deposits it in
+ * the lower chamber, and removal closes the frame around the waist.
  */
 AnimatedIcon {
     id: root
@@ -21,6 +23,8 @@ AnimatedIcon {
     property bool paused: false
     property bool finished: false
     property bool busy: false
+    /** Elapsed fraction of the countdown, 0..1 — already quantised by the driver. */
+    property real progress: 0
 
     readonly property real dimmed: 0.3
 
@@ -32,6 +36,16 @@ AnimatedIcon {
     property real bottomSandAmount: 0.22
     property real grainY: 11.7
     property real bodyTurn: 0
+
+    // Rest changes glide; the cue animations write past these Behaviors.
+    Behavior on topSandAmount {
+        enabled: !root.busy
+        NumberAnimation { duration: 420; easing.type: Easing.OutCubic }
+    }
+    Behavior on bottomSandAmount {
+        enabled: !root.busy
+        NumberAnimation { duration: 420; easing.type: Easing.OutCubic }
+    }
 
     function shouldFlow(): bool {
         return root.running && !root.paused && !root.finished;
@@ -48,12 +62,10 @@ AnimatedIcon {
         if (root.finished) {
             root.topSandAmount = 0.08;
             root.bottomSandAmount = 0.92;
-        } else if (root.paused) {
-            root.topSandAmount = 0.52;
-            root.bottomSandAmount = 0.48;
         } else {
-            root.topSandAmount = 0.78;
-            root.bottomSandAmount = 0.22;
+            const spent = Math.max(0, Math.min(1, root.progress));
+            root.topSandAmount = 0.78 - spent * 0.66;
+            root.bottomSandAmount = 0.22 + spent * 0.66;
         }
 
         glyph.opacity = (root.running || root.paused || root.finished) ? 1 : root.dimmed;
@@ -61,17 +73,15 @@ AnimatedIcon {
 
     function stopAll(): void {
         startAnim.stop();
-        flowAnim.stop();
         pauseAnim.stop();
         resumeAnim.stop();
         completeAnim.stop();
         removedAnim.stop();
     }
 
-    function beginFlow(): void {
+    function settle(): void {
         root.busy = false;
-        if (root.shouldFlow())
-            flowAnim.start();
+        root.applyRest();
     }
 
     function play(cue: string): void {
@@ -108,13 +118,15 @@ AnimatedIcon {
             return;
         root.stopAll();
         root.applyRest();
-        if (root.shouldFlow())
-            flowAnim.start();
     }
 
     onRunningChanged: root.refreshRest()
     onPausedChanged: root.refreshRest()
     onFinishedChanged: root.refreshRest()
+    onProgressChanged: {
+        if (!root.busy)
+            root.applyRest();
+    }
     Component.onCompleted: root.refreshRest()
 
     Item {
@@ -187,23 +199,29 @@ AnimatedIcon {
             }
         }
 
-        Shape {
+        // The sand and the grain keep one fixed geometry each and move through
+        // a clip, a scale and a translate: rebuilding the paths every frame made
+        // the curve renderer re-triangulate three shapes for as long as a
+        // countdown ran.
+        Item {
             id: topSand
 
-            anchors.fill: parent
-            preferredRendererType: Shape.CurveRenderer
-            ShapePath {
-                strokeColor: "transparent"
-                fillColor: root.color
-                PathSvg {
-                    path: {
-                        const amount = Math.max(0.05, Math.min(1, root.topSandAmount));
-                        const surfaceY = 6.15 + (1 - amount) * 4.6;
-                        return "M 7.85 " + String(surfaceY)
-                            + " H 16.15 Q 15.65 9.15 12.65 11.55"
-                            + " Q 12 12.05 11.35 11.55 Q 8.35 9.15 7.85 "
-                            + String(surfaceY) + " Z";
-                    }
+            readonly property real surfaceY: 6.15 + (1 - Math.max(0.05, Math.min(1, root.topSandAmount))) * 4.6
+
+            y: topSand.surfaceY
+            width: 24
+            height: 24 - topSand.surfaceY
+            clip: true
+
+            Shape {
+                y: -topSand.surfaceY
+                width: 24
+                height: 24
+                preferredRendererType: Shape.CurveRenderer
+                ShapePath {
+                    strokeColor: "transparent"
+                    fillColor: root.color
+                    PathSvg { path: "M 7.85 6.15 H 16.15 Q 15.65 9.15 12.65 11.55 Q 12 12.05 11.35 11.55 Q 8.35 9.15 7.85 6.15 Z" }
                 }
             }
         }
@@ -213,17 +231,14 @@ AnimatedIcon {
 
             anchors.fill: parent
             preferredRendererType: Shape.CurveRenderer
+            transform: Scale {
+                origin.y: 18.25
+                yScale: Math.max(0.05, Math.min(1, root.bottomSandAmount))
+            }
             ShapePath {
                 strokeColor: "transparent"
                 fillColor: root.color
-                PathSvg {
-                    path: {
-                        const amount = Math.max(0.05, Math.min(1, root.bottomSandAmount));
-                        const apexY = 18.25 - amount * 5.4;
-                        return "M 7.55 18.25 H 16.45 Q 15.4 15.6 12 "
-                            + String(apexY) + " Q 8.6 15.6 7.55 18.25 Z";
-                    }
-                }
+                PathSvg { path: "M 7.55 18.25 H 16.45 Q 15.4 15.6 12 12.85 Q 8.6 15.6 7.55 18.25 Z" }
             }
         }
 
@@ -233,12 +248,13 @@ AnimatedIcon {
             anchors.fill: parent
             preferredRendererType: Shape.CurveRenderer
             opacity: root.shouldFlow() ? 1 : root.dimmed
+            transform: Translate { y: root.grainY }
             ShapePath {
                 strokeColor: "transparent"
                 fillColor: root.color
                 PathAngleArc {
                     centerX: 12
-                    centerY: root.grainY
+                    centerY: 0
                     radiusX: 0.72
                     radiusY: 1.15
                     startAngle: 0
@@ -262,42 +278,7 @@ AnimatedIcon {
             NumberAnimation { target: root; property: "bottomSandAmount"; from: 0.06; to: 0.22; duration: 420; easing.type: Easing.OutCubic }
             NumberAnimation { target: root; property: "grainY"; from: 10.9; to: 16.7; duration: 390; easing.type: Easing.InCubic }
         }
-        ScriptAction { script: root.beginFlow() }
-    }
-
-    // ── Running: sand drains, then the filled glass turns and refills ───────
-    SequentialAnimation {
-        id: flowAnim
-        loops: Animation.Infinite
-
-        ParallelAnimation {
-            NumberAnimation { target: root; property: "topSandAmount"; from: 0.78; to: 0.12; duration: 2600; easing.type: Easing.Linear }
-            NumberAnimation { target: root; property: "bottomSandAmount"; from: 0.22; to: 0.88; duration: 2600; easing.type: Easing.Linear }
-            SequentialAnimation {
-                loops: 5
-                NumberAnimation { target: root; property: "grainY"; from: 11.5; to: 16.9; duration: 520; easing.type: Easing.InCubic }
-            }
-        }
-        ParallelAnimation {
-            NumberAnimation { target: root; property: "bodyTurn"; from: 0; to: 180; duration: 560; easing.type: Easing.OutBack }
-            SequentialAnimation {
-                NumberAnimation { target: root; property: "topCapShift"; to: 0.6; duration: 180; easing.type: Easing.OutCubic }
-                NumberAnimation { target: root; property: "topCapShift"; to: 0; duration: 300; easing.type: Easing.OutBack }
-            }
-            SequentialAnimation {
-                NumberAnimation { target: root; property: "bottomCapShift"; to: -0.6; duration: 180; easing.type: Easing.OutCubic }
-                NumberAnimation { target: root; property: "bottomCapShift"; to: 0; duration: 300; easing.type: Easing.OutBack }
-            }
-        }
-        ScriptAction {
-            script: {
-                root.bodyTurn = 0;
-                root.topSandAmount = 0.78;
-                root.bottomSandAmount = 0.22;
-                root.grainY = 11.5;
-            }
-        }
-        PauseAnimation { duration: 120 }
+        ScriptAction { script: root.settle() }
     }
 
     // ── Paused: the rails catch the chambers and the grain stops ───────────
@@ -306,8 +287,6 @@ AnimatedIcon {
 
         ParallelAnimation {
             NumberAnimation { target: root; property: "bodyTurn"; to: 0; duration: 360; easing.type: Easing.OutBack }
-            NumberAnimation { target: root; property: "topSandAmount"; to: 0.52; duration: 360; easing.type: Easing.OutCubic }
-            NumberAnimation { target: root; property: "bottomSandAmount"; to: 0.48; duration: 360; easing.type: Easing.OutCubic }
             NumberAnimation { target: root; property: "grainY"; to: 12.1; duration: 180; easing.type: Easing.OutCubic }
             SequentialAnimation {
                 NumberAnimation { target: root; property: "leftRailLean"; to: 4; duration: 150; easing.type: Easing.OutCubic }
@@ -321,7 +300,7 @@ AnimatedIcon {
         ScriptAction {
             script: {
                 root.applyRest();
-                root.beginFlow();
+                root.settle();
             }
         }
     }
@@ -339,10 +318,8 @@ AnimatedIcon {
         ScriptAction {
             script: {
                 root.bodyTurn = 0;
-                root.topSandAmount = 0.78;
-                root.bottomSandAmount = 0.22;
                 root.grainY = 11.5;
-                root.beginFlow();
+                root.settle();
             }
         }
     }
@@ -365,7 +342,7 @@ AnimatedIcon {
         ScriptAction {
             script: {
                 root.applyRest();
-                root.beginFlow();
+                root.settle();
             }
         }
     }
@@ -393,7 +370,7 @@ AnimatedIcon {
         ScriptAction {
             script: {
                 root.applyRest();
-                root.beginFlow();
+                root.settle();
             }
         }
     }

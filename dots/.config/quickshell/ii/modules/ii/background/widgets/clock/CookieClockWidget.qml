@@ -18,7 +18,7 @@ AbstractBackgroundWidget {
 
     property bool wallpaperSafetyTriggered: false
 
-    visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "center" || root.lockBehavior === "lockOnly" || (Config.options.lock.centerWidget === "clock_cookie")
+    visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "custom" || root.lockBehavior === "center" || root.lockBehavior === "lockOnly" || (Config.options.lock.centerWidget === "clock_cookie")
     opacity: {
         if (root.lockBehavior === "lockOnly") return GlobalStates.screenLocked ? 1 : 0;
         if (GlobalStates.screenLocked && !visibleWhenLocked) return 0;
@@ -31,7 +31,9 @@ AbstractBackgroundWidget {
         anchors.centerIn: parent
         spacing: 10
 
-        CookieClock {}
+        CookieClock {
+            live: root.live
+        }
 
         FadeLoader {
             anchors.horizontalCenter: parent.horizontalCenter

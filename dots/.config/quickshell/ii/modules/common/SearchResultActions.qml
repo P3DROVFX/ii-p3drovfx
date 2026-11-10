@@ -7,6 +7,7 @@ import Quickshell
 import qs
 import qs.services
 import qs.modules.common.models
+import qs.modules.ii.background.shortcuts
 
 /**
  * The actions a search result offers, in one place.
@@ -44,6 +45,9 @@ Singleton {
         const contentType = String(entry.category ?? "");
         const key = String(entry.key ?? "");
         const identifier = String(entry.id ?? "") || iconName;
+
+        // The desktop layer exists only in the ii family.
+        const desktopAvailable = PanelFamily.isIi;
 
         const items = [];
 
@@ -143,6 +147,16 @@ Singleton {
                     done();
                 }
             });
+            if (desktopAvailable) {
+                items.push({
+                    name: Translation.tr("Add to Desktop"),
+                    icon: "desktop_windows",
+                    execute: () => {
+                        DesktopShortcuts.addFromLauncher("app", identifier);
+                        done();
+                    }
+                });
+            }
             items.push({
                 name: Translation.tr("Copy ID"),
                 icon: "content_copy",
@@ -180,11 +194,25 @@ Singleton {
             }
         }
 
+        // Files and folders: the result's canonical path (rows show only the
+        // basename). Same source for aliases, whose path is the row's name.
+        const desktopPath = String(entry.filePath || (itemType === Translation.tr("Folder Alias") ? itemName : ""));
+        if (desktopAvailable && desktopPath.length > 0 && (contentType === "filepath" || itemType === Translation.tr("Directory") || itemType === Translation.tr("Folder Alias"))) {
+            items.push({
+                name: Translation.tr("Add to Desktop"),
+                icon: "desktop_windows",
+                execute: () => {
+                    DesktopShortcuts.addFromLauncher("path", desktopPath);
+                    done();
+                }
+            });
+        }
+
         if (key.startsWith("fsearch:") && LauncherSearch.allFileResults.length > 0) {
             const resultCount = LauncherSearch.allFileResults.length;
             items.push({
                 name: Translation.tr("Browse %1 results in File Browser").arg(String(resultCount)),
-                icon: "folder_search",
+                icon: "folder_data",
                 execute: () => {
                     GlobalStates.openFileBrowserResults(LauncherSearch.allFileResults, LauncherSearch.fileSearchQuery);
                     done();

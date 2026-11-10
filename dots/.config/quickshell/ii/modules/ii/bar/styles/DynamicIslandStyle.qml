@@ -11,6 +11,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.modules.ii.overview
+import qs.modules.ii.dynamicIsland.core
 import "island"
 import Qt5Compat.GraphicalEffects
 
@@ -53,6 +54,51 @@ Item {
 
     // Expose pill width back to BarContent
     readonly property real pillWidth: barBackground.width
+    // What the pill takes of the edge: its width and the concave fillet it flares into
+    // the screen edge on each side. Read by the bar window, which publishes it for the
+    // dock (GlobalStates.barIslands).
+    readonly property real islandExtent: barBackground.width > 0 ? barBackground.width + 2 * barBackground.islandRadius : 0
+
+    // ── Combined mode: the bar and the island share the centre ───────────────
+    // With this bar style *and* the island drawn in the bar centre, the island is the
+    // centred pill and the bar's job is to flank it. The two spacers around the (empty)
+    // centre section each reserve half of the island's live width, so the island sits in
+    // a gap of its own size and the widget groups are pushed outward as it grows.
+    //
+    // Deliberately not animated: the island is already animating its own width, and a
+    // second animation here would chase a moving target - the same mistake that made
+    // this pill lag behind the active window title (see the note above on content
+    // resize vs mode resize).
+    readonly property bool islandInBarCenter: IslandPolicy.centerInBar && BarInteraction.cornerStyle === 3
+    readonly property real islandCenterGap: Appearance.sizes.hyprlandGapsOut
+    // The island's own width closes when it hides, but its two side gaps stay: a hidden
+    // island leaves the groups a small break in the middle instead of pressing them
+    // together, and the gap never jumps at the end of the retract. Whole pixels; see
+    // IslandGeometry.
+    readonly property real islandReservedWidth: root.islandInBarCenter
+        ? Math.max(0, IslandGeometry.centerWidth + 2 * root.islandCenterGap)
+        : 0
+
+    // The island window is centred on screen, so the reserved gap has to be centred too.
+    // The pill itself is content-sized and its two groups are rarely the same width, so
+    // centring the *pill* leaves the gap off to one side. Shifting the pill by the
+    // difference puts the gap under the island and lets both groups keep hugging it,
+    // which is why the cluster as a whole sits slightly off-centre.
+    readonly property real islandCenterCorrection: {
+        if (!root.islandInBarCenter)
+            return 0;
+        const inset = Math.max(0, (barBackground.width - islandSections.width) / 2);
+        // The island's centre inside the row: the left group, the left bubble's room
+        // (which belongs entirely to the left half of the gap), then half the island.
+        const gapCentreInPill = inset + leftSectionLayout.width + IslandGeometry.leftExtra + root.islandReservedWidth / 2;
+        const correction = (barBackground.width / 2) - gapCentreInPill;
+        // Whole pixels only. Centre anchors already snap the centred position to a
+        // pixel (`alignWhenCentered`) and then add this offset, so a fractional offset
+        // put the pill - and every widget in it - on a half pixel whenever the
+        // groups' combined width changed parity: the whole bar flickered half a pixel
+        // left and right while any widget animated its own width.
+        return Math.round(correction);
+    }
     readonly property var modeState: modeState
 
     readonly property var activeNotchCurve: {
@@ -92,8 +138,8 @@ Item {
     readonly property bool searchStable: modeState._displayMode === "search" && (searchWidgetLoader.item ? searchWidgetLoader.item.openStateStable : false)
     readonly property bool isSearchModeActive: (modeState._displayMode === "search") || searchWidgetLoader.visible || root.isSearchActiveHere
 
-    readonly property real verticalTopOffset: BarPlacement.bottom ? Math.max(0, barBackground.height - parent.height) : 0
-    readonly property real verticalBottomOffset: !BarPlacement.bottom ? Math.max(0, barBackground.height - parent.height) : 0
+    readonly property real verticalTopOffset: BarPlacement.bottom ? Math.max(0, (barBackground.height + root.frameThickness) - parent.height) : 0
+    readonly property real verticalBottomOffset: !BarPlacement.bottom ? Math.max(0, (barBackground.height + root.frameThickness) - parent.height) : 0
 
     IslandModeController {
         id: modeController
@@ -107,7 +153,7 @@ Item {
     }
 
     // Determine the actual background color of the bar reactively
-    property color actualColor: root.showBarBackground ? (Config.options.bar.expressiveColors ? root.activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
+    property color actualColor: root.showBarBackground ? (Config.options.bar.amoledBackground ? "#000000" : Config.options.bar.expressiveColors ? root.activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
 
     Behavior on actualColor {
         animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(root)
@@ -124,6 +170,11 @@ Item {
             top: !BarPlacement.bottom ? parent.top : undefined
             bottom: BarPlacement.bottom ? parent.bottom : undefined
             horizontalCenter: parent.horizontalCenter
+            // An offset rather than a swapped anchor: the pill stays centre-anchored and
+            // is simply nudged so its centre gap lands on the island.
+            horizontalCenterOffset: root.islandCenterCorrection
+            topMargin: !BarPlacement.bottom ? root.frameThickness : 0
+            bottomMargin: BarPlacement.bottom ? root.frameThickness : 0
         }
 
         layer.enabled: Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
@@ -142,16 +193,17 @@ Item {
                 if (modeState._displayMode === "")
                     return 0;
                 if (modeState._displayMode === "osd") {
-                    return 72;
+                    return Math.max(0, 72 - root.frameThickness);
                 }
                 if (modeState._displayMode === "notification") {
-                    return 80;
+                    return Math.max(0, 80 - root.frameThickness);
                 }
                 if (modeState._displayMode === "search") {
-                    return searchWidgetLoader.item ? Math.min(root.screen.height * 0.7, searchWidgetLoader.item.implicitHeight) : (GlobalStates.searchConnectActive ? 68 : 60);
+                    const searchH = searchWidgetLoader.item ? Math.min(root.screen.height * 0.7, searchWidgetLoader.item.implicitHeight) : (GlobalStates.searchConnectActive ? 68 : 60);
+                    return Math.max(0, searchH - root.frameThickness);
                 }
             }
-            return parent.height;
+            return Math.max(0, parent.height - root.frameThickness);
         }
 
         Behavior on height {
@@ -218,7 +270,7 @@ Item {
             return baseWidth;
         }
 
-        readonly property real availableIslandHeight: Math.max(0, height - root.frameThickness)
+        readonly property real availableIslandHeight: Math.max(0, height)
         readonly property real islandRadius: Math.min(Appearance.rounding.screenRounding, Math.floor(availableIslandHeight / 2))
         property real baseRadius: islandRadius
         topLeftRadius: !BarPlacement.bottom ? 0 : baseRadius
@@ -227,7 +279,14 @@ Item {
         bottomRightRadius: BarPlacement.bottom ? 0 : baseRadius
 
         Behavior on width {
-            enabled: !root.searchStable && root.modeResizing
+            // Never while the island sits in the centre. The pill's width is then a sum
+            // with the island's *live* width in it, so any mode change (search opening
+            // or closing is one) armed this OutBack animation toward a target that moved
+            // every frame: it restarted each frame, overshot and stalled, the pill
+            // lagged its own widgets and clipped the outermost ones, and the concave
+            // corners anchored to it jittered. The island is the one animator; the pill
+            // follows it exactly.
+            enabled: !root.islandInBarCenter && !root.searchStable && root.modeResizing
             NumberAnimation {
                 duration: {
                     if (modeState.notchModeEnabled) {
@@ -244,8 +303,13 @@ Item {
         // ── Island layout (placed directly inside background to handle hover natively) ─
         RowLayout {
             id: islandSections
-            width: parent.width - 10
-            height: root.height
+            // The row is normally 22px wider than its content (the pill adds 32, this
+            // takes 10 back), and Qt hands that slack to whichever cells can grow - which
+            // moved the right half outward and made the island's right margin wider than
+            // its left. In combined mode the row is exactly its content, so there is no
+            // slack to distribute and both margins come out equal.
+            width: root.islandInBarCenter ? implicitWidth : (parent.width - 10)
+            height: parent.height
             anchors.centerIn: parent
             spacing: 0
             opacity: (!modeState.notchModeEnabled || (modeState.expanded && modeState._displayMode !== "search") || (modeState._displayMode !== "" && modeState._displayMode !== "osd" && modeState._displayMode !== "notification" && modeState._displayMode !== "search")) ? 1.0 : 0.0
@@ -288,6 +352,11 @@ Item {
             RowLayout {
                 id: leftSectionLayout
                 spacing: 4
+                // Layout.fillWidth defaults to true for a Layout inside a Layout, so
+                // these sections used to absorb the row's leftover width and shift the
+                // halves apart - the right margin came out 22px wider than the left. In
+                // combined mode the gap belongs to the island, so nothing may stretch.
+                Layout.fillWidth: !root.islandInBarCenter
                 opacity: (!modeState.notchModeEnabled || modeState.expanded || (modeState._displayMode === "workspaces" && Config.options.bar.layouts.left.some(e => e.id === "workspaces"))) ? 1.0 : 0.0
                 visible: opacity > 0.01
                 Behavior on opacity {
@@ -312,19 +381,33 @@ Item {
                 }
             }
             Item {
-                Layout.fillWidth: !modeState.notchModeEnabled || modeState.expanded
-                Layout.preferredWidth: (!modeState.notchModeEnabled || modeState.expanded) ? barBackground.islandSectionSpacing : 0
+                // In combined mode the gap belongs to the island, so it must not
+                // stretch: `fillWidth` would hand it leftover space and the groups would
+                // stop tracking the island. Half here, half in the mirrored spacer.
+                Layout.fillWidth: !root.islandInBarCenter && (!modeState.notchModeEnabled || modeState.expanded)
+                Layout.preferredWidth: {
+                    // The left half also makes room for the left auxiliary bubble.
+                    if (root.islandInBarCenter)
+                        return root.islandReservedWidth / 2 + IslandGeometry.leftExtra;
+                    return (!modeState.notchModeEnabled || modeState.expanded) ? barBackground.islandSectionSpacing : 0;
+                }
                 visible: Layout.preferredWidth > 0
                 Behavior on Layout.preferredWidth {
-                    // Content-driven, like the pill above: only a mode change
-                    // is worth animating here.
-                    enabled: root.modeResizing
+                    // Content-driven, like the pill above: only a mode change is worth
+                    // animating here, and in combined mode never - the island's own
+                    // animation is the one to follow.
+                    enabled: root.modeResizing && !root.islandInBarCenter
                     animation: Appearance.animation.barResize.numberAnimation.createObject(this)
                 }
             }
             RowLayout {
                 id: centerSectionLayout
                 spacing: (modeState.notchModeEnabled && !modeState.expanded) ? 0 : 4
+                // Layout.fillWidth defaults to true for a Layout inside a Layout, so
+                // these sections used to absorb the row's leftover width and shift the
+                // halves apart - the right margin came out 22px wider than the left. In
+                // combined mode the gap belongs to the island, so nothing may stretch.
+                Layout.fillWidth: !root.islandInBarCenter
                 Repeater {
                     model: root.leftList
                     delegate: BarComponent {
@@ -354,19 +437,33 @@ Item {
                 }
             }
             Item {
-                Layout.fillWidth: !modeState.notchModeEnabled || modeState.expanded
-                Layout.preferredWidth: (!modeState.notchModeEnabled || modeState.expanded) ? barBackground.islandSectionSpacing : 0
+                // In combined mode the gap belongs to the island, so it must not
+                // stretch: `fillWidth` would hand it leftover space and the groups would
+                // stop tracking the island. Half here, half in the mirrored spacer.
+                Layout.fillWidth: !root.islandInBarCenter && (!modeState.notchModeEnabled || modeState.expanded)
+                Layout.preferredWidth: {
+                    // The right half also makes room for the auxiliary bubble.
+                    if (root.islandInBarCenter)
+                        return root.islandReservedWidth / 2 + IslandGeometry.rightExtra;
+                    return (!modeState.notchModeEnabled || modeState.expanded) ? barBackground.islandSectionSpacing : 0;
+                }
                 visible: Layout.preferredWidth > 0
                 Behavior on Layout.preferredWidth {
-                    // Content-driven, like the pill above: only a mode change
-                    // is worth animating here.
-                    enabled: root.modeResizing
+                    // Content-driven, like the pill above: only a mode change is worth
+                    // animating here, and in combined mode never - the island's own
+                    // animation is the one to follow.
+                    enabled: root.modeResizing && !root.islandInBarCenter
                     animation: Appearance.animation.barResize.numberAnimation.createObject(this)
                 }
             }
             RowLayout {
                 id: rightSectionLayout
                 spacing: 4
+                // Layout.fillWidth defaults to true for a Layout inside a Layout, so
+                // these sections used to absorb the row's leftover width and shift the
+                // halves apart - the right margin came out 22px wider than the left. In
+                // combined mode the gap belongs to the island, so nothing may stretch.
+                Layout.fillWidth: !root.islandInBarCenter
                 opacity: (!modeState.notchModeEnabled || modeState.expanded || (modeState._displayMode === "workspaces" && Config.options.bar.layouts.right.some(e => e.id === "workspaces"))) ? 1.0 : 0.0
                 visible: opacity > 0.01
                 Behavior on opacity {
@@ -574,7 +671,7 @@ Item {
     // line when transparency is enabled.
     RoundCorner {
         anchors.top: barBackground.top
-        anchors.topMargin: root.frameThickness
+        anchors.topMargin: 0
         anchors.right: barBackground.left
         implicitSize: barBackground.islandRadius
         color: barBackground.color
@@ -590,7 +687,7 @@ Item {
     }
     RoundCorner {
         anchors.top: barBackground.top
-        anchors.topMargin: root.frameThickness
+        anchors.topMargin: 0
         anchors.left: barBackground.right
         implicitSize: barBackground.islandRadius
         color: barBackground.color
@@ -606,7 +703,7 @@ Item {
     }
     RoundCorner {
         anchors.bottom: barBackground.bottom
-        anchors.bottomMargin: root.frameThickness
+        anchors.bottomMargin: 0
         anchors.right: barBackground.left
         implicitSize: barBackground.islandRadius
         color: barBackground.color
@@ -622,7 +719,7 @@ Item {
     }
     RoundCorner {
         anchors.bottom: barBackground.bottom
-        anchors.bottomMargin: root.frameThickness
+        anchors.bottomMargin: 0
         anchors.left: barBackground.right
         implicitSize: barBackground.islandRadius
         color: barBackground.color

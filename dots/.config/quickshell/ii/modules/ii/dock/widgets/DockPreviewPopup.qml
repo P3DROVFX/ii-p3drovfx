@@ -42,13 +42,36 @@ PopupWindow {
         (backgroundHover.hovered || dockRoot.buttonHovered || dockRoot.popupIsResizing) &&
         (appTopLevel?.toplevels?.length > 0)
 
+    // Opening waits out a small dwell — 70 ms, under the time a pointer
+    // needs to cross one icon on purpose, over the time a sweep spends on
+    // each icon it passes. The thing that costs during a sweep is everything
+    // behind `show`: the surface map, the row rebuild, one live capture per
+    // window. While the popup is closed those never run (see
+    // onAppTopLevelChanged), so a fast pass through the dock costs nothing
+    // here; a resting hover sees the popup at the next frame after the dwell.
+    readonly property int openDwellMs: Math.round(70 * (Appearance.animMultiplier ?? 1))
+
     onShouldShowChanged: {
-        if (shouldShow)
-            show = true
-        else if (dockRoot.anyContextMenuOpen)
+        if (shouldShow) {
+            hideTimer.stop()
+            showTimer.restart()
+        } else if (dockRoot.anyContextMenuOpen) {
+            showTimer.stop()
+            hideTimer.stop()
             show = false
-        else
+        } else {
+            showTimer.stop()
             hideTimer.restart()
+        }
+    }
+
+    Timer {
+        id: showTimer
+        interval: previewPopup.openDwellMs
+        onTriggered: {
+            if (previewPopup.shouldShow)
+                previewPopup.show = true
+        }
     }
 
     Timer {
@@ -57,8 +80,221 @@ PopupWindow {
         onTriggered: previewPopup.show = previewPopup.shouldShow
     }
 
-    visible: show || popupBackground.opacity > 0
+    // ── What the card shows ────────────────────────────────────────────────
+    // Two pages, front and back. The front shows the app on screen; a new
+    // target is built on the BACK page, hidden, with its captures already
+    // running, and replaces the front in one frame once every capture holds a
+    // frame. The old row used to dip to nothing, commit, and rise into views
+    // that had no frame yet - an empty card for as long as the compositor
+    // took to export the first one, every time the pointer moved to another
+    // app. Now the card never shows less than one complete set of frames.
+    // No crossfade either: two half-transparent rows over the card read as
+    // the content flickering, so the rows are swapped outright.
+    //
+    // The target still needs a short dwell before its captures start, so a
+    // sweep across the dock does not open one capture per icon it crosses;
+    // the card's position does not wait for it (see popupBackground.x).
+    property bool frontIsA: true
+    readonly property Item frontPage: frontIsA ? pageA : pageB
+    readonly property Item backPage: frontIsA ? pageB : pageA
+    readonly property var displayedApp: frontPage.app
+    readonly property var pendingApp: backPage.app
+    // The page whose size the card grows toward: the front, or the back once
+    // it is about to replace it.
+    readonly property Item layoutPage: backPage.ready ? backPage : frontPage
+    // Kept for callers/tests written against the old dip: the card no longer
+    // dims while it swaps.
+    readonly property real swapOpacity: 1.0
+    readonly property int targetDwellMs: Math.round(60 * (Appearance.animMultiplier ?? 1))
+    // A window the compositor will not export never produces a frame; past
+    // this the swap goes ahead with whatever the back page has.
+    readonly property int frameWaitMs: 220
+
+    // Nothing on screen to crossfade: take the hovered app as it is.
+    function adoptDisplayedAppNow() {
+        targetSettleTimer.stop()
+        frameWaitTimer.stop()
+        backPage.app = null
+        frontPage.app = appTopLevel
+    }
+
+    // Something is on screen: let the cursor rest on the new app first.
+    function requestDisplayedAppSwap() {
+        // A target that moved on must not be committed by the wait that was
+        // running for the previous one.
+        frameWaitTimer.stop()
+        if (displayedApp === appTopLevel) {
+            targetSettleTimer.stop()
+            backPage.app = null
+            return
+        }
+        targetSettleTimer.restart()
+    }
+
+    function prepareSwap() {
+        if (displayedApp === appTopLevel)
+            return
+        if (backPage.app !== appTopLevel)
+            backPage.app = appTopLevel
+        if (backPage.ready)
+            commitSwap()
+        else
+            frameWaitTimer.restart()
+    }
+
+    function commitSwap() {
+        frameWaitTimer.stop()
+        if (!backPage.app || backPage.app === displayedApp || backPage.app !== appTopLevel)
+            return
+        const oldFront = frontPage
+        frontIsA = !frontIsA
+        // The page that left releases its captures at once.
+        oldFront.app = null
+    }
+
+    // The closed popup does not track the hovered app at all: adoption is
+    // what builds the row and arms the captures, and a sweep across the dock
+    // while closed would otherwise rebuild that machinery on every icon
+    // crossed. The popup adopts its target on the frame it opens (see
+    // onShowChanged) — nothing is missed, because nothing was on screen.
+    onAppTopLevelChanged: {
+        if (active && show)
+            requestDisplayedAppSwap()
+    }
+
+    // Closing stops any pending swap. The committed front page is kept so a
+    // re-hover of the same app re-opens without rebuilding anything; the back
+    // page is dropped with its captures.
+    // A popup is blurred with its parent layer's ignore_alpha, which on the
+    // frame band sits at 0.99 (the dock paints no tray there): the card never
+    // clears it. Ask for the card's threshold while this popup is on screen.
+    property bool _holdsPopupBlur: false
+    function _setPopupBlur(on) {
+        if (on === _holdsPopupBlur)
+            return
+        _holdsPopupBlur = on
+        Appearance.dockPopupsOpen += on ? 1 : -1
+    }
+    Component.onDestruction: _setPopupBlur(false)
+
+    onActiveChanged: {
+        _setPopupBlur(active && Config.options.appearance.transparency.popups)
+        if (active) {
+            everShown = true
+            return
+        }
+        targetSettleTimer.stop()
+        frameWaitTimer.stop()
+        backPage.app = null
+    }
+
+    // ── Open and close ─────────────────────────────────────────────────────
+    // The dock menus' contract (DockContextMenuBase): `showProgress` carries
+    // the shape — the card grows out of the dock edge on the expressive enter
+    // clock — and `revealProgress` the opacity on the fast clock, so the card
+    // is readable at once instead of fading in across its whole grow. Closing
+    // takes both on one short exit clock, so nothing inside outlives the card.
+    property real showProgress: 0
+    property real revealProgress: 0
+    readonly property real slideDistance: 14
+    readonly property bool _motion: !(Appearance.reducedMotion ?? false)
+
+    onShowChanged: {
+        if (show) {
+            closeMotion.stop()
+            openMotion.restart()
+            adoptDisplayedAppNow()
+            if (compactMode)
+                requestCompactAnchor()
+        } else {
+            openMotion.stop()
+            closeMotion.restart()
+        }
+    }
+
+    ParallelAnimation {
+        id: openMotion
+        NumberAnimation {
+            target: previewPopup
+            property: "showProgress"
+            to: 1
+            duration: previewPopup._motion ? Appearance.animation.elementMoveEnter.duration : 0
+            easing.type: Appearance.animation.elementMoveEnter.type
+            easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+        }
+        NumberAnimation {
+            target: previewPopup
+            property: "revealProgress"
+            to: 1
+            duration: previewPopup._motion ? Appearance.animation.elementMoveFast.duration : 0
+            easing.type: Appearance.animation.elementMoveFast.type
+            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+        }
+    }
+    ParallelAnimation {
+        id: closeMotion
+        NumberAnimation {
+            target: previewPopup
+            property: "showProgress"
+            to: 0
+            duration: previewPopup._motion ? Appearance.animation.elementMoveExit.duration : 0
+            easing.type: Appearance.animation.elementMoveExit.type
+            easing.bezierCurve: Appearance.animation.elementMoveExit.bezierCurve
+        }
+        NumberAnimation {
+            target: previewPopup
+            property: "revealProgress"
+            to: 0
+            duration: previewPopup._motion ? Appearance.animation.elementMoveExit.duration : 0
+            easing.type: Appearance.animation.elementMoveExit.type
+            easing.bezierCurve: Appearance.animation.elementMoveExit.bezierCurve
+        }
+    }
+
+    // The dwell that confirms a target, so crossing icons never starts a
+    // capture more than once.
+    Timer {
+        id: targetSettleTimer
+        interval: previewPopup.targetDwellMs
+        onTriggered: previewPopup.prepareSwap()
+    }
+
+    Timer {
+        id: frameWaitTimer
+        interval: previewPopup.frameWaitMs
+        onTriggered: previewPopup.commitSwap()
+    }
+
+    Connections {
+        target: previewPopup.backPage
+        function onReadyChanged() {
+            if (previewPopup.backPage.ready && previewPopup.backPage.app)
+                previewPopup.commitSwap()
+        }
+    }
+
+    // On screen (or on its way off): what captures, swaps and the dock's
+    // "keep me revealed" follow. The WINDOW stays mapped once used: mapping a
+    // popup surface costs 40–100 ms in the compositor, and paying it on every
+    // open was the hitch at the start of each preview. Closed, the surface is
+    // transparent and takes no input (empty mask).
+    readonly property bool active: show || showProgress > 0 || revealProgress > 0
+    // Mapped soon after the dock (its first map is the expensive frame) and
+    // kept; never together with the dock window itself, whose surface has to
+    // exist first (see DockTooltipHost). Group popups build theirs on demand.
+    property bool everShown: false
+    readonly property bool _parentShown: (dockWindow?.visible ?? false)
+    on_ParentShownChanged: if (!_parentShown && !compactMode) everShown = false
+    Timer {
+        interval: 1500
+        running: !previewPopup.compactMode && previewPopup._parentShown && !previewPopup.everShown
+        onTriggered: previewPopup.everShown = true
+    }
+    visible: (everShown || active) && (compactMode || _parentShown)
     color: "transparent"
+    readonly property Region cardRegion: Region { item: popupBackground }
+    readonly property Region noRegion: Region {}
+    mask: active ? cardRegion : noRegion
 
     readonly property Item hoveredBtn: dockRoot?.lastHoveredButton ?? null
     readonly property real hoveredMagScale: (hoveredBtn && dockRoot) ? dockRoot._getSlotMagScale(hoveredBtn) : 1.0
@@ -94,10 +330,6 @@ PopupWindow {
             requestCompactAnchor()
     }
 
-    onShowChanged: {
-        if (show && compactMode)
-            requestCompactAnchor()
-    }
 
     anchor {
         // Group previews live inside DockGroupPopup's PopupWindow. The app
@@ -146,8 +378,19 @@ PopupWindow {
             // Compact positions are assigned by onAnchoring. Keeping these
             // bindings at zero provides a safe initial value before the host
             // window is mapped for the first time.
-            x: compactMode ? 0 : dockPos === "left" ? ((dockWindow?.width ?? 0) - (dockWindow?.magCrossExtra ?? 0) + hoveredScaleExtra) : (dockPos === "right" ? Math.max(0, (dockWindow?.magCrossExtra ?? 0) - hoveredScaleExtra) : 0)
-            y: compactMode ? 0 : dockPos === "bottom" ? Math.max(0, (dockWindow?.magCrossExtra ?? 0) - hoveredScaleExtra) : dockPos === "top" ? ((dockWindow?.height ?? 0) - (dockWindow?.magCrossExtra ?? 0) + hoveredScaleExtra) : 0
+            // Static: the unmagnified icons' inner edge. Following the lens
+            // here re-anchored the popup (a Wayland round trip) on every frame
+            // the hovered icon grew; the card now lifts inside the surface
+            // instead (popupBackground.lensLift), which has room for it.
+            // Connect mode widens a vertical dock's window inward by pushRoom
+            // (sidebar push room) and offsets the dock by the sidebar's width;
+            // anchor to the dock's inner edge, not the window's. pushTarget,
+            // not the animated sidebarPush: that one changes every frame of
+            // the push and re-anchored the popup on each of them.
+            x: compactMode ? 0 : dockPos === "left"
+                ? ((dockWindow?.width ?? 0) - (dockWindow?.pushRoom ?? 0) + (Math.round(dockWindow?.pushTarget ?? 0)) - (dockWindow?.magCrossExtra ?? 0))
+                : (dockPos === "right" ? ((dockWindow?.pushRoom ?? 0) - (Math.round(dockWindow?.pushTarget ?? 0)) + (dockWindow?.magCrossExtra ?? 0)) : 0)
+            y: compactMode ? 0 : dockPos === "bottom" ? (dockWindow?.magCrossExtra ?? 0) : dockPos === "top" ? ((dockWindow?.height ?? 0) - (dockWindow?.magCrossExtra ?? 0)) : 0
         }
 
         gravity: {
@@ -191,21 +434,29 @@ PopupWindow {
 
     readonly property int _extra: popupBackground.padding * 2 + popupBackground.margins * 2
 
+    // Room for the card to lift over a magnified icon without moving the window.
+    readonly property real _lensRoom: compactMode ? 0 : (dockWindow?.magCrossExtra ?? 0)
     implicitWidth: compactMode
         ? dockRoot.maxWindowPreviewWidth + (isVertical ? dockRoot.windowControlsHeight : 0) + _extra
-        : isVertical ? dockRoot.maxWindowPreviewWidth + dockRoot.windowControlsHeight + _extra - 25 : dockWindow?.width ?? 0
+        : isVertical ? dockRoot.maxWindowPreviewWidth + dockRoot.windowControlsHeight + _extra - 25 + _lensRoom : dockWindow?.width ?? 0
     implicitHeight: compactMode
         ? dockRoot.maxWindowPreviewHeight + (isVertical ? 0 : dockRoot.windowControlsHeight) + _extra + 5
-        : isVertical ? dockWindow?.height ?? 0 : dockRoot.maxWindowPreviewHeight + dockRoot.windowControlsHeight + _extra + 5
+        : isVertical ? dockWindow?.height ?? 0 : dockRoot.maxWindowPreviewHeight + dockRoot.windowControlsHeight + _extra + 5 + _lensRoom
 
     StyledRectangularShadow {
         target: popupBackground
         opacity: popupBackground.opacity
         visible: popupBackground.visible
+        // Under Hyprland's popup blur threshold (ignore_alpha 0.19 on
+        // quickshell.*), or the wallpaper behind the shadow gets blurred.
+        color: ColorUtils.transparentize(Appearance.m3colors.m3shadow, 0.83)
     }
 
     Rectangle {
         id: popupBackground
+        // Public handle for the offscreen tests: QML ids are context-scoped,
+        // so the test cannot read them off the instance.
+        objectName: "popupBackground"
 
         property real margins: 5
         property real padding: 6
@@ -227,13 +478,36 @@ PopupWindow {
             onTriggered: dockRoot.popupIsResizing = false
         }
 
-        readonly property real _clampedX: Math.max(margins, Math.min(dockRoot.hoveredButtonCenter.x - implicitWidth  / 2, parent.width  - implicitWidth  - margins))
-        readonly property real _clampedY: Math.max(margins, Math.min(dockRoot.hoveredButtonCenter.y - implicitHeight / 2, parent.height - implicitHeight - margins))
-        x: compactMode ? margins : isVertical ? (dockPos === "left" ? margins : parent.width - implicitWidth - margins) : _clampedX
-        y: compactMode ? margins : isVertical ? _clampedY : (dockPos === "top" ? margins : parent.height - implicitHeight - margins)
+        // The card travels with the pointer: its centre follows the hovered
+        // icon on its own clock, independent of the row it is showing, so
+        // moving across the dock reads as one card sliding along rather than
+        // a card that jumps and then reloads. The clamp runs on the animated
+        // centre, and the width animation never restarts the slide.
+        property real followX: dockRoot.hoveredButtonCenter.x
+        property real followY: dockRoot.hoveredButtonCenter.y
+        readonly property bool sliding: previewPopup.show && previewPopup.showProgress > 0.98
+        Behavior on followX {
+            enabled: popupBackground.sliding
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(popupBackground)
+        }
+        Behavior on followY {
+            enabled: popupBackground.sliding
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(popupBackground)
+        }
+        readonly property real _clampedX: Math.max(margins, Math.min(followX - implicitWidth  / 2, parent.width  - implicitWidth  - margins))
+        readonly property real _clampedY: Math.max(margins, Math.min(followY - implicitHeight / 2, parent.height - implicitHeight - margins))
+        // How far the hovered icon has grown toward the card: the card lifts
+        // by that much inside the surface, frame by frame, at no window cost.
+        readonly property real lensLift: compactMode ? 0 : previewPopup.hoveredScaleExtra
+        x: compactMode ? margins : isVertical ? (dockPos === "left" ? margins + lensLift : parent.width - implicitWidth - margins - lensLift) : _clampedX
+        y: compactMode ? margins : isVertical ? _clampedY : (dockPos === "top" ? margins + lensLift : parent.height - implicitHeight - margins - lensLift)
 
-        opacity: previewPopup.show ? 1 : 0
-        scale: previewPopup.show ? 1.0 : 0.90
+        opacity: previewPopup.revealProgress
+        scale: 0.92 + 0.08 * previewPopup.showProgress
+        transform: Translate {
+            x: (dockPos === "left" ? -1 : dockPos === "right" ? 1 : 0) * previewPopup.slideDistance * (1 - previewPopup.showProgress)
+            y: (dockPos === "top" ? -1 : dockPos === "bottom" ? 1 : 0) * previewPopup.slideDistance * (1 - previewPopup.showProgress)
+        }
         transformOrigin: {
             if (dockPos === "top") return Item.Top
             if (dockPos === "left") return Item.Left
@@ -241,122 +515,155 @@ PopupWindow {
             return Item.Bottom
         }
 
-        visible: (appTopLevel?.toplevels?.length ?? 0) > 0
+        visible: (displayedApp?.toplevels?.length ?? 0) > 0
         clip: true
         color: Config.options.appearance.transparency.popups ? Appearance.colors.colLayer0 : Appearance.m3colors.m3surfaceContainer
+        readonly property bool opaqueSurface: color.a >= 0.999
         radius: (Config.options?.dock?.widgetRadius ?? -1) >= 0 ? Config.options.dock.widgetRadius : Appearance.rounding.normal
-        implicitHeight: previewRowLayout.implicitHeight + padding * 2
-        implicitWidth: previewRowLayout.implicitWidth + padding * 2
+        implicitHeight: previewPopup.layoutPage.implicitHeight + padding * 2
+        implicitWidth: previewPopup.layoutPage.implicitWidth + padding * 2
 
-        layer.enabled: true
-        layer.effect: FastBlur {
-            radius: previewPopup.show ? 0 : 16
-            Behavior on radius {
-                NumberAnimation {
-                    duration: Appearance.animation.elementMoveFast.duration
-                    easing.type: Appearance.animation.elementMoveFast.type
-                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                }
-            }
-        }
-
-        Behavior on scale {
-            NumberAnimation {
-                duration: Appearance.animation.elementMoveFast.duration
-                easing.type: Appearance.animation.elementMoveFast.type
-                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-            }
-        }
         Behavior on implicitWidth {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
         }
         Behavior on implicitHeight {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
         }
-        Behavior on opacity {
-            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(previewPopup)
-        }
 
         HoverHandler {
             id: backgroundHover
         }
 
-        GridLayout {
-            id: previewRowLayout
-            anchors {
-                top: parent.top
-                left: parent.left
-                topMargin: popupBackground.padding
-                leftMargin: popupBackground.padding
+        PreviewPage {
+            id: pageA
+            isFront: previewPopup.frontIsA
+        }
+        PreviewPage {
+            id: pageB
+            isFront: !previewPopup.frontIsA
+        }
+    }
+
+    // One row of window previews for one app. Pages are centred in the card
+    // so the crossfade between two rows of different widths stays centred
+    // while the card's width eases between them.
+    component PreviewPage: GridLayout {
+        id: page
+        property var app: null
+        property bool isFront: false
+        // Every capture on the page holds a frame (or there is nothing to
+        // capture). Recomputed by the delegates as their frames land.
+        property bool ready: false
+        readonly property var windows: (page.app?.toplevels ?? []).slice(0, previewPopup.maxPreviews)
+
+        function updateReady() {
+            if (!page.app || page.windows.length === 0 || windowRepeater.count < page.windows.length) {
+                page.ready = false
+                return
             }
-            flow: isVertical ? GridLayout.TopToBottom : GridLayout.LeftToRight
-            columnSpacing: 6
-            rowSpacing: 6
+            for (let i = 0; i < windowRepeater.count; i++) {
+                if (!windowRepeater.itemAt(i)?.frameReady) {
+                    page.ready = false
+                    return
+                }
+            }
+            page.ready = true
+        }
+        onAppChanged: updateReady()
 
-            Repeater {
-                model: ScriptModel { values: (appTopLevel?.toplevels ?? []).slice(0, previewPopup.maxPreviews) }
+        anchors.top: parent.top
+        anchors.topMargin: popupBackground.padding
+        anchors.horizontalCenter: parent.horizontalCenter
+        // The back page builds and captures at opacity 0 until the swap; the
+        // renderer skips a transparent subtree, so it costs no drawing.
+        visible: page.app !== null
+        opacity: page.isFront ? 1 : 0
+        flow: isVertical ? GridLayout.TopToBottom : GridLayout.LeftToRight
+        columnSpacing: 6
+        rowSpacing: 6
 
-                delegate: RippleButton {
-                    id: windowButton
-                    required property var modelData
-                    padding: 0
+        Repeater {
+            id: windowRepeater
+            model: ScriptModel { values: page.windows }
+            onCountChanged: page.updateReady()
 
-                    onClicked: {
-                        modelData?.activate()
-                        dockRoot.buttonHovered = false
-                        dockRoot.lastHoveredButton = null
-                    }
-                    middleClickAction: () => modelData?.close()
+            delegate: RippleButton {
+                id: windowButton
+                required property var modelData
+                readonly property bool frameReady: screencopyView.hasContent
+                onFrameReadyChanged: page.updateReady()
+                padding: 0
+                enabled: page.isFront
 
-                    contentItem: ColumnLayout {
-                        implicitWidth: screencopyView.implicitWidth
-                        implicitHeight: screencopyView.implicitHeight
+                onClicked: {
+                    modelData?.activate()
+                    dockRoot.buttonHovered = false
+                    dockRoot.lastHoveredButton = null
+                }
+                middleClickAction: () => modelData?.close()
 
-                        ButtonGroup {
-                            contentWidth: parent.width - anchors.margins * 2
+                contentItem: ColumnLayout {
+                    ButtonGroup {
+                        contentWidth: parent.width - anchors.margins * 2
 
-                            WrapperRectangle {
+                        WrapperRectangle {
+                            Layout.fillWidth: true
+                            color: ColorUtils.transparentize(Appearance.colors.colSurfaceContainer)
+                            radius: Appearance.rounding.small
+                            margin: 5
+
+                            StyledText {
                                 Layout.fillWidth: true
-                                color: ColorUtils.transparentize(Appearance.colors.colSurfaceContainer)
-                                radius: Appearance.rounding.small
-                                margin: 5
-
-                                StyledText {
-                                    Layout.fillWidth: true
-                                    font.pixelSize: Appearance.font.pixelSize.small
-                                    text: windowButton.modelData?.title ?? ""
-                                    elide: Text.ElideRight
-                                    color: Appearance.m3colors.m3onSurface
-                                }
-                            }
-
-                            RippleButton {
-                                id: closeButton
-                                colBackground: ColorUtils.transparentize(Appearance.colors.colSurfaceContainer)
-                                implicitWidth: dockRoot.windowControlsHeight
-                                implicitHeight: dockRoot.windowControlsHeight
-                                buttonRadius: Appearance.rounding.full
-
-                                contentItem: MaterialSymbol {
-                                    anchors.centerIn: parent
-                                    text: "close"
-                                    iconSize: Appearance.font.pixelSize.normal
-                                    color: Appearance.m3colors.m3onSurface
-                                }
-                                onClicked: windowButton.modelData?.close()
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                text: windowButton.modelData?.title ?? ""
+                                elide: Text.ElideRight
+                                color: Appearance.m3colors.m3onSurface
                             }
                         }
 
+                        RippleButton {
+                            id: closeButton
+                            colBackground: ColorUtils.transparentize(Appearance.colors.colSurfaceContainer)
+                            implicitWidth: dockRoot.windowControlsHeight
+                            implicitHeight: dockRoot.windowControlsHeight
+                            buttonRadius: Appearance.rounding.full
+
+                            contentItem: MaterialSymbol {
+                                anchors.centerIn: parent
+                                text: "close"
+                                iconSize: Appearance.font.pixelSize.normal
+                                color: Appearance.m3colors.m3onSurface
+                            }
+                            onClicked: windowButton.modelData?.close()
+                        }
+                    }
+
+                    // Fixed geometry, never the captured frame's: the first
+                    // frame arrives later (or never, for a window the
+                    // compositor refuses to export), and a popup that resizes
+                    // to chase it keeps resizing its surface under the cursor
+                    // while the dock magnifies.
+                    Item {
+                        id: previewSlot
+                        objectName: "previewSlot"
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        implicitWidth: dockRoot.maxWindowPreviewWidth
+                        implicitHeight: dockRoot.maxWindowPreviewHeight
+
                         ScreencopyView {
                             id: screencopyView
-                            captureSource: previewPopup.visible ? windowButton.modelData : null
+                            anchors.centerIn: parent
+                            captureSource: previewPopup.active ? windowButton.modelData : null
                             live: true
                             paintCursor: true
-                            constraintSize: Qt.size(
-                                dockRoot.maxWindowPreviewWidth,
-                                dockRoot.maxWindowPreviewHeight
-                            )
-                            layer.enabled: true
+                            // Fits the frame inside the slot; it is the
+                            // display size, not the capture size.
+                            constraintSize: Qt.size(previewSlot.implicitWidth, previewSlot.implicitHeight)
+                            // A translucent card cannot hide corners under
+                            // pieces of its own colour; only then pay for a
+                            // mask pass.
+                            layer.enabled: !popupBackground.opaqueSurface
                             layer.effect: OpacityMask {
                                 maskSource: Rectangle {
                                     width: screencopyView.width
@@ -364,6 +671,16 @@ PopupWindow {
                                     radius: Appearance.rounding.small
                                 }
                             }
+                        }
+
+                        // Rounds the live frame with four corner pieces in the
+                        // card's colour instead of re-rendering it offscreen
+                        // through a mask on every captured frame.
+                        CornerCutouts {
+                            visible: popupBackground.opaqueSurface && screencopyView.hasContent
+                            anchors.fill: screencopyView
+                            radius: Appearance.rounding.small
+                            color: popupBackground.color
                         }
                     }
                 }

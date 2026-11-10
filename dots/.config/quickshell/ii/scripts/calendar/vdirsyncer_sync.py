@@ -103,7 +103,10 @@ def sync_request(request: dict[str, Any]) -> dict[str, Any]:
     config_path = Path(vdirsyncer_config_path).expanduser() if vdirsyncer_config_path else default_vdirsyncer_config()
     target = resolve_target(calendar, calendar_path(calendar, khal_config_path) if calendar else None, config_path)
     command = ["vdirsyncer", "sync"] + ([target] if target else [])
-    completed = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+    # Tokens granted by older reauth helpers carry extra scopes; without this,
+    # oauthlib refuses every refresh of them with "Scope has changed".
+    env = {**os.environ, "OAUTHLIB_RELAX_TOKEN_SCOPE": "1"}
+    completed = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False, env=env)
     output = (completed.stderr.strip() or completed.stdout.strip())[-4000:]
     return {
         "ok": completed.returncode == 0,

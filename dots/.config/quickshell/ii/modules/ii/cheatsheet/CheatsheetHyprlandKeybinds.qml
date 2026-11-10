@@ -1,11 +1,14 @@
 pragma ComponentBehavior: Bound
 
 import qs
+import Qt5Compat.GraphicalEffects
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 import QtQuick
+import QtQuick.Effects
+import Qt5Compat.GraphicalEffects
 import QtQuick.Layouts
 import Quickshell
 
@@ -249,7 +252,7 @@ Item {
     }
 
     onFocusChanged: focus => {
-        if (focus) filterField.forceActiveFocus();
+        if (focus) extraOptions.forceActiveFocus();
     }
 
     // Injected by Cheatsheet.qml so the search field can hand focus to
@@ -277,39 +280,49 @@ Item {
     }
 
     function rebuildModel() {
-        sectionOrderModel.clear();
-        if (!root.flatSections || root.flatSections.length === 0) return;
+        const rows = [];
+        if (root.flatSections && root.flatSections.length > 0) {
+            const savedOrder = Persistent.states.cheatsheet.sectionOrder;
+            const used = new Set(); // tracks flatIndices already added
 
-        const savedOrder = Persistent.states.cheatsheet.sectionOrder;
-        const used = new Set(); // tracks flatIndices already added
-
-        // First pass: add sections in saved order
-        for (let s = 0; s < savedOrder.length; s++) {
-            const savedName = savedOrder[s];
-            for (let i = 0; i < root.flatSections.length; i++) {
-                if (!used.has(i) && root.flatSections[i].name === savedName) {
-                    var uid = i + "|" + root.flatSections[i].name;
-                    sectionOrderModel.append({
-                        name: root.flatSections[i].name,
-                        originalIndex: i,
-                        uniqueId: uid
-                    });
-                    used.add(i);
-                    break;
+            // First pass: add sections in saved order
+            for (let s = 0; s < savedOrder.length; s++) {
+                const savedName = savedOrder[s];
+                for (let i = 0; i < root.flatSections.length; i++) {
+                    if (!used.has(i) && root.flatSections[i].name === savedName) {
+                        rows.push(i);
+                        used.add(i);
+                        break;
+                    }
                 }
+            }
+
+            // Second pass: append remaining sections in flatSections order
+            for (let i = 0; i < root.flatSections.length; i++) {
+                if (!used.has(i))
+                    rows.push(i);
             }
         }
 
-        // Second pass: append remaining sections in flatSections order
-        for (let i = 0; i < root.flatSections.length; i++) {
-            if (!used.has(i)) {
-                var uid = i + "|" + root.flatSections[i].name;
-                sectionOrderModel.append({
-                    name: root.flatSections[i].name,
-                    originalIndex: i,
-                    uniqueId: uid
-                });
-            }
+        // Creation runs this from onCompleted and again from the deferred
+        // onFlatSectionsChanged. Same order means the delegates already bind
+        // the new section data; clearing would rebuild every card.
+        let unchanged = rows.length === sectionOrderModel.count;
+        for (let r = 0; unchanged && r < rows.length; r++) {
+            const row = sectionOrderModel.get(r);
+            unchanged = row.originalIndex === rows[r] && row.name === root.flatSections[rows[r]].name;
+        }
+        if (unchanged)
+            return;
+
+        sectionOrderModel.clear();
+        for (let r = 0; r < rows.length; r++) {
+            const i = rows[r];
+            sectionOrderModel.append({
+                name: root.flatSections[i].name,
+                originalIndex: i,
+                uniqueId: i + "|" + root.flatSections[i].name
+            });
         }
     }
 
@@ -409,7 +422,6 @@ Item {
         repeat: false
         onTriggered: root.dragReorderCooldown = false
     }
-
     // Scrollbar indicator
     Rectangle {
         id: scrollIndicator
@@ -422,13 +434,15 @@ Item {
             right: parent.right
             rightMargin: 3
         }
-        y: flickable.height > 0 && flickable.contentHeight > flickable.height
-           ? flickable.contentY / flickable.contentHeight * flickable.height
+        // The bottom margin under the filter bar is part of the scroll range
+        readonly property real extent: flickable.contentHeight + flickable.bottomMargin
+        y: flickable.height > 0 && extent > flickable.height
+           ? flickable.contentY / extent * flickable.height
            : 0
-        height: flickable.height > 0 && flickable.contentHeight > flickable.height
-                ? Math.max(32, flickable.height * flickable.height / flickable.contentHeight)
+        height: flickable.height > 0 && extent > flickable.height
+                ? Math.max(32, flickable.height * flickable.height / extent)
                 : 0
-        visible: flickable.contentHeight > flickable.height
+        visible: extent > flickable.height
 
         Behavior on opacity {
             NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
@@ -445,6 +459,37 @@ Item {
             function onContentYChanged() { scrollIndicatorTimer.restart() }
         }
     }
+    Item {
+        id: listViewport
+        anchors.fill: parent
+
+    // Like TaskList in TodoWidget, only the list and blur are masked;
+    // the floating controls remain outside this layer.
+    layer.enabled: visible && (Appearance.rounding.normal > 0 || edgeFade.overflowing)
+    layer.effect: OpacityMask {
+        maskSource: Rectangle {
+            id: keybindsViewportMask
+            width: listViewport.width
+            height: listViewport.height
+            radius: Appearance.rounding.normal
+            readonly property real fadeFraction: Math.min(0.5, edgeFade.fadeSize / Math.max(1, height))
+            property real topAlpha: edgeFade.overflowing && edgeFade.startGap > edgeFade.edgeTolerance ? 0 : 1
+            property real bottomAlpha: edgeFade.overflowing && edgeFade.endGap > edgeFade.edgeTolerance ? 0 : 1
+            Behavior on topAlpha {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+            Behavior on bottomAlpha {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+            gradient: Gradient {
+                GradientStop { position: 0; color: Qt.rgba(1, 1, 1, keybindsViewportMask.topAlpha) }
+                GradientStop { position: keybindsViewportMask.fadeFraction; color: "white" }
+                GradientStop { position: 1 - keybindsViewportMask.fadeFraction; color: "white" }
+                GradientStop { position: 1; color: Qt.rgba(1, 1, 1, keybindsViewportMask.bottomAlpha) }
+            }
+        }
+    }
+
 
     Flickable {
         id: flickable
@@ -458,6 +503,8 @@ Item {
         flickableDirection: Flickable.VerticalFlick
         // contentHeight computed from tallest column (see contentArea.totalContentHeight)
         contentHeight: contentArea.totalContentHeight + root.cardSpacing
+        // Room to scroll the last cards clear of the floating filter bar
+        bottomMargin: extraOptions.barHeight + extraOptions.inset
         contentWidth: width
         boundsBehavior: Flickable.StopAtBounds
         // Allow mouse wheel scroll when not dragging a card
@@ -471,99 +518,47 @@ Item {
 
         property int layoutRevision: 0
 
-        // Total content height = tallest column; used to drive Flickable.contentHeight
-        property real totalContentHeight: {
+        // Every card's slot in one pass. Each card used to walk all the
+        // cards before it for its column and again for its y, so every
+        // height change while the page settled cost O(n²).
+        readonly property var masonry: {
             var _rev = layoutRevision;
             var h = [0, 0, 0, 0];
+            var columns = [];
+            var ys = [];
             for (var i = 0; i < sectionOrderModel.count; i++) {
                 var child = cardRepeater.itemAt(i);
-                if (!child) continue;
-                var childH = child.hasMatches ? (child.implicitHeight || 100) : 0;
-                if (childH <= 0) continue;
-                var minIdx = 0;
-                for (var j = 1; j < 4; j++) { if (h[j] < h[minIdx]) minIdx = j; }
-                h[minIdx] += childH + root.cardSpacing;
-            }
-            return Math.max(h[0], h[1], h[2], h[3]);
-        }
-
-        function getColumnIndex(targetIndex) {
-            var h = [0, 0, 0, 0];
-            var count = 0;
-            var maxH = 99999;  // no vertical clip — Flickable handles overflow
-            for (var i = 0; i < sectionOrderModel.count; i++) {
-                var child = cardRepeater.itemAt(i);
-                if (!child) continue;
-                var childH = child.implicitHeight || 100;
-                if (!child.hasMatches) childH = 0;
-                if (childH <= 0) continue;
-
+                var childH = child && child.hasMatches ? (child.implicitHeight || 100) : 0;
+                if (childH <= 0) {
+                    columns.push(0);
+                    ys.push(0);
+                    continue;
+                }
                 var minIdx = 0;
                 for (var j = 1; j < 4; j++) {
                     if (h[j] < h[minIdx]) minIdx = j;
                 }
-
-                if (h[minIdx] + childH + root.cardSpacing > maxH) {
-                    var bestIdx = minIdx;
-                    var bestH = h[minIdx];
-                    var found = false;
-                    for (var j = 0; j < 4; j++) {
-                        if (h[j] + childH + root.cardSpacing <= maxH && h[j] < bestH) {
-                            bestH = h[j];
-                            bestIdx = j;
-                            found = true;
-                        }
-                    }
-                    if (found) minIdx = bestIdx;
-                }
-
-                if (i === targetIndex) return minIdx;
+                columns.push(minIdx);
+                ys.push(h[minIdx]);
                 h[minIdx] += childH + root.cardSpacing;
-                count++;
             }
-            return 0;
+            return { columns: columns, ys: ys, height: Math.max(h[0], h[1], h[2], h[3]) };
         }
 
-        function getY(targetIndex) {
-            var h = [0, 0, 0, 0];
-            var count = 0;
-            var maxH = 99999;  // no vertical clip — Flickable handles overflow
-            for (var i = 0; i < sectionOrderModel.count; i++) {
-                var child = cardRepeater.itemAt(i);
-                if (!child) continue;
-                var childH = child.implicitHeight || 100;
-                if (!child.hasMatches) childH = 0;
-                if (childH <= 0) continue;
+        // Total content height = tallest column; used to drive Flickable.contentHeight
+        readonly property real totalContentHeight: masonry.height
 
-                var minIdx = 0;
-                for (var j = 1; j < 4; j++) {
-                    if (h[j] < h[minIdx]) minIdx = j;
-                }
-
-                if (h[minIdx] + childH + root.cardSpacing > maxH) {
-                    var bestIdx = minIdx;
-                    var bestH = h[minIdx];
-                    var found = false;
-                    for (var j = 0; j < 4; j++) {
-                        if (h[j] + childH + root.cardSpacing <= maxH && h[j] < bestH) {
-                            bestH = h[j];
-                            bestIdx = j;
-                            found = true;
-                        }
-                    }
-                    if (found) minIdx = bestIdx;
-                }
-
-                if (i === targetIndex) return h[minIdx];
-                h[minIdx] += childH + root.cardSpacing;
-                count++;
-            }
-            return 0;
-        }
+        // Cards take their first slots without motion: the heights settle
+        // over the first polish passes, and animating those corrections read
+        // as the page sliding into place after it was already built.
+        property bool animateLayout: false
 
         Repeater {
             id: cardRepeater
             model: sectionOrderModel
+            // itemAt() is not a binding dependency of the masonry pass.
+            onItemAdded: contentArea.layoutRevision++
+            onItemRemoved: contentArea.layoutRevision++
 
             delegate: CheatsheetKeybindsCategory {
                 id: cardDelegate
@@ -579,14 +574,8 @@ Item {
 
                 readonly property bool isDragged: root.dragging && uniqueId === root.dragUniqueId
 
-                readonly property int _col: {
-                    var _rev = contentArea.layoutRevision;
-                    return contentArea.getColumnIndex(index);
-                }
-                readonly property real _yPos: {
-                    var _rev = contentArea.layoutRevision;
-                    return contentArea.getY(index);
-                }
+                readonly property int _col: contentArea.masonry.columns[index] ?? 0
+                readonly property real _yPos: contentArea.masonry.ys[index] ?? 0
 
                 readonly property real targetX: root.isTabActive ? _col * (root.cardWidth + root.cardSpacing) : (contentArea.width - root.cardWidth) / 2
                 readonly property real targetY: root.isTabActive ? _yPos : index * 20
@@ -600,7 +589,7 @@ Item {
                 }
 
                 Behavior on x {
-                    enabled: !cardDelegate.isDragged
+                    enabled: !cardDelegate.isDragged && contentArea.animateLayout
                     NumberAnimation {
                         duration: 220
                         easing.type: Easing.BezierSpline
@@ -608,7 +597,7 @@ Item {
                     }
                 }
                 Behavior on y {
-                    enabled: !cardDelegate.isDragged
+                    enabled: !cardDelegate.isDragged && contentArea.animateLayout
                     NumberAnimation {
                         duration: 220
                         easing.type: Easing.BezierSpline
@@ -771,84 +760,49 @@ Item {
             id: settlingTimer
             interval: 500
             repeat: false
-            onTriggered: contentArea.layoutRevision = contentArea.layoutRevision + 1
+            onTriggered: {
+                contentArea.layoutRevision = contentArea.layoutRevision + 1;
+                contentArea.animateLayout = true;
+            }
         }
     }  // end contentArea
-    }  // end Flickable
 
-    Toolbar {
+        TouchpadScrollHandler {
+            flickable: flickable
+        }
+    }  // end Flickable
+    ScrollEdgeFade {
+        id: edgeFade
+        z: 1
+        target: flickable
+        blurEdges: true
+        fadeSize: Math.round(Appearance.font.pixelSize.huge * 1.8)
+        color: "transparent"
+    }
+    } // end listViewport
+
+
+    FloatingSearchBar {
         id: extraOptions
         z: 2
-        enableShadow: false
-        colBackground: Appearance.colors.colSecondaryContainer
-        anchors {
-            bottom: parent.bottom
-            horizontalCenter: parent.horizontalCenter
-            bottomMargin: 8
+        tabActive: root.isTabActive
+        blurSourceItem: flickable
+        keyNavTarget: root.keyNavTarget
+        placeholderText: Translation.tr("Filter shortcuts")
+        fabTooltip: Translation.tr("Edit shortcuts")
+        fabText: Translation.tr("Edit shortcuts")
+        placeholderTooltip: Translation.tr("Filter shortcuts")
+        fabVisible: true
+        onFabClicked: {
+            GlobalStates.closeCheatsheet();
+            HyprlandGui.openTab("shortcuts");
         }
-
-        transform: Translate {
-            id: searchBarTrans
-            y: root.isTabActive ? 0 : 35
-        }
-        opacity: root.isTabActive ? 1.0 : 0.0
-
-        Behavior on opacity {
-            NumberAnimation {
-                duration: 250
-                easing.type: Easing.OutCubic
-            }
-        }
-        Behavior on transform {
-            NumberAnimation {
-                duration: 350
-                easing.type: Easing.OutBack
-                easing.overshoot: 1.3
-            }
-        }
-
-        // This list is where you find out a shortcut is wrong. The page that changes it is
-        // several clicks away otherwise, and the cheatsheet has to be dismissed to get there.
-        IconToolbarButton {
-            implicitWidth: height
-            text: "edit"
-            onClicked: {
-                GlobalStates.closeCheatsheet();
-                HyprlandGui.openTab("shortcuts");
-            }
-            StyledToolTip {
-                text: Translation.tr("Edit shortcuts")
-            }
-        }
-
-        IconToolbarButton {
-            implicitWidth: height
-            text: Config.options.cheatsheet.filterUnbinds ? "filter_alt" : "filter_alt_off"
-            onClicked: Config.options.cheatsheet.filterUnbinds = !Config.options.cheatsheet.filterUnbinds
-            StyledToolTip {
-                text: Translation.tr("Toggle filter on system shortcuts unbind by the user")
-            }
-        }
-
-        ToolbarTextField {
-            id: filterField
-            placeholderText: focus ? Translation.tr("Filter shortcuts") : Translation.tr("Hit \"/\" to filter")
-            clip: true
-            font.pixelSize: Appearance.font.pixelSize.small
-            onTextChanged: root.filter = text;
-            keyNavTarget: root.keyNavTarget
-        }
-
-        IconToolbarButton {
-            implicitWidth: height
-            onClicked: root.filter = filterField.text = '';
-            text: "close"
-            StyledToolTip {
-                text: Translation.tr("Clear filter")
-            }
+        onTextChanged: root.filter = text
+        onAccepted: {
+            flickable.contentY = flickable.originY;
+            forceActiveFocus();
         }
     }
-
     PagePlaceholder {
         shown: !root.hasMatches && root.filter !== ''
         icon: "search_off"

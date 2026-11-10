@@ -28,7 +28,49 @@ Item {
     readonly property var activeTrackRef: MprisController.activeTrack
 
     property bool isExpanded: false
+    /**
+     * The seekbar's position, read only while the expanded layout can be seen.
+     *
+     * Collapsed, that layout stays visible at opacity 0 (the expand and contract
+     * animations drive it), so a seekbar bound to the track kept following every
+     * `positionChanged()` any media widget in the shell sent - a full-screen frame of
+     * the island each time, for a bar nobody could see. Held, it waits where it was;
+     * expanding reads the live value before the layout fades in, and the seekbar draws
+     * that jump without animating.
+     */
+    readonly property bool seekLive: root.isExpanded || expandedLayout.opacity > 0
+    property real heldTrackProgress: 0
+    readonly property real trackProgress: root.seekLive ? MprisController.trackProgressOf(root.player) : root.heldTrackProgress
+    onTrackProgressChanged: if (root.seekLive) root.heldTrackProgress = root.trackProgress
+    /** The album art, grown from the bubble's cover (see AuxiliaryBubble's hero). */
+    readonly property var heroItems: (root.inBubbleCard || root.isExpanded) ? [expandedBg] : []
+    /**
+     * Set by a bubble hosting this as its card. The bubble grows the card and fades it in
+     * itself, so the face opens already expanded: its own 500 ms swap from the contracted
+     * layout ran beside the bubble's, a second album art fading out next to the one
+     * growing from the cover.
+     */
+    property bool inBubbleCard: false
     property real expandContractRatio: 1.4
+
+    onInBubbleCardChanged: {
+        if (root.inBubbleCard)
+            root.snapExpanded();
+    }
+
+    function snapExpanded() {
+        if (!root.inBubbleCard)
+            return;
+        expandAnim.stop();
+        contractAnim.stop();
+        contractedLayout.opacity = 0;
+        contractedLayout.scale = 0.95;
+        expandedBg.opacity = 1;
+        expandedBg.scale = 1;
+        expandedLayout.opacity = 1;
+        expandedLayout.scale = 1;
+        root._contractScale = 1;
+    }
 
     // Drives the whole-widget scale-down during contract. Independent from the
     // individual layout scales so the size change is always visible even if
@@ -82,20 +124,23 @@ Item {
     property real artVignetteInner: 0.2
     property real artVignetteOuter: 0.85
 
-    readonly property color artTextColor: Appearance.colors.colOnSurface
-    readonly property color artSubtextColor: Appearance.colors.colOnSurfaceVariant
-
-    property bool isLocalArt: root.artUrl.startsWith("file://")
-    property string artDownloadLocation: Directories.coverArt
-    property string artFileName: Qt.md5(root.artUrl)
-    property string artFilePath: `${artDownloadLocation}/${artFileName}`
-    property bool artDownloaded: false
-
-    readonly property string localArtFilePath: {
-        if (!root.artUrl || root.artUrl === "") return "";
-        if (root.isLocalArt) return FileUtils.trimFileProtocol(root.artUrl);
-        return root.artDownloaded ? root.artFilePath : "";
+    readonly property color containerFillColor: root.useDynamicColors ? ColorUtils.mix(Appearance.m3colors.m3primaryContainer,
+        root.artDominantColor, 0.85) : Appearance.m3colors.m3primaryContainer
+    // The fade toward the bottom edge (and the paused dim) goes toward the island's own background:
+    // black in dark mode, white in light mode, where darkening would sink the dark text into it
+    readonly property color artDimColor: Appearance.m3colors.darkmode ? "black" : "white"
+    readonly property color containerContentColor: Appearance.m3colors.m3onPrimaryContainer
+    // The played part of the seek wave. In dark mode it is lifted halfway to the text colour: the
+    // cover's primary alone can be a mid tone (pink on a red cover) that no patch can rescue.
+    readonly property color seekColor: {
+        const primary = root.useDynamicColors ? root.blendedColors.colPrimary : Appearance.colors.colPrimary;
+        return Appearance.m3colors.darkmode ? ColorUtils.mix(Appearance.colors.colOnSurface, primary, 0.5) : primary;
     }
+    readonly property color lightTrackColor: root.useDynamicColors ? root.blendedColors.colLayer1 : Appearance.colors.colSurfaceContainer
+    readonly property color lightVizColor: root.useDynamicColors ? root.blendedColors.colPrimary : Appearance.colors.colOnSurface
+
+
+    readonly property string localArtFilePath: CoverArt.localPath(root.artUrl)
 
     readonly property string resolvedArtPath: root.localArtFilePath !== "" ? Qt.resolvedUrl(root.localArtFilePath) : ""
 
@@ -117,9 +162,27 @@ Item {
         color: root.artDominantColor
     }
 
+    readonly property string currentArtSource: {
+        if (!root.currentArtUrl || root.currentArtUrl === "")
+            return "";
+        if (root.currentArtUrl.startsWith("file://") || root.currentArtUrl.startsWith("/"))
+            return root.currentArtUrl;
+        return CoverArt.source(root.currentArtUrl) || root.effectiveSource(root.currentArtUrl);
+    }
+
+    readonly property string previousArtSource: {
+        if (!root.previousArtUrl || root.previousArtUrl === "")
+            return "";
+        if (root.previousArtUrl.startsWith("file://") || root.previousArtUrl.startsWith("/"))
+            return root.previousArtUrl;
+        return root.effectiveSource(root.previousArtUrl);
+    }
+
     function effectiveSource(url) {
         if (!url || url === "")
             return "";
+        if (url.startsWith("file://") || url.startsWith("/"))
+            return url;
         return url + "?v=" + artCacheBuster;
     }
 
@@ -175,17 +238,6 @@ Item {
         artOutgoingBlur = 0;
         artOutgoingScale = 1.0;
         artOutgoingAnimation.restart();
-    }
-
-    Process {
-        id: artDownloader
-        property string targetFile: root.artUrl
-        property string artFilePath: root.artFilePath
-        property string artTempPath: root.artFilePath + ".tmp"
-        command: ["bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
-        onExited: {
-            root.artDownloaded = true;
-        }
     }
 
     Behavior on artVignetteBlur {
@@ -260,10 +312,14 @@ Item {
             LyricsService.initiliazeLyrics();
             root.activeLyricText = root.displaySongText;
             contractAnim.stop();
-            expandAnim.restart();
+            if (root.inBubbleCard)
+                root.snapExpanded();
+            else
+                expandAnim.restart();
         } else {
             expandAnim.stop();
-            contractAnim.restart();
+            if (!root.inBubbleCard)
+                contractAnim.restart();
         }
         // Sample the settled width after the container's 500ms width Behavior
         widthCaptureTimer.restart();
@@ -393,7 +449,7 @@ Item {
 
     Image {
         id: artPreload
-        source: root.awaitingImageLoad ? root.effectiveSource(root.pendingArtUrl) : ""
+        source: root.awaitingImageLoad ? (CoverArt.source(root.pendingArtUrl) || root.effectiveSource(root.pendingArtUrl)) : ""
         visible: false
         asynchronous: true
         width: 16
@@ -422,24 +478,6 @@ Item {
     }
 
     onArtUrlChanged: {
-        var shouldDownload = false;
-        
-        if (!root.artUrl || root.artUrl === "") {
-            root.artDownloaded = false;
-        } else if (root.isLocalArt) {
-            root.artDownloaded = true;
-        } else {
-            shouldDownload = true;
-            artDownloader.targetFile = root.artUrl;
-            artDownloader.artFilePath = root.artFilePath;
-            artDownloader.artTempPath = root.artFilePath + ".tmp";
-            root.artDownloaded = false;
-        }
-        
-        if (shouldDownload) {
-            artDownloader.running = true;
-        }
-
         if (!root._initialized)
             return;
         if (root.artUrl === root.currentArtUrl && root.currentArtUrl !== "")
@@ -606,6 +644,8 @@ Item {
         root.activeLyricText = root.displaySongText;
         if (root.artUrl !== "" && root.currentArtUrl === "")
             root.snapToArt(root.artUrl);
+        if (root.inBubbleCard)
+            root.snapExpanded();
         root._initialized = true;
     }
 
@@ -638,48 +678,6 @@ Item {
         }
 
         Item {
-            id: contractedVignetteMask
-            anchors.fill: parent
-            visible: true
-
-            Rectangle {
-                id: contractedHMask
-                anchors.fill: parent
-                gradient: Gradient {
-                    orientation: Gradient.Horizontal
-                    GradientStop { position: 0.0; color: "transparent" }
-                    GradientStop { position: 0.08; color: "transparent" }
-                    GradientStop { position: 0.2; color: Qt.rgba(1, 1, 1, 0.3) }
-                    GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
-                    GradientStop { position: 0.45; color: "white" }
-                    GradientStop { position: 0.55; color: "white" }
-                    GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
-                    GradientStop { position: 0.8; color: Qt.rgba(1, 1, 1, 0.3) }
-                    GradientStop { position: 0.92; color: "transparent" }
-                    GradientStop { position: 1.0; color: "transparent" }
-                }
-            }
-
-            Rectangle {
-                anchors.fill: parent
-                gradient: Gradient {
-                    orientation: Gradient.Vertical
-                    GradientStop { position: 0.0; color: "transparent" }
-                    GradientStop { position: 0.15; color: Qt.rgba(1, 1, 1, 0.3) }
-                    GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
-                    GradientStop { position: 0.5; color: "white" }
-                    GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
-                    GradientStop { position: 0.85; color: Qt.rgba(1, 1, 1, 0.3) }
-                    GradientStop { position: 1.0; color: "transparent" }
-                }
-                layer.enabled: true
-                layer.effect: OpacityMask {
-                    maskSource: contractedHMask
-                }
-            }
-        }
-
-        Item {
             anchors.fill: parent
 
             Item {
@@ -688,7 +686,7 @@ Item {
 
                 Image {
                     anchors.fill: parent
-                    source: root.previousArtUrl !== "" ? root.effectiveSource(root.previousArtUrl) : ""
+                    source: root.previousArtSource
                     fillMode: Image.PreserveAspectCrop
                     smooth: true
                     asynchronous: true
@@ -701,26 +699,66 @@ Item {
                 }
 
                 Item {
+                    id: contractedArtHost1
                     anchors.fill: parent
                     layer.enabled: true
                     layer.effect: OpacityMask {
-                        maskSource: contractedVignetteMask
+                        maskSource: Rectangle {
+                            width: contractedArtHost1.width
+                            height: contractedArtHost1.height
+                            color: "transparent"
+                            gradient: Gradient {
+                                orientation: Gradient.Horizontal
+                                GradientStop { position: 0.0; color: "transparent" }
+                                GradientStop { position: 0.08; color: "transparent" }
+                                GradientStop { position: 0.2; color: Qt.rgba(1, 1, 1, 0.3) }
+                                GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
+                                GradientStop { position: 0.45; color: "white" }
+                                GradientStop { position: 0.55; color: "white" }
+                                GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
+                                GradientStop { position: 0.8; color: Qt.rgba(1, 1, 1, 0.3) }
+                                GradientStop { position: 0.92; color: "transparent" }
+                                GradientStop { position: 1.0; color: "transparent" }
+                            }
+                        }
                     }
 
-                    Image {
-                        id: contractedArtOutgoing
-                        anchors.centerIn: parent
-                        width: parent.width * root.artOutgoingScale
-                        height: parent.height * root.artOutgoingScale
-                        source: root.previousArtUrl !== "" ? root.effectiveSource(root.previousArtUrl) : ""
-                        fillMode: Image.PreserveAspectCrop
-                        smooth: true
-                        asynchronous: true
-                        layer.enabled: root.artOutgoingBlur > 0
-                        layer.effect: MultiEffect {
-                            blurEnabled: root.artOutgoingBlur > 0
-                            blurMax: 128
-                            blur: root.artOutgoingBlur / 128
+                    Item {
+                        anchors.fill: parent
+                        layer.enabled: true
+                        layer.effect: OpacityMask {
+                            maskSource: Rectangle {
+                                width: contractedArtHost1.width
+                                height: contractedArtHost1.height
+                                color: "transparent"
+                                gradient: Gradient {
+                                    orientation: Gradient.Vertical
+                                    GradientStop { position: 0.0; color: "transparent" }
+                                    GradientStop { position: 0.15; color: Qt.rgba(1, 1, 1, 0.3) }
+                                    GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
+                                    GradientStop { position: 0.5; color: "white" }
+                                    GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
+                                    GradientStop { position: 0.85; color: Qt.rgba(1, 1, 1, 0.3) }
+                                    GradientStop { position: 1.0; color: "transparent" }
+                                }
+                            }
+                        }
+
+                        Image {
+                            id: contractedArtOutgoing
+                            anchors.centerIn: parent
+                            width: parent.width * root.artOutgoingScale
+                            height: parent.height * root.artOutgoingScale
+                            source: root.previousArtSource
+                            fillMode: Image.PreserveAspectCrop
+                            smooth: true
+                            asynchronous: true
+                            layer.enabled: root.artOutgoingBlur > 0
+                            layer.effect: MultiEffect {
+                                blurEnabled: root.artOutgoingBlur > 0
+                                blurMax: 128
+                                blur: root.artOutgoingBlur / 128
+                            }
                         }
                     }
                 }
@@ -732,7 +770,7 @@ Item {
 
                 Image {
                     anchors.fill: parent
-                    source: root.currentArtUrl !== "" ? root.effectiveSource(root.currentArtUrl) : ""
+                    source: root.currentArtSource
                     fillMode: Image.PreserveAspectCrop
                     smooth: true
                     asynchronous: true
@@ -745,26 +783,66 @@ Item {
                 }
 
                 Item {
+                    id: contractedArtHost2
                     anchors.fill: parent
                     layer.enabled: true
                     layer.effect: OpacityMask {
-                        maskSource: contractedVignetteMask
+                        maskSource: Rectangle {
+                            width: contractedArtHost2.width
+                            height: contractedArtHost2.height
+                            color: "transparent"
+                            gradient: Gradient {
+                                orientation: Gradient.Horizontal
+                                GradientStop { position: 0.0; color: "transparent" }
+                                GradientStop { position: 0.08; color: "transparent" }
+                                GradientStop { position: 0.2; color: Qt.rgba(1, 1, 1, 0.3) }
+                                GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
+                                GradientStop { position: 0.45; color: "white" }
+                                GradientStop { position: 0.55; color: "white" }
+                                GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
+                                GradientStop { position: 0.8; color: Qt.rgba(1, 1, 1, 0.3) }
+                                GradientStop { position: 0.92; color: "transparent" }
+                                GradientStop { position: 1.0; color: "transparent" }
+                            }
+                        }
                     }
 
-                    Image {
-                        id: contractedArtIncoming
-                        anchors.centerIn: parent
-                        width: parent.width * root.artIncomingScale
-                        height: parent.height * root.artIncomingScale
-                        source: root.currentArtUrl !== "" ? root.effectiveSource(root.currentArtUrl) : ""
-                        fillMode: Image.PreserveAspectCrop
-                        smooth: true
-                        asynchronous: true
-                        layer.enabled: root.artIncomingBlur > 0
-                        layer.effect: MultiEffect {
-                            blurEnabled: root.artIncomingBlur > 0
-                            blurMax: 128
-                            blur: root.artIncomingBlur / 128
+                    Item {
+                        anchors.fill: parent
+                        layer.enabled: true
+                        layer.effect: OpacityMask {
+                            maskSource: Rectangle {
+                                width: contractedArtHost2.width
+                                height: contractedArtHost2.height
+                                color: "transparent"
+                                gradient: Gradient {
+                                    orientation: Gradient.Vertical
+                                    GradientStop { position: 0.0; color: "transparent" }
+                                    GradientStop { position: 0.15; color: Qt.rgba(1, 1, 1, 0.3) }
+                                    GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
+                                    GradientStop { position: 0.5; color: "white" }
+                                    GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
+                                    GradientStop { position: 0.85; color: Qt.rgba(1, 1, 1, 0.3) }
+                                    GradientStop { position: 1.0; color: "transparent" }
+                                }
+                            }
+                        }
+
+                        Image {
+                            id: contractedArtIncoming
+                            anchors.centerIn: parent
+                            width: parent.width * root.artIncomingScale
+                            height: parent.height * root.artIncomingScale
+                            source: root.currentArtSource
+                            fillMode: Image.PreserveAspectCrop
+                            smooth: true
+                            asynchronous: true
+                            layer.enabled: root.artIncomingBlur > 0
+                            layer.effect: MultiEffect {
+                                blurEnabled: root.artIncomingBlur > 0
+                                blurMax: 128
+                                blur: root.artIncomingBlur / 128
+                            }
                         }
                     }
                 }
@@ -813,17 +891,17 @@ Item {
             Rectangle {
                 anchors.fill: parent
                 gradient: Gradient {
-                    GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0.0) }
-                    GradientStop { position: 0.5; color: Qt.rgba(0, 0, 0, 0.05) }
-                    GradientStop { position: 0.8; color: Qt.rgba(0, 0, 0, 0.25) }
-                    GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.45) }
+                    GradientStop { position: 0.0; color: ColorUtils.applyAlpha(root.artDimColor, 0.0) }
+                    GradientStop { position: 0.5; color: ColorUtils.applyAlpha(root.artDimColor, 0.05) }
+                    GradientStop { position: 0.8; color: ColorUtils.applyAlpha(root.artDimColor, 0.25) }
+                    GradientStop { position: 1.0; color: ColorUtils.applyAlpha(root.artDimColor, 0.45) }
                 }
             }
 
             // Extra dim layer when paused
             Rectangle {
                 anchors.fill: parent
-                color: Qt.rgba(0, 0, 0, 0.3)
+                color: ColorUtils.applyAlpha(root.artDimColor, 0.3)
                 opacity: root.playing ? 0.0 : 0.5
 
                 Behavior on opacity {
@@ -863,12 +941,14 @@ Item {
                 spacing: 1
 
                 StyledText {
+                    id: contractedTitleText
+
                     Layout.fillWidth: true
                     font.pixelSize: Appearance.font.pixelSize.smaller
                     font.weight: Font.Black
                     font.styleName: "Rounded"
                     font.hintingPreference: Font.PreferNoHinting
-                    color: root.artTextColor
+                    color: Appearance.colors.colOnSurface
                     text: root.displayTitle
                     maximumLineCount: 1
                     elide: Text.ElideRight
@@ -880,9 +960,11 @@ Item {
                 }
 
                 StyledText {
+                    id: contractedArtistText
+
                     Layout.fillWidth: true
                     font.pixelSize: Appearance.font.pixelSize.smallest
-                    color: root.artSubtextColor
+                    color: Appearance.colors.colOnSurfaceVariant
                     text: root.displayArtist
                     maximumLineCount: 1
                     elide: Text.ElideRight
@@ -895,6 +977,7 @@ Item {
 
             // Right: visualizer bars
             Item {
+                id: contractedViz
                 Layout.alignment: Qt.AlignVCenter
                 implicitWidth: root.barWidth * 4 + 2 * 3
                 implicitHeight: root.elementHeight
@@ -914,7 +997,7 @@ Item {
                             minHeight: root.barWidth
                             amplitude: root.getBarAmplitude(index)
                             bgAmplitude: root.getBarAmplitude((index + 1) % 4)
-                            color: root.useDynamicColors ? root.blendedColors.colPrimary : root.artTextColor
+                            color: root.lightVizColor
                             fgColor: root.useDynamicColors ? root.blendedColors.colTertiary : Appearance.colors.colTertiary
                             glowColor: root.useDynamicColors ? root.blendedColors.colOnPrimary : "#FFFFFF"
                             playing: root.playing
@@ -933,6 +1016,8 @@ Item {
     Item {
         id: expandedBg
 
+        /** Handed over under the card's text, not over it (see AuxiliaryBubble's hero). */
+        readonly property bool heroBackdrop: true
         readonly property bool isMultiWidget: {
             var p = root.parent;
             while (p && !p.hasOwnProperty("activeWidgetsList")) {
@@ -941,10 +1026,10 @@ Item {
             return (p && p.activeWidgetsList.length > 1);
         }
 
-        x: -(root.widgetBg.width - root.width) / 2
-        y: -(root.widgetBg.height - root.height) / 2
-        width: root.widgetBg.width
-        height: root.widgetBg.height
+        x: root.inBubbleCard ? 0 : -(root.widgetBg.width - root.width) / 2
+        y: root.inBubbleCard ? 0 : -(root.widgetBg.height - root.height) / 2
+        width: root.inBubbleCard ? root.width : root.widgetBg.width
+        height: root.inBubbleCard ? root.height : root.widgetBg.height
         visible: true
         opacity: 0.0
         scale: 0.95
@@ -960,51 +1045,12 @@ Item {
             visible: false
         }
 
-        layer.enabled: true
+        // Not in a bubble's card: the bubble masks it to the card's own outline, and a
+        // layer's effect is drawn beside its item, so it stayed on screen over the art the
+        // bubble hands over while the item itself was hidden for it.
+        layer.enabled: !root.inBubbleCard
         layer.effect: OpacityMask {
             maskSource: maskRect
-        }
-
-        Item {
-            id: expandedVignetteMask
-            anchors.fill: parent
-            visible: true
-
-            Rectangle {
-                id: expandedHMask
-                anchors.fill: parent
-                gradient: Gradient {
-                    orientation: Gradient.Horizontal
-                    GradientStop { position: 0.0; color: "transparent" }
-                    GradientStop { position: 0.08; color: "transparent" }
-                    GradientStop { position: 0.2; color: Qt.rgba(1, 1, 1, 0.3) }
-                    GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
-                    GradientStop { position: 0.45; color: "white" }
-                    GradientStop { position: 0.55; color: "white" }
-                    GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
-                    GradientStop { position: 0.8; color: Qt.rgba(1, 1, 1, 0.3) }
-                    GradientStop { position: 0.92; color: "transparent" }
-                    GradientStop { position: 1.0; color: "transparent" }
-                }
-            }
-
-            Rectangle {
-                anchors.fill: parent
-                gradient: Gradient {
-                    orientation: Gradient.Vertical
-                    GradientStop { position: 0.0; color: "transparent" }
-                    GradientStop { position: 0.15; color: Qt.rgba(1, 1, 1, 0.3) }
-                    GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
-                    GradientStop { position: 0.5; color: "white" }
-                    GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
-                    GradientStop { position: 0.85; color: Qt.rgba(1, 1, 1, 0.3) }
-                    GradientStop { position: 1.0; color: "transparent" }
-                }
-                layer.enabled: true
-                layer.effect: OpacityMask {
-                    maskSource: expandedHMask
-                }
-            }
         }
 
         Item {
@@ -1016,7 +1062,7 @@ Item {
 
                 Image {
                     anchors.fill: parent
-                    source: root.previousArtUrl !== "" ? root.effectiveSource(root.previousArtUrl) : ""
+                    source: root.previousArtSource
                     fillMode: Image.PreserveAspectCrop
                     opacity: 0.85
                     smooth: true
@@ -1030,27 +1076,67 @@ Item {
                 }
 
                 Item {
+                    id: expandedArtHost1
                     anchors.fill: parent
                     layer.enabled: true
                     layer.effect: OpacityMask {
-                        maskSource: expandedVignetteMask
+                        maskSource: Rectangle {
+                            width: expandedArtHost1.width
+                            height: expandedArtHost1.height
+                            color: "transparent"
+                            gradient: Gradient {
+                                orientation: Gradient.Horizontal
+                                GradientStop { position: 0.0; color: "transparent" }
+                                GradientStop { position: 0.08; color: "transparent" }
+                                GradientStop { position: 0.2; color: Qt.rgba(1, 1, 1, 0.3) }
+                                GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
+                                GradientStop { position: 0.45; color: "white" }
+                                GradientStop { position: 0.55; color: "white" }
+                                GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
+                                GradientStop { position: 0.8; color: Qt.rgba(1, 1, 1, 0.3) }
+                                GradientStop { position: 0.92; color: "transparent" }
+                                GradientStop { position: 1.0; color: "transparent" }
+                            }
+                        }
                     }
 
-                    Image {
-                        id: expandedArtOutgoing
-                        anchors.centerIn: parent
-                        width: parent.width * root.artOutgoingScale
-                        height: parent.height * root.artOutgoingScale
-                        source: root.previousArtUrl !== "" ? root.effectiveSource(root.previousArtUrl) : ""
-                        fillMode: Image.PreserveAspectCrop
-                        opacity: 0.85
-                        smooth: true
-                        asynchronous: true
-                        layer.enabled: root.artOutgoingBlur > 0
-                        layer.effect: MultiEffect {
-                            blurEnabled: root.artOutgoingBlur > 0
-                            blurMax: 128
-                            blur: root.artOutgoingBlur / 128
+                    Item {
+                        anchors.fill: parent
+                        layer.enabled: true
+                        layer.effect: OpacityMask {
+                            maskSource: Rectangle {
+                                width: expandedArtHost1.width
+                                height: expandedArtHost1.height
+                                color: "transparent"
+                                gradient: Gradient {
+                                    orientation: Gradient.Vertical
+                                    GradientStop { position: 0.0; color: "transparent" }
+                                    GradientStop { position: 0.15; color: Qt.rgba(1, 1, 1, 0.3) }
+                                    GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
+                                    GradientStop { position: 0.5; color: "white" }
+                                    GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
+                                    GradientStop { position: 0.85; color: Qt.rgba(1, 1, 1, 0.3) }
+                                    GradientStop { position: 1.0; color: "transparent" }
+                                }
+                            }
+                        }
+
+                        Image {
+                            id: expandedArtOutgoing
+                            anchors.centerIn: parent
+                            width: parent.width * root.artOutgoingScale
+                            height: parent.height * root.artOutgoingScale
+                            source: root.previousArtSource
+                            fillMode: Image.PreserveAspectCrop
+                            opacity: 0.85
+                            smooth: true
+                            asynchronous: true
+                            layer.enabled: root.artOutgoingBlur > 0
+                            layer.effect: MultiEffect {
+                                blurEnabled: root.artOutgoingBlur > 0
+                                blurMax: 128
+                                blur: root.artOutgoingBlur / 128
+                            }
                         }
                     }
                 }
@@ -1062,7 +1148,7 @@ Item {
 
                 Image {
                     anchors.fill: parent
-                    source: root.currentArtUrl !== "" ? root.effectiveSource(root.currentArtUrl) : ""
+                    source: root.currentArtSource
                     fillMode: Image.PreserveAspectCrop
                     opacity: 0.85
                     smooth: true
@@ -1076,27 +1162,67 @@ Item {
                 }
 
                 Item {
+                    id: expandedArtHost2
                     anchors.fill: parent
                     layer.enabled: true
                     layer.effect: OpacityMask {
-                        maskSource: expandedVignetteMask
+                        maskSource: Rectangle {
+                            width: expandedArtHost2.width
+                            height: expandedArtHost2.height
+                            color: "transparent"
+                            gradient: Gradient {
+                                orientation: Gradient.Horizontal
+                                GradientStop { position: 0.0; color: "transparent" }
+                                GradientStop { position: 0.08; color: "transparent" }
+                                GradientStop { position: 0.2; color: Qt.rgba(1, 1, 1, 0.3) }
+                                GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
+                                GradientStop { position: 0.45; color: "white" }
+                                GradientStop { position: 0.55; color: "white" }
+                                GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
+                                GradientStop { position: 0.8; color: Qt.rgba(1, 1, 1, 0.3) }
+                                GradientStop { position: 0.92; color: "transparent" }
+                                GradientStop { position: 1.0; color: "transparent" }
+                            }
+                        }
                     }
 
-                    Image {
-                        id: expandedArtIncoming
-                        anchors.centerIn: parent
-                        width: parent.width * root.artIncomingScale
-                        height: parent.height * root.artIncomingScale
-                        source: root.currentArtUrl !== "" ? root.effectiveSource(root.currentArtUrl) : ""
-                        fillMode: Image.PreserveAspectCrop
-                        opacity: 0.85
-                        smooth: true
-                        asynchronous: true
-                        layer.enabled: root.artIncomingBlur > 0
-                        layer.effect: MultiEffect {
-                            blurEnabled: root.artIncomingBlur > 0
-                            blurMax: 128
-                            blur: root.artIncomingBlur / 128
+                    Item {
+                        anchors.fill: parent
+                        layer.enabled: true
+                        layer.effect: OpacityMask {
+                            maskSource: Rectangle {
+                                width: expandedArtHost2.width
+                                height: expandedArtHost2.height
+                                color: "transparent"
+                                gradient: Gradient {
+                                    orientation: Gradient.Vertical
+                                    GradientStop { position: 0.0; color: "transparent" }
+                                    GradientStop { position: 0.15; color: Qt.rgba(1, 1, 1, 0.3) }
+                                    GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
+                                    GradientStop { position: 0.5; color: "white" }
+                                    GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
+                                    GradientStop { position: 0.85; color: Qt.rgba(1, 1, 1, 0.3) }
+                                    GradientStop { position: 1.0; color: "transparent" }
+                                }
+                            }
+                        }
+
+                        Image {
+                            id: expandedArtIncoming
+                            anchors.centerIn: parent
+                            width: parent.width * root.artIncomingScale
+                            height: parent.height * root.artIncomingScale
+                            source: root.currentArtSource
+                            fillMode: Image.PreserveAspectCrop
+                            opacity: 0.85
+                            smooth: true
+                            asynchronous: true
+                            layer.enabled: root.artIncomingBlur > 0
+                            layer.effect: MultiEffect {
+                                blurEnabled: root.artIncomingBlur > 0
+                                blurMax: 128
+                                blur: root.artIncomingBlur / 128
+                            }
                         }
                     }
                 }
@@ -1118,17 +1244,17 @@ Item {
             Rectangle {
                 anchors.fill: parent
                 gradient: Gradient {
-                    GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0.0) }
-                    GradientStop { position: 0.5; color: Qt.rgba(0, 0, 0, 0.05) }
-                    GradientStop { position: 0.8; color: Qt.rgba(0, 0, 0, 0.25) }
-                    GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.45) }
+                    GradientStop { position: 0.0; color: ColorUtils.applyAlpha(root.artDimColor, 0.0) }
+                    GradientStop { position: 0.5; color: ColorUtils.applyAlpha(root.artDimColor, 0.05) }
+                    GradientStop { position: 0.8; color: ColorUtils.applyAlpha(root.artDimColor, 0.25) }
+                    GradientStop { position: 1.0; color: ColorUtils.applyAlpha(root.artDimColor, 0.45) }
                 }
             }
 
             // Extra dim layer when paused
             Rectangle {
                 anchors.fill: parent
-                color: Qt.rgba(0, 0, 0, 0.3)
+                color: ColorUtils.applyAlpha(root.artDimColor, 0.3)
                 opacity: root.playing ? 0.0 : 0.5
 
                 Behavior on opacity {
@@ -1175,6 +1301,7 @@ Item {
 
             // App program source icon
             MaterialShape {
+                id: appIconShape
                 implicitWidth: 24
                 implicitHeight: 24
                 shapeString: "Cookie12Sided"
@@ -1187,7 +1314,9 @@ Item {
                     active: root.player && root.player.desktopEntry !== ""
                     sourceComponent: IconImage {
                         implicitSize: Appearance.font.pixelSize.huge
-                        source: Quickshell.iconPath(root.player ? root.player.desktopEntry : "audio-x-generic", "audio-x-generic")
+                        // desktopEntry is the entry id (com.msob7y.namida), not an icon name
+                        source: Quickshell.iconPath(DesktopEntries.byId(root.player?.desktopEntry ?? "")?.icon
+                            || (root.player?.desktopEntry ?? ""), "audio-x-generic")
                     }
                 }
 
@@ -1214,9 +1343,11 @@ Item {
                 leftPadding: 8
                 rightPadding: 8
                 Layout.alignment: Qt.AlignTop
-                colBackground: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
-                colBackgroundHover: root.useDynamicColors ? root.blendedColors.colPrimaryContainerHover : Appearance.colors.colPrimaryContainerHover
-                colRipple: root.useDynamicColors ? root.blendedColors.colOnPrimaryContainer : Appearance.colors.colOnPrimaryContainer
+                colBackground: root.containerFillColor
+                colBackgroundHover: ColorUtils.mix(root.containerFillColor, root.containerContentColor, 0.9)
+                colBackgroundActive: ColorUtils.mix(root.containerFillColor, root.containerContentColor, 0.8)
+                colRipple: ColorUtils.applyAlpha(root.containerContentColor, 0.2)
+
                 buttonRadius: Appearance.rounding.full
 
                 readonly property string activeAudioDeviceName: Audio.sink ? (Audio.sink.description || "") : ""
@@ -1228,12 +1359,7 @@ Item {
                     return "volume_up";
                 }
 
-                onClicked: {
-                    GlobalStates.openRightSidebar();
-                    Qt.callLater(() => {
-                        GlobalStates.requestVolumeDialog = true;
-                    });
-                }
+                onClicked: GlobalStates.openAudioOutputSettings()
 
                 contentItem: RowLayout {
                     id: audioPillLayout
@@ -1242,14 +1368,14 @@ Item {
                     MaterialSymbol {
                         text: audioPill.audioDeviceIcon
                         iconSize: Appearance.font.pixelSize.smallest
-                        color: root.useDynamicColors ? root.blendedColors.colOnPrimaryContainer : Appearance.colors.colOnPrimaryContainer
+                        color: root.containerContentColor
                     }
 
                     StyledText {
                         text: audioPill.activeAudioDeviceName !== "" ? audioPill.activeAudioDeviceName : Translation.tr("Wired headphones")
                         font.pixelSize: Appearance.font.pixelSize.smallest
                         font.bold: true
-                        color: root.useDynamicColors ? root.blendedColors.colOnPrimaryContainer : Appearance.colors.colOnPrimaryContainer
+                        color: root.containerContentColor
                         Layout.maximumWidth: 100
                         elide: Text.ElideRight
                     }
@@ -1270,6 +1396,7 @@ Item {
                 spacing: 2
 
                 Item {
+                    id: expandedTitleArea
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     clip: true
@@ -1348,7 +1475,7 @@ Item {
                                     font.weight: Math.abs(lineOffset) === 0 ? Font.Black : Font.Medium
                                     font.styleName: Math.abs(lineOffset) === 0 ? "Rounded" : "Regular"
                                     font.hintingPreference: Font.PreferNoHinting
-                                    color: root.artTextColor
+                                    color: Appearance.colors.colOnSurface
                                     text: isValidLine ? LyricsService.syncedLines[actualIndex].text : ""
                                     horizontalAlignment: Text.AlignLeft
                                     verticalAlignment: Text.AlignVCenter
@@ -1361,13 +1488,15 @@ Item {
                     }
 
                     StyledText {
+                        id: expandedTitleText
+
                         visible: !LyricsService.hasSyncedLines
                         anchors.fill: parent
                         font.family: Appearance.font.family.main
                         font.pixelSize: Appearance.font.pixelSize.large
                         font.weight: Font.Black
                         font.styleName: "Rounded"
-                        color: root.artTextColor
+                        color: Appearance.colors.colOnSurface
                         text: root.displaySongText
                         maximumLineCount: 2
                         wrapMode: Text.WordWrap
@@ -1377,10 +1506,12 @@ Item {
                 }
 
                 StyledText {
+                    id: expandedArtistText
+
                     Layout.fillWidth: true
                     font.family: Appearance.font.family.main
                     font.pixelSize: Appearance.font.pixelSize.small
-                    color: root.artSubtextColor
+                    color: Appearance.colors.colOnSurfaceVariant
                     text: root.displayArtist
                     maximumLineCount: 1
                     elide: Text.ElideRight
@@ -1397,9 +1528,11 @@ Item {
                 implicitWidth: 52
                 implicitHeight: 52
                 buttonRadius: 18
-                colBackground: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
-                colBackgroundHover: root.useDynamicColors ? root.blendedColors.colPrimaryContainerHover : Appearance.colors.colPrimaryContainerHover
-                colRipple: root.useDynamicColors ? root.blendedColors.colPrimaryContainerActive : Appearance.colors.colPrimaryContainerActive
+                colBackground: root.containerFillColor
+                colBackgroundHover: ColorUtils.mix(root.containerFillColor, root.containerContentColor, 0.9)
+                colBackgroundActive: ColorUtils.mix(root.containerFillColor, root.containerContentColor, 0.8)
+                colRipple: ColorUtils.applyAlpha(root.containerContentColor, 0.2)
+
                 Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
 
                 onClicked: {
@@ -1418,7 +1551,7 @@ Item {
                         anchors.centerIn: parent
                         text: root.playing ? "pause" : "play_arrow"
                         iconSize: Appearance.font.pixelSize.hugeass
-                        color: root.useDynamicColors ? root.blendedColors.colOnPrimaryContainer : Appearance.colors.colOnPrimaryContainer
+                        color: root.containerContentColor
                         fill: 1
                     }
                 }
@@ -1476,15 +1609,22 @@ Item {
                 Loader {
                     id: sliderLoader
                     anchors.fill: parent
-                    active: root.player ? (root.player.canSeek ?? false) : false
+                    active: root.player?.canSeek ?? false
                     sourceComponent: StyledSlider {
                         configuration: StyledSlider.Configuration.Wavy
-                        highlightColor: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
-                        trackColor: root.useDynamicColors ? root.blendedColors.colLayer1 : Appearance.colors.colSurfaceContainer
-                        handleColor: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
-                        value: (root.player && root.player.length > 0) ? Math.min(1, Math.max(0, root.player.position / root.player.length)) : 0
-                        onMoved: if (root.player)
-                            root.player.position = value * root.player.length
+                        animateWave: root.playing && root.seekLive
+                        highlightColor: root.seekColor
+                        trackColor: root.lightTrackColor
+                        handleColor: root.seekColor
+                        value: root.trackProgress
+                        // Nothing to seek to while the player publishes no length.
+                        enabled: MprisController.hasTrackLength(root.player)
+                        onMoved: MprisController.seekFraction(root.player, value)
+                        // QQuickSlider writes `value` itself while the user drags, which destroys
+                        // the binding below it. Without this the bar froze where the drag left it
+                        // and never followed the track again.
+                        onPressedChanged: if (!pressed)
+                            value = Qt.binding(() => root.trackProgress)
                     }
                 }
 
@@ -1495,12 +1635,13 @@ Item {
                         left: parent.left
                         right: parent.right
                     }
-                    active: root.player ? !(root.player.canSeek ?? false) : false
+                    active: !!root.player && !sliderLoader.active
                     sourceComponent: StyledProgressBar {
                         wavy: root.player ? root.playing : false
-                        highlightColor: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
-                        trackColor: root.useDynamicColors ? root.blendedColors.colLayer1 : Appearance.colors.colSurfaceContainer
-                        value: (root.player && root.player.length > 0) ? Math.min(1, Math.max(0, root.player.position / root.player.length)) : 0
+                        animateWave: root.playing && root.seekLive
+                        highlightColor: root.seekColor
+                        trackColor: root.lightTrackColor
+                        value: MprisController.trackProgressOf(root.player)
                     }
                 }
             }

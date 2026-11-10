@@ -13,15 +13,48 @@ import "../../shared/cards"
 
 StyledPopup {
     id: root
+    popupId: "resources"
     popupRadius: Appearance.rounding.large
     stickyHover: true
 
     readonly property int graphPointCount: 13
     property list<real> cpuGraphHistory: []
     property list<real> gpuGraphHistory: []
+    property bool _popupResourceRequested: false
+    property bool _diskMetricRequested: false
+    property bool _temperatureMetricRequested: false
+    property bool _hardwareIdentityRequested: false
+    property bool _swapMetricRequested: false
+
+    function syncResourceMetricRequests() {
+        const activeNow = !!root.active;
+        const wantsSwap = activeNow && !!Config.options.bar.resources.alwaysShowSwap;
+        if (_popupResourceRequested !== activeNow) {
+            ResourceUsage.requestResourcePopup(activeNow);
+            _popupResourceRequested = activeNow;
+        }
+        if (_diskMetricRequested !== activeNow) {
+            ResourceUsage.requestMetric("disk", activeNow);
+            _diskMetricRequested = activeNow;
+        }
+        if (_temperatureMetricRequested !== activeNow) {
+            ResourceUsage.requestMetric("temperature", activeNow);
+            _temperatureMetricRequested = activeNow;
+        }
+        if (_hardwareIdentityRequested !== activeNow) {
+            ResourceUsage.requestMetric("hardwareIdentity", activeNow);
+            _hardwareIdentityRequested = activeNow;
+        }
+        if (_swapMetricRequested !== wantsSwap) {
+            ResourceUsage.requestMetric("swap", wantsSwap);
+            _swapMetricRequested = wantsSwap;
+        }
+    }
+
+    Component.onCompleted: syncResourceMetricRequests()
 
     onActiveChanged: {
-        ResourceUsage.resourcePopupMonitoringEnabled = active;
+        syncResourceMetricRequests();
         if (active) {
             cpuGraphHistory = [];
             gpuGraphHistory = [];
@@ -32,23 +65,108 @@ StyledPopup {
         }
     }
 
+    Component.onDestruction: {
+        if (_popupResourceRequested)
+            ResourceUsage.requestResourcePopup(false);
+        if (_diskMetricRequested)
+            ResourceUsage.requestMetric("disk", false);
+        if (_temperatureMetricRequested)
+            ResourceUsage.requestMetric("temperature", false);
+        if (_hardwareIdentityRequested)
+            ResourceUsage.requestMetric("hardwareIdentity", false);
+        if (_swapMetricRequested)
+            ResourceUsage.requestMetric("swap", false);
+    }
+
     // String cleanup functions
     function cleanDistro(name) {
         return name.replace(/ Linux/g, "").replace(/\s*\(.*?\)/g, "").trim();
     }
 
     function cleanCpu(model) {
-        return model.replace(/Intel\(R\)|Core\(TM\)|CPU|Processor|AMD|(\d+th Gen)/g, "").replace(/\s+/g, " ").trim();
+        // The APU's Radeon tail ("w/ Radeon 890M") is named on the GPU line right below.
+        return model.replace(/\s+w(?:ith|\/)\s*Radeon\b.*$/i, "").replace(/\s*@\s*[\d.]+\s*[GM]Hz/i, "")
+            .replace(/Intel\(R\)|Core\(TM\)|CPU|Processor|AMD|(\d+th Gen)/g, "").replace(/\s+/g, " ").trim();
     }
 
-    function cleanGpu(model) {
+    function lastBracket(text) {
+        var rx = /\[([^\]]+)\]/g;
+        var match;
+        var last = "";
+        while ((match = rx.exec(text)) !== null) {
+            last = match[1].trim();
+        }
+        return last;
+    }
+
+    // "Alder Lake-P GT2 [Iris Xe Graphics]" → "Intel Iris Xe", "... Arc Graphics 130V/140V GPU" → "Intel Arc 130V/140V"
+    function cleanIntelGpu(model) {
+        var name = model.replace(/^Intel Corporation\s*/i, "").trim();
+        var bracket = root.lastBracket(name);
+        var product = (bracket || name).replace(/\bIntel\b/gi, "").replace(/\s*\([^)]*\)/g, "")
+            .replace(/\s*\/\s*/g, "/").replace(/\s+GPU$/i, "").replace(/\s+/g, " ").trim();
+
+        var family = product.match(/\b(?:Arc|Iris|UHD|HD|Xe|Data Center GPU|Server GPU)\b.*$/i);
+        if (family) {
+            var words = family[0].split(" ");
+            var withoutGraphics = words.filter(word => !/^Graphics$/i.test(word));
+            // Keep "Graphics" when it is all that follows the family ("Intel UHD Graphics")
+            return "Intel " + (withoutGraphics.length >= 2 ? withoutGraphics : words).join(" ");
+        }
+
+        // Unbranded ("[Intel Graphics]", "Haswell-ULT Integrated Graphics Controller"): name the platform
+        var platform = name.replace(/\[[^\]]*\]/g, "")
+            .replace(/\bCore Ultra\b.*?\bProcessors?\b(?:\s*\([^)]*\))?/i, "")
+            .replace(/\b(?:Integrated|Graphics|Controller|Device|Processors?|Family|Series|Express|Accelerator)\b|&|\(.*?\)/gi, "")
+            .replace(/\bGT\d(?:\.\d)?e?\b|\bG\d{2}\b/g, "")
+            .replace(/([a-z])(Lake|Bridge)\b/g, "$1 $2")
+            .replace(/\s+/g, " ").trim()
+            .replace(/-[A-Z]+\d*$/, "");
+        return platform ? "Intel Graphics (" + platform + ")" : "Intel Graphics";
+    }
+
+    // Returns "" unless the GPU is an APU's iGPU. lspci often knows only the codename ("Phoenix1") or
+    // every variant of the die ("Radeon 880M / 890M"); the CPU name carries the exact one.
+    function cleanAmdIgpu(model, cpuModel) {
+        var name = model.replace(/Advanced Micro Devices,?\s*Inc\.?/gi, "").replace(/\[AMD\/ATI\]/gi, "").trim();
+        var bracket = root.lastBracket(name);
+        var alternatives = bracket ? bracket.split("/").map(part => part.trim()) : [];
+        var codename = name.replace(/\[[^\]]*\]/g, "").trim();
+
+        var igpuPattern = /^(?:Radeon\s+)?(?:Graphics|Vega(?: Mobile)?(?: Series)?|\d{3}M|\d{4}S)(?:\s+Graphics)?$/i;
+        var apuCodenames = /^(?:Phoenix|Hawk ?Point|Krackan|Strix|Rembrandt|Barcelo|Lucienne|Renoir|Cezanne|Raphael|Granite Ridge|Mendocino|Raven|Picasso)/i;
+        var isIgpu = bracket ? alternatives.every(part => igpuPattern.test(part)) : apuCodenames.test(codename);
+        if (!isIgpu)
+            return "";
+
+        var cpuMatch = String(cpuModel || "").match(/\bw(?:ith|\/)\s*(Radeon\b.*)$/i);
+        var cpuRadeon = cpuMatch ? cpuMatch[1].replace(/\s+(?:Graphics|Gfx)\s*$/i, "").trim() : "";
+        if (/\d/.test(cpuRadeon))
+            return cpuRadeon;
+
+        var models = alternatives.map(part => (part.match(/\d{3}M|\d{4}S/i) || [""])[0])
+            .filter((value, index, list) => value && list.indexOf(value) === index);
+        if (models.length > 0)
+            return "Radeon " + models.join("/");
+
+        var family = /Vega/i.test(cpuRadeon + " " + bracket) ? "Radeon Vega" : "Radeon Graphics";
+        var platform = codename.split("/")[0].replace(/\s*\d+$/, "").replace(/([a-z])([A-Z])/g, "$1 $2").trim();
+        return platform ? family + " (" + platform + ")" : family;
+    }
+
+    function cleanGpu(model, cpuModel) {
         if (!model || model === "--")
             return "--";
 
         var cleaned = model.replace(/\(rev\s+[a-f0-9]+\)/gi, "").trim();
         var baseModel = "";
 
-        if (/Advanced Micro Devices|AMD|ATI/i.test(cleaned)) {
+        // Word-bounded: a bare /ATI/i also matches "Corporation", sending Intel/NVIDIA lspci names here
+        if (/Advanced Micro Devices|\bAMD\b|\bATI\b/i.test(cleaned)) {
+            var igpu = root.cleanAmdIgpu(cleaned, cpuModel);
+            if (igpu)
+                return igpu;
+
             var rx = /\[([^\]]+)\]/g;
             var match;
             var modelBracket = "";
@@ -73,7 +191,7 @@ StyledPopup {
                 }
             }
         } else if (/Intel/i.test(cleaned)) {
-            baseModel = cleaned.replace(/Intel Corporation/gi, "Intel").trim();
+            return root.cleanIntelGpu(cleaned);
         } else if (/NVIDIA/i.test(cleaned)) {
             var rxNvidia = /\[([^\]]+)\]/g;
             var matchNvidia;
@@ -82,7 +200,7 @@ StyledPopup {
                 lastBracket = matchNvidia[1].trim();
             }
             if (lastBracket) {
-                baseModel = lastBracket;
+                baseModel = lastBracket.split("/")[0].trim();
             } else {
                 baseModel = cleaned.replace(/NVIDIA Corporation/gi, "").trim();
             }
@@ -100,10 +218,31 @@ StyledPopup {
         return baseModel;
     }
 
-    contentItem: ColumnLayout {
+    // `StyledPopup` lazily creates its PanelWindow, but its default content item
+    // would still be constructed at bar startup. This popup owns the complete
+    // resource dashboard (cards, graphs and Docker), so keep that tree lazy as
+    // well. The Loader mirrors the component's implicit size for popup layout
+    // and destroys the tree after the close animation, releasing its bindings
+    // and graphical-effect resources instead of retaining an invisible copy.
+    contentItem: Loader {
+        id: contentLoader
+        active: root.active
+        sourceComponent: root.popupContent
+    }
+
+    property Component popupContent: Component {
+
+        ColumnLayout {
         id: contentLayout
         spacing: 12
         implicitWidth: 380
+
+        Connections {
+            target: Config.options.bar.resources
+            function onAlwaysShowSwapChanged() {
+                root.syncResourceMetricRequests();
+            }
+        }
 
         Connections {
             target: ResourceUsage
@@ -525,7 +664,7 @@ StyledPopup {
                             id: gpuText
                             Layout.fillWidth: true
                             horizontalAlignment: Text.AlignRight
-                            text: root.cleanGpu(ResourceUsage.gpuModel)
+                            text: root.cleanGpu(ResourceUsage.gpuModel, ResourceUsage.cpuModel)
                             font.pixelSize: Appearance.font.pixelSize.small
                             font.weight: Font.DemiBold
                             color: Appearance.colors.colOnPrimaryContainer
@@ -1102,30 +1241,35 @@ StyledPopup {
 
             color: ColorUtils.applyAlpha(_fillColor, 0.25)
 
-            layer.enabled: true
-            layer.samples: 4
-            layer.smooth: true
-            layer.effect: OpacityMask {
-                maskSource: Rectangle {
-                    width: ramCard.width
-                    height: ramCard.height
-                    radius: ramCard.radius
+            // Only the fill is layered: a layer on the card also rasterizes its
+            // texts, which come out soft when the layer lands on a fractional pixel.
+            Item {
+                anchors.fill: parent
+                layer.enabled: true
+                layer.samples: 4
+                layer.smooth: true
+                layer.effect: OpacityMask {
+                    maskSource: Rectangle {
+                        width: ramCard.width
+                        height: ramCard.height
+                        radius: ramCard.radius
+                    }
                 }
-            }
 
-            Rectangle {
-                id: ramFill
-                anchors.left: parent.left
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                radius: parent.radius
-                width: parent.width * parent._percent
-                color: parent._fillColor
+                Rectangle {
+                    id: ramFill
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    radius: ramCard.radius
+                    width: parent.width * ramCard._percent
+                    color: ramCard._fillColor
 
-                Behavior on width {
-                    NumberAnimation {
-                        duration: 400
-                        easing.type: Easing.OutCubic
+                    Behavior on width {
+                        NumberAnimation {
+                            duration: 400
+                            easing.type: Easing.OutCubic
+                        }
                     }
                 }
             }
@@ -1384,30 +1528,34 @@ StyledPopup {
 
             color: ColorUtils.applyAlpha(_fillColor, 0.25)
 
-            layer.enabled: true
-            layer.samples: 4
-            layer.smooth: true
-            layer.effect: OpacityMask {
-                maskSource: Rectangle {
-                    width: swapCard.width
-                    height: swapCard.height
-                    radius: swapCard.radius
+            // Only the fill is layered: see ramCard.
+            Item {
+                anchors.fill: parent
+                layer.enabled: true
+                layer.samples: 4
+                layer.smooth: true
+                layer.effect: OpacityMask {
+                    maskSource: Rectangle {
+                        width: swapCard.width
+                        height: swapCard.height
+                        radius: swapCard.radius
+                    }
                 }
-            }
 
-            Rectangle {
-                id: swapFill
-                anchors.left: parent.left
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                radius: parent.radius
-                width: parent.width * parent._percent
-                color: parent._fillColor
+                Rectangle {
+                    id: swapFill
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    radius: swapCard.radius
+                    width: parent.width * swapCard._percent
+                    color: swapCard._fillColor
 
-                Behavior on width {
-                    NumberAnimation {
-                        duration: 400
-                        easing.type: Easing.OutCubic
+                    Behavior on width {
+                        NumberAnimation {
+                            duration: 400
+                            easing.type: Easing.OutCubic
+                        }
                     }
                 }
             }
@@ -1665,30 +1813,34 @@ StyledPopup {
 
             color: ColorUtils.applyAlpha(_fillColor, 0.25)
 
-            layer.enabled: true
-            layer.samples: 4
-            layer.smooth: true
-            layer.effect: OpacityMask {
-                maskSource: Rectangle {
-                    width: diskCard.width
-                    height: diskCard.height
-                    radius: diskCard.radius
+            // Only the fill is layered: see ramCard.
+            Item {
+                anchors.fill: parent
+                layer.enabled: true
+                layer.samples: 4
+                layer.smooth: true
+                layer.effect: OpacityMask {
+                    maskSource: Rectangle {
+                        width: diskCard.width
+                        height: diskCard.height
+                        radius: diskCard.radius
+                    }
                 }
-            }
 
-            Rectangle {
-                id: diskFill
-                anchors.left: parent.left
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                radius: parent.radius
-                width: parent.width * parent._percent
-                color: parent._fillColor
+                Rectangle {
+                    id: diskFill
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    radius: diskCard.radius
+                    width: parent.width * diskCard._percent
+                    color: diskCard._fillColor
 
-                Behavior on width {
-                    NumberAnimation {
-                        duration: 400
-                        easing.type: Easing.OutCubic
+                    Behavior on width {
+                        NumberAnimation {
+                            duration: 400
+                            easing.type: Easing.OutCubic
+                        }
                     }
                 }
             }
@@ -2020,4 +2172,5 @@ StyledPopup {
             }
         }
     }
+}
 }

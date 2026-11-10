@@ -39,37 +39,44 @@ AbstractBackgroundWidget {
     readonly property int currMonth: currDate.getMonth()
     readonly property int currYear: currDate.getFullYear()
 
-    // Chronologically sorted today events
-    readonly property var todayEvents: {
-        if (!CalendarService.khalAvailable || !CalendarService.events) return [];
-        let list = [];
-        let today = root.currDate;
-        if (!today) today = new Date();
-        const currentDay = today.getDate();
-        const currentMonth = today.getMonth();
-        const currentYear = today.getFullYear();
-
-        for (let i = 0; i < CalendarService.events.length; i++) {
-            let evt = CalendarService.events[i];
-            let taskDate = new Date(evt.startDate);
-            if (taskDate.getDate() === currentDay && taskDate.getMonth() === currentMonth && taskDate.getFullYear() === currentYear) {
-                list.push(evt);
-            }
+    // When an event stops being upcoming. khal ends an all-day event at 00:00
+    // or 23:59 of its own day, so it counts until the next midnight.
+    function effectiveEnd(evt) {
+        if (CalendarService.isAllDayEvent(evt)) {
+            const start = new Date(evt.startDate);
+            return new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1).getTime();
         }
+        return new Date(evt.endDate).getTime();
+    }
+
+    // Every event that has not ended yet, soonest first
+    readonly property var upcomingEvents: {
+        if (!CalendarService.khalAvailable || !CalendarService.events) return [];
+        const now = root.currDate ? root.currDate.getTime() : Date.now();
+        const list = CalendarService.events.filter(evt => root.effectiveEnd(evt) > now);
         list.sort((a, b) => a.startDate - b.startDate);
         return list;
     }
 
-    // Next upcoming event for today
-    readonly property var nextEvent: {
-        let evts = root.todayEvents;
-        let now = root.currDate ? root.currDate.getTime() : Date.now();
-        for (let i = 0; i < evts.length; i++) {
-            let evtEnd = new Date(evts[i].endDate).getTime();
-            if (evtEnd > now) return evts[i];
-        }
-        return evts.length > 0 ? evts[0] : null;
+    // The day the card shows: today while something is still ahead on it,
+    // else the next day that has events (khal keeps each event within a day)
+    readonly property date focusDate: root.upcomingEvents.length > 0
+        && new Date(root.upcomingEvents[0].startDate) > root.currDate
+        ? new Date(root.upcomingEvents[0].startDate) : root.currDate
+    readonly property int focusDayOffset: {
+        const today = new Date(root.currYear, root.currMonth, root.currDay);
+        const day = new Date(root.focusDate.getFullYear(), root.focusDate.getMonth(), root.focusDate.getDate());
+        return Math.round((day - today) / 86400000);
     }
+
+    // The focus day's remaining events
+    readonly property var dayEvents: root.upcomingEvents.filter(evt => {
+        const start = new Date(evt.startDate);
+        return start.getDate() === root.focusDate.getDate() && start.getMonth() === root.focusDate.getMonth()
+            && start.getFullYear() === root.focusDate.getFullYear();
+    })
+
+    readonly property var nextEvent: root.dayEvents.length > 0 ? root.dayEvents[0] : null
 
     // Formatted time string until next event (ex: "in 45m" or "in 1h 10m")
     readonly property string timeUntilNextEvent: {
@@ -86,6 +93,7 @@ AbstractBackgroundWidget {
         }
         let totalMins = Math.floor(diffMs / 60000);
         if (totalMins < 60) return "in " + String(totalMins) + "m";
+        if (totalMins >= 24 * 60) return "in " + String(Math.round(totalMins / (24 * 60))) + "d";
         let hours = Math.floor(totalMins / 60);
         let mins = totalMins % 60;
         if (mins === 0) return "in " + String(hours) + "h";
@@ -134,7 +142,11 @@ AbstractBackgroundWidget {
                     spacing: 0
 
                     StyledText {
-                        text: Qt.locale().toString(root.currDate, "ddd")
+                        Layout.fillWidth: true
+                        elide: Text.ElideRight
+                        text: root.focusDayOffset === 1 ? Translation.tr("Tomorrow")
+                            : root.focusDayOffset > 6 ? Qt.locale().toString(root.focusDate, "ddd MMM")
+                            : Qt.locale().toString(root.focusDate, "ddd")
                         font {
                             pixelSize: 22
                             weight: Font.Medium
@@ -144,7 +156,7 @@ AbstractBackgroundWidget {
                     }
 
                     StyledText {
-                        text: Qt.locale().toString(root.currDate, "dd")
+                        text: Qt.locale().toString(root.focusDate, "dd")
                         font {
                             pixelSize: 84
                             weight: Font.ExtraBold
@@ -204,7 +216,7 @@ AbstractBackgroundWidget {
                     spacing: 8
                     clip: true
 
-                    model: root.todayEvents
+                    model: root.dayEvents
 
                     delegate: Rectangle {
                         required property int index
@@ -214,7 +226,7 @@ AbstractBackgroundWidget {
                         width: eventsListView.width
                         implicitHeight: colLayout.implicitHeight + 24
                         radius: Appearance.rounding.normal
-                        color: isFirst ? root.primaryCardBg : root.normalCardBg
+                        color: isFirst ? root.primaryCardBg : WidgetColorScheme.tintBackground(root.normalCardBg)
 
                         ColumnLayout {
                             id: colLayout
@@ -239,10 +251,11 @@ AbstractBackgroundWidget {
 
                             StyledText {
                                 text: {
-                                    if (modelData.allDay) return Translation.tr("All Day");
-                                    let st = Qt.formatDateTime(new Date(modelData.startDate), "h:mm");
-                                    let et = Qt.formatDateTime(new Date(modelData.endDate), "h:mm A");
-                                    return st + " - " + et;
+                                    if (CalendarService.isAllDayEvent(modelData)) return Translation.tr("All Day");
+                                    const fmt = Config.options.time.format || "hh:mm";
+                                    let st = Qt.formatDateTime(new Date(modelData.startDate), fmt);
+                                    let et = Qt.formatDateTime(new Date(modelData.endDate), fmt);
+                                    return st + " – " + et;
                                 }
                                 font {
                                     pixelSize: 13
@@ -255,15 +268,15 @@ AbstractBackgroundWidget {
                         }
                     }
 
-                    // Placeholder when no events today
+                    // Placeholder when nothing is ahead
                     Item {
                         anchors.fill: parent
-                        visible: root.todayEvents.length === 0
+                        visible: root.dayEvents.length === 0
 
                         Rectangle {
                             anchors.fill: parent
                             radius: Appearance.rounding.normal
-                            color: root.normalCardBg
+                            color: WidgetColorScheme.tintBackground(root.normalCardBg)
 
                             ColumnLayout {
                                 anchors.centerIn: parent
@@ -278,7 +291,7 @@ AbstractBackgroundWidget {
 
                                 StyledText {
                                     Layout.alignment: Qt.AlignHCenter
-                                    text: Translation.tr("No Events Scheduled Today")
+                                    text: Translation.tr("No Upcoming Events")
                                     font {
                                         pixelSize: 13
                                         weight: Font.Medium
@@ -288,6 +301,10 @@ AbstractBackgroundWidget {
                                 }
                             }
                         }
+                    }
+
+                    TouchpadScrollHandler {
+                        flickable: eventsListView
                     }
                 }
 
@@ -300,7 +317,7 @@ AbstractBackgroundWidget {
 
                     gradient: Gradient {
                         GradientStop { position: 0.0; color: "transparent" }
-                        GradientStop { position: 1.0; color: root.cardBgColor }
+                        GradientStop { position: 1.0; color: WidgetColorScheme.tintBackground(root.cardBgColor) }
                     }
                 }
             }

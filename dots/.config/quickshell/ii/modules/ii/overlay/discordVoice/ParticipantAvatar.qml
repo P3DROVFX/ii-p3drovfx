@@ -206,6 +206,23 @@ Item {
             padding: 2
             colSymbol: Appearance.colors.colOnErrorContainer
         }
+
+        // Your local setting for this person, not theirs: muted for you, or
+        // turned away from Discord's 100%.
+        MaterialShapeWrappedMaterialSymbol {
+            readonly property real volume: root.participant?.volume ?? 100
+            readonly property bool localMuted: root.participant?.localMute === true
+            visible: localMuted || Math.abs(volume - 100) >= 1
+            anchors.left: parent.left
+            anchors.bottom: parent.bottom
+            implicitSize: 20
+            shape: localMuted ? MaterialShape.Shape.SoftBurst : MaterialShape.Shape.Pill
+            color: localMuted ? Appearance.colors.colErrorContainer : Appearance.colors.colSecondaryContainer
+            text: localMuted || volume <= 0 ? "volume_off" : (volume < 100 ? "volume_down" : "volume_up")
+            iconSize: 12
+            padding: 2
+            colSymbol: localMuted ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnSecondaryContainer
+        }
     }
 
     StyledText {

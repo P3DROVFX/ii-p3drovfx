@@ -32,8 +32,14 @@ class RaycastFeatureContracts(unittest.TestCase):
             self.assertIn(f"property JsonObject {module}: JsonObject", self.config)
             self.assertIn(f"Config.options.search.modules.{module}.enable = checked",
                           source("modules/settings/configs/widgets/LauncherModulesConfig.qml"))
-        # Grammar spends tokens; it must disappear with the AI policy.
-        self.assertIn("(Config.options.search.modules.grammar?.enable ?? true) && Ai.enabled", self.registry)
+        # Grammar spends tokens; it must disappear with the AI policy. The
+        # gate reads the policy from Config (mirroring Ai.qml's `enabled`)
+        # because evaluating Ai.enabled from this registry's descriptors would
+        # construct the whole Ai singleton.
+        self.assertIn("readonly property bool aiPolicyEnabled: Number(Config.options?.policies?.ai ?? 1) !== 0", self.registry)
+        self.assertIn("(Config.options.search.modules.grammar?.enable ?? true) && root.aiPolicyEnabled", self.registry)
+        # ...and the mirror must stay in sync with the service it mirrors.
+        self.assertIn("readonly property int aiPolicy: Number(Config.options?.policies?.ai ?? 1)", source("services/Ai.qml"))
 
     def test_content_search_is_prefix_only_streamed_and_capped(self):
         self.assertIn('property string fileContent: "\'"', self.config)
@@ -70,7 +76,10 @@ class RaycastFeatureContracts(unittest.TestCase):
         self.assertIn("ratesAge > 24 * 60 * 60 * 1000", self.launcher)
         # "10 things to do" parses as a derived unit; it must not be shown.
         self.assertIn("if (!namesTarget)\n                        return;", self.launcher)
-        self.assertIn("root.recordCalculation(root.mathExpression, root.mathResult);", self.launcher)
+        # The row captures its result when built: running it closes Search,
+        # and the query reset clears `mathResult` before the action runs.
+        self.assertIn("root.recordCalculation(expression, result);", self.launcher)
+        self.assertIn("})(root.mathResult, root.mathExpression)", self.launcher)
         persistent = source("modules/common/Persistent.qml")
         self.assertIn("property list<var> calculatorHistory: []", persistent)
         self.assertIn("property real exchangeRatesUpdatedAt: 0", persistent)

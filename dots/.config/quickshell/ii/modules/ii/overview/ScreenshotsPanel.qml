@@ -265,6 +265,10 @@ Item {
                     wrapMode: Text.Wrap
                     color: Appearance.colors.colSubtext
                 }
+
+                TouchpadScrollHandler {
+                    flickable: screenshotList
+                }
             }
 
             Item {

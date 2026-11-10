@@ -124,6 +124,20 @@ ContentPage {
                 }
             }
 
+            ConfigSlider {
+                buttonIcon: "swap_vert"
+                text: Translation.tr("Line spacing")
+                enabled: Config.options.background.widgets.clock_digital.vertical
+                usePercentTooltip: false
+                value: Config.options.background.widgets.clock_digital.lineSpacing
+                from: -100
+                to: 200
+                stepSize: 1
+                onValueChanged: {
+                    Config.options.background.widgets.clock_digital.lineSpacing = value;
+                }
+            }
+
             Item { Layout.preferredHeight: 8 }
 
             ContentSubsectionLabel {

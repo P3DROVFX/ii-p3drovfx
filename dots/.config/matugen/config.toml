@@ -1,6 +1,17 @@
 [config]
 version_check = false
 
+# Harmonized accent hues (blended toward the wallpaper source) for app themes
+# that need more than the three M3 accents, e.g. syntax highlighting.
+[config.custom_colors]
+code_red = "#E53935"
+code_orange = "#FB8C00"
+code_yellow = "#FDD835"
+code_green = "#43A047"
+code_cyan = "#00ACC1"
+code_blue = "#1E88E5"
+code_magenta = "#AB47BC"
+
 [templates.m3colors]
 input_path = '~/.config/matugen/templates/colors.json'
 output_path = '~/.local/state/quickshell/user/generated/colors.json'
@@ -32,3 +43,22 @@ output_path = '~/.local/state/quickshell/user/generated/color.txt'
 [templates.wallpaper]
 input_path = '~/.config/matugen/templates/wallpaper.txt'
 output_path = '~/.local/state/quickshell/user/generated/wallpaper/path.txt'
+
+[templates.vscode]
+input_path = '~/.config/matugen/templates/vscode/ii-material-you.json'
+output_path = '~/.local/state/quickshell/user/generated/vscode/theme.json'
+
+[templates.vesktop]
+input_path = '~/.config/matugen/templates/vesktop/Material-Discord.theme.css'
+output_path = '~/.config/vesktop/themes/Material-Discord.theme.css'
+
+# Kvantum theme for Qt apps (Dolphin); rebuild the templates with
+# quickshell/ii/scripts/kvantum/build_m3e_theme.py. Running apps keep the old
+# colours until restarted.
+[templates.kvantum_svg]
+input_path = '~/.config/matugen/templates/kvantum/MaterialYouExpressive.svg'
+output_path = '~/.config/Kvantum/MaterialYouExpressive/MaterialYouExpressive.svg'
+
+[templates.kvantum_kvconfig]
+input_path = '~/.config/matugen/templates/kvantum/MaterialYouExpressive.kvconfig'
+output_path = '~/.config/Kvantum/MaterialYouExpressive/MaterialYouExpressive.kvconfig'

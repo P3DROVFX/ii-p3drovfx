@@ -33,6 +33,109 @@ Item {
 
     readonly property bool editing: root.mode === "edit" || root.mode === "create"
     readonly property bool open: root.mode !== ""
+    property bool showShortcutHints: false
+    property bool ctrlPressed: false
+    readonly property bool hintsVisible: root.showShortcutHints || root.ctrlPressed
+
+    function handleKey(event) {
+        if (!root.open)
+            return false;
+
+        if (event.key === Qt.Key_Control) {
+            root.ctrlPressed = true;
+            return false;
+        }
+
+        if (event.key === Qt.Key_Escape) {
+            root.close();
+            return true;
+        }
+
+        const ctrl = Boolean(event.modifiers & Qt.ControlModifier);
+
+        if (root.mode === "create" || root.mode === "edit") {
+            if (ctrl && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)) {
+                root.submit();
+                return true;
+            }
+            if (ctrl && event.key === Qt.Key_D && root.mode === "edit" && !root.eventReadOnly) {
+                root.requestDelete();
+                return true;
+            }
+            return false;
+        }
+
+        if (root.mode === "details") {
+            if (ctrl && (event.key === Qt.Key_E || event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
+                && !root.eventReadOnly && !root.sportsEvent && !root.birthdayEvent) {
+                root.startEdit(root.event);
+                return true;
+            }
+            if (ctrl && event.key === Qt.Key_R && !root.sportsEvent && !root.birthdayEvent) {
+                root.datePickerRequested("reschedule", root.event?.startDate ?? root.day);
+                return true;
+            }
+            if (ctrl && event.key === Qt.Key_D && !root.eventReadOnly) {
+                root.requestDelete();
+                return true;
+            }
+            if (ctrl && event.key === Qt.Key_F && !root.sportsEvent) {
+                root.focusOnEvent();
+                return true;
+            }
+            if (ctrl && event.key === Qt.Key_O && !root.sportsEvent && !root.birthdayEvent) {
+                if (root.attachedNoteIndex() >= 0) root.openAttachedNote();
+                else root.attachNote();
+                return true;
+            }
+            if (ctrl && event.key === Qt.Key_H && !root.detailsOnly && (root.sportsListOnly ? root.daySports.length > 0 : root.dayEvents.length > 1)) {
+                if (root.sportsListOnly) root.showSportsDay(root.day);
+                else root.showDay(root.day);
+                return true;
+            }
+            return false;
+        }
+
+        if (root.mode === "scope") {
+            if (event.key === Qt.Key_1) {
+                root.chooseScope("this");
+                return true;
+            }
+            if (event.key === Qt.Key_2) {
+                root.chooseScope("future");
+                return true;
+            }
+            if (event.key === Qt.Key_3 || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                root.chooseScope("all");
+                return true;
+            }
+            return false;
+        }
+
+        if (root.mode === "day") {
+            if (ctrl && event.key === Qt.Key_N) {
+                root.startCreate(root.day);
+                return true;
+            }
+            return false;
+        }
+
+        return false;
+    }
+
+    function releaseKey(event) {
+        if (event.key === Qt.Key_Control || !(event.modifiers & Qt.ControlModifier)) {
+            root.ctrlPressed = false;
+        }
+    }
+
+    function handleEscape() {
+        if (root.open) {
+            root.close();
+            return true;
+        }
+        return false;
+    }
 
     // ─── Editor state ───
     property date formDate: new Date()
@@ -42,6 +145,10 @@ Item {
     property int formEndMinutes: 10 * 60
     property bool formAllDay: false
     property string createKind: "event"
+
+    onFormDateChanged: root.emitCreateSpan()
+    onFormStartMinutesChanged: root.emitCreateSpan()
+    onFormEndMinutesChanged: root.emitCreateSpan()
     property string formUrl: ""
     property string formLocation: ""
     property string formCalendar: ""
@@ -94,6 +201,8 @@ Item {
     signal taskCompletionRequested(var task)
     signal timePickerRequested(string which, int startHour, int startMinute)
     signal datePickerRequested(string purpose, var date)
+    /** The new event's date and span, so the grid can draw its draft block. */
+    signal createSpanChanged(var date, int startMinutes, int endMinutes)
 
     // ─── Entry points ───
     function showDay(date) {
@@ -338,6 +447,21 @@ Item {
         titleInput.forceActiveFocus();
     }
 
+    /** Mirrors the editor's span into the grid while a new event is being built. */
+    function emitCreateSpan() {
+        if (root.mode === "create" && root.createKind === "event")
+            root.createSpanChanged(root.formDate, root.formStartMinutes, root.formEndMinutes);
+    }
+
+    /** Takes a span set by dragging the grid's draft; the title and the rest stay. */
+    function setCreateSpan(date, startMinutes, endMinutes) {
+        if (root.mode !== "create" || root.createKind !== "event" || !date)
+            return;
+        root.formDate = H.startOfDay(date);
+        root.formStartMinutes = startMinutes;
+        root.formEndMinutes = endMinutes;
+    }
+
     function startEdit(eventData) {
         if (!eventData)
             return;
@@ -560,6 +684,7 @@ Item {
     readonly property var dayBirthdays: BirthdaysService.birthdaysForDate(root.day)
     readonly property var daySports: SportsService.gamesForDate(root.day)
     readonly property var dayTasks: Todo.getTasksByDate(root.day).filter(task => !task.done)
+        .concat(RemindersService.timetableItems[H.dayKeyOf(root.day)] ?? [])
     readonly property var dayEvents: root.sportsListOnly ? root.daySports : root.dayCalendarEvents.concat(root.dayBirthdays, root.daySports, root.dayTasks)
     readonly property var dayHolidays: (Config.options.calendar.holidays.enable && Config.options.calendar.holidays.showInMonthView) ? (Holidays.byDayKey[H.dayKeyOf(root.day)] ?? []) : []
     readonly property color accent: (root.sportsEvent || root.birthdayEvent)
@@ -569,6 +694,23 @@ Item {
 
     readonly property bool eventAllDay: root.birthdayEvent || (root.event ? CalendarService.isAllDayEvent(root.event) : false)
     readonly property bool eventReadOnly: root.event?.readOnly === true
+
+    // Clock alarm tied to this event (AlarmService matches it by uid and date).
+    readonly property var eventAlarm: {
+        AlarmService.alarms;
+        const index = AlarmService.alarmIndexForEvent(root.event);
+        return index >= 0 ? AlarmService.alarms[index] : null;
+    }
+    readonly property bool eventAlarmOn: Boolean(root.eventAlarm?.enabled)
+    readonly property int eventAlarmLead: root.eventAlarm?.leadMinutes ?? (Config.options.clockApp?.timetableLeadMinutes ?? 15)
+    readonly property bool eventAlarmPossible: !!root.event?.startDate && !root.eventAllDay && !root.sportsEvent
+        && root.event.startDate.getTime() > Date.now()
+
+    function setEventAlarm(on, leadMinutes) {
+        AlarmService.removeAlarmForEvent(root.event);
+        if (on)
+            AlarmService.addAlarmForEvent(root.event, leadMinutes);
+    }
     readonly property int eventStartMinutes: root.event ? root.event.startDate.getHours() * 60 + root.event.startDate.getMinutes() : 0
     readonly property int eventEndMinutes: root.event ? root.event.endDate.getHours() * 60 + root.event.endDate.getMinutes() : 0
 
@@ -645,16 +787,18 @@ Item {
                     colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
                     onClicked: root.sportsListOnly ? root.showSportsDay(root.day) : root.showDay(root.day)
 
-                    contentItem: MaterialSymbol {
+                    contentItem: TaskShortcutContent {
                         anchors.centerIn: parent
-                        text: "list"
+                        symbol: "list"
+                        shortcut: "Ctrl\nH"
+                        showHint: root.hintsVisible
                         iconSize: Appearance.font.pixelSize.larger
                         color: Appearance.colors.colOnSurfaceVariant
                     }
 
                     StyledToolTip {
                         extraVisibleCondition: backToDetails.hovered
-                        text: root.sportsListOnly ? Translation.tr("Sports") : Translation.tr("All events this day")
+                        text: (root.sportsListOnly ? Translation.tr("Sports") : Translation.tr("All events this day")) + " (Ctrl+H)"
                     }
                 }
 
@@ -668,16 +812,18 @@ Item {
                     colBackgroundHover: Appearance.colors.colErrorContainer
                     onClicked: root.requestDelete()
 
-                    contentItem: MaterialSymbol {
+                    contentItem: TaskShortcutContent {
                         anchors.centerIn: parent
-                        text: "delete"
+                        symbol: "delete"
+                        shortcut: "Ctrl\nD"
+                        showHint: root.hintsVisible
                         iconSize: Appearance.font.pixelSize.larger
                         color: deleteButton.hovered ? Appearance.colors.colOnErrorContainer : Appearance.colors.colError
                     }
 
                     StyledToolTip {
                         extraVisibleCondition: deleteButton.hovered
-                        text: Translation.tr("Delete event")
+                        text: Translation.tr("Delete event") + " (Ctrl+D)"
                     }
                 }
 
@@ -691,16 +837,18 @@ Item {
                     colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
                     onClicked: root.focusOnEvent()
 
-                    contentItem: MaterialSymbol {
+                    contentItem: TaskShortcutContent {
                         anchors.centerIn: parent
-                        text: "timer"
+                        symbol: "timer"
+                        shortcut: "Ctrl\nF"
+                        showHint: root.hintsVisible
                         iconSize: Appearance.font.pixelSize.larger
                         color: Appearance.colors.colOnSurfaceVariant
                     }
 
                     StyledToolTip {
                         extraVisibleCondition: focusButton.hovered
-                        text: Translation.tr("Start a countdown for the time left in this event")
+                        text: Translation.tr("Start a countdown for the time left in this event") + " (Ctrl+F)"
                     }
                 }
 
@@ -715,20 +863,23 @@ Item {
                     colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
                     onClicked: noteButton.hasNote ? root.openAttachedNote() : root.attachNote()
 
-                    contentItem: MaterialSymbol {
+                    contentItem: TaskShortcutContent {
                         anchors.centerIn: parent
-                        text: noteButton.hasNote ? "description" : "note_add"
+                        symbol: noteButton.hasNote ? "description" : "note_add"
+                        shortcut: "Ctrl\nO"
+                        showHint: root.hintsVisible
                         iconSize: Appearance.font.pixelSize.larger
                         color: noteButton.hasNote ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant
                     }
 
                     StyledToolTip {
                         extraVisibleCondition: noteButton.hovered
-                        text: noteButton.hasNote ? Translation.tr("Open attached note") : Translation.tr("Attach a note to this event")
+                        text: (noteButton.hasNote ? Translation.tr("Open attached note") : Translation.tr("Attach a note to this event")) + " (Ctrl+O)"
                     }
                 }
 
                 RippleButton {
+                    id: closeSidebarButton
                     implicitWidth: 38
                     implicitHeight: 38
                     buttonRadius: Appearance.rounding.full
@@ -736,11 +887,18 @@ Item {
                     colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
                     onClicked: root.close()
 
-                    contentItem: MaterialSymbol {
+                    contentItem: TaskShortcutContent {
                         anchors.centerIn: parent
-                        text: "close"
+                        symbol: "close"
+                        shortcut: "Esc"
+                        showHint: root.hintsVisible
                         iconSize: Appearance.font.pixelSize.larger
                         color: Appearance.colors.colOnSurfaceVariant
+                    }
+
+                    StyledToolTip {
+                        extraVisibleCondition: closeSidebarButton.hovered
+                        text: Translation.tr("Close") + " (Esc)"
                     }
                 }
             }
@@ -1754,6 +1912,90 @@ Item {
                                     onGoogleColorSelected: colorId => GoogleCalendarService.setEventColor(root.event?.uid ?? "", colorId)
                                 }
                             }
+
+                            // Alarm: the clock rings `lead` minutes before the event starts.
+                            Rectangle {
+                                id: eventAlarmRow
+                                visible: root.eventAlarmPossible
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 56
+                                radius: Appearance.rounding.small
+                                color: root.eventAlarmOn ? Appearance.colors.colSecondaryContainer : Appearance.m3colors.m3surfaceContainerHighest
+
+                                Behavior on color {
+                                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(eventAlarmRow)
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.setEventAlarm(!root.eventAlarmOn, root.eventAlarmLead)
+                                }
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 10
+                                    anchors.rightMargin: 10
+                                    spacing: 10
+
+                                    MaterialShapeWrappedMaterialSymbol {
+                                        text: root.eventAlarmOn ? "alarm_on" : "alarm_add"
+                                        iconSize: 18
+                                        padding: 9
+                                        shape: MaterialShape.Shape.Cookie7Sided
+                                        color: root.eventAlarmOn ? Appearance.colors.colTertiary : Appearance.colors.colPrimaryContainer
+                                        colSymbol: root.eventAlarmOn ? Appearance.colors.colOnTertiary : Appearance.colors.colOnPrimaryContainer
+                                        rotation: root.eventAlarmOn ? 30 : 0
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 0
+
+                                        StyledText {
+                                            Layout.fillWidth: true
+                                            text: Translation.tr("Alarm")
+                                            font.pixelSize: Appearance.font.pixelSize.small
+                                            font.weight: Font.Bold
+                                            color: root.eventAlarmOn ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurface
+                                            elide: Text.ElideRight
+                                        }
+
+                                        StyledText {
+                                            Layout.fillWidth: true
+                                            text: root.eventAlarmOn
+                                                ? Translation.tr("Rings at %1").arg(String(root.eventAlarm?.time ?? ""))
+                                                : Translation.tr("Ring before it starts")
+                                            font.pixelSize: Appearance.font.pixelSize.smaller
+                                            color: root.eventAlarmOn ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurfaceVariant
+                                            elide: Text.ElideRight
+                                        }
+                                    }
+
+                                    StyledSwitch {
+                                        checked: root.eventAlarmOn
+                                        checkable: false
+                                        onClicked: root.setEventAlarm(!root.eventAlarmOn, root.eventAlarmLead)
+                                    }
+                                }
+                            }
+
+                            Flow {
+                                Layout.fillWidth: true
+                                visible: root.eventAlarmPossible && root.eventAlarmOn
+                                spacing: 6
+
+                                Repeater {
+                                    model: [0, 5, 10, 15, 30, 60]
+
+                                    delegate: DurationChip {
+                                        required property int modelData
+                                        label: modelData === 0 ? Translation.tr("At start") : Translation.tr("%1 min before").arg(modelData)
+                                        selected: root.eventAlarmLead === modelData
+                                        onTriggered: root.setEventAlarm(true, modelData)
+                                    }
+                                }
+                            }
                             }
                         }
                     }
@@ -1771,12 +2013,14 @@ Item {
                         SecondaryAction {
                             label: Translation.tr("Reschedule")
                             symbol: "event_repeat"
+                            shortcutText: "Ctrl+R"
                             onTriggered: root.datePickerRequested("reschedule", root.event?.startDate ?? root.day)
                         }
 
                         PrimaryAction {
                             label: Translation.tr("Edit event")
                             symbol: "edit"
+                            shortcutText: "Ctrl+E"
                             onTriggered: root.startEdit(root.event)
                         }
                     }
@@ -2320,9 +2564,9 @@ Item {
                         anchors.centerIn: parent; width: Math.min(parent.width, 300); spacing: 10
                         StyledText { Layout.fillWidth: true; text: root.headerTitle; font.pixelSize: Appearance.font.pixelSize.large; font.weight: Font.Bold; wrapMode: Text.Wrap; color: Appearance.colors.colOnSurface }
                         StyledText { Layout.fillWidth: true; text: root.pendingMutationFields ? Translation.tr("Only this event becomes an exception in the series.") : Translation.tr("Choose how much of this series changes."); wrapMode: Text.Wrap; color: Appearance.colors.colOnSurfaceVariant }
-                        SecondaryAction { Layout.fillWidth: true; label: Translation.tr("Only this event"); symbol: "event"; onTriggered: root.chooseScope("this") }
-                        SecondaryAction { Layout.fillWidth: true; label: Translation.tr("This and future"); symbol: "event_repeat"; onTriggered: root.chooseScope("future") }
-                        PrimaryAction { Layout.fillWidth: true; label: Translation.tr("Entire series"); symbol: "all_inclusive"; onTriggered: root.chooseScope("all") }
+                        SecondaryAction { Layout.fillWidth: true; label: Translation.tr("Only this event"); symbol: "event"; shortcutText: "1"; onTriggered: root.chooseScope("this") }
+                        SecondaryAction { Layout.fillWidth: true; label: Translation.tr("This and future"); symbol: "event_repeat"; shortcutText: "2"; onTriggered: root.chooseScope("future") }
+                        PrimaryAction { Layout.fillWidth: true; label: Translation.tr("Entire series"); symbol: "all_inclusive"; shortcutText: "3"; onTriggered: root.chooseScope("all") }
                     }
                 }
             }
@@ -2356,48 +2600,52 @@ Item {
     // width, so a bare RowLayout ends up with the icon pinned left and the
     // label adrift. `centerContent` is the wrapper that keeps the pair tight
     // and centred.
-    component PrimaryAction: RippleButtonWithIcon {
+    component PrimaryAction: RippleButton {
         id: primaryAction
         property string label: ""
         property string symbol: ""
+        property string shortcutText: "Ctrl+↵"
+        property bool showShortcut: root.hintsVisible
 
         signal triggered
 
         Layout.fillWidth: true
         implicitHeight: 48
         buttonRadius: Appearance.rounding.full
-        centerContent: true
-        materialIcon: primaryAction.symbol
-        materialIconFill: false
-        mainText: primaryAction.label
-        iconPixelSize: Appearance.font.pixelSize.larger
-        textPixelSize: Appearance.font.pixelSize.small
-        mainTextWeight: Font.Bold
-        colText: Appearance.colors.colOnPrimary
         colBackground: Appearance.colors.colPrimary
         colBackgroundHover: Appearance.colors.colPrimaryHover
         colBackgroundActive: Appearance.colors.colPrimaryActive
         onClicked: primaryAction.triggered()
+
+        contentItem: TaskShortcutContent {
+            anchors.centerIn: parent
+            symbol: primaryAction.symbol
+            labelText: primaryAction.label
+            shortcut: primaryAction.shortcutText
+            showHint: primaryAction.showShortcut
+            iconSize: Appearance.font.pixelSize.larger
+            labelPixelSize: Appearance.font.pixelSize.small
+            color: Appearance.colors.colOnPrimary
+        }
+
+        StyledToolTip {
+            extraVisibleCondition: primaryAction.hovered && primaryAction.shortcutText.length > 0
+            text: (primaryAction.label.length > 0 ? primaryAction.label : "") + " (" + primaryAction.shortcutText + ")"
+        }
     }
 
-    component SecondaryAction: RippleButtonWithIcon {
+    component SecondaryAction: RippleButton {
         id: secondaryAction
         property string label: ""
         property string symbol: ""
+        property string shortcutText: "Esc"
+        property bool showShortcut: root.hintsVisible
 
         signal triggered
 
         Layout.fillWidth: true
         implicitHeight: 46
         buttonRadius: Appearance.rounding.full
-        centerContent: true
-        materialIcon: secondaryAction.symbol
-        materialIconFill: false
-        mainText: secondaryAction.label
-        iconPixelSize: Appearance.font.pixelSize.large
-        textPixelSize: Appearance.font.pixelSize.small
-        mainTextWeight: Font.DemiBold
-        colText: Appearance.colors.colPrimary
         colBackground: "transparent"
         colBackgroundHover: ColorUtils.applyAlpha(Appearance.colors.colPrimary, 0.12)
         colBackgroundActive: ColorUtils.applyAlpha(Appearance.colors.colPrimary, 0.2)
@@ -2410,6 +2658,22 @@ Item {
             dashLength: 5
             gapLength: 4
             radius: Appearance.rounding.full
+        }
+
+        contentItem: TaskShortcutContent {
+            anchors.centerIn: parent
+            symbol: secondaryAction.symbol
+            labelText: secondaryAction.label
+            shortcut: secondaryAction.shortcutText
+            showHint: secondaryAction.showShortcut
+            iconSize: Appearance.font.pixelSize.large
+            labelPixelSize: Appearance.font.pixelSize.small
+            color: Appearance.colors.colPrimary
+        }
+
+        StyledToolTip {
+            extraVisibleCondition: secondaryAction.hovered && secondaryAction.shortcutText.length > 0
+            text: (secondaryAction.label.length > 0 ? secondaryAction.label : "") + " (" + secondaryAction.shortcutText + ")"
         }
     }
 

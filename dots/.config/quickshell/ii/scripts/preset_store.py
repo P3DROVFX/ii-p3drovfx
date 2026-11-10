@@ -24,6 +24,8 @@ Commands:
   preview <name>
   publish <name> [--repo NAME] [--description TEXT] [--notes TEXT] [--private]
   push-update <name> [--version V | --bump major|minor|patch] [--notes TEXT]
+  screenshots <name>
+  set-screenshots <name> [--screenshot PATH ...]
   links
   unlink <name>
   uninstall <name>
@@ -152,11 +154,11 @@ def emit(payload):
     print(json.dumps(payload), flush=True)
 
 
-def run(args, cwd=None, timeout=GIT_TIMEOUT, stdin_text=None):
+def run(args, cwd=None, timeout=GIT_TIMEOUT, stdin_text=None, env=None):
     """Run a command and hand back (code, stdout, stderr), never raising."""
     try:
         proc = subprocess.run(args, cwd=cwd, input=stdin_text, capture_output=True,
-                              text=True, timeout=timeout)
+                              text=True, timeout=timeout, env=env)
         return proc.returncode, proc.stdout.strip(), proc.stderr.strip()
     except FileNotFoundError:
         return 127, '', '%s is not installed' % args[0]
@@ -168,6 +170,52 @@ def run(args, cwd=None, timeout=GIT_TIMEOUT, stdin_text=None):
 
 def git(args, cwd, timeout=GIT_TIMEOUT):
     return run(['git'] + list(args), cwd=cwd, timeout=timeout)
+
+
+# Installing and updating someone else's preset is a read of a public
+# repository and must work with no GitHub account at all. The user's own git
+# config can stand in the way: a `url."git@github.com:".insteadOf` rewrite
+# turns the https clone into an SSH one that needs a key GitHub knows, and a
+# credential helper or askpass can stall on a prompt nobody sees. Downloads
+# therefore try a config-free, prompt-free git first and only fall back to the
+# user's setup (proxies, a private repository of their own) when that fails.
+ANONYMOUS_GIT_ENV = {
+    'GIT_CONFIG_GLOBAL': os.devnull,
+    'GIT_CONFIG_NOSYSTEM': '1',
+    'GIT_TERMINAL_PROMPT': '0',
+    'GIT_ASKPASS': 'true',
+    'SSH_ASKPASS': 'true',
+    'GCM_INTERACTIVE': 'never',
+}
+
+
+def git_download(args, cwd, timeout=GIT_TIMEOUT):
+    """clone/fetch/pull of a store repository, anonymous first."""
+    env = dict(os.environ, **ANONYMOUS_GIT_ENV)
+    code, out, err = run(['git'] + list(args), cwd=cwd, timeout=timeout, env=env)
+    if code == 0:
+        return code, out, err
+    # A failed clone can leave a partial directory behind; the retry needs
+    # the target free again.
+    if args and args[0] == 'clone' and os.path.exists(args[-1]):
+        shutil.rmtree(args[-1], ignore_errors=True)
+    retry = run(['git'] + list(args), cwd=cwd, timeout=timeout,
+                env=dict(os.environ, GIT_TERMINAL_PROMPT='0'))
+    # The anonymous error is the one that says what is wrong with the
+    # repository itself; the fallback's usually only adds the user's config.
+    return retry if retry[0] == 0 else (retry[0], retry[1], err or retry[2])
+
+
+def git_error(err, fallback):
+    """The line of git's stderr worth showing, not its trailing advice."""
+    lines = [line.strip() for line in (err or '').splitlines() if line.strip()]
+    # GitHub answers a missing or private repository with an auth challenge.
+    if any('Authentication failed' in line or 'could not read Username' in line for line in lines):
+        return 'GitHub has no public repository there (it may be private or deleted).'
+    for line in lines:
+        if line.lower().startswith(('fatal:', 'error:')):
+            return line.split(':', 1)[1].strip() or fallback
+    return lines[-1] if lines else fallback
 
 
 def gh(args, timeout=GH_TIMEOUT, stdin_text=None):
@@ -248,6 +296,25 @@ def read_json(path):
 def image_ext(path):
     ext = os.path.splitext(path)[1].lower()
     return ext if ext in IMAGE_EXTS else None
+
+
+def wallpaper_ext(path):
+    """A wallpaper may be a video; every other asset is a picture."""
+    ext = os.path.splitext(path)[1].lower()
+    return ext if ext in IMAGE_EXTS or ext in presets_helper.VIDEO_EXTS else None
+
+
+def card_preview(screenshots, poster, wallpaper, fallback):
+    """What a store card shows: a screenshot, else the video's poster, else
+    the wallpaper itself when it is a picture. A video URL is never handed to
+    the preview downloader, which can only cache an image."""
+    if screenshots:
+        return screenshots[0]
+    if poster:
+        return poster
+    if wallpaper and image_ext(str(wallpaper)):
+        return wallpaper
+    return fallback
 
 
 # ---------------------------------------------------------------------------
@@ -773,8 +840,8 @@ def discover_result(repo, installed, kind=None, meta_data=None, metadata_ready=F
             wallpaper = preset.get('wallpaper')
             screenshots = preset.get('screenshots') or []
             # banner is the sidebar decoration, not a screenshot of the look.
-            preview = (screenshots[0] if screenshots else None) or wallpaper \
-                or '%s/wallpaper.png' % path
+            preview = card_preview(screenshots, preset.get('poster'), wallpaper,
+                                   '%s/wallpaper.png' % path)
             wallpaper_path = wallpaper or '%s/wallpaper.png' % path
             entry = dict(base)
             entry.update({
@@ -793,7 +860,7 @@ def discover_result(repo, installed, kind=None, meta_data=None, metadata_ready=F
     if kind == 'preset' and isinstance(meta_data, dict):
         wallpaper = meta_data.get('wallpaper')
         screenshots = meta_data.get('screenshots') or []
-        preview = (screenshots[0] if screenshots else None) or wallpaper or 'wallpaper.png'
+        preview = card_preview(screenshots, meta_data.get('poster'), wallpaper, 'wallpaper.png')
         entry = dict(base)
         entry.update({
             'name': meta_data.get('name') or base['name'],
@@ -1082,13 +1149,14 @@ def cmd_fetch_manifest(slug, stream=False):
 # ---------------------------------------------------------------------------
 
 def clear_preset_assets(name):
-    for pattern in ('%s.*' % name, '%s_profile.*' % name, '%s_banner.*' % name):
+    for pattern in ('%s.*' % name, '%s_profile.*' % name, '%s_banner.*' % name,
+                    '%s_screen[0-9]*.*' % name):
         for path in glob.glob(os.path.join(presets_dir(), pattern)):
             if not path.lower().endswith('.json'):
                 os.remove(path)
 
 
-def repo_asset(directory, declared, stem):
+def repo_asset(directory, declared, stem, accept=image_ext):
     """Locate a shipped image, by name if the manifest gives one.
 
     A preset written by hand often just drops wallpaper.png at the repo root
@@ -1097,10 +1165,10 @@ def repo_asset(directory, declared, stem):
     """
     if isinstance(declared, str) and declared and not declared.startswith('/') and '..' not in declared:
         path = os.path.join(directory, declared)
-        if image_ext(path) and os.path.isfile(path):
+        if accept(path) and os.path.isfile(path):
             return path
     for candidate in sorted(glob.glob(os.path.join(directory, '%s.*' % stem))):
-        if image_ext(candidate) and os.path.isfile(candidate):
+        if accept(candidate) and os.path.isfile(candidate):
             return candidate
     return None
 
@@ -1124,12 +1192,18 @@ def materialise(directory, manifest, name):
     # who installed it.
     presets_helper.sanitize(source, target)
 
-    for key, suffix in (('wallpaper', ''), ('banner', '_banner')):
-        asset = repo_asset(directory, manifest.get(key), key)
+    for key, suffix, accept in (('wallpaper', '', wallpaper_ext), ('banner', '_banner', image_ext)):
+        asset = repo_asset(directory, manifest.get(key), key, accept)
         if not asset:
             continue
-        ext = image_ext(asset)
+        ext = accept(asset)
         shutil.copy2(asset, os.path.join(presets_dir(), '%s%s%s' % (name, suffix, ext)))
+    # Per-screen wallpapers, named by the asset id the config refers to.
+    for candidate in sorted(glob.glob(os.path.join(directory, 'screen[0-9]*.*'))):
+        stem = os.path.splitext(os.path.basename(candidate))[0]
+        ext = image_ext(candidate)
+        if ext and presets_helper.SCREEN_ASSET_RE.match(stem) and os.path.isfile(candidate):
+            shutil.copy2(candidate, os.path.join(presets_dir(), '%s_%s%s' % (name, stem, ext)))
     return target
 
 
@@ -1151,10 +1225,10 @@ def clone(slug, directory):
     os.makedirs(store_dir(), exist_ok=True)
     # Deliberately not --depth 1: a shallow clone cannot show what changed
     # between the version installed and the version being offered.
-    code, _, err = git(['clone', '%s%s.git' % (GIT_BASE, slug), directory], cwd=store_dir())
+    code, _, err = git_download(['clone', '%s%s.git' % (GIT_BASE, slug), directory], cwd=store_dir())
     if code != 0:
         shutil.rmtree(directory, ignore_errors=True)
-        raise StoreError(err.splitlines()[-1] if err else 'Could not download the preset.')
+        raise StoreError(git_error(err, 'Could not download the preset.'))
 
 
 def head_commit(directory):
@@ -1176,9 +1250,9 @@ def cmd_install(slug, name=None, force=False):
         is_new_clone = True
     else:
         # Clone already exists on disk; pull fast-forward to get latest commits
-        code, _, _ = git(['fetch', '--quiet', 'origin'], cwd=directory)
+        code, _, _ = git_download(['fetch', '--quiet', 'origin'], cwd=directory)
         if code == 0:
-            git(['pull', '--ff-only', '--quiet'], cwd=directory)
+            git_download(['pull', '--ff-only', '--quiet'], cwd=directory)
 
     subpath = ''
     if preset_id:
@@ -1258,10 +1332,10 @@ def cmd_check_updates():
                              'error': 'Its local copy is gone.'})
             continue
         if directory not in fetched_dirs:
-            code, _, err = git(['fetch', '--quiet', 'origin'], cwd=directory, timeout=90)
+            code, _, err = git_download(['fetch', '--quiet', 'origin'], cwd=directory, timeout=90)
             if code != 0:
                 problems.append({'name': name, 'repo': link.get('repo', ''),
-                                 'error': err.splitlines()[-1] if err else 'Could not reach GitHub.'})
+                                 'error': git_error(err, 'Could not reach GitHub.')})
                 continue
             fetched_dirs.add(directory)
         ref = upstream_ref(directory)
@@ -1275,9 +1349,13 @@ def cmd_check_updates():
         manifest_file = os.path.join(subpath, MANIFEST_NAME) if subpath else MANIFEST_NAME
         manifest = remote_manifest(directory, ref, manifest_file)
         version = str(manifest.get('version', '') or '')
+        installed_version = str(link.get('version', '') or '')
+        # A commit that is not a release (new screenshots, a README) changes
+        # nothing an installer applies, so it is not an update.
+        if version and installed_version and version_key(version) <= version_key(installed_version):
+            continue
         # Only the entries newer than what is installed: a preset that has
         # shipped ten times should not read like ten pending updates.
-        installed_version = str(link.get('version', '') or '')
         changelog = [entry for entry in (manifest.get('changelog') or [])
                      if isinstance(entry, dict)
                      and version_key(entry.get('version')) > version_key(installed_version)]
@@ -1303,9 +1381,9 @@ def cmd_pull(name, force=False):
     if not os.path.isdir(os.path.join(directory, '.git')):
         raise StoreError('The local copy of "%s" is gone. Reinstall it from the store.' % name)
 
-    code, _, err = git(['fetch', '--quiet', 'origin'], cwd=directory, timeout=90)
+    code, _, err = git_download(['fetch', '--quiet', 'origin'], cwd=directory, timeout=90)
     if code != 0:
-        raise StoreError(err.splitlines()[-1] if err else 'Could not reach GitHub.')
+        raise StoreError(git_error(err, 'Could not reach GitHub.'))
     ref = upstream_ref(directory)
     manifest_file = os.path.join(subpath, MANIFEST_NAME) if subpath else MANIFEST_NAME
     incoming = remote_manifest(directory, ref, manifest_file)
@@ -1316,7 +1394,7 @@ def cmd_pull(name, force=False):
     before = head_commit(directory)
     # --ff-only, always: a preset the author force-pushed should fail loudly
     # rather than leave a half-merged config behind.
-    code, _, err = git(['pull', '--ff-only', '--quiet'], cwd=directory, timeout=120)
+    code, _, err = git_download(['pull', '--ff-only', '--quiet'], cwd=directory, timeout=120)
     if code != 0:
         raise StoreError('The preset\'s history was rewritten, so it cannot be updated in place. '
                          'Remove it and install it again.')
@@ -1399,9 +1477,9 @@ def cmd_diff(name, incoming=False):
     repo_config_rel = os.path.join(subpath, config_file_name) if subpath else config_file_name
 
     if incoming:
-        code, _, err = git(['fetch', '--quiet', 'origin'], cwd=directory, timeout=90)
+        code, _, err = git_download(['fetch', '--quiet', 'origin'], cwd=directory, timeout=90)
         if code != 0:
-            raise StoreError(err.splitlines()[-1] if err else 'Could not reach GitHub.')
+            raise StoreError(git_error(err, 'Could not reach GitHub.'))
         ref = upstream_ref(directory)
         code, out, _ = git(['show', 'HEAD:%s' % repo_config_rel], cwd=directory, timeout=30)
         before = json.loads(out) if code == 0 and out else {}
@@ -1481,12 +1559,17 @@ def cmd_preview(name):
     dropped = sorted('.'.join(path) for path in set(dict(flatten(raw))) - set(kept))
 
     files = [{'name': CONFIG_NAME, 'bytes': config_bytes, 'kind': 'config'}]
-    for kind, asset in (('wallpaper', presets_helper.find_wallpaper_fallback(presets_dir(), name)),
-                        ('banner', presets_helper.find_banner_fallback(presets_dir(), name))):
-        if not asset or not image_ext(asset) or not os.path.isfile(asset):
+    for kind, asset, accept in (
+            ('wallpaper', presets_helper.find_wallpaper_fallback(presets_dir(), name), wallpaper_ext),
+            ('banner', presets_helper.find_banner_fallback(presets_dir(), name), image_ext)):
+        if not asset or not accept(asset) or not os.path.isfile(asset):
             continue
-        files.append({'name': '%s%s' % (kind, image_ext(asset)),
+        files.append({'name': '%s%s' % (kind, accept(asset)),
                       'bytes': os.path.getsize(asset), 'kind': kind})
+    for asset_id, asset in sorted(presets_helper.screen_asset_files(presets_dir(), name).items()):
+        if image_ext(asset):
+            files.append({'name': '%s%s' % (asset_id, image_ext(asset)),
+                          'bytes': os.path.getsize(asset), 'kind': 'screen'})
 
     return {'ok': True, 'name': name, 'total': len(entries),
             'entries': entries, 'flagged': [e for e in entries if e['flagged']],
@@ -1550,15 +1633,20 @@ def stage_screenshots(directory, manifest, screenshots):
     `None` means the caller is not touching them, which is what an update that
     only changes settings wants -- the pictures already published stay.
     An empty list is a deliberate "ship none".
+
+    Sources may be the published pictures themselves, so every one is checked
+    and set aside before the folder is cleared. Names carry a digest: a raw
+    GitHub URL is cached for minutes, and a reordered picture that kept the
+    name "1.png" would be served as the one that used to be first.
     """
     if screenshots is None:
         return manifest
-    shutil.rmtree(os.path.join(directory, SCREENSHOT_DIR), ignore_errors=True)
+    if len(screenshots) > MAX_SCREENSHOTS:
+        raise StoreError('A preset may ship at most %d screenshots.' % MAX_SCREENSHOTS)
+    shot_dir = os.path.join(directory, SCREENSHOT_DIR)
     shipped = []
-    if screenshots:
-        if len(screenshots) > MAX_SCREENSHOTS:
-            raise StoreError('A preset may ship at most %d screenshots.' % MAX_SCREENSHOTS)
-        os.makedirs(os.path.join(directory, SCREENSHOT_DIR), exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='preset-shots-') as holding:
+        held = []
         for index, source in enumerate(screenshots, start=1):
             if not os.path.isfile(source):
                 raise StoreError('The screenshot %s is no longer there.' % os.path.basename(source))
@@ -1568,11 +1656,38 @@ def stage_screenshots(directory, manifest, screenshots):
             if os.path.getsize(source) > MAX_SCREENSHOT_BYTES:
                 raise StoreError('%s is larger than %d MB.'
                                  % (os.path.basename(source), MAX_SCREENSHOT_BYTES // (1024 * 1024)))
-            target = '%s/%d%s' % (SCREENSHOT_DIR, index, ext)
-            shutil.copy2(source, os.path.join(directory, target))
+            copy = os.path.join(holding, '%d%s' % (index, ext))
+            shutil.copy2(source, copy)
+            held.append(copy)
+
+        shutil.rmtree(shot_dir, ignore_errors=True)
+        if held:
+            os.makedirs(shot_dir, exist_ok=True)
+        for index, copy in enumerate(held, start=1):
+            with open(copy, 'rb') as handle:
+                digest = hashlib.sha256(handle.read()).hexdigest()[:8]
+            target = '%s/%d-%s%s' % (SCREENSHOT_DIR, index, digest, image_ext(copy))
+            shutil.copy2(copy, os.path.join(directory, target))
             shipped.append(target)
     manifest['screenshots'] = shipped
     return manifest
+
+
+def index_screenshots(entry, subpath, manifest):
+    """Mirror the manifest's screenshots into its collection index entry.
+
+    Shipping none has to drop the key, or the store keeps showing pictures
+    that are no longer in the repository.
+    """
+    shots = manifest.get('screenshots') or []
+    if shots:
+        entry['screenshots'] = ['%s/%s' % (subpath, s) for s in shots]
+    else:
+        entry.pop('screenshots', None)
+    if manifest.get('poster'):
+        entry['poster'] = '%s/%s' % (subpath, manifest['poster'])
+    else:
+        entry.pop('poster', None)
 
 
 def check_asset_size(path, what):
@@ -1598,21 +1713,44 @@ def stage_payload(directory, name, manifest, screenshots=None):
     presets_helper.sanitize(source, os.path.join(directory, CONFIG_NAME))
 
     for existing in glob.glob(os.path.join(directory, 'wallpaper.*')) + \
-            glob.glob(os.path.join(directory, 'banner.*')):
+            glob.glob(os.path.join(directory, 'banner.*')) + \
+            glob.glob(os.path.join(directory, 'poster.*')) + \
+            glob.glob(os.path.join(directory, 'screen[0-9]*.*')):
         os.remove(existing)
     manifest.pop('wallpaper', None)
     manifest.pop('banner', None)
+    manifest.pop('poster', None)
+    manifest.pop('screens', None)
 
     # The profile picture is never shipped. It is the author's own face, it
     # says nothing about the theme, and a published preset is public.
-    for key, source in (('wallpaper', presets_helper.find_wallpaper_fallback(presets_dir(), name)),
-                        ('banner', presets_helper.find_banner_fallback(presets_dir(), name))):
-        if not source or not image_ext(source):
+    for key, source, accept in (
+            ('wallpaper', presets_helper.find_wallpaper_fallback(presets_dir(), name), wallpaper_ext),
+            ('banner', presets_helper.find_banner_fallback(presets_dir(), name), image_ext)):
+        if not source or not accept(source):
             continue
         check_asset_size(source, key)
-        target = '%s%s' % (key, image_ext(source))
+        target = '%s%s' % (key, accept(source))
         shutil.copy2(source, os.path.join(directory, target))
         manifest[key] = target
+        # A store card is an image: a video wallpaper ships a still of it.
+        if key == 'wallpaper' and presets_helper.is_video(source):
+            seconds = presets_helper.video_frame_seconds(read_json(
+                os.path.join(directory, CONFIG_NAME)), [source])
+            poster = presets_helper.video_poster(source, seconds)
+            if poster:
+                shutil.copy2(poster, os.path.join(directory, 'poster.jpg'))
+                manifest['poster'] = 'poster.jpg'
+    screens = []
+    for asset_id, source in sorted(presets_helper.screen_asset_files(presets_dir(), name).items()):
+        if not image_ext(source):
+            continue
+        check_asset_size(source, 'wallpaper of one screen')
+        target = '%s%s' % (asset_id, image_ext(source))
+        shutil.copy2(source, os.path.join(directory, target))
+        screens.append(target)
+    if screens:
+        manifest['screens'] = screens
     return stage_screenshots(directory, manifest, screenshots)
 
 
@@ -1638,6 +1776,10 @@ def write_readme(directory, manifest):
     ]
     if manifest.get('wallpaper'):
         lines.append('- `%s` — the wallpaper' % manifest['wallpaper'])
+    if manifest.get('poster'):
+        lines.append('- `%s` — a still of the video wallpaper' % manifest['poster'])
+    for screen in manifest.get('screens') or []:
+        lines.append('- `%s` — the wallpaper of one screen' % screen)
     if manifest.get('banner'):
         lines.append('- `%s` — the sidebar banner' % manifest['banner'])
     for shot in manifest.get('screenshots') or []:
@@ -1774,8 +1916,7 @@ def cmd_publish(name, repo=None, description='', notes='', private=False, screen
             p_entry['wallpaper'] = '%s/%s' % (subpath, manifest['wallpaper'])
         if manifest.get('banner'):
             p_entry['banner'] = '%s/%s' % (subpath, manifest['banner'])
-        if manifest.get('screenshots'):
-            p_entry['screenshots'] = ['%s/%s' % (subpath, s) for s in manifest['screenshots']]
+        index_screenshots(p_entry, subpath, manifest)
 
         index_data['presets'] = [p for p in index_data.get('presets', []) if p.get('id') != preset_id]
         index_data['presets'].append(p_entry)
@@ -1886,8 +2027,7 @@ def cmd_push_update(name, version=None, bump='patch', notes='', screenshots=None
                         p['wallpaper'] = '%s/%s' % (subpath, manifest['wallpaper'])
                     if manifest.get('banner'):
                         p['banner'] = '%s/%s' % (subpath, manifest['banner'])
-                    if manifest.get('screenshots'):
-                        p['screenshots'] = ['%s/%s' % (subpath, s) for s in manifest['screenshots']]
+                    index_screenshots(p, subpath, manifest)
                     break
             presets_helper.atomic_write_json(os.path.join(directory, INDEX_NAME), index_data)
             base_slug = link.get('baseRepo') or parse_slug(link.get('repo', ''))[0]
@@ -1919,6 +2059,98 @@ def cmd_push_update(name, version=None, bump='patch', notes='', screenshots=None
     base_slug = link.get('baseRepo') or parse_slug(link.get('repo', ''))[0]
     return {'ok': True, 'name': name, 'repo': link.get('repo', ''), 'changed': True,
             'version': new_version, 'repoUrl': 'https://github.com/%s' % base_slug}
+
+
+def owned_preset_dir(name):
+    """The local clone and the folder inside it that hold a preset you own."""
+    link = get_link(name)
+    if not link.get('owned'):
+        raise StoreError('"%s" was installed from someone else\'s repository, so it cannot be changed from here.' % name)
+    directory = link.get('path') or slug_dir(link.get('repo', ''))
+    subpath = link.get('subpath', '')
+    if not os.path.isdir(os.path.join(directory, '.git')):
+        raise StoreError('The local copy of "%s" is gone.' % name)
+    return link, directory, subpath, (os.path.join(directory, subpath) if subpath else directory)
+
+
+def cmd_screenshots(name):
+    """The pictures a published preset ships, as files in its local clone."""
+    name = check_name(name)
+    _, _, _, preset_dir = owned_preset_dir(name)
+    manifest = read_manifest(preset_dir)
+    root = os.path.realpath(preset_dir)
+    shots = []
+    for relative in manifest.get('screenshots') or []:
+        if not isinstance(relative, str):
+            continue
+        path = os.path.realpath(os.path.join(preset_dir, relative))
+        if path.startswith(root + os.sep) and os.path.isfile(path) and image_ext(path):
+            shots.append(path)
+    return {'ok': True, 'name': name, 'screenshots': shots,
+            'max': MAX_SCREENSHOTS, 'maxBytes': MAX_SCREENSHOT_BYTES}
+
+
+def cmd_set_screenshots(name, screenshots=None):
+    """Replace a published preset's pictures, and nothing else.
+
+    No version bump and no re-export: the settings people install stay the
+    released ones. check-updates only offers newer versions, so installers are
+    not told about a commit that changed nothing they apply.
+    """
+    name = check_name(name)
+    link, directory, subpath, preset_dir = owned_preset_dir(name)
+    auth = require_login()
+    ensure_git_identity(directory, auth)
+
+    code, _, err = git(['fetch', '--quiet', 'origin'], cwd=directory, timeout=90)
+    if code != 0:
+        raise StoreError(err.splitlines()[-1] if err else 'Could not reach GitHub.')
+    code, _, err = git(['pull', '--ff-only', '--quiet'], cwd=directory, timeout=90)
+    if code != 0:
+        raise StoreError(err.splitlines()[-1] if err else 'Could not bring the local copy up to date.')
+    before = head_commit(directory)
+
+    try:
+        manifest = read_manifest(preset_dir)
+        manifest = stage_screenshots(preset_dir, manifest, screenshots or [])
+        presets_helper.atomic_write_json(os.path.join(preset_dir, MANIFEST_NAME), manifest)
+        if subpath:
+            index_data = read_index(directory)
+            if index_data and isinstance(index_data.get('presets'), list):
+                preset_id = os.path.basename(subpath)
+                for p in index_data['presets']:
+                    if p.get('id') == preset_id or p.get('path') == subpath:
+                        index_screenshots(p, subpath, manifest)
+                        break
+                presets_helper.atomic_write_json(os.path.join(directory, INDEX_NAME), index_data)
+        else:
+            write_readme(directory, dict(manifest, _repo=link.get('repo', '')))
+
+        code, _, err = git(['add', '-A'], cwd=directory, timeout=60)
+        if code != 0:
+            raise StoreError(err or 'Could not stage the changes.')
+        code, out, _ = git(['status', '--porcelain'], cwd=directory, timeout=30)
+        if code == 0 and not out:
+            return {'ok': True, 'name': name, 'changed': False,
+                    'screenshots': len(manifest['screenshots']),
+                    'message': 'These are already the published screenshots.'}
+        code, _, err = git(['commit', '-m', 'Update screenshots of %s' % name], cwd=directory, timeout=60)
+        if code != 0:
+            raise StoreError(err.splitlines()[-1] if err else 'Could not commit the screenshots.')
+        code, _, err = git(['push', 'origin', 'HEAD'], cwd=directory, timeout=180)
+        if code != 0:
+            raise StoreError(err.splitlines()[-1] if err else 'Could not push the screenshots.')
+    except Exception:
+        # The clone mirrors what is published; a half-made change left in it
+        # would ride along with the next release.
+        if before:
+            git(['reset', '--hard', '--quiet', before], cwd=directory)
+        git(['clean', '-fdq'], cwd=directory)
+        raise
+
+    link.update({'commit': head_commit(directory), 'updatedAt': today()})
+    set_link(name, link)
+    return {'ok': True, 'name': name, 'changed': True, 'screenshots': len(manifest['screenshots'])}
 
 
 # ---------------------------------------------------------------------------
@@ -2067,6 +2299,11 @@ def dispatch(argv):
         notes = take_option(rest, '--notes', '')
         screenshots = take_options(rest, '--screenshot')
         return cmd_push_update(rest[0] if rest else '', version, bump, notes, screenshots)
+    if command == 'screenshots':
+        return cmd_screenshots(rest[0] if rest else '')
+    if command == 'set-screenshots':
+        screenshots = take_options(rest, '--screenshot')
+        return cmd_set_screenshots(rest[0] if rest else '', screenshots)
     if command == 'links':
         return cmd_links()
     if command == 'unlink':

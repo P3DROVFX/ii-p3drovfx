@@ -104,15 +104,92 @@ Singleton {
             cpuUsageHistory.shift()
         }
     }
-    function updateHistories() {
-        if (!resourcePopupMonitoringEnabled)
-            return;
+	function updateHistories() {
+		if (!historyMonitoringEnabled)
+			return;
         updateMemoryUsageHistory()
-        updateSwapUsageHistory()
         updateCpuUsageHistory()
+        if (swapMonitoringEnabled)
+            updateSwapUsageHistory()
     }
 
-	property bool resourcePopupMonitoringEnabled: false
+	property int resourcePopupMonitoringRequests: 0
+	readonly property bool resourcePopupMonitoringEnabled: resourcePopupMonitoringRequests > 0
+	// CPU and RAM are the cheap always-visible bar metrics. The optional
+	// metrics below are demand-driven so the service does not start disk,
+	// temperature, swap or hardware-identity work merely because the bar
+	// exists. Popups and other consumers hold/release these requests.
+	property int diskMonitoringRequests: 0
+	property int temperatureMonitoringRequests: 0
+	property int swapMonitoringRequests: 0
+	property int hardwareIdentityRequests: 0
+	property int historyMonitoringRequests: 0
+	readonly property bool diskMonitoringEnabled: resourcePopupMonitoringEnabled || diskMonitoringRequests > 0
+	readonly property bool temperatureMonitoringEnabled: resourcePopupMonitoringEnabled || temperatureMonitoringRequests > 0
+	readonly property bool swapMonitoringEnabled: swapMonitoringRequests > 0
+	readonly property bool hardwareIdentityEnabled: resourcePopupMonitoringEnabled || hardwareIdentityRequests > 0
+	readonly property bool historyMonitoringEnabled: resourcePopupMonitoringEnabled || historyMonitoringRequests > 0
+
+	function requestResourcePopup(on: bool): void {
+		resourcePopupMonitoringRequests = Math.max(0, resourcePopupMonitoringRequests + (on ? 1 : -1));
+	}
+
+	function requestMetric(metric: string, on: bool): void {
+		const delta = on ? 1 : -1;
+		switch (metric) {
+		case "disk":
+			diskMonitoringRequests = Math.max(0, diskMonitoringRequests + delta);
+			break;
+		case "temperature":
+			temperatureMonitoringRequests = Math.max(0, temperatureMonitoringRequests + delta);
+			break;
+		case "swap":
+			swapMonitoringRequests = Math.max(0, swapMonitoringRequests + delta);
+			break;
+		case "hardwareIdentity":
+			hardwareIdentityRequests = Math.max(0, hardwareIdentityRequests + delta);
+			break;
+		case "history":
+			historyMonitoringRequests = Math.max(0, historyMonitoringRequests + delta);
+			break;
+		}
+	}
+
+	onTemperatureMonitoringEnabledChanged: {
+		if (temperatureMonitoringEnabled) {
+			if (!locateCpuTempPathProc.running && !cpuTempPath)
+				locateCpuTempPathProc.running = true;
+		} else {
+			locateCpuTempPathProc.running = false;
+			cpuTempFileView.path = "";
+			cpuTempPath = "";
+			cpuTemp = 0;
+		}
+	}
+
+	onDiskMonitoringEnabledChanged: {
+		if (diskMonitoringEnabled) {
+			if (!diskSpaceProc.running)
+				diskSpaceProc.running = true;
+		} else {
+			diskSpaceProc.running = false;
+			diskTotal = 1;
+			diskFree = 0;
+			diskUsed = 0;
+		}
+	}
+
+	onHardwareIdentityEnabledChanged: {
+		if (hardwareIdentityEnabled) {
+			if (!findCpuMaxFreqProc.running && root.maxAvailableCpuString === "--")
+				findCpuMaxFreqProc.running = true;
+			if (!cpuModelProc.running && root.cpuModel === "--")
+				cpuModelProc.running = true;
+		} else {
+			findCpuMaxFreqProc.running = false;
+			cpuModelProc.running = false;
+		}
+	}
 	// Other consumers (GameDetector's fullscreen+GPU heuristic) hold a
 	// refcount so GPU sampling runs only while somebody needs it.
 	property int gpuMonitoringRequests: 0
@@ -147,8 +224,17 @@ Singleton {
 
 	onGpuMonitoringEnabledChanged: {
 		if (gpuMonitoringEnabled) {
+			if (gpuVendor === "unknown" && !gpuModelProc.running)
+				gpuModelProc.running = true;
 			requestGpuSample()
 		} else {
+			gpuMonitorProc.running = false
+			gpuModelProc.running = false
+			amdPathResolveProc.running = false
+			amdUsageFileView.path = ""
+			amdTempFileView.path = ""
+			amdUsagePath = ""
+			amdTempPath = ""
 			gpuUsage = 0
 			gpuTemp = 0
 			previousIntelGpuSample = null
@@ -167,10 +253,12 @@ Singleton {
     // "auto" keeps the NVIDIA → AMD → Intel priority; anything else forces
     // that vendor's probe first (hybrid iGPU+dGPU systems), falling back to
     // the auto cascade if the preferred vendor isn't found.
-    property string gpuPreference: Config.options?.resources?.gpuPreference ?? "auto"
-    onGpuPreferenceChanged: {
-        gpuModelProc.running = false
-        gpuModelProc.running = true
+	property string gpuPreference: Config.options?.resources?.gpuPreference ?? "auto"
+	onGpuPreferenceChanged: {
+		if (gpuMonitoringEnabled) {
+			gpuModelProc.running = false
+			gpuModelProc.running = true
+		}
     }
 
     // AMD sysfs paths (resolved once after vendor detection)
@@ -186,9 +274,11 @@ Singleton {
     Process {
         id: locateCpuTempPathProc
         command: ["bash", "-c", "for hw in /sys/class/hwmon/hwmon*; do if [ -f \"$hw/name\" ]; then name=$(cat \"$hw/name\" 2>/dev/null); if [ \"$name\" = \"k10temp\" ] || [ \"$name\" = \"zenpower\" ] || [ \"$name\" = \"coretemp\" ]; then for t_input in \"$hw\"/temp*_input; do if [ -f \"$t_input\" ]; then echo \"$t_input\"; exit 0; fi; done; fi; fi; done; for tz in /sys/class/thermal/thermal_zone*; do if [ -f \"$tz/type\" ] && [ -f \"$tz/temp\" ]; then type=$(cat \"$tz/type\" 2>/dev/null); if [ \"$type\" = \"x86_pkg_temp\" ] || [ \"$type\" = \"cpu-thermal\" ] || [ \"$type\" = \"cpu_thermal\" ] || [ \"$type\" = \"TCPU\" ] || [ \"$type\" = \"cpu\" ] || [ \"$type\" = \"acpitz\" ]; then echo \"$tz/temp\"; exit 0; fi; fi; done"]
-        running: true
+        running: false
         stdout: StdioCollector {
             onStreamFinished: {
+                if (!root.temperatureMonitoringEnabled)
+                    return;
                 root.cpuTempPath = text.trim()
                 if (root.cpuTempPath) {
                     cpuTempFileView.path = root.cpuTempPath
@@ -209,7 +299,7 @@ Singleton {
 			// Reload files
 			fileMeminfo.reload()
 			fileStat.reload()
-			if (root.cpuTempPath) {
+			if (root.temperatureMonitoringEnabled && root.cpuTempPath) {
 				cpuTempFileView.reload()
 				const rawTemp = Number(cpuTempFileView.text().trim() || 0)
 				root.cpuTemp = rawTemp > 1000 ? rawTemp / 1000 : rawTemp
@@ -219,8 +309,10 @@ Singleton {
 			const textMeminfo = fileMeminfo.text()
 			memoryTotal = Number(textMeminfo.match(/MemTotal: *(\d+)/)?.[1] ?? 1)
 			memoryFree = Number(textMeminfo.match(/MemAvailable: *(\d+)/)?.[1] ?? 0)
-			swapTotal = Number(textMeminfo.match(/SwapTotal: *(\d+)/)?.[1] ?? 1)
-			swapFree = Number(textMeminfo.match(/SwapFree: *(\d+)/)?.[1] ?? 0)
+			if (root.swapMonitoringEnabled) {
+				swapTotal = Number(textMeminfo.match(/SwapTotal: *(\d+)/)?.[1] ?? 1)
+				swapFree = Number(textMeminfo.match(/SwapFree: *(\d+)/)?.[1] ?? 0)
+			}
 
 			// Parse CPU usage
 			const textStat = fileStat.text()
@@ -279,7 +371,10 @@ Singleton {
         id: topProcessesTimer
         interval: 15000
         repeat: true
-        running: true
+        // Process enumeration is not part of the bar metrics. Keep it
+        // demand-driven so a background shell does not fork `ps` forever.
+        running: root.resourcePopupMonitoringEnabled
+            || (Config.options?.search?.modules?.processes?.enable ?? false)
         triggeredOnStart: true
         onTriggered: {
             if (!topProcessesProc.running)
@@ -290,7 +385,7 @@ Singleton {
     Process {
         id: findCpuMaxFreqProc
         command: ["bash", "-c", "LANG=C LC_ALL=C lscpu | grep 'CPU max MHz' | awk '{print $4}'"]
-        running: true
+        running: false
         stdout: StdioCollector {
             id: outputCollector
             onStreamFinished: {
@@ -302,7 +397,7 @@ Singleton {
     Process {
         id: cpuModelProc
         command: ["bash", "-c", "LANG=C LC_ALL=C grep -m1 'model name' /proc/cpuinfo | sed 's/model name\\s*:\\s*//'"]
-        running: true
+        running: false
         stdout: StdioCollector {
             id: cpuModelCollector
             onStreamFinished: {
@@ -364,7 +459,7 @@ Singleton {
         environment: ({
             GPUPREF: root.gpuPreference
         })
-        running: true
+        running: false
         stdout: StdioCollector {
             id: gpuModelCollector
             onStreamFinished: {
@@ -382,10 +477,12 @@ Singleton {
                               : "unknown"
                 if (model.length > 0) root.gpuModel = model
 
-                if (root.gpuVendor === "amd") {
+                if (root.gpuVendor === "amd" && root.gpuMonitoringEnabled) {
                     // Resolve AMD sysfs paths once for cheap FileView polling
                     amdPathResolveProc.running = true
                 }
+                if (root.gpuMonitoringEnabled)
+                    root.requestGpuSample()
             }
         }
     }
@@ -412,6 +509,8 @@ Singleton {
         running: false
         stdout: StdioCollector {
             onStreamFinished: {
+                if (!root.gpuMonitoringEnabled)
+                    return;
                 const lines = text.trim().split("\n")
                 lines.forEach(line => {
                     if (line.startsWith("USAGE=")) {
@@ -453,7 +552,8 @@ Singleton {
         id: diskSpaceTimer
         interval: 30000
         repeat: true
-        running: true
+        running: root.diskMonitoringEnabled
+        triggeredOnStart: true
         onTriggered: {
             diskSpaceProc.running = false
             diskSpaceProc.running = true
@@ -465,6 +565,8 @@ Singleton {
     Connections {
         target: Config.options?.resources ?? null
         function onDiskMountChanged() {
+            if (!root.diskMonitoringEnabled)
+                return;
             diskSpaceProc.running = false
             diskSpaceProc.running = true
         }

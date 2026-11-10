@@ -21,7 +21,7 @@ AbstractBackgroundWidget {
     readonly property bool hasMedia: player !== null && (player.trackTitle || "").length > 0
     readonly property bool isPlaying: MprisController.isPlaying
     readonly property real position: player ? (player.position ?? 0) : 0
-    readonly property real length: player ? (player.length ?? 0) : 0
+    readonly property real length: MprisController.trackLengthOf(player)
     readonly property real progress: (hasMedia && length > 0) ? Math.min(1, Math.max(0, position / length)) : 0
     readonly property int percentInt: Math.round(progress * 100)
 

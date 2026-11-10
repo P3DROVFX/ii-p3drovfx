@@ -43,7 +43,7 @@ Scope {
                     // the stable ShellScreen name and require a real focused
                     // monitor so only one surface can be active.
                     readonly property string screenName: modelData ? modelData.name : ""
-                    readonly property string focusedMonitorName: Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""
+                    readonly property string focusedMonitorName: GlobalStates.overviewMonitor
                     property bool monitorIsFocused: Quickshell.screens.length <= 1
                         || (screenName !== "" && focusedMonitorName !== "" && screenName === focusedMonitorName)
                     property bool contentKeepAlive: false
@@ -52,25 +52,35 @@ Scope {
                     // The Scope and IPC shortcuts remain loaded, but this
                     // expensive per-monitor PanelWindow is destroyed otherwise.
                     property bool visualActive: false
-                    property bool loadedOnce: false
+
+                    // The loaded window flips these from inside its own creation and destruction,
+                    // which run inside the write of `active` itself; a synchronous write there is
+                    // a binding loop, so the flip lands one tick later.
+                    function setVisualActiveLater(value) {
+                        Qt.callLater(() => {
+                            if (realOverviewLoader) realOverviewLoader.visualActive = value;
+                        });
+                    }
+                    function setContentKeepAliveLater(value) {
+                        Qt.callLater(() => {
+                            if (realOverviewLoader) realOverviewLoader.contentKeepAlive = value;
+                        });
+                    }
 
                     onMonitorIsFocusedChanged: {
                         if (!monitorIsFocused) {
                             visualActive = false;
-                            loadedOnce = false;
                         }
                     }
 
-                    Connections {
-                        target: GlobalStates
-                        function onOverviewOpenChanged() {
-                            if (GlobalStates.overviewOpen && realOverviewLoader.monitorIsFocused) {
-                                realOverviewLoader.loadedOnce = true;
-                            }
-                        }
-                    }
+                    active: monitorIsFocused && (contentKeepAlive || GlobalStates.overviewOpen || visualActive)
 
-                    active: monitorIsFocused && (contentKeepAlive || GlobalStates.overviewOpen || visualActive || loadedOnce || (TypeToSearch.armed && (Config.options?.launcher?.typeToSearch?.enable ?? false)))
+                    onItemChanged: {
+                        // Close-time cleanup runs before the exit animation ends.
+                        // Collect wrappers only after the window tree is released.
+                        if (!item)
+                            Qt.callLater(LauncherSearch.collectReleasedResults);
+                    }
 
                     component: PanelWindow {
                         id: root
@@ -81,8 +91,43 @@ Scope {
                         readonly property bool keepAlive: searchWidget.keepAlive
                         readonly property bool isBottomBar: !BarPlacement.vertical && BarPlacement.bottom
 
-                        readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
                         readonly property var backgroundController: GlobalStates.overviewBackgroundControllerFor(root.screen?.name ?? "")
+                        // Real Gnome: compact thumbnails on top, the window picker
+                        // in the free area under them.
+                        readonly property bool realGnome: !!backgroundController && backgroundController.isRealGnome
+                        readonly property var monitorReserved: HyprlandData.monitors.find(m => m.name === root.screen?.name)?.reserved ?? [0, 0, 0, 0]
+                        // Screen coordinates -> window coordinates (the window
+                        // starts at the usable area and reaches past it by 2 margins).
+                        readonly property real screenOffsetX: root.margin * 2 - root.monitorReserved[0]
+                        readonly property real screenOffsetY: root.margin * 2 - root.monitorReserved[1]
+                        function publishRealGnomeArea() {
+                            if (!root.realGnome || !root.screen || searchWidgetWrapper.height < 24 || root.searchSurfaceOwned)
+                                return;
+                            const reserved = root.monitorReserved;
+                            const screenW = root.screen.width;
+                            const screenH = root.screen.height;
+                            const width = screenW - reserved[0] - reserved[2];
+                            if (root.isBottomBar) {
+                                const top = searchWidgetWrapper.y - root.screenOffsetY - 12;
+                                GlobalStates.setRealGnomeArea(root.screen.name, Qt.rect(reserved[0], reserved[1], width, top - reserved[1]));
+                            } else {
+                                const bottom = searchWidgetWrapper.y + searchWidgetWrapper.height - root.screenOffsetY + 12;
+                                // The workspace indicator keeps the bottom strip.
+                                GlobalStates.setRealGnomeArea(root.screen.name, Qt.rect(reserved[0], bottom, width, screenH - reserved[3] - 40 - bottom));
+                            }
+                        }
+                        Timer {
+                            id: realGnomeAreaTimer
+                            interval: 32
+                            onTriggered: root.publishRealGnomeArea()
+                        }
+                        onRealGnomeChanged: realGnomeAreaTimer.restart()
+                        Connections {
+                            target: searchWidgetWrapper
+                            function onHeightChanged() { realGnomeAreaTimer.restart(); }
+                            function onYChanged() { realGnomeAreaTimer.restart(); }
+                        }
+
                         readonly property bool backgroundAnimating: backgroundController
                             && backgroundController.progress > 0.001 && backgroundController.progress < 0.999
                         readonly property string animStyle: (Config.options.overview.animationStyle === "none") ? "none" : ((GlobalStates.searchCenterMode || Config.options.search.suggestions.enable) ? "zoom" : (Config.options.overview.animationStyle ?? "bounce"))
@@ -138,8 +183,22 @@ Scope {
                          * revealed it underneath the results. Recomputing from the
                          * primitives cannot be stale, whoever calls it.
                          */
+                        // On the scrolling layouts (native and zscroll) the scrolloverview
+                        // plugin's overview stands behind the search in place of the
+                        // shell's, from open to close. Without the plugin the shell
+                        // draws its usual overview.
+                        readonly property bool pluginOverviewWanted: root.monitorIsFocused && GlobalStates.overviewOpen
+                            && !GlobalStates.searchConnectActive && GlobalStates.scrollingLayoutActive
+                            && !GlobalStates.searchOnlyMode && !GlobalStates.panelOpenedDirectly
+                        onPluginOverviewWantedChanged: {
+                            if (root.pluginOverviewWanted)
+                                ScrollOverviewPlugin.open();
+                            else
+                                ScrollOverviewPlugin.close();
+                        }
                         function evaluateOverviewShouldShow() {
-                            return !root.evaluateSearchSurfaceOwned()
+                            return !ScrollOverviewPlugin.hosting
+                                && !root.evaluateSearchSurfaceOwned()
                                 && !GlobalStates.searchOnlyMode
                                 && !GlobalStates.searchCenterMode
                                 && !Config.options.search.suggestions.enable
@@ -360,27 +419,36 @@ Scope {
                         }
 
                         Component.onCompleted: {
-                            realOverviewLoader.visualActive = true;
+                            realOverviewLoader.setVisualActiveLater(true);
                             root.overviewRevealProgress = root.evaluateOverviewShouldShow() ? 1.0 : 0.0;
                             root.overviewFadeProgress = root.overviewRevealProgress;
                             root._overviewRevealInitialized = true;
                             root.consumePendingSearchQuery();
                         }
 
-                        onKeepAliveChanged: realOverviewLoader.contentKeepAlive = keepAlive
-                        Component.onDestruction: realOverviewLoader.contentKeepAlive = false
+                        onKeepAliveChanged: realOverviewLoader.setContentKeepAliveLater(keepAlive)
+                        Component.onDestruction: realOverviewLoader.setContentKeepAliveLater(false)
 
                         visible: root.monitorIsFocused
                             && (GlobalStates.overviewOpen || searchWidgetWrapper.slideOpacity > 0)
                         onVisibleChanged: {
                             if (root.visible)
-                                realOverviewLoader.visualActive = true;
+                                realOverviewLoader.setVisualActiveLater(true);
                             else if (!GlobalStates.overviewOpen)
-                                realOverviewLoader.visualActive = false;
+                                realOverviewLoader.setVisualActiveLater(false);
                         }
 
+                        // Closing, the window must take no input at all: an empty item,
+                        // not a null one, is the empty region. With the plugin's overview behind, only the search takes the
+                        // pointer: the rest of the screen is the plugin's to click.
                         mask: Region {
-                            item: root.monitorIsFocused && GlobalStates.overviewOpen ? contentItem : null
+                            item: !(root.monitorIsFocused && GlobalStates.overviewOpen) ? noInputRegion
+                                : (ScrollOverviewPlugin.hosting ? searchWidgetWrapper : contentItem)
+                        }
+                        Item {
+                            id: noInputRegion
+                            width: 0
+                            height: 0
                         }
 
                         anchors {
@@ -478,6 +546,30 @@ Scope {
                                 onClicked: GlobalStates.overviewOpen = false
                             }
 
+                            Loader { // Real Gnome window picker input and affordances
+                                anchors.fill: parent
+                                // The Dynamic Island hosts the picker when it owns search.
+                                active: root.realGnome && root.monitorIsFocused && !GlobalStates.islandOwnsSearch
+                                sourceComponent: RealGnomeWindowPicker {
+                                    screenName: root.screen?.name ?? ""
+                                    offsetX: root.screenOffsetX
+                                    offsetY: root.screenOffsetY
+                                    shown: GlobalStates.overviewOpen && root.overviewShouldShow
+                                        && !!root.backgroundController && root.backgroundController.progress > 0.9
+                                }
+                            }
+
+                            Loader { // Real Gnome workspace indicator
+                                active: root.realGnome && root.monitorIsFocused && !GlobalStates.islandOwnsSearch
+                                x: root.screenOffsetX + ((root.screen?.width ?? 0) - (item ? item.width : 0)) / 2
+                                y: root.screenOffsetY + (root.screen?.height ?? 0) - root.monitorReserved[3] - 20 - (item ? item.height / 2 : 0)
+                                sourceComponent: RealGnomeWorkspaceIndicator {
+                                    screenName: root.screen?.name ?? ""
+                                    shown: GlobalStates.overviewOpen && root.overviewShouldShow
+                                        && !!root.backgroundController && root.backgroundController.progress > 0.6
+                                }
+                            }
+
                             Item { // Wrapper for animation
                                 id: searchWidgetWrapper
                                 readonly property bool isNotchMode: Config.ready && Config.options.bar.dynamicIsland.notchMode.enable
@@ -494,7 +586,6 @@ Scope {
                                 // Driven directly — no Behavior, to avoid QML skipping anim while invisible
                                 property real slideY: initialYOffset
                                 property real slideOpacity: 0.0
-
                                 opacity: isNotchMode ? 0.0 : slideOpacity
                                 transform: [
                                     Translate {
@@ -598,9 +689,25 @@ Scope {
                                     }
                                 }
 
+                                // A touchpad gesture is holding the reveal where the fingers are
+                                // (GlobalStates.gestureDragSurface): the slide is a position, not
+                                // an animation, until the gesture has settled.
+                                function applyGestureDrag() {
+                                    slideInParallel.stop();
+                                    slideOutParallel.stop();
+                                    slideInStartTimer.stop();
+                                    const held = root.animStyle === "none" ? 1 : GlobalStates.gestureDragProgress;
+                                    searchWidgetWrapper.slideY = searchWidgetWrapper.initialYOffset * (1 - held);
+                                    searchWidgetWrapper.slideOpacity = GlobalStates.gestureDragProgress;
+                                }
+
                                 Connections {
                                     target: root
                                     function onVisibleChanged() {
+                                        if (root.visible && GlobalStates.overviewDragging) {
+                                            searchWidgetWrapper.applyGestureDrag();
+                                            return;
+                                        }
                                         if (root.visible && GlobalStates.overviewOpen) {
                                             // Window just became visible — trigger slide-in from scratch
                                             searchWidgetWrapper.triggerSlideIn();
@@ -610,7 +717,15 @@ Scope {
 
                                 Connections {
                                     target: GlobalStates
+                                    function onGestureDragProgressChanged() {
+                                        if (GlobalStates.overviewDragging)
+                                            searchWidgetWrapper.applyGestureDrag();
+                                    }
                                     function onOverviewOpenChanged() {
+                                        if (GlobalStates.overviewDragging) {
+                                            searchWidgetWrapper.applyGestureDrag();
+                                            return;
+                                        }
                                         if (GlobalStates.overviewOpen) {
                                             if (root.visible) {
                                                 searchWidgetWrapper.triggerSlideIn();
@@ -660,7 +775,8 @@ Scope {
                                 // this way, and leaving every other hosted panel to
                                 // opacity alone is what let the workspaces stay on
                                 // screen behind them.
-                                active: root.visible && !GlobalStates.searchOnlyMode && !GlobalStates.searchCenterMode && !Config.options.search.suggestions.enable && (Config?.options.overview.enable ?? true) && !root.isScrollingLayout && !root.searchPanelOwned
+                                // Real Gnome has no grid: the plane and its neighbours are the workspaces.
+                                active: root.visible && !root.realGnome && !GlobalStates.searchOnlyMode && !GlobalStates.searchCenterMode && !Config.options.search.suggestions.enable && (Config?.options.overview.enable ?? true) && !root.searchPanelOwned
                                 // Driven by the reveal progress alone. Gating this on
                                 // `overviewShouldShow` too meant a panel that opened
                                 // without ever changing the query could leave the grid
@@ -683,36 +799,6 @@ Scope {
                                 ]
 
                                 sourceComponent: OverviewWidget {
-                                    panelWindow: root
-                                    visible: root.overviewFadeProgress > 0.001
-                                    monitorIndex: root.monitorIndex
-                                }
-                            }
-
-                            Loader { // Scrolling overview
-                                id: scrollingOverviewLoader
-                                anchors.fill: parent
-                                active: root.visible && !GlobalStates.searchOnlyMode && !GlobalStates.searchCenterMode && !Config.options.search.suggestions.enable && (Config?.options.overview.enable ?? true) && root.isScrollingLayout && !root.searchPanelOwned
-                                opacity: searchWidgetWrapper.slideOpacity * root.overviewFadeProgress
-                                visible: opacity > 0.001
-
-
-
-                                transform: [
-                                    Translate {
-                                        y: root.animStyle === "none" ? 0 : (root.animStyle === "zoom" ? ((1.0 - Math.min(1.0, Math.max(0.0, scrollingOverviewLoader.opacity))) * (root.isBottomBar ? 30 : -30)) : searchWidgetWrapper.slideY + ((1.0 - root.overviewRevealProgress) * (root.isBottomBar ? -30 : 30))
-                                            + root.overviewExitShift)
-                                    },
-                                    Scale {
-                                        origin.x: scrollingOverviewLoader.width / 2
-                                        origin.y: scrollingOverviewLoader.height / 2
-                                        xScale: root.animStyle === "zoom" ? (0.92 + 0.08 * Math.min(1.0, Math.max(0.0, scrollingOverviewLoader.opacity))) : 1.0
-                                        yScale: root.animStyle === "zoom" ? (0.92 + 0.08 * Math.min(1.0, Math.max(0.0, scrollingOverviewLoader.opacity))) : 1.0
-                                    }
-                                ]
-
-                                sourceComponent: ScrollingOverviewWidget {
-                                    anchors.fill: parent
                                     panelWindow: root
                                     visible: root.overviewFadeProgress > 0.001
                                     monitorIndex: root.monitorIndex
@@ -752,6 +838,7 @@ Scope {
             // The default overview is lazy-loaded. Keep the prefix until its
             // PanelWindow exists so the first shortcut press is not lost.
             GlobalStates.activeSearchQuery = prefix;
+            GlobalStates.panelOpenedDirectly = true;
             GlobalStates.overviewOpen = true;
         }
     }
@@ -781,7 +868,7 @@ Scope {
     }
 
     function toggleAi() {
-        if (!Ai.enabled)
+        if (!SearchPanelRegistry.aiPolicyEnabled)
             return;
         togglePrefixedSearch(Config.options.search.prefix.ai);
     }

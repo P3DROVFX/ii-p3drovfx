@@ -1,0 +1,4 @@
+module qs.modules.ii.upscaylPopup
+
+UpscaylPopup 1.0 UpscaylPopup.qml
+UpscaylPopupContent 1.0 UpscaylPopupContent.qml

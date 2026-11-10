@@ -23,10 +23,16 @@ Singleton {
     property bool goalReached: dailyGoal > 0 && glassesDrunk >= dailyGoal
     property string _lastDate: ""
     property real _lastNotify: 0
+    // Glasses per day, last 14 days, today included.
+    property var history: ({})
 
     function _todayKey() {
         const d = new Date();
         return d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate();
+    }
+
+    function _keyFor(date) {
+        return date.getFullYear() + "-" + (date.getMonth() + 1) + "-" + date.getDate();
     }
 
     function _save() {
@@ -35,11 +41,68 @@ Singleton {
         w.glassesDrunk = root.glassesDrunk;
         w.lastDate = root._lastDate;
         w.lastNotify = root._lastNotify;
+        // Today's count into the history, keeping two weeks.
+        const next = {};
+        const oldest = new Date();
+        oldest.setDate(oldest.getDate() - 13);
+        const keep = {};
+        for (let d = new Date(oldest); d <= new Date(); d.setDate(d.getDate() + 1))
+            keep[root._keyFor(d)] = true;
+        for (const key in root.history) {
+            if (keep[key])
+                next[key] = root.history[key];
+        }
+        if (root._lastDate.length > 0)
+            next[root._lastDate] = root.glassesDrunk;
+        root.history = next;
+        w.historyJson = JSON.stringify(next);
+    }
+
+    /** The last seven days, oldest first: [{ date, glasses }]. */
+    function week() {
+        const out = [];
+        for (let i = 6; i >= 0; i--) {
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            const key = root._keyFor(d);
+            out.push({ date: d, glasses: key === root._lastDate ? root.glassesDrunk : Number(root.history[key] ?? 0) });
+        }
+        return out;
+    }
+
+    /** A new day starts the count again, whether or not reminders are on. */
+    function ensureToday() {
+        if (root._lastDate !== root._todayKey()) {
+            root.glassesDrunk = 0;
+            root._lastDate = root._todayKey();
+            root._save();
+        }
+    }
+
+    /** Add (or take back) glasses, uncapped: the dock widget's counter. */
+    function drink(delta) {
+        root.ensureToday();
+        const before = root.glassesDrunk;
+        root.glassesDrunk = Math.max(0, root.glassesDrunk + delta);
+        root._save();
+        if (delta > 0 && before < root.dailyGoal && root.glassesDrunk >= root.dailyGoal) {
+            Quickshell.execDetached([
+                "notify-send",
+                "-a", "Water Reminder",
+                Translation.tr("Daily water goal reached!"),
+                Translation.tr("You drank %1 glasses today.").arg(String(root.dailyGoal))
+            ]);
+        }
     }
 
     function _load() {
         if (!Persistent.ready) return;
         const w = Persistent.states.water || {};
+        try {
+            root.history = JSON.parse(w.historyJson || "{}") || {};
+        } catch (e) {
+            root.history = {};
+        }
         root._lastDate = w.lastDate || "";
         root._lastNotify = w.lastNotify || 0;
         if (root._lastDate !== root._todayKey()) {
@@ -89,13 +152,11 @@ Singleton {
     }
 
     function _check() {
+        // Day rollover reset (also covered by _load on boot), for the dock
+        // widget too, so it runs before the reminder gate.
+        if (Persistent.ready)
+            root.ensureToday();
         if (!root.enabled) return;
-        // Day rollover reset (also covered by _load on boot).
-        if (root._lastDate !== root._todayKey()) {
-            root.glassesDrunk = 0;
-            root._lastDate = root._todayKey();
-            root._save();
-        }
         if (root.dailyGoal > 0 && root.glassesDrunk >= root.dailyGoal) return;
 
         const intervalMs = Math.max(1, root.intervalHours) * 3600 * 1000;

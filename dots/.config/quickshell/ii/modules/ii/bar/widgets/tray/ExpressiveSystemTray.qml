@@ -13,6 +13,11 @@ Item {
     property bool isMaterial: true // Forced expressive
     visible: tray.hasItems
 
+    BarWidgetPalette {
+        id: palette
+        colorMode: Config.options.bar.systray.colorMode
+    }
+
     readonly property real pillPadding: 4
     readonly property real contentW: tray.implicitWidth + pillPadding * 2
     readonly property real contentH: tray.implicitHeight + pillPadding * 2
@@ -25,7 +30,7 @@ Item {
     Rectangle {
         id: pill
         anchors.centerIn: parent
-        color: Appearance.m3colors.m3surfaceContainer
+        color: palette.colBackground
         radius: Appearance.rounding.large
         width: root.pillW
         height: root.pillH

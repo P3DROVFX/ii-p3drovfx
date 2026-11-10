@@ -112,6 +112,8 @@ Singleton {
     /// is kept: the ones in between were never on screen and nobody is waiting for them.
     property var queuedRequest: null
     property bool applying: false
+    // TaskbarApps watches the rebuild and redraws on its own; it stays out of a pack sequence.
+    onApplyingChanged: TaskbarApps.iconPackApplying = root.applying
 
     /**
      * Put one icon change through, start to finish, and only then start the next.
@@ -303,20 +305,6 @@ Singleton {
                 if (ObjectUtils.canon(sorted) !== ObjectUtils.canon(root.packs)) root.packs = sorted;
                 root.packsReady = true;
             }
-        }
-    }
-
-    FileView {
-        path: Directories.home + "/.local/share/icons/DynamicTheme.colhash"
-        watchChanges: true
-        onFileChanged: {
-            // DynamicTheme is atomically replaced, and KIconLoader is told about it, before
-            // the hash is written. A single bounded toggle is enough to invalidate icon
-            // bindings without making sourceSize grow after every theme change - and while a
-            // pack is being applied the rebuild is only the first step of it, so the redraw
-            // is left to the end of the sequence rather than done twice.
-            if (root.applying) return;
-            root.invalidateIcons();
         }
     }
 

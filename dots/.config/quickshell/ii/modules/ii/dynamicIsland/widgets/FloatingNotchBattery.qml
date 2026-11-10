@@ -4,24 +4,19 @@ import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import Quickshell.Services.UPower
 
 Item {
     id: root
     anchors.fill: parent
 
-    property bool isExpanded: false
 
-    readonly property int batteryPercent: Math.round(Battery.percentage * 100)
     readonly property bool isCharging: Battery.isCharging
     readonly property bool isFull: Battery.isFullyCharged || Battery.chargeLimitReached
     readonly property bool isPluggedIn: Battery.isPluggedIn
     readonly property bool isPowerSaving: PowerProfiles.profile === PowerProfile.PowerSaver
     readonly property bool isPerformance: PowerProfiles.profile === PowerProfile.Performance
 
-    readonly property color accentColor: (isCharging || isFull) ? "#18CC47"
-        : isPowerSaving ? "#fbbc04"
-        : isPerformance ? "#42A5F5"
-        : Appearance.colors.colPrimary
 
     readonly property string statusText: {
         if (Battery.chargeLimitReached) return Translation.tr("Held at %1%").arg(Battery.chargeLimit);
@@ -58,181 +53,48 @@ Item {
         : Translation.tr("Balanced")
 
     // ── Contracted ──────────────────────────────────────────────────────
+    // Status text at one edge, the user's own bar battery glyph at the other,
+    // with the island's full width of air between them.
 
     RowLayout {
         id: contractedLayout
         anchors.fill: parent
-        anchors.leftMargin: 14
+        anchors.leftMargin: 18
         anchors.rightMargin: 14
-        spacing: 8
-        visible: !root.isExpanded
-
-        MaterialSymbol {
-            id: boltIcon
-            text: root.isCharging ? "bolt"
-                : root.isFull ? "check_circle"
-                : root.isPowerSaving ? "energy_savings_leaf"
-                : root.isPerformance ? "local_fire_department"
-                : "battery_full"
-            fill: 1
-            iconSize: 16
-            color: root.accentColor
-            Layout.alignment: Qt.AlignVCenter
-
-            SequentialAnimation on opacity {
-                running: root.isCharging && contractedLayout.visible
-                // A value source keeps whatever opacity it stopped at, so the icon would stay faded
-                onRunningChanged: if (!running) boltIcon.opacity = 1.0
-                loops: Animation.Infinite
-                NumberAnimation { to: 0.4; duration: 1200; easing.type: Easing.InOutQuad }
-                NumberAnimation { to: 1.0; duration: 1200; easing.type: Easing.InOutQuad }
-            }
-        }
+        spacing: 16
 
         StyledText {
-            text: String(root.batteryPercent) + "%"
-            font.pixelSize: Appearance.font.pixelSize.small
-            font.bold: true
-            color: root.accentColor
             Layout.alignment: Qt.AlignVCenter
+            text: root.statusText
+            font.pixelSize: Appearance.font.pixelSize.large
+            color: Appearance.colors.colOnSurface
+        }
+
+        // The wide gap: pushes the glyph to the right edge.
+        Item {
+            Layout.fillWidth: true
+            Layout.preferredWidth: 0
+        }
+
+        // The bar's own BatteryIndicator, same component and same user style
+        // (android16/oneui/legacy/material), popup off.
+        Loader {
+            id: barBatteryIcon
+            Layout.alignment: Qt.AlignVCenter
+            Layout.maximumHeight: contractedLayout.height
+            source: Qt.resolvedUrl("../../bar/widgets/battery/BatteryIndicator.qml")
+
+            Binding {
+                target: barBatteryIcon.item
+                property: "disablePopup"
+                value: true
+            }
+            Binding {
+                target: barBatteryIcon.item
+                property: "colText"
+                value: Appearance.colors.colOnSurface
+            }
         }
     }
 
-    // ── Expanded ────────────────────────────────────────────────────────
-
-    Item {
-        id: expandedLayout
-        anchors.fill: parent
-        visible: root.isExpanded
-
-        ColumnLayout {
-            anchors.fill: parent
-            anchors.margins: 14
-            spacing: 6
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 10
-
-                StyledText {
-                    text: String(root.batteryPercent) + "%"
-                    font.pixelSize: 30
-                    font.bold: true
-                    color: root.accentColor
-                }
-
-                Item { Layout.fillWidth: true }
-
-                Rectangle {
-                    Layout.alignment: Qt.AlignVCenter
-                    width: 44
-                    height: 22
-                    radius: 5
-                    color: "transparent"
-                    clip: true
-
-                    Rectangle {
-                        width: 3
-                        height: 10
-                        radius: 1
-                        x: parent.width + 1
-                        y: (parent.height - 10) / 2
-                        color: Qt.rgba(root.accentColor.r, root.accentColor.g, root.accentColor.b, 0.35)
-                    }
-
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: parent.radius
-                        color: "transparent"
-                        opacity: 0.35
-                        scale: 1 - 2 / parent.height
-                        layer.enabled: true
-                        layer.smooth: true
-                    }
-
-                    Rectangle {
-                        id: expFillRect
-                        anchors.left: parent.left
-                        anchors.leftMargin: 2
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: Math.max(0, (parent.width - 4) * root.batteryPercent / 100)
-                        height: parent.height - 4
-                        radius: 3
-                        color: root.accentColor
-
-                        Behavior on width {
-                            NumberAnimation { duration: 600; easing.type: Easing.OutCubic }
-                        }
-                    }
-                }
-            }
-
-            StyledText {
-                text: root.statusText
-                font.pixelSize: Appearance.font.pixelSize.smaller
-                color: Appearance.colors.colOnSurfaceVariant
-            }
-
-            StyledText {
-                text: root.timeText
-                font.pixelSize: Appearance.font.pixelSize.smallest
-                color: Appearance.colors.colOutlineVariant
-                visible: root.timeText !== ""
-            }
-
-            Item { Layout.fillHeight: true }
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 6
-
-                MaterialSymbol {
-                    text: root.profileIcon
-                    iconSize: 14
-                    color: root.isPowerSaving ? "#fbbc04"
-                        : root.isPerformance ? "#42A5F5"
-                        : Appearance.colors.colOnSurfaceVariant
-                }
-
-                StyledText {
-                    text: root.profileLabel
-                    font.pixelSize: Appearance.font.pixelSize.smallest
-                    color: Appearance.colors.colOnSurfaceVariant
-                    Layout.fillWidth: true
-                }
-
-                Rectangle {
-                    width: 28
-                    height: 28
-                    radius: 14
-                    color: Qt.rgba(Appearance.colors.colOnSurface.r, Appearance.colors.colOnSurface.g, Appearance.colors.colOnSurface.b, 0.08)
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (PowerProfiles.hasPerformanceProfile) {
-                                if (PowerProfiles.profile === PowerProfile.PowerSaver)
-                                    PowerProfiles.profile = PowerProfile.Balanced;
-                                else if (PowerProfiles.profile === PowerProfile.Balanced)
-                                    PowerProfiles.profile = PowerProfile.Performance;
-                                else
-                                    PowerProfiles.profile = PowerProfile.PowerSaver;
-                            } else {
-                                PowerProfiles.profile = PowerProfiles.profile === PowerProfile.PowerSaver
-                                    ? PowerProfile.Balanced : PowerProfile.PowerSaver;
-                            }
-                        }
-                    }
-
-                    MaterialSymbol {
-                        anchors.centerIn: parent
-                        text: "swap_horiz"
-                        iconSize: 14
-                        color: Appearance.colors.colOnSurfaceVariant
-                    }
-                }
-            }
-        }
-    }
 }

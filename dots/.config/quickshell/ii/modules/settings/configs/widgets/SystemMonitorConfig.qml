@@ -43,6 +43,69 @@ ContentPage {
     }
 
     ContentSection {
+        icon: "style"
+        title: Translation.tr("Style & Layout")
+
+        ContentSubsection {
+            title: Translation.tr("Visual style")
+            icon: "palette"
+            ConfigSelectionArray {
+                currentValue: Config.options.bar.styles.resources
+                onSelected: newValue => {
+                    Config.options.bar.styles.resources = String(newValue);
+                }
+                options: [
+                    { displayName: Translation.tr("Default"), icon: "dock_to_bottom", value: "default" },
+                    { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" },
+                    { displayName: Translation.tr("Sculpt"), icon: "shapes", value: "sculpt" }
+                ]
+            }
+        }
+
+        ExpressiveColorModeSubsection {
+            visible: Config.options.bar.styles.resources === "sculpt"
+            currentValue: Config.options.bar.resources.colorMode
+            onSelected: newValue => Config.options.bar.resources.colorMode = String(newValue)
+        }
+
+        ContentSubsection {
+            visible: Config.options.bar.styles.resources === "sculpt"
+            title: Translation.tr("Sculpt variant")
+
+            ConfigSelectionArray {
+                currentValue: Config.options.bar.resources.sculptVariant
+                onSelected: newValue => Config.options.bar.resources.sculptVariant = String(newValue)
+                options: [
+                    { displayName: Translation.tr("Pressure"), icon: "compress", value: "pressure" },
+                    { displayName: Translation.tr("Bars"), icon: "bar_chart", value: "bars" },
+                    { displayName: Translation.tr("Trace"), icon: "show_chart", value: "trace" }
+                ]
+            }
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: Config.options.bar.styles.resources === "sculpt" && Config.options.bar.resources.sculptVariant === "pressure"
+            materialIcon: "compress"
+            text: Translation.tr("Every number is set under the load it reports: idle is light and wide, busy is black and condensed, so the row's texture says which part of the machine is working.")
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: Config.options.bar.styles.resources === "sculpt" && Config.options.bar.resources.sculptVariant === "bars"
+            materialIcon: "bar_chart"
+            text: Translation.tr("A tiny chart with one bar per metric. The busiest bar takes the vivid tone and a sunburst on top, and its number is read out beside the chart.")
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: Config.options.bar.styles.resources === "sculpt" && Config.options.bar.resources.sculptVariant === "trace"
+            materialIcon: "show_chart"
+            text: Translation.tr("A card per metric with its recent history drawn behind the number, cropped by the card. Disk and temperature fill up to their level instead.")
+        }
+    }
+
+    ContentSection {
         icon: "memory"
         title: Translation.tr("Resources Tracker")
 

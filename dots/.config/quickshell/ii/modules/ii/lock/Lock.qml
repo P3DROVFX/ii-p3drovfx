@@ -7,6 +7,7 @@ import qs.modules.common.panels.lock
 import QtQuick
 import Quickshell
 import Quickshell.Hyprland
+import Quickshell.Wayland
 
 LockScreen {
     id: root
@@ -82,6 +83,20 @@ LockScreen {
         context: root.context
     }
 
+    // Always On Display after a stretch without input on the lock, on every screen.
+    // The desktop has no timer of its own: its idle timeout is the lock itself. Waking
+    // is input, which re-arms the monitor for the next stretch.
+    readonly property int aodTimeoutMinutes: Config.options.oledSaver.lockTimeout ?? 0
+    readonly property bool aodEnabled: (Config.options.oledSaver.enable ?? true) && root.aodTimeoutMinutes > 0
+    IdleMonitor {
+        enabled: GlobalStates.screenLocked && root.aodEnabled
+        timeout: root.aodTimeoutMinutes * 60
+        onIsIdleChanged: {
+            if (isIdle && GlobalStates.screenLocked && root.aodEnabled)
+                GlobalStates.oledSaverMonitors = Quickshell.screens.map(s => s.name);
+        }
+    }
+
     // Single batch for lock and unlock so we don't race multiple hyprctl calls
     Connections {
         target: GlobalStates
@@ -131,7 +146,7 @@ LockScreen {
                     monitorsToAlloc.push({
                         name: mon,
                         activeWorkspaceId: next[mon] ?? 1,
-                        index: i
+                        index: HyprlandData.workspaceMapIndex(mon)
                     });
                 }
 
@@ -187,9 +202,81 @@ LockScreen {
         }
     }
 
+    Binding {
+        target: HyprlandData
+        property: "holdWorkspaceMapSync"
+        value: GlobalStates.screenLocked
+    }
+
+    // A monitor that drops and comes back while locked (HDMI on resume) loses its lock
+    // workspace: Hyprland moves it to another output and gives the returning one whatever
+    // workspace it picks, often one with windows, which session_lock_xray then shows under
+    // the lock. Put every monitor back on an empty lock workspace.
+    function enforceLockWorkspaces() {
+        if (!GlobalStates.screenLocked)
+            return;
+        const occupied = new Set((HyprlandData.windowList || []).map(w => w?.workspace?.id));
+        const temps = Object.assign({}, root.temporaryWorkspaces);
+        const saved = Object.assign({}, root.savedWorkspaces);
+        let batch = "keyword animation workspaces,0";
+        let hasCmds = false;
+        for (const mData of HyprlandData.monitors) {
+            const mon = mData?.name;
+            const cur = mData?.activeWorkspace?.id;
+            if (!mon || cur === undefined)
+                continue;
+            let lockWs = temps[mon];
+            if (cur === lockWs && !occupied.has(cur))
+                continue;
+            if (saved[mon] === undefined)
+                saved[mon] = cur;
+            if (lockWs === undefined || occupied.has(lockWs)) {
+                const taken = Object.values(temps);
+                const emptyMap = WorkspaceLockUtils.allocateEmptyWorkspaces({
+                    monitors: [{ name: mon, activeWorkspaceId: saved[mon], index: HyprlandData.workspaceMapIndex(mon) }],
+                    windowList: HyprlandData.windowList || [],
+                    allMonitors: HyprlandData.monitors || [],
+                    useWorkspaceMap: Config.options?.bar?.workspaces?.useWorkspaceMap ?? false,
+                    workspaceMap: Config.options?.bar?.workspaces?.workspaceMap ?? [],
+                    workspacesShown: Config.options?.bar?.workspaces?.shown || 10
+                });
+                lockWs = emptyMap[mon] || (saved[mon] + 1);
+                while (taken.includes(lockWs) || occupied.has(lockWs))
+                    lockWs++;
+                temps[mon] = lockWs;
+            }
+            batch += ` ; dispatch hl.dsp.workspace.move({ workspace = ${lockWs}, monitor = "${mon}" })`;
+            batch += ` ; dispatch hl.dsp.focus {monitor="${mon}"} ; dispatch hl.dsp.focus {workspace=${lockWs}}`;
+            hasCmds = true;
+        }
+        if (!hasCmds)
+            return;
+        const focused = Hyprland.focusedMonitor?.name ?? "";
+        if (focused !== "")
+            batch += ` ; dispatch hl.dsp.focus {monitor="${focused}"}`;
+        batch += " ; keyword animation workspaces,1";
+        root.savedWorkspaces = saved;
+        root.temporaryWorkspaces = temps;
+        GlobalStates.lockSavedWorkspaces = saved;
+        GlobalStates.lockTempWorkspaces = temps;
+        Quickshell.execDetached(["hyprctl", "--batch", batch]);
+    }
+
+    // Hotplug sends a burst of monitor updates; act once it settles, and give the
+    // lock batch itself time to land before checking the result.
+    Timer {
+        id: enforceLockWorkspacesTimer
+        interval: 400
+        onTriggered: root.enforceLockWorkspaces()
+    }
+
     // Evict any new window opened while screen is locked out of the temporary lock workspace
     Connections {
         target: HyprlandData
+        function onMonitorsChanged() {
+            if (GlobalStates.screenLocked)
+                enforceLockWorkspacesTimer.restart();
+        }
         function onWindowListChanged() {
             if (!GlobalStates.screenLocked) return;
             if (!HyprlandData.windowListLoaded || !HyprlandData.windowList) return;

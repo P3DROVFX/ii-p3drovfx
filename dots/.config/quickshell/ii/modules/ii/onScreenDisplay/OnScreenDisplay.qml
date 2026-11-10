@@ -1,6 +1,7 @@
 import qs
 import qs.services
 import qs.modules.common
+import qs.modules.ii.dynamicIsland.core
 import qs.modules.common.widgets
 import qs.modules.ii.topLayer.osd
 import QtQuick
@@ -13,6 +14,7 @@ import Quickshell.Hyprland
 import Quickshell.Services.Pipewire
 import "components"
 import "popups"
+import "tuner"
 
 Scope {
     id: root
@@ -228,7 +230,8 @@ Scope {
     Connections {
         target: KeyboardBacklight
         function onCurrentValueChanged() {
-            if (root.isStartup || GlobalStates.dashboardPanelOpen || KeyboardBacklight.suppressOsd)
+            // With keysOnly on, the service gates changes and reports the ones that pass as keyChanged.
+            if (root.isStartup || GlobalStates.dashboardPanelOpen || KeyboardBacklight.suppressOsd || KeyboardBacklight.keysOnly)
                 return;
             if (!KeyboardBacklight.initialValueLoaded) {
                 KeyboardBacklight.initialValueLoaded = true;
@@ -237,6 +240,107 @@ Scope {
             root.protectionMessage = "";
             root.currentIndicator = "keyboardBrightness";
             root.triggerOsd();
+        }
+        function onKeyChanged() {
+            if (root.isStartup || GlobalStates.dashboardPanelOpen)
+                return;
+            root.protectionMessage = "";
+            root.currentIndicator = "keyboardBrightness";
+            root.triggerOsd();
+        }
+    }
+
+    // ── On/off pills ──────────────────────────────────────────────────────────────
+    // The "toggle" indicator only exists in the Dynamic Island and the connected OSD; the
+    // classic popup has no face for it, so there nothing is shown. The Tuner style draws it
+    // everywhere.
+    readonly property bool tunerStyle: Config.ready && Config.options.osd.style === "tuner"
+    readonly property bool pillsDrawn: IslandPolicy.ownsOsd || GlobalStates.osdConnectActive || root.tunerStyle
+
+    function showPill(gateId: string, icon: string, label: string, state: string, caption: string): void {
+        if (!root.pillsDrawn || !Config.osdIndicatorEnabled(gateId))
+            return;
+        GlobalStates.osdPill = {
+            icon: icon,
+            label: label,
+            state: (state === "on" || state === "off") ? state : "",
+            caption: caption
+        };
+        root.protectionMessage = "";
+        root.currentIndicator = "toggle";
+        // Also written directly: `osd trigger` and the settings preview set the global
+        // without going through currentIndicator, which then no longer changes here.
+        GlobalStates.osdCurrentIndicator = "toggle";
+        root.triggerOsd();
+    }
+
+    Connections {
+        target: GlobalStates
+        function onOsdPillRequested(icon, label, state) {
+            root.showPill("pills", icon, label, state, "");
+        }
+        function onOsdNoticeRequested(icon, caption, label) {
+            root.showPill("pills", icon, label, "", caption);
+        }
+    }
+
+    Connections {
+        target: Audio.source?.audio ?? null
+        function onMutedChanged() {
+            if (!Audio.ready || root.isStartup || GlobalStates.dashboardPanelOpen)
+                return;
+            const muted = Audio.source.audio.muted;
+            root.showPill("microphone", muted ? "mic_off" : "mic",
+                muted ? Translation.tr("Microphone muted") : Translation.tr("Microphone on"),
+                muted ? "off" : "on", "");
+        }
+    }
+
+    // Caps Lock and Num Lock: the default keybinds forward the key releases here without
+    // consuming them, and Hyprland's own keyboard state says which way they went. The
+    // release, not the press: xkb switches a lock off only when the second press is
+    // released, so at press time it still reads "on". Nothing runs between presses.
+    GlobalShortcut {
+        name: "osdCapsLock"
+        description: "Caps Lock pill (bind the Caps_Lock release to it, non-consuming)"
+        onReleased: lockKeyProc.probe("capsLock")
+    }
+
+    GlobalShortcut {
+        name: "osdNumLock"
+        description: "Num Lock pill (bind the Num_Lock release to it, non-consuming)"
+        onReleased: lockKeyProc.probe("numLock")
+    }
+
+    Process {
+        id: lockKeyProc
+        property string key: ""
+
+        function probe(key: string): void {
+            if (!root.pillsDrawn || !Config.osdIndicatorEnabled(key))
+                return;
+            lockKeyProc.key = key;
+            lockKeyProc.running = true;
+        }
+
+        command: ["hyprctl", "devices", "-j"]
+        stdout: StdioCollector {
+            id: lockKeyOutput
+            onStreamFinished: {
+                let keyboards = [];
+                try {
+                    keyboards = JSON.parse(lockKeyOutput.text).keyboards ?? [];
+                } catch (e) {
+                    return;
+                }
+                const main = keyboards.find(k => k.main) ?? keyboards[0];
+                if (!main)
+                    return;
+                const caps = lockKeyProc.key === "capsLock";
+                const on = caps ? main.capsLock : main.numLock;
+                root.showPill(lockKeyProc.key, caps ? "keyboard_capslock" : "numbers",
+                    caps ? Translation.tr("Caps Lock") : Translation.tr("Num Lock"), on ? "on" : "off", "");
+            }
         }
     }
 
@@ -286,9 +390,64 @@ Scope {
         }
     }
 
+    // ── Tuner style without the island ────────────────────────────────────────────
+    // With the Dynamic Island on, the island draws the Tuner face itself (NotchContent).
+    // Kept loaded for the length of the fade-out after the OSD closes.
+    Timer {
+        id: tunerCloseTimer
+        interval: 250
+    }
+
+    Connections {
+        target: GlobalStates
+        function onOsdVolumeOpenChanged() {
+            if (!GlobalStates.osdVolumeOpen)
+                tunerCloseTimer.restart();
+        }
+    }
+
+    Loader {
+        id: tunerLoader
+        active: root.tunerStyle && !IslandPolicy.ownsOsd && (GlobalStates.osdVolumeOpen || tunerCloseTimer.running)
+
+        sourceComponent: TunerOsdWindow {
+            screen: root.focusedScreen
+            shown: GlobalStates.osdVolumeOpen
+            visible: Quickshell.screens.length > 0
+        }
+    }
+
+    // ── Classic OSD slide-out ─────────────────────────────────────────────────────
+    // The window is destroyed as soon as the Loader's `active` turns false. Reading
+    // `isClosing` there was a race: the Loader re-evaluates before the window's own handler
+    // sets it, so the window died before it could slide out. This latch changes only when
+    // the OSD opens (immediately) or once the slide has finished (the timer), never in the
+    // close notification itself.
+    property bool osdWindowAlive: false
+
+    Timer {
+        id: osdCloseTimer
+        // The slide is the 300 ms openedProgress Behavior below, plus a little margin.
+        interval: Math.round(300 * Appearance.animMultiplier) + 50
+        onTriggered: root.osdWindowAlive = false
+    }
+
+    Connections {
+        target: GlobalStates
+        function onOsdVolumeOpenChanged() {
+            if (GlobalStates.osdVolumeOpen) {
+                osdCloseTimer.stop();
+                root.osdWindowAlive = true;
+            } else {
+                osdCloseTimer.restart();
+            }
+        }
+    }
+
     Loader {
         id: osdLoader
-        active: (GlobalStates.osdVolumeOpen || root.isClosing) && !GlobalStates.osdConnectActive && !(Config.ready && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar))
+        active: root.osdWindowAlive && !GlobalStates.osdConnectActive && !IslandPolicy.ownsOsd
+            && !root.tunerStyle
 
         sourceComponent: PanelWindow {
             id: osdRoot
@@ -1654,5 +1813,6 @@ Scope {
     Component.onCompleted: {
         GlobalStates.osdCurrentIndicator = currentIndicator;
         GlobalStates.osdProtectionMessage = protectionMessage;
+        root.osdWindowAlive = GlobalStates.osdVolumeOpen;
     }
 }

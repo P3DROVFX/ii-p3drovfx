@@ -18,6 +18,7 @@ import qs.modules.ii.background.parallax
 import qs.modules.ii.background.overview
 import qs.modules.ii.background.blur
 import qs.modules.ii.editMode
+import qs.modules.ii.background.shortcuts
 
 PanelWindow {
     id: bgRoot
@@ -62,6 +63,15 @@ PanelWindow {
     // for it: the capture is taken once, when the effect is created, and is never retaken, so a
     // plane that grows underneath one leaves a band the blurred texture no longer reaches.
     property bool wallpaperSizeKnown: false
+    // Whether the size probe has answered *for the current path*. TransitionImage freezes the
+    // decode at source-set and never re-decodes, so feeding it a source before the probe answers
+    // would freeze the PREVIOUS wallpaper's decode size (native on boot, or the wrong size after
+    // a preset switch). The wallpaper source is committed to the plane only while this is true.
+    property bool wallpaperSizeFresh: false
+    // The file revision (WallpaperLayout.fileRevisions) the probe last answered
+    // for: a file rewritten in place keeps its path, so `wallpaperSizeFresh`
+    // alone cannot tell the old answer from the new one.
+    property int probedRevision: 0
 
     // State controllers
     WallpaperSizeProbe {
@@ -72,11 +82,15 @@ PanelWindow {
             bgRoot.wallpaperHeight = h;
             bgRoot.recalcWallpaperScale();
             bgRoot.wallpaperSizeKnown = true;
+            bgRoot.wallpaperSizeFresh = true;
+            bgRoot.probedRevision = WallpaperLayout.revisionOf(bgRoot.wallpaperPath);
         }
         // A missing or failing `magick` must never keep the wallpaper effects switched off for the
         // whole session - let them capture the screen-sized guess instead.
         onExited: (exitCode, exitStatus) => {
             bgRoot.wallpaperSizeKnown = true;
+            bgRoot.wallpaperSizeFresh = true;
+            bgRoot.probedRevision = WallpaperLayout.revisionOf(bgRoot.wallpaperPath);
         }
     }
 
@@ -84,13 +98,51 @@ PanelWindow {
         id: wallpaperProbeTimeout
         interval: 3000
         repeat: false
-        onTriggered: bgRoot.wallpaperSizeKnown = true
+        onTriggered: {
+            bgRoot.wallpaperSizeKnown = true;
+            bgRoot.wallpaperSizeFresh = true;
+            bgRoot.probedRevision = WallpaperLayout.revisionOf(bgRoot.wallpaperPath);
+        }
+    }
+
+    // ── Lock animation reusing the overview designs ─────────────────────────
+    // "gnome" and "material-shape" hand the lock to the overview background
+    // controller below, which then plays the exact same animations it plays
+    // for the overview. A video wallpaper keeps the legacy zoom: image-based
+    // effects cannot run on an animated plane.
+    readonly property string lockEffectStyle: {
+        const style = Config.options.lock.zoomAnimation?.style ?? "default";
+        if (style !== "gnome" && style !== "material-shape")
+            return "default";
+        return bgRoot.videoEffectsDisabled ? "default" : style;
+    }
+    readonly property bool lockEffectRequested: lockEffectStyle !== "default" && GlobalStates.screenLocked
+    // Latched copy for the STYLE bindings only: it holds the lock's design
+    // through the unlock rewind, so the close reverses the same effect instead
+    // of morphing into the overview's preset mid-flight. `active` deliberately
+    // reads the unlatched flag, or the progress would never rewind.
+    property bool lockEffectActive: lockEffectRequested
+    onLockEffectRequestedChanged: {
+        if (lockEffectRequested)
+            lockEffectActive = true;
+        else if (Config.options.background.useBackgroundOverviewAlways ?? false)
+            lockEffectActive = false; // progress is pinned at 1; nothing rewinds
+        else
+            lockEffectActive = lockEffectActive; // break the init binding, keep the value
+    }
+    Connections {
+        target: overviewController
+        function onProgressChanged() {
+            if (!bgRoot.lockEffectRequested && overviewController.progress <= 0.001)
+                bgRoot.lockEffectActive = false;
+        }
     }
 
     LockAnimController {
         id: lockAnim
         baseScale: bgRoot.baseWallpaperScale
         hasWindowsInActiveWorkspace: bgRoot.hasWindowsInActiveWorkspace
+        effectDriven: bgRoot.lockEffectStyle !== "default"
         onRequestRipple: function(x, y) {
             lockScreenRippleEffect.startRipple(x, y);
         }
@@ -120,14 +172,25 @@ PanelWindow {
 
     OverviewBackgroundController {
         id: overviewController
-        active: GlobalStates.overviewBackgroundActive && bgRoot.isMonitorFocused
-        style: Config.options.background.overviewBackgroundStyle
+        active: (Config.options.background.useBackgroundOverviewAlways ?? false)
+            || bgRoot.lockEffectRequested
+            || (GlobalStates.overviewBackgroundActive && (bgRoot.isOverviewMonitor || bgRoot.mirroredOverview))
+            || (Boolean(Config.options.background?.zoomOutEnabled) && bgRoot.scratchpadOpenOnMonitor)
+        // Only where the overview is what would zoom this wallpaper in the first place.
+        held: GlobalStates.overviewDragging && bgRoot.isMonitorFocused && !bgRoot.lockEffectRequested
+            && !GlobalStates.overviewUsesAppDrawer && Config.options.background.zoomOutEnabled
+            && !(Config.options.background.useBackgroundOverviewAlways ?? false)
+            && Config.options.overview.animationStyle !== "none"
+        heldProgress: GlobalStates.gestureDragProgress
+        style: bgRoot.lockEffectActive ? bgRoot.lockEffectStyle : Config.options.background.overviewBackgroundStyle
+        lockDriven: bgRoot.lockEffectActive
+        openHold: GlobalStates.overviewZoomHeld && (bgRoot.isOverviewMonitor || bgRoot.mirroredOverview) && !bgRoot.lockEffectActive
         legacyStyle: Config.options.background.zoomOutStyle
         videoEffectsDisabled: bgRoot.videoEffectsDisabled
         screenWidth: bgRoot.screen.width
         screenHeight: bgRoot.screen.height
-        wallpaperWidth: bgRoot.wallpaperWidth
-        wallpaperHeight: bgRoot.wallpaperHeight
+        wallpaperWidth: bgRoot.wallpaperBoxWidth
+        wallpaperHeight: bgRoot.wallpaperBoxHeight
         baseWallpaperScale: bgRoot.baseWallpaperScale
         parallaxX: bgRoot.videoEffectsDisabled ? 0 : parallax.parallaxX
         parallaxY: bgRoot.videoEffectsDisabled ? 0 : parallax.parallaxY
@@ -135,28 +198,33 @@ PanelWindow {
         wallpaperDisplacementY: bgRoot.videoEffectsDisabled ? 0 : (parallax.parallaxY - parallax.centeredY)
         wallpaperPath: bgRoot.wallpaperPath
         wallpaperSafetyTriggered: bgRoot.wallpaperSafetyTriggered
+        realGnomeArea: {
+            const name = bgRoot.screen?.name ?? "";
+            const area = GlobalStates.realGnomeAreaFor(name) ?? Persistent.states.overview?.realGnomeAreas?.[name];
+            return area ? Qt.rect(area.x, area.y, area.width, area.height) : Qt.rect(0, 0, 0, 0);
+        }
     }
 
     readonly property bool isGnomeLikeOverview: overviewController.isGnomeLike
 
-    // Publish the overview background transform for the focused monitor.
+    // Publish the overview background transform for the overview's monitor.
     Binding {
         target: GlobalStates
         property: "overviewZoomScale"
         value: bgRoot.isGnomeLikeOverview ? overviewController.scale : 1.0
-        when: bgRoot.isMonitorFocused
+        when: bgRoot.isOverviewMonitor
     }
     Binding {
         target: GlobalStates
         property: "overviewZoomOriginX"
         value: bgRoot.isGnomeLikeOverview ? overviewController.scaleOriginX : 0.5
-        when: bgRoot.isMonitorFocused
+        when: bgRoot.isOverviewMonitor
     }
     Binding {
         target: GlobalStates
         property: "overviewZoomOriginY"
         value: bgRoot.isGnomeLikeOverview ? overviewController.scaleOriginY : 0.5
-        when: bgRoot.isMonitorFocused
+        when: bgRoot.isOverviewMonitor
     }
 
     // Expose properties from controllers for internal bindings
@@ -185,7 +253,8 @@ PanelWindow {
             activeId = GlobalStates._editSavedWorkspace;
         else if (activeId > 1000000)
             activeId = 2147483647 - activeId;
-        return HyprlandData.windowList.some(function(w) { return w.workspace.id === activeId; });
+        return HyprlandData.specialWindowsShown(monName)
+            || HyprlandData.windowList.some(function(w) { return HyprlandData.sameWorkspace(w.workspace.id, activeId); });
     }
     // Deferred to avoid Wayland dispatch reentrancy crash in PanelWindow visibility
     property bool deferredFullscreen: false
@@ -200,8 +269,20 @@ PanelWindow {
 
     // Workspaces calculations
     property HyprlandMonitor monitor: Hyprland.monitorFor(modelData)
+    readonly property var thisMonitorData: {
+        const monName = bgRoot.monitor?.name ?? (bgRoot.screen?.name ?? "");
+        return (HyprlandData.monitors ?? []).find(m => m.name === monName) ?? null;
+    }
+    readonly property bool scratchpadOpenOnMonitor: {
+        const spec = bgRoot.thisMonitorData?.specialWorkspace;
+        return Boolean(spec && spec.name !== "");
+    }
+    // Real Gnome shows the overview on every monitor, not just the focused one.
+    readonly property bool mirroredOverview: GlobalStates.realGnomeMirrored && overviewController.isRealGnome
     readonly property bool isMonitorFocused: Quickshell.screens.length <= 1 || ((Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "") == (monitor ? monitor.name : ""))
-    readonly property bool loopEnabled: !wallpaperIsVideo && Config.options.background.parallax.loop
+    // The overview's monitor stays the one it opened on while the pointer roams.
+    readonly property bool isOverviewMonitor: Quickshell.screens.length <= 1 || GlobalStates.overviewMonitor === (monitor ? monitor.name : "")
+    readonly property bool loopEnabled: !videoEffectsDisabled && Config.options.background.parallax.loop
     readonly property var intensitySpans: [20, 15, 12, 10, 8, 7, 5, 4, 3, 2]
     readonly property int chunkSize: {
         let intensity = Config.options.background.parallax.intensity;
@@ -211,7 +292,7 @@ PanelWindow {
     }
     readonly property bool useWorkspaceMap: Config.options.bar.workspaces.useWorkspaceMap
     readonly property var workspaceMap: Config.options.bar.workspaces.workspaceMap
-    readonly property int monitorIndex: Quickshell.screens.indexOf(modelData)
+    readonly property int monitorIndex: HyprlandData.workspaceMapIndex(modelData.name)
     readonly property int workspaceOffset: useWorkspaceMap ? workspaceMap[monitorIndex] : 0
     readonly property int workspaceGroup: {
         if (!loopEnabled)
@@ -242,12 +323,75 @@ PanelWindow {
     // Wallpaper options
     property bool useSeparateLightModeWallpaper: Config.options && Config.options.background ? (Config.options.background.useSeparateLightModeWallpaper ?? false) : false
     property string lightModeWallpaperPath: Config.options && Config.options.background && Config.options.background.lightModeWallpaperPath ? Config.options.background.lightModeWallpaperPath : ""
+    // ── This screen's own wallpaper and framing (services/WallpaperLayout.qml) ─
+    // Edit Mode's Wallpaper catalogue can give a screen a picture of its own and
+    // zoom, move or turn whichever picture it shows. A screen with neither is
+    // exactly the desktop it always was: the shared wallpaper, in a plane of the
+    // picture's own proportions.
+    readonly property string ownWallpaperPath: WallpaperLayout.ownPathFor(bgRoot.editScreenName)
+    // The file this screen's framings are keyed by (the video itself, for a
+    // shared video, rather than its poster frame).
+    readonly property string framingSourcePath: WallpaperLayout.sourcePathFor(bgRoot.editScreenName)
+    // A framed picture is laid out in a plane of the SCREEN's proportions, so
+    // the room the framing leaves - including what the cover fit crops off a
+    // picture of another shape - is the user's to move through, and the
+    // parallax, the lock's zoom-out and the overview all work on that plane
+    // the way they work on any other. Read from the plane itself, so it turns
+    // with the picture actually on screen rather than the config.
+    readonly property bool wallpaperFramed: wallpaperImage.framed
+    // Vertical workspace parallax sweeps the WHOLE picture: a framed plane of
+    // the screen's proportions would leave it only the workspace zoom's sliver
+    // around the framing's pan, so the plane keeps the picture's on-screen
+    // height instead (the pan along that axis is the parallax's to drive).
+    // A centred picture keeps the screen plane it letterboxes into.
+    readonly property bool framedVerticalSweep: {
+        if (!bgRoot.wallpaperFramed || bgRoot.videoEffectsDisabled || wallpaperImage.framingCentering > 0.001)
+            return false;
+        const p = Config.options.background.parallax;
+        if (!p.enableWorkspace || bgRoot.wallpaperWidth <= 0 || bgRoot.wallpaperHeight <= 0)
+            return false;
+        return p.vertical || (p.autoVertical && bgRoot.framedPictureAspect > 1);
+    }
+    // Height over width of the picture as the framing turns it.
+    readonly property real framedPictureAspect: CF.WallpaperFraming.isSideways(wallpaperImage.framingAngle)
+        ? bgRoot.wallpaperWidth / Math.max(1, bgRoot.wallpaperHeight)
+        : bgRoot.wallpaperHeight / Math.max(1, bgRoot.wallpaperWidth)
+    readonly property real wallpaperBoxWidth: bgRoot.wallpaperFramed ? bgRoot.screen.width : bgRoot.wallpaperWidth
+    readonly property real wallpaperBoxHeight: !bgRoot.wallpaperFramed ? bgRoot.wallpaperHeight
+        : bgRoot.framedVerticalSweep ? Math.max(bgRoot.screen.height, bgRoot.screen.width * bgRoot.framedPictureAspect)
+        : bgRoot.screen.height
+    // The geometry Edit Mode's overlay turns a drag into a position with: the
+    // plane a framed picture gets (the screen at the workspace zoom) and the
+    // picture's own size in logical pixels (the unit the centred fit draws it
+    // in), once the probe has measured it.
+    readonly property var framingGeometry: ({
+        "planeWidth": bgRoot.screen ? bgRoot.screen.width * bgRoot.baseWallpaperScale : 0,
+        "planeHeight": bgRoot.screen ? bgRoot.screen.height * bgRoot.baseWallpaperScale : 0,
+        "imageWidth": bgRoot.wallpaperSizeKnown ? wallpaperImage.logicalFileWidth : 0,
+        "imageHeight": bgRoot.wallpaperSizeKnown ? wallpaperImage.logicalFileHeight : 0
+    })
+    onFramingGeometryChanged: bgRoot.publishFramingGeometry()
+    function publishFramingGeometry() {
+        const g = bgRoot.framingGeometry;
+        WallpaperLayout.publishGeometry(bgRoot.editScreenName, g.planeWidth, g.planeHeight, g.imageWidth, g.imageHeight);
+    }
+
     property bool wallpaperIsVideo: {
+        // A screen of its own always shows a picture (WallpaperLayout only
+        // takes images), whatever the shared wallpaper is.
+        if (bgRoot.ownWallpaperPath !== "")
+            return false;
         const path = Config.options && Config.options.background && Config.options.background.wallpaperPath ? Config.options.background.wallpaperPath : "";
         return Wallpapers.isVideoFile(path);
     }
-    readonly property bool videoEffectsDisabled: wallpaperIsVideo || Config.options.background.useWallpaperEngine
+    // The shell plays the video itself (background.videoBackend "shell"): image
+    // effects keep working on it, and mpvpaper is not running.
+    readonly property bool videoInShell: wallpaperIsVideo && Wallpapers.videoRenderedByShell
+        && !(!Appearance.m3colors.darkmode && useSeparateLightModeWallpaper && lightModeWallpaperPath !== "")
+    readonly property bool videoEffectsDisabled: (wallpaperIsVideo && !videoInShell) || Config.options.background.useWallpaperEngine
     property string wallpaperPath: {
+        if (bgRoot.ownWallpaperPath !== "")
+            return bgRoot.ownWallpaperPath;
         if (!Appearance.m3colors.darkmode && useSeparateLightModeWallpaper && lightModeWallpaperPath !== "") {
             return lightModeWallpaperPath;
         }
@@ -274,20 +418,22 @@ PanelWindow {
         const sensitiveNetwork = (CF.StringUtils.stringListContainsSubstring(Network.networkName.toLowerCase(), Config.options.workSafety.triggerCondition.networkNameKeywords));
         return enabled && sensitiveWallpaper && sensitiveNetwork;
     }
-    property real wallpaperToScreenRatio: Math.min(wallpaperWidth / screen.width, wallpaperHeight / screen.height)
+    // The plane's proportions (wallpaperBox*), not the file's: the same thing
+    // until the screen frames its picture.
+    property real wallpaperToScreenRatio: Math.min(wallpaperBoxWidth / screen.width, wallpaperBoxHeight / screen.height)
     property real preferredWallpaperScale: videoEffectsDisabled ? 1.0 : Config.options.background.parallax.workspaceZoom
-    property real movableXSpace: ((wallpaperWidth / wallpaperToScreenRatio * baseWallpaperScale) - screen.width) / 2
-    property real movableYSpace: ((wallpaperHeight / wallpaperToScreenRatio * baseWallpaperScale) - screen.height) / 2
+    property real movableXSpace: ((wallpaperBoxWidth / wallpaperToScreenRatio * baseWallpaperScale) - screen.width) / 2
+    property real movableYSpace: ((wallpaperBoxHeight / wallpaperToScreenRatio * baseWallpaperScale) - screen.height) / 2
 
     readonly property real minSafeScale: {
-        const w = wallpaperWidth / wallpaperToScreenRatio * baseWallpaperScale;
-        const h = wallpaperHeight / wallpaperToScreenRatio * baseWallpaperScale;
+        const w = wallpaperBoxWidth / wallpaperToScreenRatio * baseWallpaperScale;
+        const h = wallpaperBoxHeight / wallpaperToScreenRatio * baseWallpaperScale;
         if (w <= 0 || h <= 0)
             return 1.0;
         return Math.max(screen.width / w, screen.height / h);
     }
 
-    readonly property bool verticalParallax: !videoEffectsDisabled && ((Config.options.background.parallax.autoVertical && wallpaperHeight > wallpaperWidth) || Config.options.background.parallax.vertical)
+    readonly property bool verticalParallax: !videoEffectsDisabled && ((Config.options.background.parallax.autoVertical && wallpaperBoxHeight > wallpaperBoxWidth) || Config.options.background.parallax.vertical)
     // Colors
     property bool shouldBlur: (GlobalStates.lockLookActive && Config.options.lock.blur.enable)
     property color dominantColor: Appearance.colors.colPrimary // Default, to be changed
@@ -305,7 +451,7 @@ PanelWindow {
     onVideoPanYChanged: bgRoot.sendMpvPan()
 
     function sendMpvPan() {
-        if (!bgRoot.wallpaperIsVideo || !bgRoot.screen) return;
+        if (!bgRoot.wallpaperIsVideo || bgRoot.videoInShell || !bgRoot.screen) return;
         const sock = "/tmp/mpvpaper-" + bgRoot.screen.name + ".sock";
         const px = videoPanX.toFixed(4);
         const py = videoPanY.toFixed(4);
@@ -318,7 +464,7 @@ PanelWindow {
         animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
     }
 
-    readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
+    readonly property bool isScrollingLayout: GlobalStates.scrollingLayoutActive
 
     property var zoomLevels: ({
         "in": {
@@ -365,7 +511,7 @@ PanelWindow {
         right: true
     }
     color: {
-        if (!bgRoot.wallpaperSafetyTriggered || bgRoot.wallpaperIsVideo)
+        if (!bgRoot.wallpaperSafetyTriggered || (bgRoot.wallpaperIsVideo && !bgRoot.videoInShell))
             return "transparent";
         return CF.ColorUtils.mix(Appearance.colors.colLayer0, Appearance.colors.colPrimary, 0.75);
     }
@@ -374,6 +520,15 @@ PanelWindow {
     }
 
     onWallpaperPathChanged: {
+        // A new file has unknown dimensions until its own probe answers; the
+        // decode-geometry gate in WallpaperImage holds the source until then.
+        bgRoot.wallpaperSizeFresh = false;
+        bgRoot.updateZoomScale();
+    }
+    // The same file rewritten (a quarter turn written into it): new dimensions.
+    readonly property int wallpaperRevision: WallpaperLayout.revisionOf(bgRoot.wallpaperPath)
+    onWallpaperRevisionChanged: {
+        bgRoot.wallpaperSizeFresh = false;
         bgRoot.updateZoomScale();
     }
     onPreferredWallpaperScaleChanged: bgRoot.recalcWallpaperScale()
@@ -572,6 +727,8 @@ PanelWindow {
 
     Component.onCompleted: {
         GlobalStates.registerOverviewBackgroundController(bgRoot.screen ? bgRoot.screen.name : "", overviewController);
+        DepthEffect.registerPlane(bgRoot.screen ? bgRoot.screen.name : "", wallpaperImage);
+        bgRoot.publishFramingGeometry();
         // Do not re-run matugen / switchwall on quickshell reload/startup.
         // Theme colors and wallpaper are already persisted on disk.
         // The path-changed handler cannot carry the first probe on its own: when the config is
@@ -585,6 +742,7 @@ PanelWindow {
             MusicVideoService.stopVideo();
         bgRoot.releaseMediaModeRegistration();
         GlobalStates.unregisterOverviewBackgroundController(bgRoot.screen ? bgRoot.screen.name : "", overviewController);
+        DepthEffect.unregisterPlane(bgRoot.screen ? bgRoot.screen.name : "", wallpaperImage);
     }
 
     LockRippleEffect {
@@ -604,14 +762,20 @@ PanelWindow {
             wallpaperPath: bgRoot.wallpaperPath
             lockscreenWallpaperPath: bgRoot.lockscreenWallpaperPath
             useSeparateLockscreenWallpaper: bgRoot.useSeparateLockscreenWallpaper
-            wallpaperIsVideo: bgRoot.wallpaperIsVideo
+            wallpaperIsVideo: bgRoot.wallpaperIsVideo && !bgRoot.videoInShell
+            shellVideoPath: bgRoot.videoInShell ? (Config.options.background.wallpaperPath ?? "") : ""
             wallpaperSafetyTriggered: bgRoot.wallpaperSafetyTriggered
             preferredWallpaperScale: bgRoot.preferredWallpaperScale
             effectiveWallpaperScale: bgRoot.effectiveWallpaperScale
             baseWallpaperScale: bgRoot.baseWallpaperScale
-            wallpaperWidth: bgRoot.wallpaperWidth
-            wallpaperHeight: bgRoot.wallpaperHeight
+            wallpaperWidth: bgRoot.wallpaperBoxWidth
+            wallpaperHeight: bgRoot.wallpaperBoxHeight
+            fileWidth: bgRoot.wallpaperWidth
+            fileHeight: bgRoot.wallpaperHeight
+            framingKey: bgRoot.framingSourcePath
             wallpaperSizeKnown: bgRoot.wallpaperSizeKnown
+            wallpaperSizeFresh: bgRoot.wallpaperSizeFresh
+            probedRevision: bgRoot.probedRevision
             wallpaperToScreenRatio: bgRoot.wallpaperToScreenRatio
             movableXSpace: bgRoot.movableXSpace
             movableYSpace: bgRoot.movableYSpace
@@ -663,6 +827,16 @@ PanelWindow {
             }
         }
 
+        DesktopShortcutDropArea {
+            anchors.fill: parent
+            screenName: bgRoot.editScreenName
+        }
+
+        DesktopIconPlates {
+            anchors.fill: parent
+            screenName: bgRoot.editScreenName
+        }
+
         // Edit Mode's card: the blurred backdrop, corner, shadow and edge around the shrunk
         // desktop, drawn over the wallpaper and cut out to the card. Loaded only while the mode is
         // on or animating, so at rest nothing here exists. Non-interactive: the widgets surface
@@ -689,6 +863,24 @@ PanelWindow {
             sourceItem: wallpaperImage
             screenWidth: bgRoot.screen.width
             screenHeight: bgRoot.screen.height
+        }
+
+        // Always On Display over the lock: pure black in place of the wallpaper, under
+        // the widgets window (which keeps the widgets, in grey) and the lock surface
+        // (which slides its islands away). See OledSaver.qml for the desktop side.
+        Rectangle {
+            anchors.fill: parent
+            z: 2
+            color: "black"
+            // Edit Mode's AOD tab shows the same black on the card, at the tab's pace.
+            opacity: Math.max(GlobalStates.screenLocked && GlobalStates.oledSaverMonitors.includes(bgRoot.editScreenName) ? 1 : 0,
+                bgRoot.isEditMonitor ? GlobalStates.editAodProgress : 0)
+            visible: opacity > 0
+            // The tab's scalar is already animated.
+            Behavior on opacity {
+                enabled: !GlobalStates.editMode
+                animation: Appearance.animation.elementMoveSlow.numberAnimation.createObject(this)
+            }
         }
 
         GlobalShortcut {

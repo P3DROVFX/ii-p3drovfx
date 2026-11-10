@@ -116,8 +116,17 @@ DockButton {
         return Item.Bottom;
     }
 
-    scale: (_pressed ? 0.88 : 1.0) * magScale
-    z: Math.round(magScale * 10)
+    property real pressProgress: _pressed ? 1 : 0
+    scale: (1 - pressProgress * 0.12) * magScale
+    Behavior on pressProgress {
+        NumberAnimation {
+            duration: Appearance.animation.elementMoveFast.duration
+            easing.type: Appearance.animation.elementMoveFast.type
+            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+        }
+    }
+    // Two tiers (see the delegate wrapper's z): no per-frame render stack reorder.
+    z: magScale > 1.01 ? 2 : 1
 
     property bool _pressed: false
     property bool fileHovered: false
@@ -152,20 +161,22 @@ DockButton {
             acceptedButtons: Qt.LeftButton | Qt.RightButton
             preventStealing: true
             cursorShape: Qt.PointingHandCursor
-            property real pressCoord: 0
+            property point pressPoint: Qt.point(0, 0)
+            property int pressButton: Qt.NoButton
             property bool dragActive: false
 
             onPressed: event => {
-                root._pressed = true;
-                if (event.button === Qt.LeftButton) {
-                    pressCoord = root.isVertical ? event.y : event.x;
-                }
+                pressButton = event.button;
+                root._pressed = event.button === Qt.LeftButton;
+                // Local coordinates move under a stationary pointer as the
+                // icon magnifies. Only scene movement can start a real drag.
+                pressPoint = dragOverlay.mapToItem(null, event.x, event.y);
             }
             onPositionChanged: event => {
-                if (!pressed || event.button !== Qt.LeftButton)
+                if (!pressed || pressButton !== Qt.LeftButton)
                     return;
-                var cur = root.isVertical ? event.y : event.x;
-                var dist = Math.abs(cur - pressCoord);
+                const point = dragOverlay.mapToItem(null, event.x, event.y);
+                const dist = Math.max(Math.abs(point.x - pressPoint.x), Math.abs(point.y - pressPoint.y));
                 if (!dragActive && dist > 5) {
                     dragActive = true;
                     root._pressed = false;
@@ -239,9 +250,23 @@ DockButton {
         }
     }
 
+    Connections {
+        target: stackPopup
+        function onActiveChanged() {
+            if (!dockContent)
+                return;
+            if (stackPopup.active)
+                dockContent.registerContextMenuOpen();
+            else
+                dockContent.registerContextMenuClose();
+        }
+    }
+
     // Safety: if this button is destroyed while menu is open, clean up the counter
     Component.onDestruction: {
         if (dockContent && fileContextMenu.active)
+            dockContent.registerContextMenuClose();
+        if (dockContent && stackPopup.active)
             dockContent.registerContextMenuClose();
     }
 
@@ -271,6 +296,11 @@ DockButton {
             }
 
             layer.enabled: Config.options.appearance.icons.enableShapeMask
+            // Rendered at the largest size the lens draws it, or the mask's
+            // texture is stretched into visible steps while magnified.
+            layer.textureSize: Qt.size(Math.ceil(width * (root.dockContent?.magnificationRenderScale ?? 1)),
+                Math.ceil(height * (root.dockContent?.magnificationRenderScale ?? 1)))
+            layer.smooth: true
             layer.effect: OpacityMask {
                 maskSource: iconMask
             }
@@ -299,6 +329,7 @@ DockButton {
                 anchors.centerIn: parent
                 visible: root.isImage && thumbnailImage.status !== Image.Ready
                 text: "image"
+                renderType: Text.CurveRendering
                 iconSize: root.buttonSize
                 color: Appearance.colors.colOnLayer0
             }
@@ -322,6 +353,7 @@ DockButton {
                 anchors.centerIn: parent
                 visible: !root.isImage && root.resolvedXdgIcon === "" && root.isDirectory
                 text: "folder"
+                renderType: Text.CurveRendering
                 iconSize: root.buttonSize
                 color: Appearance.colors.colOnLayer0
             }

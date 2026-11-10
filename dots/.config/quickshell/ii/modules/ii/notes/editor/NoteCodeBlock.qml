@@ -32,7 +32,7 @@ Item {
         y: Math.round((root.implicitHeight - height) / 2)
         width: Math.max(160, Math.min(NotesMetrics.readingWidth,
             root.width - NotesMetrics.readingPadding * 2))
-        height: content.implicitHeight + 20
+        height: Math.max(content.implicitHeight, codeText.implicitHeight + 36) + 20
         radius: Appearance.rounding.normal
         color: Appearance.m3colors.m3surfaceContainerLowest
         // Nothing draws past the slab. Code does not wrap, so a long command has to be
@@ -57,6 +57,16 @@ Item {
                     text: root.block ? root.block.language : ""
                     font.pixelSize: Appearance.font.pixelSize.smaller
                     color: Appearance.colors.colSubtext
+                    onActiveFocusChanged: {
+                        if (!root.editor || !root.block)
+                            return;
+                        if (activeFocus) {
+                            root.editor.activeBlockId = root.block.id;
+                            root.editor.activeTextEdit = languageField;
+                        } else if (root.editor.activeTextEdit === languageField) {
+                            root.editor.activeTextEdit = null;
+                        }
+                    }
                     onEditingFinished: root.editor.apply(
                         [{ op: "update", id: root.block.id, patch: { language: languageField.text } }], false)
                 }
@@ -135,6 +145,7 @@ Item {
                     if (activeFocus) {
                         root.editor.activeBlockId = root.block.id;
                         root.editor.activeTextEdit = codeText;
+                        root.editor.rememberSelection(codeText, root.block.id);
                     } else {
                         if (root.editor && root.editor.activeTextEdit === codeText)
                             root.editor.activeTextEdit = null;
@@ -143,6 +154,14 @@ Item {
                 }
 
                 onTextChanged: saveDebounce.restart()
+                onSelectionStartChanged: {
+                    if (root.editor && root.block)
+                        root.editor.rememberSelection(codeText, root.block.id);
+                }
+                onSelectionEndChanged: {
+                    if (root.editor && root.block)
+                        root.editor.rememberSelection(codeText, root.block.id);
+                }
 
                 Keys.onPressed: event => {
                     // Backspace out of an empty snippet returns to a paragraph, which is

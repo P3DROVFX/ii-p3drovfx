@@ -95,8 +95,10 @@ class TabletAppDrawerOverviewContractTests(unittest.TestCase):
         # Touch: swipe pans the strip, long press picks the window up.
         self.assertIn("Qt.MouseEventNotSynthesized", overview)
         self.assertIn("id: longPress", overview)
-        self.assertIn("gradient: Gradient", overview)
-        self.assertIn("Gradient.Horizontal", overview)
+        # Edge fade is the shared analytic alpha ramp, horizontal, not a second mask texture.
+        self.assertIn("layer.effect: TabletEdgeFade {", overview)
+        self.assertIn("horizontal: 1", overview)
+        self.assertNotIn("OpacityMask", overview)
 
 
 if __name__ == "__main__":

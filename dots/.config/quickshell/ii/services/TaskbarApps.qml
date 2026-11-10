@@ -1,5 +1,6 @@
 pragma Singleton
 import qs.modules.common
+import qs.modules.common.functions
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -206,10 +207,57 @@ Singleton {
         root.syncPinnedFileOrder()
     }
 
-    // Bumped once by IconThemes after DynamicTheme generation completes.
-    // Keep color changes independent from icon invalidation so a palette update
-    // cannot repeatedly recreate icon textures while the theme is still being built.
+    // Bumped once after DynamicTheme generation completes. Keep color changes independent
+    // from icon invalidation so a palette update cannot repeatedly recreate icon textures
+    // while the theme is still being built.
     property int iconThemeRevision: 0
+    /// Set by IconThemes while it applies a pack: that sequence redraws once, at its end.
+    property bool iconPackApplying: false
+
+    // The recolor script writes this hash last, after DynamicTheme has been swapped in and the
+    // icon loader told about it. It is watched here rather than in IconThemes: that service
+    // only loads with the settings page, so a wallpaper change redrew nothing and icons that
+    // stay on screen (the dock) kept the old colours until they were recreated.
+    FileView {
+        path: Quickshell.env("HOME") + "/.local/share/icons/DynamicTheme.colhash"
+        watchChanges: true
+        onFileChanged: {
+            if (!root.iconPackApplying)
+                iconRedrawTimer.restart()
+        }
+    }
+
+    // Any other tool that rewrites an icon theme in place - a wallpaper-driven folder tint for
+    // a theme that is not DynamicTheme, say - keeps the theme's name, so nothing above fires.
+    // KIconLoader's iconChanged signal is the desktop-wide "icons changed" announcement: the
+    // shell's own loader drops its cache on it, and this redraws what is on screen once that
+    // is done. A burst (one per icon group) restarts the timer, so it is still one redraw.
+    Process {
+        id: iconChangedWatch
+        running: true
+        command: ProcUtils.pdeath(["dbus-monitor", "--session",
+            "type='signal',interface='org.kde.KIconLoader',member='iconChanged'"])
+        stdout: SplitParser {
+            onRead: data => {
+                if (String(data).includes("member=iconChanged") && !root.iconPackApplying)
+                    iconRedrawTimer.restart()
+            }
+        }
+        onExited: iconChangedWatchRestart.restart()
+    }
+    Timer {
+        id: iconChangedWatchRestart
+        interval: 5000
+        onTriggered: iconChangedWatch.running = true
+    }
+
+    // A single bounded toggle invalidates the icon bindings without making sourceSize grow
+    // after every theme change. The delay lets the loader finish rebuilding the theme first.
+    Timer {
+        id: iconRedrawTimer
+        interval: 250
+        onTriggered: root.iconThemeRevision = 1 - root.iconThemeRevision
+    }
 
     // ── XDG user directories ──────────────────────────────────────────────
     property var xdgUserDirs: ({})

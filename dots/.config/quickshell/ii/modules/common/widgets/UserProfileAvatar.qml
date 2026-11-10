@@ -245,10 +245,11 @@ Item {
         // Keep the same high-quality target as the static path so the masked
         // avatar retains its smooth edges without decoding unused source pixels.
         sourceSize: Qt.size(Math.max(256, Math.ceil(root.width * 2)), Math.max(256, Math.ceil(root.height * 2)))
-        // AnimatedImage maps this to QMovie::CacheAll. Keeping the decoded
-        // frames avoids decoding this GIF again on every loop while preserving
-        // the same source resolution, filtering, and masked anti-aliasing.
-        cache: true
+        // CacheAll kept every decoded frame for as long as the avatar lived
+        // (~10 MB for a 42-frame GIF, held forever by the kept-loaded right
+        // sidebar). Decoding the next 256 px frame while playing is cheap and
+        // gives the same resolution, filtering and masked anti-aliasing.
+        cache: false
         visible: root.isAnimated && status === Image.Ready && root.imageStyle !== "expressive"
 
         layer.enabled: true

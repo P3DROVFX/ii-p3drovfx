@@ -1,3 +1,4 @@
+import qs
 import qs.modules.ii.bar.popups.sports
 import QtQuick
 import QtQuick.Layouts
@@ -23,9 +24,49 @@ MouseArea {
     property bool activated: root.displayGame && root.displayGame.state === "in"
     property color onActivatedColor: Appearance.colors.colOnPrimaryContainer
 
-    implicitWidth: shouldBeVisible ? (vertical ? Appearance.sizes.verticalBarWidth : sportsLayoutHoriz.implicitWidth) : 0
-    implicitHeight: shouldBeVisible ? (vertical ? sportsLayoutVert.implicitHeight + 8 : Appearance.sizes.baseBarHeight) : 0
+    // Match events (goals and bookings) queue up and play one after another;
+    // the widget grows along the bar while a banner plays.
+    property var eventQueue: []
+    property var activeEvent: null
+    readonly property bool celebrating: activeEvent !== null
+    readonly property bool activeIsCard: activeEvent?.kind === "card"
+    readonly property real celebrationLength: activeIsCard ? (vertical ? 150 : 200) : (vertical ? 190 : 236)
+
+    function playNextEvent() {
+        if (eventQueue.length === 0) {
+            activeEvent = null;
+            return;
+        }
+        activeEvent = eventQueue[0];
+        eventQueue = eventQueue.slice(1);
+    }
+
+    function queueEvent(event) {
+        eventQueue = eventQueue.concat([event]);
+        if (!celebrating)
+            playNextEvent();
+    }
+
+    Connections {
+        target: SportsService
+        enabled: root.shouldBeVisible
+        function onGoalScored(goal) {
+            if (Config.options.bar.sports.goalAnimation)
+                root.queueEvent(Object.assign({ kind: "goal" }, goal));
+        }
+        function onCardShown(card) {
+            if (Config.options.bar.sports.cardAnimation)
+                root.queueEvent(Object.assign({ kind: "card" }, card));
+        }
+    }
+
+    implicitWidth: shouldBeVisible ? (vertical ? Appearance.sizes.verticalBarWidth : (celebrating ? Math.max(celebrationLength, sportsLayoutHoriz.implicitWidth) : sportsLayoutHoriz.implicitWidth)) : 0
+    implicitHeight: shouldBeVisible ? (vertical ? (celebrating ? Math.max(celebrationLength, sportsLayoutVert.implicitHeight + 8) : sportsLayoutVert.implicitHeight + 8) : Appearance.sizes.baseBarHeight) : 0
     hoverEnabled: !BarInteraction.clickToShow
+
+    // Click-to-show gives the left click to the popup; cycling moves to the right button.
+    readonly property bool rightClickCycles: BarInteraction.cycleOnRightClick
+    acceptedButtons: rightClickCycles ? (Qt.LeftButton | Qt.RightButton) : Qt.LeftButton
 
     // Vertical offset for the slide animation - using transform: Translate bypasses anchor restrictions
     property real verticalOffset: 0
@@ -124,18 +165,59 @@ MouseArea {
         }
     }
 
-    onClicked: {
+    onClicked: mouse => {
+        if (mouse.button !== (rightClickCycles ? Qt.RightButton : Qt.LeftButton))
+            return;
         SportsService.nextGame();
     }
 
-    SportsPopup {
-        hoverTarget: root
+    PopupLoader {
+        id: popupLoader
+        // Keep the whole popup type out of the idle bar tree. The popup body
+        // is lazy as well, but StyledPopup itself owns a fairly large
+        // PanelWindow/interaction graph. In hover mode it is created only
+        // when the pointer reaches this widget; click-to-show keeps the
+        // lightweight controller available for the press handler.
+        active: (root.shouldBeVisible || GlobalStates.isBarPopupOpen("sports", root.screen?.name)) && BarInteraction.enablePopups
+            && (BarInteraction.clickToShow || root.containsMouse || held)
+        sourceComponent: SportsPopup {
+            hoverTarget: root
+        }
+    }
+
+    Loader {
+        anchors.fill: parent
+        active: root.celebrating
+        z: 1
+        sourceComponent: root.activeIsCard ? cardNoticeComponent : goalCelebrationComponent
+    }
+
+    Component {
+        id: goalCelebrationComponent
+        GoalCelebration {
+            goal: root.activeIsCard ? null : root.activeEvent
+            vertical: root.vertical
+            fromFarEdge: Config.options.bar.bottom
+            onFinished: root.playNextEvent()
+        }
+    }
+
+    Component {
+        id: cardNoticeComponent
+        CardNotice {
+            card: root.activeIsCard ? root.activeEvent : null
+            vertical: root.vertical
+            fromFarEdge: Config.options.bar.bottom
+            onFinished: root.playNextEvent()
+        }
     }
 
     Item {
         id: contentClipper
         anchors.fill: parent
         clip: true
+        opacity: root.celebrating ? 0 : 1
+        Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
 
         RowLayout {
             id: sportsLayoutHoriz
@@ -154,11 +236,11 @@ MouseArea {
                 Layout.preferredWidth: 24
                 Layout.preferredHeight: 24
                 Layout.alignment: Qt.AlignVCenter
-                source: root.displayGame ? root.displayGame.home.logo : ""
+                source: !root.vertical && root.displayGame ? root.displayGame.home.logo : ""
                 fillMode: Image.PreserveAspectFit
                 smooth: true
                 mipmap: true
-                cache: true
+                cache: false
             }
 
             // Home Team Score (Only if not pre-game)
@@ -235,11 +317,11 @@ MouseArea {
                 Layout.preferredWidth: 24
                 Layout.preferredHeight: 24
                 Layout.alignment: Qt.AlignVCenter
-                source: root.displayGame ? root.displayGame.away.logo : ""
+                source: !root.vertical && root.displayGame ? root.displayGame.away.logo : ""
                 fillMode: Image.PreserveAspectFit
                 smooth: true
                 mipmap: true
-                cache: true
+                cache: false
             }
         }
 
@@ -268,11 +350,11 @@ MouseArea {
                     Layout.alignment: Qt.AlignHCenter
                     Layout.preferredWidth: 20
                     Layout.preferredHeight: 20
-                    source: root.displayGame ? root.displayGame.home.logo : ""
+                    source: root.vertical && root.displayGame ? root.displayGame.home.logo : ""
                     fillMode: Image.PreserveAspectFit
                     smooth: true
                     mipmap: true
-                    cache: true
+                    cache: false
                 }
                 StyledText {
                     id: homeScoreTextVert
@@ -338,11 +420,11 @@ MouseArea {
                     Layout.alignment: Qt.AlignHCenter
                     Layout.preferredWidth: 20
                     Layout.preferredHeight: 20
-                    source: root.displayGame ? root.displayGame.away.logo : ""
+                    source: root.vertical && root.displayGame ? root.displayGame.away.logo : ""
                     fillMode: Image.PreserveAspectFit
                     smooth: true
                     mipmap: true
-                    cache: true
+                    cache: false
                 }
             }
         }

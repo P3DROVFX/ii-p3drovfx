@@ -54,9 +54,52 @@ ContentPage {
                 onSelected: newValue => Config.options.bar.styles.timer = String(newValue)
                 options: [
                     { displayName: Translation.tr("Default"), icon: "style", value: "default" },
-                    { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" }
+                    { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" },
+                    { displayName: Translation.tr("Sculpt"), icon: "shapes", value: "sculpt" }
                 ]
             }
+        }
+
+        ContentSubsection {
+            visible: Config.options.bar.styles.timer === "sculpt"
+            title: Translation.tr("Sculpt variant")
+
+            ConfigSelectionArray {
+                currentValue: Config.options.bar.timers.sculptVariant
+                onSelected: newValue => Config.options.bar.timers.sculptVariant = String(newValue)
+                options: [
+                    { displayName: Translation.tr("Squeeze"), icon: "compress", value: "squeeze" },
+                    { displayName: Translation.tr("Fill"), icon: "battery_horiz_075", value: "fill" },
+                    { displayName: Translation.tr("Phases"), icon: "linear_scale", value: "phases" }
+                ]
+            }
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: Config.options.bar.styles.timer === "sculpt" && Config.options.bar.timers.sculptVariant === "squeeze"
+            materialIcon: "compress"
+            text: Translation.tr("Tall digits that condense as the time runs out: wide when the timer is fresh, narrow in its last seconds. A break is set slanted, a paused timer light.")
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: Config.options.bar.styles.timer === "sculpt" && Config.options.bar.timers.sculptVariant === "fill"
+            materialIcon: "battery_horiz_075"
+            text: Translation.tr("The capsule is the progress bar: the vivid tone fills it as the time goes, and the digits change colour exactly where the fill's edge crosses them.")
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: Config.options.bar.styles.timer === "sculpt" && Config.options.bar.timers.sculptVariant === "phases"
+            materialIcon: "linear_scale"
+            text: Translation.tr("A display label (Focus, Break, the countdown's name) over a segmented indicator with one segment per pomodoro of the cycle, beside the time.")
+        }
+
+        ExpressiveColorModeSubsection {
+            visible: Config.options.bar.styles.timer === "expressive" || Config.options.bar.styles.timer === "sculpt"
+            currentValue: Config.options.bar.timers.colorMode
+            onSelected: newValue => Config.options.bar.timers.colorMode = String(newValue)
         }
 
         ConfigSwitch {

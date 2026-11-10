@@ -1,8 +1,11 @@
 import QtQuick
+import QtQuick.Effects
+import Quickshell.Widgets
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
-
+import qs
+import qs.services
 import "./widgets"
 
 DockButton {
@@ -25,6 +28,17 @@ DockButton {
     property string fileDropIcon: ""
     property bool fileDropActive: false
     property string customImageSource: ""
+    // A glyph-like picture in place of the symbol (the overview button's icon
+    // from assets/icons); `-symbolic` files take the glyph's colour.
+    property string customIconSource: ""
+    // Black-and-white pictures are drawn in the glyph's colour.
+    property bool tintCustomIcon: root.customIconSource.indexOf("symbolic") >= 0
+    // The plate's shape by name, and whether it stays up when not toggled.
+    property string shapeName: ""
+    property bool alwaysShowShape: false
+    readonly property bool plateShown: root.toggled || root.alwaysShowShape
+    // Drawn at the lens's largest scale so magnifying never stretches it.
+    readonly property real renderScale: root.dockContent?.magnificationRenderScale ?? 1
     property real symbolFill: root.toggled ? 1.0 : 0.0
     property bool _pressed: false
     readonly property bool isDragging: dragActive || fileDropActive
@@ -49,61 +63,21 @@ DockButton {
         return Item.Bottom;
     }
 
-    // ── Launch Bounce Customization Tokens ──
-    readonly property bool enableLaunchBounce: Config.options?.dock?.enableLaunchBounce ?? true
-    readonly property real bounceHeight: Config.options?.dock?.bounceHeight ?? 18
-    readonly property int bounceDuration: 280
-    readonly property int maxBounceCycles: 3
+    readonly property string launchAnimation: Config.options?.dock?.launchAnimation ?? "bounce"
 
-    property real launchBounceY: 0
-    readonly property string dockPos: dockContent?.dockPos ?? "bottom"
+    transform: [attention.shift, attention.grow, attention.turn]
 
-    readonly property real effectiveBounceOffset: {
-        if (root.dockPos === "top") return -root.launchBounceY;
-        if (root.dockPos === "left") return -root.launchBounceY;
-        return root.launchBounceY;
+    DockAttentionAnimation {
+        id: attention
+        host: root
+        dockPos: root.dockContent?.dockPos ?? "bottom"
     }
 
-    transform: Translate {
-        x: root.dockContent?.isVertical ? root.effectiveBounceOffset : 0
-        y: !root.dockContent?.isVertical ? root.effectiveBounceOffset : 0
-    }
-
-    SequentialAnimation {
-        id: launchBounceAnim
-        loops: root.maxBounceCycles
-
-        NumberAnimation {
-            target: root
-            property: "launchBounceY"
-            from: 0
-            to: -root.bounceHeight
-            duration: Math.round(root.bounceDuration * 0.45)
-            easing.type: Easing.OutQuad
-        }
-        NumberAnimation {
-            target: root
-            property: "launchBounceY"
-            from: -root.bounceHeight
-            to: 0
-            duration: Math.round(root.bounceDuration * 0.55)
-            easing.type: Easing.InQuad
-        }
-    }
-
-    function triggerLaunchBounce() {
-        if (!enableLaunchBounce) return;
-        launchBounceAnim.stop();
-        launchBounceY = 0;
-        launchBounceAnim.start();
-    }
-
-    onClicked: {
-        triggerLaunchBounce();
-    }
+    onClicked: attention.playLaunch(root.launchAnimation)
 
     scale: (_pressed ? 0.88 : 1.0) * magScale
-    z: Math.round(magScale * 10)
+    // Two tiers (see the delegate wrapper's z): no per-frame render stack reorder.
+    z: magScale > 1.01 ? 2 : 1
 
     Loader {
         anchors.fill: parent
@@ -135,7 +109,8 @@ DockButton {
                 root._pressed = true;
             }
             onPositionChanged: event => {
-                if (!pressed || event.button !== Qt.LeftButton)
+                // event.button is NoButton on a move: ask what is held.
+                if (!pressed || !(pressedButtons & Qt.LeftButton))
                     return;
                 var cur = root.dockContent?.isVertical ? event.y : event.x;
                 var dist = Math.abs(cur - pressCoord);
@@ -157,9 +132,10 @@ DockButton {
                     return;
                 }
                 if (event.button === Qt.RightButton) {
-                    if (root.actionId === "trash") {
+                    if (root.actionId === "trash")
                         trashContextMenu.open();
-                    }
+                    else if (root.actionId === "overview" || root.actionId === "pin")
+                        actionMenu.open();
                     return;
                 }
                 root.clicked();
@@ -181,6 +157,49 @@ DockButton {
         anchorItem: root
     }
 
+    // Overview and pin: what they do, how the overview button looks, and
+    // taking them off the dock (Dock → Content brings them back).
+    DockContextMenuBase {
+        id: actionMenu
+        anchorItem: root
+        headerText: root.actionId === "overview" ? Translation.tr("Overview") : Translation.tr("Pin")
+        headerSubtitle: root.actionId === "overview" ? Translation.tr("Dock button") : Translation.tr("Drop an app here to pin it")
+        headerSymbol: root.symbolName
+        menuId: "dockButton"
+        menuGroups: actionMenu.menuOpen ? [
+            root.actionId === "overview" ? [
+                { id: "open", icon: "open_in_full", text: Translation.tr("Open overview") }
+            ] : [],
+            [
+                root.actionId === "overview"
+                    ? { id: "settings", icon: "palette", text: Translation.tr("Icon and shape") }
+                    : { id: "settings", icon: "settings", text: Translation.tr("Dock settings") },
+                { id: "remove", icon: "remove_circle", text: Translation.tr("Remove from dock"), destructive: true }
+            ]
+        ].filter(group => group.length > 0) : []
+
+        onActionTriggered: id => {
+            actionMenu.close();
+            switch (id) {
+            case "open":
+                root.clicked();
+                break;
+            case "settings":
+                if (root.actionId === "overview")
+                    GlobalStates.openSettingsPage("dock", "widgets/DockOverviewButtonConfig.qml");
+                else
+                    GlobalStates.openSettingsPage("dock", "");
+                break;
+            case "remove":
+                if (root.actionId === "overview")
+                    Config.options.dock.showOverviewButton = false;
+                else
+                    Config.options.dock.showPinButton = false;
+                break;
+            }
+        }
+    }
+
     contentItem: Item {
         id: contentContainer
         implicitWidth: root.buttonSize
@@ -188,27 +207,97 @@ DockButton {
         anchors.fill: parent
         clip: false // Allow larger icons to overflow slightly if needed
 
-        MaterialShapeWrappedMaterialSymbol {
+        Item {
             id: shapeSymbol
             anchors.centerIn: parent
             visible: root.customImageSource === ""
-            // ... (rest of the properties)
-            shape: root.isDragging ? root.activeShape : root.normalShape
-            implicitSize: root.dragOver ? root.buttonSize * 1.1 : root.buttonSize * 0.9
-            rotation: root.dragOver ? 90 : (root.isDragging ? 45 : 0)
-            color: {
-                if (root.isDragging) {
-                    return root._pressed ? Appearance.colors.colSecondaryContainerActive : root.hovered ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colSecondaryContainer;
+            implicitWidth: root.dragOver ? root.buttonSize * 1.1 : root.buttonSize * 0.9
+            implicitHeight: implicitWidth
+
+            MaterialShape {
+                id: plateShape
+                width: parent.width * root.renderScale
+                height: parent.height * root.renderScale
+                transformOrigin: Item.Center
+                x: (parent.width - width) / 2
+                y: (parent.height - height) / 2
+                scale: 1 / root.renderScale
+                shape: root.shapeName.length > 0 && !root.isDragging
+                    ? (plateShape.shapeMap[root.shapeName] ?? root.normalShape)
+                    : (root.toggled || root.isDragging) ? root.activeShape : root.normalShape
+                rotation: root.dragOver ? 90 : (root.isDragging ? 45 : (root.toggled && root.shapeName.length === 0 ? 90 : 0))
+                color: root.isDragging ? Appearance.colors.colSecondaryContainer
+                    : root._pressed ? Appearance.colors.colPrimaryActive
+                    : root.hovered ? Appearance.colors.colPrimaryHover : Appearance.colors.colPrimary
+                opacity: root.plateShown || root.isDragging ? 1 : 0
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Appearance.animation.elementMoveFast.type
+                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                    }
                 }
-                if (root.toggled) {
-                    return root._pressed ? Appearance.colors.colPrimaryActive : root.hovered ? Appearance.colors.colPrimaryHover : Appearance.colors.colPrimary;
+                Behavior on rotation {
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Appearance.animation.elementMoveFast.type
+                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                    }
                 }
-                return root._pressed ? Appearance.colors.colLayer1Active : root.hovered ? Appearance.colors.colLayer1Hover : "transparent";
+                Behavior on color {
+                    ColorAnimation {
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Appearance.animation.elementMoveFast.type
+                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                    }
+                }
             }
-            text: root.fileDropActive ? root.fileDropIcon : root.dragActive ? root.dragSymbol : root.symbolName
-            fill: root.symbolFill
-            iconSize: root.isDragging ? Math.round(root.buttonSize * 0.4) : root.symbolSize
-            colSymbol: root.isDragging ? Appearance.colors.colOnSecondaryContainer : (root.toggled ? root.activeColor : root.inactiveColor)
+
+            // The custom icon, glyph-sized, sharp under the lens.
+            IconImage {
+                id: customIcon
+                anchors.centerIn: parent
+                // Hidden for symbolic ones: the effect below draws them from it.
+                visible: root.customIconSource.length > 0 && !root.isDragging && !root.tintCustomIcon
+                implicitSize: root.symbolSize
+                source: root.customIconSource
+                backer.sourceSize: Qt.size(Math.ceil(root.symbolSize * root.renderScale), Math.ceil(root.symbolSize * root.renderScale))
+            }
+            // Black-and-white pictures: lifted to white and coloured like
+            // the glyph. QtQuick.Effects, not Qt5Compat — this
+            // button is also drawn in Settings, whose window is destroyed on
+            // close (a Qt5Compat effect would keep a reference to it).
+            MultiEffect {
+                anchors.fill: customIcon
+                visible: root.customIconSource.length > 0 && !root.isDragging && root.tintCustomIcon
+                source: customIcon
+                brightness: 1.0
+                colorization: 1.0
+                colorizationColor: root.plateShown ? root.activeColor : root.inactiveColor
+            }
+
+            MaterialSymbol {
+                anchors.centerIn: parent
+                visible: root.customIconSource.length === 0 || root.isDragging
+                // The lens scales this glyph up to magnificationScale. Native
+                // glyphs are rasterized once at the base size and stretched,
+                // which reads as jagged steps; curves are re-evaluated at
+                // whatever size the transform draws them.
+                renderType: Text.CurveRendering
+                text: root.fileDropActive ? root.fileDropIcon : root.dragActive ? root.dragSymbol : root.symbolName
+                fill: root.symbolFill
+                iconSize: root.isDragging ? Math.round(root.buttonSize * 0.4) : root.symbolSize
+                color: root.isDragging ? Appearance.colors.colOnSecondaryContainer : (root.plateShown ? root.activeColor : root.inactiveColor)
+
+                Behavior on color {
+                    ColorAnimation {
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Appearance.animation.elementMoveFast.type
+                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                    }
+                }
+            }
         }
 
         // Custom image (for trash icon, etc.)

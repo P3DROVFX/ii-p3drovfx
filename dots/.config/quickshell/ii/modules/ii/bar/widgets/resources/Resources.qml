@@ -9,89 +9,111 @@ MouseArea {
     id: root
     property bool borderless: Config.options.bar.borderless
     property bool vertical: false
-    property color groupBgColor: Appearance.colors.colLayer1
-    property real groupStartRadius: Appearance.rounding.full
-    property real groupEndRadius: Appearance.rounding.full
 
-    implicitWidth: mainRow.implicitWidth
+    property bool _temperatureMetricRequested: false
+    property bool _diskMetricRequested: false
+    property bool _swapMetricRequested: false
+    property bool _dockerConsumerRequested: false
+
+    function syncMetricRequests() {
+        const resources = Config.options.bar.resources;
+        const wantTemperature = !!resources.alwaysShowCpuTemp;
+        const wantDisk = !!resources.alwaysShowDisk;
+        const wantSwap = !!resources.alwaysShowSwap;
+        const wantDocker = !!resources.showDocker;
+
+        if (_temperatureMetricRequested !== wantTemperature) {
+            ResourceUsage.requestMetric("temperature", wantTemperature);
+            _temperatureMetricRequested = wantTemperature;
+        }
+        if (_diskMetricRequested !== wantDisk) {
+            ResourceUsage.requestMetric("disk", wantDisk);
+            _diskMetricRequested = wantDisk;
+        }
+        if (_swapMetricRequested !== wantSwap) {
+            ResourceUsage.requestMetric("swap", wantSwap);
+            _swapMetricRequested = wantSwap;
+        }
+        if (_dockerConsumerRequested !== wantDocker) {
+            DockerService.requestConsumer(wantDocker);
+            _dockerConsumerRequested = wantDocker;
+        }
+    }
+
+    Component.onCompleted: syncMetricRequests()
+    Component.onDestruction: {
+        if (_temperatureMetricRequested)
+            ResourceUsage.requestMetric("temperature", false);
+        if (_diskMetricRequested)
+            ResourceUsage.requestMetric("disk", false);
+        if (_swapMetricRequested)
+            ResourceUsage.requestMetric("swap", false);
+        if (_dockerConsumerRequested)
+            DockerService.requestConsumer(false);
+    }
+
+    Connections {
+        target: Config.options.bar.resources
+        function onAlwaysShowCpuTempChanged() { root.syncMetricRequests(); }
+        function onAlwaysShowDiskChanged() { root.syncMetricRequests(); }
+        function onAlwaysShowSwapChanged() { root.syncMetricRequests(); }
+        function onShowDockerChanged() { root.syncMetricRequests(); }
+    }
+
+    implicitWidth: rowLayout.implicitWidth
     implicitHeight: Appearance.sizes.baseBarHeight
     hoverEnabled: !BarInteraction.clickToShow
 
-    readonly property color capsuleColor: root.groupBgColor
-
     RowLayout {
-        id: mainRow
-        spacing: 8
+        id: rowLayout
+        spacing: 0
         anchors.centerIn: parent
 
-        // 1. Resources Capsule
-        Rectangle {
-            id: resourcesCapsule
-            implicitWidth: rowLayout.implicitWidth + 12
-            implicitHeight: Appearance.sizes.baseBarHeight - 10
-            color: Config.options.bar.resources.showDocker ? root.capsuleColor : "transparent"
-            topLeftRadius: root.groupStartRadius
-            bottomLeftRadius: root.groupStartRadius
-            topRightRadius: root.groupEndRadius
-            bottomRightRadius: root.groupEndRadius
-
-            RowLayout {
-                id: rowLayout
-                spacing: 0
-                anchors.centerIn: parent
-
-                Resource {
-                    iconName: "memory"
-                    shown: Config.options.bar.resources.alwaysShowRam
-                    percentage: ResourceUsage.memoryUsedPercentage
-                    warningThreshold: Config.options.bar.resources.memoryWarningThreshold
-                }
-
-                Resource {
-                    iconName: "planner_review"
-                    shown: Config.options.bar.resources.alwaysShowCpu
-                    percentage: ResourceUsage.cpuUsage
-                    Layout.leftMargin: shown ? 6 : 0
-                    warningThreshold: Config.options.bar.resources.cpuWarningThreshold
-                }
-
-                Resource {
-                    iconName: "thermostat"
-                    shown: Config.options.bar.resources.alwaysShowCpuTemp
-                    percentage: ResourceUsage.cpuTemp / 100
-                    Layout.leftMargin: shown ? 6 : 0
-                }
-
-                Resource {
-                    iconName: "hard_drive"
-                    shown: Config.options.bar.resources.alwaysShowDisk
-                    percentage: ResourceUsage.diskUsedPercentage
-                    Layout.leftMargin: shown ? 6 : 0
-                }
-
-                Resource {
-                    iconName: "swap_horiz"
-                    shown: Config.options.bar.resources.alwaysShowSwap
-                    percentage: ResourceUsage.swapUsedPercentage
-                    Layout.leftMargin: shown ? 6 : 0
-                    warningThreshold: Config.options.bar.resources.swapWarningThreshold
-                }
-            }
+        Resource {
+            iconName: "memory"
+            shown: Config.options.bar.resources.alwaysShowRam
+            percentage: ResourceUsage.memoryUsedPercentage
+            warningThreshold: Config.options.bar.resources.memoryWarningThreshold
         }
 
-        // 2. Standalone Docker Capsule
-        Rectangle {
-            id: dockerCapsule
+        Resource {
+            iconName: "planner_review"
+            shown: Config.options.bar.resources.alwaysShowCpu
+            percentage: ResourceUsage.cpuUsage
+            Layout.leftMargin: shown ? 6 : 0
+            warningThreshold: Config.options.bar.resources.cpuWarningThreshold
+        }
+
+        Resource {
+            iconName: "thermostat"
+            shown: Config.options.bar.resources.alwaysShowCpuTemp
+            percentage: ResourceUsage.cpuTemp / 100
+            Layout.leftMargin: shown ? 6 : 0
+        }
+
+        Resource {
+            iconName: "hard_drive"
+            shown: Config.options.bar.resources.alwaysShowDisk
+            percentage: ResourceUsage.diskUsedPercentage
+            Layout.leftMargin: shown ? 6 : 0
+        }
+
+        Resource {
+            iconName: "swap_horiz"
+            shown: Config.options.bar.resources.alwaysShowSwap
+            percentage: ResourceUsage.swapUsedPercentage
+            Layout.leftMargin: shown ? 6 : 0
+            warningThreshold: Config.options.bar.resources.swapWarningThreshold
+        }
+
+        Item {
+            id: dockerItem
             property bool shown: Config.options.bar.resources.showDocker && DockerService.dockerRunning
-            visible: shown
+            visible: width > 0
             clip: true
-            implicitWidth: shown ? (dockerRow.implicitWidth + 16) : 0
-            implicitHeight: Appearance.sizes.baseBarHeight - 10
-            color: root.capsuleColor
-            topLeftRadius: root.groupStartRadius
-            bottomLeftRadius: root.groupStartRadius
-            topRightRadius: root.groupEndRadius
-            bottomRightRadius: root.groupEndRadius
+            Layout.leftMargin: shown ? 6 : 0
+            implicitWidth: shown ? dockerRow.implicitWidth : 0
+            implicitHeight: Appearance.sizes.baseBarHeight
 
             Behavior on implicitWidth {
                 animation: Appearance.animation.barResize.numberAnimation.createObject(this)
@@ -99,35 +121,40 @@ MouseArea {
 
             RowLayout {
                 id: dockerRow
-                spacing: 6
+                spacing: 4
                 anchors.centerIn: parent
 
                 CustomIcon {
                     source: "docker.svg"
-                    width: 18
-                    height: 18
+                    width: 16
+                    height: 16
                     colorize: true
-                    color: Appearance.colors.colOnSurface
+                    color: Appearance.colors.colOnLayer1
                 }
 
                 StyledText {
                     text: DockerService.runningCount.toString()
                     font.pixelSize: Appearance.font.pixelSize.small
                     font.weight: Font.Bold
-                    color: Appearance.colors.colOnSurface
+                    color: Appearance.colors.colOnLayer1
                 }
             }
         }
     }
 
-    ExpressiveResourcesPopup {
-        hoverTarget: root
-        Component.onCompleted: {
-            activeChanged.connect(() => {
-                if (active) {
-                    DockerService.refreshForPopup();
-                }
-            });
+    // Lazy: popup controller is only built on approach (same as ExpressiveSports).
+    PopupLoader {
+        active: BarInteraction.enablePopups
+            && (BarInteraction.clickToShow || root.containsMouse || held)
+        sourceComponent: ExpressiveResourcesPopup {
+            hoverTarget: root
+            Component.onCompleted: {
+                activeChanged.connect(() => {
+                    if (active) {
+                        DockerService.refreshForPopup();
+                    }
+                });
+            }
         }
     }
 }

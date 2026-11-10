@@ -31,9 +31,12 @@ AbstractBackgroundWidget {
     property var notesData: NotesService.tabsData.tabs
 
     property bool notesWindowOpen: false
+    /// The note the window opens on, or -1 for the list.
+    property int openedTabIndex: -1
 
     function openNotes(tabIdx) {
-        if (tabIdx !== undefined && tabIdx >= 0) {
+        root.openedTabIndex = tabIdx !== undefined && tabIdx >= 0 ? tabIdx : -1;
+        if (root.openedTabIndex >= 0) {
             Persistent.states.overlay.notes.tabIndex = tabIdx;
         }
         root.notesWindowOpen = true;
@@ -269,6 +272,10 @@ AbstractBackgroundWidget {
                         }
                     }
                 }
+
+                TouchpadScrollHandler {
+                    flickable: notesListView
+                }
             }
 
             // Floating action button at bottom right
@@ -414,6 +421,7 @@ AbstractBackgroundWidget {
                             NotesContent {
                                 id: notesContentComp
                                 anchors.fill: parent
+                                initialTabIndex: root.openedTabIndex
                                 radius: Appearance.rounding.normal
                                 isClickthrough: false
                             }

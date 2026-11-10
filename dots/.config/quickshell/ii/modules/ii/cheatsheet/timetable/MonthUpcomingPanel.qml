@@ -24,8 +24,7 @@ Item {
 
     readonly property date todayDate: DateTime.clock.date
 
-    readonly property var todayTasks: Todo.getTasksByDate(root.todayDate)
-        .filter(task => task?.hasDate === true)
+    readonly property var todayTasks: Todo.tasksByDay[H.dayKeyOf(root.todayDate)] ?? []
     readonly property var overdueTasks: Todo.getOverdueTasks(root.todayDate)
     readonly property var todayEvents: {
         let events = CalendarService.eventsByDay[H.dayKeyOf(root.todayDate)] ?? [];
@@ -93,7 +92,8 @@ Item {
             if (root.categoryFilter)
                 dayEvents = dayEvents.filter(event => (event.categories ?? []).includes(root.categoryFilter));
             const dayBirthdays = BirthdaysService.birthdaysForDate(date);
-            const dayTasks = Todo.getTasksByDate(date).filter(task => !root.overdueTasks.some(overdue => overdue === task || String(overdue?.id ?? "") === String(task?.id ?? "")));
+            const dayTasks = (Todo.tasksByDay[key] ?? []).filter(task => !root.overdueTasks.some(overdue => overdue === task || String(overdue?.id ?? "") === String(task?.id ?? "")))
+                .concat(RemindersService.timetableItems[key] ?? []);
 
             // Today's list is about what is left of today, not what already ran.
             if (offset === 0)
@@ -529,7 +529,7 @@ Item {
                         sourceComponent: TaskChip {
                             taskData: rowItem.modelData.task
                             compact: false
-                            onCompletionRequested: task => Todo.markDone(task)
+                            onCompletionRequested: task => RemindersService.completeTask(task) || Todo.markDone(task)
                         }
                     }
 

@@ -331,9 +331,10 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        // Reaches the bottom when the host gives this a height, so the list
-        // inside can take the room instead of stopping at a fixed cap.
-        anchors.bottom: root.height > contentColumnLayout.implicitHeight ? parent.bottom : undefined
+        // Always pinned to the bottom: when the host is shorter than the
+        // content (a small screen) the list inside must be squeezed to the
+        // room there is, so it scrolls instead of overflowing the view.
+        anchors.bottom: parent.bottom
         spacing: 6
 
         RowLayout {

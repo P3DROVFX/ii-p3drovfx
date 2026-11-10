@@ -1,0 +1,1109 @@
+pragma ComponentBehavior: Bound
+
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Effects
+import Quickshell
+import qs
+import qs.modules.common
+import qs.modules.common.widgets
+import qs.modules.ii.dynamicIsland.core
+import qs.modules.ii.overview
+import qs.modules.ii.wallpaperSelector
+import qs.modules.ii.dynamicIsland.widgets
+import qs.modules.ii.localSendPopup
+import qs.modules.ii.colorPickerPopup
+import qs.modules.ii.displayModesPopup
+import qs.services
+
+/**
+ * Draws whichever activity the notch is showing.
+ *
+ * Two things are deliberate here.
+ *
+ * The loader's `source` follows the *activity*, not the presentation: the legacy widgets
+ * each render both states from an `isExpanded` property, and reloading them on expand
+ * would restart their internal state - the album art state machine being the expensive
+ * one. So expanding rebinds a property and never rebuilds anything.
+ *
+ * And the resting face is drawn here rather than loaded: a clock needs no file, and the
+ * old panel's "home" widget was three lines of layout that cost a Loader.
+ */
+Item {
+    id: content
+
+    required property string activityId
+    required property bool expanded
+    required property var controller
+    /** The password prompt holds the keyboard; the island decides, see NotchIsland. */
+    property bool askpassFocused: false
+    signal askpassFocusRequested
+    /** A face expanding in place is about to end its own activity; see NotchIsland. */
+    signal faceCollapseRequested
+    /**
+     * The box the contracted presentation of the activity is drawn in.
+     *
+     * A face that has a card of its own keeps this box while the card has the island -
+     * see the widget loader below. From the island, because it is the island's own size
+     * ladder that decides it.
+     */
+    required property real contractedWidth
+    required property real contractedHeight
+    /** Side widgets of the resting face (media, AI), from the island. */
+    property var sideIds: []
+    /** The island's resting height; the resting face sizes itself from it. */
+    property real restingHeight: 42
+    /** The width of the island's screen, in logical pixels; Alt+Tab scales with it. */
+    property real screenWidth: 1920
+    /** The width the resting face asks for: the clock and its side widgets. */
+    readonly property real restingWidth: restingFace.targetWidth
+
+    /**
+     * What is on screen, which lags `activityId` by the length of the exit animation.
+     *
+     * The loader replaces its item the instant its source changes, so binding it
+     * straight to `activityId` left nothing to animate out - the old content simply
+     * blinked away. Holding it back for the exit gives the transition two halves: the
+     * outgoing activity slides off and blurs, then the incoming one slides in.
+     *
+     * Plain state, never a binding. Declared as `displayedId: activityId` it changed on
+     * its own the moment the activity did, so whether the transition ran at all depended
+     * on whether the binding or the change handler was evaluated first - and the first
+     * imperative assignment then broke the binding for good, freezing the content on
+     * whatever happened to be showing.
+     */
+    property string displayedId: ""
+
+    readonly property string sourcePath: IslandRegistry.faceFor(content.displayedId, "compact")
+    readonly property bool hasWidget: content.sourcePath !== ""
+
+    /**
+     * Whether the activity on screen has a card of its own for the expanded state.
+     *
+     * The two presentations are two files for the new content, so expanding cannot be a
+     * property rebind the way it is for the legacy widgets - and reloading the one
+     * loader would rebuild the contracted face and cut to the card in a single frame.
+     * So the card is loaded beside it and the two crossfade on the island's own growth:
+     * `expandReveal` is that blend, and every activity without a card (LocalSend's drop
+     * flow included, which the legacy widget draws from `isExpanded`) keeps the old
+     * one-loader path with the blend pinned at 0.
+     */
+    readonly property bool hasOwnExpandedFace: IslandRegistry.hasPresentation(content.displayedId, "expanded")
+    readonly property string expandedSourcePath: content.hasOwnExpandedFace
+        ? IslandRegistry.faceFor(content.displayedId, "expanded") : ""
+    /**
+     * The height a card asks for when it measures itself (an `implicitHeight`), or a
+     * face expanding in place (its `expandedHeight`); 0 for the ones that take the
+     * registry's box as given. The registry's box stays the cap.
+     */
+    readonly property real expandedFaceHeight: {
+        if (expandedFace.item && expandedFace.item.implicitHeight > 0)
+            return expandedFace.item.implicitHeight;
+        const face = widgetLoader.item;
+        if (face && face.hasOwnProperty("expandedHeight") && face.expandedHeight > 0)
+            return face.expandedHeight;
+        return 0;
+    }
+    /**
+     * The width the expanded card is laid out in: the registry's box, unless the
+     * source overrides it — the same precedence `widgetBoxWidth` gives the
+     * island's own target, so the card and the body growing around it can never
+     * disagree (the teleprompter's user-chosen width lives in its override).
+     */
+    readonly property real expandedBoxWidth: {
+        const registered = IslandRegistry.widthFor(content.displayedId, "expanded");
+        const source = content.controller ? content.controller.sources.sourceFor(content.displayedId) : null;
+        const override = (source && source.sizeOverride) ? source.sizeOverride : null;
+        if (!override || override.width <= 0)
+            return registered;
+        // The card may ask to be wider than the contracted strip.
+        const wide = override.expandedWidth > 0 ? override.expandedWidth : override.width;
+        return wide > 0 ? wide : registered;
+    }
+    /** The pointer is on one of the face's own buttons. */
+    readonly property bool faceControlHovered: widgetLoader.item && widgetLoader.item.hasOwnProperty("controlHovered")
+        ? widgetLoader.item.controlHovered : false
+    /** 0 = the contracted face, 1 = the expanded card. */
+    property real expandReveal: (content.expanded && content.hasOwnExpandedFace) ? 1 : 0
+    Behavior on expandReveal {
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(content)
+    }
+
+    /**
+     * State the widgets reach for by walking up their parent chain.
+     *
+     * `FloatingNotchWifi` looks for `wifiSsid` and `FloatingNotchWorkspaces` publishes
+     * itself into `workspaceWidgetRef`; the panel used to hold both. Declaring them here
+     * keeps those walks working. They disappear when the activities get presentations
+     * that take their data from the source directly, the way every new one does.
+     */
+    readonly property string wifiSsid: {
+        const payload = content.controller.sources.wifi.payload;
+        return (payload && payload.ssid) ? payload.ssid : "";
+    }
+    property var workspaceWidgetRef: null
+
+    readonly property bool isSearch: content.displayedId === "search"
+    readonly property bool isOsd: content.displayedId === "osd"
+    readonly property bool isWallpaper: content.displayedId === "wallpaper"
+    readonly property bool isSession: content.displayedId === "session"
+    readonly property bool isColorPicker: content.displayedId === "colorPicker"
+    readonly property bool isDisplayModes: content.displayedId === "displayModes"
+    readonly property bool isAskpass: content.displayedId === "askpass"
+    /**
+     * An incoming transfer, as opposed to files being sent.
+     *
+     * Receiving is a question - accept or reject - and the popup already asks it in a
+     * tall, narrow card. The island's own LocalSend face is the wide drop target for
+     * sending, which is a different job; this draws the popup's card instead.
+     */
+    readonly property bool isLocalSendRequest: content.displayedId === "localSend"
+        && GlobalStates.islandOwnsLocalSendRequest
+        && LocalSend.currentTransfer !== null
+        // A drag still wants the drop target, even mid-transfer.
+        && !content.controller.sources.localSend.dragHovering
+    /** The dashboard is on, or on its way: it crossfades over the faces, see below. */
+    readonly property bool isDashboard: content.activityId === "dashboard"
+
+    /**
+     * The quick-toggle grid lives exactly as long as it can be seen.
+     *
+     * It was built once and kept, so every expand was instant - but a hidden grid is
+     * not free: its tiles hold service requests and infinite animations whose cost
+     * never notices that the dashboard is closed, and the island's window is a
+     * full-screen, always-mapped surface. So the grid is wanted while the dashboard is
+     * up, while the closing crossfade is still drawing it (`dashboardReveal` only
+     * reaches 0 on the fade's last frame, so that hand-off cannot drop it either), and
+     * while a page asked for from elsewhere is still looking for it (`pendingPage`).
+     *
+     * Once it is no longer wanted the loader keeps the grid hidden for a minute, so a
+     * quick reopen is instant, then destroys it. `keepDashboardLoaded` buys the old
+     * behavior back explicitly: one resident grid and instant openings, traded for its
+     * RAM while idle (the tiles' CPU stays gated on being drawn either way).
+     */
+    readonly property bool dashboardWanted: IslandPolicy.keepDashboardLoaded || content.isDashboard
+        || content.dashboardReveal > 0 || content.pendingPage.pageId !== ""
+
+    onIsDashboardChanged: {
+        // Leaving the dashboard leaves it clean: out of edit mode, back on the grid -
+        // the exit fades the grid, not a half-finished edit.
+        if (!content.isDashboard && dashboardLoader.item)
+            dashboardLoader.item.resetState();
+    }
+
+    /** Room the dashboard may take, from the island; it stops growing its grid there. */
+    property real dashboardAvailableWidth: 1600
+    property real dashboardAvailableHeight: 900
+    /** The size the dashboard's grid asks for, unanimated; the island morphs to it. */
+    readonly property real dashboardTargetWidth: dashboardLoader.item ? dashboardLoader.item.targetWidth : 0
+    readonly property real dashboardTargetHeight: dashboardLoader.item ? dashboardLoader.item.targetHeight : 0
+    /** Editing or an open page pins the dashboard open; see NotchIsland.dashboardPinned. */
+    readonly property bool dashboardEditing: dashboardLoader.item ? dashboardLoader.item.holdOpen : false
+    /** Only the grid editor, without an open page: the one hold a click away must not end. */
+    readonly property bool dashboardGridEditing: dashboardLoader.item ? dashboardLoader.item.editMode : false
+    /** A dashboard page may take text; the island hands it the keyboard. */
+    readonly property bool dashboardWantsKeyboard: dashboardLoader.item ? dashboardLoader.item.wantsKeyboard : false
+
+    /**
+     * Open one of the dashboard's detail pages from outside the island.
+     *
+     * The dashboard is built lazily, so the request also builds it; an open page pins
+     * the dashboard, which is what brings the island out with it.
+     */
+    /** Back from a detail page to the grid, so the page stops holding the island open. */
+    function closeDashboardPage() {
+        if (dashboardLoader.item)
+            dashboardLoader.item.closePage();
+    }
+
+    function showDashboardPage(pageId) {
+        // The request is also the build: `dashboardWanted` reads `pendingPage`.
+        content.pendingPage.pageId = pageId;
+        content.deliverPendingPage();
+    }
+
+    /**
+     * Give the pending page to the grid, as soon as there is a grid to take it.
+     *
+     * The request is cleared on the next round rather than here: showing the page pins
+     * the dashboard through a chain of bindings (`openPage` → `holdOpen` →
+     * `dashboardPinned` → `isDashboard`), and clearing it in this same turn could drop
+     * `dashboardWanted` - destroying the grid - before that chain lands.
+     */
+    function deliverPendingPage() {
+        if (!dashboardLoader.item || content.pendingPage.pageId === "")
+            return;
+        const pageId = content.pendingPage.pageId;
+        dashboardLoader.item.showPage(pageId);
+        Qt.callLater(() => {
+            if (content.pendingPage.pageId === pageId)
+                content.pendingPage.pageId = "";
+        });
+    }
+
+    property QtObject pendingPage: QtObject {
+        property string pageId: ""
+    }
+
+    Connections {
+        target: dashboardLoader
+        function onItemChanged() {
+            content.deliverPendingPage();
+        }
+    }
+
+    /**
+     * The size search *wants*, read before anything eases it.
+     *
+     * The surface animates toward this and drives the widget's size in return, so the
+     * two are never chasing each other; see SearchWidget.hostDrivesSize.
+     */
+    readonly property Item searchItem: searchLoader.item
+    readonly property real searchTargetWidth: searchLoader.item ? searchLoader.item.contentTargetWidth : 0
+    readonly property real searchTargetHeight: searchLoader.item ? searchLoader.item.contentTargetHeight : 0
+
+    // ── The workspace overview, inside the island ────────────────────────────
+    /**
+     * The overview is part of the search face, not a panel hanging under it.
+     *
+     * It used to be drawn by the island's *window*, anchored below the island body -
+     * managed by the island but visually a second surface with its own background and
+     * shadow. Here it is inside the body: the island grows to hold the search field and
+     * the grid together, and the grid draws straight onto the island's surface.
+     */
+    property bool overviewVisible: false
+    property bool overviewBuilt: false
+    /** 0..1, the island's own fade; the overview plays no entrance of its own. */
+    property real overviewFade: 0
+    property int overviewRows: 2
+    property int overviewColumns: 3
+    property real overviewScale: 0.15
+    property var overviewPanelWindow: null
+    property int overviewMonitorIndex: 0
+    /** Gap between the search field and the grid below it. */
+    readonly property real overviewGap: 8
+
+    /** What the grid asks for; the island adds it to the search face's own size. */
+    readonly property real overviewTargetWidth: overviewLoader.item ? overviewLoader.item.implicitWidth : 0
+    readonly property real overviewTargetHeight: overviewLoader.item ? overviewLoader.item.implicitHeight : 0
+    /** The room the grid takes out of the surface, gap included. */
+    readonly property real overviewArea: (content.overviewVisible && content.overviewTargetHeight > 0)
+        ? content.overviewTargetHeight + content.overviewGap : 0
+
+    /** The search bar's own collapsed height (54px). */
+    readonly property real searchFieldHeight: (searchLoader.item && searchLoader.item.collapsedHeight > 0)
+        ? searchLoader.item.collapsedHeight : 54
+
+    /**
+     * Dynamic expansion progress of the overview following overviewFade.
+     * Scale and translate follow this: 1.0 when open, decreasing to 0.90 / -20px when exiting.
+     */
+    readonly property real overviewExpansionProgress: content.overviewFade
+
+    /**
+     * The search field's own height, declared - never measured off the surface.
+     *
+     * Deriving it as `surface height - grid` looked equivalent and was not: the surface
+     * height is animating, so the field grew from nothing to its full height while the
+     * island opened and dragged the grid anchored under it down the screen. That travel
+     * was a second animation on top of the island's own, which is what made the opening
+     * feel like two separate motions.
+     *
+     * Pinned to what search asks for, the field and the grid are already in their final
+     * places on the first frame; the island growing over them is the whole animation,
+     * exactly as it is for search on its own.
+     */
+    readonly property real searchFaceHeight: content.searchTargetHeight > 0
+        ? content.searchTargetHeight : 54
+
+    /**
+     * The size the wallpaper browser wants, declared rather than measured.
+     *
+     * Same contract as search: the island animates toward this and gives the browser its
+     * live size in return, so neither is ever chasing the other.
+     */
+    readonly property real wallpaperTargetWidth: wallpaperLoader.item ? wallpaperLoader.item.contentTargetWidth : 0
+    readonly property real wallpaperTargetHeight: wallpaperLoader.item ? wallpaperLoader.item.contentTargetHeight : 0
+
+    /**
+     * The size the OSD indicator wants.
+     *
+     * It declares its own `osdWidth`/`osdHeight` (380x72), and the registry's numbers
+     * for the activity were neither - so the island sized itself to a pill and cut the
+     * indicator off. Reading them from the indicator keeps the two from drifting apart
+     * again.
+     */
+    readonly property real osdTargetWidth: (osdLoader.item && osdLoader.item.osdWidth > 0)
+        ? osdLoader.item.osdWidth : 0
+    readonly property real osdTargetHeight: (osdLoader.item && osdLoader.item.osdHeight > 0)
+        ? osdLoader.item.osdHeight : 0
+
+    /** Both popup cards measure themselves; the island animates to what they ask. */
+    readonly property real colorPickerTargetWidth: colorPickerLoader.item ? colorPickerLoader.item.implicitWidth : 0
+    readonly property real colorPickerTargetHeight: colorPickerLoader.item ? colorPickerLoader.item.implicitHeight : 0
+    readonly property real displayModesTargetWidth: displayModesLoader.item ? displayModesLoader.item.implicitWidth : 0
+    readonly property real displayModesTargetHeight: displayModesLoader.item ? displayModesLoader.item.implicitHeight : 0
+    readonly property real localSendRequestTargetWidth: localSendRequestLoader.item ? localSendRequestLoader.item.implicitWidth : 0
+    readonly property real localSendRequestTargetHeight: localSendRequestLoader.item ? localSendRequestLoader.item.implicitHeight : 0
+
+    /** The size the password prompt wants; declared, like the session menu's. */
+    readonly property real askpassTargetWidth: askpassLoader.item ? askpassLoader.item.contentTargetWidth : 0
+    readonly property real askpassTargetHeight: askpassLoader.item ? askpassLoader.item.contentTargetHeight : 0
+
+    /** The size the session menu wants; declared, like search's. */
+    readonly property real sessionTargetWidth: sessionLoader.item ? sessionLoader.item.contentTargetWidth : 0
+    readonly property real sessionTargetHeight: sessionLoader.item ? sessionLoader.item.contentTargetHeight : 0
+
+    // ── Alt+Tab ──────────────────────────────────────────────────────────────
+    /**
+     * Alt+Tab crossfades over whatever face is showing, the way the dashboard does: the
+     * face underneath is never swapped out, so when Alt comes up the island morphs back to
+     * exactly what it was showing. Keyed on `activityId`, not `displayedId`, for that reason.
+     */
+    readonly property bool isWindowSwitcher: content.activityId === "windowSwitcher"
+    property real switcherReveal: content.isWindowSwitcher ? 1 : 0
+    Behavior on switcherReveal {
+        // Not the elementMoveFast component: that one runs to its end, and an Alt+Tab
+        // released mid-reveal would wait for the reveal before fading out.
+        //
+        // In with the island's growth, most of its length, so the covers arrive as the shape
+        // does instead of popping into a pill that is still opening; out quicker, so they are
+        // gone before the shape has shrunk around them. Keyed on the service's `active`, which
+        // turns before the face does (see NotchIsland.switcherMorph).
+        NumberAnimation {
+            duration: WindowSwitcher.active ? Math.round(Appearance.animationCurves.expressiveFastSpatialDuration * Appearance.animMultiplier)
+                : Appearance.animation.elementMoveFast.duration
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Appearance.animationCurves.standard
+        }
+    }
+
+    /**
+     * The switcher's size, from the screen and the window count alone: the island starts
+     * growing the moment the switcher takes it, before its face has been built. The middle
+     * cover is a fifth of the screen wide; the island is as wide as the covers either side
+     * of it need - one neighbour each side for three windows, the whole fan from five.
+     */
+    readonly property QtObject switcherMetrics: QtObject {
+        readonly property real coverWidth: Math.round(Math.max(240, Math.min(560, content.screenWidth * 0.2)))
+        readonly property real coverHeight: Math.round(coverWidth * 0.625)
+        readonly property real topPadding: 16
+        readonly property real titleGap: 10
+        readonly property real titleHeight: 22
+        readonly property real bottomPadding: 14
+        /// The search line, added on top while there is a query (or Alt+` keeps to one app).
+        readonly property real searchHeight: 30
+        /// The hints line under the title: the keys, and "4 / 17" once the flow runs off the edges.
+        readonly property real hintsHeight: (WindowSwitcher.showKeyHints || WindowSwitcher.count > 4) ? 18 : 0
+    }
+    readonly property real windowSwitcherTargetWidth: {
+        const m = content.switcherMetrics;
+        const n = WindowSwitcher.count;
+        const spread = n <= 1 ? 1.25 : n === 2 ? 1.6 : n === 3 ? 2.0 : n === 4 ? 2.4 : 2.8;
+        return Math.round(m.coverWidth * spread);
+    }
+    readonly property real windowSwitcherTargetHeight: {
+        const m = content.switcherMetrics;
+        return m.topPadding + m.coverHeight + m.titleGap + m.titleHeight + m.hintsHeight + m.bottomPadding
+            + (WindowSwitcher.query.length > 0 || WindowSwitcher.appFilter !== "" ? m.searchHeight : 0);
+    }
+
+    function focusSearch() {
+        if (searchLoader.item)
+            searchLoader.item.focusSearchInput();
+    }
+
+    function cancelSearch() {
+        if (searchLoader.item)
+            searchLoader.item.cancelSearch();
+    }
+
+    /**
+     * Changing what the island shows is a dissolve, not a cut and not a slide.
+     *
+     * Into and out of the dashboard it is a true crossfade: the faces and the dashboard
+     * live in separate layers on one clock (`dashboardReveal`), so from the first frame
+     * the face fades and blurs out while the dashboard fades and sharpens in, and for
+     * the middle of the transition both are on screen. A fade that emptied one before
+     * starting the other read as a blink, however short.
+     *
+     * Between two faces (one loader, so one at a time) the outgoing face dims and blurs,
+     * the swap happens while it is dim, and the incoming one sharpens back in.
+     *
+     * Media is exempt from the blur. Its face *is* an album cover, and blurring a
+     * photograph on every track change looks like a rendering fault rather than motion.
+     */
+    property real morphOpacity: 1.0
+    property real morphBlur: 0.0
+    /** How far a face dims before the swap; the rest of the change is the blur. */
+    readonly property real morphFloor: 0.15
+
+    /** 0 = the faces, 1 = the dashboard; one clock for both halves of the crossfade. */
+    property real dashboardReveal: content.isDashboard ? 1 : 0
+    Behavior on dashboardReveal {
+        NumberAnimation {
+            duration: Math.round(320 * Appearance.animMultiplier)
+            easing.type: Easing.InOutQuad
+        }
+    }
+
+    /**
+     * Media keeps its cover sharp; see above. Search is exempt for the same reason: a
+     * field the user is about to type into must not arrive out of focus, and the surface
+     * behind it is travelling far enough that the blur added nothing but cost.
+     */
+    readonly property var sharpFaces: ["media", "search", "dashboard", "wallpaper", "session", "colorPicker", "displayModes", "askpass"]
+    readonly property bool blurAllowed: content.sharpFaces.indexOf(content.activityId) === -1
+        && content.sharpFaces.indexOf(content.displayedId) === -1
+
+    function beginMorph() {
+        // The dashboard crossfades over whatever face is showing, which stays put
+        // underneath it; nothing to swap.
+        if (content.activityId === "dashboard" || content.activityId === content.displayedId)
+            return;
+        // Alt+Tab covers the face the same way; see `isWindowSwitcher`.
+        if (content.activityId === "windowSwitcher")
+            return;
+        // Straight to it on the first paint, and whenever the dashboard covers the
+        // faces: the change happens unseen and the crossfade back reveals it.
+        // Search is a dedicated, full-surface expansion that has its own loaders and
+        // entrance/exit animations; dimming and delaying the swap by 120ms causes elements
+        // (clock, search field, overview grid) to flash/flicker during the island morph.
+        if (content.displayedId === "" || content.dashboardReveal > 0.5
+                || content.activityId === "search" || content.displayedId === "search") {
+            morph.stop();
+            content.morphOpacity = 1.0;
+            content.morphBlur = 0.0;
+            content.displayedId = content.activityId;
+            return;
+        }
+        morph.restart();
+    }
+
+    onActivityIdChanged: content.beginMorph()
+    Component.onCompleted: content.beginMorph()
+
+    SequentialAnimation {
+        id: morph
+        running: false
+
+        // Out: dim and blur.
+        ParallelAnimation {
+            NumberAnimation {
+                target: content
+                property: "morphOpacity"
+                to: content.morphFloor
+                duration: Math.round(120 * Appearance.animMultiplier)
+                easing.type: Easing.InQuad
+            }
+            NumberAnimation {
+                target: content
+                property: "morphBlur"
+                to: content.blurAllowed ? 1.0 : 0.0
+                duration: Math.round(120 * Appearance.animMultiplier)
+                easing.type: Easing.InQuad
+            }
+        }
+
+        // The swap happens while the face is dim. A script rather than a
+        // PropertyAction, so the value is read when the action runs.
+        ScriptAction {
+            script: content.displayedId = content.activityId
+        }
+
+        // In: sharpen and brighten.
+        ParallelAnimation {
+            NumberAnimation {
+                target: content
+                property: "morphOpacity"
+                to: 1.0
+                duration: Math.round(220 * Appearance.animMultiplier)
+                easing.type: Easing.OutCubic
+            }
+            NumberAnimation {
+                target: content
+                property: "morphBlur"
+                to: 0.0
+                duration: Math.round(240 * Appearance.animMultiplier)
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        // An activity that arrived mid-transition is picked up here, so the island
+        // always lands on the current one instead of the one it started toward.
+        onFinished: content.beginMorph()
+    }
+
+    // ── The faces ────────────────────────────────────────────────────────────
+    // Everything but the dashboard, in one layer: it dims and blurs as a whole, both
+    // for a swap between faces and under the dashboard's crossfade.
+    // It follows the island's live size throughout, crossfade included: held at its
+    // pre-expansion size it stood still while the island grew, and snapped to the
+    // island's size when the crossfade ended before the island had finished shrinking.
+    Item {
+        id: faces
+        anchors.fill: parent
+        readonly property real blur: Math.max(content.morphBlur, content.dashboardReveal)
+        opacity: content.morphOpacity * (1 - content.dashboardReveal) * (1 - content.switcherReveal)
+        visible: faces.opacity > 0.001
+
+        // The layer only exists while the blur is on screen: an always-on layer would
+        // cost a full offscreen pass for an island that is mostly still.
+        layer.enabled: faces.blur > 0.001
+        layer.smooth: true
+        layer.effect: MultiEffect {
+            blurEnabled: true
+            blurMax: 24
+            blur: faces.blur
+        }
+
+        Loader {
+            id: widgetLoader
+
+            /**
+             * A face with a card of its own is laid out in the contracted box, always.
+             *
+             * The island grows; the face that is leaving does not. Filling the live
+             * surface instead, a face that sizes its contents from the surface it is
+             * given - the notification's icon is as tall as its face - grew with the
+             * morph under the card and shrank on the way home, when what should be a
+             * still image faded out. Anchored at the top, the edge the island's growth
+             * does not move, so the leaving face stays where it was drawn. Every other
+             * face keeps filling the island, as it always has: the legacy widgets draw
+             * their expanded state from the same item, and there the island's box *is*
+             * the right one.
+             */
+            readonly property bool ownBox: content.hasOwnExpandedFace
+            x: (parent.width - width) / 2
+            y: 0
+            width: widgetLoader.ownBox ? content.contractedWidth : parent.width
+            height: widgetLoader.ownBox ? content.contractedHeight : parent.height
+
+            active: content.hasWidget && !content.isSearch && !content.isOsd && !content.isWallpaper
+                && !content.isSession && !content.isColorPicker && !content.isDisplayModes
+                && !content.isLocalSendRequest && !content.isAskpass
+            source: content.sourcePath
+            /**
+             * Built over a few frames rather than in one. The swap lands in the middle of
+             * the island's resize, and a face built in one go (the agent's, 20-30 ms)
+             * froze the island there. The outgoing face is dimmed by then, so the gap
+             * before the new one is not seen.
+             */
+            asynchronous: true
+
+            // Rebinding rather than reloading; see above.
+            Binding {
+                target: widgetLoader.item && widgetLoader.item.hasOwnProperty("isExpanded") ? widgetLoader.item : null
+                property: "isExpanded"
+                value: content.expanded
+            }
+
+            // Only the faces that expand in place send it.
+            Connections {
+                target: widgetLoader.item
+                ignoreUnknownSignals: true
+                function onCollapseRequested() {
+                    content.faceCollapseRequested();
+                }
+            }
+
+            // Some widgets lay themselves out differently when they are one of several.
+            // With a single slot there is always exactly one.
+            Binding {
+                target: widgetLoader.item && widgetLoader.item.hasOwnProperty("panelWidgetsCount") ? widgetLoader.item : null
+                property: "panelWidgetsCount"
+                value: 1
+            }
+
+            Binding {
+                target: widgetLoader.item && widgetLoader.item.hasOwnProperty("isDragOverNotch") ? widgetLoader.item : null
+                property: "isDragOverNotch"
+                value: content.controller.sources.localSend.dragHovering
+            }
+
+            // LocalSend's drop state lives in its source; the widget is handed it.
+            Binding {
+                target: widgetLoader.item && widgetLoader.item.hasOwnProperty("serviceChoice") ? widgetLoader.item : null
+                property: "serviceChoice"
+                value: content.controller.sources.localSend.serviceChoice
+            }
+            Binding {
+                target: widgetLoader.item && widgetLoader.item.hasOwnProperty("queueFiles") ? widgetLoader.item : null
+                property: "queueFiles"
+                value: content.controller.sources.localSend.queueFiles
+            }
+            Binding {
+                target: widgetLoader.item && widgetLoader.item.hasOwnProperty("leftHover") ? widgetLoader.item : null
+                property: "leftHover"
+                value: content.controller.sources.localSend.dragHovering && content.controller.sources.localSend.dragColumn === 0
+            }
+            Binding {
+                target: widgetLoader.item && widgetLoader.item.hasOwnProperty("middleHover") ? widgetLoader.item : null
+                property: "middleHover"
+                value: content.controller.sources.localSend.dragHovering && content.controller.sources.localSend.dragColumn === 1
+            }
+            Binding {
+                target: widgetLoader.item && widgetLoader.item.hasOwnProperty("rightHover") ? widgetLoader.item : null
+                property: "rightHover"
+                value: content.controller.sources.localSend.dragHovering && content.controller.sources.localSend.dragColumn === 2
+            }
+            // ...and when the widget ends a choice itself (KDE Connect's send completing),
+            // the source hears of it.
+            Connections {
+                target: widgetLoader.item && widgetLoader.item.hasOwnProperty("serviceChoice") ? widgetLoader.item : null
+                ignoreUnknownSignals: true
+                function onServiceChoiceChanged() {
+                    if (widgetLoader.item.serviceChoice === 0)
+                        content.controller.sources.localSend.serviceChoice = 0;
+                }
+            }
+
+            /**
+             * In on load, out as the expanded card takes its place.
+             *
+             * Declared rather than assigned on `onLoaded`: a binding on the loader's own
+             * state can carry the crossfade, where an imperative assignment would have
+             * broken it for good the first time a face was loaded. Loading counts: the
+             * swap between two faces is the dissolve's to show, not a second fade.
+             */
+            readonly property real shown: (widgetLoader.status === Loader.Ready
+                || widgetLoader.status === Loader.Loading) ? 1 : 0
+            opacity: widgetLoader.shown * (1 - content.expandReveal)
+            scale: 0.96 + 0.04 * widgetLoader.shown
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(widgetLoader)
+            }
+            Behavior on scale {
+                NumberAnimation {
+                    duration: Appearance.animation.elementMoveSmall.duration
+                    easing.type: Easing.OutBack
+                    easing.overshoot: 0.5
+                }
+            }
+        }
+
+        // ── The card of a face that has one ──────────────────────────────────────
+        /**
+         * Laid out once at the box the registry gives the activity and revealed by the
+         * growing body: sized to the animating surface instead, it would be re-laid out
+         * on every frame of the growth. Anchored to the top, the edge that does not move
+         * while the island grows downwards.
+         */
+        Loader {
+            id: expandedFace
+
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: parent.top
+            width: content.hasOwnExpandedFace
+                ? content.expandedBoxWidth : 0
+            height: !content.hasOwnExpandedFace ? 0
+                : content.expandedFaceHeight > 0
+                    ? Math.min(IslandRegistry.heightFor(content.displayedId, "expanded"), content.expandedFaceHeight)
+                    : IslandRegistry.heightFor(content.displayedId, "expanded")
+            active: content.hasOwnExpandedFace && (content.expanded || content.expandReveal > 0.01)
+            visible: content.expandReveal > 0.001
+            source: content.expandedSourcePath
+            opacity: content.expandReveal
+        }
+
+        // ── Search ───────────────────────────────────────────────────────────────
+        // Kept loaded across a close so the query and the result list survive being
+        // dismissed and reopened, which is what the launcher has always done.
+        Loader {
+            id: searchLoader
+            // Fills the surface rather than sizing it: the island is already animating to
+            // the size search asked for, and a loader that measured its own item put a
+            // second, unanimated size in the middle of that travel.
+            // Its own declared height when the grid is under it, so neither moves while
+            // the island grows; the whole surface otherwise.
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            height: (content.overviewArea > 0 && (!searchLoader.item || !searchLoader.item.resultsVisible))
+                ? content.searchFieldHeight : parent.height
+
+            active: Config.ready
+            visible: content.isSearch
+            opacity: content.isSearch ? 1 : 0
+
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(searchLoader)
+            }
+
+            sourceComponent: SearchWidget {
+                inNotchMode: true
+                hostWidth: searchLoader.width
+                hostHeight: searchLoader.height
+            }
+
+            /**
+             * A query handed over by another surface (a keybind, the bar) opens with
+             * that text already in place instead of an empty field.
+             *
+             * Taken the moment search becomes the activity, not when its face becomes
+             * visible. That is one face swap later, and for that long the island was
+             * growing toward an empty search field; the clipboard shortcut's prefix
+             * then arrived, the panel was built in the middle of the movement - the
+             * freeze - and the island set off again for a second, larger size. Taken at
+             * once, the panel is built before anything moves and the island grows once.
+             */
+            function takeQuery() {
+                if (!searchLoader.item)
+                    return;
+                if (GlobalStates.activeSearchQuery) {
+                    searchLoader.item.setSearchingText(GlobalStates.activeSearchQuery);
+                    GlobalStates.activeSearchQuery = "";
+                } else if (GlobalStates.searchPendingPanel !== "") {
+                    searchLoader.item.consumePanelIntent();
+                } else if (!GlobalStates.searchPanelActive && searchLoader.item.requestedPanelId === "") {
+                    searchLoader.item.cancelSearch();
+                }
+            }
+
+            /**
+             * Taken once per open. The face swap can make this visible before `wanted`
+             * catches up with the same activity change; a second take then found the
+             * handed-over query already consumed and cancelled it, so the first key typed
+             * on an empty desktop never reached the field.
+             */
+            property bool queryTaken: false
+            readonly property bool wanted: content.activityId === "search"
+            onWantedChanged: {
+                if (!searchLoader.wanted) {
+                    searchLoader.queryTaken = false;
+                    return;
+                }
+                if (searchLoader.queryTaken || searchLoader.item === null)
+                    return;
+                searchLoader.queryTaken = true;
+                searchLoader.takeQuery();
+            }
+
+            onVisibleChanged: {
+                if (!searchLoader.visible || !searchLoader.item)
+                    return;
+                // Shown without having been the activity first (the first paint), or shown
+                // ahead of `wanted`, which still holds its old value in this handler.
+                if (!searchLoader.queryTaken) {
+                    searchLoader.queryTaken = content.activityId === "search";
+                    searchLoader.takeQuery();
+                }
+                Qt.callLater(() => searchLoader.item.focusSearchInput());
+            }
+        }
+
+        // ── The workspace overview, under the search field ───────────────────────
+        Loader {
+            id: overviewLoader
+            // Built off the UI thread: the workspace grid (a tile and a screen copy per
+            // window) is the heaviest thing search opens, and building it synchronously
+            // stalled the island's morph for its first frames.
+            asynchronous: true
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: parent.top
+            anchors.topMargin: content.searchFieldHeight + content.overviewGap
+            /**
+             * Built once and kept, like the dashboard. Tied to `isSearch` it was
+             * destroyed on every close and rebuilt asynchronously on the next open, so
+             * the island sized itself to the search field first and jumped again when
+             * the grid arrived a few frames later.
+             */
+            active: content.overviewBuilt
+            visible: (content.overviewVisible || content.overviewFade > 0.01) && opacity > 0.01
+            opacity: content.overviewFade
+
+            transform: [
+                Translate {
+                    y: (1.0 - content.overviewFade) * 16
+                }
+            ]
+
+            sourceComponent: OverviewWidget {
+                hosted: true
+                panelWindow: content.overviewPanelWindow
+                monitorIndex: content.overviewMonitorIndex
+                gridRows: content.overviewRows
+                gridColumns: content.overviewColumns
+                fixedScale: content.overviewScale
+                suppressEntrance: false
+            }
+        }
+
+        // ── A picked colour, and an incoming transfer ────────────────────────────
+        // Both are the popups' own cards, hosted: the island is the surface, so their
+        // background, border, shadow and elevation margin come off and what is left is
+        // the layout the user already knows.
+        Loader {
+            id: colorPickerLoader
+            anchors.centerIn: parent
+            active: content.isColorPicker || content.activityId === "colorPicker"
+            visible: content.isColorPicker
+            opacity: content.isColorPicker ? 1 : 0
+
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(colorPickerLoader)
+            }
+
+            sourceComponent: ColorPickerPopupContent {
+                hosted: true
+                onDismissed: GlobalStates.colorPickerPopupOpen = false
+            }
+        }
+
+        Loader {
+            id: displayModesLoader
+            anchors.centerIn: parent
+            active: content.isDisplayModes || content.activityId === "displayModes"
+            visible: content.isDisplayModes
+            opacity: content.isDisplayModes ? 1 : 0
+
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(displayModesLoader)
+            }
+
+            sourceComponent: DisplayModesPopupContent {
+                hosted: true
+                onDismissed: GlobalStates.displayModesPopupOpen = false
+            }
+        }
+
+        Loader {
+            id: localSendRequestLoader
+            anchors.centerIn: parent
+            active: content.isLocalSendRequest
+            visible: content.isLocalSendRequest
+            opacity: content.isLocalSendRequest ? 1 : 0
+
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(localSendRequestLoader)
+            }
+
+            sourceComponent: LocalSendPopupContent {
+                hosted: true
+                transfer: LocalSend.currentTransfer
+                onAcceptRequested: LocalSend.acceptTransfer()
+                onRejectRequested: LocalSend.denyTransfer()
+            }
+        }
+
+        // ── Password prompt ──────────────────────────────────────────────────────
+        // Unloaded when no prompt is waiting: the field must not outlive the request,
+        // and nothing about it is worth keeping warm.
+        Loader {
+            id: askpassLoader
+            anchors.fill: parent
+
+            active: content.isAskpass || content.activityId === "askpass"
+            visible: content.isAskpass
+            opacity: content.isAskpass ? 1 : 0
+
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(askpassLoader)
+            }
+
+            sourceComponent: IslandAskpassCard {
+                request: AskpassService.current
+                style: AskpassService.currentStyle
+                shown: content.isAskpass
+                focused: content.askpassFocused
+                fingerprint: content.controller.sources.fingerprint
+                onFocusRequested: content.askpassFocusRequested()
+            }
+        }
+
+        // ── Session menu ─────────────────────────────────────────────────────────
+        // Unloaded when closed: eight buttons are cheap to build, and holding the
+        // keyboard focus chain of a menu nobody is looking at only invites trouble.
+        Loader {
+            id: sessionLoader
+            anchors.fill: parent
+
+            active: content.isSession || content.activityId === "session"
+            visible: content.isSession
+            opacity: content.isSession ? 1 : 0
+
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(sessionLoader)
+            }
+
+            sourceComponent: IslandSessionMenu {
+                active: content.isSession
+                onCloseRequested: GlobalStates.sessionOpen = false
+            }
+
+            function focusSession() {
+                if (sessionLoader.visible && sessionLoader.item) {
+                    Qt.callLater(() => {
+                        if (sessionLoader.item) {
+                            sessionLoader.item.forceActiveFocus();
+                            if (typeof sessionLoader.item.focusFirstButton === "function") {
+                                sessionLoader.item.focusFirstButton();
+                            }
+                        }
+                    });
+                }
+            }
+
+            onLoaded: sessionLoader.focusSession()
+            onVisibleChanged: sessionLoader.focusSession()
+        }
+
+        // ── Wallpapers ───────────────────────────────────────────────────────────
+        /**
+         * The wallpaper picker, as one row inside the island.
+         *
+         * It is the same WallpaperSelectorContent the full-screen selector draws, in its
+         * compact layout: sidebar off, the folder path on top, one row of four
+         * wallpapers with a fade at each end, and the toolbars in a row beneath. Reusing
+         * it rather than writing a second browser is what keeps the thumbnails, the
+         * colour filter, sorting, favourites and the online search working here without
+         * a line of their own.
+         *
+         * Unloaded when closed, unlike search: a directory of thumbnails is far too much
+         * to hold for a surface the user may not open again this session, and the browser
+         * restores its own directory and query from Wallpapers when it comes back.
+         */
+        Loader {
+            id: wallpaperLoader
+            anchors.fill: parent
+
+            active: content.isWallpaper || content.activityId === "wallpaper"
+            visible: content.isWallpaper
+            opacity: content.isWallpaper ? 1 : 0
+
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(wallpaperLoader)
+            }
+
+            sourceComponent: WallpaperSelectorContent {
+                compact: true
+                compactStyle: Config.options.bar.floatingNotch.wallpaperBrowserStyle
+                screenAspect: {
+                    const screen = (content.QsWindow.window as QsWindow)?.screen ?? null;
+                    return screen && screen.height > 0 ? screen.width / screen.height : 16 / 10;
+                }
+                // The island's crossfade is the open animation; this only says whether
+                // the contents should have made their entrance.
+                active: content.isWallpaper || content.activityId === "wallpaper"
+                onCloseRequested: GlobalStates.wallpaperSelectorOpen = false
+            }
+
+            // The browser's own focus-on-open runs when the flag flips, before this
+            // Loader has built it, so the carousel is focused from here instead: arrows
+            // move it straight away, and typing still lands in the search field.
+            function focusBrowser() {
+                if (wallpaperLoader.visible && wallpaperLoader.item)
+                    Qt.callLater(() => wallpaperLoader.item?.forceActiveFocus());
+            }
+            onLoaded: wallpaperLoader.focusBrowser()
+            onVisibleChanged: wallpaperLoader.focusBrowser()
+        }
+
+        // ── OSD ──────────────────────────────────────────────────────────────────
+        Loader {
+            id: osdLoader
+            // Built as soon as the island pages to the OSD, not when the face swap lands:
+            // the island sizes itself from the indicator (osdTargetWidth), and until then
+            // it morphed toward the registry's 380 px, so a narrow Tuner face (a switch,
+            // a notice) grew to slider width and shrank back. Hidden until it is shown.
+            readonly property bool wanted: content.isOsd || content.activityId === "osd"
+            anchors.fill: parent
+            active: osdLoader.wanted
+            visible: content.isOsd
+            source: {
+                if (!osdLoader.wanted)
+                    return "";
+                // The Tuner style has one face for every indicator.
+                if (Config.ready && Config.options.osd.style === "tuner")
+                    return Quickshell.shellPath("modules/ii/onScreenDisplay/tuner/TunerIndicator.qml");
+                const indicators = {
+                    "volume": "VolumeIndicator.qml",
+                    "brightness": "BrightnessIndicator.qml",
+                    "playerVolume": "PlayerVolumeIndicator.qml",
+                    "gamma": "GammaIndicator.qml",
+                    "keyboardBrightness": "KeyboardBrightnessIndicator.qml",
+                    "toggle": "ToggleIndicator.qml"
+                };
+                const file = indicators[GlobalStates.osdCurrentIndicator];
+                if (!file)
+                    return "";
+                return Quickshell.shellPath("modules/ii/topLayer/osd/indicators/" + file);
+            }
+        }
+
+        // The resting face: the clock, with the side widgets beside it.
+        NotchRestingFace {
+            id: restingFace
+            anchors.fill: parent
+            sideIds: content.sideIds
+            restHeight: content.restingHeight
+            sportsGame: content.controller.sources.sports.liveGame
+            phoneLive: content.controller.sources.phoneLive.current
+            visible: !content.hasWidget && !content.isSearch && !content.isOsd && !content.isWallpaper
+                && !content.isSession && !content.isColorPicker && !content.isDisplayModes
+                && !content.isLocalSendRequest && !content.isAskpass
+        }
+    }
+
+    // ── Dashboard ────────────────────────────────────────────────────────────
+    RetainedLoader {
+        id: dashboardLoader
+        anchors.fill: parent
+        /**
+         * Built while the dashboard can be seen and destroyed a minute after it cannot;
+         * see `dashboardWanted`. Always asynchronous: building the grid takes a good part
+         * of an expansion and must never run in the morph's way - it incubates off the
+         * GUI thread on every open instead of freezing the shell. The morph does not
+         * wait for it either: `DashboardMetrics` already gives the island its final
+         * target.
+         */
+        requested: content.dashboardWanted
+        retainFor: 60000
+        asynchronous: true
+        // The other half of the crossfade: it arrives soft and sharpens as the faces go.
+        opacity: content.dashboardReveal
+        visible: content.dashboardReveal > 0.001
+        layer.enabled: content.dashboardReveal > 0.001 && content.dashboardReveal < 0.999
+        layer.smooth: true
+        layer.effect: MultiEffect {
+            blurEnabled: true
+            blurMax: 24
+            blur: 1 - content.dashboardReveal
+        }
+        source: Quickshell.shellPath("modules/ii/dynamicIsland/dashboard/IslandDashboard.qml")
+
+        Binding {
+            target: dashboardLoader.item
+            property: "availableWidth"
+            value: content.dashboardAvailableWidth
+            when: dashboardLoader.item !== null
+        }
+        Binding {
+            target: dashboardLoader.item
+            property: "availableHeight"
+            value: content.dashboardAvailableHeight
+            when: dashboardLoader.item !== null
+        }
+    }
+
+    // ── Alt+Tab ──────────────────────────────────────────────────────────────
+    // Over everything else, faces and dashboard alike; built only while it can be seen.
+    Loader {
+        id: windowSwitcherLoader
+        anchors.fill: parent
+        active: content.isWindowSwitcher || content.switcherReveal > 0.001
+        visible: content.switcherReveal > 0.001
+        opacity: content.switcherReveal
+
+        sourceComponent: IslandWindowSwitcher {
+            shown: content.isWindowSwitcher
+            coverWidth: content.switcherMetrics.coverWidth
+            coverHeight: content.switcherMetrics.coverHeight
+            topPadding: content.switcherMetrics.topPadding
+            titleGap: content.switcherMetrics.titleGap
+            titleHeight: content.switcherMetrics.titleHeight
+            searchHeight: content.switcherMetrics.searchHeight
+            hintsHeight: content.switcherMetrics.hintsHeight
+        }
+    }
+}

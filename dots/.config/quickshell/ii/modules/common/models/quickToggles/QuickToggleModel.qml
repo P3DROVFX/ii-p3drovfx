@@ -7,6 +7,12 @@ QtObject {
     property string tooltipText: ""
     property string icon: "close"
 
+    // The one reading a big expressive tile is about (volume, battery, signal...):
+    // the number, its unit, and 0..1 for faces that draw it as a level (-1 = none).
+    property string heroValue: ""
+    property string heroUnit: ""
+    property real heroLevel: -1
+
     // State
     property bool hasStatusText: true
     property bool available: true

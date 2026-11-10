@@ -337,6 +337,61 @@ class AiPlanUsageParserTests(unittest.TestCase):
         opencode.assert_called_once()
         openrouter.assert_called_once()
 
+    def test_expired_claude_token_flags_signin_and_keeps_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            cache_dir = Path(temporary) / "cache"
+            credentials = Path(temporary) / ".credentials.json"
+            credentials.write_text(
+                json.dumps(
+                    {
+                        "claudeAiOauth": {
+                            "accessToken": "expired-secret",
+                            "subscriptionType": "max",
+                            "expiresAt": int(time.time() * 1000) - 60_000,
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            snapshot = MODULE.parse_claude_usage(
+                {"five_hour": {"utilization": 40, "resets_at": "2026-08-30T05:00:00Z"}},
+                plan="max",
+                updated_at=int(time.time() * 1000) - 3_600_000,
+            )
+            MODULE.save_provider_cache(cache_dir, snapshot)
+            opener = mock.Mock()
+            result = MODULE.collect_claude(
+                cache_dir, credentials_path=credentials, opener=opener
+            )
+            opener.assert_not_called()
+            self.assertTrue(result["needsSignIn"])
+            self.assertTrue(result["stale"])
+            self.assertEqual(len(result["items"]), 1)
+            self.assertNotIn("expired-secret", json.dumps(result))
+
+            without_cache = MODULE.collect_claude(
+                Path(temporary) / "empty", credentials_path=credentials, opener=opener
+            )
+            self.assertTrue(without_cache["needsSignIn"])
+
+    def test_rejected_claude_token_flags_signin(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            credentials = Path(temporary) / ".credentials.json"
+            credentials.write_text(
+                json.dumps({"claudeAiOauth": {"accessToken": "revoked-secret"}}),
+                encoding="utf-8",
+            )
+            opener = mock.Mock(
+                side_effect=MODULE.urllib.error.HTTPError(
+                    MODULE.CLAUDE_USAGE_URL, 401, "Unauthorized", None, None
+                )
+            )
+            result = MODULE.collect_claude(
+                Path(temporary) / "cache", credentials_path=credentials, opener=opener
+            )
+            self.assertTrue(result["needsSignIn"])
+            self.assertNotIn("revoked-secret", json.dumps(result))
+
     def test_cache_never_contains_credentials(self) -> None:
         payload = MODULE.provider_result(
             "claude",

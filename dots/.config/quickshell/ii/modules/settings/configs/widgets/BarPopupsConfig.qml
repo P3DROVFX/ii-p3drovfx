@@ -75,6 +75,23 @@ Item {
             }
             ConfigSwitch {
                 enabled: Config.options.bar.tooltips.enablePopups
+                buttonIcon: "desktop_windows"
+                text: Translation.tr("Enable display modes floating popup")
+                checked: Config.options.bar.tooltips.enableDisplayModesPopup
+                onCheckedChanged: Config.options.bar.tooltips.enableDisplayModesPopup = checked
+                StyledToolTip {
+                    text: Translation.tr("Extend, duplicate or show only one screen. Opens with Super+Alt+P")
+                }
+            }
+            ConfigSwitch {
+                enabled: Config.options.bar.tooltips.enablePopups && Config.options.bar.tooltips.enableDisplayModesPopup
+                buttonIcon: "cable"
+                text: Translation.tr("Show display modes when a screen is plugged in")
+                checked: Config.options.bar.tooltips.displayModesOnHotplug
+                onCheckedChanged: Config.options.bar.tooltips.displayModesOnHotplug = checked
+            }
+            ConfigSwitch {
+                enabled: Config.options.bar.tooltips.enablePopups
                 buttonIcon: "keyboard"
                 text: Translation.tr("Enable keyboard layout transition floating popup")
                 checked: Config.options.bar.tooltips.enableKeyboardLayoutTransitionPopup

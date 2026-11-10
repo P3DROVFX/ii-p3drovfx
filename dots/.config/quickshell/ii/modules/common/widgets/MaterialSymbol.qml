@@ -9,11 +9,28 @@ StyledText {
     // values during animation can drop internal paths in Qt's variable-font
     // renderer after a parent scale transform.
     readonly property real truncatedFill: root.fill >= 0.5 ? 1 : 0
+    // The optical size snaps to Material's four standard sizes: every distinct value opens a
+    // new face of the font (an mmap of the whole file), and icon sizes animate.
+    readonly property int opticalSize: root.iconSize < 22 ? 20 : root.iconSize < 32 ? 24 : root.iconSize < 44 ? 40 : 48
 
-    // QtRendering can omit contours from filled variable-font glyphs (notably
-    // `devices`) at small sizes. NativeRendering uses the font engine's glyph
-    // rasterizer and preserves the complete FILL outline.
-    renderType: Text.NativeRendering
+    // True while this symbol or any ancestor is scaled or rotated (popup scale
+    // multiplier, rotating shapes). The binding reads every ancestor's
+    // scale/rotation/parent, so it follows animations and reparenting.
+    readonly property bool transformed: {
+        for (let p = root; p; p = p.parent) {
+            if (Math.abs(p.scale - 1) > 0.001 || p.rotation % 360 !== 0)
+                return true;
+        }
+        return false;
+    }
+
+    // NativeRendering gives the crispest glyph at its real size, but rasterizes
+    // before transforms: a scale stretches that bitmap into jagged steps.
+    // CurveRendering evaluates the outline at the final on-screen size, so it is
+    // used only under a transform — untransformed its small-size antialiasing
+    // wobbles. QtRendering's distance field drops contours from filled glyphs
+    // (`devices`, `settings`), so it is never used here.
+    renderType: root.transformed ? Text.CurveRendering : Text.NativeRendering
     antialiasing: true
     smooth: true
     horizontalAlignment: Text.AlignHCenter
@@ -26,7 +43,7 @@ StyledText {
         variableAxes: ({
                 "FILL": parseFloat(root.truncatedFill),
                 "wght": 400,
-                "opsz": Math.max(20, Math.min(48, iconSize))
+                "opsz": root.opticalSize
             })
     }
 

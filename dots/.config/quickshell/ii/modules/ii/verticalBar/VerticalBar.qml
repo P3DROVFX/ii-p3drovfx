@@ -63,14 +63,49 @@ Scope {
                     mask: Region {}
                 }
 
-                PanelWindow { // Bar window (Full screen)
+                PanelWindow { // Bar window
                     id: barRoot
                     screen: barLoader.modelData
                     // Fullscreen windows naturally cover the bar via the Wayland compositor
                     // (Hyprland places fullscreen windows above WlrLayer.Top). No QML
                     // visibility toggling needed — that approach caused SIGSEGV crashes.
 
+                    // Strip-sized surface (same pattern as BarWindow's needsFullSurface):
+                    // the bar only ever spans the screen edge it sits on, so the window is
+                    // sized to the bar plus room for the drop shadow. A fullscreen
+                    // transparent window paid a full swapchain — 2-3 screen-sized buffers,
+                    // tens of MB per monitor — to draw a ~72px strip, which was the entire
+                    // empty-bar RAM delta vs end4. The welded frame (fakeScreenRounding 3)
+                    // keeps the fullscreen surface: its visuals draw from this window.
+                    readonly property bool needsFullSurface: Config.options.appearance.fakeScreenRounding === 3
+                    // Room for what is drawn outside the bar strip but inside this window:
+                    // the MultiEffect drop shadow (blur ~32px + offset 4) and the autohide
+                    // hover region, which can extend past the hidden bar.
+                    readonly property real outsideStripPadding: 120
+
                     property var brightnessMonitor: Brightness.getMonitorForScreen(barLoader.modelData)
+
+                    // The Dynamic Island style reserves the whole strip but draws only a pill
+                    // centred in it: the dock reads what is really occupied to take the rest.
+                    // An autohiding bar animates its zone, so it publishes nothing to reclaim.
+                    QtObject {
+                        id: islandPublisher
+                        readonly property string screenName: barLoader.modelData ? barLoader.modelData.name : ""
+                        readonly property string edge: Config.options.bar.bottom ? "right" : "left"
+                        readonly property real extent: barContent.islandExtent
+                        readonly property real reserve: Config.options.bar.autoHide.enable ? 0
+                            : Math.max(0, Appearance.sizes.baseVerticalBarWidth - barSpaceReserver.minZone)
+
+                        function publish() {
+                            GlobalStates.setBarIsland(islandPublisher.screenName, islandPublisher.edge, islandPublisher.extent, islandPublisher.reserve);
+                        }
+
+                        onEdgeChanged: publish()
+                        onExtentChanged: publish()
+                        onReserveChanged: publish()
+                        Component.onCompleted: publish()
+                        Component.onDestruction: GlobalStates.setBarIsland(islandPublisher.screenName, "", 0, 0)
+                    }
 
                     property int monitorIndex: barLoader.monitorIndex
                     property bool hasActiveWindows: false
@@ -154,7 +189,7 @@ Scope {
                     }
 
                     property bool superShow: false
-                    property bool mustShow: hoverTriggered || superShow || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen || GlobalStates.editMode
+                    property bool mustShow: hoverTriggered || superShow || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen || GlobalStates.editMode || GlobalStates.anyBarPopupOpen
                     property real hiddenAmount: (Config.options.bar.autoHide.enable && !mustShow) ? Appearance.sizes.verticalBarWindowWidth : 0
                     Behavior on hiddenAmount {
                         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(barRoot)
@@ -170,10 +205,12 @@ Scope {
                     }
                     color: "transparent"
 
-                    // Positioning FULL SCREEN
+                    // Positioning: one screen edge (strip), or fullscreen for the welded frame
+                    implicitWidth: Appearance.sizes.verticalBarWindowWidth
+                        + Appearance.rounding.screenRounding + barRoot.outsideStripPadding
                     anchors {
-                        left: true
-                        right: true
+                        left: !Config.options.bar.bottom || barRoot.needsFullSurface
+                        right: Config.options.bar.bottom || barRoot.needsFullSurface
                         top: true
                         bottom: true
                     }
@@ -302,7 +339,7 @@ Scope {
                                     }
 
                                     implicitSize: Appearance.rounding.screenRounding
-                                    color: barRoot.showBarBackground ? (Config.options.bar.expressiveColors ? barRoot.activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
+                                    color: barRoot.showBarBackground ? (Config.options.bar.amoledBackground ? "#000000" : Config.options.bar.expressiveColors ? barRoot.activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
 
                                     corner: RoundCorner.CornerEnum.TopLeft
                                     states: State {
@@ -321,7 +358,7 @@ Scope {
                                         right: Config.options.bar.bottom ? parent.right : undefined
                                     }
                                     implicitSize: Appearance.rounding.screenRounding
-                                    color: barRoot.showBarBackground ? (Config.options.bar.expressiveColors ? barRoot.activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
+                                    color: barRoot.showBarBackground ? (Config.options.bar.amoledBackground ? "#000000" : Config.options.bar.expressiveColors ? barRoot.activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
 
                                     corner: RoundCorner.CornerEnum.BottomLeft
                                     states: State {

@@ -3,8 +3,6 @@
 -- Disable blur for xwayland context menus
 hl.window_rule({match = {class = "^()$", title = "^()$" },                   no_blur = true })
 
--- Disable blur for every window except transparent apps
-hl.window_rule({match = {class = "^(?!(kitty|code|code-url-handler|vscodium|antigravity-ide)).*" }, no_blur = true })
 
 -- Floating
 -- Tablet Family shell tools are regular xdg toplevels, so they behave like apps on the
@@ -22,6 +20,41 @@ hl.window_rule({match = {title = "^(Open File)(.*)$" },                      cen
 hl.window_rule({match = {title = "^(ii Notes)$" },                           float = true})
 hl.window_rule({match = {title = "^(ii Notes)$" },                           center = true})
 hl.window_rule({match = {title = "^(ii Notes)$" },                           size = "1500 940"})
+-- The clock app, like the notes app: a real toplevel that floats, centred. Usage, Modes
+-- and EasyEffects are built from the clock's parts and open at its size, so the
+-- whole-app windows read as one family.
+hl.window_rule({match = {title = "^(ii Clock)$" },                           float = true})
+hl.window_rule({match = {title = "^(ii Clock)$" },                           center = true})
+hl.window_rule({match = {title = "^(ii EasyEffects)$" },                     float = true})
+hl.window_rule({match = {title = "^(ii EasyEffects)$" },                     center = true})
+hl.window_rule({match = {title = "^(ii Usage)$" },                           float = true})
+hl.window_rule({match = {title = "^(ii Usage)$" },                           center = true})
+hl.window_rule({match = {title = "^(ii Modes)$" },                           float = true})
+hl.window_rule({match = {title = "^(ii Modes)$" },                           center = true})
+hl.window_rule({match = {title = "^(ii System Health)$" },                   float = true})
+hl.window_rule({match = {title = "^(ii System Health)$" },                   center = true})
+-- The throwaway mirror the shell opens only so a phone's lockscreen can be
+-- dismissed from here. It lives for a few seconds, so it must not be tiled
+-- into the current layout.
+hl.window_rule({match = {title = "^(ii-phone-unlock)$" },                    float = true})
+hl.window_rule({match = {title = "^(ii-phone-unlock)$" },                    center = true})
+-- The scrcpy window the Phone sidebar embeds. It is a real window kept exactly
+-- under a cut-out in the panel's input region, which is what makes touches and
+-- the keyboard reach the phone natively; the panel paints the captured picture
+-- over it, so it is never actually seen and every decoration below would be
+-- work thrown away. It opens on a hidden special workspace and the shell moves
+-- it into place, so it never flashes through the tiling layout on the way in.
+-- Off the monitor rather than on a special workspace: `silent` is not read in
+-- any spelling the Lua parser accepts without complaint, so parking it there
+-- pulled an empty scratchpad into view — overlay and all — on every start. The
+-- offset is relative to the monitor and is not clamped, so nothing is ever seen
+-- until the shell moves it under the panel's cut-out.
+hl.window_rule({match = {title = "^(ii-phone-embed-)(.*)$" },               move = "9000 9000"})
+hl.window_rule({match = {title = "^(ii-phone-embed-)(.*)$" },               float = true})
+hl.window_rule({match = {title = "^(ii-phone-embed-)(.*)$" },               no_initial_focus = true})
+hl.window_rule({match = {title = "^(ii-phone-embed-)(.*)$" },               no_anim = true})
+hl.window_rule({match = {title = "^(ii-phone-embed-)(.*)$" },               no_blur = true})
+hl.window_rule({match = {title = "^(ii-phone-embed-)(.*)$" },               no_shadow = true})
 hl.window_rule({match = {title = "^(Open File)(.*)$" },                      float = true})
 hl.window_rule({match = {title = "^(Select a File)(.*)$" },                  center = true})
 hl.window_rule({match = {title = "^(Select a File)(.*)$" },                  float = true})
@@ -30,6 +63,8 @@ hl.window_rule({match = {title = "^(Choose wallpaper)(.*)$" },               flo
 hl.window_rule({match = {title = "^(Choose wallpaper)(.*)$" },               size = {"(monitor_w*0.60)", "(monitor_h*0.65)"} })
 hl.window_rule({match = {title = "^(Open Folder)(.*)$" },                    center = true})
 hl.window_rule({match = {title = "^(Open Folder)(.*)$" },                    float = true})
+hl.window_rule({match = {title = "^(Select the mod file to import)(.*)$" },  center = true}) -- Gale
+hl.window_rule({match = {title = "^(Select the mod file to import)(.*)$" },  float = true})
 hl.window_rule({match = {title = "^(Save As)(.*)$" },                        center = true})
 hl.window_rule({match = {title = "^(Save As)(.*)$" },                        float = true})
 hl.window_rule({match = {title = "^(Library)(.*)$" },                        center = true})
@@ -132,10 +167,6 @@ hl.layer_rule({ match = { namespace = "overview[0-9]*" }, blur = true})
 hl.layer_rule({ match = { namespace = "overview[0-9]*" }, ignore_alpha = 0.6})
 hl.layer_rule({ match = { namespace = "cheatsheet[0-9]*" }, blur = true})
 hl.layer_rule({ match = { namespace = "cheatsheet[0-9]*" }, ignore_alpha = 0.6})
-hl.layer_rule({ match = { namespace = "quickshell:usage" }, blur = true})
-hl.layer_rule({ match = { namespace = "quickshell:usage" }, ignore_alpha = 0.6})
-hl.layer_rule({ match = { namespace = "quickshell:modes" }, blur = true})
-hl.layer_rule({ match = { namespace = "quickshell:modes" }, ignore_alpha = 0.6})
 hl.layer_rule({ match = { namespace = "sideright[0-9]*" }, blur = true})
 hl.layer_rule({ match = { namespace = "sideright[0-9]*" }, ignore_alpha = 0.6})
 hl.layer_rule({ match = { namespace = "sideleft[0-9]*" }, blur = true})
@@ -153,6 +184,10 @@ hl.layer_rule({ match = { namespace = "quickshell.*" }, ignore_alpha = 0.19})
 hl.layer_rule({ match = { namespace = "quickshell.*" }, xray = false})
 -- Background is a Bottom-layer wallpaper surface; compositor blur here causes double-blur
 hl.layer_rule({ match = { namespace = "quickshell:background" }, blur = false})
+-- Off until the shell pushes its own per-screen rule (Appearance.backgroundWidgetsRules): on for
+-- see-through widgets, off on a screen whose widgets blur themselves under open windows
+-- (a hard-edged patch otherwise). One namespace per screen: quickshell:backgroundWidgets:<screen>
+hl.layer_rule({ match = { namespace = "quickshell:backgroundWidgets:.*" }, blur = false})
 hl.layer_rule({ match = { namespace = "quickshell:workspaceBlurOverlay" }, order = -1})
 hl.layer_rule({ match = { namespace = "quickshell:workspaceBlurOverlay" }, blur = true})
 hl.layer_rule({ match = { namespace = "quickshell:workspaceBlurOverlay" }, ignore_alpha = 0.0})
@@ -163,14 +198,14 @@ hl.layer_rule({ match = { namespace = "quickshell:cheatsheet" }, animation = "sl
 hl.layer_rule({ match = { namespace = "quickshell:notes" }, blur = true})
 hl.layer_rule({ match = { namespace = "quickshell:notes" }, ignore_alpha = 0.6})
 hl.layer_rule({ match = { namespace = "quickshell:notes" }, animation = "slide bottom"})
-hl.layer_rule({ match = { namespace = "quickshell:usage" }, animation = "slide bottom"})
-hl.layer_rule({ match = { namespace = "quickshell:modes" }, animation = "slide bottom"})
 hl.layer_rule({ match = { namespace = "quickshell:dock" }, animation = "slide bottom"})
 hl.layer_rule({ match = { namespace = "quickshell:screenCorners" }, animation = "popin 120%", order = 10})
 hl.layer_rule({ match = { namespace = "quickshell:lockWindowPusher" }, no_anim = true})
-hl.layer_rule({ match = { namespace = "quickshell:notificationPopup" }, animation = "fade"})
+-- Lower order is drawn on top: keeps the popup over the dock, bar and corner surfaces during its slide.
+hl.layer_rule({ match = { namespace = "quickshell:notificationPopup" }, animation = "fade", order = -2})
 hl.layer_rule({ match = { namespace = "quickshell:idleDim" }, above_lock = 1, no_anim = true, blur = false})
 hl.layer_rule({ match = { namespace = "quickshell:overlay" }, no_anim = true})
+hl.layer_rule({ match = { namespace = "quickshell:desktopMenu" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:overlay" }, ignore_alpha = 0.3})
 hl.layer_rule({ match = { namespace = "quickshell:floatingNotch" }, blur = true})
 hl.layer_rule({ match = { namespace = "quickshell:floatingNotch" }, ignore_alpha = 0.2})
@@ -202,8 +237,23 @@ hl.layer_rule({ match = { namespace = "quickshell:screenshot" }, no_anim = true}
 hl.layer_rule({ match = { namespace = "quickshell:session" }, blur = true})
 hl.layer_rule({ match = { namespace = "quickshell:session" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:session" }, ignore_alpha = 0})
-hl.layer_rule({ match = { namespace = "quickshell:sidebarRight" }, animation = "slide right", order = 5})
-hl.layer_rule({ match = { namespace = "quickshell:sidebarLeft" }, animation = "slide left", order = 5})
+-- Alt+Tab panel: animates itself (fade + scale); blur only behind the panel, not its shadow
+hl.layer_rule({ match = { namespace = "quickshell:windowSwitcher" }, blur = true})
+hl.layer_rule({ match = { namespace = "quickshell:windowSwitcher" }, ignore_alpha = 0.6})
+hl.layer_rule({ match = { namespace = "quickshell:windowSwitcher" }, no_anim = true})
+-- Alt+Tab's peek covers the screen under the island and the switcher panel, never over them
+-- (in the overlay level, order 1 is drawn beneath the default 0). Named outside quickshell.*
+-- so that blur rule misses it: blur under a fading peek pops off at the end of the fade.
+hl.layer_rule({ match = { namespace = "ii-alt-tab-peek" }, no_anim = true})
+hl.layer_rule({ match = { namespace = "ii-alt-tab-peek" }, order = 1})
+-- The invisible surface that takes a click outside the switcher while a search waits with Alt
+-- up, under the island and the panel in the same way.
+hl.layer_rule({ match = { namespace = "ii-alt-tab-catcher" }, no_anim = true})
+hl.layer_rule({ match = { namespace = "ii-alt-tab-catcher" }, order = 1})
+-- The shell slides the sidebars itself (Appearance.animation.sidebarSlide), so the wallpaper
+-- parallax can follow the same curve; a compositor slide on top would move them twice.
+hl.layer_rule({ match = { namespace = "quickshell:sidebarRight" }, no_anim = true, order = 5})
+hl.layer_rule({ match = { namespace = "quickshell:sidebarLeft" }, no_anim = true, order = 5})
 -- Tablet shade. Compositor blur is deliberately off: a layer rule can only switch blur on or
 -- off, and its strength is the layer's own fade alpha, which the client cannot drive per frame.
 -- The shade blurs a frozen screencopy of the desktop itself so the strength can follow the drag.
@@ -213,12 +263,22 @@ hl.layer_rule({ match = { namespace = "quickshell:tabletShade" }, no_anim = true
 -- threshold, so it snapped in part-way through the open animation instead of ramping. The
 -- drawer blurs its own frozen screencopy so the strength can follow the gesture.
 hl.layer_rule({ match = { namespace = "quickshell:tabletAppDrawer" }, blur = false})
+-- Recents animates itself: the app shrinks into its card and grows back into its window.
+-- Without this the compositor ran its own close animation on the unmap, over a last frame
+-- that is the app at full size — so every exit ended looking like the app had closed.
+-- Blur is off for the same reason as the drawer: the surface draws its own backdrop.
+hl.layer_rule({ match = { namespace = "quickshell:tabletRecents" }, blur = false})
+hl.layer_rule({ match = { namespace = "quickshell:tabletRecents" }, no_anim = true})
 -- Live draw is ink on transparency: there is no surface of its own for a blur to sit
 -- behind, and the strokes that are opaque cover whatever it would have blurred. The
 -- blanket `quickshell.*` rule above would otherwise run a full-screen blur pass for as
 -- long as a drawing is on the workspace.
 hl.layer_rule({ match = { namespace = "quickshell:tabletLiveDraw" }, blur = false})
 hl.layer_rule({ match = { namespace = "quickshell:tabletLiveDraw" }, no_anim = true})
+-- The desktop's live draw, same reasoning; and above every other overlay (lower order is
+-- drawn on top), since annotating the screen means annotating the island and the OSK too.
+hl.layer_rule({ match = { namespace = "quickshell:liveDraw" }, blur = false})
+hl.layer_rule({ match = { namespace = "quickshell:liveDraw" }, no_anim = true, order = -5})
 hl.layer_rule({ match = { namespace = "quickshell:verticalBar" }, animation = "slide", order = 5})
 hl.layer_rule({ match = { namespace = "quickshell:osk" }, order = -1})
 -- Quickshell: waffles

@@ -4,6 +4,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.modules.ii.modes
+import qs.modules.ii.clock.components
 import QtQuick
 import QtQuick.Layouts
 
@@ -38,17 +39,19 @@ ColumnLayout {
         Repeater {
             model: wsCol.quick.concat(["+1", "-1", "empty", "special"])
 
+            // The clock's day chips: round at rest, the picked one squares off in primary.
             delegate: RippleButton {
                 id: chip
                 required property string modelData
                 readonly property bool on: chip.modelData === wsCol.target
 
-                implicitHeight: 32
-                implicitWidth: Math.max(32, chipText.implicitWidth + 20)
-                buttonRadius: Appearance.rounding.full
-                colBackground: on ? Appearance.colors.colPrimary : Appearance.colors.colLayer3
-                colBackgroundHover: on ? Appearance.colors.colPrimaryHover : Appearance.colors.colLayer3Hover
-                colRipple: on ? Appearance.colors.colPrimaryActive : Appearance.colors.colLayer3Active
+                implicitHeight: 36
+                implicitWidth: Math.max(36, chipText.implicitWidth + ClockStyle.gap * 2)
+                buttonRadius: chip.on ? ClockStyle.radiusNormal : ClockStyle.pill(36)
+                buttonRadiusPressed: ClockStyle.radiusSmall
+                colBackground: chip.on ? ClockStyle.colPrimary : ClockStyle.colField
+                colBackgroundHover: chip.on ? ClockStyle.colPrimaryHover : ClockStyle.colFieldHover
+                colRipple: chip.on ? ClockStyle.colPrimaryActive : ClockStyle.colSurfaceActive
                 onClicked: row.patchValue({ target: chip.modelData })
 
                 contentItem: StyledText {
@@ -67,8 +70,9 @@ ColumnLayout {
                             return Translation.tr("Special");
                         return chip.modelData;
                     }
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    color: chip.on ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer3
+                    font.pixelSize: ClockStyle.textNormal
+                    font.weight: Font.DemiBold
+                    color: chip.on ? ClockStyle.colOnPrimary : ClockStyle.colOnSurfaceVariant
                 }
             }
         }

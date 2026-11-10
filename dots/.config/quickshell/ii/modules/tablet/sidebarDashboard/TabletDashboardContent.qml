@@ -17,9 +17,12 @@ import qs.modules.common.quickToggleDialogs.darkMode
 import qs.modules.common.quickToggleDialogs.localSend
 import qs.modules.common.quickToggleDialogs.vpn
 import qs.modules.common.quickToggleDialogs.tailscale
+import qs.modules.common.quickToggleDialogs.kdeConnect
 import qs.modules.common.quickToggleDialogs.dnsOverTls
+import qs.modules.common.quickToggleDialogs.easyEffects
 import qs.modules.common.quickToggleDialogs.idleInhibitor
 import qs.modules.common.quickToggleDialogs.screenShader
+import qs.modules.common.quickToggleDialogs.smartDevices
 
 /**
  * Landscape shade contents, laid out like Android's: one status line across the top, quick
@@ -61,11 +64,14 @@ Item {
     property bool showLocalSendDialog: false
     property bool showVpnDialog: false
     property bool showTailscaleDialog: false
+    property bool showKdeConnectDialog: false
     property bool showDnsOverTlsDialog: false
     property bool showIdleInhibitorDialog: false
     property bool showScreenShaderDialog: false
+    property bool showEasyEffectsDialog: false
+    property bool showSmartDevicesDialog: false
     property bool showTrayDialog: false
-    readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showDnsOverTlsDialog || showIdleInhibitorDialog || showScreenShaderDialog || showTrayDialog
+    readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showKdeConnectDialog || showDnsOverTlsDialog || showIdleInhibitorDialog || showScreenShaderDialog || showEasyEffectsDialog || showSmartDevicesDialog || showTrayDialog
 
     property bool editMode: false
 
@@ -86,6 +92,29 @@ Item {
         return 1 - Math.pow(1 - t, 3);
     }
 
+    /**
+     * Whether a vertical drag that starts at (x, y) of `item` belongs to the content rather
+     * than to the shade.
+     *
+     * Everything else hands the drag to the shade, which follows the finger up and closes —
+     * the Android shade closes from wherever you swipe it. Only what has its own vertical
+     * motion keeps it: a list with more than fits, the tile grid while it is being arranged,
+     * and any dialog on top.
+     */
+    function ownsVerticalDragAt(item, x, y) {
+        if (root.anyDialogVisible || root.editMode)
+            return true;
+        const over = target => {
+            if (!target || !target.visible)
+                return false;
+            const p = item.mapToItem(target, x, y);
+            return p.x >= 0 && p.y >= 0 && p.x <= target.width && p.y <= target.height;
+        };
+        if (quickTogglesScroll.interactive && over(quickTogglesScroll))
+            return true;
+        return notificationList.scrollable && over(notificationList);
+    }
+
     function sectionReveal(delay) {
         const span = Math.max(0.001, 1 - delay);
         return Math.max(0, Math.min(1, (root.revealProgress - delay) / span));
@@ -101,9 +130,11 @@ Item {
         root.showLocalSendDialog = false;
         root.showVpnDialog = false;
         root.showTailscaleDialog = false;
+        root.showKdeConnectDialog = false;
         root.showDnsOverTlsDialog = false;
         root.showIdleInhibitorDialog = false;
         root.showScreenShaderDialog = false;
+        root.showEasyEffectsDialog = false;
         root.showTrayDialog = false;
         pomodoroTimePicker.close();
     }
@@ -213,6 +244,7 @@ Item {
                                 sourceComponent: ClassicQuickPanel {
                                     onOpenVpnDialog: root.showVpnDialog = true
                                     onOpenTailscaleDialog: root.showTailscaleDialog = true
+                                    onOpenKdeConnectDialog: root.showKdeConnectDialog = true
                                 }
                             }
 
@@ -229,6 +261,7 @@ Item {
                                     editMode: root.editMode
                                     onOpenVpnDialog: root.showVpnDialog = true
                                     onOpenTailscaleDialog: root.showTailscaleDialog = true
+                                    onOpenKdeConnectDialog: root.showKdeConnectDialog = true
                                     onOpenDnsOverTlsDialog: root.showDnsOverTlsDialog = true
                                     onOpenScreenShaderDialog: root.showScreenShaderDialog = true
                                 }
@@ -278,6 +311,7 @@ Item {
                         }
 
                         NotificationList {
+                            id: notificationList
                             anchors.fill: parent
                             anchors.margins: Math.round(root.gridSpacing * 0.8)
                             zoom: root.notificationZoom
@@ -388,10 +422,34 @@ Item {
 
     DialogHostLoader {
         owner: root
+        shownPropertyString: "showKdeConnectDialog"
+        dialogRadius: Appearance.rounding.normal
+        dialogWidth: root.dialogWidth
+        dialog: KdeConnectDialog {}
+    }
+
+    DialogHostLoader {
+        owner: root
         shownPropertyString: "showDnsOverTlsDialog"
         dialogRadius: Appearance.rounding.normal
         dialogWidth: root.dialogWidth
         dialog: DnsOverTlsDialog {}
+    }
+
+    DialogHostLoader {
+        owner: root
+        shownPropertyString: "showEasyEffectsDialog"
+        dialogRadius: Appearance.rounding.normal
+        dialogWidth: root.dialogWidth
+        dialog: EasyEffectsDialog {}
+    }
+
+    DialogHostLoader {
+        owner: root
+        shownPropertyString: "showSmartDevicesDialog"
+        dialogRadius: Appearance.rounding.normal
+        dialogWidth: root.dialogWidth
+        dialog: SmartDevicesDialog {}
     }
 
     ToggleDialog {
@@ -493,6 +551,12 @@ Item {
             }
             function onOpenIdleInhibitorDialog() {
                 root.showIdleInhibitorDialog = true;
+            }
+            function onOpenEasyEffectsDialog() {
+                root.showEasyEffectsDialog = true;
+            }
+            function onOpenSmartDevicesDialog() {
+                root.showSmartDevicesDialog = true;
             }
         }
     }

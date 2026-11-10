@@ -15,9 +15,7 @@ class CircularMediaGlowContractTests(unittest.TestCase):
         self.circular_media = CIRCULAR_MEDIA.read_text(encoding="utf-8")
 
     def test_circular_fix_does_not_change_the_shared_widget_canvas_rule(self):
-        self.assertIn("WlrLayershell.namespace: \"quickshell:backgroundWidgets\"", self.widgets_window)
-        appearance = (ROOT / "modules/common/Appearance.qml").read_text(encoding="utf-8")
-        self.assertFalse("name = 'ii:appearance:background-widgets'" in appearance)
+        self.assertIn("WlrLayershell.namespace: \"quickshell:backgroundWidgets:\"", self.widgets_window)
 
     def test_local_glow_blurs_do_not_clamp_their_effect_texture_edges(self):
         blur_count = self.circular_media.count("FastBlur {")

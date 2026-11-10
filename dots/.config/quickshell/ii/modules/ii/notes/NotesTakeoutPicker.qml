@@ -5,7 +5,7 @@ import Quickshell.Io
 /**
  * The system folder chooser, for a Google Takeout export.
  *
- * The same shape as `UserProfileImagePicker`: `kdialog` if it is there, `zenity`
+ * Uses `kdialog` if it is there, `zenity`
  * otherwise, and nothing at all if neither is — a shell has no business drawing its own
  * file browser to pick one directory once.
  *

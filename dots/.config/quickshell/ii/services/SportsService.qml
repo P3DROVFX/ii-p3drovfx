@@ -1,8 +1,10 @@
 pragma Singleton
+import qs
 import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.modules.common
+import "SportsServiceHelpers.js" as SportsCache
 
 Item {
     id: root
@@ -10,9 +12,15 @@ Item {
     // Fetch sports data while either consumer is enabled. The dock and bar
     // controls stay independent, but share this single data source.
     readonly property bool barEnabled: Config.options?.bar?.sports?.enable ?? false
-    readonly property bool dockEnabled: Config.options?.dock?.enableSportsWidget ?? true
-    readonly property bool lockEnabled: Config.options?.lock?.sports ?? true
-    property bool enabled: barEnabled || dockEnabled || lockEnabled
+    readonly property bool dockEnabled: Config.options?.dock?.enableSportsWidget ?? false
+    // Lock-screen sports is a real consumer only while the lock surface is
+    // active. The old config-only gate fetched ESPN continuously on idle.
+    readonly property bool lockEnabled: (Config.options?.lock?.sports ?? true)
+        && (GlobalStates?.lockLookActive ?? false)
+    property int widgetSubscribers: 0
+    // Settings → APIs → Sports master switch; off means no ESPN request at all.
+    readonly property bool apiEnabled: Config.options?.bar?.sports?.apiEnabled ?? true
+    readonly property bool enabled: apiEnabled && (barEnabled || dockEnabled || lockEnabled || widgetSubscribers > 0)
     // AI consumers are counted separately from the visual widgets. They may
     // query a league that is not monitored by the bar, but must never cause a
     // visual selection or a Config write as a side effect.
@@ -27,25 +35,21 @@ Item {
     // subscriber keeps a weekly scoreboard warm without making the sports bar
     // a prerequisite for calendar-only users.
     property int timetableSubscribers: 0
-    readonly property bool timetableActive: timetableSubscribers > 0
+    readonly property bool timetableActive: apiEnabled && timetableSubscribers > 0
     property string teamFilter: Config.options.bar.sports.teamFilter
     property int updateInterval: Config.options.bar.sports.updateInterval
 
     property var allGames: []
-    property var customOrder: Config.options.bar.sports.customOrder
-    onCustomOrderChanged: {
-        if (JSON.stringify(Config.options.bar.sports.customOrder) !== JSON.stringify(customOrder)) {
-            Config.options.bar.sports.customOrder = customOrder;
-        }
-    }
+    // Serialized copy of the last published `allGames`. A refresh that brings
+    // the same data back keeps the same array, so nothing bound to the feed
+    // (bar, dock, popup rows) re-evaluates on an idle poll.
+    property string _compactSignature: ""
     property int currentGameIndex: 0
     property var currentGame: null
     onCurrentGameChanged: {
-        if (currentGame) {
-            Config.options.bar.sports.activeGameId = currentGame.id;
-        } else {
-            Config.options.bar.sports.activeGameId = "";
-        }
+        const id = currentGame ? String(currentGame.id) : "";
+        if (Config.options.bar.sports.activeGameId !== id)
+            Config.options.bar.sports.activeGameId = id;
     }
 
     property bool loading: false
@@ -76,13 +80,19 @@ Item {
     // meant three quarters of the delay before games appeared was waiting.
     readonly property int timetableProjectionBudgetMs: 8
 
-    // Persistent ESPN cache. Scoreboards retain the raw response events so a
-    // team-filter change can be projected again without a network request.
+    // Persistent ESPN cache. Timetable ranges retain compact response DTOs so
+    // a team-filter change can be projected again without a network request.
     property var scheduleCache: ({})
+    property bool scheduleCacheLoaded: false
     property var detailsCache: ({})
+    property bool detailsCacheLoaded: false
     property var scheduleRequests: ({})
     property var detailsRequests: ({})
     property var detailsErrors: ({})
+    property var _compactRequests: []
+    property int _compactRequestGeneration: 0
+    property var _searchRequests: []
+    property int _searchRequestGeneration: 0
     property int detailsRevision: 0
     property bool cacheReady: false
     property bool pendingRangeRequest: false
@@ -93,7 +103,24 @@ Item {
     readonly property int liveDetailsCacheTtlMs: Math.max(10, root.updateInterval) * 1000
     readonly property int maximumScheduleEntries: 32
     readonly property int maximumDetailsEntries: 16
+    readonly property int maximumDetailsCacheBytes: 2 * 1024 * 1024
     readonly property list<string> apiHosts: ["site.web.api.espn.com", "site.api.espn.com"]
+
+    onApiEnabledChanged: {
+        if (root.apiEnabled)
+            return;
+        root.cancelCompactRequests();
+        root.cancelSearchRequests();
+        root.cancelTimetableRequests();
+        root.allGames = [];
+        root._compactSignature = "";
+        root._scoreMemory = ({});
+        root._cardMemory = ({});
+        root.currentGameIndex = 0;
+        root.currentGame = null;
+        root.searchGames = [];
+        root.timetableGames = [];
+    }
 
     function acquireAiSubscriber() {
         aiSubscribers += 1;
@@ -112,15 +139,32 @@ Item {
 
     function releaseSearchSubscriber() {
         searchSubscribers = Math.max(0, searchSubscribers - 1);
+        if (searchSubscribers === 0) {
+            root.cancelSearchRequests();
+            root.searchGames = [];
+            root.searchLoading = false;
+        }
     }
 
     function acquireTimetableSubscriber() {
         timetableSubscribers += 1;
+        if (root.cacheReady && (!root.scheduleCacheLoaded || !root.detailsCacheLoaded))
+            root.loadDetailsCacheFromDisk();
     }
 
     function releaseTimetableSubscriber() {
+        const wasLastSubscriber = root.timetableSubscribers === 1;
+        if (wasLastSubscriber && root.cacheReady && cacheSaveDebounce.running) {
+            // Flush a just-fetched range before dropping the FileView path.
+            // Otherwise closing the timetable during the debounce window could
+            // discard the only in-memory copy before it reaches disk.
+            cacheSaveDebounce.stop();
+            root.saveCache();
+        }
         timetableSubscribers = Math.max(0, timetableSubscribers - 1);
         if (timetableSubscribers === 0) {
+            root.cancelTimetableRequests();
+            cacheRetryTimer.stop();
             timetableProjectionTimer.stop();
             timetableProjectionSource = [];
             timetableProjectionCompactEvents = [];
@@ -130,12 +174,89 @@ Item {
             timetableProjectionSeen = ({});
             timetableProjecting = false;
             timetableGames = [];
+            // The index and the input signature describe the dropped
+            // projection; keeping either would let the next open skip the
+            // rebuild it needs.
+            timetableGamesByDay = ({});
+            timetableProjectionSignature = "";
             timetableRangeStart = "";
             timetableRangeEnd = "";
             pendingRangeRequest = false;
             pendingRangeForce = false;
             focusedGameId = "";
+            // The bar/dock never read the weekly schedule cache. Drop the
+            // timetable projection and stop holding the raw file, but keep the
+            // two *parsed* projections: they are bounded by construction
+            // (`compactScheduleCache` / `prunedDetailsCache` cap entries and
+            // bytes), and re-parsing the multi-megabyte file cost a measured
+            // 95 ms of the next open's click burst — on the main thread, in
+            // QV4 — for a graph that was already in memory.
+            root.detailsErrors = ({});
+            root.detailsRevision += 1;
+            root.cacheReady = false;
         }
+    }
+
+    function acquireWidgetSubscriber() {
+        const wasInactive = !root.enabled;
+        widgetSubscribers += 1;
+        if (wasInactive && !root.timetableActive)
+            root.fetchGames();
+    }
+
+    function releaseWidgetSubscriber() {
+        widgetSubscribers = Math.max(0, widgetSubscribers - 1);
+        if (!root.enabled) {
+            root.cancelCompactRequests();
+            allGames = [];
+            _compactSignature = "";
+            _scoreMemory = ({});
+            _cardMemory = ({});
+            currentGameIndex = 0;
+            currentGame = null;
+        }
+    }
+
+    function abortRequestList(requests) {
+        const list = Array.isArray(requests) ? requests : Object.values(requests ?? ({}));
+        for (let i = 0; i < list.length; i++) {
+            const xhr = list[i]?.xhr ?? list[i];
+            if (!xhr || xhr.readyState === XMLHttpRequest.DONE)
+                continue;
+            try {
+                xhr.abort();
+            } catch (error) {
+                // The request may have completed between the state check and
+                // abort(). Its completion callback is already harmless.
+            }
+        }
+    }
+
+    function cancelCompactRequests() {
+        root._compactRequestGeneration += 1;
+        const requests = root._compactRequests;
+        root._compactRequests = [];
+        root.abortRequestList(requests);
+        root.loading = false;
+    }
+
+    function cancelSearchRequests() {
+        root._searchRequestGeneration += 1;
+        const requests = root._searchRequests;
+        root._searchRequests = [];
+        root.abortRequestList(requests);
+        root.searchLoading = false;
+    }
+
+    function cancelTimetableRequests() {
+        const scheduleRequests = root.scheduleRequests;
+        const detailsRequests = root.detailsRequests;
+        root.scheduleRequests = ({});
+        root.detailsRequests = ({});
+        root.timetableLoading = false;
+        root.detailsRevision += 1;
+        root.abortRequestList(scheduleRequests);
+        root.abortRequestList(detailsRequests);
     }
 
     function nextGame() {
@@ -165,7 +286,9 @@ Item {
     function monitoredLeagueEntries() {
         const result = [];
         const monitored = Config.options.bar.sports.monitoredLeagues;
-        if (monitored && monitored.length > 0) {
+        // An explicitly empty list means "track nothing". Only old configs
+        // without the new list property use the legacy show* migration path.
+        if (monitored !== undefined && monitored !== null) {
             for (let i = 0; i < monitored.length; i++) {
                 const item = monitored[i];
                 if (!item?.enabled)
@@ -246,8 +369,12 @@ Item {
     })
 
     function fetchGames() {
+        root.cancelCompactRequests();
         if (!enabled) {
             allGames = [];
+            _compactSignature = "";
+            _scoreMemory = ({});
+            _cardMemory = ({});
             return;
         }
 
@@ -258,50 +385,73 @@ Item {
 
         if (leaguesToFetch.length === 0) {
             allGames = [];
+            _compactSignature = "";
+            _scoreMemory = ({});
+            _cardMemory = ({});
             loading = false;
             return;
         }
 
         let pendingRequests = leaguesToFetch.length;
         let collectedEvents = [];
+        const generation = root._compactRequestGeneration;
 
         for (let i = 0; i < leaguesToFetch.length; i++) {
             const entry = leaguesToFetch[i];
             const url = `https://${root.apiHosts[0]}/apis/site/v2/sports/${encodeURIComponent(entry.sport)}/${encodeURIComponent(entry.league)}/scoreboard`;
             const xhr = new XMLHttpRequest();
-            xhr.open("GET", url);
-            xhr.onreadystatechange = function () {
-                if (xhr.readyState === XMLHttpRequest.DONE) {
-                    pendingRequests--;
-                    if (xhr.status === 200) {
-                        try {
-                            const response = JSON.parse(xhr.responseText);
-                            let leagueLogo = "";
-                            if (response.leagues && response.leagues[0] && response.leagues[0].logos && response.leagues[0].logos[0]) {
-                                leagueLogo = response.leagues[0].logos[0].href;
-                            }
-                            const events = (response.events || []).map(e => {
-                                e.leagueName = entry.name;
-                                e.sportCategory = entry.sport;
-                                e.leagueLogo = leagueLogo;
-                                return e;
-                            });
-                            collectedEvents = collectedEvents.concat(events);
-                        } catch (e) {
-                            error = "Parse error";
-                        }
-                    }
-                    if (pendingRequests === 0) {
-                        loading = false;
-                        processGames(collectedEvents);
+            const request = { xhr: xhr, generation: generation };
+            root._compactRequests = root._compactRequests.concat([request]);
+            let completed = false;
+            const complete = function() {
+                if (completed)
+                    return;
+                completed = true;
+                if (generation !== root._compactRequestGeneration)
+                    return;
+                root._compactRequests = root._compactRequests.filter(item => item !== request);
+                pendingRequests--;
+                if (xhr.status === 200) {
+                    try {
+                        const response = JSON.parse(xhr.responseText);
+                        let leagueLogo = "";
+                        if (response.leagues && response.leagues[0] && response.leagues[0].logos && response.leagues[0].logos[0])
+                            leagueLogo = response.leagues[0].logos[0].href;
+                        const events = (response.events || []).map(e => {
+                            e.leagueName = entry.name;
+                            e.sportCategory = entry.sport;
+                            e.leagueLogo = leagueLogo;
+                            return e;
+                        });
+                        collectedEvents = collectedEvents.concat(events);
+                    } catch (e) {
+                        error = "Parse error";
                     }
                 }
+                if (pendingRequests === 0) {
+                    loading = false;
+                    processGames(collectedEvents);
+                }
             };
+            xhr.open("GET", url);
+            xhr.timeout = 12000;
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === XMLHttpRequest.DONE)
+                    complete();
+            };
+            xhr.onerror = complete;
+            xhr.ontimeout = complete;
             xhr.send();
         }
     }
 
     function fetchSearchGamesForToday() {
+        root.cancelSearchRequests();
+        if (!root.apiEnabled) {
+            root.searchGames = [];
+            root.searchLoading = false;
+            return;
+        }
         const leaguesToFetch = root.searchLeagueEntries();
         root.searchLoading = true;
         root.searchError = "";
@@ -315,15 +465,22 @@ Item {
         let pendingRequests = leaguesToFetch.length;
         let failedRequests = 0;
         let collectedEvents = [];
+        const generation = root._searchRequestGeneration;
 
         for (let i = 0; i < leaguesToFetch.length; i++) {
             const entry = leaguesToFetch[i];
             const url = `https://${root.apiHosts[0]}/apis/site/v2/sports/${encodeURIComponent(entry.sport)}/${encodeURIComponent(entry.league)}/scoreboard?dates=${date}`;
             const xhr = new XMLHttpRequest();
-            xhr.open("GET", url);
-            xhr.onreadystatechange = function() {
-                if (xhr.readyState !== XMLHttpRequest.DONE)
+            const request = { xhr: xhr, generation: generation };
+            root._searchRequests = root._searchRequests.concat([request]);
+            let completed = false;
+            const complete = function() {
+                if (completed)
                     return;
+                completed = true;
+                if (generation !== root._searchRequestGeneration || root.searchSubscribers === 0)
+                    return;
+                root._searchRequests = root._searchRequests.filter(item => item !== request);
                 pendingRequests--;
                 if (xhr.status === 200) {
                     try {
@@ -338,7 +495,7 @@ Item {
                             leagueLogo: leagueLogo
                         }));
                         collectedEvents = collectedEvents.concat(events);
-                    } catch (error) {
+                    } catch (parseError) {
                         failedRequests++;
                     }
                 } else {
@@ -353,6 +510,14 @@ Item {
                     root.processGames(collectedEvents, true);
                 }
             };
+            xhr.open("GET", url);
+            xhr.timeout = 12000;
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === XMLHttpRequest.DONE)
+                    complete();
+            };
+            xhr.onerror = complete;
+            xhr.ontimeout = complete;
             xhr.send();
         }
     }
@@ -573,6 +738,173 @@ Item {
         };
     }
 
+    // Scoreboard responses contain a large amount of ESPN metadata that no
+    // timetable consumer reads. Keeping that raw graph alive for every cached
+    // range was disproportionately expensive: a few MiB of JSON became many
+    // more MiB of JS objects, strings and arrays. Store a DTO with exactly the
+    // fields used by the read-only timetable projection instead.
+    function compactLinks(values) {
+        const result = [];
+        const list = Array.isArray(values) ? values : [];
+        const seen = ({});
+        for (let i = 0; i < list.length; i++) {
+            const item = list[i] ?? ({});
+            const href = String(item.href ?? "");
+            if (!/^https?:\/\//.test(href) || seen[href])
+                continue;
+            seen[href] = true;
+            result.push({
+                href: href,
+                text: String(item.text || item.shortText || "ESPN"),
+                rel: Array.isArray(item.rel) ? item.rel.slice(0, 8).map(value => String(value)) : []
+            });
+        }
+        return result;
+    }
+
+    function compactStatus(value) {
+        const status = value ?? ({});
+        const type = status.type ?? ({});
+        return {
+            type: {
+                state: String(type.state ?? ""),
+                detail: String(type.detail ?? ""),
+                shortDetail: String(type.shortDetail ?? ""),
+                description: String(type.description ?? "")
+            }
+        };
+    }
+
+    function compactSeason(value) {
+        if (value === null || value === undefined)
+            return null;
+        if (typeof value !== "object")
+            return String(value);
+        return {
+            name: String(value.name ?? ""),
+            displayName: String(value.displayName ?? ""),
+            year: value.year ?? null
+        };
+    }
+
+    function compactScheduleCompetitor(value) {
+        const item = value ?? ({});
+        const team = item.team ?? ({});
+        const athlete = item.athlete ?? ({});
+        const teamLogos = Array.isArray(team.logos) ? team.logos : [];
+        const records = Array.isArray(item.records) ? item.records : (Array.isArray(item.record) ? item.record : []);
+        return {
+            id: String(item.id || team.id || athlete.id || ""),
+            homeAway: String(item.homeAway ?? ""),
+            score: String(item.score ?? ""),
+            displayValue: String(item.displayValue ?? ""),
+            winner: item.winner === true,
+            form: String(item.form || team.form || ""),
+            records: records.length > 0 ? [{
+                summary: String(records[0]?.summary ?? ""),
+                displayValue: String(records[0]?.displayValue ?? "")
+            }] : [],
+            team: {
+                id: String(team.id ?? ""),
+                displayName: String(team.displayName ?? ""),
+                shortDisplayName: String(team.shortDisplayName ?? ""),
+                name: String(team.name ?? ""),
+                abbreviation: String(team.abbreviation ?? ""),
+                logo: String(team.logo ?? ""),
+                logos: teamLogos.length > 0 ? [{ href: String(teamLogos[0]?.href ?? "") }] : [],
+                links: root.compactLinks(team.links)
+            },
+            athlete: {
+                id: String(athlete.id ?? ""),
+                displayName: String(athlete.displayName ?? ""),
+                shortName: String(athlete.shortName ?? ""),
+                headshot: String(athlete.headshot ?? "")
+            }
+        };
+    }
+
+    function compactScheduleCompetition(value) {
+        const competition = value ?? ({});
+        const venue = competition.venue ?? ({});
+        const address = venue.address ?? ({});
+        const competitors = Array.isArray(competition.competitors) ? competition.competitors : [];
+        const rawDetails = Array.isArray(competition.details) ? competition.details : [];
+        const lastDetail = rawDetails.length > 0 ? rawDetails[rawDetails.length - 1] : null;
+        const compactDetail = lastDetail ? {
+            type: { text: String(lastDetail.type?.text ?? "") },
+            clock: { displayValue: String(lastDetail.clock?.displayValue ?? "") },
+            athletesInvolved: Array.isArray(lastDetail.athletesInvolved) && lastDetail.athletesInvolved.length > 0
+                ? [{ displayName: String(lastDetail.athletesInvolved[0]?.displayName ?? "") }]
+                : []
+        } : null;
+        return {
+            id: String(competition.id ?? ""),
+            date: String(competition.date ?? ""),
+            startDate: String(competition.startDate ?? ""),
+            status: root.compactStatus(competition.status),
+            competitors: competitors.map(root.compactScheduleCompetitor),
+            venue: {
+                id: String(venue.id ?? ""),
+                fullName: String(venue.fullName ?? ""),
+                name: String(venue.name ?? ""),
+                address: {
+                    city: String(address.city ?? ""),
+                    state: String(address.state ?? ""),
+                    country: String(address.country ?? "")
+                }
+            },
+            links: root.compactLinks(competition.links),
+            broadcasts: Array.isArray(competition.broadcasts) ? competition.broadcasts.slice(0, 8).map(item => ({
+                name: String(item?.name ?? ""),
+                names: Array.isArray(item?.names) ? item.names.slice(0, 8).map(name => String(name)) : []
+            })) : [],
+            broadcast: String(competition.broadcast ?? ""),
+            attendance: Number(competition.attendance ?? 0),
+            notes: [],
+            altGameNote: String(competition.altGameNote ?? ""),
+            details: compactDetail ? [compactDetail] : [],
+            situation: {
+                lastPlay: { text: String(competition.situation?.lastPlay?.text ?? "") }
+            }
+        };
+    }
+
+    function compactScheduleEvent(value) {
+        const event = value ?? ({});
+        const competitions = Array.isArray(event.competitions) ? event.competitions : [];
+        const firstCompetition = competitions[0] ?? ({});
+        return {
+            id: String(event.id ?? ""),
+            date: String(event.date || firstCompetition.date || firstCompetition.startDate || ""),
+            name: String(event.name ?? ""),
+            status: root.compactStatus(event.status),
+            leagueName: String(event.leagueName ?? ""),
+            leagueId: String(event.leagueId ?? ""),
+            sportCategory: String(event.sportCategory ?? ""),
+            leagueLogo: String(event.leagueLogo ?? ""),
+            season: root.compactSeason(event.season),
+            links: root.compactLinks(event.links),
+            competitions: competitions.map(root.compactScheduleCompetition)
+        };
+    }
+
+    function compactScheduleCache(values) {
+        const result = ({});
+        const source = values && typeof values === "object" ? values : ({});
+        for (const key of Object.keys(source)) {
+            const entry = source[key] ?? ({});
+            result[key] = {
+                fetchedAt: Number(entry.fetchedAt ?? 0),
+                sport: String(entry.sport ?? ""),
+                league: String(entry.league ?? ""),
+                name: String(entry.name ?? ""),
+                leagueLogo: String(entry.leagueLogo ?? ""),
+                events: Array.isArray(entry.events) ? entry.events.map(root.compactScheduleEvent) : []
+            };
+        }
+        return result;
+    }
+
     function cacheEntryFresh(entry, ttl) {
         return entry && Date.now() - Number(entry.fetchedAt ?? 0) <= ttl;
     }
@@ -587,9 +919,20 @@ Item {
         root.timetableLoading = Object.keys(next).length > 0;
     }
 
+    // ESPN's scoreboard answers a whole month (`dates=202609`) but rejects a
+    // `from-to` range with HTTP 400, so a range is fetched month by month and
+    // merged into the same cache entry — the range key, the TTL and the
+    // projection stay exactly as they were. See SportsServiceHelpers.js.
+    function scheduleRequestMonth(request) {
+        return SportsCache.monthForIndex(request?.months, request?.monthIndex)
+            || root.espnDate(request?.fromKey);
+    }
+
     function startScheduleRequest(key, request) {
+        if (!root.apiEnabled)
+            return;
         const host = root.apiHosts[request.hostIndex] || root.apiHosts[0];
-        const url = `https://${host}/apis/site/v2/sports/${encodeURIComponent(request.entry.sport)}/${encodeURIComponent(request.entry.league)}/scoreboard?dates=${root.espnDate(request.fromKey)}-${root.espnDate(request.toKey)}`;
+        const url = `https://${host}/apis/site/v2/sports/${encodeURIComponent(request.entry.sport)}/${encodeURIComponent(request.entry.league)}/scoreboard?dates=${root.scheduleRequestMonth(request)}`;
         const xhr = new XMLHttpRequest();
         request.xhr = xhr;
         const next = Object.assign({}, root.scheduleRequests);
@@ -599,12 +942,56 @@ Item {
         xhr.timeout = 12000;
         xhr.onreadystatechange = function() {
             if (xhr.readyState === XMLHttpRequest.DONE)
-                root.finishScheduleRequest(String(key), xhr.status, xhr.responseText);
+                root.handleScheduleResponse(String(key), xhr.status, xhr.responseText);
         };
-        xhr.onerror = function() { root.finishScheduleRequest(String(key), 0, ""); };
-        xhr.ontimeout = function() { root.finishScheduleRequest(String(key), 0, ""); };
+        xhr.onerror = function() { root.handleScheduleResponse(String(key), 0, ""); };
+        xhr.ontimeout = function() { root.handleScheduleResponse(String(key), 0, ""); };
         xhr.open("GET", url);
         xhr.send();
+    }
+
+    function handleScheduleResponse(key, httpStatus, responseText) {
+        const request = root.scheduleRequests[String(key)] ?? null;
+        if (!request)
+            return;
+        if (httpStatus === 403 && request.hostIndex + 1 < root.apiHosts.length) {
+            request.hostIndex += 1;
+            root.startScheduleRequest(String(key), request);
+            return;
+        }
+        if (httpStatus !== 200) {
+            root.failScheduleRequest(String(key), request, `HTTP ${String(httpStatus)}`);
+            return;
+        }
+        let parsed = null;
+        try {
+            parsed = JSON.parse(String(responseText ?? "{}"));
+        } catch (error) {
+            parsed = null;
+        }
+        if (!parsed || !Array.isArray(parsed.events)) {
+            root.failScheduleRequest(String(key), request, "unreadable schedule data");
+            return;
+        }
+        request.leagues = Array.isArray(request.leagues) && request.leagues.length > 0
+            ? request.leagues
+            : (Array.isArray(parsed.leagues) ? parsed.leagues : []);
+        request.events = (request.events ?? []).concat(parsed.events);
+        const months = Array.isArray(request.months) ? request.months : [];
+        const nextMonth = Number(request.monthIndex ?? 0) + 1;
+        if (nextMonth < months.length) {
+            request.monthIndex = nextMonth;
+            root.startScheduleRequest(String(key), request);
+            return;
+        }
+        root.finishScheduleRequest(String(key), { events: request.events, leagues: request.leagues });
+    }
+
+    function failScheduleRequest(key, request, reason) {
+        root.removeScheduleRequest(key);
+        root.timetableError = `ESPN ${reason} · ${request.entry.name}`;
+        console.warn(`[SportsService] Timetable fetch failed for ${request.entry.sport}/${request.entry.league} (${reason})`);
+        root.rebuildTimetableGames();
     }
 
     function fetchScheduleEntry(entry, fromKey, toKey) {
@@ -616,32 +1003,23 @@ Item {
             hostIndex: 0,
             entry: entry,
             fromKey: fromKey,
-            toKey: toKey
+            toKey: toKey,
+            months: SportsCache.espnMonths(fromKey, toKey),
+            monthIndex: 0,
+            events: [],
+            leagues: []
         });
     }
 
-    function finishScheduleRequest(key, httpStatus, responseText) {
+    function finishScheduleRequest(key, response) {
         const request = root.scheduleRequests[String(key)] ?? null;
         if (!request)
             return;
-        if (httpStatus === 403 && request.hostIndex + 1 < root.apiHosts.length) {
-            request.hostIndex += 1;
-            root.startScheduleRequest(String(key), request);
-            return;
-        }
-
         root.removeScheduleRequest(key);
-        if (httpStatus !== 200) {
-            root.timetableError = `ESPN HTTP ${String(httpStatus)} · ${request.entry.name}`;
-            console.warn(`[SportsService] Timetable fetch failed for ${request.entry.sport}/${request.entry.league} (HTTP ${String(httpStatus)})`);
-            root.rebuildTimetableGames();
-            return;
-        }
 
         try {
-            const response = JSON.parse(String(responseText ?? "{}"));
-            const events = Array.isArray(response.events) ? response.events : [];
-            const responseLeague = Array.isArray(response.leagues) && response.leagues.length > 0 ? response.leagues[0] : ({});
+            const events = Array.isArray(response?.events) ? response.events : [];
+            const responseLeague = Array.isArray(response?.leagues) && response.leagues.length > 0 ? response.leagues[0] : ({});
             const logos = Array.isArray(responseLeague?.logos) ? responseLeague.logos : [];
             const nextCache = Object.assign({}, root.scheduleCache);
             nextCache[String(key)] = {
@@ -650,9 +1028,10 @@ Item {
                 league: request.entry.league,
                 name: String(responseLeague?.name || request.entry.name),
                 leagueLogo: String(logos?.[0]?.href ?? ""),
-                events: events
+                events: events.map(root.compactScheduleEvent)
             };
             root.scheduleCache = root.prunedCache(nextCache, root.maximumScheduleEntries);
+            root.scheduleCacheLoaded = true;
             root.timetableError = "";
             root.scheduleCacheSave();
         } catch (error) {
@@ -681,6 +1060,8 @@ Item {
         const leagues = root.monitoredLeagueEntries();
         if (leagues.length === 0) {
             root.timetableGames = [];
+            root.timetableGamesByDay = ({});
+            root.timetableProjectionSignature = "";
             root.timetableLoading = false;
             return;
         }
@@ -729,11 +1110,28 @@ Item {
         return true;
     }
 
+    // The projection is a pure function of the cache contents, the visible range
+    // and the team filter. Rebuilds arrive from events that change none of those
+    // — a failed ESPN fetch, a repeated range request — and every rebuild
+    // republishes `timetableGames`, which invalidates each month cell's sport
+    // list and the week view's day model, so their delegates are rebuilt. A
+    // signature of the inputs keeps a fruitless fetch from rebuilding the grid.
+    property string timetableProjectionSignature: ""
+
+    function timetableSourceSignature() {
+        return SportsCache.sourceSignature(root.timetableRangeStart, root.timetableRangeEnd,
+            root.teamFilter, root.cachedRangeSources());
+    }
+
     function rebuildTimetableGames() {
         if (!root.timetableActive)
             return;
         if (root.timetableRangeStart.length === 0 || root.timetableRangeEnd.length === 0)
             return;
+        const signature = root.timetableSourceSignature();
+        if (signature === root.timetableProjectionSignature)
+            return;
+        root.timetableProjectionSignature = signature;
         timetableProjectionTimer.stop();
         root.timetableProjectionSource = root.cachedRangeSources();
         root.timetableProjectionCompactEvents = [];
@@ -828,7 +1226,14 @@ Item {
         const compactEvents = root.timetableProjectionCompactEvents;
         const games = root.timetableProjectionGames;
         games.sort((left, right) => left.startDate.getTime() - right.startDate.getTime());
-        root.timetableGames = games;
+        // A republish that changes nothing still invalidates every month cell's
+        // sport list and the week view's day model, which rebuilds their
+        // delegates — and a failing fetch or a refresh tick used to repeat that
+        // every minute. Only a real change reaches the views now.
+        if (!SportsCache.sameGames(root.timetableGames, games)) {
+            root.timetableGames = games;
+            root.timetableGamesByDay = root.stableGamesByDay(games);
+        }
         root.timetableProjectionSource = [];
         root.timetableProjectionCompactEvents = [];
         root.timetableProjectionGames = [];
@@ -853,25 +1258,27 @@ Item {
     // on every republication, which is why a busy month felt slow to fill in.
     // The arrays are shared and read-only, same contract as
     // CalendarService.eventsByDay.
-    readonly property var timetableGamesByDay: {
-        const map = {};
-        const games = root.timetableGames ?? [];
-        for (let i = 0; i < games.length; i++) {
-            const key = root.dayKey(games[i]?.startDate);
-            if (key.length === 0)
-                continue;
-            if (!map[key])
-                map[key] = [];
-            map[key].push(games[i]);
-        }
-        return map;
+    //
+    // Published imperatively rather than as a binding on `timetableGames`,
+    // because a day whose games did not change must keep the *same* array
+    // instance: `MonthDayCell` derives its whole entry list from it, and a new
+    // identity there rebuilds every chip delegate of that cell. With many
+    // sports events in the visible range a single refreshed game used to
+    // rebuild the whole month; now only the affected days do.
+    property var timetableGamesByDay: ({})
+
+    /** Shared empty array so a day without games never changes identity. */
+    readonly property var noTimetableGames: []
+
+    function stableGamesByDay(games) {
+        return SportsCache.gamesByDay(games, value => root.dayKey(value), root.timetableGamesByDay);
     }
 
     function gamesForDate(date) {
         const key = root.dayKey(date);
         if (key.length === 0)
-            return [];
-        return root.timetableGamesByDay[key] ?? [];
+            return root.noTimetableGames;
+        return root.timetableGamesByDay[key] ?? root.noTimetableGames;
     }
 
     function gameById(gameId) {
@@ -935,9 +1342,25 @@ Item {
         const id = String(gameId ?? "");
         if (id.length === 0 || root.focusedGameId === id)
             root.focusedGameId = "";
+        if (id.length === 0 || root.detailsCache[id] === undefined)
+            return;
+
+        // The detail panel is the only consumer of the raw summary graph.
+        // Drop it as soon as that panel closes instead of keeping up to 16
+        // full ESPN responses alive for the whole shell session.
+        const nextCache = Object.assign({}, root.detailsCache);
+        delete nextCache[id];
+        root.detailsCache = nextCache;
+        const nextErrors = Object.assign({}, root.detailsErrors);
+        delete nextErrors[id];
+        root.detailsErrors = nextErrors;
+        root.detailsRevision += 1;
+        root.scheduleCacheSave();
     }
 
     function requestGameDetails(game, force = false) {
+        if (!root.apiEnabled)
+            return;
         const id = String(game?.id ?? "");
         const sport = String(game?.sport ?? "");
         const league = String(game?.leagueId ?? "");
@@ -1018,7 +1441,7 @@ Item {
                 league: request.league,
                 data: parsed
             };
-            root.detailsCache = root.prunedCache(nextCache, root.maximumDetailsEntries);
+            root.detailsCache = root.prunedDetailsCache(nextCache);
             const errors = Object.assign({}, root.detailsErrors);
             delete errors[String(key)];
             root.detailsErrors = errors;
@@ -1043,19 +1466,129 @@ Item {
         return result;
     }
 
+    function prunedDetailsCache(values) {
+        const source = values ?? ({});
+        const keys = Object.keys(source).sort((left, right) => {
+            return Number(source[right]?.fetchedAt ?? 0) - Number(source[left]?.fetchedAt ?? 0);
+        });
+        const result = ({});
+        let bytes = 2;
+        for (let i = 0; i < keys.length && Object.keys(result).length < root.maximumDetailsEntries; i++) {
+            const key = keys[i];
+            const entry = source[key];
+            let entryBytes = 0;
+            try {
+                entryBytes = JSON.stringify(entry?.data ?? entry).length;
+            } catch (error) {
+                entryBytes = root.maximumDetailsCacheBytes;
+            }
+            // Keep the newest response even if it alone exceeds the budget;
+            // otherwise opening one game would silently show no details.
+            if (Object.keys(result).length > 0 && bytes + entryBytes > root.maximumDetailsCacheBytes)
+                continue;
+            result[key] = entry;
+            bytes += entryBytes;
+        }
+        return result;
+    }
+
     function scheduleCacheSave() {
-        cacheSaveDebounce.restart();
+        if (root.timetableActive)
+            cacheSaveDebounce.restart();
+    }
+
+    function loadCacheFromDisk(includeDetails) {
+        if (!includeDetails) {
+            // The compact bar/dock projection is fetched independently. The
+            // weekly timetable cache can be several MiB on disk and is not
+            // useful until the timetable acquires its first subscriber.
+            root.scheduleCache = ({});
+            root.scheduleCacheLoaded = false;
+            root.detailsCache = ({});
+            root.detailsCacheLoaded = false;
+            root.detailsRevision += 1;
+            root.finishCacheLoad();
+            return;
+        }
+
+        // The FileView re-reads the file on every open, but its parsed,
+        // compacted projection survives the close. Parsing it again would put
+        // the whole document back through QV4 for nothing.
+        if (root.scheduleCacheLoaded && root.detailsCacheLoaded) {
+            root.finishCacheLoad();
+            return;
+        }
+
+        try {
+            const parsed = JSON.parse(sportsCacheFile.text() || "{}");
+            const validSchema = parsed?.schema === 1 || parsed?.schema === 2;
+            root.scheduleCache = validSchema
+                ? root.compactScheduleCache(parsed.schedules)
+                : ({});
+            root.scheduleCacheLoaded = true;
+            root.detailsCache = includeDetails && validSchema && parsed?.details && typeof parsed.details === "object"
+                ? root.prunedDetailsCache(parsed.details)
+                : ({});
+            root.detailsCacheLoaded = includeDetails;
+        } catch (error) {
+            root.scheduleCache = ({});
+            root.scheduleCacheLoaded = false;
+            root.detailsCache = ({});
+            root.detailsCacheLoaded = false;
+        }
+        root.detailsRevision += 1;
+        root.finishCacheLoad();
+    }
+
+    function loadDetailsCacheFromDisk() {
+        if (!root.cacheReady || !root.timetableActive || (root.scheduleCacheLoaded && root.detailsCacheLoaded))
+            return;
+        try {
+            const parsed = JSON.parse(sportsCacheFile.text() || "{}");
+            const validSchema = parsed?.schema === 1 || parsed?.schema === 2;
+            if (!root.scheduleCacheLoaded) {
+                root.scheduleCache = validSchema
+                    ? root.compactScheduleCache(parsed.schedules)
+                    : ({});
+                root.scheduleCacheLoaded = true;
+            }
+            root.detailsCache = validSchema && parsed?.details && typeof parsed.details === "object"
+                ? root.prunedDetailsCache(parsed.details)
+                : ({});
+        } catch (error) {
+            root.scheduleCache = ({});
+            root.scheduleCacheLoaded = false;
+            root.detailsCache = ({});
+        }
+        root.detailsCacheLoaded = true;
+        root.detailsRevision += 1;
     }
 
     function saveCache() {
+        if (!root.timetableActive)
+            return;
         if (!root.cacheReady) {
             cacheSaveDebounce.restart();
             return;
         }
+        // Details may have been deliberately unloaded after the timetable
+        // closed. Preserve the on-disk copy without keeping its parsed object
+        // graph resident in the singleton.
+        let details = root.detailsCache;
+        if (!root.detailsCacheLoaded) {
+            try {
+                const parsed = JSON.parse(sportsCacheFile.text() || "{}");
+                details = parsed?.details && typeof parsed.details === "object"
+                    ? root.prunedDetailsCache(parsed.details)
+                    : ({});
+            } catch (error) {
+                details = ({});
+            }
+        }
         sportsCacheFile.setText(JSON.stringify({
-            schema: 1,
+            schema: 2,
             schedules: root.scheduleCache,
-            details: root.detailsCache
+            details: details
         }));
     }
 
@@ -1066,6 +1599,185 @@ Item {
             root.pendingRangeRequest = false;
             root.pendingRangeForce = false;
             root.requestTimetableRange(root.timetableRangeStart, root.timetableRangeEnd, force);
+        }
+    }
+
+    // ESPN's match page for a scoreboard event ("summary" desktop link), with
+    // the generic gameId URL as a fallback for events that ship no links.
+    function compactGameLink(event) {
+        const links = Array.isArray(event?.links) ? event.links : [];
+        let fallback = "";
+        for (let i = 0; i < links.length; i++) {
+            const href = String(links[i]?.href ?? "");
+            if (!/^https?:\/\//.test(href))
+                continue;
+            const rel = Array.isArray(links[i].rel) ? links[i].rel : [];
+            if (rel.indexOf("summary") !== -1 && rel.indexOf("desktop") !== -1)
+                return href;
+            if (fallback === "" && rel.indexOf("desktop") !== -1)
+                fallback = href;
+        }
+        if (fallback !== "")
+            return fallback;
+        const sport = encodeURIComponent(String(event?.sportCategory ?? ""));
+        return event?.id && sport !== "" ? `https://www.espn.com/${sport}/game/_/gameId/${encodeURIComponent(event.id)}` : "";
+    }
+
+    // Scoring plays of a competition as {teamId, name, minute, penalty, ownGoal},
+    // oldest first. Only the fields the goal celebration shows are kept.
+    function compactScorers(comp) {
+        const details = Array.isArray(comp?.details) ? comp.details : [];
+        const result = [];
+        for (let i = 0; i < details.length; i++) {
+            const detail = details[i];
+            if (!detail || !detail.scoringPlay || detail.shootout)
+                continue;
+            const athlete = Array.isArray(detail.athletesInvolved) && detail.athletesInvolved.length > 0 ? detail.athletesInvolved[0] : null;
+            result.push({
+                teamId: String(detail.team?.id ?? ""),
+                name: String(athlete?.displayName ?? athlete?.shortName ?? ""),
+                minute: String(detail.clock?.displayValue ?? ""),
+                penalty: detail.penaltyKick === true,
+                ownGoal: detail.ownGoal === true
+            });
+        }
+        return result;
+    }
+
+    // Bookings of a competition as {teamId, name, minute, red}, oldest first.
+    // A second yellow arrives flagged as red.
+    function compactCards(comp) {
+        const details = Array.isArray(comp?.details) ? comp.details : [];
+        const result = [];
+        for (let i = 0; i < details.length; i++) {
+            const detail = details[i];
+            if (!detail || !(detail.yellowCard || detail.redCard))
+                continue;
+            const athlete = Array.isArray(detail.athletesInvolved) && detail.athletesInvolved.length > 0 ? detail.athletesInvolved[0] : null;
+            result.push({
+                teamId: String(detail.team?.id ?? ""),
+                name: String(athlete?.displayName ?? athlete?.shortName ?? ""),
+                minute: String(detail.clock?.displayValue ?? ""),
+                red: detail.redCard === true
+            });
+        }
+        return result;
+    }
+
+    // Card feed for the bar notice, same memory rules as goals: ESPN appends
+    // bookings in order, so anything past the count seen last poll is new.
+    signal cardShown(var card)
+    property var _cardMemory: ({})
+
+    function buildCard(game, card) {
+        const team = card.teamId !== "" && card.teamId === game.away?.id ? game.away : game.home;
+        return {
+            gameId: String(game.id),
+            red: card.red === true,
+            player: String(card.name ?? ""),
+            minute: String(card.minute ?? ""),
+            teamName: String(team?.name ?? ""),
+            teamLogo: String(team?.logo ?? "")
+        };
+    }
+
+    function detectCards(games) {
+        const previous = root._cardMemory;
+        const next = ({});
+        const shown = [];
+        for (let i = 0; i < games.length; i++) {
+            const game = games[i];
+            const cards = Array.isArray(game.cards) ? game.cards : [];
+            next[game.id] = cards.length;
+            const before = previous[game.id];
+            if (before === undefined || game.state !== "in" || game.sport !== "soccer")
+                continue;
+            for (let j = before; j < cards.length; j++)
+                shown.push(root.buildCard(game, cards[j]));
+        }
+        root._cardMemory = next;
+        for (let i = 0; i < shown.length; i++)
+            root.cardShown(shown[i]);
+    }
+
+    // Goal feed for the bar celebration. Scores are remembered per game; a
+    // live football game whose score went up since the previous poll emits
+    // one `goalScored` per side that scored. The first poll after boot (or
+    // after the game list was cleared) only seeds the memory.
+    signal goalScored(var goal)
+    property var _scoreMemory: ({})
+
+    function buildGoal(game, side) {
+        const team = side === "away" ? game.away : game.home;
+        // ESPN often publishes the scoring play a poll after the score. Name a
+        // scorer only once the team's listed goals have caught up with its
+        // score; until then the banner shows the team instead of a stale name.
+        const scorers = Array.isArray(game.scorers) ? game.scorers : [];
+        const teamScorers = team.id ? scorers.filter(item => item.teamId === team.id) : [];
+        const teamScore = parseInt(team.score ?? "", 10);
+        const scorer = teamScorers.length > 0 && !isNaN(teamScore) && teamScorers.length >= teamScore
+            ? teamScorers[teamScorers.length - 1] : null;
+        return {
+            gameId: String(game.id),
+            side: side,
+            league: String(game.league ?? ""),
+            teamName: String(team.name ?? ""),
+            teamLogo: String(team.logo ?? ""),
+            homeName: String(game.home?.name ?? ""),
+            awayName: String(game.away?.name ?? ""),
+            homeScore: String(game.home?.score ?? "0"),
+            awayScore: String(game.away?.score ?? "0"),
+            scorer: scorer ? scorer.name : "",
+            minute: scorer ? scorer.minute : "",
+            penalty: scorer ? scorer.penalty : false,
+            ownGoal: scorer ? scorer.ownGoal : false
+        };
+    }
+
+    function detectGoals(games) {
+        const previous = root._scoreMemory;
+        const next = ({});
+        const goals = [];
+        for (let i = 0; i < games.length; i++) {
+            const game = games[i];
+            const home = parseInt(game.home?.score ?? "", 10);
+            const away = parseInt(game.away?.score ?? "", 10);
+            if (isNaN(home) || isNaN(away))
+                continue;
+            next[game.id] = { home: home, away: away };
+            const before = previous[game.id];
+            if (!before || game.state !== "in" || game.sport !== "soccer")
+                continue;
+            if (home > before.home)
+                goals.push(root.buildGoal(game, "home"));
+            if (away > before.away)
+                goals.push(root.buildGoal(game, "away"));
+        }
+        root._scoreMemory = next;
+        for (let i = 0; i < goals.length; i++)
+            root.goalScored(goals[i]);
+    }
+
+    // `qs -c ii ipc call sportsGoal simulate home|away` plays the celebration
+    // for the current game without waiting for a real goal.
+    IpcHandler {
+        target: "sportsGoal"
+        function simulate(side: string): string {
+            const game = root.currentGame ?? root.allGames[0];
+            if (!game)
+                return "no game";
+            root.goalScored(root.buildGoal(game, side === "away" ? "away" : "home"));
+            return "ok";
+        }
+        // `qs -c ii ipc call sportsGoal card yellow|red`
+        function card(color: string): string {
+            const game = root.currentGame ?? root.allGames[0];
+            if (!game)
+                return "no game";
+            const cards = Array.isArray(game.cards) ? game.cards : [];
+            const sample = cards.length > 0 ? cards[cards.length - 1] : { teamId: game.home?.id ?? "", name: "", minute: "" };
+            root.cardShown(root.buildCard(game, Object.assign({}, sample, { red: color === "red" })));
+            return "ok";
         }
     }
 
@@ -1197,12 +1909,14 @@ Item {
                             second = comp.competitors[0];
                         }
                         home = {
+                            id: first.team ? String(first.team.id ?? "") : "",
                             name: first.team ? (first.team.shortDisplayName || first.team.name) : "Home",
                             score: first.score || "0",
                             logo: first.team ? first.team.logo : "",
                             winner: first.winner || false
                         };
                         away = {
+                            id: second.team ? String(second.team.id ?? "") : "",
                             name: second.team ? (second.team.shortDisplayName || second.team.name) : "Away",
                             score: second.score || "0",
                             logo: second.team ? second.team.logo : "",
@@ -1236,6 +1950,9 @@ Item {
                             : (comp.status ? comp.status.type.detail : (event.status ? event.status.type.detail : ""))),
                     state: comp.status ? comp.status.type.state : state,
                     lastPlay: lastPlayText,
+                    link: root.compactGameLink(event),
+                    scorers: isRacing ? [] : root.compactScorers(comp),
+                    cards: isRacing ? [] : root.compactCards(comp),
                     home: home,
                     away: away
                 });
@@ -1248,24 +1965,25 @@ Item {
             return;
         }
 
-        if (customOrder && customOrder.length > 0) {
-            validGames.sort((a, b) => {
-                let idxA = customOrder.indexOf(a.id);
-                let idxB = customOrder.indexOf(b.id);
-                if (idxA !== -1 && idxB !== -1) {
-                    return idxA - idxB;
-                }
-                if (idxA !== -1) return -1;
-                if (idxB !== -1) return 1;
-                const order = { "in": 0, "pre": 1, "post": 2 };
-                return (order[a.state] || 3) - (order[b.state] || 3);
-            });
-        } else {
-            validGames.sort((a, b) => {
-                const order = { "in": 0, "pre": 1, "post": 2 };
-                return (order[a.state] || 3) - (order[b.state] || 3);
-            });
-        }
+        // Live first, then upcoming by kickoff, then finished. The date tie-break
+        // keeps the order stable between polls (Array.sort over equal keys
+        // otherwise follows whatever order the league requests finished in).
+        const stateOrder = { "in": 0, "pre": 1, "post": 2 };
+        validGames.sort((a, b) => {
+            const byState = (stateOrder[a.state] ?? 3) - (stateOrder[b.state] ?? 3);
+            if (byState !== 0)
+                return byState;
+            const byDate = new Date(a.date).getTime() - new Date(b.date).getTime();
+            return byDate !== 0 ? byDate : String(a.id).localeCompare(String(b.id));
+        });
+
+        root.detectGoals(validGames);
+        root.detectCards(validGames);
+
+        const signature = JSON.stringify(validGames);
+        if (signature === root._compactSignature)
+            return;
+        root._compactSignature = signature;
 
         let nextIndex = 0;
         let currentId = currentGame ? currentGame.id : Config.options.bar.sports.activeGameId;
@@ -1333,30 +2051,31 @@ Item {
     Timer {
         id: cacheRetryTimer
         interval: 500
-        onTriggered: sportsCacheFile.reload()
+        onTriggered: {
+            if (root.timetableActive)
+                sportsCacheFile.reload();
+        }
     }
 
     FileView {
         id: sportsCacheFile
-        path: Directories.sportsCachePath
+        // The bar/dock compact projection does not use the weekly cache. A
+        // blank path makes FileView release its text buffer while no timetable
+        // consumer is alive, instead of retaining the whole JSON document.
+        path: root.timetableActive ? Directories.sportsCachePath : ""
         watchChanges: false
         atomicWrites: true
         printErrors: false
 
         onLoaded: {
-            try {
-                const parsed = JSON.parse(sportsCacheFile.text());
-                root.scheduleCache = parsed?.schema === 1 && parsed?.schedules && typeof parsed.schedules === "object" ? parsed.schedules : ({});
-                root.detailsCache = parsed?.schema === 1 && parsed?.details && typeof parsed.details === "object" ? parsed.details : ({});
-            } catch (error) {
-                root.scheduleCache = ({});
-                root.detailsCache = ({});
-            }
-            root.detailsRevision += 1;
-            root.finishCacheLoad();
+            if (!root.timetableActive)
+                return;
+            root.loadCacheFromDisk(root.timetableActive);
         }
 
         onLoadFailed: error => {
+            if (!root.timetableActive)
+                return;
             if (error !== FileViewError.FileNotFound)
                 return;
             if (Date.now() - root.cacheInitTimestamp <= root.cacheGracePeriod) {
@@ -1364,7 +2083,9 @@ Item {
                 return;
             }
             root.scheduleCache = ({});
+            root.scheduleCacheLoaded = false;
             root.detailsCache = ({});
+            root.detailsCacheLoaded = false;
             root.finishCacheLoad();
             root.saveCache();
         }
@@ -1374,10 +2095,15 @@ Item {
     readonly property int cacheGracePeriod: 2000
 
     onEnabledChanged: {
+        if (!enabled)
+            root.cancelCompactRequests();
         if (enabled && !root.timetableActive) {
             fetchGames();
         } else {
             allGames = [];
+            _compactSignature = "";
+            _scoreMemory = ({});
+            _cardMemory = ({});
             currentGameIndex = 0;
             currentGame = null;
         }

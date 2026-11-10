@@ -56,7 +56,9 @@ class DetectionTests(unittest.TestCase):
 
     def test_the_toolbox_exposes_ocr_availability_to_the_registry(self):
         availability = body_between(TOOLS, "readonly property var serviceAvailability: ({", "})")
-        self.assertIn("ocr: Ai.ocrAvailable", availability)
+        # Getters keep a construction of Ai from probing every service at once;
+        # the question the gate still must answer is ocr availability from Ai.
+        self.assertIn("get ocr() { return Ai.ocrAvailable; }", availability)
 
     def test_the_config_toggle_defaults_on(self):
         block = body_between(CONFIG, "property JsonObject vision: JsonObject {", "}")

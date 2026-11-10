@@ -10,6 +10,7 @@ import qs.services
 import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Mpris
+import Quickshell.Hyprland
 import qs.modules.ii.background.widgets
 import Quickshell.Widgets
 
@@ -18,7 +19,7 @@ AbstractBackgroundWidget {
 
     configEntryName: "media"
 
-    visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "center" || root.lockBehavior === "lockOnly" || (Config.options.lock.centerWidget === "media")
+    visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "custom" || root.lockBehavior === "center" || root.lockBehavior === "lockOnly" || (Config.options.lock.centerWidget === "media")
 
     property real lastStaticWidth: 400
     property real lastStaticHeight: 240
@@ -41,6 +42,27 @@ AbstractBackgroundWidget {
     }
 
     property MprisPlayer player: MprisController.activePlayer
+
+    // Desktop-widget CPU contract (see AndroidMediaWidget): the wave only runs
+    // while nothing covers the widget, or while the media UI is open in front of
+    // the user. The active workspace is read with the lock/edit-mode detours the
+    // other media surfaces already need.
+    readonly property bool hasActiveWindows: {
+        const monName = Hyprland.focusedMonitor?.name ?? "";
+        var activeWsId = 0;
+        if (GlobalStates.screenLocked && GlobalStates.lockSavedWorkspaces?.[monName])
+            activeWsId = GlobalStates.lockSavedWorkspaces[monName];
+        else if (GlobalStates.editMode && GlobalStates.editModeMonitor === monName && GlobalStates._editSavedWorkspace > 0)
+            activeWsId = GlobalStates._editSavedWorkspace;
+        else {
+            activeWsId = Hyprland.focusedMonitor?.activeWorkspace?.id ?? (HyprlandData.activeWorkspace ? HyprlandData.activeWorkspace.id : 1);
+            if (activeWsId > 1000000)
+                activeWsId = 2147483647 - activeWsId;
+        }
+        if (!HyprlandData || !HyprlandData.windowList)
+            return false;
+        return HyprlandData.windowList.some(w => w.workspace && w.workspace.id === activeWsId);
+    }
 
     readonly property bool useDynamicColors: (Config.options.background.widgets.media.dynamicAlbumColors ?? false) && root.artSource !== ""
 
@@ -128,45 +150,7 @@ AbstractBackgroundWidget {
     readonly property string trackTitle: player?.trackTitle || Translation.tr("No media")
     readonly property string trackArtist: player?.trackArtist || Translation.tr("Unknown Artist")
     readonly property string artUrl: MprisController.artUrl
-    readonly property bool isLocalArt: artUrl.startsWith("file://")
-    
-    property string artDownloadLocation: Directories.coverArt
-    property string artFileName: Qt.md5(artUrl)
-    property string artFilePath: `${artDownloadLocation}/${artFileName}`
-    property bool artDownloaded: false
-
-    readonly property string artSource: {
-        if (!artUrl) return "";
-        if (isLocalArt) return artUrl;
-        return artDownloaded ? Qt.resolvedUrl(artFilePath) : "";
-    }
-
-    onArtFilePathChanged: {
-        if (!artUrl || artUrl.length === 0) {
-            artDownloaded = false;
-            return;
-        }
-        if (isLocalArt) {
-            artDownloaded = true;
-            return;
-        }
-        artDownloader.targetFile = artUrl;
-        artDownloader.artFilePath = artFilePath;
-        artDownloader.artTempPath = artFilePath + ".tmp";
-        artDownloaded = false;
-        artDownloader.running = true;
-    }
-
-    Process {
-        id: artDownloader
-        property string targetFile: root.artUrl
-        property string artFilePath: root.artFilePath
-        property string artTempPath: root.artFilePath + ".tmp"
-        command: ["bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
-        onExited: {
-            artDownloaded = true;
-        }
-    }
+    readonly property string artSource: CoverArt.source(root.artUrl)
 
     FontLoader {
         id: ledFont
@@ -174,7 +158,7 @@ AbstractBackgroundWidget {
     }
 
     Timer {
-        running: root.player?.playbackState == MprisPlaybackState.Playing
+        running: root.player?.playbackState == MprisPlaybackState.Playing && root.live
         interval: 500
         repeat: true
         onTriggered: root.player.positionChanged()
@@ -238,7 +222,7 @@ AbstractBackgroundWidget {
 
                         Timer {
                             id: rotationTimer
-                            running: root.player?.isPlaying && root.rotateAlbumArt
+                            running: root.player?.isPlaying && root.rotateAlbumArt && root.live
                             interval: 16  // ~60fps
                             repeat: true
                             onTriggered: albumArtItem._rotationAngle = (albumArtItem._rotationAngle + 0.6) % 360  // 360° in 10s
@@ -319,7 +303,7 @@ AbstractBackgroundWidget {
 
                             Text {
                                 visible: root.showTimeInfo
-                                text: StringUtils.friendlyTimeForSeconds(Math.min(root.player?.position ?? 0, root.player?.length ?? Infinity))
+                                text: StringUtils.friendlyTimeForSeconds(MprisController.trackPositionOf(root.player))
                                 color: root.colTimeMain
                                 font.pixelSize: root.timerPrimarySize
                                 font.weight: Font.ExtraBold
@@ -328,7 +312,8 @@ AbstractBackgroundWidget {
 
                             Text {
                                 visible: root.showTimeInfo
-                                text: StringUtils.friendlyTimeForSeconds(root.player?.length ?? 0)
+                                text: MprisController.hasTrackLength(root.player)
+                                    ? StringUtils.friendlyTimeForSeconds(root.player.length) : "\u2013\u2013:\u2013\u2013"
                                 color: root.colTimeSub
                                 font.pixelSize: root.timerSecondarySize
                                 font.weight: Font.Regular
@@ -365,11 +350,19 @@ AbstractBackgroundWidget {
                                 active: root.player?.canSeek ?? false
                                 sourceComponent: StyledSlider {
                                     configuration: StyledSlider.Configuration.Wavy
+                                    animateWave: (root.player?.isPlaying ?? false) && root.visible && (!root.hasActiveWindows || GlobalStates.mediaControlsOpen)
                                     highlightColor: root.colProgressHighlight
                                     trackColor: root.colProgressTrack
                                     handleColor: root.colProgressHighlight
-                                    value: (root.player?.length ?? 0) > 0 ? Math.min(1, Math.max(0, root.player.position / root.player.length)) : 0
-                                    onMoved: root.player.position = value * root.player.length
+                                    value: MprisController.trackProgressOf(root.player)
+                                    // Nothing to seek to while the player publishes no length.
+                                    enabled: MprisController.hasTrackLength(root.player)
+                                    onMoved: MprisController.seekFraction(root.player, value)
+                                    // QQuickSlider writes `value` itself while the user drags, which destroys
+                                    // the binding below it. Without this the bar froze where the drag left it
+                                    // and never followed the track again.
+                                    onPressedChanged: if (!pressed)
+                                        value = Qt.binding(() => MprisController.trackProgressOf(root.player))
                                 }
                             }
 
@@ -380,12 +373,13 @@ AbstractBackgroundWidget {
                                     left: parent.left
                                     right: parent.right
                                 }
-                                active: !(root.player?.canSeek ?? false)
+                                active: !!root.player && !sliderLoader.active
                                 sourceComponent: StyledProgressBar {
                                     wavy: root.player?.isPlaying
+                                    animateWave: (root.player?.isPlaying ?? false) && root.visible && (!root.hasActiveWindows || GlobalStates.mediaControlsOpen)
                                     highlightColor: root.colProgressHighlight
                                     trackColor: root.colProgressTrack
-                                    value: (root.player?.length ?? 0) > 0 ? Math.min(1, Math.max(0, root.player.position / root.player.length)) : 0
+                                    value: MprisController.trackProgressOf(root.player)
                                 }
                             }
                         }

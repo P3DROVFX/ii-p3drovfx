@@ -24,6 +24,7 @@ Row {
     property int allDayExpanderHeight
     property bool expanded: false
     property bool hasExpandableLane: false
+    property bool showShortcutHints: false
     readonly property date referenceDate: days?.length > 0 ? days[0].sportsDate : DateTime.clock.date
 
     signal dayActivated(var date)
@@ -132,14 +133,19 @@ Row {
                             radius: Appearance.rounding.full
                             color: dayTitleButton.isToday ? Appearance.colors.colPrimary : H.withOpacity(Appearance.colors.colSurface, 0)
 
-                            StyledText {
+                            TaskShortcutContent {
                                 id: dayNumber
                                 anchors.centerIn: parent
-                                text: String(dayDelegate.sportsDate.getDate())
-                                font.family: Appearance.font.family.numbers
-                                font.pixelSize: Appearance.font.pixelSize.large
-                                font.weight: Font.Bold
+                                symbol: ""
+                                labelText: String(dayDelegate.sportsDate.getDate())
+                                shortcut: "Ctrl\n↵"
+                                showHint: dayTitleButton.toggled && headerRow.showShortcutHints
+                                circle: false
+                                iconSize: Appearance.font.pixelSize.large + 8
+                                labelPixelSize: Appearance.font.pixelSize.large
                                 color: dayTitleButton.isToday ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                                badgeColor: Appearance.colors.colPrimary
+                                badgeTextColor: Appearance.colors.colOnPrimary
                             }
                         }
                     }
@@ -298,24 +304,22 @@ Row {
                 colBackgroundHover: Appearance.colors.colLayer2Hover
                 onClicked: headerRow.allDayExpansionRequested(!headerRow.expanded)
 
-                contentItem: RowLayout {
+                contentItem: TaskShortcutContent {
                     anchors.centerIn: parent
-                    spacing: 3
+                    symbol: headerRow.expanded ? "expand_less" : "expand_more"
+                    labelText: headerRow.expanded
+                        ? Translation.tr("Show less")
+                        : Translation.tr("%1 more").arg(String(dayDelegate.hiddenChipCount))
+                    shortcut: "Ctrl\nA"
+                    showHint: headerRow.showShortcutHints
+                    iconSize: Appearance.font.pixelSize.small
+                    labelPixelSize: Appearance.font.pixelSize.smallest
+                    color: Appearance.colors.colPrimary
+                }
 
-                    StyledText {
-                        text: headerRow.expanded
-                            ? Translation.tr("Show less")
-                            : Translation.tr("%1 more").arg(String(dayDelegate.hiddenChipCount))
-                        font.pixelSize: Appearance.font.pixelSize.smallest
-                        font.weight: Font.Bold
-                        color: Appearance.colors.colPrimary
-                    }
-
-                    MaterialSymbol {
-                        text: headerRow.expanded ? "expand_less" : "expand_more"
-                        iconSize: Appearance.font.pixelSize.small
-                        color: Appearance.colors.colPrimary
-                    }
+                StyledToolTip {
+                    extraVisibleCondition: allDayExpander.hovered
+                    text: (headerRow.expanded ? Translation.tr("Show less") : Translation.tr("Expand all day events")) + " (Ctrl+A)"
                 }
             }
         }

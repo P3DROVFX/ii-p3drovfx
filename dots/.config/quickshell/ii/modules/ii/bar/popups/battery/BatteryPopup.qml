@@ -9,6 +9,7 @@ import Qt5Compat.GraphicalEffects
 
 StyledPopup {
     id: root
+    popupId: "battery"
     stickyHover: true
     function formatTime(seconds) {
         const d = Math.floor(seconds / 86400);

@@ -4,6 +4,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.modules.ii.modes
+import qs.modules.ii.clock.components
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
@@ -48,35 +49,42 @@ ColumnLayout {
             Layout.fillWidth: true
             spacing: 8
 
+            // The chosen app as a filled chip with its own remove button.
             Rectangle {
                 visible: (row.obj.app ?? "").length > 0
-                implicitWidth: chosenRow.implicitWidth + 20
-                implicitHeight: 32
-                radius: Appearance.rounding.full
-                color: Appearance.colors.colSecondaryContainer
+                implicitWidth: chosenRow.implicitWidth + ClockStyle.gap + ClockStyle.gapTiny
+                implicitHeight: 40
+                radius: ClockStyle.radiusSmall
+                color: ClockStyle.colSecondaryContainer
 
                 RowLayout {
                     id: chosenRow
                     anchors.centerIn: parent
-                    spacing: 6
+                    spacing: ClockStyle.gapTiny + 2
 
                     StyledText {
+                        Layout.leftMargin: 2
                         text: DesktopEntries.byId(row.obj.app ?? "")?.name ?? (row.obj.app ?? "")
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        color: Appearance.colors.colOnSecondaryContainer
+                        font.pixelSize: ClockStyle.textNormal
+                        font.weight: Font.DemiBold
+                        color: ClockStyle.colOnSecondaryContainer
                     }
 
-                    MouseArea {
-                        implicitWidth: 18
-                        implicitHeight: 18
-                        cursorShape: Qt.PointingHandCursor
+                    RippleButton {
+                        implicitWidth: 24
+                        implicitHeight: 24
+                        buttonRadius: 12
+                        colBackground: "transparent"
+                        colBackgroundHover: ColorUtils.applyAlpha(ClockStyle.colOnSecondaryContainer, 0.12)
+                        colRipple: ColorUtils.applyAlpha(ClockStyle.colOnSecondaryContainer, 0.2)
                         onClicked: row.patchValue({ app: "" })
 
-                        MaterialSymbol {
+                        contentItem: MaterialSymbol {
                             anchors.centerIn: parent
+                            horizontalAlignment: Text.AlignHCenter
                             text: "close"
                             iconSize: 16
-                            color: Appearance.colors.colOnSecondaryContainer
+                            color: ClockStyle.colOnSecondaryContainer
                         }
                     }
                 }
@@ -84,31 +92,42 @@ ColumnLayout {
 
             Rectangle {
                 Layout.fillWidth: true
-                implicitHeight: 36
-                radius: Appearance.rounding.full
-                color: Appearance.colors.colLayer3
-                border.width: appSearch.activeFocus ? 2 : 0
-                border.color: Appearance.colors.colPrimary
+                implicitHeight: 40
+                radius: ClockStyle.radiusSmall
+                color: appSearch.activeFocus ? ClockStyle.colFieldHover : ClockStyle.colField
 
-                StyledTextInput {
-                    id: appSearch
+                RowLayout {
                     anchors {
                         fill: parent
-                        leftMargin: 14
-                        rightMargin: 14
+                        leftMargin: ClockStyle.gap
+                        rightMargin: ClockStyle.gap + 2
                     }
-                    verticalAlignment: TextInput.AlignVCenter
-                    color: Appearance.colors.colOnLayer3
-                    clip: true
-                    onTextChanged: launchCol.appQuery = text
+                    spacing: ClockStyle.gapSmall
 
-                    StyledText {
-                        anchors.fill: parent
-                        verticalAlignment: Text.AlignVCenter
-                        visible: !appSearch.text.length
-                        text: (row.obj.app ?? "").length ? Translation.tr("Search to replace")
-                                                          : Translation.tr("Search apps")
-                        color: Appearance.colors.colSubtext
+                    MaterialSymbol {
+                        text: "search"
+                        iconSize: ClockStyle.iconSmall + 2
+                        color: ClockStyle.colOnSurfaceVariant
+                    }
+
+                    StyledTextInput {
+                        id: appSearch
+                        Layout.fillWidth: true
+                        verticalAlignment: TextInput.AlignVCenter
+                        color: ClockStyle.colOnSurface
+                        font.pixelSize: ClockStyle.textNormal
+                        clip: true
+                        onTextChanged: launchCol.appQuery = text
+
+                        StyledText {
+                            anchors.fill: parent
+                            verticalAlignment: Text.AlignVCenter
+                            visible: !appSearch.text.length
+                            text: (row.obj.app ?? "").length ? Translation.tr("Search to replace")
+                                                              : Translation.tr("Search apps")
+                            font.pixelSize: ClockStyle.textNormal
+                            color: Appearance.colors.colOnLayer1Inactive
+                        }
                     }
                 }
             }
@@ -122,11 +141,11 @@ ColumnLayout {
                 required property var modelData
 
                 Layout.fillWidth: true
-                implicitHeight: 36
-                buttonRadius: Appearance.rounding.small
-                colBackground: "transparent"
-                colBackgroundHover: Appearance.colors.colLayer3Hover
-                colRipple: Appearance.colors.colLayer3Active
+                implicitHeight: 44
+                buttonRadius: ClockStyle.radiusSmall
+                colBackground: ClockStyle.colField
+                colBackgroundHover: ClockStyle.colFieldHover
+                colRipple: ClockStyle.colSurfaceActive
                 onClicked: {
                     row.patchValue({ app: appResult.modelData.id, command: "" });
                     appSearch.text = "";
@@ -135,22 +154,30 @@ ColumnLayout {
                 contentItem: RowLayout {
                     anchors {
                         fill: parent
-                        leftMargin: 10
-                        rightMargin: 10
+                        leftMargin: ClockStyle.gap
+                        rightMargin: ClockStyle.gap
                     }
-                    spacing: 8
+                    spacing: ClockStyle.gapSmall
+
+                    MaterialSymbol {
+                        text: "add"
+                        iconSize: ClockStyle.iconSmall
+                        color: ClockStyle.colPrimary
+                    }
 
                     StyledText {
                         Layout.fillWidth: true
                         text: appResult.modelData.name
                         elide: Text.ElideRight
-                        color: Appearance.colors.colOnLayer2
+                        font.pixelSize: ClockStyle.textNormal
+                        font.weight: Font.DemiBold
+                        color: ClockStyle.colOnSurface
                     }
 
                     StyledText {
                         text: appResult.modelData.id
-                        font.pixelSize: Appearance.font.pixelSize.smaller
-                        color: Appearance.colors.colSubtext
+                        font.pixelSize: ClockStyle.textSmall
+                        color: ClockStyle.colSubtext
                     }
                 }
             }

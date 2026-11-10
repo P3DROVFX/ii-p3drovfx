@@ -20,7 +20,7 @@ AbstractBackgroundWidget {
 
     configEntryName: "circular_media"
 
-    visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "center" || root.lockBehavior === "lockOnly" || (Config.options.lock.centerWidget === "media")
+    visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "custom" || root.lockBehavior === "center" || root.lockBehavior === "lockOnly" || (Config.options.lock.centerWidget === "media")
 
     // Default size is 240x240 for 1:1 widgets as per AGENTS.md guidelines.
     // The size factor is folded into the implicit size rather than left to an
@@ -38,46 +38,7 @@ AbstractBackgroundWidget {
     readonly property string trackTitle: StringUtils.cleanMusicTitle(player?.trackTitle) || Translation.tr("No media")
     readonly property string trackArtist: player?.trackArtist || Translation.tr("Unknown Artist")
 
-    property bool isLocalArt: artUrl.startsWith("file://")
-    property string artDownloadLocation: Directories.coverArt
-    property string artFileName: Qt.md5(artUrl)
-    property string artFilePath: `${artDownloadLocation}/${artFileName}`
-    property bool artDownloaded: false
-
-    readonly property string artSource: {
-        if (!artUrl)
-            return "";
-        if (isLocalArt)
-            return artUrl;
-        return artDownloaded ? Qt.resolvedUrl(artFilePath) : "";
-    }
-
-    onArtFilePathChanged: {
-        if (!artUrl || artUrl.length === 0) {
-            artDownloaded = false;
-            return;
-        }
-        if (isLocalArt) {
-            artDownloaded = true;
-            return;
-        }
-        artDownloader.targetFile = artUrl;
-        artDownloader.artFilePath = artFilePath;
-        artDownloader.artTempPath = artFilePath + ".tmp";
-        artDownloaded = false;
-        artDownloader.running = true;
-    }
-
-    Process {
-        id: artDownloader
-        property string targetFile: root.artUrl
-        property string artFilePath: root.artFilePath
-        property string artTempPath: root.artFilePath + ".tmp"
-        command: ["bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
-        onExited: {
-            artDownloaded = true;
-        }
-    }
+    readonly property string artSource: CoverArt.source(root.artUrl)
 
     ColorQuantizer {
         id: colorQuantizer
@@ -115,7 +76,7 @@ AbstractBackgroundWidget {
 
     // Trigger position updates for the progress bar
     Timer {
-        running: root.playing
+        running: root.playing && root.live
         interval: Config.options.resources.updateInterval ?? 1000
         repeat: true
         onTriggered: {
@@ -125,11 +86,7 @@ AbstractBackgroundWidget {
         }
     }
 
-    readonly property real progressValue: {
-        if (!root.player || root.player.length <= 0)
-            return 0.0;
-        return Math.max(0.0, Math.min(1.0, root.player.position / root.player.length));
-    }
+    readonly property real progressValue: MprisController.trackProgressOf(root.player)
 
     // This widget shares the desktop canvas' compositor surface with other widgets,
     // so it cannot override Hyprland's ignore_alpha rule by itself. When the user
@@ -488,12 +445,7 @@ AbstractBackgroundWidget {
                             return "volume_up";
                         }
 
-                        onClicked: {
-                            GlobalStates.openRightSidebar();
-                            Qt.callLater(() => {
-                                GlobalStates.requestVolumeDialog = true;
-                            });
-                        }
+                        onClicked: GlobalStates.openAudioOutputSettings()
 
                         contentItem: Item {
                             implicitWidth: deviceRowLayout.implicitWidth

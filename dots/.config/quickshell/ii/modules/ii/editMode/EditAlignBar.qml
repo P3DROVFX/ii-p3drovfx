@@ -94,6 +94,21 @@ Item {
                 enabled: root.canDistribute
             }
         }
+
+        Rectangle {
+            Layout.alignment: Qt.AlignVCenter
+            Layout.leftMargin: 3
+            Layout.rightMargin: 3
+            implicitWidth: 1
+            implicitHeight: 18
+            color: Appearance.colors.colOutlineVariant
+        }
+
+        AlignButton {
+            symbol: "more_horiz"
+            label: Translation.tr("Widget options")
+            mode: "menu"
+        }
     }
 
     component AlignButton: IconToolbarButton {

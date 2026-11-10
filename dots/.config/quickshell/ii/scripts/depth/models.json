@@ -1,0 +1,149 @@
+{
+    "runtime": {
+        "package": "onnxruntime",
+        "approxBytes": 70000000
+    },
+    "models": [
+        {
+            "id": "general",
+            "name": "General subjects",
+            "shortName": "General",
+            "description": "People, characters, objects. The best all-rounder.",
+            "icon": "person_pin",
+            "architecture": "BiRefNet lite",
+            "license": "MIT",
+            "kind": "salient",
+            "file": "birefnet-lite.onnx",
+            "url": "https://github.com/danielgatis/rembg/releases/download/v0.0.0/BiRefNet-general-bb_swin_v1_tiny-epoch_232.onnx",
+            "bytes": 224005088,
+            "sha256": "5600024376f572a557870a5eb0afb1e5961636bef4e1e22132025467d0f03333",
+            "input": 1024,
+            "mean": [
+                0.485,
+                0.456,
+                0.406
+            ],
+            "std": [
+                0.229,
+                0.224,
+                0.225
+            ],
+            "output": "sigmoid",
+            "peakMemoryMB": 7000,
+            "seconds": 9
+        },
+        {
+            "id": "general-light",
+            "name": "General subjects, light",
+            "shortName": "Light",
+            "description": "Same job with a fraction of the memory; softer edges.",
+            "icon": "bolt",
+            "architecture": "IS-Net general",
+            "license": "Apache-2.0",
+            "kind": "salient",
+            "file": "isnet-general-use.onnx",
+            "url": "https://github.com/danielgatis/rembg/releases/download/v0.0.0/isnet-general-use.onnx",
+            "bytes": 178648008,
+            "sha256": "60920e99c45464f2ba57bee2ad08c919a52bbf852739e96947fbb4358c0d964a",
+            "input": 1024,
+            "mean": [
+                0.5,
+                0.5,
+                0.5
+            ],
+            "std": [
+                1.0,
+                1.0,
+                1.0
+            ],
+            "output": "minmax",
+            "peakMemoryMB": 1000,
+            "seconds": 2
+        },
+        {
+            "id": "anime",
+            "name": "Anime & illustration",
+            "shortName": "Anime",
+            "description": "Trained on anime characters; clean cuts on line art.",
+            "icon": "draw",
+            "architecture": "IS-Net anime",
+            "license": "Apache-2.0",
+            "kind": "salient",
+            "file": "isnet-anime.onnx",
+            "url": "https://github.com/danielgatis/rembg/releases/download/v0.0.0/isnet-anime.onnx",
+            "bytes": 176069933,
+            "sha256": "f15622d853e8260172812b657053460e20806f04b9e05147d49af7bed31a6e99",
+            "input": 1024,
+            "mean": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "std": [
+                1.0,
+                1.0,
+                1.0
+            ],
+            "letterbox": true,
+            "output": "raw",
+            "peakMemoryMB": 1000,
+            "seconds": 2
+        },
+        {
+            "id": "portrait",
+            "name": "People, high detail",
+            "shortName": "Portrait",
+            "description": "Hair-level edges on portraits. Large and slow.",
+            "icon": "face",
+            "architecture": "BiRefNet portrait",
+            "license": "MIT",
+            "kind": "salient",
+            "file": "birefnet-portrait.onnx",
+            "url": "https://github.com/danielgatis/rembg/releases/download/v0.0.0/BiRefNet-portrait-epoch_150.onnx",
+            "bytes": 972666916,
+            "sha256": "",
+            "input": 1024,
+            "mean": [
+                0.485,
+                0.456,
+                0.406
+            ],
+            "std": [
+                0.229,
+                0.224,
+                0.225
+            ],
+            "output": "sigmoid",
+            "peakMemoryMB": 9000,
+            "seconds": 20
+        },
+        {
+            "id": "landscape",
+            "name": "Landscapes",
+            "shortName": "Landscape",
+            "description": "Lifts the nearest plane (trees, rocks, buildings) by depth.",
+            "icon": "landscape",
+            "architecture": "Depth Anything V2 small",
+            "license": "Apache-2.0",
+            "kind": "depth",
+            "file": "depth-anything-v2-small.onnx",
+            "url": "https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/onnx/model.onnx",
+            "bytes": 99060839,
+            "sha256": "afb6a5c28f3b6bf1618c6e43f02073ef9dfdc70e937502d51603e57b0a1df10c",
+            "input": 518,
+            "mean": [
+                0.485,
+                0.456,
+                0.406
+            ],
+            "std": [
+                0.229,
+                0.224,
+                0.225
+            ],
+            "output": "depth",
+            "peakMemoryMB": 650,
+            "seconds": 2
+        }
+    ]
+}

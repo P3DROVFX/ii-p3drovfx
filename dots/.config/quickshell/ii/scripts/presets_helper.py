@@ -5,6 +5,7 @@ import os
 import sys
 import glob
 import re
+import shutil
 import tempfile
 
 SENSITIVE_KEY_NAMES = {
@@ -25,6 +26,7 @@ def is_sensitive_key(key: str) -> bool:
     return False
 
 DOCK_BLACKLIST_KEYS = {
+    "monitor",
     "pinnedApps",
     "pinnedFiles",
     "appGroups",
@@ -35,6 +37,12 @@ DOCK_BLACKLIST_KEYS = {
     "enableWeatherWidget",
     "enableSportsWidget",
     "enableLivePreviewWidget",
+    "enableTasksWidget",
+    "enableWidgetStack",
+    "widgetStackItems",
+    "utilityWidgets",
+    "overviewButton",
+    "utilities",
     "livePreviewSlots",
     "livePreviewPaintCursor",
     "livePreviewCaptureMode",
@@ -43,6 +51,7 @@ DOCK_BLACKLIST_KEYS = {
     "showTrashButton",
     "showOverviewButton",
     "showPinButton",
+    "switchPresetsOnScroll",
 }
 
 SEARCH_APPEARANCE_KEYS = {
@@ -78,6 +87,9 @@ MONITOR_BINDING_PATHS = (
     "bar.floatingNotch.singleMonitorName",
     "background.widgets.showOnlyOnSingleMonitor",
     "background.widgets.targetMonitor",
+    # background.monitorWallpapers is machine-local too, but a preset does
+    # carry it: portable_monitor_wallpapers() on save, apply_monitor_wallpapers()
+    # on apply, which maps it onto the importer's screens.
     "interactions.touchGestures.targetMonitor",
     "notifications.monitor.enable",
     "notifications.monitor.name",
@@ -91,19 +103,49 @@ PERSONAL_PATHS = (
     "userProfile.customGreeting",
     "userProfile.imagePath",
     "sidebar.dashboardHeader.profileImagePath",
-    "background.widgets.*.imagePath",
     "background.thumbnailPath",
     "bluetoothDeviceImages",
+    # Dock utility widgets: the LocalSend target, folders and favorite sites.
+    "dock.utilities.send.localsendIp",
+    "background.widgets.send_drop.localsendIp",
+    "dock.utilities.send.localsendAlias",
+    "background.widgets.send_drop.localsendAlias",
+    "dock.utilities.send.kdeDevice",
+    "background.widgets.send_drop.kdeDevice",
+    "dock.utilities.files.folder",
+    "dock.utilities.screenshots.folder",
+    "dock.utilities.favorites.sites",
     "soundcore.macAddress",
+    # Phone & LocalSend services and toggles (Devices & Phone / Phone settings)
+    "phone.kdeconnectEnabled",
+    "phone.remoteCommands",
+    "phone.mirrorNotificationsToDesktop",
+    "phone.showPeripheralCards",
     "phone.contacts.favoriteIds",
+    "phone.contacts.enabled",
+    "phone.contacts.hideUnnamed",
     "phone.microphone.wifiIp",
     "phone.scrcpy.wirelessIp",
+    "phone.scrcpy.useWireless",
+    "phone.scrcpy.autoWirelessIp",
+    "phone.scrcpy.pinAdbPort",
+    "phone.scrcpy.autoResume",
+    "phone.scrcpy.embed.enabled",
+    "phone.scrcpy.recording.folder",
     "phone.webcam.wifiIp",
+    "localsend.autoStart",
+    "localsend.showNotifications",
+    "localsend.preferPopupOverNotification",
     "sidebar.booru.zerochan.username",
     # The libinput id of a touchpad that exists on one laptop. Machine-local
     # in the same way a monitor name is, and applying it silently stops touch
     # gestures working on everyone else's.
     "interactions.touchGestures.deviceId",
+    # The depth effect runs on models downloaded to this machine, and its
+    # per-picture choices are keyed by the author's own file paths. A preset
+    # that carried it would switch the effect on (or off) for someone who
+    # never downloaded a model, the next time they fetch one.
+    "background.depthEffect",
     "todo",
     "googleDrive",
     "cheatsheet",
@@ -172,12 +214,47 @@ LOCAL_PREFERENCE_PATHS = (
     "bar.weather.useUSCS",
     "policies",
     "workSafety",
+    # What each touchpad swipe does is a habit of the hand, and a list written for
+    # another laptop's touchpad. A theme that rebinds it is a theme nobody can use.
+    "interactions.touchpadGestures",
 ) + SEARCH_LOCAL_PREFERENCE_PATHS
+
+# Daily limits and the usage tracker they count from. A limit on someone else's
+# app list, or a tracker switched off, would land on the importer without a word,
+# so neither travels: removed on export with the root sections, and handed back
+# from the importer's own config on apply.
+SCREEN_TIME_PATHS = (
+    "screenTime",
+    "appStats",
+)
+
+# Modes & Routines, with the game detector that feeds them. A preset's modes
+# would start shell actions and automatic triggers on the importer's machine,
+# so they never travel either.
+MODES_PATHS = (
+    "modes",
+)
+
+# The Clock app and its shared time/alarm/timer/pomodoro/world-clock settings.
+# Bedtime (including intrusive mode's forced shutdown), alarms, reminders,
+# timers, world clocks and clock format belong to the user, not a theme.
+CLOCK_PATHS = (
+    "clockApp",
+    "time",
+)
 
 # Everything merge() hands back to the importer.
 LOCAL_ONLY_PATHS = (
     MONITOR_BINDING_PATHS + PERSONAL_PATHS + LOCAL_FOLDER_PATHS + LOCAL_PREFERENCE_PATHS
+    + SCREEN_TIME_PATHS + MODES_PATHS + CLOCK_PATHS
 )
+# The shell keeps a durable mirror of every path here (plus the dock/search
+# keys above and the blacklisted root sections) in
+# ~/.config/illogical-impulse/local-preferences.json, so deleting config.json
+# no longer takes them with it. Written by modules/common/LocalPreferences.qml
+# — keep the protected-path list there in sync with the lists above. The file
+# is a plain { "<concrete dotted path>": value } map.
+LOCAL_PREFERENCES_NAME = "local-preferences.json"
 
 # Path fields a preset is meant to bring with it. Each falls back to a bundled
 # asset, then to whatever the importer already had, so applying a preset never
@@ -415,19 +492,58 @@ def restore_local_only(merged, current):
             set_path(merged, path, copy.deepcopy(get_path(current, path)))
 
 
+def local_preferences_path(config_path):
+    return os.path.join(os.path.dirname(os.path.abspath(config_path)), LOCAL_PREFERENCES_NAME)
+
+
+def load_local_preferences(config_path):
+    """The importer's durable protected settings, or {} if there is none."""
+    try:
+        with open(local_preferences_path(config_path), 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def restore_local_preferences(merged, local):
+    """Fill machine-local paths the merged config lost entirely.
+
+    restore_local_only() hands back whatever the current config.json still
+    holds; when that file was just deleted there is nothing to hand back and
+    the preset's own (or absent) values would win. The durable mirror has
+    them, so consult it for any protected path still missing after the
+    merge. Values already in the merged config are never overwritten.
+    """
+    for dotted, value in local.items():
+        if not isinstance(dotted, str) or not dotted:
+            continue
+        path = dotted.split('.')
+        if get_path(merged, path, _MISSING) is _MISSING:
+            set_path(merged, path, copy.deepcopy(value))
+
+
 def resolve_asset_paths(merged, current, presets_dir, preset_name):
-    """Point each shipped asset field at something that actually exists."""
+    """Point each shipped asset field at the copy that ships with the preset.
+
+    A bundled `{name}_banner.*` (or `{name}.<ext>` wallpaper) is the exact
+    image the author exported, so it replaces whatever path the preset
+    carries even when that path happens to exist on the importer's disk --
+    applying a preset means swapping in its banner, not colliding with a
+    same-named local file. With no bundled copy, a preset path that exists
+    stays; a dead path falls back to the importer's own.
+    """
     finders = {'wallpaper': find_wallpaper_fallback, 'banner': find_banner_fallback}
     for dotted, kind in ASSET_PATHS:
         path = dotted.split('.')
-        value = plain_path(get_path(merged, path))
-        if value and os.path.exists(value):
-            continue
         bundled = None
         if kind and presets_dir and preset_name:
             bundled = finders[kind](presets_dir, preset_name)
         if bundled:
             set_path(merged, path, bundled)
+            continue
+        value = plain_path(get_path(merged, path, ''))
+        if value and os.path.exists(value):
             continue
         local = get_path(current, path)
         if isinstance(local, str) and local:
@@ -460,6 +576,9 @@ ROOT_PRESET_BLACKLIST_KEYS = {
     "todo",
     "ai",
     "cheatsheet",
+    *SCREEN_TIME_PATHS,
+    *MODES_PATHS,
+    *CLOCK_PATHS,
 }
 
 def remove_secrets_and_userdata(data, is_root=True):
@@ -489,9 +608,17 @@ def remove_secrets_and_userdata(data, is_root=True):
                     if dk in DOCK_BLACKLIST_KEYS or is_sensitive_key(dk):
                         continue
                     dock_copy[dk] = remove_secrets_and_userdata(dv, is_root=False)
-                cleaned[k] = dock_copy
+                if dock_copy:
+                    cleaned[k] = dock_copy
                 continue
-            cleaned[k] = remove_secrets_and_userdata(v, is_root=False)
+            child = remove_secrets_and_userdata(v, is_root=False)
+            # A container emptied by the stripping goes with it: leaving a
+            # `services: {gmail: {}}` husk behind would still write it into
+            # every config the preset is applied to. Objects the author
+            # genuinely left empty are kept untouched.
+            if isinstance(child, dict) and not child and v:
+                continue
+            cleaned[k] = child
         return cleaned
     elif isinstance(data, list):
         return [remove_secrets_and_userdata(x, is_root=False) for x in data]
@@ -541,6 +668,532 @@ def normalize_path_field(data, section_name, field_name, home_dir, fallback=None
         section[field_name] = fallback
     else:
         section[field_name] = path
+
+# ---------------------------------------------------------------------------
+# Video wallpapers and per-screen wallpapers
+# ---------------------------------------------------------------------------
+
+# Wallpapers.videoExtensions; switchwall.sh plays the same set.
+VIDEO_EXTS = ('.mp4', '.mkv', '.webm', '.avi', '.mov', '.m4v', '.ogv')
+# Edit Mode's per-screen wallpapers ship next to the preset as
+# `{name}_screen<N>.<ext>`; an entry names its file by this id.
+SCREEN_ASSET_RE = re.compile(r'^screen[0-9]+$')
+# Desktop photo widget images ship next to the preset as `{name}_photo<N>.<ext>`.
+PHOTO_ASSET_RE = re.compile(r'^photo[0-9]+$')
+# WallpaperLayout.framingMemory.
+FRAMING_MEMORY = 12
+
+
+def is_video(path):
+    return isinstance(path, str) and os.path.splitext(plain_path(path))[1].lower() in VIDEO_EXTS
+
+
+def poster_cache_dir():
+    base = os.environ.get('XDG_CACHE_HOME') or os.path.join(user_home(), '.cache')
+    return os.path.join(base, 'quickshell-ii', 'preset-posters')
+
+
+def video_frame_seconds(data, paths):
+    """The moment the author picked for a video's colours (and its poster)."""
+    background = data.get('background') if isinstance(data, dict) else None
+    times = background.get('videoFrameTimes') if isinstance(background, dict) else None
+    wanted = {plain_path(p) for p in paths if p}
+    for item in times if isinstance(times, list) else []:
+        if isinstance(item, dict) and plain_path(item.get('path', '')) in wanted:
+            seconds = item.get('seconds')
+            if isinstance(seconds, (int, float)) and not isinstance(seconds, bool) and seconds > 0:
+                return float(seconds)
+    return 0.0
+
+
+def video_poster(video, seconds=0.0):
+    """A still of `video` an Image can show, cached by file and moment.
+
+    Qt's Image cannot decode a video, so every preset card showed nothing for
+    a video wallpaper. "" when ffmpeg is missing or the file is unreadable.
+    """
+    import hashlib
+    import subprocess
+    try:
+        stat = os.stat(video)
+    except OSError:
+        return ''
+    key = hashlib.sha256(('%s\0%d\0%d\0%s' % (
+        os.path.abspath(video), stat.st_size, int(stat.st_mtime), seconds)).encode()).hexdigest()[:24]
+    directory = poster_cache_dir()
+    poster = os.path.join(directory, key + '.jpg')
+    if os.path.isfile(poster) and os.path.getsize(poster) > 0:
+        return poster
+    try:
+        os.makedirs(directory, exist_ok=True)
+    except OSError:
+        return ''
+    handle, partial = tempfile.mkstemp(dir=directory, prefix='.poster-', suffix='.jpg')
+    os.close(handle)
+    try:
+        for at in ([seconds, 0] if seconds > 0 else [0]):
+            try:
+                subprocess.run(['ffmpeg', '-v', 'error', '-y', '-ss', str(at), '-i', video,
+                                '-frames:v', '1', '-vf', "scale='min(1280,iw)':-2", partial],
+                               stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL, timeout=20, check=False)
+            except (OSError, subprocess.SubprocessError):
+                return ''
+            if os.path.getsize(partial) > 0:
+                os.replace(partial, poster)
+                return poster
+        return ''
+    finally:
+        if os.path.exists(partial):
+            os.unlink(partial)
+
+
+def screen_key(model, serial):
+    model = str(model or '').strip()
+    serial = str(serial or '').strip()
+    return '' if not model and not serial else '%s/%s' % (model, serial)
+
+
+def list_monitors():
+    """Connected monitors left to right, keyed like WallpaperLayout.screenKeys.
+
+    [] when Hyprland cannot be asked (tests, a TTY); callers then keep the
+    connector names the preset carries.
+    """
+    try:
+        import subprocess
+        out = subprocess.check_output(['hyprctl', 'monitors', '-j'], timeout=2, stderr=subprocess.DEVNULL)
+        monitors = json.loads(out.decode('utf-8'))
+    except Exception:
+        return []
+    if not isinstance(monitors, list):
+        return []
+    rows = [m for m in monitors if isinstance(m, dict) and isinstance(m.get('name'), str) and m['name']]
+    rows.sort(key=lambda m: (m.get('x', 0) if isinstance(m.get('x'), (int, float)) else 0,
+                             m.get('y', 0) if isinstance(m.get('y'), (int, float)) else 0))
+    keys = [screen_key(m.get('model'), m.get('serial')) for m in rows]
+    # Twin monitors without serials cannot be told apart: connector only.
+    return [{'name': m['name'], 'key': key if key and keys.count(key) == 1 else ''}
+            for m, key in zip(rows, keys)]
+
+
+def portable_monitor_wallpapers(data, live=False, keep_keys=True):
+    """Make Edit Mode's per-screen wallpapers something a preset can carry.
+
+    Each picture a screen shows of its own gets an asset id (`screen0`, ...)
+    that names the copy bundled next to the preset, and its framings say
+    which picture they belong to (`wallpaper` = the shared one) instead of a
+    path on the author's disk. `screen` is the screen's place from the left,
+    the fallback when the importer's connectors are named differently.
+    Framings of pictures the preset does not ship are only history and drop.
+    """
+    background = data.get('background') if isinstance(data, dict) else None
+    if not isinstance(background, dict) or 'monitorWallpapers' not in background:
+        return
+    entries = background.get('monitorWallpapers')
+    if not isinstance(entries, list):
+        background['monitorWallpapers'] = []
+        return
+    shared = plain_path(background.get('wallpaperPath', ''))
+    order = {m['name']: i for i, m in enumerate(list_monitors())} if live else {}
+    assets = {}
+    portable = []
+    for entry in entries:
+        if not isinstance(entry, dict) or not isinstance(entry.get('monitor'), str) or not entry['monitor']:
+            continue
+        item = {'monitor': entry['monitor']}
+        key = entry.get('key')
+        if keep_keys and isinstance(key, str) and key:
+            item['key'] = key
+        screen = entry.get('screen')
+        if not isinstance(screen, int) or isinstance(screen, bool):
+            screen = None
+        screen = order.get(entry['monitor'], screen) if live else (screen if screen is not None
+                                                                   else order.get(entry['monitor']))
+        if screen is not None:
+            item['screen'] = screen
+        own = plain_path(entry.get('path', ''))
+        item['path'] = own
+        if own:
+            if own not in assets:
+                assets[own] = 'screen%d' % len(assets)
+            item['asset'] = assets[own]
+        framings = []
+        for framing in entry.get('framings') or []:
+            if not isinstance(framing, dict):
+                continue
+            path = plain_path(framing.get('path', ''))
+            if own and path == own:
+                asset = item['asset']
+            elif shared and path == shared:
+                asset = 'wallpaper'
+            else:
+                continue
+            framings.append(dict(framing, path=path, asset=asset))
+        item['framings'] = framings
+        if own or framings:
+            portable.append(item)
+    background['monitorWallpapers'] = portable
+
+
+def portable_photo_widgets(data):
+    """Make desktop photo widgets carry portable asset IDs (photo0, photo1, ...)."""
+    background = data.get('background')
+    if not isinstance(background, dict):
+        return
+
+    assets = {}
+
+    active = background.get('activeWidgets')
+    if isinstance(active, list):
+        for entry in active:
+            if isinstance(entry, dict) and isinstance(entry.get('asset'), str) and PHOTO_ASSET_RE.match(entry['asset']):
+                path = plain_path(entry.get('imagePath', ''))
+                if path:
+                    assets[path] = entry['asset']
+
+    widgets = background.get('widgets')
+    if isinstance(widgets, dict):
+        for conf in widgets.values():
+            if isinstance(conf, dict) and isinstance(conf.get('asset'), str) and PHOTO_ASSET_RE.match(conf['asset']):
+                path = plain_path(conf.get('imagePath', ''))
+                if path:
+                    assets[path] = conf['asset']
+
+    def next_asset(path):
+        if not path:
+            return None
+        if path not in assets:
+            existing_nums = set()
+            for a in assets.values():
+                m = re.match(r'^photo(\d+)$', a)
+                if m:
+                    existing_nums.add(int(m.group(1)))
+            idx = 0
+            while idx in existing_nums:
+                idx += 1
+            assets[path] = f'photo{idx}'
+        return assets[path]
+
+    if isinstance(active, list):
+        for entry in active:
+            if not isinstance(entry, dict):
+                continue
+            path = plain_path(entry.get('imagePath', ''))
+            if path:
+                entry['asset'] = next_asset(path)
+            elif 'asset' in entry:
+                entry.pop('asset', None)
+
+    if isinstance(widgets, dict):
+        for key, conf in widgets.items():
+            if not isinstance(conf, dict):
+                continue
+            path = plain_path(conf.get('imagePath', ''))
+            if path:
+                conf['asset'] = next_asset(path)
+            elif 'asset' in conf:
+                conf.pop('asset', None)
+
+
+def screen_asset_files(presets_dir, preset_name):
+    """{asset id: file} for the per-screen wallpapers bundled with a preset."""
+    found = {}
+    prefix = '%s_' % preset_name
+    for filepath in glob.glob(os.path.join(glob.escape(presets_dir), glob.escape(prefix) + 'screen*.*')):
+        stem, ext = os.path.splitext(os.path.basename(filepath)[len(prefix):])
+        if SCREEN_ASSET_RE.match(stem) and ext.lower() not in ('.json', '.zip'):
+            found[stem] = filepath
+    return found
+
+
+def bundle_screens(preset_path, presets_dir, preset_name):
+    """Copy every per-screen wallpaper a preset names next to it.
+
+    The sources are read before anything is removed: a preset re-saved after
+    being applied points straight at its own `{name}_screen<N>` copies, and
+    those may swap numbers.
+    """
+    with open(preset_path, 'r', encoding='utf-8') as f:
+        preset = json.load(f)
+    background = preset.get('background') if isinstance(preset, dict) else None
+    entries = background.get('monitorWallpapers') if isinstance(background, dict) else None
+    wanted = {}
+    for entry in entries if isinstance(entries, list) else []:
+        if not isinstance(entry, dict):
+            continue
+        asset = entry.get('asset')
+        source = plain_path(expand_val(entry.get('path', ''), user_home()))
+        if isinstance(asset, str) and SCREEN_ASSET_RE.match(asset) and source and os.path.isfile(source):
+            wanted.setdefault(asset, source)
+    with tempfile.TemporaryDirectory(dir=presets_dir, prefix='.screens-') as staging:
+        staged = {}
+        for asset, source in wanted.items():
+            target = os.path.join(staging, asset + os.path.splitext(source)[1].lower())
+            shutil.copy2(source, target)
+            staged[asset] = target
+        for old in screen_asset_files(presets_dir, preset_name).values():
+            os.remove(old)
+        for asset, target in staged.items():
+            os.replace(target, os.path.join(presets_dir, '%s_%s' % (preset_name, os.path.basename(target))))
+
+
+def photo_asset_files(presets_dir, preset_name):
+    """{asset id: file} for the photo widget images bundled with a preset."""
+    found = {}
+    if not presets_dir or not preset_name or not os.path.isdir(presets_dir):
+        return found
+    prefix = '%s_' % preset_name
+    pattern = os.path.join(glob.escape(presets_dir), glob.escape(prefix) + 'photo*.*')
+    for filepath in glob.glob(pattern):
+        stem, ext = os.path.splitext(os.path.basename(filepath)[len(prefix):])
+        if PHOTO_ASSET_RE.match(stem) and ext.lower() not in ('.json', '.zip'):
+            found[stem] = filepath
+    return found
+
+
+def bundle_photos(preset_path, presets_dir, preset_name):
+    """Copy every desktop photo widget image a preset names next to it."""
+    if not os.path.isfile(preset_path):
+        return
+    with open(preset_path, 'r', encoding='utf-8') as f:
+        preset = json.load(f)
+    background = preset.get('background') if isinstance(preset, dict) else None
+    if not isinstance(background, dict):
+        return
+
+    portable_photo_widgets(preset)
+    with open(preset_path, 'w', encoding='utf-8') as f:
+        json.dump(preset, f, indent=4)
+
+    wanted = {}
+
+    active = background.get('activeWidgets')
+    for entry in active if isinstance(active, list) else []:
+        if not isinstance(entry, dict):
+            continue
+        asset = entry.get('asset')
+        source = plain_path(expand_val(entry.get('imagePath', ''), user_home()))
+        if isinstance(asset, str) and PHOTO_ASSET_RE.match(asset) and source and os.path.isfile(source):
+            wanted.setdefault(asset, source)
+
+    widgets = background.get('widgets')
+    for conf in widgets.values() if isinstance(widgets, dict) else []:
+        if not isinstance(conf, dict):
+            continue
+        asset = conf.get('asset')
+        source = plain_path(expand_val(conf.get('imagePath', ''), user_home()))
+        if isinstance(asset, str) and PHOTO_ASSET_RE.match(asset) and source and os.path.isfile(source):
+            wanted.setdefault(asset, source)
+
+    os.makedirs(presets_dir, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=presets_dir, prefix='.photos-') as staging:
+        staged = {}
+        for asset, source in wanted.items():
+            ext = os.path.splitext(source)[1].lower() or '.png'
+            target = os.path.join(staging, asset + ext)
+            shutil.copy2(source, target)
+            staged[asset] = target
+        for old in photo_asset_files(presets_dir, preset_name).values():
+            try:
+                os.remove(old)
+            except OSError:
+                pass
+        for asset, target in staged.items():
+            dest = os.path.join(presets_dir, '%s_%s' % (preset_name, os.path.basename(target)))
+            os.replace(target, dest)
+
+
+def export_photos(config_path, dest_dir, presets_dir=None, preset_name=None):
+    """Ensure all photo widget images in config_path exist in dest_dir as {asset}.{ext}."""
+    if not os.path.isfile(config_path):
+        return
+    with open(config_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        return
+
+    portable_photo_widgets(data)
+    with open(config_path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=4)
+
+    background = data.get('background', {})
+    bundled = photo_asset_files(presets_dir, preset_name) if presets_dir and preset_name else {}
+
+    entries_to_check = []
+    active = background.get('activeWidgets')
+    if isinstance(active, list):
+        entries_to_check.extend([e for e in active if isinstance(e, dict)])
+    widgets = background.get('widgets')
+    if isinstance(widgets, dict):
+        entries_to_check.extend([c for c in widgets.values() if isinstance(c, dict)])
+
+    for entry in entries_to_check:
+        asset = entry.get('asset')
+        if not (isinstance(asset, str) and PHOTO_ASSET_RE.match(asset)):
+            continue
+
+        already_staged = glob.glob(os.path.join(glob.escape(dest_dir), glob.escape(asset) + '.*'))
+        if already_staged:
+            continue
+
+        source = bundled.get(asset)
+        if not source or not os.path.isfile(source):
+            source = plain_path(expand_val(entry.get('imagePath', ''), user_home()))
+
+        if source and os.path.isfile(source):
+            ext = os.path.splitext(source)[1].lower() or '.png'
+            target = os.path.join(dest_dir, asset + ext)
+            shutil.copy2(source, target)
+
+
+def resolve_photo_assets(merged, preset, current, presets_dir=None, preset_name=None):
+    """Point desktop photo widgets at the copies bundled next to the preset."""
+    files = photo_asset_files(presets_dir, preset_name) if presets_dir and preset_name else {}
+    background = merged.get('background')
+    if not isinstance(background, dict):
+        return
+
+    # 1. activeWidgets
+    active = background.get('activeWidgets')
+    if isinstance(active, list):
+        for entry in active:
+            if not isinstance(entry, dict):
+                continue
+            asset = entry.get('asset')
+            if isinstance(asset, str) and asset in files:
+                entry['imagePath'] = files[asset]
+            else:
+                raw_path = plain_path(expand_val(entry.get('imagePath', ''), user_home()))
+                if raw_path and os.path.isfile(raw_path):
+                    entry['imagePath'] = raw_path
+
+    # 2. widgets
+    widgets = background.get('widgets')
+    if isinstance(widgets, dict):
+        for conf in widgets.values():
+            if not isinstance(conf, dict):
+                continue
+            asset = conf.get('asset')
+            if isinstance(asset, str) and asset in files:
+                conf['imagePath'] = files[asset]
+            else:
+                raw_path = plain_path(expand_val(conf.get('imagePath', ''), user_home()))
+                if raw_path and os.path.isfile(raw_path):
+                    conf['imagePath'] = raw_path
+
+
+def apply_monitor_wallpapers(merged, preset, current, presets_dir=None, preset_name=None):
+    """Hand the preset's per-screen wallpapers to the importer's screens.
+
+    `monitorWallpapers` is machine-local and comes back from the current
+    config first; this then decides what each screen shows. Every screen
+    starts on the preset's shared wallpaper (a look is not applied while
+    one monitor keeps the old picture); a screen the preset gives its own
+    wallpaper is matched by monitor, then connector, then place from the
+    left. The importer's framings of other pictures are kept.
+    """
+    background = merged.get('background')
+    if not isinstance(background, dict):
+        return
+    current_bg = current.get('background') if isinstance(current, dict) else None
+    existing = current_bg.get('monitorWallpapers') if isinstance(current_bg, dict) else None
+    result = []
+    for entry in existing if isinstance(existing, list) else []:
+        if isinstance(entry, dict) and isinstance(entry.get('monitor'), str) and entry['monitor']:
+            item = {k: copy.deepcopy(v) for k, v in entry.items() if k not in ('asset', 'screen')}
+            item['path'] = ''
+            item['framings'] = [f for f in item.get('framings') or [] if isinstance(f, dict)]
+            result.append(item)
+
+    preset_bg = preset.get('background') if isinstance(preset, dict) else None
+    incoming = preset_bg.get('monitorWallpapers') if isinstance(preset_bg, dict) else None
+    incoming = [e for e in incoming if isinstance(e, dict) and isinstance(e.get('monitor'), str)
+                and e['monitor']] if isinstance(incoming, list) else []
+    files = screen_asset_files(presets_dir, preset_name) if presets_dir and preset_name else {}
+    shared = plain_path(background.get('wallpaperPath', ''))
+
+    def resolve(asset, path):
+        if asset == 'wallpaper':
+            return shared
+        if isinstance(asset, str) and asset in files:
+            return files[asset]
+        path = plain_path(path)
+        return path if path and os.path.isfile(path) else ''
+
+    monitors = list_monitors() if incoming else []
+    used = set()
+
+    def target_for(entry):
+        free = [m for m in monitors if m['name'] not in used]
+        key = entry.get('key') if isinstance(entry.get('key'), str) else ''
+        hit = next((m for m in free if key and m['key'] == key), None)
+        hit = hit or next((m for m in free if m['name'] == entry['monitor']), None)
+        screen = entry.get('screen')
+        if not hit and isinstance(screen, int) and not isinstance(screen, bool) and 0 <= screen < len(monitors):
+            hit = monitors[screen] if monitors[screen]['name'] not in used else None
+        if not hit and not monitors:
+            hit = {'name': entry['monitor'], 'key': key}
+        return hit
+
+    for entry in incoming:
+        target = target_for(entry)
+        if not target:
+            continue
+        used.add(target['name'])
+        own = resolve(entry.get('asset'), entry.get('path', '')) if entry.get('path') or entry.get('asset') else ''
+        if own == shared:
+            own = ''
+        framings = []
+        for framing in entry.get('framings') or []:
+            if not isinstance(framing, dict):
+                continue
+            path = resolve(framing.get('asset'), framing.get('path', ''))
+            if path:
+                framings.append({k: v for k, v in dict(framing, path=path).items() if k != 'asset'})
+        key = target.get('key') or ''
+        slot = next((e for e in result if key and e.get('key') == key), None) or next(
+            (e for e in result if e['monitor'] == target['name'] and (not e.get('key') or not key)), None)
+        if slot is None:
+            slot = {'monitor': target['name'], 'key': key, 'path': '', 'framings': []}
+            result.append(slot)
+        slot['monitor'] = target['name']
+        if key:
+            slot['key'] = key
+        slot['path'] = own
+        paths = {f['path'] for f in framings}
+        slot['framings'] = (framings + [f for f in slot['framings']
+                                        if plain_path(f.get('path', '')) not in paths])[:FRAMING_MEMORY]
+
+    # WallpaperLayout keeps no empty entries.
+    background['monitorWallpapers'] = [e for e in result if e.get('path') or e.get('framings')]
+
+
+def carry_video_frame_time(merged, preset, current):
+    """Keep the author's colour frame when the video is now the bundled copy.
+
+    videoFrameTimes is keyed by path, and applying points wallpaperPath at
+    `{name}.<ext>` in the presets folder, so the author's pick (and with it the
+    palette and poster) was lost. The importer's own picks for other videos
+    stay.
+    """
+    background = merged.get('background')
+    if not isinstance(background, dict):
+        return
+    resolved = background.get('wallpaperPath', '')
+    preset_bg = preset.get('background') if isinstance(preset.get('background'), dict) else {}
+    current_bg = current.get('background') if isinstance(current.get('background'), dict) else {}
+    original = preset_bg.get('wallpaperPath', '')
+    times = [t for t in current_bg.get('videoFrameTimes') or [] if isinstance(t, dict)]
+    if not is_video(resolved):
+        background['videoFrameTimes'] = times
+        return
+    seconds = video_frame_seconds(preset, [original, resolved])
+    times = [t for t in times if plain_path(t.get('path', '')) != plain_path(resolved)]
+    if seconds > 0:
+        times.append({'path': plain_path(resolved), 'seconds': seconds})
+    background['videoFrameTimes'] = times
+
 
 def reset_monitor_bindings(data):
     background = data.get('background')
@@ -617,7 +1270,7 @@ def normalize_active_widgets(data):
                 if 'lockY' in forked_lock:
                     entry['lockY'] = forked_lock['lockY']
 
-def sanitize_data(data, home_dir):
+def sanitize_data(data, home_dir, snapshot=False):
     data = remove_secrets_and_userdata(data)
 
     # Identity and paired hardware never travel with a preset. These are
@@ -644,6 +1297,16 @@ def sanitize_data(data, home_dir):
 
     # Monitor connector names are local to the source machine.
     reset_monitor_bindings(data)
+    # Per-screen wallpapers travel, matched to the importer's screens on
+    # apply. A monitor's model/serial stays on the author's machine.
+    portable_monitor_wallpapers(data, live=snapshot, keep_keys=snapshot)
+    # Desktop photo widgets travel as portable assets (photo0, photo1, ...)
+    portable_photo_widgets(data)
+    # Where switchwall put this machine's screen-sized copy of the video.
+    background = data.get('background')
+    if isinstance(background, dict):
+        background.pop('videoPlaybackSource', None)
+        background.pop('videoPlaybackPath', None)
 
     if 'background' in data and isinstance(data['background'], dict):
         if 'referenceResolution' not in data['background']:
@@ -652,7 +1315,23 @@ def sanitize_data(data, home_dir):
 
     return data
 
-def sanitize(input_path, output_path):
+def clamp_config_version(data):
+    """Cap a snapshot's schema version at the one this build understands.
+
+    config.json keeps whatever version last wrote it, and Config.qml never
+    migrates down: after running a build with a newer schema and going back,
+    the file still claims the newer one. A preset saved from it is shaped by
+    this build, so stamping it newer would have this very shell refuse it.
+    """
+    ours = current_config_version()
+    version = data.get('configVersion')
+    if not isinstance(ours, int) or not isinstance(version, int) or isinstance(version, bool):
+        return data
+    if version > ours:
+        data['configVersion'] = ours
+    return data
+
+def sanitize(input_path, output_path, snapshot=False):
     with open(input_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
 
@@ -660,10 +1339,17 @@ def sanitize(input_path, output_path):
     if home_dir.endswith('/'):
         home_dir = home_dir[:-1]
 
-    data = sanitize_data(data, home_dir)
+    data = sanitize_data(data, home_dir, snapshot=snapshot)
+    # Only a snapshot of the running config is clamped. An imported preset
+    # keeps the version its author's shell gave it, so a newer one is still
+    # refused.
+    if snapshot:
+        data = clamp_config_version(data)
 
-    with open(output_path, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=4)
+    # Written through a temp file: the presets list is re-read right after a
+    # save, and a half-written preset reads as malformed and drops out of the
+    # grid until the next refresh.
+    atomic_write_json(output_path, data)
 
 def expand_val(val, home_dir):
     if isinstance(val, dict):
@@ -675,82 +1361,6 @@ def expand_val(val, home_dir):
             return val.replace('$HOME', home_dir)
         return val
     return val
-
-def expand(input_path, output_path, presets_dir, preset_name):
-    with open(input_path, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-        
-    home_dir = os.environ.get('HOME', '')
-    if home_dir.endswith('/'):
-        home_dir = home_dir[:-1]
-        
-    data = expand_val(data, home_dir)
-    
-    # Check if background.wallpaperPath exists
-    bg = data.get('background', {})
-    if isinstance(bg, dict):
-        wall_path = bg.get('wallpaperPath', '')
-        if not wall_path or not os.path.exists(wall_path):
-            # Check for fallback file in presets_dir
-            fallback = find_wallpaper_fallback(presets_dir, preset_name)
-            if fallback:
-                bg['wallpaperPath'] = fallback
-                data['background'] = bg
-
-    # Check if userProfile.imagePath exists
-    profile = data.get('userProfile', {})
-    if isinstance(profile, dict):
-        profile_path = profile.get('imagePath', '')
-        if not profile_path or not os.path.exists(profile_path):
-            fallback_prof = find_profile_fallback(presets_dir, preset_name)
-            if fallback_prof:
-                profile['imagePath'] = fallback_prof
-                data['userProfile'] = profile
-
-    # Check sidebar.dashboardHeader.profileImagePath and sidebar.bannerImage
-    sb = data.get('sidebar', {})
-    if isinstance(sb, dict):
-        dash_hdr = sb.get('dashboardHeader', {})
-        if isinstance(dash_hdr, dict):
-            p_path = dash_hdr.get('profileImagePath', '')
-            if not p_path or not os.path.exists(p_path):
-                fallback_prof = find_profile_fallback(presets_dir, preset_name)
-                if fallback_prof:
-                    dash_hdr['profileImagePath'] = fallback_prof
-                    sb['dashboardHeader'] = dash_hdr
-
-        banner_path = sb.get('bannerImage', '')
-        if not banner_path or not os.path.exists(banner_path):
-            fallback_banner = find_banner_fallback(presets_dir, preset_name)
-            if fallback_banner:
-                sb['bannerImage'] = fallback_banner
-                data['sidebar'] = sb
-
-    # Preserve target user's existing dock apps and widgets when output config already exists
-    if os.path.exists(output_path):
-        try:
-            with open(output_path, 'r', encoding='utf-8') as f:
-                existing_config = json.load(f)
-            if isinstance(existing_config, dict) and isinstance(existing_config.get('dock'), dict):
-                if 'dock' not in data or not isinstance(data['dock'], dict):
-                    data['dock'] = {}
-                for key in DOCK_BLACKLIST_KEYS:
-                    if key in existing_config['dock']:
-                        data['dock'][key] = existing_config['dock'][key]
-            if isinstance(existing_config, dict) and isinstance(existing_config.get('search'), dict):
-                if 'search' not in data or not isinstance(data['search'], dict):
-                    data['search'] = {}
-                for key in list(data['search'].keys()):
-                    if key not in SEARCH_APPEARANCE_KEYS:
-                        del data['search'][key]
-                for key, val in existing_config['search'].items():
-                    if key not in SEARCH_APPEARANCE_KEYS:
-                        data['search'][key] = copy.deepcopy(val)
-        except Exception:
-            pass
-
-    with open(output_path, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=4)
 
 def merge(preset_path, config_path, out_path, presets_dir=None, preset_name=None):
     """Apply a preset onto an existing config without destroying what is local.
@@ -777,15 +1387,26 @@ def merge(preset_path, config_path, out_path, presets_dir=None, preset_name=None
             raise ValueError('existing config is not a JSON object')
 
     preset = expand_val(preset, user_home())
-    if isinstance(preset.get('search'), dict):
-        preset['search'] = {
-            sk: copy.deepcopy(sv)
-            for sk, sv in preset['search'].items()
-            if sk in SEARCH_APPEARANCE_KEYS and not is_sensitive_key(sk)
-        }
+    # The same pass a preset goes through on its way out, run on its way in.
+    # Presets written by this build are already clean, so this is a no-op for
+    # them; it is the hand-edited and pre-blacklist files that need it, and
+    # an apply is the last moment anything can still be dropped silently.
+    preset = remove_secrets_and_userdata(preset)
     merged = deep_merge(current, preset)
     restore_local_only(merged, current)
+    restore_local_preferences(merged, load_local_preferences(config_path))
     resolve_asset_paths(merged, current, presets_dir, preset_name)
+    apply_monitor_wallpapers(merged, preset, current, presets_dir, preset_name)
+    resolve_photo_assets(merged, preset, current, presets_dir, preset_name)
+    carry_video_frame_time(merged, preset, current)
+    # A screen-sized copy of the importer's previous video, not of this one;
+    # switchwall publishes the right one when it switches.
+    if isinstance(merged.get('background'), dict) and isinstance(current.get('background'), dict):
+        for key in ('videoPlaybackSource', 'videoPlaybackPath'):
+            if key in current['background']:
+                merged['background'][key] = current['background'][key]
+            else:
+                merged['background'].pop(key, None)
 
     # migrateRaw() in Config.qml only runs when the file still says which
     # version it was written for, so the preset's version has to survive the
@@ -962,7 +1583,10 @@ def find_wallpaper_fallback(presets_dir, preset_name):
         ext = os.path.splitext(filepath)[1].lower()
         if ext not in ('.json', '.zip'):
             base = os.path.basename(filepath)
-            if not base.startswith(f"{preset_name}_profile.") and not base.startswith(f"{preset_name}_banner."):
+            if (not base.startswith(f"{preset_name}_profile.") and
+                not base.startswith(f"{preset_name}_banner.") and
+                not base.startswith(f"{preset_name}_photo") and
+                not base.startswith(f"{preset_name}_screen")):
                 return filepath
     return None
 
@@ -1007,18 +1631,34 @@ def list_presets(presets_dir):
             if wall_path:
                 wall_path = wall_path.replace('$HOME', home_dir)
                 
+        original = wall_path
         if not wall_path or not os.path.exists(wall_path):
             fallback = find_wallpaper_fallback(presets_dir, preset_name)
-            if fallback:
-                wall_path = fallback
-                
+            wall_path = fallback if fallback else ''
+
+        # The cards are Images: a video wallpaper shows its poster, taken at
+        # the moment the author picked for the colours.
+        video = is_video(wall_path)
+        if video:
+            wall_path = video_poster(wall_path, video_frame_seconds(data, [original, wall_path]))
+        screens = bg.get('monitorWallpapers') if isinstance(bg, dict) else None
+        screens = len([e for e in screens if isinstance(e, dict) and e.get('asset')]) \
+            if isinstance(screens, list) else 0
+
         # 0, never null: a ListModel fixes its roles on the first row, and a
         # null there would type the role as something no other row fits.
         version = data.get('configVersion')
         if not isinstance(version, int) or isinstance(version, bool):
             version = 0
+        # Seconds since the epoch the preset was last saved: the "Newest"
+        # order of Edit Mode's presets.
+        try:
+            modified = int(os.path.getmtime(json_path))
+        except OSError:
+            modified = 0
         print(json.dumps({"name": preset_name, "wallpaper": wall_path,
-                          "configVersion": version}))
+                          "configVersion": version, "video": video,
+                          "screenWallpapers": screens, "modified": modified}))
 
 def main():
     if len(sys.argv) < 2:
@@ -1029,10 +1669,10 @@ def main():
         if len(sys.argv) < 4:
             sys.exit(1)
         sanitize(sys.argv[2], sys.argv[3])
-    elif action == 'expand':
-        if len(sys.argv) < 6:
+    elif action == 'snapshot':
+        if len(sys.argv) < 4:
             sys.exit(1)
-        expand(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5])
+        sanitize(sys.argv[2], sys.argv[3], snapshot=True)
     elif action == 'merge':
         if len(sys.argv) < 5:
             sys.exit(1)
@@ -1058,6 +1698,20 @@ def main():
         if len(sys.argv) < 3:
             sys.exit(1)
         print(json.dumps(compatibility(preset_config_version(sys.argv[2]))))
+    elif action == 'bundle-screens':
+        if len(sys.argv) < 5:
+            sys.exit(1)
+        bundle_screens(sys.argv[2], sys.argv[3], sys.argv[4])
+    elif action == 'bundle-photos':
+        if len(sys.argv) < 5:
+            sys.exit(1)
+        bundle_photos(sys.argv[2], sys.argv[3], sys.argv[4])
+    elif action == 'export-photos':
+        if len(sys.argv) < 4:
+            sys.exit(1)
+        presets_dir = sys.argv[4] if len(sys.argv) > 4 else None
+        preset_name = sys.argv[5] if len(sys.argv) > 5 else None
+        export_photos(sys.argv[2], sys.argv[3], presets_dir, preset_name)
     elif action == 'list':
         if len(sys.argv) < 3:
             sys.exit(1)

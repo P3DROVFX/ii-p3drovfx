@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
-import QtQuick.Dialogs
+import Quickshell.Io
 import Qt5Compat.GraphicalEffects
 import Quickshell
 import qs.services
@@ -103,20 +103,14 @@ Item {
         colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colOnPrimary, 0.85)
         colRipple: ColorUtils.transparentize(Appearance.colors.colOnPrimary, 0.5)
         onClicked: {
-            fileDialog.currentFolder = bannerSelectorRoot.wallpaperFolder;
-            fileDialog.open();
+            fileDialog.pick();
         }
     }
 
-    FileDialog {
+    BannerImagePicker {
         id: fileDialog
-        title: bannerSelectorRoot.text !== "" ? bannerSelectorRoot.text : "Select banner image"
+        title: bannerSelectorRoot.text !== "" ? bannerSelectorRoot.text : Translation.tr("Select banner image")
         nameFilters: bannerSelectorRoot.nameFilters
-        fileMode: FileDialog.OpenFile
-        onAccepted: {
-            const path = selectedFile.toString().replace(/^file:\/\//, "");
-            Config.options.sidebar.bannerImage = path;
-        }
     }
 
     Rectangle {

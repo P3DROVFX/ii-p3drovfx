@@ -57,7 +57,7 @@ AbstractBackgroundWidget {
     readonly property string artistName: activeTrack ? activeTrack.artist : Translation.tr("Oasis")
 
     readonly property real position: player ? (player.position ?? 0) : 163
-    readonly property real length: player ? (player.length ?? 0) : 258
+    readonly property real length: player ? MprisController.trackLengthOf(player) : 258
 
     function formatTime(seconds) {
         if (isNaN(seconds) || seconds < 0) return "0:00";
@@ -67,7 +67,7 @@ AbstractBackgroundWidget {
     }
 
     Timer {
-        running: root.isPlaying
+        running: root.isPlaying && root.live
         interval: 1000
         repeat: true
         onTriggered: {
@@ -75,51 +75,7 @@ AbstractBackgroundWidget {
         }
     }
 
-    // Direct resolution of artSource (local vs http/https)
-    readonly property bool isLocalArt: root.rawArtUrl.startsWith("file://") || root.rawArtUrl.startsWith("/")
-    property string artDownloadLocation: Directories.coverArt
-    property string artFileName: Qt.md5(root.rawArtUrl)
-    property string artFilePath: `${artDownloadLocation}/${artFileName}`
-    property bool downloaded: false
-
-    readonly property string effectiveArtSource: {
-        if (!root.rawArtUrl || root.rawArtUrl === "") return "";
-        if (root.isLocalArt)
-            return root.rawArtUrl;
-        return root.downloaded ? Qt.resolvedUrl(root.artFilePath) : "";
-    }
-
-    function refreshArt() {
-        if (!root.rawArtUrl || root.rawArtUrl === "") {
-            root.downloaded = false;
-            return;
-        }
-
-        if (root.isLocalArt) {
-            root.downloaded = true;
-            return;
-        }
-
-        coverArtDownloader.targetFile = root.rawArtUrl;
-        coverArtDownloader.artFilePath = root.artFilePath;
-        coverArtDownloader.artTempPath = root.artFilePath + ".tmp";
-        root.downloaded = false;
-        coverArtDownloader.running = true;
-    }
-
-    onArtFilePathChanged: root.refreshArt()
-    Component.onCompleted: root.refreshArt()
-
-    Process {
-        id: coverArtDownloader
-        property string targetFile: root.rawArtUrl
-        property string artFilePath: root.artFilePath
-        property string artTempPath: root.artFilePath + ".tmp"
-        command: ["bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
-        onExited: (exitCode, exitStatus) => {
-            root.downloaded = exitCode === 0;
-        }
-    }
+    readonly property string effectiveArtSource: CoverArt.source(root.rawArtUrl)
 
     StyledRectangularShadow {
         id: bgShadow

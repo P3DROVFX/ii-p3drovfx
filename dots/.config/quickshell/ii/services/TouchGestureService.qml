@@ -251,12 +251,34 @@ Singleton {
     readonly property RustHelperBuild helperBuild: RustHelperBuild {
         label: "TouchGestures"
         sourceDir: Directories.scriptPath + "/touchGestures/touch_gestures_src"
-        binaryPath: Directories.scriptPath + "/touchGestures/touch_gestures"
         crateName: "touch_gestures"
 
         // `helperProcess` is bound to `enabled`, which the check below feeds, so
         // re-checking is the whole handover — the daemon starts without a restart.
-        onFinished: ok => root.checkBinary()
+        onFinished: ok => {
+            root.checkBinary();
+            // A rebuild over a running daemon leaves it on the old inode, so the fixes
+            // just compiled would not arrive until the next login. Cycling the guard
+            // drops it and spawns the binary that was installed a moment ago.
+            if (ok)
+                root.restartHelper();
+        }
+    }
+
+    /// Held true for one tick to make the daemon stop and start again.
+    property bool _restarting: false
+
+    function restartHelper() {
+        root._restarting = true;
+        Qt.callLater(() => root._restarting = false);
+    }
+
+    /// "ok", "stale", "unknown" or "missing" — whether the built daemon is still the
+    /// sources beside it. See RustHelperBuild.state.
+    readonly property string helperState: root.helperBuild.state
+    readonly property bool helperOutdated: root.binaryExists && root.helperBuild.outdated
+    function refreshHelperState() {
+        root.helperBuild.refreshState();
     }
 
     readonly property bool building: root.helperBuild.building
@@ -276,7 +298,7 @@ Singleton {
     Process {
         id: helperProcess
 
-        running: root.enabled && !GlobalStates.screenLocked && Directories.scriptPath.length > 0
+        running: root.enabled && !root._restarting && !GlobalStates.screenLocked && Directories.scriptPath.length > 0
 
         // pdeath: the gesture daemon runs for the whole session; without the
         // parent-death signal a SIGKILL'd/crashed shell left it reparented to
@@ -961,13 +983,19 @@ Singleton {
         primaryTravel = travel.primary;
         offAxisTravel = travel.offAxis;
 
-        if (primaryTravel < -8) {
+        // A family drag follows the finger both ways: pulling the shade down and then back up
+        // past where it started, or wandering sideways on the way, is the finger saying
+        // "less", not a different gesture. The release decides; cancelling here snapped the
+        // surface back under a finger that was still on it.
+        var followsFinger = TouchGestureDragRegistry.claims(activeOrigin);
+
+        if (!followsFinger && primaryTravel < -8) {
             cancelActiveGesture("reverse-direction");
             return;
         }
 
         // Direction lock check after 16px
-        if (primaryTravel > 16) {
+        if (!followsFinger && primaryTravel > 16) {
             var angle = Math.atan2(travel.offAxis, Math.max(travel.primary, 0.001)) * 180 / Math.PI;
             var tol = (root.opts && root.opts.directionTolerance) ? root.opts.directionTolerance : 35;
             if (angle > tol) {

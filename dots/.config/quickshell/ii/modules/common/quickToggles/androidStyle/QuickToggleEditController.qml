@@ -12,6 +12,16 @@ Item {
     property var config: null
     property list<var> persistedPages: []
     property int columns: 4
+    property real cellWidth: 98
+    property real cellHeight: 56
+    property real spacing: 6
+    // A grid with a fixed height (the island dashboard) refuses any edit that would pack
+    // into more rows than it has. Negative means unbounded, which is the sidebar.
+    property int maxRows: -1
+    // A bounded host may enlarge its grid instead of refusing an addition that does not
+    // fit: called with the pages the addition would produce, it returns true when it made
+    // room (the new bounds arrive through `columns`/`maxRows` before the retry).
+    property var growToFit: null
 
     property bool active: false
     property string mode: "none"
@@ -24,6 +34,7 @@ Item {
     property list<var> originalPages: []
     property int candidateSizeW: 1
     property int candidateSizeH: 1
+    property real resizePreviewBottom: 0
 
     // Drag stability. Rounding the dragged rectangle to the nearest cell used
     // to flip on sub-pixel jitter, so a pointer parked on the seam between two
@@ -58,6 +69,7 @@ Item {
         targetIndex = -1;
         candidateSizeW = 1;
         candidateSizeH = 1;
+        resizePreviewBottom = 0;
         draftPages = [];
         originalPages = [];
         QuickToggleLayout.resetDragCellState(dragCellState);
@@ -168,7 +180,7 @@ Item {
             for (var ci = 0; ci < page.length; ci++) {
                 if (page[ci] && compactTypes.indexOf(page[ci].type) !== -1) {
                     rowHeights = QuickToggleLayout.rowPixelHeights(
-                        QuickToggleLayout.pack(page, root.columns),
+                        QuickToggleLayout.pack(page, root.columns, root.cellWidth, root.cellHeight, root.spacing),
                         cellHeight, spacing, compactHeight, compactTypes);
                     break;
                 }
@@ -203,13 +215,15 @@ Item {
     }
 
     function applyDragCell(pageIndex, page, row, column) {
-        var packed = QuickToggleLayout.pack(page, root.columns);
+        var packed = QuickToggleLayout.pack(page, root.columns, root.cellWidth, root.cellHeight, root.spacing);
         return previewReorder(pageIndex, QuickToggleLayout.findInsertionIndex(
             packed.items,
             row,
             column,
             draggedId,
-            root.columns
+            root.columns,
+            root.cellWidth,
+            root.spacing
         ));
     }
 
@@ -277,9 +291,10 @@ Item {
         return true;
     }
 
-    function validatePages(pages) {
+    function validatePages(pages, overrideMaxRows) {
         if (!Array.isArray(pages) || pages.length < 1)
             return false;
+        var effectiveMaxRows = (overrideMaxRows !== undefined && overrideMaxRows !== null) ? overrideMaxRows : root.maxRows;
         var ids = Object.create(null);
         for (var pageIndex = 0; pageIndex < pages.length; pageIndex++) {
             var page = pages[pageIndex];
@@ -294,6 +309,11 @@ Item {
                 ids[data.id] = true;
                 if (!QuickToggleCatalog.isSizeAllowed(data.type, data.sizeW, data.sizeH, root.columns)
                         && QuickToggleCatalog.hasType(data.type))
+                    return false;
+            }
+            if (effectiveMaxRows > 0) {
+                var packed = QuickToggleLayout.pack(page, root.columns, root.cellWidth, root.cellHeight, root.spacing);
+                if (packed.rowsUsed > effectiveMaxRows)
                     return false;
             }
         }
@@ -314,8 +334,20 @@ Item {
     function persist(pages) {
         var normalized = normalizedPages(pages);
         if (!validatePages(normalized)) {
-            rejected("refusing to persist invalid quick-toggle pages");
-            return false;
+            var grew = false;
+            if (typeof root.growToFit === "function") {
+                grew = Boolean(root.growToFit(normalized));
+                if (grew) {
+                    normalized = normalizedPages(pages);
+                }
+            }
+            if (!grew && !validatePages(normalized)) {
+                rejected("refusing to persist invalid quick-toggle pages");
+                return false;
+            } else if (grew && !validatePages(normalized, -1)) {
+                rejected("refusing to persist invalid quick-toggle pages");
+                return false;
+            }
         }
         var currentSource = root.config && root.config.pages !== undefined ? root.config.pages : root.persistedPages;
         var current = normalizedPages(currentSource);
@@ -387,18 +419,34 @@ Item {
     function addToggle(type, pageIndex) {
         if (!QuickToggleCatalog.hasType(type) || pageIndex < 0)
             return false;
-        return updateOrPersist(function(pages) {
+        var mutator = function(pages) {
             if (pageIndex >= pages.length)
                 return;
             if (findItemInPages(pages, type).page >= 0)
                 return;
             pages[pageIndex].push(QuickToggleCatalog.item(type, type, undefined, undefined, root.columns));
-        });
+        };
+        if (updateOrPersist(mutator))
+            return true;
+        if (active || typeof root.growToFit !== "function")
+            return false;
+        var source = root.config && root.config.pages !== undefined ? root.config.pages : root.persistedPages;
+        var candidate = clonePages(source);
+        mutator(candidate);
+        if (!root.growToFit(candidate))
+            return false;
+        return updateOrPersist(mutator);
     }
 
     function removeToggle(id) {
         if (typeof id !== "string" || id.length === 0)
             return false;
+        var location = findItemInPages(active ? draftPages : (root.config && root.config.pages !== undefined ? root.config.pages : root.persistedPages), id);
+        if (location.page >= 0) {
+            var entry = (active ? draftPages : (root.config && root.config.pages !== undefined ? root.config.pages : root.persistedPages))[location.page][location.index];
+            if (entry && QuickToggleCatalog.isPermanent(entry.type))
+                return false;
+        }
         return updateOrPersist(function(pages) {
             var location = findItemInPages(pages, id);
             if (location.page >= 0)

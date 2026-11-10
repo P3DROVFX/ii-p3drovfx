@@ -37,7 +37,7 @@ AbstractBackgroundWidget {
     readonly property color subTextColor: WidgetColorScheme.subtextColorOnBg
     readonly property color accentColor: WidgetColorScheme.accentColor
 
-    visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "center" || root.lockBehavior === "lockOnly"
+    visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "custom" || root.lockBehavior === "center" || root.lockBehavior === "lockOnly"
     opacity: {
         if (root.lockBehavior === "lockOnly") return GlobalStates.screenLocked ? 1 : 0;
         if (GlobalStates.screenLocked && !visibleWhenLocked) return 0;

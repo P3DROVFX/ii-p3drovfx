@@ -16,6 +16,10 @@ Item {
     required property real baseScale
     required property bool lockAnimationActive
 
+    // Set while the overview-style lock animation owns the look: the effects then
+    // belong to the backing wallpaper, and the zooming plane stays clean.
+    property bool suppressed: false
+
     property bool wallpaperIsVideo: false
     // The blur radius is animated independently from the layer opacity. This keeps the lock
     // entrance progressive even though the Gaussian effect is created lazily.
@@ -25,6 +29,8 @@ Item {
     readonly property real sourceHeight: sourceItem ? sourceItem.height : 0
     readonly property real configuredBlurRadius: Math.max(0, Math.min(50, Config.options.lock.blur.radius ?? 40))
 
+    readonly property bool blurWanted: GlobalStates.lockLookActive || GlobalStates.scratchpadEmptyOverlayActive
+
     function startBlurEntrance() {
         blurInAnimation.stop();
         blurOutAnimation.stop();
@@ -32,10 +38,20 @@ Item {
         blurInAnimation.start();
     }
 
-    // If the shell locks before the wallpaper has decoded, defer the entrance clock until the
+    function syncBlurWanted() {
+        if (lockBlurRoot.blurWanted) {
+            lockBlurRoot.startBlurEntrance();
+        } else {
+            blurInAnimation.stop();
+            blurOutAnimation.stop();
+            blurOutAnimation.start();
+        }
+    }
+
+    // If the shell locks or scratchpad overlay opens before the wallpaper has decoded, defer the entrance clock until the
     // source is actually available; otherwise the blur would finish invisibly and appear at full
     // strength in one frame when sourceReady eventually becomes true.
-    onSourceReadyChanged: if (sourceReady && GlobalStates.lockLookActive)
+    onSourceReadyChanged: if (sourceReady && lockBlurRoot.blurWanted)
         startBlurEntrance();
 
     SequentialAnimation {
@@ -62,18 +78,15 @@ Item {
     Connections {
         target: GlobalStates
         function onLockLookActiveChanged() {
-            if (GlobalStates.lockLookActive) {
-                lockBlurRoot.startBlurEntrance();
-            } else {
-                blurInAnimation.stop();
-                blurOutAnimation.stop();
-                blurOutAnimation.start();
-            }
+            lockBlurRoot.syncBlurWanted();
+        }
+        function onScratchpadEmptyOverlayActiveChanged() {
+            lockBlurRoot.syncBlurWanted();
         }
     }
 
     Component.onCompleted: {
-        if (GlobalStates.lockLookActive && sourceReady)
+        if (lockBlurRoot.blurWanted && sourceReady)
             startBlurEntrance();
     }
 
@@ -99,14 +112,15 @@ Item {
 
     Loader {
         id: blurLoader
-        active: Config.options.lock.blur.enable && lockBlurRoot.sourceReady && !lockBlurRoot.reloadRequested
-            && (GlobalStates.lockLookActive || opacityAnim.running) && !lockBlurRoot.wallpaperIsVideo
+        active: (Config.options.lock.blur.enable || GlobalStates.scratchpadEmptyOverlayActive) && lockBlurRoot.sourceReady && !lockBlurRoot.reloadRequested
+            && (lockBlurRoot.blurWanted || opacityAnim.running) && !lockBlurRoot.wallpaperIsVideo
+            && !lockBlurRoot.suppressed
         anchors.fill: parent
-        opacity: GlobalStates.lockLookActive ? 1.0 : 0.0
+        opacity: lockBlurRoot.blurWanted ? 1.0 : 0.0
         Behavior on opacity {
             SequentialAnimation {
                 id: opacityAnim
-                PauseAnimation { duration: GlobalStates.lockLookActive ? Math.round(150 * Appearance.animMultiplier) : 0 }
+                PauseAnimation { duration: lockBlurRoot.blurWanted ? Math.round(150 * Appearance.animMultiplier) : 0 }
                 NumberAnimation {
                     duration: Math.round(350 * Appearance.animMultiplier)
                     easing.type: Easing.OutCubic

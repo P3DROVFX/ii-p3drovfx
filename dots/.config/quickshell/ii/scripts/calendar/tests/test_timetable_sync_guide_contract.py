@@ -14,7 +14,7 @@ TIMETABLE = ROOT / "modules" / "ii" / "cheatsheet" / "timetable"
 class TimetableSyncGuideContractTests(unittest.TestCase):
     def test_google_calendar_setup_is_explained_in_both_timetable_entry_points(self) -> None:
         guide = (ROOT / "modules" / "common" / "widgets" / "GoogleCalendarSetupGuide.qml").read_text(encoding="utf-8")
-        settings = (ROOT / "modules" / "settings" / "configs" / "widgets" / "TimetableConfig.qml").read_text(encoding="utf-8")
+        settings = (ROOT / "modules" / "ii" / "cheatsheet" / "settings" / "TimetableSettings.qml").read_text(encoding="utf-8")
         sidebar = (TIMETABLE / "EventSidebar.qml").read_text(encoding="utf-8")
 
         self.assertIn("Google Calendar ↔ vdirsyncer ↔ khal ↔ Timetable", guide)

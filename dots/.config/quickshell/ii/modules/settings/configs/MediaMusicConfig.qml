@@ -25,15 +25,7 @@ Item {
             icon: "album"
             title: Translation.tr("Media Integrations")
 
-            MaterialTextArea {
-                Layout.fillWidth: true
-                placeholderText: Translation.tr("Prioritized player (e.g. spotify)")
-                text: Config.options.media.priorityPlayer
-                wrapMode: TextEdit.NoWrap
-                onTextChanged: {
-                    Config.options.media.priorityPlayer = text;
-                }
-            }
+            MediaPlayerPriorityPicker {}
 
             ConfigSwitch {
                 buttonIcon: "filter_list"
@@ -43,7 +35,7 @@ Item {
                     Config.options.media.filterDuplicatePlayers = checked;
                 }
                 StyledToolTip {
-                    text: Translation.tr("Attempt to remove dupes (the aggregator playerctl one and browsers' native ones when there's plasma browser integration)")
+                    text: Translation.tr("Hide duplicate and empty players: the playerctld aggregator, players with no track and no controls, and native browser players repeating a Plasma Browser Integration one. Electron apps register as \"chromium\" but are only hidden when they repeat it.")
                 }
             }
 
@@ -56,6 +48,16 @@ Item {
                 }
                 StyledToolTip {
                     text: Translation.tr("Extract dominant colors from album art to theme media controls (buttons, text, progress bar)")
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "blur_on"
+                text: Translation.tr("Album art blur animations")
+                checked: Config.options.media.albumArtBlurAnimations
+                onCheckedChanged: Config.options.media.albumArtBlurAnimations = checked
+                StyledToolTip {
+                    text: Translation.tr("Animate album art blur when pausing and blur/zoom when changing tracks in quick toggles, Android media popups and the Android desktop media widget.")
                 }
             }
 
@@ -78,7 +80,7 @@ Item {
                     Config.options.lyricsService.enable = checked;
                 }
                 StyledToolTip {
-                    text: Translation.tr("Toggle lyrics service. Click button text to configure Genius, LrcLib, and YouTube Music providers.")
+                    text: Translation.tr("Toggle lyrics service. Click button text to configure Genius, LrcLib, BetterLyrics, and YouTube Music providers.")
                 }
             }
         }

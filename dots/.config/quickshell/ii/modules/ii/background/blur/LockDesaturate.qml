@@ -14,20 +14,28 @@ Item {
     required property real baseScale
     required property bool lockAnimationActive
 
+    // Set while the overview-style lock animation owns the look: the effects then
+    // belong to the backing wallpaper, and the zooming plane stays clean.
+    property bool suppressed: false
+
     readonly property real targetSaturation: -Config.options.lock.desaturate.amount
-    // Keep the effect mounted just long enough for the unlock desaturation
-    // animation to finish. Referencing Loader.status/item from Loader.active
-    // creates a self-dependency in Qt's Loader implementation.
-    property bool keepLoadedForExit: false
+    // Keep the effect mounted while the lock look is on, and just long enough after it goes
+    // off for the unlock desaturation animation to finish. Only the handlers below write this:
+    // reading Loader.status/item from Loader.active is a self-dependency in Qt's Loader (a
+    // binding loop on every lock/unlock), and a binding on lockLookActive would race the
+    // Connections handler for the same signal and unload the effect before the hold is set.
+    property bool holdLoaded: false
+
+    Component.onCompleted: holdLoaded = GlobalStates.lockLookActive
 
     Connections {
         target: GlobalStates
         function onLockLookActiveChanged() {
             if (GlobalStates.lockLookActive) {
                 unlockReleaseTimer.stop();
+                lockDesatRoot.holdLoaded = true;
                 return;
             }
-            lockDesatRoot.keepLoadedForExit = true;
             unlockReleaseTimer.restart();
         }
     }
@@ -36,13 +44,13 @@ Item {
         id: unlockReleaseTimer
         interval: Math.round(600 * Appearance.animMultiplier)
         repeat: false
-        onTriggered: lockDesatRoot.keepLoadedForExit = false
+        onTriggered: lockDesatRoot.holdLoaded = false
     }
 
     Loader {
         id: desatLoader
-        active: Config.options.lock.desaturate.enable && lockDesatRoot.sourceReady
-            && (GlobalStates.lockLookActive || (desatLoader.status === Loader.Ready && desatLoader.item && desatLoader.item.saturation !== 0.0))
+        active: Config.options.lock.desaturate.enable && lockDesatRoot.sourceReady && lockDesatRoot.holdLoaded
+            && !lockDesatRoot.suppressed
         anchors.fill: parent
         sourceComponent: MultiEffect {
             source: lockDesatRoot.sourceItem

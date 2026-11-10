@@ -44,7 +44,10 @@ Singleton {
     signal loginRequired(string url)
     signal errorOccurred(string message)
     signal peerPingFinished(string peer, bool success, string result)
-    readonly property string envPath: Directories.home.toString().replace(/^file:\/\//, "") + "/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    // The usual FHS dirs first, then the inherited PATH: on NixOS (and Guix) the CLIs live
+    // only in profile dirs such as /run/current-system/sw/bin, so the FHS list alone
+    // can't find them and the service reported itself unavailable.
+    readonly property string envPath: Directories.home.toString().replace(/^file:\/\//, "") + "/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" + (Quickshell.env("PATH") ? ":" + Quickshell.env("PATH") : "")
     property var operationQueue: []
     property var currentOperation: null
     property bool refreshQueued: false

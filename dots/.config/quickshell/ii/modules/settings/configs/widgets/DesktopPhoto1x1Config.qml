@@ -1,7 +1,5 @@
 import QtQuick
 import QtQuick.Layouts
-import Quickshell
-import Quickshell.Io
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -12,18 +10,6 @@ ContentPage {
 
     signal goBack
 
-    Process {
-        id: pickImageProc
-        command: ["bash", "-c", "if command -v kdialog &> /dev/null; then FILE=$(kdialog --getopenfilename \"$HOME\" \"*.png *.jpg *.jpeg *.gif *.webp *.bmp *.svg *.PNG *.JPG *.JPEG *.GIF *.WEBP *.BMP *.SVG\" 2>/dev/null); elif command -v zenity &> /dev/null; then FILE=$(zenity --file-selection --file-filter=\"Images | *.png *.jpg *.jpeg *.gif *.webp *.bmp *.svg *.PNG *.JPG *.JPEG *.GIF *.WEBP *.BMP *.SVG\" 2>/dev/null); fi; if [ -n \"$FILE\" ] && [ -f \"$FILE\" ]; then echo \"$FILE\"; fi"]
-        stdout: SplitParser {
-            onRead: data => {
-                let path = data.trim();
-                if (path.length > 0) {
-                    Config.options.background.widgets.photo_1x1.imagePath = path;
-                }
-            }
-        }
-    }
 
     RowLayout {
         spacing: 12
@@ -85,16 +71,14 @@ ContentPage {
                 Layout.fillWidth: true
                 materialIcon: "folder_open"
                 mainText: Translation.tr("Choose Image")
-                onClicked: {
-                    pickImageProc.running = false;
-                    pickImageProc.running = true;
-                }
+                enabled: !WidgetPhotoPicker.picking
+                onClicked: WidgetPhotoPicker.pick("photo_1x1")
             }
 
             StyledText {
                 Layout.fillWidth: true
-                visible: Config.options.background.widgets.photo_1x1.imagePath && Config.options.background.widgets.photo_1x1.imagePath !== ""
-                text: Translation.tr("Current image: %1").arg(Config.options.background.widgets.photo_1x1.imagePath ?? "")
+                visible: WidgetPhotoPicker.currentPath("photo_1x1") !== ""
+                text: Translation.tr("Current image: %1").arg(WidgetPhotoPicker.currentPath("photo_1x1"))
                 font.pixelSize: Appearance.font.pixelSize.small
                 color: Appearance.colors.colOnSurfaceVariant
                 wrapMode: Text.Wrap
@@ -102,12 +86,10 @@ ContentPage {
 
             RippleButtonWithIcon {
                 Layout.fillWidth: true
-                visible: Config.options.background.widgets.photo_1x1.imagePath && Config.options.background.widgets.photo_1x1.imagePath !== ""
+                visible: WidgetPhotoPicker.currentPath("photo_1x1") !== ""
                 materialIcon: "delete"
                 mainText: Translation.tr("Remove Custom Image")
-                onClicked: {
-                    Config.options.background.widgets.photo_1x1.imagePath = "";
-                }
+                onClicked: WidgetPhotoPicker.clear("photo_1x1")
             }
 
             // ── Material Shape Selection ─────────────────────────────────────

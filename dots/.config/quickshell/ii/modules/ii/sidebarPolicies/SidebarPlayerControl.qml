@@ -20,46 +20,8 @@ Item {
         return Mpris.players.values[playerSelector.currentIndex] ?? MprisController.activePlayer ?? Mpris.players.values[0];
     }
     property string artUrl: (player?.trackArtUrl && player.trackArtUrl !== "") ? player.trackArtUrl : (player === MprisController.activePlayer ? MprisController.artUrl : "")
-    property bool isLocalArt: (typeof artUrl === "string") && (artUrl.startsWith("file://") || artUrl.startsWith("/"))
-    property string artDownloadLocation: Directories.coverArt
-    property string artFileName: (artUrl && artUrl !== "" && !isLocalArt) ? Qt.md5(artUrl) : ""
-    property string artFilePath: artFileName !== "" ? `${artDownloadLocation}/${artFileName}` : ""
-    property bool downloaded: false
-    property string displayedArtFilePath: ""
-
-    function updateArt() {
-        if (!root.artUrl || root.artUrl === "") {
-            root.displayedArtFilePath = "";
-            root.downloaded = false;
-            return;
-        }
-        if (root.isLocalArt) {
-            root.displayedArtFilePath = root.artUrl.startsWith("/") ? ("file://" + root.artUrl) : root.artUrl;
-            root.downloaded = true;
-            return;
-        }
-        coverArtDownloader.targetFile = root.artUrl;
-        coverArtDownloader.artFilePath = root.artFilePath;
-        root.downloaded = false;
-        coverArtDownloader.running = true;
-    }
-
-    onArtUrlChanged: updateArt()
-    onArtFilePathChanged: updateArt()
-    Component.onCompleted: updateArt()
-
-    Process {
-        id: coverArtDownloader
-        property string targetFile: root.artUrl
-        property string artFilePath: root.artFilePath
-        command: ["bash", "-c", `mkdir -p '${root.artDownloadLocation}' && ( [ -f '${artFilePath}' ] || curl -4 -sSL '${targetFile}' -o '${artFilePath}' )`]
-        onExited: (exitCode, exitStatus) => {
-            if (exitCode === 0 && root.artFilePath !== "") {
-                root.displayedArtFilePath = Qt.resolvedUrl(root.artFilePath);
-                root.downloaded = true;
-            }
-        }
-    }
+    readonly property string displayedArtFilePath: CoverArt.source(root.artUrl ?? "")
+    readonly property bool downloaded: root.displayedArtFilePath !== ""
 
     readonly property bool hasArt: root.displayedArtFilePath !== "" && root.downloaded
     property color artDominantColor: (root.hasArt && colorQuantizer.colors.length > 0) ? colorQuantizer.colors[0] : Appearance.colors.colPrimary
@@ -316,7 +278,7 @@ Item {
                     text: "music_note"
                     iconSize: 48
                     color: Appearance.colors.colSubtext
-                    visible: !root.hasArt && !coverArtDownloader.running
+                    visible: !root.hasArt
                     opacity: 0.5
                 }
 
@@ -353,7 +315,7 @@ Item {
                 }
 
                 FadeLoader {
-                    shown: !root.downloaded && root.artUrl !== "" && coverArtDownloader.running
+                    shown: !root.downloaded && root.artUrl !== ""
                     anchors.centerIn: parent
                     MaterialLoadingIndicator {
                         anchors.centerIn: parent
@@ -495,7 +457,7 @@ Item {
                     color: root.activeSubtextColor
                     font.letterSpacing: -0.4
                     font.features: { "tnum": 1 }
-                    text: StringUtils.friendlyTimeForSeconds(root.player ? Math.min(root.player.position, root.player.length > 0 ? root.player.length : Infinity) : 0)
+                    text: StringUtils.friendlyTimeForSeconds(MprisController.trackPositionOf(root.player))
                 }
 
                 Item {
@@ -505,14 +467,22 @@ Item {
                     Loader {
                         id: sliderLoader
                         anchors.fill: parent
-                        active: root.player ? (root.player.canSeek ?? false) : false
+                        active: root.player?.canSeek ?? false
                         sourceComponent: StyledSlider {
                             configuration: StyledSlider.Configuration.Wavy
+                            animateWave: (root.player?.isPlaying ?? false) && root.visible
                             highlightColor: root.activeColor
                             trackColor: root.activeContainerColor
                             handleColor: root.activeColor
-                            value: (root.player && root.player.length > 0) ? Math.min(1, Math.max(0, root.player.position / root.player.length)) : 0
-                            onMoved: if (root.player) root.player.position = value * root.player.length
+                            value: MprisController.trackProgressOf(root.player)
+                            // Nothing to seek to while the player publishes no length.
+                            enabled: MprisController.hasTrackLength(root.player)
+                            onMoved: MprisController.seekFraction(root.player, value)
+                            // QQuickSlider writes `value` itself while the user drags, which destroys
+                            // the binding below it. Without this the bar froze where the drag left it
+                            // and never followed the track again.
+                            onPressedChanged: if (!pressed)
+                                value = Qt.binding(() => MprisController.trackProgressOf(root.player))
                         }
                     }
 
@@ -523,12 +493,13 @@ Item {
                             left: parent.left
                             right: parent.right
                         }
-                        active: root.player ? !(root.player.canSeek ?? false) : false
+                        active: !!root.player && !sliderLoader.active
                         sourceComponent: StyledProgressBar {
                             wavy: root.player ? root.player.isPlaying : false
+                            animateWave: (root.player?.isPlaying ?? false) && root.visible
                             highlightColor: root.activeColor
                             trackColor: root.activeContainerColor
-                            value: (root.player && root.player.length > 0) ? Math.min(1, Math.max(0, root.player.position / root.player.length)) : 0
+                            value: MprisController.trackProgressOf(root.player)
                         }
                     }
                 }
@@ -538,7 +509,8 @@ Item {
                     color: root.activeSubtextColor
                     font.letterSpacing: -0.4
                     font.features: { "tnum": 1 }
-                    text: StringUtils.friendlyTimeForSeconds(root.player ? root.player.length : 0)
+                    text: MprisController.hasTrackLength(root.player)
+                        ? StringUtils.friendlyTimeForSeconds(root.player.length) : "\u2013\u2013:\u2013\u2013"
                 }
             }
 

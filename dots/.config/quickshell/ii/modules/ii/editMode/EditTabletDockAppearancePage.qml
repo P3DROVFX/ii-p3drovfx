@@ -35,9 +35,9 @@ StyledFlickable {
             title: Translation.tr("Taskbar height")
             trailingKind: "stepper"
             valueText: (Config.options.tablet.dock.height ?? 96) + " px"
-            stepDownEnabled: (Config.options.tablet.dock.height ?? 96) > 54
+            stepDownEnabled: (Config.options.tablet.dock.height ?? 96) > 40
             stepUpEnabled: (Config.options.tablet.dock.height ?? 96) < 160
-            onStepDown: Config.options.tablet.dock.height = Math.max(54, (Config.options.tablet.dock.height ?? 96) - 4)
+            onStepDown: Config.options.tablet.dock.height = Math.max(40, (Config.options.tablet.dock.height ?? 96) - 4)
             onStepUp: Config.options.tablet.dock.height = Math.min(160, (Config.options.tablet.dock.height ?? 96) + 4)
         }
 

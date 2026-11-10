@@ -48,15 +48,7 @@ ContentPage {
         icon: "album"
         title: Translation.tr("Media Integrations")
 
-        MaterialTextArea {
-            Layout.fillWidth: true
-            placeholderText: Translation.tr("Prioritized player (e.g. spotify)")
-            text: Config.options.media.priorityPlayer
-            wrapMode: TextEdit.NoWrap
-            onTextChanged: {
-                Config.options.media.priorityPlayer = text;
-            }
-        }
+        MediaPlayerPriorityPicker {}
 
         ConfigSwitch {
             buttonIcon: "filter_list"
@@ -66,7 +58,7 @@ ContentPage {
                 Config.options.media.filterDuplicatePlayers = checked;
             }
             StyledToolTip {
-                text: Translation.tr("Attempt to remove dupes (the aggregator playerctl one and browsers' native ones when there's plasma browser integration)")
+                text: Translation.tr("Hide duplicate and empty players: the playerctld aggregator, players with no track and no controls, and native browser players repeating a Plasma Browser Integration one. Electron apps register as \"chromium\" but are only hidden when they repeat it.")
             }
         }
 
@@ -123,6 +115,16 @@ ContentPage {
             checked: Config.options.lyricsService.enableLrclib
             onCheckedChanged: {
                 Config.options.lyricsService.enableLrclib = checked;
+            }
+        }
+
+        ConfigSwitch {
+            enabled: Config.options.lyricsService.enable
+            buttonIcon: "subtitles"
+            text: Translation.tr("Enable BetterLyrics service (cached TTML)")
+            checked: Config.options.lyricsService.enableBetterlyrics
+            onCheckedChanged: {
+                Config.options.lyricsService.enableBetterlyrics = checked;
             }
         }
     }

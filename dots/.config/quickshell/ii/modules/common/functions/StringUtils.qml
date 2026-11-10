@@ -191,17 +191,19 @@ Singleton {
     function cleanMusicTitle(title) {
         if (!title)
             return "";
-        // Brackets
-        title = title.replace(/^ *\([^)]*\) */g, " "); // Round brackets
-        title = title.replace(/^ *\[[^\]]*\] */g, " "); // Square brackets
-        title = title.replace(/^ *\{[^\}]*\} */g, " "); // Curly brackets
+        // Leading tag brackets are noise ("[MV] Song"), but round brackets are
+        // part of real names ("(I Can't Get No) Satisfaction"), so those stay.
+        // A strip that would leave nothing keeps the original title.
+        const original = title.trim();
+        title = title.replace(/^ *\[[^\]]*\] */, ""); // Square brackets
+        title = title.replace(/^ *\{[^\}]*\} */, ""); // Curly brackets
         // Japenis brackets
         title = title.replace(/^ *【[^】]*】/, ""); // Touhou
         title = title.replace(/^ *《[^》]*》/, ""); // ??
         title = title.replace(/^ *「[^」]*」/, ""); // OP/ED thingie
         title = title.replace(/^ *『[^』]*』/, ""); // OP/ED thingie
 
-        return title.trim();
+        return title.trim() || original;
     }
 
     /**

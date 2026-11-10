@@ -1,17 +1,23 @@
 pragma Singleton
 import QtQuick
 import Quickshell
+import "../../../common/draw/StrokeGeometry.js" as StrokeGeometry
 
 // Pure helper library for the inline region-editor annotation object model.
 // Annotations are plain dicts of the shape:
 //   { id, type, z, geom: {...}, style: { stroke, strokeWidth, fill, fillOpacity, opacity, fontPx } }
 // Geometry keys per type:
 //   rect    -> { x, y, w, h }
+//   ellipse -> { x, y, w, h } (the box it is inscribed in)
 //   arrow   -> { x1, y1, x2, y2 }
+//   ruler   -> { x1, y1, x2, y2 } (measured segment; fixed tuner styling)
 //   circle  -> { x, y, r }
 //   star    -> { x, y, outerR, innerR }
-//   pencil  -> { points: [{x, y}, ...] }
+//   pencil  -> { points: [{x, y, p}, ...] } (p: pen pressure 0..1, 1 for a mouse;
+//              style.usePressure says whether p shapes the width — live draw's engine)
 //   blur    -> { points: [{x, y}, ...] }
+//   (line = arrow; circle/number = {x, y, r}; text = rect + text;
+//    highlighter/gaussblur = pencil)
 Singleton {
     id: model
 
@@ -53,6 +59,7 @@ Singleton {
         var g = ann.geom ?? ann;
         switch (ann.type) {
         case "rect":
+        case "ellipse":
             return {
                 "x": g.x ?? 0,
                 "y": g.y ?? 0,
@@ -98,6 +105,7 @@ Singleton {
             };
         case "arrow":
         case "line":
+        case "ruler":
             return {
                 "x": Math.min(g.x1 ?? 0, g.x2 ?? 0),
                 "y": Math.min(g.y1 ?? 0, g.y2 ?? 0),
@@ -106,6 +114,7 @@ Singleton {
             };
         case "pencil":
         case "blur":
+        case "gaussblur":
         case "highlighter":
             {
                 var pts = g.points ?? [];
@@ -162,4 +171,240 @@ Singleton {
         return null;
     }
 
+    // Shift an annotation's geometry by (dx, dy) in place; returns it.
+    function translate(ann, dx, dy) {
+        var g = ann.geom;
+        switch (ann.type) {
+        case "rect":
+        case "ellipse":
+        case "circle":
+        case "star":
+        case "text":
+        case "number":
+            g.x += dx;
+            g.y += dy;
+            break;
+        case "arrow":
+        case "line":
+        case "ruler":
+            g.x1 += dx;
+            g.y1 += dy;
+            g.x2 += dx;
+            g.y2 += dy;
+            break;
+        case "pencil":
+        case "blur":
+        case "gaussblur":
+        case "highlighter":
+            for (var p = 0; p < g.points.length; p++) {
+                g.points[p].x += dx;
+                g.points[p].y += dy;
+            }
+            break;
+        }
+        return ann;
+    }
+
+    // Resize grips. (ax, ay) is the grip's normalised spot on the bounding
+    // box and l/t/r/b say which edges it drags; p1/p2 are line endpoints.
+    readonly property var gripSlots: [
+        { "id": "tl", "ax": 0, "ay": 0, "l": true, "t": true, "r": false, "b": false, "edge": false },
+        { "id": "tr", "ax": 1, "ay": 0, "l": false, "t": true, "r": true, "b": false, "edge": false },
+        { "id": "bl", "ax": 0, "ay": 1, "l": true, "t": false, "r": false, "b": true, "edge": false },
+        { "id": "br", "ax": 1, "ay": 1, "l": false, "t": false, "r": true, "b": true, "edge": false },
+        { "id": "t", "ax": 0.5, "ay": 0, "l": false, "t": true, "r": false, "b": false, "edge": true },
+        { "id": "b", "ax": 0.5, "ay": 1, "l": false, "t": false, "r": false, "b": true, "edge": true },
+        { "id": "l", "ax": 0, "ay": 0.5, "l": true, "t": false, "r": false, "b": false, "edge": true },
+        { "id": "r", "ax": 1, "ay": 0.5, "l": false, "t": false, "r": true, "b": false, "edge": true },
+        { "id": "p1" },
+        { "id": "p2" }
+    ]
+    readonly property real minGripSize: 6
+
+    // Round shapes, badges and text scale uniformly, so they only get corners.
+    function lockedAspect(type) {
+        return type === "circle" || type === "star" || type === "number" || type === "text";
+    }
+
+    // Where a grip sits for this annotation (editor-local), or null when the
+    // annotation doesn't use it. Box grips sit on the bounding box grown by
+    // `pad`, matching the selection outline.
+    function gripPosition(ann, slot, pad) {
+        if (!ann || !slot)
+            return null;
+        var g = ann.geom;
+        var endpoints = ann.type === "arrow" || ann.type === "line" || ann.type === "ruler";
+        if (slot.id === "p1")
+            return endpoints ? { "x": g.x1, "y": g.y1 } : null;
+        if (slot.id === "p2")
+            return endpoints ? { "x": g.x2, "y": g.y2 } : null;
+        if (endpoints || (slot.edge && lockedAspect(ann.type)))
+            return null;
+        var b = boundingBox(ann);
+        var p = pad ?? 0;
+        return {
+            "x": b.x - p + (b.w + p * 2) * slot.ax,
+            "y": b.y - p + (b.h + p * 2) * slot.ay
+        };
+    }
+
+    // `start` after dragging grip `slot` by (dx, dy). Always computed from the
+    // drag's starting copy so motion events don't compound rounding.
+    function resized(start, slot, dx, dy) {
+        var ann = clone(start);
+        var g = ann.geom;
+        if (slot.id === "p1" || slot.id === "p2") {
+            g[slot.id === "p1" ? "x1" : "x2"] += dx;
+            g[slot.id === "p1" ? "y1" : "y2"] += dy;
+            return ann;
+        }
+        var b = boundingBox(start);
+        var m = minGripSize;
+        var x1 = b.x, y1 = b.y, x2 = b.x + b.w, y2 = b.y + b.h;
+        if (slot.l)
+            x1 = Math.min(x1 + dx, x2 - m);
+        if (slot.r)
+            x2 = Math.max(x2 + dx, x1 + m);
+        if (slot.t)
+            y1 = Math.min(y1 + dy, y2 - m);
+        if (slot.b)
+            y2 = Math.max(y2 + dy, y1 + m);
+        if (lockedAspect(start.type) && b.w > 0 && b.h > 0) {
+            // Follow whichever axis moved further, anchored on the opposite corner.
+            var k = Math.max((x2 - x1) / b.w, (y2 - y1) / b.h);
+            if (slot.l)
+                x1 = x2 - b.w * k;
+            else
+                x2 = x1 + b.w * k;
+            if (slot.t)
+                y1 = y2 - b.h * k;
+            else
+                y2 = y1 + b.h * k;
+        }
+        var w = x2 - x1, h = y2 - y1;
+        switch (start.type) {
+        case "rect":
+        case "ellipse":
+            g.x = x1;
+            g.y = y1;
+            g.w = w;
+            g.h = h;
+            break;
+        case "circle":
+        case "number":
+            g.r = w / 2;
+            g.x = x1 + w / 2;
+            g.y = y1 + h / 2;
+            break;
+        case "star":
+            {
+                var outer = start.geom.outerR ?? start.geom.outerRadius ?? 0;
+                var inner = start.geom.innerR ?? start.geom.innerRadius ?? 0;
+                g.outerR = w / 2;
+                g.innerR = outer > 0 ? inner * (w / 2) / outer : w / 4;
+                g.x = x1 + w / 2;
+                g.y = y1 + h / 2;
+                break;
+            };
+        case "text":
+            g.x = x1;
+            g.y = y1;
+            g.w = w;
+            g.h = h;
+            ann.style.fontPx = Math.max(6, Math.round((start.style.fontPx ?? 20) * h / b.h));
+            break;
+        case "pencil":
+        case "blur":
+        case "gaussblur":
+        case "highlighter":
+            {
+                // A perfectly straight stroke has no extent on one axis;
+                // centre it in the new box instead of dividing by zero.
+                var pts = g.points;
+                for (var i = 0; i < pts.length; i++) {
+                    pts[i].x = b.w > 0 ? x1 + (pts[i].x - b.x) * w / b.w : x1 + w / 2;
+                    pts[i].y = b.h > 0 ? y1 + (pts[i].y - b.y) * h / b.h : y1 + h / 2;
+                }
+                break;
+            };
+        }
+        return ann;
+    }
+
+    // ── Live draw's tools ──────────────────────────────────────────────
+
+    /// Whether the eraser at (px, py) with `radius` touches an annotation: the line
+    /// itself for strokes, lines and outlines, the whole area for a filled shape, a
+    /// badge or a text box. Whole annotations go, as on live draw's sheets.
+    function hitBy(ann, px, py, radius) {
+        var g = ann.geom;
+        var half = ((ann.style && ann.style.strokeWidth) || 2) / 2;
+        var reach = radius + half;
+        var filled = !!(ann.style && ann.style.fill);
+        function nearSegment(ax, ay, bx, by) {
+            var dx = bx - ax, dy = by - ay;
+            var len = dx * dx + dy * dy;
+            var t = len > 0 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len)) : 0;
+            var cx = ax + dx * t - px, cy = ay + dy * t - py;
+            return cx * cx + cy * cy <= reach * reach;
+        }
+        switch (ann.type) {
+        case "pencil":
+        case "highlighter":
+        case "blur":
+        case "gaussblur": {
+            var pts = g.points || [];
+            for (var i = 0; i < pts.length; i++) {
+                if (i + 1 < pts.length ? nearSegment(pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y)
+                                       : nearSegment(pts[i].x, pts[i].y, pts[i].x, pts[i].y))
+                    return true;
+            }
+            return false;
+        }
+        case "arrow":
+        case "line":
+        case "ruler":
+            return nearSegment(g.x1, g.y1, g.x2, g.y2);
+        case "rect":
+            if (filled && contains(ann, px, py, radius))
+                return true;
+            return nearSegment(g.x, g.y, g.x + g.w, g.y) || nearSegment(g.x + g.w, g.y, g.x + g.w, g.y + g.h)
+                || nearSegment(g.x + g.w, g.y + g.h, g.x, g.y + g.h) || nearSegment(g.x, g.y + g.h, g.x, g.y);
+        case "ellipse":
+        case "circle": {
+            var cx = ann.type === "circle" ? g.x : g.x + g.w / 2;
+            var cy = ann.type === "circle" ? g.y : g.y + g.h / 2;
+            var rx = ann.type === "circle" ? g.r : g.w / 2;
+            var ry = ann.type === "circle" ? g.r : g.h / 2;
+            if (rx <= 0 || ry <= 0)
+                return false;
+            // Distance from the outline, measured along the normalised radius.
+            var nx = (px - cx) / rx, ny = (py - cy) / ry;
+            var d = Math.sqrt(nx * nx + ny * ny);
+            if (filled && d <= 1)
+                return true;
+            return Math.abs(d - 1) * Math.min(rx, ry) <= reach;
+        }
+        default:
+            return contains(ann, px, py, radius);
+        }
+    }
+
+    /// The end of a drag held with Shift: lines, arrows and rulers in 15° steps, boxes
+    /// square. The same snap as live draw (StrokeGeometry.constrained).
+    function constrained(tool, sx, sy, ex, ey) {
+        var kind = (tool === "line" || tool === "arrow" || tool === "ruler") ? "line" : "rect";
+        return StrokeGeometry.constrained(kind, { "x": sx, "y": sy }, { "x": ex, "y": ey, "p": 1 });
+    }
+
+    /// A pencil or highlighter annotation as live draw's stroke record, for its SVG.
+    function strokeOf(ann) {
+        return {
+            "tool": "pen",
+            "points": ann.geom.points || [],
+            "color": ann.style.stroke,
+            "width": ann.style.strokeWidth,
+            "usePressure": ann.type === "pencil" && ann.style.usePressure === true
+        };
+    }
 }

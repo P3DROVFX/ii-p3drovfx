@@ -110,7 +110,15 @@ Singleton {
     Connections {
         target: HyprlandGui
         function onWatchingChanged() {
-            if (HyprlandGui.watching) root.ensureFresh();
+            if (!HyprlandGui.watching) {
+                rescan.stop();
+                root.mice = [];
+                root.keyboards = [];
+                root.tablets = [];
+                root.touch = [];
+                root.ready = false;
+                root.stale = true;
+            }
         }
     }
 
@@ -124,6 +132,7 @@ Singleton {
         command: ["hyprctl", "-j", "devices"]
         stdout: StdioCollector {
             onStreamFinished: {
+                if (!HyprlandGui.watching) return;
                 let parsed;
                 try {
                     parsed = JSON.parse(text);

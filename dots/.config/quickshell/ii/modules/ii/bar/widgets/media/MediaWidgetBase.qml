@@ -8,6 +8,7 @@ import Quickshell.Services.Mpris
 import qs
 import qs.services
 import qs.modules.common
+import qs.modules.ii.dynamicIsland.core
 import qs.modules.common.functions
 import qs.modules.common.widgets
 
@@ -38,9 +39,7 @@ Item {
     readonly property string trackArtist: activePlayer?.trackArtist ?? ""
     readonly property bool hasTrack: (activePlayer?.trackTitle ?? "").length > 0
     readonly property bool playing: activePlayer?.isPlaying ?? false
-    readonly property real progress: (activePlayer?.length ?? 0) > 0
-        ? Math.min(1, Math.max(0, activePlayer.position / activePlayer.length))
-        : 0
+    readonly property real progress: MprisController.trackProgressOf(activePlayer)
 
     // Lyrics are a horizontal-bar feature. A 44px column cannot hold a line of
     // text at any size worth reading, so the vertical form never asks for them
@@ -59,65 +58,24 @@ Item {
         ? Appearance.sizes.verticalBarWidth - 8
         : Appearance.sizes.baseBarHeight - 8
 
-    visible: root.hasTrack
+    /**
+     * Out in one of the Dynamic Island's auxiliary bubbles right now, so the bar
+     * leaves it to the bubble instead of showing it twice.
+     */
+    readonly property bool bubbled: !root.previewMode && IslandGeometry.bubbled("media")
+    /** Whether the bar shows this widget at all. */
+    readonly property bool present: root.hasTrack && !root.bubbled
 
-    onHasTrackChanged: {
+    visible: root.present
+
+    onPresentChanged: {
         if (typeof rootItem !== "undefined")
-            rootItem.toggleVisible(root.hasTrack);
+            rootItem.toggleVisible(root.present);
     }
 
     // ── Cover art ────────────────────────────────────────────────────────────
     readonly property string artUrl: MprisController.artUrl
-    readonly property bool isLocalArt: root.artUrl.startsWith("file://")
-    readonly property string artFilePath: `${Directories.coverArt}/${Qt.md5(root.artUrl)}`
-    property bool artDownloaded: false
-    property bool artRefreshPending: false
-    readonly property string artSource: {
-        if (!root.artUrl)
-            return "";
-        if (root.isLocalArt)
-            return root.artUrl;
-        return root.artDownloaded ? Qt.resolvedUrl(root.artFilePath) : "";
-    }
-
-    function refreshArt() {
-        if (!root.artUrl || root.artUrl.length === 0) {
-            root.artDownloaded = false;
-            root.artRefreshPending = false;
-            return;
-        }
-        if (root.isLocalArt) {
-            root.artDownloaded = true;
-            root.artRefreshPending = false;
-            return;
-        }
-
-        root.artDownloaded = false;
-        if (artDownloader.running) {
-            root.artRefreshPending = artDownloader.targetFile !== root.artUrl;
-            return;
-        }
-
-        root.artRefreshPending = false;
-        artDownloader.targetFile = root.artUrl;
-        artDownloader.targetPath = root.artFilePath;
-        artDownloader.running = true;
-    }
-
-    onArtUrlChanged: root.refreshArt()
-
-    Process {
-        id: artDownloader
-        property string targetFile: ""
-        property string targetPath: ""
-        command: ["bash", "-c", `[ -f '${targetPath}' ] || (curl -4 -sSL '${StringUtils.shellSingleQuoteEscape(targetFile)}' -o '${targetPath}.tmp' && mv '${targetPath}.tmp' '${targetPath}')`]
-        onExited: exitCode => {
-            const requestIsCurrent = targetFile === root.artUrl && targetPath === root.artFilePath;
-            root.artDownloaded = requestIsCurrent && exitCode === 0;
-            if (!requestIsCurrent || root.artRefreshPending)
-                Qt.callLater(root.refreshArt);
-        }
-    }
+    readonly property string artSource: CoverArt.source(root.artUrl)
 
     // ── Popup anchor ─────────────────────────────────────────────────────────
     function updatePopupRect() {
@@ -143,13 +101,9 @@ Item {
     }
 
     Component.onCompleted: {
-        // `artUrl` can already be populated when this style is selected. In that
-        // case no change signal is emitted after construction, so initialize the
-        // cache explicitly instead of waiting for the next track.
-        root.refreshArt();
         LyricsService.initiliazeLyrics();
         if (typeof rootItem !== "undefined")
-            rootItem.toggleVisible(root.hasTrack);
+            rootItem.toggleVisible(root.present);
         Qt.callLater(root.updatePopupRect);
     }
 
@@ -172,11 +126,11 @@ Item {
         onEntered: {
             if (root.previewMode)
                 return;
+            // Anchor first: MediaControls opens from this hover after its debounce,
+            // the same way StyledPopup does for every other bar widget.
+            if (hoverEnabled)
+                root.updatePopupRect();
             GlobalStates.setMediaWidgetHovered(true);
-            if (!hoverEnabled)
-                return;
-            root.updatePopupRect();
-            GlobalStates.mediaControlsOpen = true;
         }
         onExited: if (!root.previewMode) GlobalStates.setMediaWidgetHovered(false)
 

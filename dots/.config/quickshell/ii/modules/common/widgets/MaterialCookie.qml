@@ -19,7 +19,7 @@ Item {
 
     property var cornerRounding: new CornerRounding.CornerRounding((sides < 17 ? 1.5 : 1.1) / Math.max(sides, 1))
 
-    ShapeCanvas {
+    CachedShapeCanvas {
         id: shapeCanvas
         anchors.fill: parent
         roundedPolygon: switch(sides) {

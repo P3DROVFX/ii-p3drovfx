@@ -16,6 +16,9 @@ StyledFlickable {
     Layout.fillHeight: true
 
     contentHeight: mainLayout.implicitHeight + 36
+    // A page hugs this whole height, slack included: given any less the body can
+    // still scroll, and the bottom fade greys out the last row.
+    readonly property real naturalHeight: mainLayout.y + root.contentHeight
     clip: true
 
     layer.enabled: true
@@ -296,9 +299,26 @@ StyledFlickable {
                     useDynamicRadius: false
                     buttonIcon: "security"
                     text: VpnService.killSwitchSupported ? Translation.tr("Kill switch") : Translation.tr("Kill switch (unsupported)")
-                    checked: Config.options.vpn.killSwitch
-                    enabled: VpnService.killSwitchSupported
-                    onCheckedChanged: Config.options.vpn.killSwitch = checked
+                    enabled: VpnService.killSwitchSupported && !VpnService.protonConnected && !VpnService.killSwitchPending
+                    checked: VpnService.killSwitchEnabled
+                    // Proton's settings own this state, so hand the binding back after the click.
+                    onCheckedChanged: {
+                        if (checked === VpnService.killSwitchEnabled)
+                            return;
+                        VpnService.setKillSwitch(checked);
+                        checked = Qt.binding(() => VpnService.killSwitchEnabled);
+                    }
+                }
+                ConfigSwitch {
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                    Layout.preferredWidth: 0
+                    useDynamicRadius: false
+                    visible: VpnService.protonvpnAvailable
+                    buttonIcon: "shield_lock"
+                    text: Translation.tr("Secure Core")
+                    checked: Config.options.vpn.protonSecureCore
+                    onCheckedChanged: Config.options.vpn.protonSecureCore = checked
                 }
                 ConfigSwitch {
                     Layout.fillWidth: true
@@ -313,8 +333,9 @@ StyledFlickable {
                 }
                 StyledText {
                     Layout.fillWidth: true
-                    visible: !VpnService.killSwitchSupported || !VpnService.blockLanSupported
-                    text: Translation.tr("Safety firewall controls are not supported by this backend.")
+                    visible: !VpnService.killSwitchSupported || VpnService.protonConnected
+                    text: VpnService.killSwitchSupported ? Translation.tr("Disconnect Proton VPN to change the kill switch.")
+                        : Translation.tr("Safety firewall controls are not supported by this backend.")
                     color: Appearance.colors.colSubtext
                     wrapMode: Text.WordWrap
                 }

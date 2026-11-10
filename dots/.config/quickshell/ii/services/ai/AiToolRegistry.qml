@@ -655,6 +655,438 @@ Singleton {
             needsSearch: false
         },
         {
+            id: "modes_catalogue",
+            version: 1,
+            domain: "modes",
+            title: Translation.tr("Read the modes vocabulary"),
+            summary: Translation.tr("Lists every trigger and action the Modes & Routines engine accepts, with their fields and live availability."),
+            icon: "book",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["modes"],
+            defaultApproval: "allow",
+            timeoutMs: 5000,
+            maxResultTokens: 2600,
+            idempotent: true,
+            description: "The complete grammar for building a mode or routine: trigger types with their fields, action types with their value shapes, which ones are live on this machine, and the shape of a definition. Always call this before modes_create or modes_update.",
+            parameters: null,
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "modes_list",
+            version: 1,
+            domain: "modes",
+            title: Translation.tr("List modes and routines"),
+            summary: Translation.tr("Reads the existing modes and routines with their ids, triggers and actions. Nothing is changed."),
+            icon: "tune",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["modes"],
+            defaultApproval: "allow",
+            timeoutMs: 5000,
+            maxResultTokens: 900,
+            idempotent: true,
+            description: "Lists every mode and routine: kind, id, name, icon, color, flags and the trigger/action types each one uses. Use it to find the exact id the user means and to avoid building a duplicate.",
+            parameters: null,
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "modes_get",
+            version: 1,
+            domain: "modes",
+            title: Translation.tr("Read one definition"),
+            summary: Translation.tr("Returns the full stored definition of one mode or routine, exactly as the editor holds it."),
+            icon: "description",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["modes"],
+            defaultApproval: "allow",
+            timeoutMs: 5000,
+            maxResultTokens: 1200,
+            idempotent: true,
+            description: "Reads the complete definition (triggers with all fields, actions with values) of one mode or routine by id, so an update can start from what exists instead of guessing.",
+            parameters: {
+                type: "object",
+                properties: {
+                    kind: { type: "string", description: "'mode' or 'routine'" },
+                    id: { type: "string", description: "The id from modes_list" }
+                },
+                required: ["kind", "id"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "modes_history",
+            version: 1,
+            domain: "modes",
+            title: Translation.tr("Read modes activity"),
+            summary: Translation.tr("Reads the most recent mode and routine starts, ends and failures."),
+            icon: "history",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["modes"],
+            defaultApproval: "allow",
+            timeoutMs: 5000,
+            maxResultTokens: 600,
+            idempotent: true,
+            description: "The engine's activity log: recent start/stop/run events per mode and routine, with reasons and skipped actions. Use it when the user says a mode 'is not working'.",
+            parameters: {
+                type: "object",
+                properties: {
+                    limit: { type: "integer", description: "How many entries (1-20, default 10)" }
+                },
+                required: []
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "modes_create",
+            version: 1,
+            domain: "modes",
+            title: Translation.tr("Create a mode or routine"),
+            summary: Translation.tr("Adds one new mode or routine from a definition the Modes editor then opens for review."),
+            icon: "add_chart",
+            kind: "localWrite",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["modes"],
+            defaultApproval: "allow",
+            timeoutMs: 5000,
+            maxResultTokens: 260,
+            idempotent: false,
+            description: "Creates exactly one mode or routine from a full definition (fields per modes_catalogue). The definition is inert until the user starts it, and lands in the editor open for review. Invalid trigger or action types are refused with a list of what was wrong — fix and call again. Never sets an id; name the definition and the engine derives it.",
+            parameters: {
+                type: "object",
+                properties: {
+                    kind: { type: "string", description: "'mode' or 'routine'" },
+                    definition: { type: "object", description: "The full definition object exactly as modes_catalogue describes it" }
+                },
+                required: ["kind", "definition"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "modes_update",
+            version: 1,
+            domain: "modes",
+            title: Translation.tr("Rewrite a definition"),
+            summary: Translation.tr("Replaces the definition of one existing mode or routine, by id."),
+            icon: "edit_note",
+            kind: "localWrite",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["modes"],
+            defaultApproval: "allow",
+            timeoutMs: 5000,
+            maxResultTokens: 260,
+            idempotent: false,
+            description: "Rewrites one mode or routine wholesale. Read it first with modes_get and change only what the user asked for — the definition replaces the whole entry. Refuses unknown ids and invalid fields the same way modes_create does.",
+            parameters: {
+                type: "object",
+                properties: {
+                    kind: { type: "string", description: "'mode' or 'routine'" },
+                    id: { type: "string", description: "The exact id from modes_list" },
+                    definition: { type: "object", description: "The complete new definition" }
+                },
+                required: ["kind", "id", "definition"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "modes_start",
+            version: 1,
+            domain: "modes",
+            title: Translation.tr("Start a mode or routine"),
+            summary: Translation.tr("Starts one mode or runs one routine by hand, the same as pressing its own start button."),
+            icon: "play_circle",
+            kind: "localWrite",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["modes"],
+            defaultApproval: "allow",
+            timeoutMs: 5000,
+            maxResultTokens: 200,
+            idempotent: false,
+            description: "Starts a mode (replacing the active one) or runs a routine, exactly like the shell's own start buttons: reversible, snapshotted, and the ending reverts what the user has not touched since. Use only when the user asked for the effects now.",
+            parameters: {
+                type: "object",
+                properties: {
+                    kind: { type: "string", description: "'mode' or 'routine'" },
+                    id: { type: "string", description: "The exact id from modes_list" }
+                },
+                required: ["kind", "id"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "modes_stop",
+            version: 1,
+            domain: "modes",
+            title: Translation.tr("Stop a mode or routine"),
+            summary: Translation.tr("Ends the active mode (reverting its actions) or stops a running routine."),
+            icon: "stop_circle",
+            kind: "localWrite",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["modes"],
+            defaultApproval: "allow",
+            timeoutMs: 5000,
+            maxResultTokens: 200,
+            idempotent: false,
+            description: "Ends the active mode — the ending replays the snapshot and restores what was in place — or stops one running routine. Omit id to end whichever mode is active.",
+            parameters: {
+                type: "object",
+                properties: {
+                    kind: { type: "string", description: "'mode' or 'routine'" },
+                    id: { type: "string", description: "Routine id, or empty to end the active mode" }
+                },
+                required: ["kind"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "modes_delete",
+            version: 1,
+            domain: "modes",
+            title: Translation.tr("Delete a mode or routine"),
+            summary: Translation.tr("Removes one definition after you approve it; the user can rebuild it only from memory."),
+            icon: "delete",
+            kind: "localWrite",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["modes"],
+            defaultApproval: "ask",
+            timeoutMs: 5000,
+            maxResultTokens: 200,
+            idempotent: false,
+            description: "Deletes one mode or routine by id. This is the only modes tool that cannot be undone from the editor, so it always asks first. Prefer updating when the user is unhappy with a definition.",
+            parameters: {
+                type: "object",
+                properties: {
+                    kind: { type: "string", description: "'mode' or 'routine'" },
+                    id: { type: "string", description: "The exact id from modes_list" }
+                },
+                required: ["kind", "id"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        // System Health: read-only views of what the health helper found, and one tool
+        // that only proposes a fix as a button. None of them changes the system, and
+        // none can return a crash dump — only the journal's stack-trace text.
+        {
+            id: "health_overview",
+            version: 1,
+            domain: "health",
+            title: Translation.tr("Read System Health"),
+            summary: Translation.tr("Lists what System Health found: failed services, crashes, new errors, disks and updates."),
+            icon: "monitor_heart",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["health"],
+            defaultApproval: "allow",
+            timeoutMs: 5000,
+            maxResultTokens: 1400,
+            idempotent: true,
+            description: "Every current System Health finding with its id, kind, severity, title and detail, the crashes of the last 7 days and the running kernel. Use the ids with health_finding and health_propose_fix.",
+            parameters: null,
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "health_finding",
+            version: 1,
+            domain: "health",
+            title: Translation.tr("Read a System Health finding"),
+            summary: Translation.tr("Reads every fact about one finding."),
+            icon: "monitor_heart",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["health"],
+            defaultApproval: "allow",
+            timeoutMs: 5000,
+            maxResultTokens: 1200,
+            idempotent: true,
+            description: "All facts about one finding by id: for a unit its result, exit status and executable; for a crash the program, package, signal and top stack frames.",
+            parameters: {
+                type: "object",
+                properties: {
+                    id: { type: "string", description: "A finding id from health_overview" }
+                },
+                required: ["id"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "health_unit_log",
+            version: 1,
+            domain: "health",
+            title: Translation.tr("Read a service's log"),
+            summary: Translation.tr("Reads the last lines a systemd unit logged."),
+            icon: "receipt_long",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["health"],
+            defaultApproval: "allow",
+            timeoutMs: 10000,
+            maxResultTokens: 1600,
+            idempotent: true,
+            description: "The last journal lines of one systemd unit, newest last.",
+            parameters: {
+                type: "object",
+                properties: {
+                    unit: { type: "string", description: "Unit name, e.g. foo.service" },
+                    scope: { type: "string", description: "'system' or 'user'" },
+                    lines: { type: "integer", description: "How many lines (5-80, default 40)" }
+                },
+                required: ["unit"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "health_crash_trace",
+            version: 1,
+            domain: "health",
+            title: Translation.tr("Read a crash's stack trace"),
+            summary: Translation.tr("Reads the stack trace systemd wrote to the journal for a program's newest crash. Never the dump."),
+            icon: "heart_broken",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["health"],
+            defaultApproval: "allow",
+            timeoutMs: 10000,
+            maxResultTokens: 2200,
+            idempotent: true,
+            description: "The systemd-coredump journal message of the newest crash of a program: every thread's stack trace as text, and the COREDUMP_* metadata (package, signal, command line). The dump itself is never available.",
+            parameters: {
+                type: "object",
+                properties: {
+                    exe: { type: "string", description: "The crashed program's absolute path, from health_finding" }
+                },
+                required: ["exe"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "health_journal_search",
+            version: 1,
+            domain: "health",
+            title: Translation.tr("Search the journal"),
+            summary: Translation.tr("Reads recent journal lines, filtered by unit, program, text and priority."),
+            icon: "search",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["health"],
+            defaultApproval: "allow",
+            timeoutMs: 10000,
+            maxResultTokens: 1800,
+            idempotent: true,
+            description: "Recent journal lines, newest last. Filter by unit or syslog identifier, a text pattern, the worst priority to include (0 emerg - 7 debug, default 4) and how far back (hours, max 168).",
+            parameters: {
+                type: "object",
+                properties: {
+                    unit: { type: "string", description: "Unit name, optional" },
+                    identifier: { type: "string", description: "Syslog identifier, optional" },
+                    grep: { type: "string", description: "Text the line must contain, optional" },
+                    priority: { type: "integer", description: "Worst priority to include, 0-7" },
+                    sinceHours: { type: "integer", description: "How far back, 1-168" },
+                    limit: { type: "integer", description: "Lines, 1-100" }
+                },
+                required: []
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "health_package",
+            version: 1,
+            domain: "health",
+            title: Translation.tr("Find a file's package"),
+            summary: Translation.tr("Reads which package owns a file, and its version."),
+            icon: "package_2",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["health"],
+            defaultApproval: "allow",
+            timeoutMs: 10000,
+            maxResultTokens: 200,
+            idempotent: true,
+            description: "The installed package that owns an absolute path, and its version.",
+            parameters: {
+                type: "object",
+                properties: {
+                    path: { type: "string", description: "Absolute file path" }
+                },
+                required: ["path"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "health_propose_fix",
+            version: 1,
+            domain: "health",
+            title: Translation.tr("Propose a fix"),
+            summary: Translation.tr("Shows one fix as a button in System Health. Nothing runs until you press it."),
+            icon: "touch_app",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["health"],
+            defaultApproval: "allow",
+            timeoutMs: 5000,
+            maxResultTokens: 200,
+            idempotent: true,
+            description: "Proposes one action System Health can run for a finding, shown to the user as a button; nothing runs until the user presses it. Only while explaining a System Health finding. Actions: units restart|stop|disable|resetFailed; crashes copyReport|muteProgram; journal markKnown|mute; drives selftest; disks cleanJournal|cleanPacmanCache|emptyTrash; reboot reboot; firmware updateFirmware.",
+            parameters: {
+                type: "object",
+                properties: {
+                    findingId: { type: "string", description: "The finding id" },
+                    action: { type: "string", description: "One action from the list for that finding's kind" }
+                },
+                required: ["findingId", "action"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
             id: "tasks_list",
             version: 1,
             domain: "tasks",
@@ -1903,6 +2335,14 @@ Singleton {
             return Array.from(args.changes ?? []).map(change => `${change.key} = ${change.value}`).join(", ");
         case "rag_search":
             return String(args.query ?? "");
+        case "modes_get":
+        case "modes_update":
+        case "modes_start":
+        case "modes_stop":
+        case "modes_delete":
+            return `${String(args.kind ?? "mode")} ${String(args.id ?? "")}`.trim();
+        case "modes_create":
+            return `${String(args.kind ?? "mode")} "${String(args.definition?.name ?? "")}"`;
         }
         return "";
     }
@@ -2001,6 +2441,15 @@ Singleton {
         const format = String(context?.format ?? "");
         if (format.length > 0 && def.formats.indexOf(format) === -1)
             return { available: false, reason: Translation.tr("Not available on this provider") };
+
+        // A host may ask for one corner of the toolbox: the Modes surface
+        // hands its agent the modes tools and nothing else, so one request
+        // cannot drag shell, gmail or files along. This filters only what is
+        // offered; the standing permission, the policy and the exposure
+        // still decide what an offered tool may do.
+        const domains = Array.isArray(context?.domains) ? context.domains : null;
+        if (domains && domains.length > 0 && domains.indexOf(String(def.domain)) === -1)
+            return { available: false, reason: Translation.tr("Not offered for this request") };
 
         const permission = String(context?.permission ?? root.defaultApprovalFor(def.id));
         if (permission === "deny")

@@ -41,6 +41,10 @@ var CONDITION_SOURCES = {
     updates: "conditions/UpdatesCondition.qml",
     notification: "conditions/NotificationCondition.qml",
     alarm: "conditions/AlarmCondition.qml",
+    alarmSoon: "conditions/AlarmSoonCondition.qml",
+    bedtime: "conditions/BedtimeCondition.qml",
+    timerDone: "conditions/TimerDoneCondition.qml",
+    phoneAlarm: "conditions/PhoneAlarmCondition.qml",
     pomodoroLap: "conditions/PomodoroLapCondition.qml",
     shortcut: "conditions/ShortcutCondition.qml"
 };
@@ -62,8 +66,39 @@ var SETTLE_MS = {
     monitors: 1500
 };
 
+// How long a game trigger keeps counting once the game is gone, unless the
+// trigger sets `offSec`: long enough to survive a crash-restart or loading
+// into a launcher, and an alt-tab to a chat for "focused".
+function gameOffSec(t) {
+    if (t && t.offSec !== null && t.offSec !== undefined && isFinite(Number(t.offSec)))
+        return Math.max(0, Math.round(Number(t.offSec)));
+    return t && t.when === "focused" ? 5 : 30;
+}
+
 function settleMs(type) {
     return SETTLE_MS[type] ?? 0;
+}
+
+// Sources that go false for a moment and come straight back: an app
+// restarting, a player between tracks, headphones reconnecting. A mode or
+// routine held by one of them waits the grace period (modes.graceSec) before
+// it ends. Everything else is clear-cut — a schedule, the charger, the lid —
+// and ends it at once. `game` is absent on purpose: its trigger has its own
+// delay (`offSec`, gameOffSec()).
+var GRACE_TYPES = {
+    app: true,
+    fullscreen: true,
+    workspace: true,
+    media: true,
+    audioDevice: true,
+    deviceInUse: true,
+    bluetooth: true,
+    discordVoice: true,
+    phone: true
+};
+
+function hasGrace(type) {
+    return GRACE_TYPES[type] === true;
 }
 
 // Editor metadata per trigger type: label, icon, group in the "add
@@ -84,6 +119,8 @@ var TRIGGER_GROUPS = {
 var TRIGGER_TYPES = {
     schedule: { label: "Schedule", icon: "schedule", editor: "schedule", group: "time" },
     calendar: { label: "Calendar event", icon: "event", editor: "calendar", group: "time" },
+    alarmSoon: { label: "Alarm coming up", icon: "alarm", editor: "alarmSoon", group: "time" },
+    bedtime: { label: "Bedtime", icon: "bedtime", editor: "bedtime", group: "time" },
     app: { label: "App", icon: "apps", editor: "app", group: "windows" },
     game: { label: "Game", icon: "sports_esports", editor: "game", group: "windows" },
     fullscreen: { label: "Fullscreen window", icon: "fullscreen", editor: "none", group: "windows" },
@@ -111,7 +148,10 @@ var TRIGGER_TYPES = {
     // routine (kind once) can use them.
     notification: { label: "A notification arrives", icon: "notifications_active", editor: "notification",
         group: "events", routineOnly: true, event: true },
-    alarm: { label: "An alarm rings", icon: "alarm", editor: "none", group: "events", routineOnly: true, event: true },
+    alarm: { label: "An alarm rings", icon: "alarm", editor: "alarm", group: "events", routineOnly: true, event: true },
+    timerDone: { label: "A timer finishes", icon: "hourglass_bottom", editor: "none", group: "events", routineOnly: true, event: true },
+    phoneAlarm: { label: "The phone's alarm rings", icon: "phone_android", editor: "none", group: "events",
+        routineOnly: true, event: true },
     pomodoroLap: { label: "A Pomodoro lap ends", icon: "timer_off", editor: "pomodoroLap", group: "events",
         routineOnly: true, event: true },
     shortcut: { label: "A shortcut is pressed", icon: "keyboard_command_key", editor: "shortcut", group: "events",
@@ -154,7 +194,30 @@ var GAME_LAUNCHER_PATTERNS = [
     "^steam_app_\\d+$",
     "^gamescope",
     "^(heroic|lutris|bottles|net\\.lutris\\.)",
-    "^(minecraft|prism)"
+    "^(minecraft|prism|modrinth)",
+    "^omikuji",
+    "^bedrock[- ]?on[- ]?linux",
+    "^mcpelauncher",
+    "^orion"
+];
+
+// Game stores / launchers whose own windows are not a game. steam.desktop is
+// categorised "Game" and Big Picture is fullscreen + GPU-heavy, so without this
+// merely opening Steam would count. Games themselves show up as steam_app_<id>
+// (or their own class), which none of these match. Skips the desktop-category
+// and GPU signals only; GAME_LAUNCHER_PATTERNS and the user's list still win.
+var GAME_CLIENT_PATTERNS = [
+    "^steam$",
+    "^steamwebhelper$",
+    "^steam-runtime",
+    "^steam_proton$"
+];
+
+// Emulator front-ends that are one window for both the library and the game.
+// Such a window is a client until its title says a game is loaded. Ryujinx:
+// idle "Ryujinx 1.3.3+hash", playing "Ryujinx 1.3.3+hash - Name (0100…16 hex) (64-bit)".
+var GAME_CLIENT_TITLE_RULES = [
+    { cls: "^ryujinx$", playing: " - .+ \\([0-9a-f]{16}\\) \\((32|64)-bit\\)$" }
 ];
 
 // The exact option set the Game Mode quick toggle writes
@@ -168,7 +231,8 @@ var GAME_MODE_OPTIONS = {
     "general:gaps_out": 0,
     "general:border_size": 1,
     "decoration:rounding": 0,
-    "decoration:rounding_power": 0,
+    // Irrelevant with rounding 0, but 0 is out of range (min 1, 2 before 0.57)
+    "decoration:rounding_power": 2,
     "general:allow_tearing": 1
 };
 var GAME_MODE_RULE_MARKER = "shell:game-mode-opaque";
@@ -181,8 +245,21 @@ var HYPRLAND_PRESETS = {
     blur: { "decoration:blur:enabled": 0 },
     shadows: { "decoration:shadow:enabled": 0 },
     gaps: { "general:gaps_in": 0, "general:gaps_out": 0 },
-    rounding: { "decoration:rounding": 0, "decoration:rounding_power": 0 },
-    tearing: { "general:allow_tearing": 1 }
+    rounding: { "decoration:rounding": 0, "decoration:rounding_power": 2 },
+    tearing: { "general:allow_tearing": 1 },
+    // A window rule rather than options: see HYPRLAND_PRESET_RULES.
+    transparency: {}
+};
+
+// Presets carried as window rules, added while the action runs and removed by
+// their marker afterwards. `transparency` makes every window opaque, over the
+// per-app opacity rules, the way Game Mode does (its own marker, so the two
+// never remove each other's rule).
+var OPAQUE_RULE_MARKER = "shell:routine-opaque";
+var HYPRLAND_PRESET_RULES = {
+    transparency: { marker: OPAQUE_RULE_MARKER,
+        line: 'hl.window_rule({name="' + OPAQUE_RULE_MARKER + '",match={class=".*"},'
+            + 'opacity="1.0 override 1.0 override 1.0 override",opaque=true})' }
 };
 
 function isArrayLike(value) {
@@ -273,6 +350,8 @@ function normalizeTrigger(raw) {
         break;
     case "game":
         t.when = t.when === "focused" ? "focused" : "running";
+        // Seconds it keeps counting after the game is gone (null: the default).
+        t.offSec = optionalInt(t.offSec, 0, 3600);
         break;
     case "battery":
         t.below = optionalInt(t.below, 0, 100);
@@ -358,6 +437,16 @@ function normalizeTrigger(raw) {
         break;
     case "pomodoroLap":
         t.lap = ["focusEnd", "breakEnd", "any"].indexOf(t.lap) !== -1 ? t.lap : "any";
+        break;
+    case "alarm":
+        t.event = ["ringing", "dismissed", "snoozed", "missed"].indexOf(t.event) !== -1 ? t.event : "ringing";
+        break;
+    case "alarmSoon":
+        t.source = ["pc", "phone", "any"].indexOf(t.source) !== -1 ? t.source : "any";
+        t.minutes = Math.max(1, Math.min(1440, optionalInt(t.minutes, 1, 1440) || 60));
+        break;
+    case "bedtime":
+        t.phase = ["windDown", "bedtime", "either"].indexOf(t.phase) !== -1 ? t.phase : "either";
         break;
     case "shortcut":
         t.name = typeof t.name === "string" && t.name.trim().length ? slugify(t.name) : "";
@@ -499,6 +588,7 @@ function normalizeModes(rawList) {
 // Routines share the trigger/action vocabulary but are not exclusive.
 //  - kind "while": applies on true, reverts on false (same grace as modes)
 //  - kind "once":  fires on the false→true edge, never reverts, honours cooldownSec
+//                   (and, with catchUp, on a schedule window it missed)
 function normalizeRoutine(raw) {
     var r = (raw && typeof raw === "object") ? clone(raw) : {};
     r.id = typeof r.id === "string" && r.id.length ? r.id : slugify(r.name);
@@ -511,6 +601,9 @@ function normalizeRoutine(raw) {
     r.kind = r.kind === "once" ? "once" : "while";
     r.match = r.match === "all" ? "all" : "any";
     r.cooldownSec = Math.max(0, Number(r.cooldownSec) || 0);
+    // `once` routines on a schedule: run when the shell finds the window
+    // already open and the routine has not run in it (off or asleep at its start).
+    r.catchUp = r.kind === "once" && r.catchUp === true;
     r.notify = r.notify !== false;
     r.triggers = toArray(r.triggers).map(normalizeTrigger).filter(function (t) { return t.type.length > 0; });
     r.actions = toArray(r.actions).map(normalizeAction).filter(function (a) { return a.type.length > 0; });
@@ -593,6 +686,19 @@ function scheduleSatisfied(trigger, date, sun) {
         return days.indexOf(isoDay(yesterday)) !== -1;
     }
     return false;
+}
+
+// Epoch ms of the moment the currently satisfied window began, 0 if not inside one.
+function scheduleStartedAt(trigger, date, sun) {
+    if (!scheduleSatisfied(trigger, date, sun))
+        return 0;
+    var from = timeToMinutes(trigger.from, sun);
+    var start = new Date(date.getTime());
+    start.setHours(Math.floor(from / 60), from % 60, 0, 0);
+    // Past midnight inside an overnight window: it began yesterday.
+    if (start.getTime() > date.getTime())
+        start.setTime(start.getTime() - 86400000);
+    return start.getTime();
 }
 
 // Epoch ms of the moment the currently satisfied window ends, 0 if not inside one.
@@ -805,6 +911,30 @@ function routineTemplates() {
             ],
             actions: [{ type: "suspend", value: null }],
             cooldownSec: 600, notify: false, end: { revert: false, strict: false }
+        },
+        {
+            template: "bedtime-wind-down", id: "bedtime-wind-down", name: "Wind down at bedtime",
+            icon: "bedtime", color: "purple", enabled: true, kind: "while", match: "any",
+            triggers: [{ type: "bedtime", phase: "either" }],
+            actions: [
+                { type: "nightLight", value: true },
+                { type: "dnd", value: true }
+            ],
+            cooldownSec: 0, notify: false, end: { revert: true, strict: false }
+        },
+        {
+            template: "missed-alarm-notice", id: "missed-alarm-notice", name: "Tell me about a missed alarm",
+            icon: "alarm_off", color: "red", enabled: true, kind: "once", match: "any",
+            triggers: [{ type: "alarm", event: "missed" }],
+            actions: [{ type: "notify", value: { title: "An alarm was missed", body: "It rang while the computer was asleep or off.", icon: "" } }],
+            cooldownSec: 0, notify: false, end: { revert: false, strict: false }
+        },
+        {
+            template: "phone-alarm-pause-media", id: "phone-alarm-pause-media", name: "Pause media when the phone's alarm rings",
+            icon: "phone_android", color: "blue", enabled: true, kind: "once", match: "any",
+            triggers: [{ type: "phoneAlarm" }],
+            actions: [{ type: "media", value: "pause" }],
+            cooldownSec: 300, notify: false, end: { revert: false, strict: false }
         }
     ];
 }

@@ -61,6 +61,8 @@ ContentPage {
                         return expressivePreview;
                     if (style === "neural")
                         return neuralPreview;
+                    if (style === "sculpt")
+                        return sculptPreview;
                     return defaultPreview;
                 }
             }
@@ -91,7 +93,8 @@ ContentPage {
                 options: [
                     { displayName: Translation.tr("Default"), icon: "style", value: "default" },
                     { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" },
-                    { displayName: Translation.tr("Neural"), icon: "neurology", value: "neural" }
+                    { displayName: Translation.tr("Neural"), icon: "neurology", value: "neural" },
+                    { displayName: Translation.tr("Sculpt"), icon: "shapes", value: "sculpt" }
                 ]
             }
         }
@@ -111,7 +114,7 @@ ContentPage {
         }
 
         ContentSubsection {
-            visible: Config.options.bar.styles.search !== "default"
+            visible: Config.options.bar.styles.search === "neural"
             title: Translation.tr("Colour treatment")
 
             ConfigSelectionArray {
@@ -123,6 +126,48 @@ ContentPage {
                     { displayName: Translation.tr("Neutral"), icon: "contrast", value: "neutral" }
                 ]
             }
+        }
+
+        ExpressiveColorModeSubsection {
+            visible: Config.options.bar.styles.search === "expressive" || Config.options.bar.styles.search === "sculpt"
+            currentValue: Config.options.bar.searchWidget.colorMode
+            onSelected: newValue => Config.options.bar.searchWidget.colorMode = String(newValue)
+        }
+
+        ContentSubsection {
+            visible: Config.options.bar.styles.search === "sculpt"
+            title: Translation.tr("Sculpt variant")
+
+            ConfigSelectionArray {
+                currentValue: Config.options.bar.searchWidget.sculptVariant
+                onSelected: newValue => Config.options.bar.searchWidget.sculptVariant = String(newValue)
+                options: [
+                    { displayName: Translation.tr("Field"), icon: "edit_note", value: "field" },
+                    { displayName: Translation.tr("Display"), icon: "format_size", value: "display" },
+                    { displayName: Translation.tr("Split"), icon: "splitscreen_right", value: "split" }
+                ]
+            }
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: Config.options.bar.styles.search === "sculpt" && Config.options.bar.searchWidget.sculptVariant === "field"
+            materialIcon: "edit_note"
+            text: Translation.tr("An assistant's prompt bar: a soft field with the placeholder and a vivid action circle at its end. Compact keeps only the circle.")
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: Config.options.bar.styles.search === "sculpt" && Config.options.bar.searchWidget.sculptVariant === "display"
+            materialIcon: "format_size"
+            text: Translation.tr("The word is the button: black, wide, slanted display type on a vivid card that stands up straight under the pointer. Compact shows a single slash.")
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: Config.options.bar.styles.search === "sculpt" && Config.options.bar.searchWidget.sculptVariant === "split"
+            materialIcon: "splitscreen_right"
+            text: Translation.tr("A split button: the leading half opens search, the trailing half opens the overview. The half under the pointer rounds its inner corners.")
         }
 
         ConfigSwitch {
@@ -195,6 +240,13 @@ ContentPage {
     Component {
         id: neuralPreview
         NeuralSearchBarWidget {
+            vertical: false
+        }
+    }
+
+    Component {
+        id: sculptPreview
+        SculptSearchBarWidget {
             vertical: false
         }
     }

@@ -29,9 +29,9 @@ AbstractOverlayWidget {
     property real editorBackgroundOpacity: 1
 
     // Defaults n stuff
-    required property var modelData
-    readonly property string identifier: modelData.identifier
-    readonly property string materialSymbol: modelData.materialSymbol ?? "widgets"
+    required property string modelData // the widget identifier
+    readonly property string identifier: modelData
+    readonly property string materialSymbol: OverlayContext.widgetSymbols[identifier] ?? "widgets"
     property string title: identifier.replace(/([A-Z])/g, " $1").replace(/^./, function(str){ return str.toUpperCase(); })
     property var persistentStateEntry: Persistent.states.overlay[identifier]
     property real radius: Appearance.rounding.windowRounding
@@ -40,6 +40,56 @@ AbstractOverlayWidget {
     property real resizeMargin: 8
     property real padding: 6
     property real contentRadius: radius - padding
+    // A widget that draws its own card (the performance HUD) can sit flush
+    // against the screen edges: its chrome (margins, title bar) may leave the
+    // screen, its content may not.
+    property bool flushToEdges: false
+    // The insets are measured to the content item itself (the card), not to
+    // its container: the title bar can be wider than a small card, and the
+    // card must still meet the edge.
+    readonly property real edgeInsetLeft: flushToEdges ? root.resizeMargin + contentContainer.x + (root.contentItem?.x ?? 0) : 0
+    readonly property real edgeInsetTop: flushToEdges ? root.resizeMargin + contentContainer.y + (root.contentItem?.y ?? 0) : 0
+    readonly property real edgeInsetRight: flushToEdges ? root.width - root.edgeInsetLeft - (root.contentItem?.width ?? contentContainer.width) : 0
+    readonly property real edgeInsetBottom: flushToEdges ? root.height - root.edgeInsetTop - (root.contentItem?.height ?? contentContainer.height) : 0
+    // Puts a card narrower than the title bar on the right, so a widget kept
+    // against the right edge grows its title bar to the left, on screen.
+    property bool contentAlignRight: false
+    Binding {
+        target: root.contentItem
+        property: "x"
+        value: root.contentAlignRight ? Math.max(0, contentContainer.width - root.contentItem.width) : 0
+        when: root.flushToEdges && root.contentItem !== null
+    }
+    // Such a widget can be pushed against the top of the screen, which would
+    // hide its title bar; the bar then moves under the content instead.
+    property bool titleBelow: false
+    // Set by a widget that places itself (a snapped HUD), so moving the title
+    // bar does not also move the widget.
+    property bool externallyPositioned: false
+    // Extra buttons at the start of the title bar's button row.
+    property Component titleExtraComponent: null
+    property bool titleElides: false
+    readonly property bool dragging: dragHandler.active
+    property bool _compensateTitleFlip: false
+
+    function updateTitlePlacement() {
+        if (!root.flushToEdges || root.dragging) {
+            if (!root.flushToEdges)
+                root.titleBelow = false;
+            return;
+        }
+        // Where the content's top edge is on screen, whichever side the bar is on
+        const contentTop = root.y + root.resizeMargin + contentContainer.y;
+        const below = contentTop < titleBar.implicitHeight + root.resizeMargin;
+        if (below === root.titleBelow)
+            return;
+        root._compensateTitleFlip = !root.externallyPositioned;
+        root.titleBelow = below;
+    }
+    onYChanged: {
+        if (root.flushToEdges && !root.dragging)
+            Qt.callLater(root.updateTitlePlacement);
+    }
 
     // Resizing
     function getXResizeDirection(x) {
@@ -92,10 +142,10 @@ AbstractOverlayWidget {
     pinned: persistentStateEntry.pinned
     clickthrough: persistentStateEntry.clickthrough
     drag {
-        minimumX: 0
-        minimumY: 0
-        maximumX: root.parent?.width - root.width
-        maximumY: root.parent?.height - root.height
+        minimumX: -root.edgeInsetLeft
+        minimumY: -root.edgeInsetTop
+        maximumX: root.parent?.width - root.width + root.edgeInsetRight
+        maximumY: root.parent?.height - root.height + root.edgeInsetBottom
     }
     opacity: (GlobalStates.overlayOpen || !clickthrough) ? 1.0 : Config.options.overlay.clickthroughOpacity
 
@@ -116,6 +166,7 @@ AbstractOverlayWidget {
     Component.onCompleted: {
         reportPinnedState();
         reportClickableState();
+        Qt.callLater(root.updateTitlePlacement);
     }
 
     Connections {
@@ -182,12 +233,13 @@ AbstractOverlayWidget {
             if (!active) {
                 root.resizing = false;
                 root.savePosition();
+                Qt.callLater(root.updateTitlePlacement);
             }
         }
-        xAxis.minimum: 0
-        xAxis.maximum: root.parent?.width - root.width
-        yAxis.minimum: 0
-        yAxis.maximum: root.parent?.height - root.height
+        xAxis.minimum: -root.edgeInsetLeft
+        xAxis.maximum: root.parent?.width - root.width + root.edgeInsetRight
+        yAxis.minimum: -root.edgeInsetTop
+        yAxis.maximum: root.parent?.height - root.height + root.edgeInsetBottom
     }
 
     function close() {
@@ -241,16 +293,19 @@ AbstractOverlayWidget {
             }
         }
 
-        ColumnLayout {
+        GridLayout {
             id: contentColumn
             z: root.fancyBorders ? 0 : -1
             anchors.fill: parent
-            spacing: 0
+            columns: 1
+            rowSpacing: 0
+            columnSpacing: 0
 
             // Title bar
             Rectangle {
                 id: titleBar
                 opacity: GlobalStates.overlayOpen ? 1 : 0
+                Layout.row: root.titleBelow ? 1 : 0
                 Layout.fillWidth: true
                 implicitWidth: titleBarRow.implicitWidth + root.padding * 2
                 implicitHeight: titleBarRow.implicitHeight + root.padding * 2
@@ -285,8 +340,17 @@ AbstractOverlayWidget {
                     
                     StyledText {
                         Layout.fillWidth: true
+                        // A compact widget lets its title elide instead of widening the bar
+                        Layout.preferredWidth: root.titleElides ? 0 : -1
                         text: root.title
                         elide: Text.ElideRight
+                    }
+
+                    Loader {
+                        visible: root.titleExtraComponent !== null
+                        active: root.titleExtraComponent !== null
+                        sourceComponent: root.titleExtraComponent
+                        Layout.alignment: Qt.AlignVCenter
                     }
 
                     TitlebarButton {
@@ -330,10 +394,23 @@ AbstractOverlayWidget {
             // Content
             Item {
                 id: contentContainer
+                Layout.row: root.titleBelow ? 0 : 1
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.margins: root.fancyBorders ? root.padding : 0
-                Layout.topMargin: -border.border.width // Border of a rectangle is drawn inside its bounds, so we do this to make the gap not too big
+                // Border of a rectangle is drawn inside its bounds, so the side facing the title bar tucks in to keep the gap small
+                Layout.topMargin: root.titleBelow ? (root.fancyBorders ? root.padding : 0) : -border.border.width
+                Layout.bottomMargin: root.titleBelow ? -border.border.width : (root.fancyBorders ? root.padding : 0)
+                // Keep the content still on screen when the title bar changes sides
+                property real lastY: 0
+                onYChanged: {
+                    if (root._compensateTitleFlip) {
+                        root._compensateTitleFlip = false;
+                        root.y -= y - lastY;
+                        root.savePosition();
+                    }
+                    lastY = y;
+                }
                 Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
                 implicitWidth: Math.max(root.persistentStateEntry.width, root.minimumWidth)
                 implicitHeight: Math.max(root.persistentStateEntry.height, root.minimumHeight)

@@ -2413,6 +2413,10 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                                         }
                                     }
                                 }
+
+                                TouchpadScrollHandler {
+                                    flickable: inputScrollView.contentItem
+                                }
                             }
                         }
 

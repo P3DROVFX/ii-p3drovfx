@@ -26,6 +26,13 @@ Singleton {
         // Internal notifications have no freedesktop sender to keep alive.
         // They still use the same cards/actions/popup path as server traffic.
         property bool internal: false
+        // A phone live update (KdeConnectService._syncLivePopups): its own card, kept
+        // through "clear all", only dismissed by hand. `liveData` is the decoded view.
+        property bool live: false
+        property var liveData: null
+        // A notification relayed from the phone by KDE Connect. Its home is the
+        // Phone tab; here it only pops up and then leaves (never in history).
+        property bool phone: false
         property list<var> customActions: []
         property string _qsFilePath: ""
         property var internalActionPayload: ({})
@@ -37,6 +44,11 @@ Singleton {
             if (customActions.length > 0) return base.concat(customActions);
             return base;
         }
+        /**
+         * The notification already offers to copy its file, so the card's own copy-text
+         * button steps aside: two copy buttons side by side read as one ambiguous one.
+         */
+        readonly property bool hasFileCopyAction: actions.some(action => action.identifier === "__qs_copy_file")
         property bool popup: false
         property bool isTransient: notification?.hints.transient ?? false
         property string appIcon: notification?.appIcon ?? ""
@@ -47,9 +59,13 @@ Singleton {
         property double time
         property string urgency: notification?.urgency.toString() ?? "normal"
         property Timer timer
+        // Discarding a server notification clears its `notification` property,
+        // which normally triggers discardNotification again. Mark the wrapper
+        // first so the lifecycle cleanup is one-way and re-entrant safe.
+        property bool _releasing: false
 
         onNotificationChanged: {
-            if (notification === null && !internal) {
+            if (notification === null && !internal && !_releasing) {
                 root.discardNotification(notificationId);
             }
         }
@@ -77,42 +93,29 @@ Singleton {
         interval: 7000
         running: true
         onTriggered: () => {
-            const index = root.list.findIndex((notif) => notif && notif.notificationId === notificationId);
-            const notifObject = root.list[index];
+            const notifObject = root.findTrackedNotification(notificationId);
+            const timer = notifObject?.timer ?? null;
+            if (notifObject)
+                notifObject.timer = null;
             print("[Notifications] Notification timer triggered for ID: " + notificationId + ", transient: " + notifObject?.isTransient);
             if (notifObject) {
                 if (notifObject.isTransient) root.discardNotification(notificationId);
                 else root.timeoutNotification(notificationId);
             }
-            destroy()
+            if (timer)
+                timer.destroy();
+            else
+                destroy();
         }
     }
 
     property bool silent: false
-    readonly property bool focusedWindowFullscreen: {
-        // 1. Direct ToplevelManager check
-        if (ToplevelManager.activeToplevel?.wayland?.fullscreen) return true;
+    // Any fullscreen window on what the focused monitor is showing. HyprlandData resolves
+    // the workspace through the client list, so this survives a workspace renumbering and
+    // ignores a fullscreen window that a silent move left holding keyboard focus off-screen.
+    readonly property bool focusedWindowFullscreen:
+        HyprlandData.monitorHasFullscreenWindow(Hyprland.focusedMonitor?.name ?? "")
 
-        // 2. Active workspace on focused monitor via Hyprland service
-        const focusedWsToplevels = Hyprland.focusedMonitor?.activeWorkspace?.toplevels?.values ?? [];
-        if (focusedWsToplevels.some(t => t.wayland?.fullscreen)) return true;
-
-        // 3. Active window address in HyprlandData
-        const activeAddress = ToplevelManager.activeToplevel?.HyprlandToplevel?.address;
-        if (activeAddress) {
-            const win = HyprlandData.windowByAddress[`0x${activeAddress}`];
-            if (win && (win.fullscreen || (win.fullscreenMode !== undefined && win.fullscreenMode > 0))) return true;
-        }
-
-        // 4. Any window on current workspace marked fullscreen in HyprlandData
-        const activeWsId = Hyprland.focusedMonitor?.activeWorkspace?.id ?? HyprlandData.activeWorkspace?.id;
-        if (activeWsId !== undefined && HyprlandData.windowList) {
-            const fsWin = HyprlandData.windowList.find(w => w.workspace?.id === activeWsId && (w.fullscreen || (w.fullscreenMode !== undefined && w.fullscreenMode > 0)));
-            if (fsWin) return true;
-        }
-
-        return false;
-    }
     readonly property bool autoSilent: (Config?.options.notifications.autoDndFullscreen ?? true) && focusedWindowFullscreen
     readonly property bool effectiveSilent: silent || autoSilent
     property int unread: 0
@@ -125,6 +128,10 @@ Singleton {
     property var popupList: list.filter((notif) => notif && notif.popup);
     property bool popupInhibited: (GlobalStates?.sidebarRightOpen ?? false) || effectiveSilent
     property var latestTimeForApp: ({})
+    // Notification history is useful context, but retaining every wrapper and
+    // image reference for the lifetime of the shell is not. Keep the newest
+    // entries while the active notification center remains responsive.
+    readonly property int maximumHistoryEntries: 200
     // See Config.qml for the rationale on these guards.
     property real initTimestamp: Date.now()
     property int missingFileGracePeriod: 2000
@@ -163,7 +170,7 @@ Singleton {
             if (root._pendingNotifications.length > 0) {
                 const pending = root._pendingNotifications.slice();
                 root._pendingNotifications = [];
-                root.list = [...root.list, ...pending];
+                root.list = root.trimHistory(root.list.concat(pending.filter(notif => notif && !notif._releasing)));
                 root.scheduleDiskWrite();
             }
         }
@@ -178,7 +185,44 @@ Singleton {
     }
 
     function stringifyList(list) {
-        return JSON.stringify(list.filter((notif) => notif).map((notif) => notifToJSON(notif)), null, 2);
+        // Live updates are rebuilt from the phone after a restart, never restored.
+        return JSON.stringify(list.filter((notif) => notif && !notif.live && !notif.phone).map((notif) => notifToJSON(notif)), null, 2);
+    }
+
+    function trimHistory(values) {
+        const entries = Array.from(values ?? []).filter(notif => notif && !notif._releasing);
+        if (entries.length <= root.maximumHistoryEntries)
+            return entries;
+        const firstRetainedIndex = entries.length - root.maximumHistoryEntries;
+        entries.slice(0, firstRetainedIndex).forEach(notif => root.releaseNotificationObject(notif));
+        return entries.slice(firstRetainedIndex);
+    }
+
+    function releaseNotificationObject(notifObject) {
+        if (!notifObject || notifObject._releasing)
+            return;
+
+        notifObject._releasing = true;
+        const timer = notifObject.timer;
+        notifObject.timer = null;
+        if (timer) {
+            timer.stop();
+            timer.destroy();
+        }
+
+        // Drop the server-side QObject/image reference before destroying the
+        // wrapper. The guard above prevents this assignment from recursively
+        // entering discardNotification.
+        notifObject.notification = null;
+        notifObject.customActions = [];
+        notifObject.internalActionPayload = ({});
+        notifObject._qsFilePath = "";
+        // Destroy on the next event-loop turn: Repeater releases pooled
+        // delegates deferred, and binding re-evaluation against a wrapper
+        // destroyed in this same tick logs "assign [undefined]" per property
+        // and races in-flight image requests. The fields are already cleared
+        // above, so those reads land on empty strings instead.
+        Qt.callLater(() => notifObject.destroy());
     }
     
     onListChanged: {
@@ -201,22 +245,59 @@ Singleton {
 
     function appNameListForGroups(groups) {
         return Object.keys(groups).sort((a, b) => {
-            // Sort by time, descending
-            return groups[b].time - groups[a].time;
+            // Live updates on top, then by time, descending
+            const live = (groups[b].live === true) - (groups[a].live === true);
+            return live !== 0 ? live : groups[b].time - groups[a].time;
         });
     }
 
-    function groupsForList(list) {
+    // Phone notifications are routed to the Phone tab only when the user opted out of
+    // mirroring them here and a phone is actually there to show them.
+    readonly property bool hidePhoneNotifications: KdeConnectService._enabled
+        && KdeConnectService.activeReachable
+        && !(Config.options?.phone?.mirrorNotificationsToDesktop ?? true)
+
+    function isKdeConnectAppName(appName) {
+        const appNameLower = String(appName || "").toLowerCase();
+        return appNameLower === "kdeconnect"
+            || appNameLower === "kde connect"
+            || appNameLower === "org.kde.kdeconnect"
+            || KdeConnectService.devices.some(d => d.name && d.name.toLowerCase() === appNameLower);
+    }
+
+    // Only the notifications plugin relays phone notifications ("notification"
+    // event); pairing, transfers, pings and calls are the daemon's own.
+    function isPhoneRelay(notification) {
+        if (!root.isKdeConnectAppName(notification?.appName)) return false;
+        const eventId = notification?.hints?.["x-kde-eventId"];
+        return eventId === undefined || eventId === null || eventId === "" || eventId === "notification";
+    }
+
+    // `popups`: phone relays are popup-only; the history list never shows them.
+    function groupsForList(list, popups) {
         const groups = {};
         list.forEach((notif) => {
             if (!notif) return;
-            const appNameLower = (notif.appName || "").toLowerCase();
-            const isKdeConnect = appNameLower === "kdeconnect"
-                || appNameLower === "kde connect"
-                || appNameLower === "org.kde.kdeconnect"
-                || KdeConnectService.devices.some(d => d.name && d.name.toLowerCase() === appNameLower);
+            if (notif.phone && !popups) return;
+            const isKdeConnect = root.isKdeConnectAppName(notif.appName);
 
-            if (isKdeConnect && KdeConnectService._enabled && KdeConnectService.activeReachable) {
+            if (isKdeConnect && (root.hidePhoneNotifications || KdeConnectService.isIgnoredNotification(notif))) {
+                return;
+            }
+
+            if (!String(notif.summary || "").trim() && !String(notif.body || "").trim()) {
+                return;
+            }
+
+            // Each live update is a group of its own, never folded into its app's.
+            if (notif.live) {
+                groups[notif.appName + " · live " + notif.notificationId] = {
+                    appName: notif.appName,
+                    appIcon: notif.appIcon,
+                    notifications: [notif],
+                    time: notif.time,
+                    live: true
+                };
                 return;
             }
 
@@ -235,9 +316,29 @@ Singleton {
         return groups;
     }
 
+    // Whether a notification's app name is this dock app: the same loose match
+    // the dock button uses to ring when one arrives.
+    function appNameMatches(notifAppName, ...targets) {
+        const appName = String(notifAppName || "").toLowerCase();
+        if (appName === "")
+            return false;
+        return targets.some(target => {
+            const name = String(target || "").toLowerCase();
+            return name !== "" && (appName === name || name.includes(appName) || appName.includes(name));
+        });
+    }
+
+    // The tracked notifications of one app, newest first, for its dock menu.
+    function notificationsForApp(appId, appName) {
+        return (root.list ?? [])
+            .filter(notif => notif && root.appNameMatches(notif.appName, appName, appId)
+                && (String(notif.summary || "").trim() || String(notif.body || "").trim()))
+            .sort((a, b) => b.time - a.time);
+    }
+
     // Computed group bindings - automatically cached by the QML engine and re-evaluated reactively.
     property var groupsByAppName: groupsForList(root.list)
-    property var popupGroupsByAppName: groupsForList(root.popupList)
+    property var popupGroupsByAppName: groupsForList(root.popupList, true)
     property list<string> appNameList: appNameListForGroups(root.groupsByAppName)
     property list<string> popupAppNameList: appNameListForGroups(root.popupGroupsByAppName)
 
@@ -341,7 +442,9 @@ Singleton {
     }
 
     function armNotificationTimeout(notifObject, notification) {
-        const expireTimeout = notification?.expireTimeout ?? notifObject?.internalExpireTimeout ?? -1;
+        // A phone relay must always leave: it has no place in the history.
+        const expireTimeout = notifObject?.phone ? -1
+            : (notification?.expireTimeout ?? notifObject?.internalExpireTimeout ?? -1);
         if (root.popupInhibited || expireTimeout === 0)
             return;
         const interval = expireTimeout < 0
@@ -375,7 +478,9 @@ Singleton {
      * them through executeShellAction and the caller receives one signal.
      */
     function publishInternalNotification(options: var): var {
-        if (root.effectiveSilent)
+        // Do not disturb drops shell notifications, but a live update still belongs in
+        // the list - it just arrives without a popup.
+        if (root.effectiveSilent && options?.live !== true)
             return null;
         const notificationId = root.nextInternalNotificationId();
         const appName = String(options?.appName ?? "Quickshell");
@@ -397,8 +502,15 @@ Singleton {
                 && String(action?.text ?? "").length > 0;
         });
         notifObject.internalActionPayload = options?.actionPayload ?? ({});
+        notifObject.live = options?.live === true;
+        notifObject.liveData = options?.liveData ?? null;
         root._pendingNotifications.push(notifObject);
         batchNotificationTimer.restart();
+        // `quiet`: into the list without a popup (a live update re-created after a reload).
+        if (options?.quiet === true || root.effectiveSilent) {
+            root.scheduleDiskWrite();
+            return notificationId;
+        }
         if (!root.popupInhibited) {
             root.armNotificationTimeout(notifObject, null);
             root.unread++;
@@ -423,13 +535,46 @@ Singleton {
         persistenceSupported: true
 
         onNotification: (notification) => {
-            const appNameLower = (notification.appName || "").toLowerCase();
-            const isKdeConnect = appNameLower === "kdeconnect"
-                || appNameLower === "kde connect"
-                || appNameLower === "org.kde.kdeconnect"
-                || KdeConnectService.devices.some(d => d.name && d.name.toLowerCase() === appNameLower);
+            const isKdeConnect = root.isKdeConnectAppName(notification.appName);
 
-            if (isKdeConnect && KdeConnectService._enabled && KdeConnectService.activeReachable) {
+            // The KDE Connect daemon reports outgoing file transfer results only
+            // through this notification. The service consumes it, publishes a
+            // translated shell notification instead, and the raw English one
+            // stays hidden.
+            if (isKdeConnect && KdeConnectService.considerTransferNotification(notification)) {
+                notification.tracked = true;
+                return;
+            }
+
+            // Filter out empty or unwanted System UI / lockscreen placeholder notifications from phone
+            if (isKdeConnect && KdeConnectService.isIgnoredNotification(notification)) {
+                notification.tracked = true;
+                const existingNotifObject = root.findTrackedNotification(notification.id + root.idOffset);
+                if (existingNotifObject) {
+                    root.discardNotification(notification.id + root.idOffset);
+                }
+                return;
+            }
+
+            // Also ignore general notifications that have completely empty summary and body
+            const summaryTrimmed = String(notification.summary || "").trim();
+            const bodyTrimmed = String(notification.body || "").trim();
+            if (!summaryTrimmed && !bodyTrimmed) {
+                notification.tracked = true;
+                return;
+            }
+
+            if (isKdeConnect && root.hidePhoneNotifications) {
+                notification.tracked = true;
+                return;
+            }
+
+            // Phone relays live in the Phone tab. Here they are popup-only, so
+            // with popups held back (sidebar open, DND) there is nothing to show,
+            // and a repeat of something already shown is dropped (anti-spam).
+            const isPhone = root.isPhoneRelay(notification);
+            if (isPhone && (root.popupInhibited
+                    || KdeConnectService.isRepeatedPhoneNotification(notification.summary, notification.body))) {
                 notification.tracked = true;
                 return;
             }
@@ -457,6 +602,7 @@ Singleton {
                 "notificationId": notificationId,
                 "notification": notification,
                 "time": Date.now(),
+                "phone": isPhone,
             });
 
             root._handleShellNotification(newNotifObject);
@@ -468,7 +614,8 @@ Singleton {
             // Popup
             if (!root.popupInhibited) {
                 root.armNotificationTimeout(newNotifObject, notification);
-                root.unread++;
+                if (!isPhone)
+                    root.unread++;
             }
             root.notify(newNotifObject);
             // Schedule disk write instead of immediate write
@@ -523,14 +670,17 @@ Singleton {
         var actions = [];
         if (isScreenshot) {
             actions.push(
-                { "identifier": "__qs_open_file", "text": Translation.tr("Open") },
-                { "identifier": "__qs_open_folder", "text": Translation.tr("Folder") },
-                { "identifier": "__qs_delete_file", "text": Translation.tr("Delete") }
+                { "identifier": "__qs_open_file", "text": Translation.tr("Open"), "icon": "open_in_new", "iconOnly": true },
+                { "identifier": "__qs_open_folder", "text": Translation.tr("Folder"), "icon": "folder_open" },
+                { "identifier": "__qs_delete_file", "text": Translation.tr("Delete"), "icon": "delete" }
             );
         } else if (isRecording) {
             actions.push(
-                { "identifier": "__qs_open_file", "text": Translation.tr("Open") },
-                { "identifier": "__qs_open_folder", "text": Translation.tr("Folder") }
+                { "identifier": "__qs_open_file", "text": Translation.tr("Open"), "icon": "open_in_new", "iconOnly": true },
+                { "identifier": "__qs_open_folder", "text": Translation.tr("Folder"), "icon": "folder_open" },
+                // The file itself, not the body text the card's own copy button takes -
+                // label and glyph both say so, since the two sit in the same card.
+                { "identifier": "__qs_copy_file", "text": Translation.tr("Copy video"), "icon": "movie" }
             );
         }
 
@@ -540,8 +690,13 @@ Singleton {
 
     // Execute a QML-handled notification action (identified by "__qs_" prefix).
     function executeShellAction(notifObj, identifier) {
-        if (String(identifier).startsWith("__qs_calendar_")) {
+        if (String(identifier).startsWith("__qs_calendar_") || String(identifier).startsWith("__qs_reminder_")
+                || String(identifier).startsWith("__qs_health_")) {
             root.internalActionInvoked(identifier, notifObj?.notificationId ?? 0, notifObj?.internalActionPayload ?? ({}));
+            return;
+        }
+        if (identifier === "__qs_phonelive_open") {
+            KdeConnectService.openNotificationIntent(notifObj?.internalActionPayload?.publicId ?? "");
             return;
         }
         if (identifier === "__qs_battery_suspend_now") {
@@ -570,17 +725,26 @@ Singleton {
             Quickshell.execDetached(["bash", "-c", 'xdg-open "$1"', "_", dirPath]);
         } else if (identifier === "__qs_delete_file") {
             Quickshell.execDetached(["bash", "-c", 'rm -f "$1"', "_", filePath]);
+        } else if (identifier === "__qs_copy_file") {
+            // A real file copy (uri-list + file-manager targets), not the path as
+            // text: the paste lands as the video itself in chats and editors.
+            Quickshell.execDetached(["python3",
+                Directories.scriptPath + "/clipboard/copy_file_to_clipboard.py", filePath]);
         }
     }
 
     function discardNotification(id) {
         console.log("[Notifications] Discarding notification with ID: " + id);
-        const index = root.list.findIndex((notif) => notif && notif.notificationId === id);
+        const matchesId = notif => notif && notif.notificationId === id;
+        const targets = Array.from(root.list ?? []).concat(root._pendingNotifications ?? [])
+            .filter(matchesId)
+            .filter((notif, index, values) => values.indexOf(notif) === index);
         const notifServerIndex = notifServer.trackedNotifications.values.findIndex((notif) => notif.id + root.idOffset === id);
-        if (index !== -1) {
-            root.list.splice(index, 1);
+        if (targets.length > 0) {
+            root.list = root.list.filter(notif => !matchesId(notif));
+            root._pendingNotifications = root._pendingNotifications.filter(notif => !matchesId(notif));
+            targets.forEach(notif => root.releaseNotificationObject(notif));
             root.scheduleDiskWrite();
-            triggerListChange()
         }
         if (notifServerIndex !== -1) {
             notifServer.trackedNotifications.values[notifServerIndex].dismiss()
@@ -588,12 +752,24 @@ Singleton {
         root.discard(id); // Emit signal
     }
 
-    function discardMultipleNotifications(ids) {
+    /** `includeLive`: only for a hand gesture on the live card itself. */
+    function discardMultipleNotifications(ids, includeLive) {
         if (!ids || ids.length === 0) return;
+        if (!includeLive) {
+            const liveIds = new Set(Array.from(root.list ?? []).concat(root._pendingNotifications ?? [])
+                .filter(n => n && n.live).map(n => n.notificationId));
+            ids = ids.filter(id => !liveIds.has(id));
+            if (ids.length === 0) return;
+        }
         const idSet = new Set(ids);
-        root.list = root.list.filter(notif => notif && !idSet.has(notif.notificationId));
+        const matchesId = notif => notif && idSet.has(notif.notificationId);
+        const targets = Array.from(root.list ?? []).concat(root._pendingNotifications ?? [])
+            .filter(matchesId)
+            .filter((notif, index, values) => values.indexOf(notif) === index);
+        root.list = root.list.filter(notif => !matchesId(notif));
+        root._pendingNotifications = root._pendingNotifications.filter(notif => !matchesId(notif));
+        targets.forEach(notif => root.releaseNotificationObject(notif));
         root.scheduleDiskWrite();
-        triggerListChange();
         notifServer.trackedNotifications.values.forEach(notif => {
             if (idSet.has(notif.id + root.idOffset)) {
                 notif.dismiss();
@@ -603,19 +779,25 @@ Singleton {
     }
 
     function discardAllNotifications() {
-        root.list = []
-        triggerListChange()
+        // Live updates survive "clear all"; they only go by hand or when they end.
+        const targets = Array.from(root.list ?? []).concat(root._pendingNotifications ?? [])
+            .filter(notif => notif && !notif.live)
+            .filter((notif, index, values) => values.indexOf(notif) === index);
+        root.list = root.list.filter(notif => notif && notif.live);
+        root._pendingNotifications = root._pendingNotifications.filter(notif => notif && notif.live);
+        targets.forEach(notif => root.releaseNotificationObject(notif));
         root.scheduleDiskWrite();
         notifServer.trackedNotifications.values.forEach((notif) => {
             notif.dismiss()
         })
-        root.discardAll();
+        targets.forEach(notif => root.discard(notif.notificationId));
     }
 
     function cancelTimeout(id) {
         const index = root.list.findIndex((notif) => notif && notif.notificationId === id);
+        // The timer is gone once it has fired.
         if (root.list[index] != null)
-            root.list[index].timer.stop();
+            root.list[index].timer?.stop();
     }
 
     function timeoutNotification(id) {
@@ -623,6 +805,7 @@ Singleton {
         if (root.list[index] != null)
             root.list[index].popup = false;
         root.timeout(id);
+        root._dropPhoneRelays();
     }
 
     function timeoutAll() {
@@ -631,6 +814,23 @@ Singleton {
         })
         root.popupList.forEach((notif) => {
             notif.popup = false;
+        });
+        root._dropPhoneRelays();
+    }
+
+    // A phone relay whose popup ended leaves the shell. Expired, not dismissed:
+    // the phone keeps its notification, and the Phone tab keeps showing it.
+    function _dropPhoneRelays() {
+        const gone = Array.from(root.list ?? []).filter(notif => notif && notif.phone && !notif.popup);
+        if (gone.length === 0) return;
+        const goneIds = new Set(gone.map(notif => notif.notificationId));
+        root.list = root.list.filter(notif => !(notif && goneIds.has(notif.notificationId)));
+        // Release the wrappers first so expiring the server side can't loop
+        // back into discardNotification (which would dismiss on the phone).
+        gone.forEach(notif => root.releaseNotificationObject(notif));
+        notifServer.trackedNotifications.values.forEach(notif => {
+            if (goneIds.has(notif.id + root.idOffset))
+                notif.expire();
         });
     }
 
@@ -673,7 +873,17 @@ Singleton {
             const fileContents = notifFileView.text();
             try {
                 const parsed = JSON.parse(fileContents || "[]");
-                root.list = parsed.map((notif) => {
+                const filtered = parsed.filter(notif => {
+                    if (!notif) return false;
+                    // Phone relays saved by older versions: their home is the Phone tab.
+                    if (root.isPhoneRelay(notif)) return false;
+                    if (!String(notif.summary || "").trim() && !String(notif.body || "").trim()) return false;
+                    return true;
+                });
+                const retained = filtered.length > root.maximumHistoryEntries
+                    ? filtered.slice(filtered.length - root.maximumHistoryEntries)
+                    : filtered;
+                root.list = retained.map((notif) => {
                     return notifComponent.createObject(root, {
                         "notificationId": notif.notificationId,
                         "actions": [], // Notification actions are meaningless if they're not tracked by the server or the sender is dead
@@ -686,6 +896,8 @@ Singleton {
                         "urgency": notif.urgency,
                     });
                 });
+                if (filtered.length !== parsed.length || parsed.length > root.maximumHistoryEntries)
+                    root.scheduleDiskWrite();
             } catch (e) {
                 console.log("[Notifications] Error parsing notifications JSON: " + e);
             }

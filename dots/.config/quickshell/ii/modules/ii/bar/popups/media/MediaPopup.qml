@@ -11,6 +11,7 @@ import Qt5Compat.GraphicalEffects
 
 StyledPopup {
     id: root
+    popupId: "media"
     popupRadius: Appearance.rounding.large
     stickyHover: true
 

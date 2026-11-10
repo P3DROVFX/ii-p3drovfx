@@ -3,7 +3,7 @@ import Quickshell
 import "EmailDetections.js" as JS
 
 Singleton {
-    function detectAll(bodyRaw) {
-        return JS.detectAll(bodyRaw);
+    function detectAll(bodyRaw, subject) {
+        return JS.detectAll(bodyRaw, subject);
     }
 }

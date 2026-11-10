@@ -44,6 +44,34 @@ ContentPage {
             color: Appearance.colors.colOnLayer0
         }
     }
+
+    ContentSection {
+        icon: "style"
+        title: Translation.tr("Policies Button Style")
+
+        ContentSubsection {
+            title: Translation.tr("Visual style")
+            icon: "palette"
+
+            ConfigSelectionArray {
+                currentValue: Config.options.bar.styles.policies
+                onSelected: newValue => {
+                    Config.options.bar.styles.policies = String(newValue);
+                }
+                options: [
+                    { displayName: Translation.tr("Default"),    icon: "style",     value: "default" },
+                    { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" },
+                    { displayName: Translation.tr("Outline"),    icon: "circle",    value: "outline" }
+                ]
+            }
+        }
+
+        ExpressiveColorModeSubsection {
+            visible: Config.options.bar.styles.policies === "expressive"
+            currentValue: Config.options.bar.policies.colorMode
+            onSelected: newValue => Config.options.bar.policies.colorMode = String(newValue)
+        }
+    }
     ContentSection {
         icon: "policy"
         title: Translation.tr("Work Safety & Policies")
@@ -75,23 +103,10 @@ ContentPage {
         title: Translation.tr("Phone & scrcpy Integration")
         visible: Config.options.policies.phone !== 0
 
-        ContentSubsectionLabel { text: Translation.tr("Display") }
-
-        ConfigSwitch {
-            buttonIcon: "view_in_ar"
-            text: Translation.tr("Show Mirror / Webcam / Microphone cards")
-            checked: Config.options.phone.showPeripheralCards
-            onCheckedChanged: {
-                Config.options.phone.showPeripheralCards = checked;
-            }
-        }
-
-
         ConfigSwitch {
             buttonIcon: "sync"
             text: Translation.tr("Enable KDE Connect Service")
             checked: Config.options.phone.kdeconnectEnabled
-            configPage: Qt.resolvedUrl("KdeConnectConfig.qml")
             onCheckedChanged: Config.options.phone.kdeconnectEnabled = checked
         }
 

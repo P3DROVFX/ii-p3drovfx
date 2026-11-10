@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import qs
 import qs.services
 import qs.modules.common
+import qs.modules.ii.dynamicIsland.core
 import qs.modules.common.widgets
 import QtQuick
 import QtQuick.Layouts
@@ -54,7 +55,12 @@ Item {
 
     // Whether the widget has anything to say at all. Its own change handler is
     // the only safe place to report it, for the same reason.
-    readonly property bool hasContent: root.activelyRecording || root.isLoading
+    /**
+     * Out in one of the Dynamic Island's auxiliary bubbles right now, so the bar
+     * leaves it to the bubble instead of showing it twice.
+     */
+    readonly property bool bubbled: IslandGeometry.bubbled("recording")
+    readonly property bool hasContent: (root.activelyRecording || root.isLoading) && !root.bubbled
 
     // ── Configuration ────────────────────────────────────────────────────────
     readonly property string style: Config.options.bar.styles.recordIndicator ?? "expressive"
@@ -107,7 +113,7 @@ Item {
     // nothing to grab, drag or place. While the mode is on it is drawn as though
     // it were active. Rendering only — the stored visibility flag stays on the
     // real condition, and the bar ORs the mode in on its side.
-    readonly property bool shown: root.activelyRecording || root.isLoading || GlobalStates.editMode
+    readonly property bool shown: root.hasContent || GlobalStates.editMode
 
     readonly property real thickness: root.vertical
         ? Appearance.sizes.verticalBarWidth - 8
@@ -246,11 +252,16 @@ Item {
             if (!root.activelyRecording)
                 return;
             Quickshell.execDetached(["bash", Directories.recordScriptPath]);
-            controlsPopup.close();
+            controlsPopupLoader.item?.close();
         }
 
-        StyledPopup {
+        // Lazy: popup controller is only built on approach (same as ExpressiveSports).
+        PopupLoader {
+            id: controlsPopupLoader
+            active: BarInteraction.enablePopups && (BarInteraction.clickToShow || mouseArea.containsMouse || held)
+            sourceComponent: StyledPopup {
             id: controlsPopup
+            popupId: "record"
             hoverTarget: mouseArea
             stickyHover: true
             popupRadius: Appearance.rounding.large
@@ -442,6 +453,46 @@ Item {
                         }
                     }
 
+                    // Draw over the screen being recorded. The popup closes first: the
+                    // overlay draws over everything, the bar's popup included.
+                    RippleButton {
+                        id: drawBtn
+                        visible: LiveDraw.enabled
+                        Layout.preferredWidth: 38
+                        Layout.preferredHeight: 38
+                        buttonRadius: Appearance.rounding.full
+
+                        toggled: LiveDraw.trayOpen
+                        colBackground: Appearance.colors.colSecondaryContainer
+                        colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+
+                        onClicked: {
+                            if (!LiveDraw.trayOpen)
+                                controlsPopup.close();
+                            LiveDraw.toggle();
+                        }
+
+                        contentItem: Item {
+                            implicitWidth: drawIcon.implicitWidth
+                            implicitHeight: drawIcon.implicitHeight
+
+                            MaterialSymbol {
+                                id: drawIcon
+                                anchors.centerIn: parent
+                                text: "draw"
+                                fill: drawBtn.toggled ? 1 : 0
+                                iconSize: 18
+                                color: drawBtn.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
+                            }
+                        }
+
+                        StyledToolTip {
+                            text: drawBtn.toggled
+                                ? Translation.tr("Put the drawing tools away")
+                                : Translation.tr("Draw on the screen while recording")
+                        }
+                    }
+
                     // Pause / Resume
                     RippleButton {
                         id: pauseBtn
@@ -524,6 +575,7 @@ Item {
                     }
                 }
             }
+        } // end Loader
         }
     }
 }

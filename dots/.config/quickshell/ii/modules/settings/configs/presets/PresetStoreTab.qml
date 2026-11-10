@@ -22,7 +22,7 @@ ColumnLayout {
     signal openDetails(var entry)
 
     // 0 stars · 1 recently updated · 2 name
-    property int sortMode: 0
+    property int sortMode: 1
     readonly property var results: {
         let rows = PresetStore.discoverResults.slice();
         if (root.sortMode === 1)

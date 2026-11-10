@@ -22,6 +22,42 @@ Singleton {
     // a level change the user didn't ask for.
     property bool suppressOsd: false
 
+    // The keyboard's own backlight key changed the level (see hwChangedView), or, with keysOnly
+    // on, a change passed the press gate. Fires even when a poll already picked the new value
+    // up, which currentValueChanged would not.
+    signal keyChanged()
+
+    // With `osd.brightnessKeysOnly` on (see Brightness.keysOnly), a polled change only reaches
+    // the OSD when the shell wrote it (setValue) or a key press was reported
+    // (`ipc call keyboardBacklight keyPressed`) within pressWindowMs, before or after it. An
+    // ambient-light daemon's writes look like any other at the sysfs level. Keys the driver
+    // reports through brightness_hw_changed bypass the gate.
+    readonly property bool keysOnly: Config.options?.osd?.brightnessKeysOnly ?? false
+    // A poll can land up to a full interval after the write.
+    readonly property int pressWindowMs: 1500
+    property real keyPressedAt: -1e9
+    property real outsideChangeAt: -1e9
+
+    function keyPressed(): void {
+        root.keyPressedAt = Date.now()
+        root.fireGatedChange()
+    }
+
+    // Both halves call this, since either can land first.
+    function fireGatedChange(): void {
+        const now = Date.now()
+        if (now - root.keyPressedAt >= root.pressWindowMs || now - root.outsideChangeAt >= root.pressWindowMs)
+            return
+        root.outsideChangeAt = -1e9
+        root.keyChanged()
+    }
+
+    onCurrentValueChanged: {
+        if (!root.keysOnly || root.suppressOsd) return
+        root.outsideChangeAt = Date.now()
+        root.fireGatedChange()
+    }
+
     readonly property bool autoOffEnabled: (Config.options?.light?.keyboardBacklight?.autoOff) ?? false
     readonly property int autoOffTimeout: (Config.options?.light?.keyboardBacklight?.timeout) ?? 15
 
@@ -58,6 +94,12 @@ Singleton {
 
     function setValue(value: int) {
         if (!available || !ready) return
+        root.keyPressedAt = Date.now()
+        root.write(value)
+    }
+
+    function write(value: int) {
+        if (!available || !ready) return
         value = Math.max(0, Math.min(maxValue, value))
         setProc.command = ["brightnessctl", "--device", deviceName, "s", value.toString(), "--quiet"]
         setProc.running = true
@@ -72,7 +114,7 @@ Singleton {
     function idleWrite(value: int) {
         root.suppressOsd = true
         osdSuppressTimer.restart()
-        root.setValue(value)
+        root.write(value)
     }
 
     // Persistent is reloadable, so its adapter can briefly lag behind a hot reload.
@@ -212,6 +254,35 @@ Singleton {
         }
     }
 
+    // Drivers that set LED_BRIGHT_HW_CHANGED (samsung-galaxybook, thinkpad_acpi, dell-laptop,
+    // asus-wmi, ...) notify this file when the keyboard's own backlight key changes the level,
+    // and only then: software writes, the idle switch-off included, never touch it. So a key
+    // press shows at once instead of on the next poll, even inside the idle-write window.
+    // Other drivers have no such file; the poll still covers them.
+    FileView {
+        id: hwChangedView
+        property bool armed: false
+        path: root.deviceName ? `/sys/class/leds/${root.deviceName}/brightness_hw_changed` : ""
+        watchChanges: true
+        printErrors: false // absent on most drivers, ENODATA until the first key press
+        onFileChanged: {
+            hwChangedView.armed = true
+            hwChangedView.reload()
+        }
+        // The file holds the level of the last key press, which can be older than the current
+        // one, so the load that comes with setting the path is not news.
+        onLoaded: {
+            if (!hwChangedView.armed) return
+            hwChangedView.armed = false
+            const val = parseInt(hwChangedView.text().trim())
+            if (isNaN(val)) return
+            root.suppressOsd = false
+            osdSuppressTimer.stop()
+            root.currentValue = val
+            root.keyChanged()
+        }
+    }
+
     Timer {
         id: pollTimer
         interval: 1000
@@ -229,6 +300,11 @@ Singleton {
 
         function set(value: string) {
             onPressed: root.setValue(parseInt(value))
+        }
+
+        // A backlight key handled outside the shell reports the press here; see keysOnly.
+        function keyPressed() {
+            root.keyPressed()
         }
     }
 }

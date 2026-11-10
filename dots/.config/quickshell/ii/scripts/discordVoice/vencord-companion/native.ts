@@ -69,6 +69,15 @@ export function publishState(_: IpcMainInvokeEvent, json: string) {
     if (socket?.writable && !connecting) socket.write(latestState);
 }
 
+// One-off events (message notices). Unlike the state they are not replayed on
+// reconnect: a toast for a message that arrived while the shell was down would
+// only be stale.
+export function publishEvent(_: IpcMainInvokeEvent, json: string) {
+    connect();
+    if (socket?.writable && !connecting)
+        socket.write(JSON.stringify({ type: "event", event: JSON.parse(json) }) + "\n");
+}
+
 // This promise resolves only when the bridge pushes a command. The renderer
 // immediately awaits another one afterward, giving us reactive bidirectional
 // delivery without a command-file polling timer.

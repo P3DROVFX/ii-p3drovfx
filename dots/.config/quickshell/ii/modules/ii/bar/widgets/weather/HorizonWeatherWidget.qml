@@ -78,7 +78,7 @@ MouseArea {
                 visible: !root.minimal
                 implicitSize: root.weatherPlateSize
                 shape: root.weatherPlateShape
-                color: root.inverted ? palette.colAccent : palette.colContainer
+                color: root.inverted ? palette.colBackgroundVariant : palette.colBackground
             }
 
             Image {
@@ -127,8 +127,13 @@ MouseArea {
         }
     }
 
-    WeatherPopup {
-        compact: Config.options.bar.tooltips.compactPopups
-        hoverTarget: root
+    // Lazy: popup controller is only built on approach (same as ExpressiveSports).
+    PopupLoader {
+        active: BarInteraction.enablePopups
+            && (BarInteraction.clickToShow || root.containsMouse || held)
+        sourceComponent: WeatherPopup {
+            compact: Config.options.bar.tooltips.compactPopups
+            hoverTarget: root
+        }
     }
 }

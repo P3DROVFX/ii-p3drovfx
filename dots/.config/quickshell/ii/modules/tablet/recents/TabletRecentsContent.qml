@@ -36,6 +36,20 @@ Item {
     /// Asks the host to close first and run this afterwards; see TabletRecentsWindow on why
     /// anything that changes focus cannot happen while this surface is still mapped.
     signal deferredRequested(var action)
+    /// The card about to be opened, so the surface can grow it back into its window.
+    signal heroRequested(var toplevel)
+
+    /// The window whose card the hero transition is standing in for; that card stays hidden.
+    property var heroToplevel: null
+
+    /// The list card showing `toplevel`, or null when it has none on screen (grid layout,
+    /// or a delegate the view has not created).
+    function cardFor(toplevel) {
+        if (root.gridLayout || !toplevel)
+            return null;
+        const index = root.windows.indexOf(toplevel);
+        return index < 0 ? null : cardList.itemAtIndex(index);
+    }
 
     readonly property var recentsConfig: Config.options?.tablet?.recents
 
@@ -128,6 +142,7 @@ Item {
     }
 
     function activate(toplevel) {
+        root.heroRequested(toplevel);
         root.deferredRequested(() => toplevel?.activate());
     }
 
@@ -436,6 +451,7 @@ Item {
                     showActions: root.actionRowHeight > 0 && listCard.index === cardList.activeIndex
                     // MRU order puts the window you came from first.
                     isCurrent: listCard.index === 0
+                    heroHidden: root.heroToplevel !== null && root.heroToplevel === listCard.modelData
 
                     onActivated: root.activate(listCard.modelData)
                     onClosed: root.closeWindow(listCard.modelData)

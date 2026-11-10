@@ -33,6 +33,14 @@ AbstractWidget {
     }
     readonly property bool interactionLocked: pinned || (_positionsLocked && !editModeActive)
     property bool isPreview: false
+    /**
+     * Set by the host while windows cover the desktop. Widgets must not keep the layer
+     * busy then: it is full screen, so any repeating Timer, seconds SystemClock, endless
+     * animation or FrameAnimation re-renders every widget on every frame.
+     * Gate each of those on `live` (tests/check-widget-live.sh enforces it).
+     */
+    property bool paused: false
+    readonly property bool live: !root.paused && root.visible && root.opacity > 0
     property string styleOverride: widgetInstance ? (WidgetsRegistry.getStyleOverride(widgetInstance.widgetId) || "") : ""
 
     property int screenWidth: 1920
@@ -46,10 +54,10 @@ AbstractWidget {
     property var configEntry: widgetInstance !== null ? widgetInstance : (Config.options.background.widgets[configEntryName] || null)
     property string placementStrategy: isPreview ? "free" : (widgetInstance !== null ? (widgetInstance.placementStrategy || "free") : (configEntry ? configEntry.placementStrategy : "free"))
     property string lockBehavior: widgetInstance ? (widgetInstance.lockBehavior || "hide") : "hide"
-    property bool visibleWhenLocked: lockBehavior === "keep" || lockBehavior === "center" || lockBehavior === "lockOnly"
+    property bool visibleWhenLocked: lockBehavior === "keep" || lockBehavior === "custom" || lockBehavior === "center" || lockBehavior === "lockOnly"
     // The lock layout: the real lock once its wallpaper has centred, or Edit
     // Mode's Lockscreen tab, which previews it without a lock session.
-    readonly property bool lockLayoutActive: GlobalStates.lockScreenCentered || GlobalStates.editLockPreview
+    readonly property bool lockLayoutActive: GlobalStates.lockScreenCentered || GlobalStates.editLockLayout
     property bool forceCenter: (lockLayoutActive || GlobalStates.workspaceRestoreInProgress) && lockBehavior === "center"
 
     function getCenteredWidgetsList() {
@@ -82,6 +90,15 @@ AbstractWidget {
     }
 
     readonly property real effectiveScale: Math.max(0.001, root.scale)
+
+    // This instance's own picture (photo widgets, Config.updateWidgetImagePath),
+    // or undefined while it has none of its own and shows its type's.
+    readonly property var instanceImagePath: {
+        if (!root.widgetInstance)
+            return undefined;
+        const entry = WidgetPlacement.findEntry(Config.options.background.activeWidgets, root.widgetInstance.id);
+        return entry && entry.imagePath !== undefined ? String(entry.imagePath) : undefined;
+    }
 
     // ── Supersampling factor ─────────────────────────────────────────────────
     // Item.scale stretches content that has already been rasterised, so anything
@@ -264,7 +281,12 @@ AbstractWidget {
     Behavior on exitProgress {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
     }
-    onExitingChanged: root.exitProgress = root.exiting ? 0 : 1
+    onExitingChanged: {
+        if (!root.exiting)
+            root.exitProgress = 1;
+        else if (!GlobalStates.presetHoldMotion)
+            root.exitProgress = 0;
+    }
 
     readonly property real lifecycleOpacity: root.entryProgress * root.exitProgress
     // 0.92 → 1 on the way in, and 1 → 0.82 on the way out: enough to read as
@@ -276,7 +298,7 @@ AbstractWidget {
     Timer {
         id: entryTimer
         interval: Math.max(1, root.staggerDelay)
-        running: !root.isPreview
+        running: !root.isPreview && !root.entryDone && !GlobalStates.presetHoldMotion
         repeat: false
         onTriggered: {
             root.entryDone = true;
@@ -472,18 +494,37 @@ AbstractWidget {
     // everyone else uses the per-instance Item scale.
     readonly property var _widgetSizeConsumers: ({
         "android_search_bar": true, "at_a_glance": true,
+        "todo_focus": true, "todo_board": true, "todo_column": true, "timer_pomodoro": true, "timer_stopwatch": true, "timer_countdown": true, "translator_widget": true, "water_glass": true, "phone_key": true, "phone_deck": true, "phone_tower": true, "send_drop": true, "session_grid": true,
+        "wellbeing_screen_ring": true, "wellbeing_limits": true, "wellbeing_bedtime": true, "wellbeing_break": true, "wellbeing_day": true, "people_birthday": true, "people_birthdays": true, "people_holiday": true, "people_countdowns": true, "people_favorites": true, "home_devices": true,
+        "weather_pattern": true, "weather_silhouette": true, "weather_strip": true, "weather_dial": true, "weather_monolith": true, "weather_daylight": true, "weather_ranges": true, "weather_ribbon": true, "weather_collage": true,
+        "converter_2x1": true, "shelf_1x1": true, "shelf_2x1": true, "shelf_1x2": true, "favorites_1x1": true, "favorites_row": true, "search_pixel": true, "search_shortcuts": true,
+        "calendar_date_banner": true, "calendar_date_shapes": true, "calendar_date_stack": true,
+        "calendar_date_type": true,
+        "calendar_month_tall": true, "calendar_week_agenda": true, "calendar_week_strip": true,
         "circle_pointer_clock": true, "circular_media": true,
         "clock_expressive_card": true, "clock_flex": true,
-        "clock_hori": true, "compact_media": true, "concentric_clock": true,
-        "grid_card_clock": true, "media_cd": true, "month_clock": true,
-        "photo_1x1": true, "resource_cpu_pill": true, "resource_disk_pill": true,
-        "resource_fill_cards": true, "resource_nothing_cpu": true,
+        "clock_duo": true, "clock_hori": true, "clock_numeral": true, "clock_type_stack": true, "clock_type_weight": true,
+        "clock_type_width": true, "compact_media": true, "concentric_clock": true,
+        "grid_card_clock": true, "media_cd": true, "media_cover": true, "media_deck": true,
+        "media_halo": true, "media_poster": true, "month_clock": true,
+        "photo_1x1": true, "photo_plain_1x1": true, "photo_plain_1x2": true,
+        "photo_plain_2x1": true, "resource_cpu_pill": true, "resource_disk_pill": true,
+        "resource_columns": true, "resource_fill_cards": true, "resource_tiles": true, "resource_nothing_cpu": true,
         "resource_nothing_disk": true, "resource_nothing_ram": true,
         "resource_ram_pill": true, "scallop_dot_clock": true,
         "scallop_number_clock": true, "search_pill": true,
         "triple_ring_clock": true, "wearos_arc_clock": true
     })
-    readonly property bool _usesWidgetSizeKey: _scaleSection !== null && _scaleSection.widgetSize !== undefined && _widgetSizeConsumers[configEntryName] === true
+    // Defensive binding: on teardown an upstream read can throw, and a throwing
+    // binding assigns undefined to the bool ("Unable to assign [undefined] to
+    // bool").
+    readonly property bool _usesWidgetSizeKey: {
+        try {
+            return Boolean(_scaleSection && _scaleSection.widgetSize !== undefined && _widgetSizeConsumers[configEntryName] === true);
+        } catch (e) {
+            return false;
+        }
+    }
     // >0 only while a resize gesture runs on the Item.scale path. It is what
     // makes the widget itself follow the grip instead of only an outline —
     // and it deliberately never touches the config, so the pointer never
@@ -507,6 +548,8 @@ AbstractWidget {
     // Uniform by design: widgets are drawn for one aspect ratio, so the grip
     // carries a single factor and never stretches one axis on its own.
     property bool _resizeActive: false
+    property var _resizeGroup: []
+    property real _resizeFollowerStartScale: 1.0
     property real _resizeStartScale: 1 // factor, not percent
     property real _resizeStartDist: 1
     property bool _resizeUsesGlobal: false
@@ -528,6 +571,9 @@ AbstractWidget {
 
     readonly property real _resizeStep: 0.05
     readonly property real _resizeDetent: 0.03 // magnetic pull back to 100%
+    // Resize grip ceiling. Content-sized text widgets stay sharp at any scale,
+    // so they may opt into a higher ceiling than the default 200%.
+    property real resizeMaxScale: 2
 
     function _currentScaleFactor() {
         if (_usesWidgetSizeKey)
@@ -571,9 +617,9 @@ AbstractWidget {
             // Never let the widget outgrow its monitor.
             const maxByWidth = (scaledScreenWidth / Math.max(1, width)) * _resizeStartScale;
             const maxByHeight = (scaledScreenHeight / Math.max(1, height)) * _resizeStartScale;
-            _resizeMaxScale = Math.max(0.5, Math.min(2, maxByWidth, maxByHeight));
+            _resizeMaxScale = Math.max(0.5, Math.min(root.resizeMaxScale, maxByWidth, maxByHeight));
         } else {
-            _resizeMaxScale = 2;
+            _resizeMaxScale = root.resizeMaxScale;
         }
         _resizeStartX = x;
         _resizeStartY = y;
@@ -583,6 +629,15 @@ AbstractWidget {
         _resizeGestureMoved = false;
         _resizeFreeStep = false;
         _resizePreviewScale = _resizeStartScale;
+        if (canvas && canvas.selectedWidgets && canvas.selectedWidgets.indexOf(root) !== -1) {
+            _resizeGroup = canvas.selectedWidgets.filter(w => w !== root && w.draggable);
+            for (let i = 0; i < _resizeGroup.length; i++) {
+                const follower = _resizeGroup[i];
+                follower._resizeFollowerStartScale = follower.committedScaleFactor ?? follower.scale;
+            }
+        } else {
+            _resizeGroup = [];
+        }
         isDraggingOrSettling = true;
         settleTimer.stop();
         staggerTimer.stop();
@@ -606,6 +661,13 @@ AbstractWidget {
         }
         dist = Math.max(1, dist);
         _resizePreviewScale = _quantiseScale(_resizeStartScale * (dist / _resizeStartDist));
+        if (_resizeGroup.length > 0 && _resizeStartScale > 0) {
+            const ratio = _resizePreviewScale / _resizeStartScale;
+            for (let i = 0; i < _resizeGroup.length; i++) {
+                const follower = _resizeGroup[i];
+                follower._liveScaleOverride = (follower._resizeFollowerStartScale ?? 1) * ratio;
+            }
+        }
         applyLiveResize();
     }
 
@@ -630,7 +692,7 @@ AbstractWidget {
     // an undo puts the widget back at its old size AND its old spot.
     function commitResizeScale(factor) {
         GlobalStates.editHistoryBeginBatch();
-        _commitResizeScale(WidgetDragMath.clamp(factor, 0.5, 2));
+        _commitResizeScale(WidgetDragMath.clamp(factor, 0.5, root.resizeMaxScale));
         GlobalStates.editHistoryEndBatch();
     }
 
@@ -673,7 +735,18 @@ AbstractWidget {
     function resetScaleFromHandle() {
         _resizeActive = false;
         _resizePreviewScale = 0;
+        const canvas = findCanvas(root.parent);
+        const inGroup = canvas && canvas.selectedWidgets && canvas.selectedWidgets.indexOf(root) !== -1;
+        GlobalStates.editHistoryBeginBatch();
         commitResizeScale(1.0);
+        if (inGroup) {
+            const others = canvas.selectedWidgets.filter(w => w !== root && w.draggable);
+            for (let i = 0; i < others.length; i++) {
+                others[i].commitResizeScale(1.0);
+                others[i]._liveScaleOverride = 0;
+            }
+        }
+        GlobalStates.editHistoryEndBatch();
         // Cleared only after the commit, so the scale binding never falls back
         // to the stale pre-resize value for a frame.
         _liveScaleOverride = 0;
@@ -687,8 +760,24 @@ AbstractWidget {
         // A click without pointer travel never entered updateResizeGesture, so
         // there is nothing to commit — persisting the untouched preview would
         // just rewrite the same value and fight the double-click reset.
-        if (_resizeGestureMoved && _resizePreviewScale > 0)
+        if (_resizeGestureMoved && _resizePreviewScale > 0) {
+            GlobalStates.editHistoryBeginBatch();
             commitResizeScale(_resizePreviewScale);
+            if (_resizeGroup.length > 0 && _resizeStartScale > 0) {
+                const ratio = _resizePreviewScale / _resizeStartScale;
+                for (let i = 0; i < _resizeGroup.length; i++) {
+                    const follower = _resizeGroup[i];
+                    follower._liveScaleOverride = 0;
+                    follower.commitResizeScale((follower._resizeFollowerStartScale ?? 1) * ratio);
+                }
+            }
+            GlobalStates.editHistoryEndBatch();
+        } else if (_resizeGroup.length > 0) {
+            for (let i = 0; i < _resizeGroup.length; i++) {
+                _resizeGroup[i]._liveScaleOverride = 0;
+            }
+        }
+        _resizeGroup = [];
         _resizePreviewScale = 0;
         _liveScaleOverride = 0;
         settleTimer.restart();
@@ -770,9 +859,26 @@ AbstractWidget {
     onPressed: mouse => beginPointerGesture(mouse)
     onPositionChanged: mouse => updatePointerGesture(mouse)
 
+    // A preset's heavy work is running: keep this spot and move once it is done.
+    Connections {
+        target: GlobalStates
+        function onPresetHoldMotionChanged() {
+            if (GlobalStates.presetHoldMotion)
+                return;
+            if (root.exiting)
+                root.exitProgress = 0;
+            if (root._pendingPosition) {
+                staggerTimer.interval = Math.max(1, root.staggerDelay);
+                staggerTimer.restart();
+            }
+        }
+    }
+
     onTargetXChanged: {
         if (!isDragging && !root.isDraggingOrSettling && !root.isPreview) {
-            if (root.staggerDelay > 0) {
+            if (GlobalStates.presetHoldMotion && root.entryDone) {
+                root._pendingPosition = true;
+            } else if (root.staggerDelay > 0) {
                 root._pendingPosition = true;
                 staggerTimer.interval = root.staggerDelay;
                 staggerTimer.restart();
@@ -783,7 +889,9 @@ AbstractWidget {
     }
     onTargetYChanged: {
         if (!isDragging && !root.isDraggingOrSettling && !root.isPreview) {
-            if (root.staggerDelay > 0) {
+            if (GlobalStates.presetHoldMotion && root.entryDone) {
+                root._pendingPosition = true;
+            } else if (root.staggerDelay > 0) {
                 root._pendingPosition = true;
                 staggerTimer.interval = root.staggerDelay;
                 staggerTimer.restart();
@@ -813,7 +921,6 @@ AbstractWidget {
         enabled: !root.exiting && root.entryProgress >= 1
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
     }
-    readonly property real lockScaleFactor: lockBehavior === "center" ? 1.0 : (GlobalStates.lockAnimationActive ? 0.85 : 1.0)
     // No scale while dragging. A 3% lift used to be the only feedback that the
     // grab took, but it wrote `root.scale` on press and on release, which meant
     // a plain reposition also re-rasterised every Canvas behind `Supersampled`
@@ -821,7 +928,7 @@ AbstractWidget {
     // widget whose real size never changed. The grab is reported by the snap
     // guides and the selection halo instead, neither of which moves the widget.
     scale: _effectiveInstanceScale * (Config.options.background.widgets.widgetsScale ?? 1.0)
-        * lockScaleFactor * lifecycleScale
+        * lifecycleScale
     Behavior on scale {
         // Same as the opacity above: `elementResize` is 300ms and the reap is
         // at 260ms, so left armed this Behavior turns the exit's shrink into a
@@ -890,7 +997,7 @@ AbstractWidget {
         const list = Config.options.background.activeWidgets || [];
         const result = {};
         for (let i = 0; i < list.length; i++)
-            result[list[i].id] = WidgetPlacement.resolve(list[i], monitorName);
+            result[list[i].id] = WidgetPlacement.resolve(list[i], monitorName, GlobalStates.lockLookActive);
         return result;
     }
 
@@ -989,16 +1096,20 @@ AbstractWidget {
             }
         }
 
-        // Monitor-centre constraint: aligns the widget's visual centre with the vertical centre line.
+        // A multi-selection centres its visual bounding box, not the leader.
         const screenCenterX = root.scaledScreenWidth / 2;
-        const tCenter = screenCenterX - root.width / 2;
+        const group = ownerCanvas ? ownerCanvas.groupDrag : null;
+        const centerOffset = group && group.leader === root && group.followers.length > 0
+            ? group.centerOffsetX : root.width / 2;
+        const tCenter = screenCenterX - centerOffset;
         candidates.push({
             "target": tCenter,
             "guide": screenCenterX,
             "distance": Math.abs(rawX - tCenter)
         });
 
-        return WidgetDragMath.nearestValidCandidate(candidates, dragMinimumX(), dragMaximumX(), _snapEnter);
+        return WidgetDragMath.nearestValidCandidate(candidates,
+            Math.max(dragMinimumX(), groupDragMinX), Math.min(dragMaximumX(), groupDragMaxX), _snapEnter);
     }
 
     function snapCandidateY(rawY, rawX) {
@@ -1094,16 +1205,20 @@ AbstractWidget {
             }
         }
 
-        // Monitor-centre constraint: aligns the widget's visual centre with the horizontal centre line.
+        // Use the same frozen group bounds as the vertical centre guide.
         const screenCenterY = root.scaledScreenHeight / 2;
-        const tCenter = screenCenterY - root.height / 2;
+        const group = ownerCanvas ? ownerCanvas.groupDrag : null;
+        const centerOffset = group && group.leader === root && group.followers.length > 0
+            ? group.centerOffsetY : root.height / 2;
+        const tCenter = screenCenterY - centerOffset;
         candidates.push({
             "target": tCenter,
             "guide": screenCenterY,
             "distance": Math.abs(rawY - tCenter)
         });
 
-        return WidgetDragMath.nearestValidCandidate(candidates, dragMinimumY(), dragMaximumY(), _snapEnter);
+        return WidgetDragMath.nearestValidCandidate(candidates,
+            Math.max(dragMinimumY(), groupDragMinY), Math.min(dragMaximumY(), groupDragMaxY), _snapEnter);
     }
 
     function applyGridAndSnapX(rawX, rawY) {
@@ -1240,6 +1355,12 @@ AbstractWidget {
             root.x = _dragOriginX;
             root.y = _dragOriginY;
         }
+        if (_resizeGroup.length > 0) {
+            for (let i = 0; i < _resizeGroup.length; i++) {
+                _resizeGroup[i]._liveScaleOverride = 0;
+            }
+            _resizeGroup = [];
+        }
         _pointerGestureReady = false;
         _dragMovementActive = false;
         isDraggingOrSettling = false;
@@ -1333,6 +1454,8 @@ AbstractWidget {
         const canvas = findCanvas(root.parent);
         if (!canvas || !canvas.contextMenuRequested)
             return;
+        if (canvas.selectedWidgets && canvas.selectedWidgets.indexOf(root) === -1)
+            canvas.applySelection([root]);
         const point = root.mapToItem(canvas, localX, localY);
         canvas.contextMenuRequested(widgetInstance.id, point.x, point.y);
     }
@@ -1464,70 +1587,16 @@ AbstractWidget {
     }
 
     // ── Resize grip ──────────────────────────────────────────────────────────
-    Item {
+    // Shared with the launch-pad cards (ResizeGrip.qml).
+    ResizeGrip {
         id: resizeHandle
-        visible: opacity > 0.001
-        // Shown on hover, and throughout the mode: a grip you have to find
-        // by hovering is not an affordance in a layout editor.
-        opacity: root._scaleHandleAvailable && !root.isDragging && (root.containsMouse || resizeDragArea.dragging || root.editModeActive) ? 1 : 0
-        // Grow into place instead of only fading: at this size a pure opacity
-        // ramp reads as a glitch rather than as something arriving.
-        scale: opacity > 0.5 ? 1 : 0.7
-        Behavior on opacity {
-            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(resizeHandle)
-        }
-        Behavior on scale {
-            animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(resizeHandle)
-        }
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        // The visual grip sits inside the bounds; the hit area around it is
-        // allowed to hang off the corner, which is what makes it grabbable.
-        anchors.rightMargin: -6
-        anchors.bottomMargin: -6
-        width: 40
-        height: 40
-        z: 99
-
-        Rectangle {
-            id: grip
-            anchors.centerIn: parent
-            anchors.horizontalCenterOffset: -3
-            anchors.verticalCenterOffset: -3
-            width: 22
-            height: 22
-            radius: 7
-            color: resizeDragArea.dragging || resizeDragArea.containsMouse
-                ? Appearance.colors.colPrimary
-                : Appearance.colors.colSecondaryContainer
-
-            Behavior on color {
-                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(grip)
-            }
-
-            MaterialSymbol {
-                anchors.centerIn: parent
-                text: "open_in_full"
-                iconSize: 13
-                color: resizeDragArea.dragging || resizeDragArea.containsMouse
-                    ? Appearance.colors.colOnPrimary
-                    : Appearance.colors.colOnSecondaryContainer
-            }
-        }
-
-        MouseArea {
-            id: resizeDragArea
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.SizeFDiagCursor
-            preventStealing: true
-
-            onPressed: mouse => root.beginResizeGesture(mouse)
-            onPositionChanged: mouse => root.updateResizeGesture(mouse)
-            onReleased: root.endResizeGesture()
-            onCanceled: root.endResizeGesture()
-            onDoubleClicked: root.resetScaleFromHandle()
-        }
+        shown: root._scaleHandleAvailable && !root.isDragging && (root.containsMouse || root.editModeActive)
+        renderScale: root.renderScale
+        onPressed: mouse => root.beginResizeGesture(mouse)
+        onPositionChanged: mouse => root.updateResizeGesture(mouse)
+        onReleased: root.endResizeGesture()
+        onCanceled: root.endResizeGesture()
+        onDoubleClicked: root.resetScaleFromHandle()
     }
 
     // ── Menu grip ────────────────────────────────────────────────────────────
@@ -1574,10 +1643,14 @@ AbstractWidget {
                 animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(menuGrip)
             }
 
+            // Rasterised at the size it is shown at: the glyph is a native-
+            // rendered bitmap, and the widget's own scale only stretched it.
             MaterialSymbol {
                 anchors.centerIn: parent
                 text: "more_horiz"
-                iconSize: 15
+                iconSize: 15 * root.renderScale
+                scale: 1 / root.renderScale
+                font.variableAxes: ({ "FILL": 0, "wght": 400, "opsz": 20 })
                 color: menuDragArea.containsMouse
                     ? Appearance.colors.colOnPrimary
                     : Appearance.colors.colOnSecondaryContainer

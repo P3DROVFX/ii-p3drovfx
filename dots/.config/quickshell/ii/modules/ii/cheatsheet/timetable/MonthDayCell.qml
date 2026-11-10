@@ -27,6 +27,7 @@ Item {
     property string densityMode: "compact"
     property real recurrenceLaneOffset: 0
     property bool keyboardSelected: false
+    property bool showShortcutHints: false
     /**
      * Open tasks with no due date, shown on today only and as one chip.
      * They belong to no day, so listing them per cell would bury the calendar.
@@ -58,7 +59,9 @@ Item {
     }
 
     readonly property bool moonEnabled: Config.options.calendar.timetable.moonPhases?.enable ?? false
-    readonly property var moonInfo: H.moonPhaseInfo(root.cellData?.date)
+    // The ephemeris is ~25 trig calls plus two Newton steps, and every cell of
+    // the month asked for it even with moon phases switched off.
+    readonly property var moonInfo: root.moonEnabled ? H.moonPhaseInfo(root.cellData?.date) : null
     readonly property string moonPhaseLabel: {
         const info = root.moonInfo;
         if (!info)
@@ -113,6 +116,14 @@ Item {
     readonly property int dotCapacity: Math.max(1, Math.min(12, Math.floor((root.width - root.cellPadding * 2 - 26) / 11)))
     readonly property var dotEntries: root.entries.slice(0, root.dotCapacity)
     readonly property int hiddenDotCount: Math.max(0, root.entryCount - root.dotEntries.length)
+
+    // Only the selected density is materialized. `visible: false` does not stop
+    // a `Repeater` from building its delegates, so the representation that is
+    // not on screen is filtered out of the model instead: the dots row alone
+    // used to add one Rectangle and one colour resolution per entry to every
+    // cell of a compact month.
+    readonly property var chipModel: root.densityMode === "dots" ? [] : root.visibleEntries
+    readonly property var dotModel: root.densityMode === "dots" ? root.dotEntries : []
 
     function entryColor(entry) {
         if (entry?.kind === "birthday" || entry?.kind === "sport")
@@ -186,6 +197,7 @@ Item {
         cursorShape: root.inMonth ? Qt.PointingHandCursor : Qt.ArrowCursor
         acceptedButtons: Qt.LeftButton
         onClicked: root.createRequested(root.cellData.date)
+        onContainsMouseChanged: if (containsMouse) addButtonSlot.wanted = true
     }
 
     // ─── Header: day number, holiday, add affordance ───
@@ -205,23 +217,30 @@ Item {
             id: dayBadge
             anchors.verticalCenter: parent.verticalCenter
             anchors.left: parent.left
-            width: Math.max(height, dayNumber.implicitWidth + 12)
+            width: Math.max(height, (root.keyboardSelected && root.showShortcutHints ? 44 : dayNumber.implicitWidth + 12))
             height: 20
             radius: Appearance.rounding.full
-            color: root.isToday ? Appearance.colors.colPrimary : (dayHover.hovered ? Appearance.colors.colLayer3 : "transparent")
+            color: root.isToday ? Appearance.colors.colPrimary : (root.keyboardSelected && root.showShortcutHints ? Appearance.colors.colPrimary : (dayHover.hovered ? Appearance.colors.colLayer3 : "transparent"))
 
             Behavior on color {
                 animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(dayBadge)
             }
+            Behavior on width {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(dayBadge)
+            }
 
-            StyledText {
+            TaskShortcutContent {
                 id: dayNumber
                 anchors.centerIn: parent
-                text: String(root.cellData?.day ?? "")
-                font.pixelSize: root.isToday ? Appearance.font.pixelSize.normal : Appearance.font.pixelSize.smallie
-                font.weight: root.isToday ? Font.Bold : (root.inMonth ? Font.DemiBold : Font.Medium)
+                labelText: String(root.cellData?.day ?? "")
+                shortcut: "Ctrl↵"
+                showHint: root.keyboardSelected && root.showShortcutHints
+                labelPixelSize: root.isToday ? Appearance.font.pixelSize.normal : Appearance.font.pixelSize.smallie
+                iconSize: Appearance.font.pixelSize.smallie
+                badgeColor: Appearance.colors.colPrimary
+                badgeTextColor: Appearance.colors.colOnPrimary
                 color: {
-                    if (root.isToday)
+                    if (root.isToday || (root.keyboardSelected && root.showShortcutHints))
                         return Appearance.colors.colOnPrimary;
                     if (!root.inMonth)
                         return Appearance.colors.colOnLayer1Inactive;
@@ -276,7 +295,8 @@ Item {
             width: Appearance.font.pixelSize.normal
             height: width
             visible: root.inMonth && root.forecast !== null && root.width > 92 && (root.isToday || root.isTomorrow || cellPointer.containsMouse)
-            source: WeatherIcons.getWeatherIcon(root.forecast?.code ?? 113, false)
+            // Decoded only where it shows: every cell used to load an icon.
+            source: visible ? WeatherIcons.getWeatherIcon(root.forecast?.code ?? 113, false) : ""
             sourceSize: Qt.size(width, height)
             fillMode: Image.PreserveAspectFit
 
@@ -300,7 +320,7 @@ Item {
         Text {
             id: moonIcon
             anchors.verticalCenter: parent.verticalCenter
-            anchors.right: addButton.left
+            anchors.right: addButtonSlot.left
             anchors.rightMargin: 4
             width: Appearance.font.pixelSize.normal
             height: width
@@ -327,16 +347,32 @@ Item {
             }
         }
 
-        RippleButton {
-            id: addButton
+        // Built on the cell's first hover and kept for its fade: a month of
+        // hidden buttons cost more than the grid's text.
+        Loader {
+            id: addButtonSlot
+            property bool wanted: false
             anchors.verticalCenter: parent.verticalCenter
             anchors.right: parent.right
-            implicitWidth: 20
-            implicitHeight: 20
+            width: 20
+            height: 20
+            active: wanted
+            sourceComponent: addButtonComponent
+        }
+    }
+
+    Component {
+        id: addButtonComponent
+
+        RippleButton {
+            id: addButton
+            // Starts hidden so the first hover fades in like the later ones.
+            property bool armed: false
+            Component.onCompleted: armed = true
             buttonRadius: Appearance.rounding.full
             colBackground: ColorUtils.applyAlpha(Appearance.colors.colPrimary, 0.16)
             colBackgroundHover: Appearance.colors.colPrimary
-            opacity: cellPointer.containsMouse || addButton.hovered ? 1 : 0
+            opacity: armed && (cellPointer.containsMouse || addButton.hovered) ? 1 : 0
             visible: opacity > 0.01
             onClicked: root.createRequested(root.cellData.date)
 
@@ -373,117 +409,152 @@ Item {
         spacing: root.chipSpacing
 
         Repeater {
-            model: root.visibleEntries
+            model: root.chipModel
 
-            delegate: Item {
+            // One chip per entry. The slot used to build all four kinds and
+            // hide three, which was most of what a busy month cost to build.
+            delegate: Loader {
                 required property var modelData
                 required property int index
 
                 width: chipColumn.width
                 height: root.chipHeight
-
-                MonthEventChip {
-                    anchors.fill: parent
-                    visible: parent.modelData.kind === "event" || parent.modelData.kind === "sport"
-                    eventData: parent.modelData.data
-                    allDay: CalendarService.isAllDayEvent(parent.modelData.data)
-                    compact: root.compactChips
-                    dragEnabled: parent.modelData.data?.readOnly !== true
-                    coordinateRoot: root.coordinateRoot
-                    dragging: root.draggedEvent === parent.modelData.data
-                    entranceKey: root.entranceKey
-                    entranceIndex: parent.index
-                    opacity: root.inMonth ? 1 : 0.6
-
-                    onActivated: {
-                        if (parent.modelData.data?.sportEvent === true || parent.modelData.data?.readOnly !== true)
-                            root.eventActivated(parent.modelData.data);
-                    }
-                    onDragBegan: (evt, x, y, w, h) => root.eventDragBegan(evt, x, y, w, h)
-                    onDragMoved: (x, y) => root.eventDragMoved(x, y)
-                    onDragEnded: root.eventDragEnded()
-                    onDragCanceled: root.eventDragCanceled()
-                }
-
-                BirthdayChip {
-                    anchors.fill: parent
-                    visible: parent.modelData.kind === "birthday"
-                    birthdayData: parent.modelData.data
-                    compact: root.compactChips
-                    opacity: root.inMonth ? 1 : 0.6
-                    onActivated: birthday => root.eventActivated(birthday)
-                }
-
-                TaskChip {
-                    anchors.fill: parent
-                    visible: parent.modelData.kind === "task"
-                    taskData: parent.modelData.data
-                    compact: root.compactChips
-                    opacity: root.inMonth ? 1 : 0.6
-                    onCompletionRequested: task => root.taskCompletionRequested(task)
-                }
-
-                // One plate for the whole undated backlog: the count is the
-                // information, the list belongs in the rail.
-                RippleButton {
-                    id: taskGroupChip
-                    readonly property string label: root.entryTitle(parent.modelData)
-
-                    anchors.fill: parent
-                    visible: parent.modelData.kind === "taskGroup"
-                    buttonRadius: Appearance.rounding.verysmall
-                    colBackground: Appearance.colors.colSecondaryContainer
-                    colBackgroundHover: Appearance.colors.colSecondaryContainerHover
-                    colRipple: Appearance.colors.colSecondaryContainerActive
-                    opacity: root.inMonth ? 1 : 0.6
-                    onClicked: root.undatedTasksActivated()
-
-                    contentItem: Row {
-                        anchors.fill: parent
-                        anchors.leftMargin: 5
-                        anchors.rightMargin: 6
-                        spacing: 4
-
-                        MaterialSymbol {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: "checklist"
-                            iconSize: root.compactChips ? Appearance.font.pixelSize.small : Appearance.font.pixelSize.normal
-                            color: Appearance.colors.colOnSecondaryContainer
-                        }
-
-                        StyledText {
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: Math.max(0, parent.width - x)
-                            text: taskGroupChip.label
-                            elide: Text.ElideRight
-                            maximumLineCount: 1
-                            font.pixelSize: root.compactChips ? Appearance.font.pixelSize.smallest : Appearance.font.pixelSize.smaller
-                            font.weight: Font.DemiBold
-                            color: Appearance.colors.colOnSecondaryContainer
-                        }
+                sourceComponent: {
+                    switch (modelData.kind) {
+                    case "event":
+                    case "sport":
+                        return eventChipComponent;
+                    case "birthday":
+                        return birthdayChipComponent;
+                    case "task":
+                        return taskChipComponent;
+                    case "taskGroup":
+                        return taskGroupChipComponent;
+                    default:
+                        return null;
                     }
                 }
             }
         }
 
-        RippleButton {
-            visible: root.hiddenCount > 0
+        Loader {
+            active: root.hiddenCount > 0
+            visible: active
             width: chipColumn.width
-            implicitHeight: root.chipHeight
-            buttonRadius: Math.min(root.chipHeight / 2, Appearance.rounding.small)
-            colBackground: "transparent"
-            colBackgroundHover: Appearance.colors.colLayer3Hover
-            onClicked: root.dayActivated(root.cellData.date)
+            height: root.chipHeight
 
-            contentItem: StyledText {
+            sourceComponent: RippleButton {
+                buttonRadius: Math.min(root.chipHeight / 2, Appearance.rounding.small)
+                colBackground: "transparent"
+                colBackgroundHover: Appearance.colors.colLayer3Hover
+                onClicked: root.dayActivated(root.cellData.date)
+
+                contentItem: StyledText {
+                    anchors.fill: parent
+                    anchors.leftMargin: 11
+                    text: Translation.tr("%1 more").arg(String(root.hiddenCount))
+                    font.pixelSize: Appearance.font.pixelSize.smallest
+                    font.weight: Font.Bold
+                    color: Appearance.colors.colPrimary
+                    verticalAlignment: Text.AlignVCenter
+                    elide: Text.ElideRight
+                }
+            }
+        }
+    }
+
+    // Chip kinds, built by the slot that needs them. `parent` is the slot
+    // Loader, which carries the entry and its index.
+    Component {
+        id: eventChipComponent
+
+        MonthEventChip {
+            anchors.fill: parent
+            eventData: parent.modelData.data
+            allDay: CalendarService.isAllDayEvent(parent.modelData.data)
+            compact: root.compactChips
+            dragEnabled: parent.modelData.data?.readOnly !== true
+            coordinateRoot: root.coordinateRoot
+            dragging: root.draggedEvent === parent.modelData.data
+            entranceKey: root.entranceKey
+            entranceIndex: parent.index
+            opacity: root.inMonth ? 1 : 0.6
+
+            onActivated: {
+                if (parent.modelData.data?.sportEvent === true || parent.modelData.data?.readOnly !== true)
+                    root.eventActivated(parent.modelData.data);
+            }
+            onDragBegan: (evt, x, y, w, h) => root.eventDragBegan(evt, x, y, w, h)
+            onDragMoved: (x, y) => root.eventDragMoved(x, y)
+            onDragEnded: root.eventDragEnded()
+            onDragCanceled: root.eventDragCanceled()
+        }
+    }
+
+    Component {
+        id: birthdayChipComponent
+
+        BirthdayChip {
+            anchors.fill: parent
+            birthdayData: parent.modelData.data
+            compact: root.compactChips
+            opacity: root.inMonth ? 1 : 0.6
+            onActivated: birthday => root.eventActivated(birthday)
+        }
+    }
+
+    Component {
+        id: taskChipComponent
+
+        TaskChip {
+            anchors.fill: parent
+            taskData: parent.modelData.data
+            compact: root.compactChips
+            opacity: root.inMonth ? 1 : 0.6
+            onCompletionRequested: task => root.taskCompletionRequested(task)
+        }
+    }
+
+    // One plate for the whole undated backlog: the count is the
+    // information, the list belongs in the rail.
+    Component {
+        id: taskGroupChipComponent
+
+        RippleButton {
+            id: taskGroupChip
+            readonly property string label: root.entryTitle(parent.modelData)
+
+            anchors.fill: parent
+            buttonRadius: Appearance.rounding.verysmall
+            colBackground: Appearance.colors.colSecondaryContainer
+            colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+            colRipple: Appearance.colors.colSecondaryContainerActive
+            opacity: root.inMonth ? 1 : 0.6
+            onClicked: root.undatedTasksActivated()
+
+            contentItem: Row {
                 anchors.fill: parent
-                anchors.leftMargin: 11
-                text: Translation.tr("%1 more").arg(String(root.hiddenCount))
-                font.pixelSize: Appearance.font.pixelSize.smallest
-                font.weight: Font.Bold
-                color: Appearance.colors.colPrimary
-                verticalAlignment: Text.AlignVCenter
-                elide: Text.ElideRight
+                anchors.leftMargin: 5
+                anchors.rightMargin: 6
+                spacing: 4
+
+                MaterialSymbol {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "checklist"
+                    iconSize: root.compactChips ? Appearance.font.pixelSize.small : Appearance.font.pixelSize.normal
+                    color: Appearance.colors.colOnSecondaryContainer
+                }
+
+                StyledText {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Math.max(0, parent.width - x)
+                    text: taskGroupChip.label
+                    elide: Text.ElideRight
+                    maximumLineCount: 1
+                    font.pixelSize: root.compactChips ? Appearance.font.pixelSize.smallest : Appearance.font.pixelSize.smaller
+                    font.weight: Font.DemiBold
+                    color: Appearance.colors.colOnSecondaryContainer
+                }
             }
         }
     }
@@ -503,7 +574,7 @@ Item {
         spacing: 4
 
         Repeater {
-            model: root.dotEntries
+            model: root.dotModel
 
             delegate: Rectangle {
                 required property var modelData

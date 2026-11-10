@@ -412,12 +412,17 @@ def parse_pages(registry_path: Path) -> list[dict[str, Any]]:
                 array = re.search(rf'"{re.escape(name)}"\s*:\s*\[([^\]]*)\]', entry, re.S)
                 return re.findall(r'"([^"]+)"', array.group(1)) if array else []
 
+            def mapping(name: str) -> dict[str, str]:
+                block = re.search(rf'"{re.escape(name)}"\s*:\s*\{{([^}}]*)\}}', entry, re.S)
+                return dict(re.findall(r'"([^"]+)"\s*:\s*"([^"]+)"', block.group(1))) if block else {}
+
             pages.append({
                 "id": identifier.group(1),
                 "name": field("name").group(1) if field("name") else identifier.group(1),
                 "component": component.group(1),
                 "subPages": strings("subPages"),
                 "searchSources": strings("searchSources"),
+                "searchSubPages": mapping("searchSubPages"),
                 "aliases": strings("aliases"),
                 "searchable": not bool(re.search(r'"searchable"\s*:\s*false', entry)),
             })
@@ -435,7 +440,7 @@ def source_records(root: Path) -> list[dict[str, Any]]:
         for subpage in page["subPages"]:
             records.append({**page, "path": config_root / subpage, "subPage": subpage})
         for source in page["searchSources"]:
-            records.append({**page, "path": config_root / source, "subPage": ""})
+            records.append({**page, "path": config_root / source, "subPage": page["searchSubPages"].get(source, "")})
     return records
 
 

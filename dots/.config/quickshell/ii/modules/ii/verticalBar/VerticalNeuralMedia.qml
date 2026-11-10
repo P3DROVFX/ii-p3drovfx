@@ -25,16 +25,7 @@ MouseArea {
     readonly property bool playing: activePlayer ? activePlayer.playbackState === MprisPlaybackState.Playing : false
 
     readonly property string artUrl: MprisController.artUrl
-    readonly property bool isLocalArt: artUrl.startsWith("file://")
-    property string artDownloadLocation: Directories.coverArt
-    property string artFileName: Qt.md5(artUrl)
-    property string artFilePath: `${artDownloadLocation}/${artFileName}`
-    property bool artDownloaded: false
-    readonly property string artSource: {
-        if (!artUrl) return "";
-        if (isLocalArt) return artUrl;
-        return artDownloaded ? Qt.resolvedUrl(artFilePath) : artUrl;
-    }
+    readonly property string artSource: CoverArt.source(artUrl) || artUrl
 
     onHasTrackChanged: {
         if (typeof rootItem !== "undefined") {
@@ -113,28 +104,6 @@ MouseArea {
         else if (event.angleDelta.y < 0)
             MprisController.decrementVolume();
         event.accepted = true;
-    }
-
-    onArtFilePathChanged: {
-        if (!artUrl || artUrl.length === 0) {
-            artDownloaded = false;
-            return;
-        }
-        if (isLocalArt) {
-            artDownloaded = true;
-            return;
-        }
-        artDownloaded = false;
-        artDownloader.command = ["bash", "-c", `[ -f '${artFilePath}' ] || (mkdir -p '${artDownloadLocation}' && curl -4 -sSL '${artUrl}' -o '${artFilePath}.tmp' && mv '${artFilePath}.tmp' '${artFilePath}')`]
-        artDownloader.running = true;
-    }
-
-    Process {
-        id: artDownloader
-        running: false
-        onExited: {
-            artDownloaded = true;
-        }
     }
 
     Timer {

@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import qs
 import qs.services
 import qs.services.network
 import qs.modules.common
@@ -29,9 +30,12 @@ ContentPage {
     // unloaded the moment someone switches away from it.
     signal openSubPage(url page)
 
-    // The tab is built when it is opened and destroyed when another one is, so
-    // its lifetime is exactly how long the scan list is worth keeping fresh.
-    Component.onCompleted: Network.setWifiScanHolder("settingsWifi", true)
+    // The tab is built when it is opened and destroyed when another one is.
+    // Settings can also stay loaded, hidden, after it is closed; the radio has
+    // nothing to show then, so the scan follows the window being open too.
+    readonly property bool scanWanted: GlobalStates.settingsOpen
+    onScanWantedChanged: Network.setWifiScanHolder("settingsWifi", root.scanWanted)
+    Component.onCompleted: Network.setWifiScanHolder("settingsWifi", root.scanWanted)
     Component.onDestruction: Network.setWifiScanHolder("settingsWifi", false)
 
     function editProfile(uuid: string): void {

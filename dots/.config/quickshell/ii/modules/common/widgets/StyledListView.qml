@@ -1,4 +1,5 @@
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
 import QtQuick
 import QtQuick.Controls
@@ -55,8 +56,9 @@ ListView {
      */
     signal userScrolled(real targetY, real maxY)
 
-    property real touchpadScrollFactor: Config?.options.interactions.scrolling.touchpadScrollFactor ?? 100
-    property real mouseScrollFactor: Config?.options.interactions.scrolling.mouseScrollFactor ?? 50
+    property bool fasterTouchpadScroll: Config?.options.interactions.scrolling.fasterTouchpadScroll ?? false
+    property real touchpadScrollFactor: Config?.options.interactions.scrolling.touchpadScrollFactor ?? 450
+    property real mouseScrollFactor: Config?.options.interactions.scrolling.mouseScrollFactor ?? 120
     property real mouseScrollDeltaThreshold: Config?.options.interactions.scrolling.mouseScrollDeltaThreshold ?? 120
 
     function resetDrag() {
@@ -107,6 +109,8 @@ ListView {
     // Same reasoning as StyledFlickable: the scroll Behavior is for wheel
     // jumps, not for the contentY that dragging and flicking write per frame.
     property bool _wheelScrolling: false
+    // Touchpad: the content follows the fingers and glides on after they lift
+    TouchpadKinetic { id: kinetic; flickable: root }
 
     onHeightChanged: {
         root._suppressScrollAnim = true;
@@ -115,6 +119,7 @@ ListView {
 
     onDraggingChanged: {
         if (root.dragging) {
+            kinetic.stop();
             scrollAnim.stop();
             bounceAnim.stop();
             reboundTimer.stop();
@@ -140,12 +145,19 @@ ListView {
         enabled: root.interactive && root.contentHeight > root.height
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
         onWheel: wheelEvent => {
-            const delta = wheelEvent.angleDelta.y / root.mouseScrollDeltaThreshold;
-            // The angleDelta.y of a touchpad is usually small and continuous,
-            // while that of a mouse wheel is typically in multiples of ±120.
-            var scrollFactor = Math.abs(wheelEvent.angleDelta.y) >= root.mouseScrollDeltaThreshold ? root.mouseScrollFactor : root.touchpadScrollFactor;
-            const step = delta * scrollFactor;
+            const angle = wheelEvent.angleDelta.y;
+            if (!ScrollWheel.isNotch(angle, root, wheelEvent.phase)) {
+                scrollAnim.stop();
+                bounceAnim.stop();
+                root._wheelScrolling = false;
+                kinetic.feed(ScrollWheel.touchpadStep(angle, wheelEvent.pixelDelta.y, root), wheelEvent.phase);
+                root.userScrolled(kinetic.target, root.maxY);
+                wheelEvent.accepted = true;
+                return;
+            }
 
+            kinetic.stop();
+            const step = ScrollWheel.notchStep(angle, root);
             bounceAnim.stop();
 
             const currentPos = (scrollAnim.running || bounceAnim.running) ? root.scrollTargetY : root.contentY;

@@ -66,6 +66,9 @@ Item {
                 text: Translation.tr("Click to show bar popups")
                 checked: Config.options.bar.tooltips.clickToShow
                 onCheckedChanged: Config.options.bar.tooltips.clickToShow = checked
+                StyledToolTip {
+                    text: Translation.tr("Popups open on left click. Widgets that cycle through items on click (keyboard layout, Bluetooth devices, sports) cycle with right click instead.")
+                }
             }
 
             ConfigSwitch {

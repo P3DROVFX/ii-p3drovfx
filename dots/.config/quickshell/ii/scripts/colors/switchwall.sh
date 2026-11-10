@@ -9,8 +9,13 @@ CACHE_DIR="$XDG_CACHE_HOME/quickshell"
 STATE_DIR="$XDG_STATE_HOME/quickshell"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SHELL_CONFIG_FILE="$XDG_CONFIG_HOME/illogical-impulse/config.json"
+CONFIG_LOCK_FILE="$STATE_DIR/config-write.lock"
 MATUGEN_DIR="$XDG_CONFIG_HOME/matugen"
 terminalscheme="$SCRIPT_DIR/terminal/scheme-base.json"
+SHELL_MATUGEN_CONFIG="$SCRIPT_DIR/matugen-shell.toml"
+
+# Picks the newest installed Matugen; see the header of matugen.sh.
+source "$SCRIPT_DIR/matugen.sh"
 
 # Matugen aborts the whole run - colors.json included - as soon as any template
 # in its config points at an input file that does not exist, and it walks the
@@ -52,6 +57,19 @@ report_matugen_failure() {
         notify-send -a "Wallpaper switcher" -c "im.error" "${extra_flags[@]}" \
             "Color generation failed (code $exit_code)" \
             "matugen exited with error code $exit_code, so the shell kept its previous palette." 2>/dev/null || true
+    fi
+}
+
+# Rebuild the recolored icon theme without holding up the rest of the theming. The recolor
+# runs at idle priority, debounces and drops superseded runs itself, so a burst of wallpaper
+# changes ends in one rebuild that never takes CPU from the desktop. It is detached from this
+# script's process group so the caller finishing (or being killed) does not stop it.
+recolor_icons_in_background() {
+    local script="$HOME/.config/quickshell/ii/scripts/colors/recolor_icons.py"
+    if command -v setsid >/dev/null 2>&1; then
+        setsid -f python3 "$script" >/dev/null 2>&1 </dev/null
+    else
+        nohup python3 "$script" >/dev/null 2>&1 </dev/null &
     fi
 }
 
@@ -110,6 +128,10 @@ post_process() {
 
 check_and_prompt_upscale() {
     local img="$1"
+    # Settings → Apps & Overlays → Wallpaper upscaling. Not `// true`: jq treats false as empty.
+    [[ "$(jq -r '.background.upscaylPrompt' "$SHELL_CONFIG_FILE" 2>/dev/null)" == "false" ]] && return
+    # Our own output (services/Upscayl.qml) never asks again, even at a smaller scale.
+    [[ "$(basename "$img")" == *-upscaled-[234]x.* ]] && return
     min_width_desired="$(hyprctl monitors -j | jq '([.[].width] | max)' | xargs)" # max monitor width
     min_height_desired="$(hyprctl monitors -j | jq '([.[].height] | max)' | xargs)" # max monitor height
 
@@ -125,8 +147,20 @@ check_and_prompt_upscale() {
         if [[ "$img_width" -lt "$min_width_desired" || "$img_height" -lt "$min_height_desired" ]]; then
             action=$(notify-send "Upscale?" \
                 "Image resolution (${img_width}x${img_height}) is lower than screen resolution (${min_width_desired}x${min_height_desired})" \
-                -A "open_upscayl=Open Upscayl"\
+                -A "upscale=Upscale" \
+                -A "open_upscayl=Open Upscayl" \
                 -a "Wallpaper switcher")
+            if [[ "$action" == "upscale" ]]; then
+                local target="desktop"
+                [[ -n "$lockscreen_flag" ]] && target="lockscreen"
+                [[ -n "$lightmode_flag" ]] && target="lightmode"
+                # The shell's corner popup does it headless (services/Upscayl.qml);
+                # without a running shell, fall back to the app.
+                if ! qs -c "$QUICKSHELL_CONFIG_NAME" ipc call upscayl prompt "$(realpath "$img")" "$target" \
+                        "$img_width" "$img_height" "$min_width_desired" "$min_height_desired" &>/dev/null; then
+                    action="open_upscayl"
+                fi
+            fi
             if [[ "$action" == "open_upscayl" ]]; then
                 if command -v upscayl &>/dev/null; then
                     nohup upscayl > /dev/null 2>&1 &
@@ -169,6 +203,74 @@ is_desktop_target() {
     [[ -z "$lockscreen_flag" && -z "$lightmode_flag" ]]
 }
 
+# "shell" means Quickshell plays the video inside its own wallpaper plane
+# (modules/ii/background/wallpaper/VideoWallpaper.qml); mpvpaper is then neither
+# required nor started, and no restore script relaunches it at login.
+video_backend_is_shell() {
+    [[ "$(jq -r '.background.videoBackend // "mpvpaper"' "$SHELL_CONFIG_FILE" 2>/dev/null)" == "shell" ]]
+}
+
+PROXY_SCRIPT="$SCRIPT_DIR/../videos/video-proxy.sh"
+
+# Play a screen-sized copy of videos bigger than the screen (videos/video-proxy.sh).
+video_downscale_enabled() {
+    # Not `// true`: jq's alternative operator treats an explicit false as missing.
+    [[ "$(jq -r '.background.videoDownscale' "$SHELL_CONFIG_FILE" 2>/dev/null)" != "false" ]]
+}
+
+# The file mpvpaper and the shell player should open for `video`: its copy when
+# one is ready. When a copy is worth making and missing, it is made in the
+# background and the wallpaper re-applied once it exists (if still current).
+resolve_video_playback() {
+    local video="$1" proxy
+    if ! video_downscale_enabled; then
+        echo "$video"
+        return
+    fi
+    proxy="$("$PROXY_SCRIPT" path "$video")"
+    if [[ -n "$proxy" ]]; then
+        echo "$proxy"
+        return
+    fi
+    if [[ "$colors_only_flag" != "1" && "$noswitch_flag" != "1" ]] && is_desktop_target && "$PROXY_SCRIPT" needed "$video"; then
+        nohup setsid bash -c '"$1" ensure "$2" >/dev/null || exit 0
+            [[ "$(jq -r ".background.wallpaperPath" "$3")" == "$2" ]] || exit 0
+            exec bash "$4" --image "$2"' \
+            _ "$PROXY_SCRIPT" "$video" "$SHELL_CONFIG_FILE" "$SCRIPT_DIR/switchwall.sh" >/dev/null 2>&1 &
+    fi
+    echo "$video"
+}
+
+# Seconds into `video` that colors and the poster frame are taken from
+# (.background.videoFrameTimes, set in Settings > Background), 0 = first frame.
+video_frame_time() {
+    jq -r --arg p "$1" '[.background.videoFrameTimes // [] | .[] | select(.path == $p) | .seconds][0] // 0' \
+        "$SHELL_CONFIG_FILE" 2>/dev/null || echo 0
+}
+
+# Poster/color frame of `video` at its configured time, into $THUMBNAIL_DIR.
+# The time is part of the file name, so a new choice is a new path and every
+# Image showing the old poster reloads instead of serving its cache.
+extract_video_frame() {
+    local video="$1" seconds name out
+    seconds="$(video_frame_time "$video")"
+    [[ "$seconds" =~ ^[0-9]+(\.[0-9]+)?$ ]] || seconds=0
+    name="$(basename "$video")"
+    if [[ "$seconds" == "0" ]]; then
+        out="$THUMBNAIL_DIR/$name.jpg"
+    else
+        out="$THUMBNAIL_DIR/$name@${seconds}s.jpg"
+    fi
+    rm -f "$out"
+    ffmpeg -y -ss "$seconds" -i "$video" -frames:v 1 "$out" 2>/dev/null
+    # Past the end of the video ffmpeg writes nothing: use the first frame.
+    if [[ ! -s "$out" && "$seconds" != "0" ]]; then
+        out="$THUMBNAIL_DIR/$name.jpg"
+        ffmpeg -y -i "$video" -frames:v 1 "$out" 2>/dev/null
+    fi
+    echo "$out"
+}
+
 kill_existing_mpvpaper() {
     pkill -f -9 mpvpaper || true
 }
@@ -178,15 +280,11 @@ kill_existing_wpe() {
 }
 
 disable_wpe_config() {
-    if [ -f "$SHELL_CONFIG_FILE" ]; then
-        jq --indent 4 '.background.useWallpaperEngine = false' "$SHELL_CONFIG_FILE" > "$SHELL_CONFIG_FILE.tmp" && mv "$SHELL_CONFIG_FILE.tmp" "$SHELL_CONFIG_FILE"
-    fi
+    update_config_value_if_changed '.background.useWallpaperEngine' bool false false
 }
 
 enable_wpe_config() {
-    if [ -f "$SHELL_CONFIG_FILE" ]; then
-        jq --indent 4 '.background.useWallpaperEngine = true' "$SHELL_CONFIG_FILE" > "$SHELL_CONFIG_FILE.tmp" && mv "$SHELL_CONFIG_FILE.tmp" "$SHELL_CONFIG_FILE"
-    fi
+    update_config_value_if_changed '.background.useWallpaperEngine' bool true false
 }
 
 create_restore_script_wpe() {
@@ -232,25 +330,69 @@ EOF
     mv "$RESTORE_SCRIPT.tmp" "$RESTORE_SCRIPT"
 }
 
+update_config_value_if_changed() {
+    local jq_filter="$1"
+    local value_type="$2"
+    local value="$3"
+    local default_value="${4:-null}"
+    local current_value temp_file
+
+    [[ -f "$SHELL_CONFIG_FILE" ]] || return 0
+    mkdir -p "$(dirname "$CONFIG_LOCK_FILE")" 2>/dev/null || return 1
+
+    # Multiple switchwall processes can overlap after rapid selections. Keep the
+    # read/compare/write transaction serialized and use a unique temp file, so a
+    # stale process cannot overwrite a newer config or trigger a needless reload.
+    exec 200>"$CONFIG_LOCK_FILE"
+    flock -x 200
+    current_value=$(jq -r "${jq_filter} // ${default_value}" "$SHELL_CONFIG_FILE" 2>/dev/null) || {
+        flock -u 200
+        exec 200>&-
+        return 1
+    }
+    if [[ "$current_value" == "$value" ]]; then
+        flock -u 200
+        exec 200>&-
+        return 0
+    fi
+
+    temp_file=$(mktemp "${SHELL_CONFIG_FILE}.tmp.XXXXXX") || {
+        flock -u 200
+        exec 200>&-
+        return 1
+    }
+    if [[ "$value_type" == "bool" ]]; then
+        jq --indent 4 --argjson value "$value" "${jq_filter} = \$value" "$SHELL_CONFIG_FILE" > "$temp_file"
+    else
+        jq --indent 4 --arg value "$value" "${jq_filter} = \$value" "$SHELL_CONFIG_FILE" > "$temp_file"
+    fi
+    if [[ $? -eq 0 ]]; then
+        mv -f -- "$temp_file" "$SHELL_CONFIG_FILE"
+    else
+        rm -f -- "$temp_file"
+        flock -u 200
+        exec 200>&-
+        return 1
+    fi
+    flock -u 200
+    exec 200>&-
+}
+
 set_wallpaper_path() {
     local path="$1"
     local target="$2"
-    if [ -f "$SHELL_CONFIG_FILE" ]; then
-        if [[ "$target" == "lightmode" ]]; then
-            jq --indent 4 --arg path "$path" '.background.lightModeWallpaperPath = $path' "$SHELL_CONFIG_FILE" > "$SHELL_CONFIG_FILE.tmp" && mv "$SHELL_CONFIG_FILE.tmp" "$SHELL_CONFIG_FILE"
-        elif [[ "$target" == "lockscreen" ]]; then
-            jq --indent 4 --arg path "$path" '.background.lockscreenWallpaperPath = $path' "$SHELL_CONFIG_FILE" > "$SHELL_CONFIG_FILE.tmp" && mv "$SHELL_CONFIG_FILE.tmp" "$SHELL_CONFIG_FILE"
-        else
-            jq --indent 4 --arg path "$path" '.background.wallpaperPath = $path' "$SHELL_CONFIG_FILE" > "$SHELL_CONFIG_FILE.tmp" && mv "$SHELL_CONFIG_FILE.tmp" "$SHELL_CONFIG_FILE"
-        fi
+    if [[ "$target" == "lightmode" ]]; then
+        update_config_value_if_changed '.background.lightModeWallpaperPath' string "$path" '""'
+    elif [[ "$target" == "lockscreen" ]]; then
+        update_config_value_if_changed '.background.lockscreenWallpaperPath' string "$path" '""'
+    else
+        update_config_value_if_changed '.background.wallpaperPath' string "$path" '""'
     fi
 }
 
 set_thumbnail_path() {
     local path="$1"
-    if [ -f "$SHELL_CONFIG_FILE" ]; then
-        jq --indent 4 --arg path "$path" '.background.thumbnailPath = $path' "$SHELL_CONFIG_FILE" > "$SHELL_CONFIG_FILE.tmp" && mv "$SHELL_CONFIG_FILE.tmp" "$SHELL_CONFIG_FILE"
-    fi
+    update_config_value_if_changed '.background.thumbnailPath' string "$path" '""'
 }
 
 categorize_wallpaper() {
@@ -301,10 +443,13 @@ switch() {
         )
     fi
 
-    # Start Gemini auto-categorization if enabled
-    aiStylingEnabled=$(jq -r '.background.widgets.clock.cookie.aiStyling' "$SHELL_CONFIG_FILE")
-    aiStylingModel=$(jq -r '.background.widgets.clock.cookie.aiStylingModel' "$SHELL_CONFIG_FILE")
-    if [[ "$aiStylingEnabled" == "true" ]]; then
+    # Categorization is unrelated to shell colors and can spawn a network/model
+    # process while the preset transition is trying to render its first frame.
+    if [[ -z "$colors_only_flag" && -z "$noswitch_flag" ]]; then
+        aiStylingEnabled=$(jq -r '.background.widgets.clock.cookie.aiStyling' "$SHELL_CONFIG_FILE")
+        aiStylingModel=$(jq -r '.background.widgets.clock.cookie.aiStylingModel' "$SHELL_CONFIG_FILE")
+    fi
+    if [[ -n "$aiStylingEnabled" && "$aiStylingEnabled" == "true" ]]; then
         if [[ "$aiStylingModel" == "gemini" ]]; then  
             "$SCRIPT_DIR/../ai/gemini-categorize-wallpaper.sh" "$imgpath" > "$STATE_DIR/user/generated/wallpaper/category.txt" &
         fi
@@ -313,12 +458,17 @@ switch() {
         fi
     fi
 
-    read scale screenx screeny screensizey < <(hyprctl monitors -j | jq '.[] | select(.focused) | .scale, .x, .y, .height' | xargs)
-    cursorposx=$(hyprctl cursorpos -j | jq '.x' 2>/dev/null) || cursorposx=960
-    cursorposx=$(bc <<< "scale=0; ($cursorposx - $screenx) * $scale / 1")
-    cursorposy=$(hyprctl cursorpos -j | jq '.y' 2>/dev/null) || cursorposy=540
-    cursorposy=$(bc <<< "scale=0; ($cursorposy - $screeny) * $scale / 1")
-    cursorposy_inverted=$((screensizey - cursorposy))
+    # These compositor queries only supported the old wallpaper animation path;
+    # colors-only runs do not need them and must stay independent of Hyprland's
+    # command latency.
+    if [[ -z "$colors_only_flag" ]]; then
+        read scale screenx screeny screensizey < <(hyprctl monitors -j | jq '.[] | select(.focused) | .scale, .x, .y, .height' | xargs)
+        cursorposx=$(hyprctl cursorpos -j | jq '.x' 2>/dev/null) || cursorposx=960
+        cursorposx=$(bc <<< "scale=0; ($cursorposx - $screenx) * $scale / 1")
+        cursorposy=$(hyprctl cursorpos -j | jq '.y' 2>/dev/null) || cursorposy=540
+        cursorposy=$(bc <<< "scale=0; ($cursorposy - $screeny) * $scale / 1")
+        cursorposy_inverted=$((screensizey - cursorposy))
+    fi
 
     matugen_args=(--source-color-index 0)
 
@@ -331,9 +481,11 @@ switch() {
             exit 0
         fi
 
-        check_and_prompt_upscale "$imgpath" &
+        if [[ -z "$colors_only_flag" && -z "$noswitch_flag" ]]; then
+            check_and_prompt_upscale "$imgpath" &
+        fi
         
-        if [[ "$noswitch_flag" != "1" ]]; then
+        if [[ "$noswitch_flag" != "1" && "$colors_only_flag" != "1" ]]; then
             kill_existing_mpvpaper
             kill_existing_wpe
         fi
@@ -382,11 +534,13 @@ switch() {
                     fi
                 done
             fi
-            enable_wpe_config
+            if [[ "$colors_only_flag" != "1" && "$noswitch_flag" != "1" ]]; then
+                enable_wpe_config
+            fi
 
             local wpe_screenshot="/tmp/wpe_screenshot.png"
 
-            if [[ "$noswitch_flag" == "1" ]]; then
+            if [[ "$noswitch_flag" == "1" || "$colors_only_flag" == "1" ]]; then
                 if [ -f "$wpe_screenshot" ]; then
                     matugen_args+=(image "$wpe_screenshot")
                     generate_colors_material_args=(--path "$wpe_screenshot")
@@ -529,8 +683,12 @@ done"
                 fi
             fi
         else
-            # If not using Wallpaper Engine, make sure it is disabled in config
-            disable_wpe_config
+            # If not using Wallpaper Engine, make sure it is disabled in config.
+            # A colors-only pass must not rewrite the config or cause another
+            # FileView reload merely because it inspected the current wallpaper.
+            if [[ "$colors_only_flag" != "1" && "$noswitch_flag" != "1" ]]; then
+                disable_wpe_config
+            fi
 
             # Resolve directories or numeric IDs to valid image files
             if [[ -d "$imgpath" ]]; then
@@ -571,7 +729,7 @@ done"
             mkdir -p "$THUMBNAIL_DIR"
 
             missing_deps=()
-            if ! command -v mpvpaper &> /dev/null; then
+            if [[ "$colors_only_flag" != "1" && "$noswitch_flag" != "1" ]] && ! video_backend_is_shell && ! command -v mpvpaper &> /dev/null; then
                 missing_deps+=("mpvpaper")
             fi
             if ! command -v ffmpeg &> /dev/null; then
@@ -607,11 +765,14 @@ done"
             fi
 
             # Set video wallpaper
-            local video_path="$imgpath"
-            if [[ -f "${imgpath%.*}_1080p.mp4" ]]; then
-                video_path="${imgpath%.*}_1080p.mp4"
+            local video_path
+            video_path="$(resolve_video_playback "$imgpath")"
+            # The shell player reads which file to open from here (VideoWallpaper.qml).
+            if is_desktop_target && [[ "$colors_only_flag" != "1" && "$noswitch_flag" != "1" ]]; then
+                update_config_value_if_changed '.background.videoPlaybackSource' string "$imgpath" '""'
+                update_config_value_if_changed '.background.videoPlaybackPath' string "$video_path" '""'
             fi
-            if is_desktop_target; then
+            if is_desktop_target && [[ "$colors_only_flag" != "1" && "$noswitch_flag" != "1" ]] && ! video_backend_is_shell; then
                 monitors=$(hyprctl monitors -j | jq -r '.[] | .name')
                 for monitor in $monitors; do
                     nohup setsid mpvpaper -o "$VIDEO_OPTS input-ipc-server=/tmp/mpvpaper-$monitor.sock" "$monitor" "$video_path" >/dev/null 2>&1 &
@@ -619,38 +780,50 @@ done"
                 done
             fi
 
-            # Extract first frame for color generation
-            thumbnail="$THUMBNAIL_DIR/$(basename "$imgpath").jpg"
-            ffmpeg -y -i "$imgpath" -vframes 1 "$thumbnail" 2>/dev/null
+            # The frame colors are generated from (first frame unless the user
+            # picked a moment in Settings > Background).
+            thumbnail="$(extract_video_frame "$imgpath")"
 
             # Set thumbnail path. Global, so it belongs to the desktop wallpaper —
             # a lockscreen or light-mode pick must not repaint the desktop preview.
-            if is_desktop_target; then
+            # --refresh-frame is a --noswitch run that only re-picks the frame.
+            if is_desktop_target && [[ ( "$colors_only_flag" != "1" && "$noswitch_flag" != "1" ) || "$refresh_frame_flag" == "1" ]]; then
                 set_thumbnail_path "$thumbnail"
             fi
 
             if [ -f "$thumbnail" ]; then
                 matugen_args+=(image "$thumbnail")
                 generate_colors_material_args=(--path "$thumbnail")
-                if is_desktop_target; then
-                    create_restore_script "$video_path"
+                if is_desktop_target && [[ "$colors_only_flag" != "1" && "$noswitch_flag" != "1" ]]; then
+                    if video_backend_is_shell; then
+                        remove_restore
+                    else
+                        create_restore_script "$video_path"
+                    fi
                 fi
             else
                 echo "Cannot create image to colorgen"
-                remove_restore
+                if [[ "$colors_only_flag" != "1" && "$noswitch_flag" != "1" ]]; then
+                    remove_restore
+                fi
                 exit 1
             fi
         else
-            if is_desktop_target; then
+            if is_desktop_target && [[ "$colors_only_flag" != "1" && "$noswitch_flag" != "1" ]]; then
                 kill_existing_mpvpaper
             fi
             matugen_args+=(image "$imgpath")
             generate_colors_material_args=(--path "$imgpath")
             # Update wallpaper path in config
             if [[ -z "$colors_only_flag" && -z "$noswitch_flag" ]]; then
-                set_wallpaper_path "$imgpath" "${lockscreen_flag:+lockscreen}"
+                # A light-mode pick only stores its own path; the dark wallpaper stays in wallpaperPath
+                if [[ -n "$lightmode_flag" ]]; then
+                    set_wallpaper_path "$imgpath" "lightmode"
+                else
+                    set_wallpaper_path "$imgpath" "${lockscreen_flag:+lockscreen}"
+                fi
             fi
-            if is_desktop_target; then
+            if is_desktop_target && [[ "$colors_only_flag" != "1" && "$noswitch_flag" != "1" ]]; then
                 remove_restore
             fi
         fi
@@ -681,12 +854,16 @@ done"
     elif [[ -n "$type_flag" ]]; then
         matugen_args+=(--type "$type_flag")
     fi
-    matugen_args+=(--source-color-index 0)
     generate_colors_material_args+=(--scheme "$type_flag")
     generate_colors_material_args+=(--termscheme "$terminalscheme" --blend_bg_fg)
     generate_colors_material_args+=(--cache "$STATE_DIR/user/generated/color.txt")
 
-    pre_process "$mode_flag"
+    # Preset application already has the mode/config state in place. Avoid the
+    # synchronous GNOME settings calls and cache-directory setup on the first
+    # color frame; those are secondary integration work.
+    if [[ -z "$colors_only_flag" ]]; then
+        pre_process "$mode_flag"
+    fi
 
     # Check if app and shell theming is enabled in config
     if [ -f "$SHELL_CONFIG_FILE" ]; then
@@ -711,26 +888,56 @@ done"
         mkdir -p "$(dirname "$STATE_DIR/user/generated/colors.json")"
         cp "$theme_file" "$STATE_DIR/user/generated/colors.json"
         rm -f "$STATE_DIR/matugen_error_notified"
+        apply_color_overrides_flat "$mode_flag"
         echo "[switchwall.sh] Applied theme: $type_flag"
-        if [[ "$(jq -r '.appearance.icons.enableThemed' "$SHELL_CONFIG_FILE" 2>/dev/null)" == "true" ]]; then python3 "$HOME/.config/quickshell/ii/scripts/colors/recolor_icons.py"; fi
+        if [[ -z "$colors_only_flag" && "$(jq -r '.appearance.icons.enableThemed' "$SHELL_CONFIG_FILE" 2>/dev/null)" == "true" ]]; then recolor_icons_in_background; fi
         "$SCRIPT_DIR"/applycolor.sh
     else
         matugen_exit_code=0
-        if ! matugen "${matugen_args[@]}"; then
+        matugen_config_args=()
+        if [[ -n "$colors_only_flag" && -f "$SHELL_MATUGEN_CONFIG" ]]; then
+            # The normal config fans out to GTK, Hyprland, terminals, yazi,
+            # browsers and other integrations. The first preset frame only
+            # needs the m3colors template that Quickshell watches.
+            matugen_config_args+=(--config "$SHELL_MATUGEN_CONFIG")
+        fi
+        color_overrides="$(get_color_overrides "$mode_flag")"
+        if [[ -n "$color_overrides" ]]; then
+            # Matugen cannot pin a role, but it renders templates from a dump:
+            # generate the dump, patch the picked colors in, render from it.
+            matugen_dump="$(mktemp --suffix=.json)"
+            if matugen "${matugen_config_args[@]}" "${matugen_args[@]}" --dry-run -q -j hex --include-image-in-json true > "$matugen_dump" \
+                && run_color_overrides patch-dump "$matugen_dump" --mode "$mode_flag" --overrides "$color_overrides" \
+                && matugen "${matugen_config_args[@]}" json "$matugen_dump"; then
+                rm -f "$STATE_DIR/matugen_error_notified"
+            else
+                matugen_exit_code=$?
+                report_matugen_failure "switchwall.sh" "$matugen_exit_code"
+            fi
+            rm -f "$matugen_dump"
+        elif matugen "${matugen_config_args[@]}" "${matugen_args[@]}"; then
+            rm -f "$STATE_DIR/matugen_error_notified"
+        else
             matugen_exit_code=$?
             report_matugen_failure "switchwall.sh" "$matugen_exit_code"
-        else
-            rm -f "$STATE_DIR/matugen_error_notified"
         fi
         if [[ "$type_flag" == "scheme-intense" ]]; then
             echo "[switchwall.sh] Applying intense surface boost to colors.json (mode: $mode_flag)" >&2
             python3 "$SCRIPT_DIR/boost_surface_chroma.py" "$STATE_DIR/user/generated/colors.json" --mode "$mode_flag"
+            # The boost rewrites the surfaces; a picked surface still wins.
+            apply_color_overrides_flat "$mode_flag"
         fi
-        if [[ "$(jq -r '.appearance.icons.enableThemed' "$SHELL_CONFIG_FILE" 2>/dev/null)" == "true" ]]; then python3 "$HOME/.config/quickshell/ii/scripts/colors/recolor_icons.py"; fi
+        if [[ -z "$colors_only_flag" && "$(jq -r '.appearance.icons.enableThemed' "$SHELL_CONFIG_FILE" 2>/dev/null)" == "true" ]]; then recolor_icons_in_background; fi
         source "$(eval echo $ILLOGICAL_IMPULSE_VIRTUAL_ENV)/bin/activate"
-        if python3 "$SCRIPT_DIR/generate_colors_material.py" "${generate_colors_material_args[@]}" \
-            --all-previews "$STATE_DIR/user/generated/wallpaper_preview_colors.json" \
-            --request-token "$request_token_file" --request-value "$my_request_token" \
+        preview_args=()
+        if [[ -z "$colors_only_flag" ]]; then
+            preview_args+=(
+                --all-previews "$STATE_DIR/user/generated/wallpaper_preview_colors.json"
+                --request-token "$request_token_file"
+                --request-value "$my_request_token"
+            )
+        fi
+        if python3 "$SCRIPT_DIR/generate_colors_material.py" "${generate_colors_material_args[@]}" "${preview_args[@]}" \
             > "$STATE_DIR"/user/generated/material_colors.scss.tmp; then
             mv "$STATE_DIR"/user/generated/material_colors.scss.tmp "$STATE_DIR"/user/generated/material_colors.scss
         else
@@ -754,10 +961,14 @@ done"
     #"$SCRIPT_DIR"/applycolor.sh
     #deactivate
 
-    # Pass screen width, height, and wallpaper path to post_process
-    max_width_desired="$(hyprctl monitors -j | jq '([.[].width] | min)' | xargs)"
-    max_height_desired="$(hyprctl monitors -j | jq '([.[].height] | min)' | xargs)"
-    post_process "$max_width_desired" "$max_height_desired" "$imgpath"
+    # KDE/code/YouTube Music theming is deliberately outside the first preset
+    # frame. They are still run for a normal wallpaper switch, but colors-only
+    # is a shell-palette transaction and must not fan out into more processes.
+    if [[ -z "$colors_only_flag" ]]; then
+        max_width_desired="$(hyprctl monitors -j | jq '([.[].width] | min)' | xargs)"
+        max_height_desired="$(hyprctl monitors -j | jq '([.[].height] | min)' | xargs)"
+        post_process "$max_width_desired" "$max_height_desired" "$imgpath"
+    fi
 }
 
 main() {
@@ -774,9 +985,26 @@ main() {
     get_accent_color_from_config() {
         jq -r '.appearance.palette.accentColor' "$SHELL_CONFIG_FILE" 2>/dev/null || echo ""
     }
+    # The user's hand-picked key colors for a mode, as compact JSON; empty
+    # when none of them is set (see color_overrides.py).
+    get_color_overrides() {
+        local mode="${1:-dark}"
+        jq -c --arg mode "$mode" '(.appearance.palette.overrides[$mode] // {})
+            | with_entries(select((.value | type) == "string" and (.value | test("^#?[0-9A-Fa-f]{6}$"))))
+            | select(length > 0)' "$SHELL_CONFIG_FILE" 2>/dev/null
+    }
+    run_color_overrides() {
+        bash "$SCRIPT_DIR/color_overrides.sh" "$@"
+    }
+    apply_color_overrides_flat() {
+        local overrides
+        overrides="$(get_color_overrides "${1:-dark}")"
+        [[ -z "$overrides" ]] && return 0
+        run_color_overrides patch-flat "$STATE_DIR/user/generated/colors.json" --mode "${1:-dark}" --overrides "$overrides"
+    }
     set_accent_color() {
         local color="$1"
-        jq --indent 4 --arg color "$color" '.appearance.palette.accentColor = $color' "$SHELL_CONFIG_FILE" > "$SHELL_CONFIG_FILE.tmp" && mv "$SHELL_CONFIG_FILE.tmp" "$SHELL_CONFIG_FILE"
+        update_config_value_if_changed '.appearance.palette.accentColor' string "$color" '""'
     }
 
     detect_scheme_type_from_image() {
@@ -790,6 +1018,7 @@ main() {
     lockscreen_flag=""
     colors_only_flag=""
     lightmode_flag=""
+    refresh_frame_flag=""
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -832,6 +1061,12 @@ main() {
             --request-seq)
                 request_seq_flag="$2"
                 shift 2
+                ;;
+            --refresh-frame)
+                # Use with --noswitch: re-extract the current video's color frame
+                # and regenerate colors, leaving the running video alone.
+                refresh_frame_flag="1"
+                shift
                 ;;
             --noswitch)
                 noswitch_flag="1"
@@ -895,8 +1130,20 @@ main() {
     # Normalize scheme-auto → auto for detection
     [[ "$type_flag" == "scheme-auto" ]] && type_flag="auto"
 
-    # Only prompt for wallpaper if not using --color and not using --noswitch and no imgpath set
-    if [[ -z "$imgpath" && -z "$color_flag" && -z "$noswitch_flag" ]]; then
+    # A colors-only request is implicitly tied to the currently selected
+    # wallpaper when no explicit image was supplied. It should never open a
+    # picker just to recolor a preset.
+    if [[ -n "$colors_only_flag" && -z "$imgpath" ]]; then
+        use_wpe=$(jq -r '.background.useWallpaperEngine' "$SHELL_CONFIG_FILE" 2>/dev/null || echo "false")
+        if [[ "$use_wpe" == "true" ]]; then
+            imgpath=$(jq -r '.background.wallpaperEngineId' "$SHELL_CONFIG_FILE" 2>/dev/null || echo "")
+        else
+            imgpath=$(jq -r '.background.wallpaperPath' "$SHELL_CONFIG_FILE" 2>/dev/null || echo "")
+        fi
+    fi
+
+    # Only prompt for wallpaper if not using --color/--colors-only/--noswitch.
+    if [[ -z "$imgpath" && -z "$color_flag" && -z "$colors_only_flag" && -z "$noswitch_flag" ]]; then
         cd "$(xdg-user-dir PICTURES)/Wallpapers/showcase" 2>/dev/null || cd "$(xdg-user-dir PICTURES)/Wallpapers" 2>/dev/null || cd "$(xdg-user-dir PICTURES)" || return 1
         if command -v zenity >/dev/null; then
             imgpath="$(zenity --file-selection --title="Choose wallpaper" 2>/dev/null)"
@@ -965,7 +1212,16 @@ main() {
         fi
     fi
 
-    # Resolve light theme variant when mode is light
+    # Resolve light theme variant when mode is light. Without --mode the mode
+    # is only read in switch(), after the dark file was already picked.
+    if [[ -n "$theme_file" && -z "$mode_flag" ]]; then
+        current_mode=$(gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null | tr -d "'")
+        if [[ "$current_mode" == "prefer-dark" ]]; then
+            mode_flag="dark"
+        else
+            mode_flag="light"
+        fi
+    fi
     if [[ -n "$theme_file" && "$mode_flag" == "light" ]]; then
         local light_theme_file="${theme_file%.json}_light.json"
         if [[ -f "$light_theme_file" ]]; then

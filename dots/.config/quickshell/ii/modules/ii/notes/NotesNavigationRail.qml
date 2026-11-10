@@ -29,6 +29,7 @@ Item {
     /// in it: the button opens somewhere, so it has to be able to say you are there.
     property bool settingsOpen: false
     readonly property string query: searchBox.text
+    readonly property bool searchFocused: searchBox.hasActiveFocus
 
     signal scopePicked(string scope)
     signal createRequested()
@@ -47,7 +48,11 @@ Item {
     }
 
     function focusSearch(): void {
-        searchBox.forceActiveFocus();
+        searchBox.focusInput();
+    }
+
+    function clearSearchFocus(): void {
+        searchBox.clearFocus();
     }
 
     readonly property var places: [
@@ -252,6 +257,10 @@ Item {
                         onTriggered: root.scopePicked(modelData.id)
                     }
                 }
+            }
+
+            TouchpadScrollHandler {
+                flickable: railScroll
             }
         }
 

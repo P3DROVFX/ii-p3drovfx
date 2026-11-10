@@ -67,8 +67,10 @@ QtObject {
             }
             property QtObject appLaunchAnimation: QtObject {
                 property bool enable: false
+                property string style: "scale"
+                property string slideDirection: "auto"
                 property int startPercent: 20
-                property real speed: 3.2
+                property real speed: 4.0
                 property string curve: "default"
             }
         }

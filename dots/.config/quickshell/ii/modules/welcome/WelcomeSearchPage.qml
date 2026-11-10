@@ -17,7 +17,8 @@ import qs.services
  * rather than written out here, so a panel the user turned off disappears from
  * this page and a rebound prefix shows its new symbol. The page supplies the
  * human labels for the query modes, which are the one part of Search that has
- * no registry of its own.
+ * no registry of its own. Panels with no symbol are listed as buttons that
+ * open them, so every panel on the page can be tried from it.
  */
 Item {
     id: root
@@ -25,8 +26,12 @@ Item {
     property bool nextButtonHovered: false
 
     signal trySearch()
+    signal trySearchPanel(string panelId)
 
     readonly property bool compactWidth: root.width < Appearance.rounding.verylarge * 22
+    // Five across once a chip still fits "Files and folders" beside its key:
+    // the symbols are a row shorter, and the named panels below get it.
+    readonly property bool wideWidth: root.width >= Appearance.rounding.verylarge * 24
 
     /** Panels that answer to a leading symbol, in the registry's own order. */
     readonly property var panelPrefixes: SearchPanelRegistry.enabledPanels
@@ -66,162 +71,219 @@ Item {
 
     readonly property var allPrefixes: [...root.queryPrefixes, ...root.panelPrefixes]
 
-    /** Panels reached by typing their name instead of a symbol. */
-    readonly property string keywordPanelNames: SearchPanelRegistry.enabledPanels
+    /**
+     * Panels reached by typing their name instead of a symbol. Most of the
+     * panels Search has gained live here, and a single sentence listing them
+     * was the one place on the page nothing could be tried from — so each is
+     * a button that opens it, with the word that summons it in the tooltip.
+     */
+    readonly property var keywordPanels: SearchPanelRegistry.enabledPanels
         .filter(panel => SearchPanelRegistry.prefixOf(panel).length === 0)
-        .map(panel => panel.label)
-        .join(" · ")
+        .map(panel => ({
+            "id": panel.id,
+            "label": panel.label,
+            "icon": panel.searchIcon || panel.icon,
+            "keyword": (panel.keywords ?? [])[0] ?? ""
+        }))
 
-    ColumnLayout {
+    // Search has more panels than a short window has rows. The page only
+    // scrolls when it has to; with room to spare it sits still like the rest.
+    StyledFlickable {
+        id: pageFlick
+
         anchors.fill: parent
-        spacing: Appearance.rounding.small
+        contentWidth: width
+        contentHeight: pageColumn.implicitHeight
+        interactive: contentHeight > height
+        clip: interactive
+        boundsBehavior: Flickable.StopAtBounds
 
-        // ── What a plain query already does ──────────────────────────────
-        Rectangle {
-            Layout.fillWidth: true
-            implicitHeight: heroContent.implicitHeight + Appearance.rounding.normal * 2
-            radius: Appearance.rounding.large
-            color: Appearance.colors.colPrimaryContainer
+        ColumnLayout {
+            id: pageColumn
 
-            RowLayout {
-                id: heroContent
+            width: pageFlick.width
+            height: Math.max(pageFlick.height, implicitHeight)
+            spacing: Appearance.rounding.small
 
-                anchors.fill: parent
-                anchors.margins: Appearance.rounding.normal
-                spacing: Appearance.rounding.small
+            // ── What a plain query already does ──────────────────────────────
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: heroContent.implicitHeight + Appearance.rounding.normal * 2
+                radius: Appearance.rounding.large
+                color: Appearance.colors.colPrimaryContainer
 
-                MaterialShapeWrappedMaterialSymbol {
-                    Layout.alignment: Qt.AlignVCenter
-                    text: "search"
-                    shape: MaterialShape.Shape.Sunny
-                    iconSize: Appearance.font.pixelSize.large
-                    padding: Appearance.rounding.small
-                    fill: 1
-                    color: Appearance.colors.colPrimary
-                    colSymbol: Appearance.colors.colOnPrimary
-                }
+                RowLayout {
+                    id: heroContent
 
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    Layout.alignment: Qt.AlignVCenter
-                    spacing: 1
+                    anchors.fill: parent
+                    anchors.margins: Appearance.rounding.normal
+                    spacing: Appearance.rounding.small
 
-                    StyledText {
-                        Layout.fillWidth: true
-                        text: Translation.tr("Just start typing")
-                        color: Appearance.colors.colOnPrimaryContainer
-                        font.family: Appearance.font.family.title
-                        font.variableAxes: Appearance.font.variableAxes.titleRounded
-                        font.pixelSize: Appearance.font.pixelSize.large
-                        font.weight: Font.Bold
-                        elide: Text.ElideRight
+                    MaterialShapeWrappedMaterialSymbol {
+                        Layout.alignment: Qt.AlignVCenter
+                        text: "search"
+                        shape: MaterialShape.Shape.Sunny
+                        iconSize: Appearance.font.pixelSize.large
+                        padding: Appearance.rounding.small
+                        fill: 1
+                        color: Appearance.colors.colPrimary
+                        colSymbol: Appearance.colors.colOnPrimary
                     }
 
-                    StyledText {
+                    ColumnLayout {
                         Layout.fillWidth: true
-                        text: Translation.tr("Search ranks apps, files, open windows, settings and web results together, and puts the one you meant on top.")
-                        color: Appearance.colors.colOnPrimaryContainer
-                        font.pixelSize: Appearance.font.pixelSize.smaller
-                        wrapMode: Text.WordWrap
-                        maximumLineCount: 2
-                        elide: Text.ElideRight
-                    }
-                }
+                        Layout.alignment: Qt.AlignVCenter
+                        spacing: 1
 
-                RippleButtonWithIcon {
-                    Layout.alignment: Qt.AlignVCenter
-                    implicitHeight: Appearance.rounding.verylarge + Appearance.rounding.verysmall
-                    centerContent: true
-                    materialIcon: "play_arrow"
-                    mainText: Translation.tr("Try Search")
-                    textPixelSize: Appearance.font.pixelSize.small
-                    iconPixelSize: Appearance.font.pixelSize.large
-                    buttonRadius: Appearance.rounding.full
-                    colText: Appearance.colors.colOnPrimary
-                    colBackground: Appearance.colors.colPrimary
-                    colBackgroundHover: Appearance.colors.colPrimaryHover
-                    colBackgroundActive: Appearance.colors.colPrimaryActive
-                    colRipple: Appearance.colors.colPrimaryActive
-                    onClicked: root.trySearch()
-                }
-            }
-        }
-
-        // ── And what a leading symbol does ───────────────────────────────
-        StyledText {
-            Layout.fillWidth: true
-            text: Translation.tr("Or lead with a symbol to go straight to one place")
-            color: Appearance.colors.colOnLayer1
-            font.pixelSize: Appearance.font.pixelSize.smaller
-            font.weight: Font.DemiBold
-        }
-
-        GridLayout {
-            Layout.fillWidth: true
-            columns: root.compactWidth ? 2 : 4
-            columnSpacing: Appearance.rounding.verysmall
-            rowSpacing: Appearance.rounding.verysmall
-
-            Repeater {
-                model: root.allPrefixes
-
-                delegate: Rectangle {
-                    id: prefixChip
-
-                    required property var modelData
-
-                    Layout.fillWidth: true
-                    Layout.preferredWidth: 0
-                    implicitHeight: Appearance.rounding.verylarge + Appearance.rounding.small
-                    radius: Appearance.rounding.normal
-                    color: Appearance.colors.colLayer1
-
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: Appearance.rounding.verysmall
-                        anchors.rightMargin: Appearance.rounding.small
-                        spacing: Appearance.rounding.verysmall
-
-                        KeyboardKey {
-                            Layout.alignment: Qt.AlignVCenter
-                            key: prefixChip.modelData.prefix
-                            pixelSize: Appearance.font.pixelSize.small
-                        }
-
-                        MaterialSymbol {
-                            Layout.alignment: Qt.AlignVCenter
-                            text: prefixChip.modelData.icon
-                            iconSize: Appearance.font.pixelSize.normal
-                            color: Appearance.colors.colOnLayer2
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("Just start typing")
+                            color: Appearance.colors.colOnPrimaryContainer
+                            font.family: Appearance.font.family.title
+                            font.variableAxes: Appearance.font.variableAxes.titleRounded
+                            font.pixelSize: Appearance.font.pixelSize.large
+                            font.weight: Font.Bold
+                            elide: Text.ElideRight
                         }
 
                         StyledText {
                             Layout.fillWidth: true
-                            Layout.alignment: Qt.AlignVCenter
-                            text: prefixChip.modelData.label
-                            color: Appearance.colors.colOnLayer1
+                            text: Translation.tr("Search ranks apps, files, open windows, settings and web results together, and puts the one you meant on top.")
+                            color: Appearance.colors.colOnPrimaryContainer
                             font.pixelSize: Appearance.font.pixelSize.smaller
-                            font.weight: Font.DemiBold
+                            wrapMode: Text.WordWrap
+                            maximumLineCount: 2
                             elide: Text.ElideRight
+                        }
+                    }
+
+                    RippleButtonWithIcon {
+                        Layout.alignment: Qt.AlignVCenter
+                        implicitHeight: Appearance.rounding.verylarge + Appearance.rounding.verysmall
+                        centerContent: true
+                        materialIcon: "play_arrow"
+                        mainText: Translation.tr("Try Search")
+                        textPixelSize: Appearance.font.pixelSize.small
+                        iconPixelSize: Appearance.font.pixelSize.large
+                        buttonRadius: Appearance.rounding.full
+                        colText: Appearance.colors.colOnPrimary
+                        colBackground: Appearance.colors.colPrimary
+                        colBackgroundHover: Appearance.colors.colPrimaryHover
+                        colBackgroundActive: Appearance.colors.colPrimaryActive
+                        colRipple: Appearance.colors.colPrimaryActive
+                        onClicked: root.trySearch()
+                    }
+                }
+            }
+
+            // ── And what a leading symbol does ───────────────────────────────
+            StyledText {
+                Layout.fillWidth: true
+                text: Translation.tr("Or lead with a symbol to go straight to one place")
+                color: Appearance.colors.colOnLayer1
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                font.weight: Font.DemiBold
+            }
+
+            GridLayout {
+                Layout.fillWidth: true
+                columns: root.compactWidth ? 2 : root.wideWidth ? 5 : 4
+                columnSpacing: Appearance.rounding.verysmall
+                rowSpacing: Appearance.rounding.verysmall
+
+                Repeater {
+                    model: root.allPrefixes
+
+                    delegate: Rectangle {
+                        id: prefixChip
+
+                        required property var modelData
+
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: 0
+                        implicitHeight: Appearance.rounding.verylarge + Appearance.rounding.verysmall
+                        radius: Appearance.rounding.normal
+                        color: Appearance.colors.colLayer1
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: Appearance.rounding.verysmall
+                            anchors.rightMargin: Appearance.rounding.small
+                            spacing: Appearance.rounding.verysmall
+
+                            KeyboardKey {
+                                Layout.alignment: Qt.AlignVCenter
+                                key: prefixChip.modelData.prefix
+                                pixelSize: Appearance.font.pixelSize.small
+                            }
+
+                            MaterialSymbol {
+                                Layout.alignment: Qt.AlignVCenter
+                                text: prefixChip.modelData.icon
+                                iconSize: Appearance.font.pixelSize.normal
+                                color: Appearance.colors.colOnLayer2
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                Layout.alignment: Qt.AlignVCenter
+                                text: prefixChip.modelData.label
+                                color: Appearance.colors.colOnLayer1
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                font.weight: Font.DemiBold
+                                elide: Text.ElideRight
+                            }
                         }
                     }
                 }
             }
-        }
 
-        Item { Layout.fillHeight: true }
+            Item { Layout.fillHeight: true }
 
-        // ── The panels with no symbol at all ─────────────────────────────
-        StyledText {
-            Layout.fillWidth: true
-            visible: root.keywordPanelNames.length > 0
-            text: Translation.tr("Some panels answer to their own name instead: %1.")
-                .arg(root.keywordPanelNames)
-            color: Appearance.colors.colOnLayer2
-            font.pixelSize: Appearance.font.pixelSize.smaller
-            wrapMode: Text.WordWrap
-            maximumLineCount: 2
-            elide: Text.ElideRight
+            // ── The panels with no symbol at all ─────────────────────────────
+            StyledText {
+                Layout.fillWidth: true
+                visible: root.keywordPanels.length > 0
+                text: Translation.tr("And many more answer to their own name — type it, or open one here")
+                color: Appearance.colors.colOnLayer1
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                font.weight: Font.DemiBold
+            }
+
+            Flow {
+                Layout.fillWidth: true
+                visible: root.keywordPanels.length > 0
+                spacing: Appearance.rounding.verysmall
+
+                Repeater {
+                    model: root.keywordPanels
+
+                    delegate: RippleButtonWithIcon {
+                        id: panelPill
+
+                        required property var modelData
+
+                        implicitHeight: Appearance.rounding.verylarge
+                        materialIcon: panelPill.modelData.icon
+                        mainText: panelPill.modelData.label
+                        textPixelSize: Appearance.font.pixelSize.smaller
+                        iconPixelSize: Appearance.font.pixelSize.normal
+                        buttonRadius: Appearance.rounding.full
+                        colText: Appearance.colors.colOnLayer1
+                        colBackground: Appearance.colors.colLayer1
+                        colBackgroundHover: Appearance.colors.colLayer1Hover
+                        colBackgroundActive: Appearance.colors.colLayer1Active
+                        colRipple: Appearance.colors.colLayer1Active
+                        Accessible.name: Translation.tr("Open %1").arg(panelPill.modelData.label)
+                        onClicked: root.trySearchPanel(panelPill.modelData.id)
+
+                        StyledToolTip {
+                            extraVisibleCondition: panelPill.modelData.keyword.length > 0
+                            text: Translation.tr("Type “%1” in Search").arg(panelPill.modelData.keyword)
+                        }
+                    }
+                }
+            }
         }
     }
 }

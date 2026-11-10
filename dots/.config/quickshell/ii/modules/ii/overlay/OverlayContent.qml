@@ -54,11 +54,14 @@ Item {
         }
 
         Repeater {
+            // Identifiers, not the availableWidgets entries: with objectProp the
+            // model rewrites a row's object in place instead of moving the row,
+            // so opening or closing a widget mid-list handed a delegate the next
+            // widget's identity while it kept its own content.
             model: ScriptModel {
-                values: Persistent.states.overlay.open.map(identifier => {
-                    return OverlayContext.availableWidgets.find(w => w.identifier === identifier);
-                }).filter(Boolean)
-                objectProp: "identifier"
+                values: Persistent.states.overlay.open.filter((identifier, i, open) =>
+                    open.indexOf(identifier) === i
+                    && OverlayContext.availableWidgets.some(w => w.identifier === identifier))
             }
             delegate: OverlayWidgetDelegateChooser {
                 

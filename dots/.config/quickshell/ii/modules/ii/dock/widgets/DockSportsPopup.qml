@@ -227,12 +227,28 @@ PopupWindow {
     visible: root.showPopup || root.surfaceOpacity > 0.01
     color: "transparent"
     implicitWidth: root.cardWidth + root.popupPadding * 2 + root.shadowMargin * 2
-    implicitHeight: Math.max(
-        Appearance.sizes.dockButtonSize * 2,
-        gamesColumn.implicitHeight + root.popupPadding * 2 + root.shadowMargin * 2
-    )
+    implicitHeight: contentLoader.item
+        ? contentLoader.item.implicitHeight
+        : Appearance.sizes.dockButtonSize * 2
 
+    // The dock creates this popup alongside the widget so it can react to
+    // hover, but the card repeater and its team logos are only needed while
+    // the popup is visible. Keeping them out of the idle tree is important
+    // when several monitored leagues return many games.
+    Loader {
+        id: contentLoader
+        anchors.fill: parent
+        active: root.showPopup || root.surfaceOpacity > 0.01
+        sourceComponent: root.popupContent
+    }
+
+    property Component popupContent: Component {
     Rectangle {
+        implicitWidth: root.cardWidth + root.popupPadding * 2 + root.shadowMargin * 2
+        implicitHeight: Math.max(
+            Appearance.sizes.dockButtonSize * 2,
+            gamesColumn.implicitHeight + root.popupPadding * 2 + root.shadowMargin * 2
+        )
         id: popupSurface
         anchors.fill: parent
         anchors.margins: root.shadowMargin
@@ -331,7 +347,7 @@ PopupWindow {
                                             fillMode: Image.PreserveAspectFit
                                             smooth: true
                                             mipmap: true
-                                            cache: true
+                                            cache: false
                                         }
                                     }
                                 }
@@ -419,7 +435,7 @@ PopupWindow {
                                             fillMode: Image.PreserveAspectFit
                                             smooth: true
                                             mipmap: true
-                                            cache: true
+                                            cache: false
                                         }
                                     }
 
@@ -480,5 +496,6 @@ PopupWindow {
                 verticalAlignment: Text.AlignVCenter
             }
         }
+    }
     }
 }

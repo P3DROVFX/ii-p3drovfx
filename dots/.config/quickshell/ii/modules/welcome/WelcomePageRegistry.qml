@@ -126,9 +126,31 @@ QtObject {
         "icon": "search",
         "headerShape": MaterialShape.Shape.VerySunny,
         "accentRole": "primary",
+        "nextLabelKey": "Meet the apps",
+        "nextIcon": "apps",
+        "component": "WelcomeSearchPage.qml"
+    }, {
+        "id": "apps",
+        // Optional, like the one after it: a presentation list with a way in,
+        // never a checklist the reader has to clear.
+        "titleKey": "Meet the apps",
+        "subtitleKey": "A few apps come with II. Open any of them now, or skip ahead.",
+        "icon": "apps",
+        "headerShape": MaterialShape.Shape.Cookie7Sided,
+        "accentRole": "secondary",
+        "nextLabelKey": "Media and system",
+        "nextIcon": "monitor_heart",
+        "component": "WelcomeAppsPage.qml"
+    }, {
+        "id": "system",
+        "titleKey": "Media and system",
+        "subtitleKey": "For the music you play and the machine it plays on.",
+        "icon": "monitor_heart",
+        "headerShape": MaterialShape.Shape.Clover8Leaf,
+        "accentRole": "tertiary",
         "nextLabelKey": "Connect your accounts",
         "nextIcon": "link",
-        "component": "WelcomeSearchPage.qml"
+        "component": "WelcomeSystemPage.qml"
     }, {
         "id": "learn",
         // Named for what it holds. It offers four account integrations, and

@@ -1,23 +1,18 @@
 import qs
 import qs.modules.common
+import qs.modules.ii.dynamicIsland.core
+import qs.modules.ii.dynamicIsland.styles.notch
 import QtQuick
 import Quickshell
 
 Scope {
     id: root
 
-    Component.onCompleted: {
-        console.log("[DynamicIsland] Scope completed - Config.ready:", Config.ready, "floatingNotch.enable:", Config.options.bar.floatingNotch.enable);
-    }
-
     LazyLoader {
         id: islandLoader
-        active: Config.ready && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
+        // One place decides whether the island exists; see IslandPolicy for why.
+        active: IslandPolicy.enabled
 
-        Component.onCompleted: {
-            console.log("[DynamicIsland] Loader active:", active, "Config.ready:", Config.ready, "floatingNotch.enable:", Config.options.bar.floatingNotch.enable, "centerInBar:", Config.options.bar.floatingNotch.centerInBar);
-        }
-
-        component: DynamicIslandPanel {}
+        component: NotchIsland {}
     }
 }

@@ -2,7 +2,7 @@ import QtQuick
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
-import "QuickToggleLayout.js" as QuickToggleLayout
+import "QuickToggleResize.js" as Resize
 import "QuickToggleCatalog.js" as QuickToggleCatalog
 
 // Shared editing surface for every Android quick-toggle delegate. The visual
@@ -17,11 +17,11 @@ Item {
     readonly property var controller: target && target.panel ? target.panel.editController : null
     readonly property bool editMode: target ? target.editMode : false
     readonly property bool isUnused: target ? target.isUnused : false
-    readonly property bool isMedia: target && target.buttonData ? target.buttonData.type === "mediaWidget" : false
+    readonly property bool pageFocused: root.isUnused || !target?.panel
+        || target.pageIndex === target.panel.currentPage
     readonly property bool isSlider: target && target.buttonData ? ["volumeSlider", "micSlider", "brightnessSlider", "gammaSlider"].includes(target.buttonData.type) : false
     readonly property bool canResize: target && target.pageIndex >= 0 && !root.isUnused
         && QuickToggleCatalog.isResizable(target.buttonData?.type ?? "", target.gridColumns)
-    readonly property bool canResizeHeight: root.canResize
 
     property real pressX: 0
     property real pressY: 0
@@ -29,19 +29,33 @@ Item {
     property real pressPointerPanelY: 0
     property real pressItemPanelX: 0
     property real pressItemPanelY: 0
-    property real editDragX: 0
-    property real editDragY: 0
-    property bool editingRight: false
-    property bool editingBottom: false
     property int resizeStartW: 1
     property int resizeStartH: 1
     property real resizeStartReferenceX: 0
     property real resizeStartReferenceY: 0
-    property bool resizing: false
+    property bool resizePressed: false
+    readonly property bool resizing: resizePressed && root.editMode && root.controller
+        && root.controller.active && root.controller.mode === "resize"
+        && root.controller.draggedId === root.target.buttonData.id
+    property real resizeStartWidth: 0
+    property real resizeStartHeight: 0
+    property real previewWidth: 0
+    property real previewHeight: 0
+    property real resizeOriginX: 0
+    property real resizeOriginY: 0
+    property real directionX: 0
+    property real directionY: 1
+    readonly property var resizeBounds: Resize.bounds(root.target.buttonData.type, root.target.gridColumns)
+    readonly property real minimumHeight: root.isSlider ? root.target.compactHeight : root.target.baseCellHeight
+
+    // Direction may reverse while details are half dissolved. Ease that vector
+    // only, leaving the surface and pointer geometry completely synchronous.
+    Behavior on directionX { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root) }
+    Behavior on directionY { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root) }
 
     property alias containsMouse: editInteraction.containsMouse
 
-    anchors.fill: parent
+    anchors.fill: root.visualItem
     visible: root.editMode
     z: target && target.isDragging ? 100 : 10
 
@@ -50,10 +64,16 @@ Item {
             return false;
         if (!root.controller.beginResize(root.target.buttonData.id, root.target.pageIndex))
             return false;
+        root.resizeOriginX = root.target.x;
+        root.resizeOriginY = root.target.y;
+        root.resizeStartWidth = root.visualItem.width + (root.isSlider ? root.target.horizontalMargin * 2 : 0);
+        root.resizeStartHeight = root.visualItem.height;
+        root.previewWidth = root.resizeStartWidth;
+        root.previewHeight = root.resizeStartHeight;
         var size = root.target.catalogSize;
         root.resizeStartW = size[0];
         root.resizeStartH = size[1];
-        root.resizing = true;
+        root.resizePressed = true;
         return true;
     }
 
@@ -68,57 +88,51 @@ Item {
         if (!root.resizing || !root.controller)
             return;
 
-        var width = root.resizeStartW;
-        var height = root.resizeStartH;
-        if (root.isMedia) {
-            var threshold = root.target.baseCellWidth / 2;
-            width = deltaX > threshold ? 4 : (deltaX < -threshold ? 2 : root.resizeStartW);
-            width = Math.max(2, Math.min(4, width));
-            if (width === 4 && height === 1)
-                height = 2;
-        } else {
-            width = QuickToggleLayout.resizeSpanFromDelta(
-                root.resizeStartW,
-                deltaX,
-                root.target.baseCellWidth,
-                root.target.cellSpacing,
-                root.target.gridColumns
-            );
-            if (root.canResizeHeight)
-                height = QuickToggleLayout.resizeSpanFromDelta(
-                    root.resizeStartH,
-                    deltaY,
-                    root.target.baseCellHeight,
-                    root.target.cellSpacing,
-                    8
-                );
+        var geometry = Resize.pixels(root.resizeStartWidth, root.resizeStartHeight,
+            deltaX, deltaY, root.target.baseCellWidth, root.target.baseCellHeight,
+            root.target.cellSpacing, root.resizeBounds, root.minimumHeight);
+        var dx = geometry.width - root.previewWidth;
+        var dy = geometry.height - root.previewHeight;
+        var distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance > 0.25) {
+            root.directionX = dx / distance;
+            root.directionY = dy / distance;
         }
-
-        root.controller.previewResize(width, height);
+        root.previewWidth = geometry.width;
+        root.previewHeight = geometry.height;
+        root.controller.resizePreviewBottom = root.resizeOriginY + geometry.height;
+        var spanW = Resize.spanFromPixelWidth(geometry.width, root.target.baseCellWidth,
+            root.target.baseCellHeight, root.target.cellSpacing);
+        var spanH = Resize.spanFromPixelHeight(geometry.height, root.target.baseCellHeight,
+            root.target.cellSpacing);
+        var size = Resize.candidate(root.target.buttonData.type,
+            spanW, spanH,
+            root.target.gridColumns, [root.controller.candidateSizeW, root.controller.candidateSizeH]);
+        root.controller.previewResize(size[0], size[1]);
     }
 
     function finishResize() {
         if (!root.resizing)
             return;
-        root.resizing = false;
         if (root.controller)
             root.controller.commitResize();
-        root.editDragX = 0;
-        root.editDragY = 0;
-        root.editingRight = false;
-        root.editingBottom = false;
+        root.resizePressed = false;
     }
 
     function cancelResize() {
         if (!root.resizing)
             return;
-        root.resizing = false;
         if (root.controller)
             root.controller.cancelResize();
-        root.editDragX = 0;
-        root.editDragY = 0;
-        root.editingRight = false;
-        root.editingBottom = false;
+        root.resizePressed = false;
+    }
+
+    Connections {
+        target: root.controller
+        function onActiveChanged() {
+            if (!root.controller.active)
+                root.resizePressed = false;
+        }
     }
 
     MouseArea {
@@ -224,8 +238,6 @@ Item {
 
             if (root.controller && root.controller.active)
                 root.controller.cancelReorder();
-            if (root.editingRight || root.editingBottom)
-                return;
             if (!root.controller)
                 return;
             if (root.isUnused)
@@ -244,116 +256,95 @@ Item {
         }
     }
 
-    Rectangle {
-        id: editBorder
+    readonly property real cornerRadius: root.visualItem
+        ? (root.visualItem.buttonRadius ?? root.visualItem.radius ?? Appearance.rounding.large)
+        : Appearance.rounding.large
+
+    // Border, resize grip and add badge only exist in edit mode; outside it every
+    // tile would carry them hidden.
+    Loader {
         anchors.fill: parent
-        visible: root.editMode && !root.target.isDragging
-        color: "transparent"
-        border.width: 2
-        radius: Appearance.rounding.large
-        border.color: root.isUnused
-                ? (root.target.hovered ? Appearance.colors.colPrimary : "transparent")
-                : (root.target.hovered ? Appearance.colors.colPrimary
-                                        : ColorUtils.transparentize(Appearance.colors.colPrimary, 0.7))
-        Behavior on border.color {
-            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(editBorder)
-        }
-    }
-
-    Rectangle {
-        id: rightDragHandle
-        width: 8
-        height: 24
-        radius: Appearance.rounding.full
-        color: Appearance.colors.colPrimary
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.right: parent.right
-        anchors.rightMargin: -width / 2
-        visible: root.canResize
-
-        MouseArea {
-            id: rightResizeArea
-            anchors.fill: parent
-            anchors.margins: -12
-            cursorShape: Qt.SizeHorCursor
-            preventStealing: true
-
-            onPressed: event => {
-                if (!root.beginResize())
-                    return;
-                var start = root.resizePointerInStableReference(rightResizeArea, event.x, event.y);
-                root.resizeStartReferenceX = start.x;
-                root.resizeStartReferenceY = start.y;
-                root.editingRight = true;
+        active: root.editMode
+        sourceComponent: Item {
+            Rectangle {
+                id: editBorder
+                anchors.fill: parent
+                radius: root.cornerRadius
+                color: "transparent"
+                border.width: 1
+                border.color: ColorUtils.transparentize(Appearance.colors.colOnLayer2, 0.75)
+                visible: root.editMode && root.pageFocused && !root.target.isDragging
+                z: 0
             }
-            onPositionChanged: event => {
-                if (!root.resizing)
-                    return;
-                var current = root.resizePointerInStableReference(rightResizeArea, event.x, event.y);
-                var deltaX = current.x - root.resizeStartReferenceX;
-                root.editDragX = deltaX;
-                root.previewResize(deltaX, 0);
+
+            QuickToggleResizeHandle {
+                id: diagonalGrip
+                objectName: "quickToggleResizeGrip"
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.rightMargin: -thickness / 2
+                anchors.bottomMargin: -thickness / 2
+                visible: root.pageFocused && root.canResize && !root.target.isDragging
+                hitSize: Math.max(38, root.cornerRadius + thickness + 12)
+                thickness: Math.max(3.5, Math.min(5, Math.round(root.target.baseCellHeight * 0.07)))
+                cornerRadius: root.cornerRadius
+                pressed: resizeArea.pressed
+                hovered: resizeArea.containsMouse
+
+                MouseArea {
+                    id: resizeArea
+                    objectName: "quickToggleResizeArea"
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    width: Math.max(18, Math.min(22, (root.target ? root.target.width : 56) * 0.38))
+                    height: width
+                    cursorShape: Qt.SizeFDiagCursor
+                    hoverEnabled: true
+                    preventStealing: true
+                    acceptedButtons: Qt.LeftButton
+                    onPressed: event => {
+                        // Capture the pointer before beginning a transaction can reflow
+                        // the grid; future events are mapped to this same panel space.
+                        var start = root.resizePointerInStableReference(resizeArea, event.x, event.y);
+                        if (!root.beginResize()) {
+                            event.accepted = false;
+                            return;
+                        }
+                        root.resizeStartReferenceX = start.x;
+                        root.resizeStartReferenceY = start.y;
+                    }
+                    onPositionChanged: event => {
+                        if (!pressed || !root.resizing)
+                            return;
+                        var current = root.resizePointerInStableReference(resizeArea, event.x, event.y);
+                        root.previewResize(current.x - root.resizeStartReferenceX,
+                            current.y - root.resizeStartReferenceY);
+                    }
+                    onReleased: root.finishResize()
+                    onCanceled: root.cancelResize()
+                }
             }
-            onReleased: root.finishResize()
-        }
-    }
 
-    Rectangle {
-        id: bottomDragHandle
-        width: 24
-        height: 8
-        radius: Appearance.rounding.full
-        color: Appearance.colors.colPrimary
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: -height / 2
-        visible: root.canResizeHeight && (!root.isMedia || root.target.catalogSize[0] <= 2)
+            Rectangle {
+                id: addBadge
+                width: 20
+                height: 20
+                radius: Appearance.rounding.full
+                color: Appearance.m3colors.m3success
+                anchors.top: parent.top
+                anchors.topMargin: -6
+                anchors.right: parent.right
+                anchors.rightMargin: -6
+                visible: root.isUnused
+                z: 10
 
-        MouseArea {
-            id: bottomResizeArea
-            anchors.fill: parent
-            anchors.margins: -12
-            cursorShape: Qt.SizeVerCursor
-            preventStealing: true
-
-            onPressed: event => {
-                if (!root.beginResize())
-                    return;
-                var start = root.resizePointerInStableReference(bottomResizeArea, event.x, event.y);
-                root.resizeStartReferenceX = start.x;
-                root.resizeStartReferenceY = start.y;
-                root.editingBottom = true;
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "add"
+                    iconSize: Appearance.font.pixelSize.small
+                    color: Appearance.m3colors.m3onSuccess
+                }
             }
-            onPositionChanged: event => {
-                if (!root.resizing)
-                    return;
-                var current = root.resizePointerInStableReference(bottomResizeArea, event.x, event.y);
-                var deltaY = current.y - root.resizeStartReferenceY;
-                root.editDragY = deltaY;
-                root.previewResize(0, deltaY);
-            }
-            onReleased: root.finishResize()
-        }
-    }
-
-    Rectangle {
-        id: addBadge
-        width: 20
-        height: 20
-        radius: Appearance.rounding.full
-        color: Appearance.m3colors.m3success
-        anchors.top: parent.top
-        anchors.topMargin: -6
-        anchors.right: parent.right
-        anchors.rightMargin: -6
-        visible: root.isUnused
-        z: 10
-
-        MaterialSymbol {
-            anchors.centerIn: parent
-            text: "add"
-            iconSize: Appearance.font.pixelSize.small
-            color: Appearance.m3colors.m3onSuccess
         }
     }
 

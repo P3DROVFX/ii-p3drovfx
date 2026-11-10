@@ -24,13 +24,12 @@ RippleButton {
     readonly property string customThemeFilePath: customThemeDirectory + "/" + colorScheme + ".json"
     readonly property string customThemeCommand: `jq -r '.primary, .primary_container, (.tertiary // .secondary)' ${customThemeFilePath}`
 
-    readonly property string wallpaperPath: (Config.options && Config.options.background && Config.options.background.wallpaperPath)
-        ? Config.options.background.wallpaperPath : ""
-    readonly property string activeWallpaperPath: {
-        if (Config.options && Config.options.background && Config.options.background.useWallpaperEngine)
-            return "/tmp/wpe_screenshot.png";
-        return wallpaperPath;
-    }
+    // The image the shell is actually showing - which is the shipped default
+    // when the user has not chosen a wallpaper yet, not "no wallpaper". Without
+    // that resolution the command below comes out empty on a first install and
+    // startColorFetch() returns before consulting any cache, which is what left
+    // these buttons blank. See Wallpapers.effectiveWallpaperPath.
+    readonly property string activeWallpaperPath: Wallpapers.effectiveWallpaperPath
     readonly property string scriptPath: FileUtils.trimFileProtocol(
         `${Directories.scriptPath}/colors/generate_colors_material.py`)
     // scheme-auto is passed through: the script resolves it from the image the
@@ -51,6 +50,29 @@ RippleButton {
 
     property bool loaded: usePreviewColors
     property bool shouldLoad: false
+    // The name stands in only when the colours do not come: shown while they
+    // load, it flashes a grid of labels before the swatches replace them.
+    property bool showNameFallback: false
+    onLoadedChanged: {
+        if (root.loaded)
+            root.showNameFallback = false;
+    }
+
+    Timer {
+        interval: 1500
+        running: root.shouldLoad && !root.loaded
+        onTriggered: root.showNameFallback = true
+    }
+    property bool _cacheHeld: false
+
+    function releasePreviewCache() {
+        if (!root._cacheHeld)
+            return;
+        root._cacheHeld = false;
+        ThemePreviewCache.relinquish();
+    }
+
+    Component.onDestruction: root.releasePreviewCache()
 
     property bool isWidgetScheme: false
     property bool widgetSchemeToggled: false
@@ -60,13 +82,21 @@ RippleButton {
     property bool expressiveSelection: false
     readonly property bool sharpMode: Config.options.appearance.sharpMode
 
-    colBackground: toggled ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer2
-    colBackgroundHover: toggled
-        ? Appearance.colors.colPrimaryContainerHover
-        : Appearance.colors.colLayer2Hover
-    colRipple: toggled
-        ? Appearance.colors.colPrimaryContainerActive
-        : Appearance.colors.colLayer2Active
+    // The chosen swatch sits on the secondary container, a quieter fill than
+    // primary, and carries the primary ring around its circle. Driven by this
+    // file's `toggled`: it shadows RippleButton's, whose toggled colours never
+    // apply here.
+    colBackground: root.toggled ? Appearance.colors.colSecondaryContainer : Appearance.colors.colLayer2
+    colBackgroundHover: root.toggled ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colLayer2Hover
+    colBackgroundActive: root.toggled ? Appearance.colors.colSecondaryContainerActive : Appearance.colors.colLayer2Active
+    colRipple: root.toggled ? Appearance.colors.colSecondaryContainerActive : Appearance.colors.colLayer2Active
+
+    /// Hosts that already print the hovered scheme's name turn the tooltip off.
+    property bool showTooltip: true
+
+    /// Space between the swatch and the selection ring, and the ring's stroke.
+    property real ringGap: 2
+    property real ringWidth: 2.5
 
     buttonRadius: Appearance.rounding.small
 
@@ -115,8 +145,6 @@ RippleButton {
 
     readonly property string wpeId: (Config.options && Config.options.background)
         ? Config.options.background.wallpaperEngineId : ""
-    readonly property bool useWpe: (Config.options && Config.options.background)
-        ? Config.options.background.useWallpaperEngine : false
 
     readonly property string presetPath: customTheme
         ? FileUtils.trimFileProtocol(customThemeFilePath)
@@ -159,7 +187,17 @@ RippleButton {
     function startColorFetch() {
         if (usePreviewColors || !shouldLoad || effectiveCommand === "")
             return;
+        if (!root._cacheHeld) {
+            root._cacheHeld = true;
+            ThemePreviewCache.acquire();
+        }
         if (root.loadFromCache())
+            return;
+        // One generation for the whole grid rather than one process per swatch.
+        // It only declines when it cannot help, and then this owns the fallback.
+        // Preset swatches read a fixed JSON file and never have anything to
+        // generate, so they go straight through.
+        if (!root.customTheme && !root.builtInTheme && ThemePreviewCache.ensureWallpaperPreviews())
             return;
         colorFetchProcess.running = false;
         colorFetchProcess.running = true;
@@ -174,24 +212,62 @@ RippleButton {
         Qt.callLater(root.startColorFetch);
     }
 
-    onShouldLoadChanged: Qt.callLater(root.startColorFetch)
-    onWallpaperPathChanged: root.refetchColors()
+    onShouldLoadChanged: {
+        if (!root.shouldLoad) {
+            colorFetchProcess.running = false;
+            root.releasePreviewCache();
+        } else {
+            Qt.callLater(root.startColorFetch);
+        }
+    }
+    onUsePreviewColorsChanged: {
+        if (root.usePreviewColors) {
+            colorFetchProcess.running = false;
+            root.releasePreviewCache();
+        } else {
+            Qt.callLater(root.startColorFetch);
+        }
+    }
+
+    // Wallpaper Engine can swap the video behind the same screenshot path, so
+    // the id matters even though the path does not change with it.
     onWpeIdChanged: root.refetchColors()
-    onUseWpeChanged: root.refetchColors()
+
+    // The image itself, rather than the raw config value: choosing or clearing a
+    // wallpaper and the switch to or from Wallpaper Engine all land here.
+    Connections {
+        target: Wallpapers
+        function onEffectiveWallpaperPathChanged() {
+            root.refetchColors();
+        }
+    }
+
+    // A preset swatch follows the cache through a binding. Listening for
+    // `cacheChanged` alone left a few swatches of a freshly built grid on their
+    // name forever: the read finished and the signal went out, but that
+    // button's Connections never ran.
+    readonly property var presetSwatch: root._cacheHeld && root.presetPath !== ""
+        ? (ThemePreviewCache.revision, ThemePreviewCache.get(root.presetPath)) : null
+    onPresetSwatchChanged: {
+        if (root.presetSwatch && !root.loaded)
+            root.applySwatch(root.presetSwatch);
+    }
 
     Connections {
-        target: ThemePreviewCache
-        enabled: root.shouldLoad && !root.usePreviewColors
-
-        function onCacheChanged(path) {
-            if (path === root.presetPath)
-                root.applySwatch(ThemePreviewCache.get(path));
-        }
+        target: root._cacheHeld ? ThemePreviewCache : null
 
         function onWallpaperPreviewsChanged() {
             if (root.customTheme || root.builtInTheme)
                 return;
             root.applySwatch(ThemePreviewCache.wallpaperPreview(root.colorScheme));
+        }
+
+        function onWallpaperPreviewsGenerationFailed() {
+            if (root.customTheme || root.builtInTheme)
+                return;
+            // The shared generation is marked as already attempted, so this
+            // reaches the per-swatch process instead of asking for another one.
+            root.refetchColors();
         }
     }
 
@@ -225,6 +301,7 @@ RippleButton {
     }
 
     StyledToolTip {
+        extraVisibleCondition: root.showTooltip
         text: root.colorSchemeDisplayName
     }
 
@@ -233,21 +310,46 @@ RippleButton {
 
         StyledText {
             anchors.fill: parent
-            visible: !root.loaded
+            visible: !root.loaded && root.showNameFallback
             elide: Text.ElideRight
             text: root.colorSchemeDisplayName
             horizontalAlignment: Text.AlignHCenter
-            color: Appearance.colors.colOnPrimaryContainer
+            color: Appearance.colors.colOnLayer2
             font.pixelSize: Appearance.font.pixelSize.small
+        }
+
+        // Selection: a primary ring standing `ringGap` off the swatch.
+        Rectangle {
+            id: selectionRing
+            anchors.centerIn: myCanvas
+            width: myCanvas.width + (root.ringGap + root.ringWidth) * 2
+            height: width
+            radius: root.sharpMode ? 0 : width / 2
+            color: "transparent"
+            border.width: root.ringWidth
+            border.color: Appearance.colors.colPrimary
+            opacity: root.toggled && root.loaded ? 1 : 0
+            visible: opacity > 0
+
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
         }
 
         Canvas {
             id: myCanvas
             anchors.centerIn: parent
-            anchors.margins: 8
-            implicitWidth: root.implicitHeight - 16
-            implicitHeight: root.implicitHeight - 16
+            // Sized from the button's real box: grids that set a height through
+            // Layout would otherwise get a swatch sized for the implicit one.
+            readonly property real side: Math.max(8, Math.round(Math.min(root.width, root.height) - 16))
+            width: side
+            height: side
             antialiasing: true
+            // A swatch can arrive before the canvas has a context or while its
+            // grid is hidden; that request is lost, so paint again once it can.
+            onWidthChanged: requestPaint()
+            onAvailableChanged: if (available) requestPaint()
+            onVisibleChanged: if (visible) requestPaint()
 
             onPaint: {
                 const ctx = getContext("2d");

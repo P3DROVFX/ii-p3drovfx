@@ -136,6 +136,8 @@ Item {
         HyprlandGui.watch(["input:kb_layout", "input:kb_variant"]);
     }
 
+    Component.onDestruction: XkbCatalog.release()
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 12

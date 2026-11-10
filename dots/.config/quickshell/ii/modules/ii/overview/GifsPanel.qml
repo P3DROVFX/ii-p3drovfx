@@ -325,6 +325,10 @@ Item {
                         }
                     }
                 }
+
+                TouchpadScrollHandler {
+                    flickable: gifGrid
+                }
             }
 
             ColumnLayout {

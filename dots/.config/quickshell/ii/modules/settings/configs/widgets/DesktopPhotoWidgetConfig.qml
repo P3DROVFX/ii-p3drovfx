@@ -1,7 +1,5 @@
 import QtQuick
 import QtQuick.Layouts
-import Quickshell
-import Quickshell.Io
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -16,23 +14,6 @@ ContentPage {
 
     signal goBack
 
-    Process {
-        id: pickImageProc
-        command: ["bash", "-c", "if command -v kdialog &> /dev/null; then FILE=$(kdialog --getopenfilename \"$HOME\" \"*.png *.jpg *.jpeg *.gif *.webp *.bmp *.svg *.PNG *.JPG *.JPEG *.GIF *.WEBP *.BMP *.SVG\" 2>/dev/null); elif command -v zenity &> /dev/null; then FILE=$(zenity --file-selection --file-filter=\"Images | *.png *.jpg *.jpeg *.gif *.webp *.bmp *.svg *.PNG *.JPG *.JPEG *.GIF *.WEBP *.BMP *.SVG\" 2>/dev/null); fi; if [ -n \"$FILE\" ] && [ -f \"$FILE\" ]; then echo \"$FILE\"; fi"]
-        stdout: SplitParser {
-            onRead: data => {
-                let path = data.trim();
-                if (path.length > 0) {
-                    let entry = Config.options.background.widgets[root.configEntryName];
-                    if (entry) {
-                        entry.imagePath = path;
-                    } else {
-                        Config.options.background.widgets.photo.imagePath = path;
-                    }
-                }
-            }
-        }
-    }
 
     RowLayout {
         spacing: 12
@@ -93,23 +74,14 @@ ContentPage {
                 Layout.fillWidth: true
                 materialIcon: "folder_open"
                 mainText: Translation.tr("Choose Image")
-                onClicked: {
-                    pickImageProc.running = false;
-                    pickImageProc.running = true;
-                }
+                enabled: !WidgetPhotoPicker.picking
+                onClicked: WidgetPhotoPicker.pick(root.configEntryName)
             }
 
             StyledText {
                 Layout.fillWidth: true
-                visible: {
-                    let entry = Config.options.background.widgets[root.configEntryName];
-                    return entry && entry.imagePath && entry.imagePath !== "";
-                }
-                text: {
-                    let entry = Config.options.background.widgets[root.configEntryName];
-                    let path = entry ? entry.imagePath : "";
-                    return Translation.tr("Current image: %1").arg(path);
-                }
+                visible: WidgetPhotoPicker.currentPath(root.configEntryName) !== ""
+                text: Translation.tr("Current image: %1").arg(WidgetPhotoPicker.currentPath(root.configEntryName))
                 font.pixelSize: Appearance.font.pixelSize.small
                 color: Appearance.colors.colOnSurfaceVariant
                 wrapMode: Text.Wrap
@@ -117,16 +89,10 @@ ContentPage {
 
             RippleButtonWithIcon {
                 Layout.fillWidth: true
-                visible: {
-                    let entry = Config.options.background.widgets[root.configEntryName];
-                    return entry && entry.imagePath && entry.imagePath !== "";
-                }
+                visible: WidgetPhotoPicker.currentPath(root.configEntryName) !== ""
                 materialIcon: "delete"
                 mainText: Translation.tr("Remove Image")
-                onClicked: {
-                    let entry = Config.options.background.widgets[root.configEntryName];
-                    if (entry) entry.imagePath = "";
-                }
+                onClicked: WidgetPhotoPicker.clear(root.configEntryName)
             }
 
             ContentSubsectionLabel {

@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import qs
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.services
@@ -209,6 +210,14 @@ Item {
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Appearance.sizes.elevationMargin / 2
+
+                ConfigSwitch {
+                    buttonIcon: "interests"
+                    text: Translation.tr("Expressive results")
+                    description: Translation.tr("Material 3 Expressive results: the top result as a hero card with its actions, every group as its own pane with a heading, and rows whose icons morph shape when selected.")
+                    checked: Config.options.search.appearance.resultsStyle === "expressive"
+                    onCheckedChanged: Config.options.search.appearance.resultsStyle = checked ? "expressive" : "classic"
+                }
 
                 ConfigSwitch {
                     buttonIcon: "format_paint"

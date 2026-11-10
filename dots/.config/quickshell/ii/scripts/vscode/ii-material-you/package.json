@@ -1,0 +1,18 @@
+{
+  "name": "ii-material-you",
+  "displayName": "ii Material You",
+  "description": "Material 3 Expressive theme that follows the illogical-impulse (matugen) wallpaper palette, live.",
+  "version": "1.0.0",
+  "publisher": "illogical-impulse",
+  "license": "GPL-3.0",
+  "engines": { "vscode": "^1.75.0" },
+  "categories": ["Themes"],
+  "main": "./extension.js",
+  "activationEvents": ["onStartupFinished"],
+  "contributes": {
+    "themes": [
+      { "label": "ii Material You Dark", "uiTheme": "vs-dark", "path": "./themes/dark.json", "_watch": true },
+      { "label": "ii Material You Light", "uiTheme": "vs", "path": "./themes/light.json", "_watch": true }
+    ]
+  }
+}

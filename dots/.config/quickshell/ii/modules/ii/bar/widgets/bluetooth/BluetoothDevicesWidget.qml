@@ -40,8 +40,14 @@ MouseArea {
 
     hoverEnabled: !BarInteraction.clickToShow
 
+    // Click-to-show gives the left click to the popup; cycling moves to the right button.
+    readonly property bool rightClickCycles: BarInteraction.cycleOnRightClick
+    acceptedButtons: rightClickCycles ? (Qt.LeftButton | Qt.RightButton) : Qt.LeftButton
+
     // Cycle through devices on click
-    onClicked: {
+    onClicked: mouse => {
+        if (mouse.button !== (rightClickCycles ? Qt.RightButton : Qt.LeftButton))
+            return;
         if (activeDevices.length > 1) {
             deviceIndex = (deviceIndex + 1) % activeDevices.length
         }
@@ -112,8 +118,11 @@ MouseArea {
         }
     }
 
-    Loader {
+    PopupLoader {
         id: popupLoader
+        // Lazy: popup controller is only built on approach (same as ExpressiveSports).
+        active: BarInteraction.enablePopups
+            && (BarInteraction.clickToShow || root.containsMouse || held)
         source: Config.options.bar.bluetoothDevicesLayout === "expressive" ? "../../popups/bluetooth/ExpressiveBluetoothDevicesPopup.qml" : "../../popups/bluetooth/BluetoothDevicesPopup.qml"
         onLoaded: {
             item.hoverTarget = root;

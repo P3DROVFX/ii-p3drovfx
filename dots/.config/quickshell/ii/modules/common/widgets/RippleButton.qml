@@ -27,6 +27,7 @@ Button {
     // Material behavior as the default, while allowing those widgets to opt
     // out without duplicating the button implementation.
     property bool animationsEnabled: true
+    property bool radiusBehaviorEnabled: true
     property bool opacityBehaviorEnabled: true
     property bool scaleBehaviorEnabled: true
     property real visualScale: 1.0
@@ -43,154 +44,41 @@ Button {
 
     property bool useDynamicRadius: false
 
-    readonly property int itemIndex: {
-        if (!useDynamicRadius)
-            return 0;
-        var p = parent;
-        if (!p)
-            return 0;
-        var children = p.children;
-        var selfIdx = -1;
-        for (var i = 0; i < children.length; ++i) {
-            if (children[i] === root) {
-                selfIdx = i;
-                break;
-            }
-        }
-        if (selfIdx === -1)
-            return 0;
+    // Filled in once per container by GroupLayout.js; see GroupPosition.qml.
+    // Only rows with a dynamic radius get one: most buttons never need it.
+    property GroupPosition groupPosition: null
+    readonly property bool groupSettled: groupPosition?.settled ?? false
+    readonly property int itemIndex: useDynamicRadius ? (groupPosition?.index ?? 0) : 0
+    readonly property int totalItems: useDynamicRadius ? (groupPosition?.count ?? 1) : 1
 
-        var startIdx = 0;
-        for (var i = selfIdx - 1; i >= 0; --i) {
-            if (children[i].visible && typeof children[i].topLeftRadius === "undefined") {
-                startIdx = i + 1;
-                break;
-            }
-        }
+    property bool isFirst: useDynamicRadius ? (groupPosition?.isFirst ?? true) : false
+    property bool isLast: useDynamicRadius ? (groupPosition?.isLast ?? true) : false
 
-        var idx = 0;
-        for (var i = startIdx; i < selfIdx; ++i) {
-            if (children[i].visible && typeof children[i].topLeftRadius !== "undefined") {
-                idx++;
-            }
-        }
-        return idx;
+    readonly property bool prevIsPressed: useDynamicRadius && (groupPosition?.previousPressed ?? false)
+    readonly property bool nextIsPressed: useDynamicRadius && (groupPosition?.nextPressed ?? false)
+
+    function ensureGroupPosition() {
+        if (root.useDynamicRadius && !root.groupPosition)
+            root.groupPosition = groupPositionComponent.createObject(root, { item: root });
     }
 
-    readonly property int totalItems: {
-        if (!useDynamicRadius)
-            return 1;
-        var p = parent;
-        if (!p)
-            return 1;
-        var children = p.children;
-        var selfIdx = -1;
-        for (var i = 0; i < children.length; ++i) {
-            if (children[i] === root) {
-                selfIdx = i;
-                break;
-            }
-        }
-        if (selfIdx === -1)
-            return 1;
+    onUseDynamicRadiusChanged: root.ensureGroupPosition()
+    Component.onCompleted: root.ensureGroupPosition()
 
-        var startIdx = 0;
-        for (var i = selfIdx - 1; i >= 0; --i) {
-            if (children[i].visible && typeof children[i].topLeftRadius === "undefined") {
-                startIdx = i + 1;
-                break;
-            }
+    Component {
+        id: groupPositionComponent
+        GroupPosition {
+            enabled: root.useDynamicRadius
         }
-
-        var endIdx = children.length - 1;
-        for (var i = selfIdx + 1; i < children.length; ++i) {
-            if (children[i].visible && typeof children[i].topLeftRadius === "undefined") {
-                endIdx = i - 1;
-                break;
-            }
-        }
-
-        var count = 0;
-        for (var i = startIdx; i <= endIdx; ++i) {
-            if (children[i].visible && typeof children[i].topLeftRadius !== "undefined") {
-                count++;
-            }
-        }
-        return count;
     }
 
-    property bool isFirst: useDynamicRadius ? (itemIndex === 0) : false
-    property bool isLast: useDynamicRadius ? (itemIndex === totalItems - 1) : false
-
-    readonly property bool prevIsPressed: {
-        if (!useDynamicRadius)
-            return false;
-        var p = parent;
-        if (!p)
-            return false;
-        var children = p.children;
-        var selfIdx = -1;
-        for (var i = 0; i < children.length; ++i) {
-            if (children[i] === root) {
-                selfIdx = i;
-                break;
-            }
-        }
-        if (selfIdx <= 0)
-            return false;
-
-        var startIdx = 0;
-        for (var i = selfIdx - 1; i >= 0; --i) {
-            if (children[i].visible && typeof children[i].topLeftRadius === "undefined") {
-                startIdx = i + 1;
-                break;
-            }
-        }
-
-        for (var i = selfIdx - 1; i >= startIdx; --i) {
-            var child = children[i];
-            if (child.visible && typeof child.topLeftRadius !== "undefined") {
-                return child.isPressed === true || (child.down !== undefined && child.down === true);
-            }
-        }
-        return false;
-    }
-
-    readonly property bool nextIsPressed: {
-        if (!useDynamicRadius)
-            return false;
-        var p = parent;
-        if (!p)
-            return false;
-        var children = p.children;
-        var selfIdx = -1;
-        for (var i = 0; i < children.length; ++i) {
-            if (children[i] === root) {
-                selfIdx = i;
-                break;
-            }
-        }
-        if (selfIdx === -1 || selfIdx >= children.length - 1)
-            return false;
-
-        var endIdx = children.length - 1;
-        for (var i = selfIdx + 1; i < children.length; ++i) {
-            if (children[i].visible && typeof children[i].topLeftRadius === "undefined") {
-                endIdx = i - 1;
-                break;
-            }
-        }
-
-        for (var i = selfIdx + 1; i <= endIdx; ++i) {
-            var child = children[i];
-            if (child.visible && typeof child.topLeftRadius !== "undefined") {
-                return child.isPressed === true || (child.down !== undefined && child.down === true);
-            }
-        }
-        return false;
-    }
+    /// Which way a connected group runs, when the parent's type cannot say: a GridLayout
+    /// that flips between a row and a column. Left undefined, the parent decides.
+    property var groupHorizontal: undefined
 
     readonly property bool isHorizontalLayout: {
+        if (root.groupHorizontal !== undefined)
+            return root.groupHorizontal === true;
         var p = parent;
         if (!p)
             return false;
@@ -206,20 +94,36 @@ Button {
     property real bottomRightRadius: useDynamicRadius ? ((isPressed || nextIsPressed) ? rFull : (isLast ? Appearance?.rounding?.large ?? 23 : Appearance?.rounding?.verysmall ?? 4)) : buttonEffectiveRadius
 
     Behavior on topLeftRadius {
-        enabled: root.animationsEnabled && root.useDynamicRadius
-        animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root)
+        enabled: root.animationsEnabled && root.useDynamicRadius && root.groupSettled
+        NumberAnimation {
+            duration: Appearance.animation.elementMoveFast.duration
+            easing.type: Appearance.animation.elementMoveFast.type
+            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+        }
     }
     Behavior on topRightRadius {
-        enabled: root.animationsEnabled && root.useDynamicRadius
-        animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root)
+        enabled: root.animationsEnabled && root.useDynamicRadius && root.groupSettled
+        NumberAnimation {
+            duration: Appearance.animation.elementMoveFast.duration
+            easing.type: Appearance.animation.elementMoveFast.type
+            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+        }
     }
     Behavior on bottomLeftRadius {
-        enabled: root.animationsEnabled && root.useDynamicRadius
-        animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root)
+        enabled: root.animationsEnabled && root.useDynamicRadius && root.groupSettled
+        NumberAnimation {
+            duration: Appearance.animation.elementMoveFast.duration
+            easing.type: Appearance.animation.elementMoveFast.type
+            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+        }
     }
     Behavior on bottomRightRadius {
-        enabled: root.animationsEnabled && root.useDynamicRadius
-        animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root)
+        enabled: root.animationsEnabled && root.useDynamicRadius && root.groupSettled
+        NumberAnimation {
+            duration: Appearance.animation.elementMoveFast.duration
+            easing.type: Appearance.animation.elementMoveFast.type
+            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+        }
     }
 
     property color colBackground: ColorUtils.transparentize(Appearance?.colors.colLayer1Hover, 1) || "transparent"
@@ -234,7 +138,7 @@ Button {
     property color borderColor: Appearance?.colors.colOutline ?? "transparent"
 
     Behavior on buttonEffectiveRadius {
-        enabled: root.animationsEnabled
+        enabled: root.animationsEnabled && root.radiusBehaviorEnabled
         animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(this)
     }
 

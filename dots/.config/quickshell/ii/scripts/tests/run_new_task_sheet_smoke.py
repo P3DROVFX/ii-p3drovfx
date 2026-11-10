@@ -102,6 +102,7 @@ QtObject {
  property var lastAdded: null
  property int addCount: 0
  function addItem(item) { lastAdded = item; addCount++; }
+ function canEditTask(task) { return true; }
 }
 ''')
 

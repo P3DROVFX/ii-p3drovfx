@@ -224,7 +224,17 @@ var prepare = (target) => {
     return new_result(target, {_targetLower:info._lower, _targetLowerCodes:info.lowerCodes, _bitflags:info.bitflags})
 }
 
-var cleanup = () => { preparedCache.clear(); preparedSearchCache.clear() }
+var cleanup = () => {
+    preparedCache.clear()
+    preparedSearchCache.clear()
+    // The reusable heap retains its backing array after polling the last row.
+    // Multi-key scratch results also carry .obj references to provider data.
+    q = fastpriorityqueue()
+    tmpTargets = []; tmpResults = []
+    matchesSimple = []; matchesStrict = []
+    nextBeginningIndexesChanges = []
+    keysSpacesBestScores = []; allowPartialMatchScores = []
+}
 
 
 // Below this point is only internal code

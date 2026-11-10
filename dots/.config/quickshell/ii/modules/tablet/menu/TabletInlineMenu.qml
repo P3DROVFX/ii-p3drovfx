@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Effects
 import qs
 import qs.services
 import qs.modules.common
@@ -31,6 +32,14 @@ Item {
     property string headerIconPath: ""
     property string headerSymbol: ""
     property bool opened: false
+
+    /// The item drawn behind the menu, which the glass under the card blurs. Compositor blur
+    /// cannot do it: the menu is part of the drawer's own surface, whose layer rule has blur
+    /// off (the drawer blurs a frozen screencopy itself), so a card translucent over the
+    /// grid showed the sharp icons and labels straight through it.
+    property Item blurSource: null
+    readonly property bool glassEnabled: root.blurSource !== null
+        && (Config.options?.appearance?.transparency?.popups ?? false)
 
     /// Where the menu grows from, in this item's coordinates.
     property real originX: 0
@@ -74,6 +83,62 @@ Item {
         anchors.fill: parent
         enabled: root.opened
         onClicked: root.close()
+    }
+
+    // Frosted glass under the card: the same box, the same open animation, a blurred copy
+    // of what is behind it. Sampled once per open — the drawer is modal while a menu is up.
+    Item {
+        id: glass
+        visible: root.glassEnabled && card.opacity > 0.01
+        x: card.x
+        y: card.y
+        width: card.width
+        height: card.height
+        opacity: card.opacity
+        scale: card.scale
+        transformOrigin: card.transformOrigin
+
+        ShaderEffectSource {
+            id: glassSource
+            anchors.fill: parent
+            visible: false
+            live: root.opened && glass.visible
+            smooth: true
+            sourceItem: root.blurSource
+            sourceRect: root.blurSource
+                ? Qt.rect(root.blurSource.mapFromItem(root, card.x, card.y).x,
+                          root.blurSource.mapFromItem(root, card.x, card.y).y,
+                          card.width, card.height)
+                : Qt.rect(0, 0, 0, 0)
+        }
+
+        Rectangle {
+            id: glassMask
+            anchors.fill: parent
+            radius: card.radius
+            visible: false
+            layer.enabled: true
+        }
+
+        // Opaque base first: the blurred copy is taken from the grid that lies right under
+        // this card, so without it the sharp icons and labels read through. The blur over
+        // it is what keeps the frosted look instead of a flat panel.
+        Rectangle {
+            anchors.fill: parent
+            radius: card.radius
+            color: Appearance.m3colors.m3surfaceContainer
+        }
+
+        MultiEffect {
+            anchors.fill: parent
+            source: glassSource
+            blurEnabled: true
+            blurMax: 64
+            blur: 1.0
+            opacity: 0.6
+            maskEnabled: true
+            maskSource: glassMask
+        }
     }
 
     TabletMenuCard {

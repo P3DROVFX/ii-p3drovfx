@@ -64,6 +64,12 @@ def generate_fixture_set(destination: str | Path) -> dict[str, Path]:
         "ffmpeg", "-y", "-loglevel", "error", "-i", str(source), "-c:a", "flac",
         "-metadata", "title=II Fixture", "-metadata", "artist=II", str(flac),
     ])
+    flac_lyrics = root / "tagged-lyrics.flac"
+    _run_ffmpeg([
+        "ffmpeg", "-y", "-loglevel", "error", "-i", str(source), "-c:a", "flac",
+        "-metadata", "title=II Fixture With Lyrics", "-metadata", "artist=II",
+        "-metadata", "LYRICS=[00:00.00]Offline lyric\n[00:00.25]Second line\n", str(flac_lyrics),
+    ])
     opus = root / "tagged.opus"
     _run_ffmpeg([
         "ffmpeg", "-y", "-loglevel", "error", "-i", str(source), "-c:a", "libopus",
@@ -80,6 +86,7 @@ def generate_fixture_set(destination: str | Path) -> dict[str, Path]:
         "wav": source,
         "mp3": tagged,
         "flac": flac,
+        "flac_lyrics": flac_lyrics,
         "opus": opus,
         "cover": cover,
         "lrc": lyrics_lrc,

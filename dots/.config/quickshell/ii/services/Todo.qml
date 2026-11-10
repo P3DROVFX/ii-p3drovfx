@@ -72,6 +72,9 @@ Singleton {
     }
     property var localList: []
 
+    readonly property bool hasDatedOpenTasks: Array.from(root.list ?? [])
+        .some(task => task && task.done !== true && task.hasDate === true && task.date)
+
     onListChanged: {
         dueTasksNotifyTimer.restart();
     }
@@ -260,10 +263,9 @@ Singleton {
 
     /**
      * What each field of the creation form is allowed to exist. Local tasks
-     * persist the whole schema; TickTick's Open API accepts priority and a
-     * notes body on create but not tags; Google Tasks only takes title, due
-     * and notes. Surfaces hide the fields a provider cannot store instead of
-     * silently dropping what the user typed.
+     * persist the whole schema; the TickTick form exposes priority and notes,
+     * while Google Tasks only takes title, due and notes. Surfaces hide the
+     * fields this integration does not store.
      */
     readonly property bool supportsDate: true
     readonly property bool supportsNotes: true
@@ -358,6 +360,33 @@ Singleton {
         if (isNaN(date.getTime()))
             return "";
         return Qt.formatDate(date, "yyyy-MM-dd") + "T00:00:00.000Z";
+    }
+
+    /**
+     * Tasks keyed by local day, mirroring `CalendarService.eventsByDay`.
+     *
+     * `getTasksByDate` walks the whole list and parses one date per entry,
+     * which is fine for a single call but not for the calendar, whose month
+     * grid asks once per visible cell and whose upcoming rail asks once per
+     * day. One index serves every consumer. `hasDate` remains the gate, not
+     * `date`, for the reason documented above.
+     */
+    readonly property var tasksByDay: {
+        const map = {};
+        const source = root.list ?? [];
+        for (let i = 0; i < source.length; i++) {
+            const task = source[i];
+            if (task?.hasDate !== true || !task?.date)
+                continue;
+            const due = task.date instanceof Date ? task.date : root.parseLocalDate(task.date);
+            if (!due || isNaN(due.getTime()))
+                continue;
+            const key = Qt.formatDate(due, "yyyy-MM-dd");
+            if (!map[key])
+                map[key] = [];
+            map[key].push(task);
+        }
+        return map;
     }
 
     /**
@@ -526,6 +555,217 @@ Singleton {
         }
     }
 
+    /**
+     * Whether the edit form may save this task.
+     *
+     * Identity check first: the task must still resolve in the live list of
+     * its own provider, so a form left open across a provider or account
+     * switch cannot save into whatever is now selected. A done-history entry
+     * from a provider the user has since left fails the lookup and is not
+     * editable, instead of being routed at the currently selected account.
+     */
+    function canEditTask(task) {
+        if (!task || typeof task !== "object")
+            return false;
+        const provider = String(task.provider ?? root.provider);
+        if (provider === "local")
+            return root.provider === "local" && root.resolveLocalTaskIndex(task) >= 0;
+        if (provider === "ticktick")
+            return root.provider === "ticktick" && TickTickService.available
+                && (root._taskListContains(TickTickService.tasks, task.id)
+                    || (task.done === true && !!task.containerId && root._taskListContains(root.doneHistoryList, task.id)));
+        if (provider === "googleTasks")
+            return root.provider === "googleTasks" && GoogleTasksService.available
+                && task.accountId === GoogleTasksService.activeAccountEmail
+                && root._taskListContains(GoogleTasksService.tasks, task.id);
+        return false;
+    }
+
+    function _taskListContains(tasks, id) {
+        const target = String(id ?? "");
+        if (target.length === 0)
+            return false;
+        return Array.from(tasks ?? []).some(item => item && String(item?.id ?? "") === target);
+    }
+
+    /** Calendar day of a due value as "yyyy-MM-dd", null for no date, undefined for an unusable value. */
+    function _dueDay(value) {
+        if (value === null || value === undefined || String(value).length === 0)
+            return null;
+        const parsed = root.parseLocalDate(value);
+        if (!parsed || isNaN(parsed.getTime()))
+            return undefined;
+        return Qt.formatDate(parsed, "yyyy-MM-dd");
+    }
+
+    /**
+     * Reduces the full form payload to what actually differs from the task.
+     *
+     * Remote providers patch individual fields, and re-sending an identical
+     * dueDate would rewrite a date the user never touched. Only `content`,
+     * `notes`, `date`, `priority` and `tags` are compared; anything else the
+     * form sends is ignored. `date: null` means "remove the due date".
+     */
+    function _taskChangeset(task, changes) {
+        const result = {
+            empty: true
+        };
+        const trimmed = value => String(value ?? "").trim();
+
+        if (changes?.content !== undefined) {
+            const title = trimmed(changes.content);
+            if (title !== trimmed(task?.content ?? task?.title ?? "")) {
+                result.title = title;
+                result.empty = false;
+            }
+        }
+        if (changes?.notes !== undefined) {
+            const notes = String(changes.notes ?? "");
+            if (notes.trim() !== trimmed(task?.notes ?? "")) {
+                result.notes = notes;
+                result.empty = false;
+            }
+        }
+        if (changes?.date !== undefined) {
+            const nextDay = root._dueDay(changes.date);
+            const currentDay = root._dueDay((task?.hasDate === true && task?.date) ? task.date : null);
+            if (nextDay !== undefined && nextDay !== currentDay) {
+                result.date = nextDay === null ? null : root.parseLocalDate(changes.date);
+                result.empty = false;
+            }
+        }
+        if (changes?.priority !== undefined) {
+            const priority = Number(changes.priority) || 0;
+            if (priority !== (Number(task?.priority) || 0)) {
+                result.priority = priority;
+                result.empty = false;
+            }
+        }
+        if (changes?.tags !== undefined) {
+            const nextTags = Array.from(changes.tags ?? [], String);
+            const currentTags = Array.from(task?.tags ?? [], String);
+            if (nextTags.join("\u0000") !== currentTags.join("\u0000")) {
+                result.tags = nextTags;
+                result.empty = false;
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Edits an existing task in place: no task is created, the existing id
+     * travels to its provider.
+     *
+     * `task` is the object the form was opened with (a copy is fine as long
+     * as it keeps `id`, plus `provider` for a history entry that came from
+     * another provider). `changes` holds the form fields — every one optional;
+     * `date: null` clears the due date, an empty `notes` string clears notes.
+     * Returns true when the change was accepted for dispatch (an untouched
+     * form is an accepted no-op); async failures surface through the
+     * provider's existing error channel (`lastError` / `lastErrorMessage`).
+     */
+    function updateItem(task, changes) {
+        if (!root.canEditTask(task) || !changes || typeof changes !== "object")
+            return false;
+
+        const changed = root._taskChangeset(task, changes);
+        if (changed.title !== undefined && changed.title.length === 0)
+            return false;
+
+        switch (String(task.provider ?? root.provider)) {
+        case "ticktick": {
+            if (changed.empty)
+                return true;
+            // Keep the existing form's field capabilities; remote tags remain unchanged.
+            return TickTickService.updateTask(task, {
+                content: changed.title,
+                notes: changed.notes,
+                date: changed.date,
+                priority: changed.priority
+            });
+        }
+        case "googleTasks": {
+            if (changed.empty)
+                return true;
+            // Google Tasks stores neither priority nor tags; those changes
+            // are dropped the same way the creation form hides the fields.
+            return GoogleTasksService.updateTask(task, {
+                content: changed.title,
+                notes: changed.notes,
+                date: changed.date
+            });
+        }
+        default:
+            return root.updateLocalItem(task, changed);
+        }
+    }
+
+    /**
+     * Local edits persist the merged task directly. Unseen fields (anything
+     * the schema does not name), `done`, `id`, `completedAt` and the provider
+     * bookkeeping ride along untouched; `done` tasks keep their history entry
+     * in step so the done list does not show the pre-edit text.
+     */
+    function updateLocalItem(task, changed) {
+        const index = root.resolveLocalTaskIndex(task);
+        if (index < 0)
+            return false;
+        if (changed.empty)
+            return true;
+
+        const merged = Object.assign({}, root.localList[index]);
+        delete merged.originalIndex;
+        if (changed.title !== undefined) {
+            merged.title = changed.title;
+            merged.content = changed.title;
+        }
+        if (changed.notes !== undefined)
+            merged.notes = changed.notes;
+        if (changed.date !== undefined) {
+            merged.dueDate = changed.date === null ? null : root.serializedDueDate({
+                date: changed.date
+            });
+            merged.date = changed.date === null ? null : changed.date;
+            merged.hasDate = changed.date !== null;
+        }
+        if (changed.priority !== undefined)
+            merged.priority = changed.priority;
+        if (changed.tags !== undefined)
+            merged.tags = changed.tags;
+
+        const next = root.localList.slice(0);
+        next[index] = merged;
+        root.persistLocalTasks(next);
+        root._syncDoneHistoryEntry(merged);
+        return true;
+    }
+
+    /** Keeps a done task's history row matching the task after an edit. */
+    function _syncDoneHistoryEntry(updated) {
+        if (updated?.done !== true)
+            return;
+        const id = String(updated?.id ?? "");
+        if (id.length === 0)
+            return;
+        const history = root.doneHistoryList ?? [];
+        const index = history.findIndex(item => String(item?.id ?? "") === id);
+        if (index < 0)
+            return;
+        const next = history.slice(0);
+        next[index] = Object.assign({}, next[index], updated);
+        root.persistDoneHistory(next);
+    }
+
+    Connections {
+        target: GoogleTasksService
+        function onTaskUpdated(task) { root._syncDoneHistoryEntry(task); }
+    }
+
+    Connections {
+        target: TickTickService
+        function onTaskUpdated(task) { root._syncDoneHistoryEntry(task); }
+    }
+
     function refresh() {
         switch (root.provider) {
         case "ticktick":
@@ -542,10 +782,7 @@ Singleton {
 
     onProviderChanged: {
         if (root.remoteEnabled && root.connected) {
-            providerRefreshTimer.restart();
             root.refresh();
-        } else {
-            providerRefreshTimer.stop();
         }
     }
 
@@ -618,7 +855,7 @@ Singleton {
         id: dueTasksPeriodicTimer
         interval: 60 * 1000
         repeat: true
-        running: true
+        running: root.hasDatedOpenTasks
         onTriggered: root.checkDueTasksNotifications()
     }
 
@@ -634,11 +871,14 @@ Singleton {
         dueTasksNotifyTimer.restart();
     }
 
+    // TickTick owns its own timer so it cannot be refreshed twice. Google
+    // Tasks has no provider-local timer, so Todo keeps this single fallback
+    // owner for Google only.
     Timer {
         id: providerRefreshTimer
         interval: Math.max(1, (Config.options.todo ? Config.options.todo.refreshIntervalMinutes : 5)) * 60 * 1000
         repeat: true
-        running: root.remoteEnabled && root.connected
+        running: root.provider === "googleTasks" && root.connected
         onTriggered: root.refresh()
     }
 

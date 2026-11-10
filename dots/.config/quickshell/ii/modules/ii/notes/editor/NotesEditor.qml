@@ -8,10 +8,12 @@ import Quickshell.Io
 import qs
 import qs.services
 import qs.services.ai
+import qs.services.ai.blocks
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.ii.notes
 import "../../../../services/notes/NotesDocument.js" as Doc
+import "../../../../services/notes/NotesMarkdown.js" as Markdown
 import "../../../../services/notes/NotesShortcuts.js" as Shortcuts
 
 /**
@@ -32,17 +34,34 @@ Item {
     property var blocks: []
     property bool ready: false
 
+    /// Bottom breathing room so the active line is never hidden under the floating toolbar.
+    readonly property int bottomClearance: 96
+    property var imageDimensions: ({})
+
     property var activeTextEdit: null
-    readonly property bool hasSelection: root.activeTextEdit !== null && root.activeTextEdit.selectedText.length > 0
-    readonly property string selectedText: root.hasSelection ? root.activeTextEdit.selectedText : ""
+    readonly property bool hasActiveTextFocus: (root.activeTextEdit !== null && root.activeTextEdit.activeFocus)
+        || root.activeBlockId.length > 0
+    readonly property bool hasSelection: (root.activeTextEdit !== null && root.activeTextEdit.selectedText.length > 0)
+        || (root.activeTextEdit !== null && root.activeTextEdit.activeFocus && root.lastSelectionBlockId === root.activeBlockId && root.lastSelectionText.length > 0)
+    readonly property string selectedText: root.activeTextEdit !== null && root.activeTextEdit.selectedText.length > 0
+        ? root.activeTextEdit.selectedText
+        : (root.hasSelection ? root.lastSelectionText : "")
+    readonly property int selectedStart: root.activeTextEdit !== null && root.activeTextEdit.selectionStart !== root.activeTextEdit.selectionEnd
+        ? Math.min(root.activeTextEdit.selectionStart, root.activeTextEdit.selectionEnd)
+        : root.lastSelectionStart
+    readonly property int selectedEnd: root.activeTextEdit !== null && root.activeTextEdit.selectionStart !== root.activeTextEdit.selectionEnd
+        ? Math.max(root.activeTextEdit.selectionStart, root.activeTextEdit.selectionEnd)
+        : root.lastSelectionEnd
 
     readonly property rect selectionGeometry: {
         if (!root.hasSelection || !root.activeTextEdit)
             return Qt.rect(0, 0, 0, 0);
         try {
             const te = root.activeTextEdit;
-            const sMin = Math.min(te.selectionStart, te.selectionEnd);
-            const sMax = Math.max(te.selectionStart, te.selectionEnd);
+            const sMin = root.selectedStart;
+            const sMax = root.selectedEnd;
+            if (sMin < 0 || sMax <= sMin)
+                return Qt.rect(0, 0, 0, 0);
             const r1 = te.positionToRectangle(sMin);
             const r2 = te.positionToRectangle(sMax);
             const startPoint = te.mapToItem(root, r1.x, r1.y);
@@ -64,6 +83,99 @@ Item {
     // Loader below. Keeps the AI task/menu/compare tree (N1: ~78 MiB PSS) out
     // of the eager editor for the common case of editing without AI.
     property bool aiLoaded: false
+    property bool externalAiGenerationActive: false
+    readonly property bool aiBusy: root.externalAiGenerationActive
+        || (aiLoader.item && aiLoader.item.aiTask && aiLoader.item.aiTask.running)
+    property bool pendingAiMenuRequest: false
+    property string pendingAiScope: ""
+    property string pendingAiText: ""
+    property string pendingAiBlockId: ""
+
+    // The selection belongs to the block, not to the focus state. Opening the AI menu
+    // moves focus into the menu, so activeTextEdit can become null before Replace is
+    // clicked; these coordinates keep the original selection addressable in that case.
+    property string aiSelectionBlockId: ""
+    property string aiSelectionText: ""
+    property int aiSelectionStart: -1
+    property int aiSelectionEnd: -1
+
+    // Text inputs clear activeTextEdit as soon as the AI toolbar receives focus. Keep a
+    // value-only snapshot while the selection is live so the toolbar can still open AI
+    // after that focus transition.
+    property string lastSelectionBlockId: ""
+    property string lastSelectionText: ""
+    property string lastSelectionFullText: ""
+    property int lastSelectionStart: -1
+    property int lastSelectionEnd: -1
+
+    onAiBusyChanged: {
+        if (!root.aiBusy)
+            return;
+        Qt.callLater(() => {
+            if (root && root.aiBusy)
+                list.positionViewAtEnd();
+        });
+    }
+
+    function rememberSelection(textEdit, blockId): void {
+        if (!textEdit || !textEdit.activeFocus)
+            return;
+        if (textEdit.selectionStart === textEdit.selectionEnd) {
+            if (root.lastSelectionBlockId === String(blockId ?? "")) {
+                root.lastSelectionBlockId = "";
+                root.lastSelectionText = "";
+                root.lastSelectionFullText = "";
+                root.lastSelectionStart = -1;
+                root.lastSelectionEnd = -1;
+            }
+            return;
+        }
+        const start = Math.min(textEdit.selectionStart, textEdit.selectionEnd);
+        const end = Math.max(textEdit.selectionStart, textEdit.selectionEnd);
+        const selected = String(textEdit.selectedText ?? "");
+        if (selected.length === 0)
+            return;
+        root.lastSelectionBlockId = String(blockId ?? "");
+        root.lastSelectionText = selected;
+        root.lastSelectionFullText = String(textEdit.text ?? "");
+        root.lastSelectionStart = start;
+        root.lastSelectionEnd = end;
+    }
+
+    /// Leaves a Markdown block in its rendered state before an AI result is committed.
+    /// TextEdit is intentionally the source view while focused, so keeping the old caret
+    /// here would make freshly generated formatting look like plain text until the window
+    /// was closed.
+    function clearTextFocus(): void {
+        const te = root.activeTextEdit;
+        root.focusRequest = "";
+        root.focusCaret = -1;
+        if (te) {
+            if (typeof te.deselect === "function")
+                te.deselect();
+            te.focus = false;
+        }
+        root.activeTextEdit = null;
+        root.activeBlockId = "";
+        root.lastSelectionBlockId = "";
+        root.lastSelectionText = "";
+        root.lastSelectionFullText = "";
+        root.lastSelectionStart = -1;
+        root.lastSelectionEnd = -1;
+    }
+
+    function presentPendingAiMenu(): void {
+        if (!root.pendingAiMenuRequest || !aiLoader.item)
+            return;
+        const menu = aiLoader.item.aiMenu;
+        if (!menu)
+            return;
+        menu.targetScope = root.pendingAiScope;
+        menu.targetText = root.pendingAiText;
+        menu.targetBlockId = root.pendingAiBlockId;
+        root.pendingAiMenuRequest = false;
+        root.aiMenuOpen = true;
+    }
 
     function openAiMenu(requestedScope = ""): void {
         let scope = requestedScope;
@@ -81,43 +193,107 @@ Item {
 
         if (scope === "selection" && root.hasSelection) {
             text = root.selectedText;
-        } else if (scope === "block" && root.activeBlock) {
-            text = root.activeBlock.text ?? "";
+            const te = root.activeTextEdit;
+            root.aiSelectionBlockId = root.activeBlockId;
+            root.aiSelectionText = te.text;
+            root.aiSelectionStart = Math.min(te.selectionStart, te.selectionEnd);
+            root.aiSelectionEnd = Math.max(te.selectionStart, te.selectionEnd);
+        } else if (scope === "selection" && root.lastSelectionBlockId.length > 0) {
+            const cachedIndex = root.indexOfBlock(root.lastSelectionBlockId);
+            const cachedBlock = root.blockAt(cachedIndex);
+            const cachedFullText = cachedBlock
+                ? (root.lastSelectionFullText.length > 0
+                    ? root.lastSelectionFullText
+                    : String(cachedBlock.text ?? ""))
+                : "";
+            if (cachedBlock && root.lastSelectionStart >= 0 && root.lastSelectionEnd > root.lastSelectionStart
+                && root.lastSelectionEnd <= cachedFullText.length) {
+                blockId = root.lastSelectionBlockId;
+                text = root.lastSelectionText;
+                root.aiSelectionBlockId = blockId;
+                root.aiSelectionText = cachedFullText;
+                root.aiSelectionStart = root.lastSelectionStart;
+                root.aiSelectionEnd = root.lastSelectionEnd;
+            } else {
+                root.aiSelectionBlockId = "";
+                root.aiSelectionText = "";
+                root.aiSelectionStart = -1;
+                root.aiSelectionEnd = -1;
+                scope = root.activeBlock ? "block" : "note";
+            }
         } else {
+            root.aiSelectionBlockId = "";
+            root.aiSelectionText = "";
+            root.aiSelectionStart = -1;
+            root.aiSelectionEnd = -1;
+            if (scope === "selection")
+                scope = root.activeBlock ? "block" : "note";
+        }
+
+        if (scope === "block" && root.activeBlock) {
+            text = root.activeBlock.text ?? "";
+        } else if (scope !== "selection") {
             scope = "note";
             const doc = NotesService.documentOf(root.noteId);
             text = doc ? Doc.contentString(doc) : "";
         }
 
-        root.aiLoaded = true; // builds aiLoader synchronously so the menu exists
-        const menu = aiLoader.item.aiMenu;
-        menu.targetScope = scope;
-        menu.targetText = text;
-        menu.targetBlockId = blockId;
-        root.aiMenuOpen = true;
+        root.pendingAiScope = scope;
+        root.pendingAiText = text;
+        root.pendingAiBlockId = blockId;
+        root.pendingAiMenuRequest = true;
+        root.aiLoaded = true;
+        root.presentPendingAiMenu();
     }
 
     function replaceActiveSelection(newText): void {
-        if (!root.activeTextEdit)
-            return;
+        const replacement = String(newText ?? "");
         const te = root.activeTextEdit;
-        const sMin = Math.min(te.selectionStart, te.selectionEnd);
-        const sMax = Math.max(te.selectionStart, te.selectionEnd);
-        const full = te.text;
-        const replaced = full.slice(0, sMin) + newText + full.slice(sMax);
-        te.text = replaced;
-        te.select(sMin, sMin + newText.length);
-        if (root.activeBlockId)
-            root.commitText(root.activeBlockId, replaced);
+        if (te && root.hasSelection) {
+            const sMin = Math.min(te.selectionStart, te.selectionEnd);
+            const sMax = Math.max(te.selectionStart, te.selectionEnd);
+            const full = te.text;
+            const replaced = full.slice(0, sMin) + replacement + full.slice(sMax);
+            te.text = replaced;
+            te.select(sMin, sMin + replacement.length);
+            if (root.activeBlockId)
+                root.commitText(root.activeBlockId, replaced);
+            Qt.callLater(() => {
+                if (!root || !te)
+                    return;
+                te.deselect();
+                te.focus = false;
+                if (root.activeTextEdit === te)
+                    root.activeTextEdit = null;
+            });
+            return;
+        }
+
+        const blockId = root.aiSelectionBlockId;
+        const block = root.blockAt(root.indexOfBlock(blockId));
+        if (!block || root.aiSelectionStart < 0 || root.aiSelectionEnd < root.aiSelectionStart)
+            return;
+        const full = root.aiSelectionText.length > 0
+            ? root.aiSelectionText
+            : String(block.text ?? "");
+        const start = Math.min(root.aiSelectionStart, full.length);
+        const end = Math.min(root.aiSelectionEnd, full.length);
+        const replaced = full.slice(0, start) + replacement + full.slice(end);
+        if (!root.apply([{ op: "update", id: blockId, patch: { text: replaced } }]))
+            return;
+        root.syncFromDocument(true);
+        root.focusCaret = -1;
+        root.focusRequest = "";
     }
 
     function onAiReplace(newText): void {
         const cs = aiLoader.item.aiCompareSheet;
         const mode = cs.mode;
-        if (mode === "selection" && root.hasSelection) {
+        if (mode === "selection") {
             root.replaceActiveSelection(newText);
         } else if (mode === "block" && cs.targetBlockId) {
-            root.apply([{ op: "update", id: cs.targetBlockId, patch: { text: newText } }]);
+            if (root.apply([{ op: "update", id: cs.targetBlockId, patch: { text: newText } }]))
+                root.syncFromDocument(true);
         } else if (mode === "title") {
             NotesService.updateMeta(root.noteId, { title: newText.trim() });
         } else if (mode === "tags") {
@@ -129,10 +305,13 @@ Item {
             if (cs.taskTitle.indexOf("Resumo") !== -1 || cs.taskTitle.indexOf("Summary") !== -1) {
                 root.apply([{ op: "insert", index: 0, block: { type: "callout", tone: "info", text: newText } }]);
             } else {
-                if (root.activeBlockId)
-                    root.apply([{ op: "update", id: root.activeBlockId, patch: { text: newText } }]);
-                else if (root.blocks.length > 0)
-                    root.apply([{ op: "update", id: root.blocks[0].id, patch: { text: newText } }]);
+                if (root.activeBlockId) {
+                    if (root.apply([{ op: "update", id: root.activeBlockId, patch: { text: newText } }]))
+                        root.syncFromDocument(true);
+                } else if (root.blocks.length > 0) {
+                    if (root.apply([{ op: "update", id: root.blocks[0].id, patch: { text: newText } }]))
+                        root.syncFromDocument(true);
+                }
             }
         }
     }
@@ -183,13 +362,24 @@ Item {
      * been selected — the file is read asynchronously — and an editor that only looked
      * once would show an empty page over a note that has text in it. The first thing typed
      * would then be saved over the real content.
+     *
+     * `keepScroll` exists because replacing `blocks` hands the ListView a brand new array,
+     * and a new model is a reset: the view drops `contentY` and goes back to the top. That
+     * is what threw the page away on every Enter — splitting has to rebuild the list to
+     * show the new block. Saving the offset for the length of the rebuild keeps the page
+     * where it was; only a different note opts out, because it starts at its own top.
      */
-    function syncFromDocument(): void {
+    function syncFromDocument(forceText = false, keepScroll = true): void {
         const document = root.noteId.length > 0 ? NotesService.documentOf(root.noteId) : null;
         const next = document ? Doc.asArray(document.blocks) : [];
         root.ready = document !== null;
-        if (root.signatureOf(next) !== root.signatureOf(root.blocks))
+        if (forceText || root.signatureOf(next) !== root.signatureOf(root.blocks)) {
+            const savedOffset = keepScroll ? Math.max(0, list.contentY - list.originY) : 0;
             root.blocks = next;
+            // The reset happens synchronously, inside the assignment; restoring it in the
+            // same turn means the frame never gets drawn at the top.
+            list.contentY = list.originY + savedOffset;
+        }
         if (root.pendingAutoFocus && root.blocks.length > 0) {
             root.pendingAutoFocus = false;
             root.focusFirstBlock();
@@ -197,9 +387,29 @@ Item {
     }
 
     onNoteIdChanged: {
+        const aiItem = aiLoader.item;
+        if (aiItem && aiItem.aiTask && aiItem.aiTask.running)
+            aiItem.aiTask.cancel();
+        root.aiMenuOpen = false;
+        root.aiCompareOpen = false;
+        root.pendingAiMenuRequest = false;
+        root.pendingAiScope = "";
+        root.pendingAiText = "";
+        root.pendingAiBlockId = "";
+        root.aiSelectionBlockId = "";
+        root.aiSelectionText = "";
+        root.aiSelectionStart = -1;
+        root.aiSelectionEnd = -1;
         root.undoStack = [];
         root.redoStack = [];
-        root.syncFromDocument();
+        root.lastSelectionBlockId = "";
+        root.lastSelectionText = "";
+        root.lastSelectionFullText = "";
+        root.lastSelectionStart = -1;
+        root.lastSelectionEnd = -1;
+        // A different note starts at its own top, so this is the one rebuild that must not
+        // carry the previous page's offset over.
+        root.syncFromDocument(false, false);
     }
 
     Connections {
@@ -213,7 +423,8 @@ Item {
         function onDataChanged() {
             // Not gated on readiness any more: this is how a document that finished
             // loading after its note was selected reaches the editor at all.
-            root.syncFromDocument();
+            if (!root.writingOurselves)
+                root.syncFromDocument();
         }
     }
 
@@ -281,7 +492,7 @@ Item {
         root.writingOurselves = false;
         if (result.ok && result.changed)
             root.redoStack = root.redoStack.concat([result.inverse]);
-        root.syncFromDocument();
+        root.syncFromDocument(true);
     }
 
     function redo(): void {
@@ -294,7 +505,7 @@ Item {
         root.writingOurselves = false;
         if (result.ok && result.changed)
             root.undoStack = root.undoStack.concat([result.inverse]);
-        root.syncFromDocument();
+        root.syncFromDocument(true);
     }
 
     function blockAt(index): var {
@@ -325,6 +536,9 @@ Item {
 
     /// Text as it is typed. Not structural: the delegate is already showing this.
     function commitText(blockId, text): void {
+        const index = root.indexOfBlock(blockId);
+        if (index >= 0 && root.blocks[index])
+            root.blocks[index].text = text;
         root.apply([{ op: "update", id: blockId, patch: { text: text } }], false);
     }
 
@@ -356,23 +570,38 @@ Item {
         return block ? block.id : "";
     }
 
+    property real minScrollOffset: -1
+    property bool advanceScrollOnFocus: false
+
     /// Enter. Splits here, or leaves the list when the item is empty.
     function splitAt(blockId, offset, text): void {
         const index = root.indexOfBlock(blockId);
         const block = root.blockAt(index);
         if (!block)
             return;
+        const savedOffset = Math.max(0, list.contentY - list.originY);
+        const currentItem = list.itemAtIndex(index);
+        const maxOffsetBefore = Math.max(0, list.contentHeight - list.height);
+        const nearBottom = (maxOffsetBefore > 0 && savedOffset >= maxOffsetBefore - 32)
+            || (currentItem !== null && (currentItem.y + currentItem.height - list.contentY) >= list.height - 220 && index >= root.blocks.length - 2);
+        root.minScrollOffset = savedOffset;
+        root.advanceScrollOnFocus = nearBottom;
+
         const current = Object.assign({}, block, { text: text });
         if (Shortcuts.shouldExit(current)) {
             root.apply(Shortcuts.exitOperations(current));
+            root.focusCaret = 0;
             root.focusRequest = blockId;
             return;
         }
         // The typed text has to land first: the split reads the block's text from the
         // document, and the document has not seen this keystroke yet.
+        block.text = text;
         root.apply([{ op: "update", id: blockId, patch: { text: text } }], false, false);
-        if (root.apply([{ op: "split", id: blockId, offset: offset }]))
+        if (root.apply([{ op: "split", id: blockId, offset: offset }])) {
+            root.focusCaret = 0;
             root.focusRequest = root.blockIdAt(index + 1);
+        }
     }
 
     /// Backspace at the very start. Joins this block onto the one above.
@@ -567,6 +796,63 @@ Item {
             root.focusRequest = root.blockIdAt(at);
     }
 
+    /**
+     * Adds text generated from the note-level prompt without erasing existing prose.
+     * A brand-new note starts with one empty paragraph, so use that paragraph instead of
+     * leaving an empty line above the generated answer.
+     */
+    function insertGeneratedText(text): bool {
+        const generated = String(text ?? "").trim();
+        if (generated.length === 0 || root.noteId.length === 0)
+            return false;
+
+        const parsed = Markdown.fromAiMarkdown(generated, { noteId: root.noteId });
+        const generatedBlocks = Doc.asArray(parsed.blocks);
+        if (generatedBlocks.length === 0)
+            return false;
+
+        const document = NotesService.documentOf(root.noteId);
+        const currentBlocks = document ? Doc.asArray(document.blocks) : root.blocks;
+
+        if (currentBlocks.length === 1) {
+            const first = currentBlocks[0];
+            if (first.type === "text" && String(first.text ?? "").trim().length === 0) {
+                const firstGenerated = generatedBlocks[0];
+                const firstProps = {};
+                for (const key in firstGenerated) {
+                    if (key !== "id" && key !== "type")
+                        firstProps[key] = firstGenerated[key];
+                }
+                const ops = [{ op: "setType", id: first.id, type: firstGenerated.type, props: firstProps }];
+                for (let i = 1; i < generatedBlocks.length; i++) {
+                    ops.push({ op: "insert", index: i, block: generatedBlocks[i] });
+                }
+                if (!root.apply(ops))
+                    return false;
+                root.syncFromDocument(true);
+                // Generated Markdown should open in its rendered form immediately. A focus
+                // request would intentionally switch a marked-up block back to source text.
+                root.focusCaret = -1;
+                root.focusRequest = "";
+                return true;
+            }
+        }
+
+        const at = currentBlocks.length;
+        const ops = generatedBlocks.map((block, index) => ({
+            op: "insert",
+            index: at + index,
+            block: block
+        }));
+        const inserted = root.apply(ops);
+        if (inserted) {
+            root.syncFromDocument(true);
+            root.focusCaret = -1;
+            root.focusRequest = "";
+        }
+        return inserted;
+    }
+
     function insertFile(path): void {
         if (root.noteId.length === 0 || !path)
             return;
@@ -679,9 +965,65 @@ Item {
      */
     property int focusTick: 0
 
+    function ensureBlockVisible(at): void {
+        if (at < 0 || at >= root.blocks.length || list.height <= 0)
+            return;
+        const floorY = root.minScrollOffset >= 0 ? list.originY + root.minScrollOffset : -1e9;
+        let item = list.itemAtIndex(at);
+        if (!item) {
+            list.positionViewAtIndex(at, ListView.Contain);
+            item = list.itemAtIndex(at);
+        }
+        if (list.contentY < floorY)
+            list.contentY = floorY;
+        if (!item)
+            return;
+
+        const topMargin = 24;
+        const visibleBottom = Math.max(topMargin + 28, list.height - root.bottomClearance);
+        const itemTop = item.y - list.contentY;
+        const itemBottom = itemTop + item.height;
+
+        if (itemBottom > visibleBottom) {
+            const delta = itemBottom - visibleBottom;
+            const maxContentY = list.originY + Math.max(0, list.contentHeight - list.height);
+            list.contentY = Math.max(floorY, Math.min(maxContentY, list.contentY + delta));
+        } else if (root.advanceScrollOnFocus) {
+            const step = Math.max(NotesMetrics.paperLineHeight, item.height);
+            const maxContentY = list.originY + Math.max(0, list.contentHeight - list.height);
+            list.contentY = Math.min(maxContentY, Math.max(list.contentY, floorY + step));
+        } else if (itemTop < topMargin && root.minScrollOffset < 0) {
+            const delta = topMargin - itemTop;
+            list.contentY = Math.max(list.originY, list.contentY - delta);
+        }
+    }
+
+    function ensureCursorVisible(textEdit): void {
+        if (!textEdit || !textEdit.activeFocus || list.height <= 0)
+            return;
+        try {
+            const caret = textEdit.cursorRectangle;
+            const mapped = textEdit.mapToItem(list, caret.x, caret.y);
+            const topMargin = 24;
+            const visibleBottom = Math.max(topMargin + 28, list.height - root.bottomClearance);
+            const caretTop = mapped.y;
+            const caretBottom = mapped.y + Math.max(caret.height, NotesMetrics.paperLineHeight);
+            if (caretBottom > visibleBottom) {
+                const maxContentY = list.originY + Math.max(0, list.contentHeight - list.height);
+                list.contentY = Math.min(maxContentY, list.contentY + (caretBottom - visibleBottom));
+            } else if (caretTop < topMargin && root.minScrollOffset < 0) {
+                list.contentY = Math.max(list.originY, list.contentY - (topMargin - caretTop));
+            }
+        } catch (e) {}
+    }
+
     onFocusRequestChanged: {
-        if (root.focusRequest.length > 0)
-            refocusTimer.restart();
+        if (root.focusRequest.length === 0)
+            return;
+        const at = root.indexOfBlock(root.focusRequest);
+        if (at >= 0)
+            root.ensureBlockVisible(at);
+        refocusTimer.restart();
     }
 
     Timer {
@@ -691,7 +1033,14 @@ Item {
         // the first character of whatever follows a markdown prefix.
         interval: 1
         repeat: false
-        onTriggered: root.focusTick++
+        onTriggered: {
+            const at = root.indexOfBlock(root.focusRequest);
+            if (at >= 0)
+                root.ensureBlockVisible(at);
+            root.minScrollOffset = -1;
+            root.advanceScrollOnFocus = false;
+            root.focusTick++;
+        }
     }
 
     /**
@@ -722,6 +1071,37 @@ Item {
 
     // ── The list ──────────────────────────────────────────────────────────
 
+    /**
+     * How much height the footer has to add to reach the bottom of the viewport.
+     *
+     * A note shorter than the page leaves dead space under its last line, and a click in
+     * it has to mean "keep typing" rather than nothing. Measured from the last *row* and
+     * never from `contentHeight`: the footer is part of `contentHeight`, so a binding on
+     * that would be a loop that keeps relaying out the row the caret is in.
+     */
+    property real footerFill: 0
+
+    function fitFooter(): void {
+        // Only the rows near the viewport are instantiated, so the last row exists exactly
+        // when the page is short enough to end on screen — which is the only case that has
+        // space to fill. A longer note leaves the footer at its base, as before.
+        const last = list.count > 0 ? list.itemAtIndex(list.count - 1) : null;
+        root.footerFill = last ? Math.max(0, list.height - (last.y + last.height)) : 0;
+    }
+
+    Connections {
+        target: list
+        function onContentHeightChanged() {
+            root.fitFooter();
+        }
+        function onHeightChanged() {
+            root.fitFooter();
+        }
+        function onCountChanged() {
+            root.fitFooter();
+        }
+    }
+
     ListView {
         id: list
         anchors.fill: parent
@@ -742,24 +1122,45 @@ Item {
         }
 
         footer: Item {
-            // A fixed height. Sizing it from the space left in the view reads
-            // `contentHeight`, which the footer is part of — a binding loop that keeps the
-            // list relaying out, rebuilding the delegate the caret is in and dropping the
-            // focus on every pass.
-            height: 200
+            // A fixed base, grown to the rest of the viewport by `footerFill`, so the
+            // empty space under the last line still belongs to the page. Sizing it from
+            // `contentHeight` — which the footer is part of — was a binding loop that kept
+            // the list relaying out, rebuilding the delegate the caret is in and dropping
+            // the focus on every pass.
+            width: list.width
+            height: Math.max(200 + (root.aiBusy ? aiLoading.implicitHeight : 0), root.footerFill)
+
+            AiTypingIndicator {
+                id: aiLoading
+                anchors.left: parent.left
+                anchors.leftMargin: NotesMetrics.readingPadding
+                anchors.top: parent.top
+                anchors.topMargin: NotesMetrics.cardLineSpacing
+                active: root.aiBusy
+                visible: root.aiBusy
+            }
 
             // Clicking the space under the last block puts the caret in it, or makes a
             // paragraph when the note ends in something you cannot type into.
             MouseArea {
-                anchors.fill: parent
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.top: root.aiBusy ? aiLoading.bottom : parent.top
                 onClicked: {
                     const last = root.blockAt(root.blocks.length - 1);
-                    if (last && ["text", "heading", "list", "quote", "callout"].includes(last.type))
+                    if (last && ["text", "heading", "list", "quote", "callout"].includes(last.type)) {
+                        root.focusCaret = -1; // The end of the block, which is where the page goes on.
                         root.focusRequest = last.id;
-                    else
+                    } else {
                         root.apply([{ op: "insert", index: root.blocks.length, block: { type: "text" } }]);
+                    }
                 }
             }
+        }
+
+        TouchpadScrollHandler {
+            flickable: list
         }
     }
 
@@ -808,7 +1209,6 @@ Item {
 
                     onActionRequested: (taskName, systemPrompt, userText, meta) => {
                         root.aiMenuOpen = false;
-                        aiTask.start(systemPrompt, userText);
                         aiCompareSheet.taskTitle = taskName;
                         aiCompareSheet.originalText = userText;
                         aiCompareSheet.proposedText = "";
@@ -816,6 +1216,10 @@ Item {
                         aiCompareSheet.targetBlockId = meta.blockId ?? "";
                         aiCompareSheet.mode = meta.mode ?? "selection";
                         root.aiCompareOpen = true;
+                        // Publish the compare surface before starting the request so a
+                        // slow endpoint still gives immediate feedback and a synchronous
+                        // policy/model error has a visible destination.
+                        aiTask.start(systemPrompt, userText);
                     }
 
                     onChatRequested: contextText => {
@@ -848,7 +1252,10 @@ Item {
                     root.aiCompareOpen = false;
                 }
             }
+
         }
+
+        onLoaded: root.presentPendingAiMenu()
     }
 
     Component.onCompleted: root.syncFromDocument()

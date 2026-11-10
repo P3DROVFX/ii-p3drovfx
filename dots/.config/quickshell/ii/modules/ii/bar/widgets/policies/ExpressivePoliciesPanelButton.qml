@@ -9,7 +9,9 @@ Item {
     readonly property string screenName: root.QsWindow?.window?.screen?.name ?? ""
     property bool vertical: false
     property bool showPing: false
-    property bool aiChatEnabled: Ai.enabled
+    // Derived from Config (not Ai.enabled) so a disabled AI policy never
+    // instantiates the Ai singleton just to light the ping badge.
+    property bool aiChatEnabled: Number(Config.options?.policies?.ai ?? 1) !== 0
     property bool translatorEnabled: Config.options.sidebar.translator.enable
     property bool animeEnabled: Config.options.policies.weeb !== 0
     visible: true
@@ -23,7 +25,9 @@ Item {
         : Appearance.sizes.barContentScale
 
     Connections {
-        target: Ai
+        // Ternary gate: when the policy is off, the singleton is never evaluated
+        // (and therefore never instantiated) by this widget.
+        target: root.aiChatEnabled ? AiResponseBus : null
         function onResponseFinished() {
             if (GlobalStates.sidebarLeftOpen)
                 return;
@@ -31,7 +35,7 @@ Item {
         }
     }
     Connections {
-        target: Booru
+        target: root.animeEnabled ? Booru : null
         function onResponseFinished() {
             if (GlobalStates.sidebarLeftOpen)
                 return;
@@ -68,21 +72,25 @@ Item {
             || PhoneMicService.connecting
             || PhoneMicService.running)
 
+    BarWidgetPalette {
+        id: palette
+        colorMode: Config.options.bar.policies.colorMode
+    }
+
     RippleButton {
         id: button
         anchors.fill: parent
         buttonRadius: Appearance.rounding.full
 
-        // Approach 1 Vibrant Dynamic Colors
         colBackground: root.phoneIntegrationActive
             ? Appearance.colors.colErrorContainer
-            : (GlobalStates.sidebarLeftOpen ? Appearance.colors.colPrimary : Appearance.colors.colTertiary)
+            : (GlobalStates.sidebarLeftOpen ? palette.colBackgroundVariant : palette.colBackground)
         colBackgroundHover: root.phoneIntegrationActive
-            ? Appearance.colors.colErrorContainerHover ?? Appearance.colors.colErrorContainer
-            : (GlobalStates.sidebarLeftOpen ? Appearance.colors.colPrimaryHover : Appearance.colors.colTertiaryHover)
+            ? (Appearance.colors.colErrorContainerHover ?? Appearance.colors.colErrorContainer)
+            : (GlobalStates.sidebarLeftOpen ? palette.colBackgroundVariantHover : palette.colBackgroundHover)
         colRipple: root.phoneIntegrationActive
-            ? Appearance.colors.colErrorContainerActive ?? Appearance.colors.colErrorContainer
-            : (GlobalStates.sidebarLeftOpen ? Appearance.colors.colPrimaryActive : Appearance.colors.colTertiaryActive)
+            ? (Appearance.colors.colErrorContainerActive ?? Appearance.colors.colErrorContainer)
+            : (GlobalStates.sidebarLeftOpen ? palette.colBackgroundVariantActive : palette.colBackgroundActive)
 
         onPressed: {
             GlobalStates.toggleLeftSidebar(root.screenName);
@@ -99,7 +107,7 @@ Item {
             // Contrast shape color with button background
             color: root.phoneIntegrationActive
                 ? Appearance.colors.colOnErrorContainer
-                : (GlobalStates.sidebarLeftOpen ? Appearance.colors.colOnPrimary : Appearance.colors.colOnTertiary)
+                : (GlobalStates.sidebarLeftOpen ? palette.colOnBackgroundVariant : palette.colOnBackground)
 
             // Rotate shape 90 degrees smoothly
             rotation: GlobalStates.sidebarLeftOpen ? 90 : 0
@@ -123,7 +131,7 @@ Item {
                 colorize: true
                 color: root.phoneIntegrationActive
                     ? Appearance.colors.colErrorContainer
-                    : (GlobalStates.sidebarLeftOpen ? Appearance.colors.colPrimary : Appearance.colors.colTertiary)
+                    : (GlobalStates.sidebarLeftOpen ? palette.colBackgroundVariant : palette.colBackground)
 
                 // Negate rotation to keep the distro icon straight
                 rotation: -shapeContainer.rotation
@@ -138,7 +146,7 @@ Item {
                 fill: 1
                 color: root.phoneIntegrationActive
                     ? Appearance.colors.colErrorContainer
-                    : (GlobalStates.sidebarLeftOpen ? Appearance.colors.colPrimary : Appearance.colors.colTertiary)
+                    : (GlobalStates.sidebarLeftOpen ? palette.colBackgroundVariant : palette.colBackground)
 
                 // Negate rotation to keep the distro icon straight
                 rotation: -shapeContainer.rotation
@@ -161,7 +169,7 @@ Item {
                 border.width: 1.5 * root.contentScale
                 border.color: root.phoneIntegrationActive
                     ? Appearance.colors.colOnErrorContainer
-                    : (GlobalStates.sidebarLeftOpen ? Appearance.colors.colOnPrimary : Appearance.colors.colOnTertiary)
+                    : (GlobalStates.sidebarLeftOpen ? palette.colOnBackgroundVariant : palette.colOnBackground)
 
                 Behavior on opacity {
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(pingBadge)

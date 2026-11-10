@@ -1,0 +1,9 @@
+module qs.modules.settings.configs.interface
+
+InterfaceGrid 1.0 InterfaceGrid.qml
+InterfaceSliderCard 1.0 InterfaceSliderCard.qml
+InterfaceRadiusSample 1.0 InterfaceRadiusSample.qml
+InterfaceMotionSample 1.0 InterfaceMotionSample.qml
+InterfaceFontSample 1.0 InterfaceFontSample.qml
+InterfaceScrollbarSample 1.0 InterfaceScrollbarSample.qml
+InterfaceIconsCard 1.0 InterfaceIconsCard.qml

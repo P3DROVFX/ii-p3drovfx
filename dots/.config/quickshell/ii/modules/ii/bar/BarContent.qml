@@ -79,6 +79,7 @@ Item {
 
     readonly property real verticalTopOffset: styleLoader.verticalTopOffset
     readonly property real verticalBottomOffset: styleLoader.verticalBottomOffset
+    readonly property real islandExtent: styleLoader.islandExtent
 
     // ── Style dispatch ────────────────────────────────────────────────────────
     BarStyleLoader {

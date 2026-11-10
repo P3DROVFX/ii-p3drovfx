@@ -33,10 +33,10 @@ __pycache__/
 /dots/.config/quickshell/ii/.cortexkit
 /dots/.config/quickshell/ii/user_widgets
 
-# Compiled binary — build it from workspace_compactor_src/ instead (see scripts/hyprland/README.md)
-/dots/.config/quickshell/ii/scripts/hyprland/workspace_compactor
-/dots/.config/quickshell/ii/scripts/hyprland/workspace_compactor_src/target/
-/dots/.config/quickshell/ii/scripts/hyprland/workspace_compactor_src/Cargo.lock
+# Compiled binary — build it from workspace_arranger_src/ instead (see scripts/hyprland/README.md)
+/dots/.config/quickshell/ii/scripts/hyprland/workspace_arranger
+/dots/.config/quickshell/ii/scripts/hyprland/workspace_arranger_src/target/
+/dots/.config/quickshell/ii/scripts/hyprland/workspace_arranger_src/Cargo.lock
 
 # Compiled binary — build it from workspace_profile_manager_src/ instead (see scripts/hyprland/README.md)
 /dots/.config/quickshell/ii/scripts/hyprland/workspace_profile_manager
@@ -53,14 +53,38 @@ __pycache__/
 /dots/.config/quickshell/ii/scripts/appStats/app_stats_src/target/
 /dots/.config/quickshell/ii/scripts/appStats/app_stats_src/Cargo.lock
 
+# The eBPF network helper — built and installed by scripts/appStats/install-net-helper.sh
+/dots/.config/quickshell/ii/scripts/appStats/app_stats_net_src/target/
+/dots/.config/quickshell/ii/scripts/appStats/app_stats_net_src/Cargo.lock
+
+# Compiled binary — build it from sni_watcher_src/ instead (see scripts/tray/README.md)
+/dots/.config/quickshell/ii/scripts/tray/sni_watcher
+/dots/.config/quickshell/ii/scripts/tray/sni_watcher_src/target/
+/dots/.config/quickshell/ii/scripts/tray/sni_watcher_src/Cargo.lock
+
 # Compiled binary — build it from touch_gestures_src/ instead (see scripts/touchGestures/README.md)
 /dots/.config/quickshell/ii/scripts/touchGestures/touch_gestures
 /dots/.config/quickshell/ii/scripts/touchGestures/touch_gestures_src/target/
 /dots/.config/quickshell/ii/scripts/touchGestures/touch_gestures_src/Cargo.lock
 
+# Compiled binary — build it from health_watch_src/ instead (see scripts/health/README.md)
+/dots/.config/quickshell/ii/scripts/health/health_watch
+/dots/.config/quickshell/ii/scripts/health/health_watch_src/target/
+/dots/.config/quickshell/ii/scripts/health/health_watch_src/Cargo.lock
+
+# What each locally built helper was built from — written by scripts/rust-helpers.sh,
+# meaningful only on the machine that compiled it.
+/dots/.config/quickshell/ii/scripts/*/.*.stamp
+
 /dots/.config/quickshell/ii/.tmp
 /dots/.config/quickshell/ii/.commandcode
 /.claude
 /dots/.config/quickshell/ii/NOTES_APP_PLAN.md
+/dots/.config/quickshell/ii/DYNAMIC_ISLAND_REWORK_PLAN.md
 /dots/.config/quickshell/ii/docs/performance/audit-2026-09-08-controlled
 /dots/.config/quickshell/ii/docs/blur-backend-feasibility.md
+/dots/.config/quickshell/ii/impasto-reference/
+/dots/.config/quickshell/ii/CLAUDE.md
+/CLAUDE.md
+/dots/.config/quickshell/ii/.vscode
+/dots/.config/quickshell/ii/DOC.md

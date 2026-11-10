@@ -13,11 +13,13 @@ Helper passivo para observação e reconhecimento de gestos em telas touchscreen
 ## Build & Instalação
 
 ```bash
-cd ~/.config/quickshell/ii/scripts/touchGestures/touch_gestures_src
-cargo build --release
-cp target/release/touch_gestures ../touch_gestures
-chmod +x ../touch_gestures
+~/.config/quickshell/ii/scripts/rust-helpers.sh build touch_gestures
 ```
+
+O script compila, instala com `mv` (sobrescrever o binário em execução falha com
+`ETXTBSY`) e grava em `.touch_gestures.stamp` o hash do código que originou o
+binário — é assim que a shell e o atualizador percebem, depois de uma atualização,
+que o daemon ficou para trás (`rust-helpers.sh status`).
 
 ## Permissões
 

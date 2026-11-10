@@ -738,10 +738,6 @@ Item {
                     readonly property real contentY: deviceFlick.contentY
                     readonly property bool atYBeginning: deviceFlick.contentY <= 0
                     readonly property bool atYEnd: deviceFlick.contentY + deviceFlick.height >= devicesContentArea.height
-                    property real scrollTargetY: 0
-                    property real touchpadScrollFactor: Config?.options.interactions.scrolling.touchpadScrollFactor ?? 100
-                    property real mouseScrollFactor: Config?.options.interactions.scrolling.mouseScrollFactor ?? 50
-                    property real mouseScrollDeltaThreshold: Config?.options.interactions.scrolling.mouseScrollDeltaThreshold ?? 120
 
                     function positionViewAtIndex(idx, mode) {
                         if (idx < 0 || idx >= count)
@@ -775,25 +771,11 @@ Item {
                         boundsBehavior: Flickable.DragOverBounds
                         pixelAligned: true
 
-                        MouseArea {
-                            z: 99
-                            visible: Config?.options.interactions.scrolling.fasterTouchpadScroll
-                            anchors.fill: parent
-                            acceptedButtons: Qt.NoButton
-                            onWheel: function (wheelEvent) {
-                                const delta = wheelEvent.angleDelta.y / deviceListView.mouseScrollDeltaThreshold;
-                                var scrollFactor = Math.abs(wheelEvent.angleDelta.y) >= deviceListView.mouseScrollDeltaThreshold ? deviceListView.mouseScrollFactor : deviceListView.touchpadScrollFactor;
-
-                                const maxY = Math.max(0, deviceFlick.contentHeight - deviceFlick.height);
-                                const base = scrollAnim.running ? deviceListView.scrollTargetY : deviceFlick.contentY;
-                                var targetY = Math.max(0, Math.min(base - delta * scrollFactor, maxY));
-
-                                deviceListView.scrollTargetY = targetY;
-                                deviceFlick.contentY = targetY;
-                                wheelEvent.accepted = true;
-                            }
+                        TouchpadScrollHandler {
+                            flickable: deviceFlick
                         }
 
+                        // Smooths the keyboard selection's scroll into view
                         Behavior on contentY {
                             enabled: !root.animationsDisabled
                             NumberAnimation {
@@ -802,12 +784,6 @@ Item {
                                 duration: Appearance.animation.scroll.duration
                                 easing.type: Appearance.animation.scroll.type
                                 easing.bezierCurve: Appearance.animation.scroll.bezierCurve
-                            }
-                        }
-
-                        onContentYChanged: {
-                            if (!scrollAnim.running) {
-                                deviceListView.scrollTargetY = contentY;
                             }
                         }
 

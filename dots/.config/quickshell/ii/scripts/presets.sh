@@ -73,18 +73,150 @@ newest_backups() {
 
 # Re-run the colour pipeline against whatever config.json now says.
 #
-# matugen writes the shell's colors.json first, so the shell recolours as soon
-# as that lands via its colors.json watcher. The whole run is niced so the
-# heavier secondary theming that follows (terminal scheme, GTK, icons, KDE)
-# yields the CPU to the shell's staged transition animation instead of stealing
-# frames from it.
+# matugen writes only the shell's colors.json in this path. The wallpaper is
+# already selected by the preset merge, so presets must not start mpvpaper,
+# generate previews, or fan out into terminal/GTK/KDE/browser integrations while
+# the staged transition is painting its first frame. Once the transition has
+# settled, a plain --noswitch pass themes the apps (GTK/KDE, Discord, browsers,
+# terminals). A newer apply/revert bumps the token so a stale pass is skipped.
+#
+# The shell's palette for a given wallpaper and palette setting never changes,
+# yet producing it decodes the full-size wallpaper (matugen, ~1 s) while the
+# shell holds its transition waiting for it. The colors.json of every pass is
+# kept, keyed by everything that pass reads, and an apply that hits the cache
+# hands the shell its palette at once; the full pass still runs afterwards.
+COLORS_FILE="${XDG_STATE_HOME:-$HOME/.local/state}/quickshell/user/generated/colors.json"
+COLORS_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/quickshell-ii/preset-colors"
+# Touched by the shell (PresetTransition) once a preset's transition is over.
+# The full pass re-themes KDE, whose icon-theme signal makes the shell reload
+# its icons — a stall that must not land inside the transition's animations.
+SETTLED_FLAG="${XDG_RUNTIME_DIR:-/tmp}/ii-preset-settled"
+
+colors_cache_key() {
+    local inputs wallpaper stamp mode
+    inputs=$(jq -c '{
+        palette: .appearance.palette,
+        theming: .appearance.wallpaperTheming,
+        wallpaper: (.background | {wallpaperPath, useWallpaperEngine, wallpaperEngineAssetsPath, videoFrameTimes, videoDownscale})
+    }' "$CONFIG_FILE" 2>/dev/null) || return 1
+    wallpaper=$(asset_source "$(jq -r '.background.wallpaperPath // ""' "$CONFIG_FILE" 2>/dev/null)")
+    stamp=$(stat -c '%s:%Y' -- "$wallpaper" 2>/dev/null) || return 1
+    mode=$(gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null)
+    printf '%s\n%s\n%s\n' "$inputs" "$stamp" "$mode" | sha256sum | cut -c1-32
+}
+
+is_video_path() {
+    local extension="${1##*.}"
+    case "${extension,,}" in
+        mp4|mkv|webm|avi|mov|m4v|ogv) return 0 ;;
+    esac
+    return 1
+}
+
+# $1: "transition" when the shell is animating this apply (load), so the full
+# pass waits for it to settle; revert has no transition and keeps the delay.
+# $2: the desktop wallpaper before this apply/revert.
 apply_colors() {
-    local nice_cmd
+    local wait_for_shell="$1" previous_wallpaper="$2"
+    local nice_cmd token token_file cache_key cached cache_hit="" wallpaper switch_to=""
+    rm -f -- "$SETTLED_FLAG"
     nice_cmd=()
     command -v nice >/dev/null 2>&1 && nice_cmd=(nice -n 10)
     command -v ionice >/dev/null 2>&1 && nice_cmd+=(ionice -c3)
-    "${nice_cmd[@]}" env -u LD_LIBRARY_PATH -u PYTHONHOME -u PYTHONPATH PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH" \
-        "$SCRIPTS_DIR/colors/switchwall.sh" --noswitch > /tmp/presets_switchwall.log 2>&1 &
+    nice_cmd+=(env -u LD_LIBRARY_PATH -u PYTHONHOME -u PYTHONPATH PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH")
+    # A --noswitch pass never starts, stops or re-posters a video: mpvpaper
+    # kept playing the previous preset's video (or none started for this
+    # one) and thumbnailPath kept the previous poster. Whenever a video comes
+    # or goes, the full pass is a real switch to the wallpaper now in config.
+    if [[ "$(jq -r '.background.useWallpaperEngine // false' "$CONFIG_FILE" 2>/dev/null)" != "true" ]]; then
+        wallpaper=$(jq -r '.background.wallpaperPath // ""' "$CONFIG_FILE" 2>/dev/null)
+        if [[ -n "$wallpaper" && "$wallpaper" != "$previous_wallpaper" ]] \
+            && { is_video_path "$wallpaper" || is_video_path "$previous_wallpaper"; }; then
+            switch_to=$(asset_source "$wallpaper")
+        fi
+    fi
+    token_file="${XDG_RUNTIME_DIR:-/tmp}/presets_colors.token"
+    token="$$-$(date +%s%N)"
+    printf '%s\n' "$token" > "$token_file"
+    cache_key=$(colors_cache_key)
+    cached=""
+    [[ -n "$cache_key" ]] && cached="$COLORS_CACHE_DIR/$cache_key.json"
+    if [[ -n "$cached" && -s "$cached" ]] && mkdir -p "$(dirname "$COLORS_FILE")" \
+        && atomic_copy_file "$cached" "$COLORS_FILE"; then
+        cache_hit=1 # palette handed over; only the full pass is left
+        touch -- "$cached"
+    fi
+    (
+        if [[ -z "$cache_hit" ]]; then
+            "${nice_cmd[@]}" "$SCRIPTS_DIR/colors/switchwall.sh" --colors-only --noswitch
+            # Keep it only if no newer apply has started meanwhile.
+            if [[ -n "$cached" && "$(cat "$token_file" 2>/dev/null)" == "$token" && -s "$COLORS_FILE" ]]; then
+                mkdir -p "$COLORS_CACHE_DIR" && atomic_copy_file "$COLORS_FILE" "$cached"
+                # Least recently applied palettes go first.
+                ls -1t "$COLORS_CACHE_DIR"/*.json 2>/dev/null | tail -n +65 | xargs -r rm -f --
+            fi
+        fi
+        if [[ "$wait_for_shell" == "transition" ]]; then
+            for _ in $(seq 100); do
+                [[ -e "$SETTLED_FLAG" ]] && break
+                sleep 0.1
+            done
+        else
+            sleep 2
+        fi
+        [[ "$(cat "$token_file" 2>/dev/null)" == "$token" ]] || exit 0
+        if [[ -n "$switch_to" && -f "$switch_to" ]]; then
+            "${nice_cmd[@]}" "$SCRIPTS_DIR/colors/switchwall.sh" --image "$switch_to"
+        else
+            "${nice_cmd[@]}" "$SCRIPTS_DIR/colors/switchwall.sh" --noswitch
+        fi
+    ) > /tmp/presets_switchwall.log 2>&1 &
+}
+
+# Turn a path out of config.json into something cp can take.
+asset_source() {
+    local path="${1#file://}"
+    path="${path%%\?*}"
+    printf '%s' "${path/#\$HOME/$HOME}"
+}
+
+# Bundle one asset next to the preset, dropping any stale copy that sits
+# under an old extension (apply prefers the bundled copy, so a leftover would
+# win). The preset json itself is kept.
+#
+# Applying a preset points config.json straight at the bundled file, so a
+# later save reads its source back out of the presets folder: clearing first
+# deleted the very file about to be copied and left the preset with no
+# wallpaper at all. When the source already is this preset's bundled asset,
+# keep it and clear only the other extensions.
+bundle_asset() {
+    local prefix="$1" source file
+    source=$(asset_source "$2")
+    for file in "$PRESETS_DIR/$prefix".*; do
+        if [[ -f "$file" && "${file##*.}" != "json" && "$file" != "$source" ]]; then
+            rm -f -- "$file"
+        fi
+    done
+    [[ -f "$source" && "$source" != "$PRESETS_DIR/$prefix."* ]] || return 0
+    cp -- "$source" "$PRESETS_DIR/$prefix.${source##*.}"
+}
+
+# Re-export the wallpaper, profile picture and sidebar banner the config
+# currently points at.
+bundle_preset_assets() {
+    local preset_name="$1"
+    bundle_asset "$preset_name" \
+        "$(jq -r '.background.wallpaperPath // ""' "$CONFIG_FILE" 2>/dev/null)"
+    bundle_asset "${preset_name}_profile" \
+        "$(jq -r '.userProfile.imagePath // .sidebar.dashboardHeader.profileImagePath // ""' "$CONFIG_FILE" 2>/dev/null)"
+    bundle_asset "${preset_name}_banner" \
+        "$(jq -r '.sidebar.bannerImage // ""' "$CONFIG_FILE" 2>/dev/null)"
+    # Edit Mode's per-screen wallpapers, as `{name}_screen<N>.<ext>`.
+    python3 "$SCRIPTS_DIR/presets_helper.py" bundle-screens \
+        "$PRESETS_DIR/$preset_name.json" "$PRESETS_DIR" "$preset_name"
+    # Desktop photo widget images, as `{name}_photo<N>.<ext>`.
+    python3 "$SCRIPTS_DIR/presets_helper.py" bundle-photos \
+        "$PRESETS_DIR/$preset_name.json" "$PRESETS_DIR" "$preset_name"
 }
 
 action=$1
@@ -94,70 +226,19 @@ case $action in
     save)
         if [[ -z "$name" ]]; then exit 1; fi
         # Sanitize on the way in, not just on export: a preset that never holds
-        # a token or a MAC address cannot leak one later.
-        python3 "$SCRIPTS_DIR/presets_helper.py" sanitize "$CONFIG_FILE" "$PRESETS_DIR/$name.json" || exit 1
-        
-        # Also copy the wallpaper if configured
-        wall_path=$(jq -r '.background.wallpaperPath // ""' "$CONFIG_FILE" 2>/dev/null)
-        wall_path="${wall_path#file://}"
-        wall_path="${wall_path%%\?*}"
-        if [[ -f "$wall_path" ]]; then
-            ext="${wall_path##*.}"
-            cp "$wall_path" "$PRESETS_DIR/$name.$ext"
-        fi
+        # a token or a MAC address cannot leak one later. `snapshot` also caps
+        # the schema version at this build's, which config.json can overshoot.
+        python3 "$SCRIPTS_DIR/presets_helper.py" snapshot "$CONFIG_FILE" "$PRESETS_DIR/$name.json" || exit 1
 
-        # Also copy the profile picture if configured
-        profile_path=$(jq -r '.userProfile.imagePath // .sidebar.dashboardHeader.profileImagePath // ""' "$CONFIG_FILE" 2>/dev/null)
-        profile_path="${profile_path#file://}"
-        profile_path="${profile_path%%\?*}"
-        if [[ -f "$profile_path" ]]; then
-            ext="${profile_path##*.}"
-            cp "$profile_path" "$PRESETS_DIR/${name}_profile.$ext"
-        fi
-
-        # Also copy the sidebar dashboard banner image if configured
-        banner_path=$(jq -r '.sidebar.bannerImage // ""' "$CONFIG_FILE" 2>/dev/null)
-        banner_path="${banner_path#file://}"
-        banner_path="${banner_path%%\?*}"
-        if [[ -f "$banner_path" ]]; then
-            ext="${banner_path##*.}"
-            cp "$banner_path" "$PRESETS_DIR/${name}_banner.$ext"
-        fi
+        # Re-export replaces the bundled assets outright, including the
+        # user's sidebar banner.
+        bundle_preset_assets "$name"
         ;;
     update)
         if [[ -z "$name" ]]; then exit 1; fi
         if [[ ! -f "$PRESETS_DIR/$name.json" ]]; then exit 1; fi
-        # Remove stale asset files for this preset before overwriting
-        for file in "$PRESETS_DIR/$name".* "$PRESETS_DIR/${name}_profile".* "$PRESETS_DIR/${name}_banner".*; do
-            if [[ -f "$file" && "${file##*.}" != "json" ]]; then
-                rm -f "$file"
-            fi
-        done
-        python3 "$SCRIPTS_DIR/presets_helper.py" sanitize "$CONFIG_FILE" "$PRESETS_DIR/$name.json" || exit 1
-
-        wall_path=$(jq -r '.background.wallpaperPath // ""' "$CONFIG_FILE" 2>/dev/null)
-        wall_path="${wall_path#file://}"
-        wall_path="${wall_path%%\?*}"
-        if [[ -f "$wall_path" ]]; then
-            ext="${wall_path##*.}"
-            cp "$wall_path" "$PRESETS_DIR/$name.$ext"
-        fi
-
-        profile_path=$(jq -r '.userProfile.imagePath // .sidebar.dashboardHeader.profileImagePath // ""' "$CONFIG_FILE" 2>/dev/null)
-        profile_path="${profile_path#file://}"
-        profile_path="${profile_path%%\?*}"
-        if [[ -f "$profile_path" ]]; then
-            ext="${profile_path##*.}"
-            cp "$profile_path" "$PRESETS_DIR/${name}_profile.$ext"
-        fi
-
-        banner_path=$(jq -r '.sidebar.bannerImage // ""' "$CONFIG_FILE" 2>/dev/null)
-        banner_path="${banner_path#file://}"
-        banner_path="${banner_path%%\?*}"
-        if [[ -f "$banner_path" ]]; then
-            ext="${banner_path##*.}"
-            cp "$banner_path" "$PRESETS_DIR/${name}_banner.$ext"
-        fi
+        python3 "$SCRIPTS_DIR/presets_helper.py" snapshot "$CONFIG_FILE" "$PRESETS_DIR/$name.json" || exit 1
+        bundle_preset_assets "$name"
         ;;
     load)
         # Said out loud, not just returned: the shell shows whatever comes back
@@ -197,8 +278,9 @@ case $action in
             exit 1
         fi
         printf '%s\n' "$name" > "$ACTIVE_FILE"
+        previous_wallpaper=$(jq -r '.background.wallpaperPath // ""' "$LAST_BACKUP" 2>/dev/null)
         prune_backups
-        apply_colors
+        apply_colors transition "$previous_wallpaper"
         ;;
     revert)
         # Pops the newest snapshot, so pressing revert twice steps back twice.
@@ -211,6 +293,7 @@ case $action in
             printf '[presets.sh] The backup is not a valid config; nothing was restored.\n' >&2
             exit 1
         fi
+        previous_wallpaper=$(jq -r '.background.wallpaperPath // ""' "$CONFIG_FILE" 2>/dev/null)
         if ! atomic_copy_file "$latest" "$CONFIG_FILE"; then
             notify_export critical "Revert failed" "Could not restore: $latest"
             exit 1
@@ -224,7 +307,7 @@ case $action in
             rm -f -- "$ACTIVE_FILE" || exit 1
         fi
         rm -f -- "$latest" "$latest.active"
-        apply_colors
+        apply_colors "" "$previous_wallpaper"
         notify_export normal "Settings restored" "Reverted to the config from before the last preset."
         ;;
     delete)
@@ -234,7 +317,8 @@ case $action in
             rm -f -- "$ACTIVE_FILE"
         fi
         # Delete any associated asset files
-        for file in "$PRESETS_DIR/$name".* "$PRESETS_DIR/${name}_profile".* "$PRESETS_DIR/${name}_banner".*; do
+        for file in "$PRESETS_DIR/$name".* "$PRESETS_DIR/${name}_profile".* "$PRESETS_DIR/${name}_banner".* \
+            "$PRESETS_DIR/${name}_screen"[0-9]*.*; do
             if [[ -f "$file" && "${file##*.}" != "json" ]]; then
                 rm -f "$file"
             fi
@@ -268,7 +352,10 @@ case $action in
             fail_export "The 'zip' utility is not installed."
         fi
         
-        if command -v zenity >/dev/null; then
+        dest_override="$3"
+        if [[ -n "$dest_override" ]]; then
+            DEST_ZIP="$dest_override"
+        elif command -v zenity >/dev/null; then
             DEST_ZIP=$(zenity --file-selection --save --confirm-overwrite --filename="$HOME/${name}.zip" --file-filter="ZIP | *.zip" 2>/dev/null)
         else
             DEST_ZIP=$(kdialog --getsavefilename "$HOME/${name}.zip" "*.zip" 2>/dev/null)
@@ -324,6 +411,22 @@ case $action in
                 fi
             fi
 
+            # 1b. Per-screen wallpapers keep their asset id as the file name.
+            for file in "$PRESETS_DIR/${name}_screen"[0-9]*.*; do
+                [[ -f "$file" ]] || continue
+                base=$(basename "$file")
+                cp "$file" "$TMP_DIR/${base#"${name}_"}"
+            done
+
+            # 1c. Desktop photo widget images keep their asset id as the file name.
+            for file in "$PRESETS_DIR/${name}_photo"[0-9]*.*; do
+                [[ -f "$file" ]] || continue
+                base=$(basename "$file")
+                cp "$file" "$TMP_DIR/${base#"${name}_"}"
+            done
+            python3 "$SCRIPTS_DIR/presets_helper.py" export-photos \
+                "$TMP_DIR/config.json" "$TMP_DIR" "$PRESETS_DIR" "$name"
+
             # 2. The profile picture is deliberately not exported. It is the
             #    user's own avatar, it says nothing about the theme, and an
             #    exported preset is meant to be handed to other people.
@@ -370,7 +473,10 @@ case $action in
         fi
         ;;
     import)
-        if command -v zenity >/dev/null; then
+        file_override="$2"
+        if [[ -n "$file_override" && -f "$file_override" ]]; then
+            FILE="$file_override"
+        elif command -v zenity >/dev/null; then
             FILE=$(zenity --file-selection --file-filter="Presets (*.zip *.json) | *.zip *.json" 2>/dev/null)
         else
             FILE=$(kdialog --getopenfilename "$HOME" "*.zip *.json" 2>/dev/null)
@@ -417,7 +523,11 @@ case $action in
                             f_ext=$(echo "$f_ext" | tr '[:upper:]' '[:lower:]')
                             if [[ "$f_ext" != "json" && "$f_ext" != "zip" ]]; then
                                 fname_lower=$(echo "$fname" | tr '[:upper:]' '[:lower:]')
-                                if [[ "$fname_lower" == profile.* || "$fname_lower" == *profile*.* ]]; then
+                                if [[ "$fname_lower" =~ ^screen[0-9]+\.[^.]+$ ]]; then
+                                    cp "$f" "$PRESETS_DIR/${preset_name}_$fname_lower"
+                                elif [[ "$fname_lower" =~ ^photo[0-9]+\.[^.]+$ ]]; then
+                                    cp "$f" "$PRESETS_DIR/${preset_name}_$fname_lower"
+                                elif [[ "$fname_lower" == profile.* || "$fname_lower" == *profile*.* ]]; then
                                     cp "$f" "$PRESETS_DIR/${preset_name}_profile.$f_ext"
                                 elif [[ "$fname_lower" == banner.* || "$fname_lower" == *banner*.* ]]; then
                                     cp "$f" "$PRESETS_DIR/${preset_name}_banner.$f_ext"

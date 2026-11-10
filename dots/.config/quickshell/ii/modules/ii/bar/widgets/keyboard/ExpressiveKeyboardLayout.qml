@@ -21,6 +21,10 @@ MouseArea {
     
     hoverEnabled: !BarInteraction.clickToShow
 
+    // Click-to-show gives the left click to the popup; cycling moves to the right button.
+    readonly property bool rightClickCycles: BarInteraction.cycleOnRightClick
+    acceptedButtons: rightClickCycles ? (Qt.LeftButton | Qt.RightButton) : Qt.LeftButton
+
     function abbreviateLayoutCode(fullCode) {
         if (!fullCode) return "";
         const firstLayout = fullCode.split(':')[0].split('-')[0];
@@ -33,19 +37,26 @@ MouseArea {
         command: ["bash", "-c", "hyprctl switchxkblayout all next"]
     }
 
-    onClicked: {
+    onClicked: mouse => {
+        if (mouse.button !== (rightClickCycles ? Qt.RightButton : Qt.LeftButton))
+            return;
         if (hasMultipleLayouts) {
             switchProc.running = false;
             switchProc.running = true;
         }
     }
 
+    BarWidgetPalette {
+        id: widgetPalette
+        colorMode: Config.options.bar.keyboardLayout.colorMode
+    }
+
     Rectangle {
         anchors.fill: parent
-        radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
+        radius: (typeof rootItem !== "undefined" ? rootItem.groupStyle : Config.options.bar.barGroupStyle) === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
         color: "transparent"
         border.width: 1
-        border.color: Appearance.colors.colSecondary
+        border.color: root.containsMouse ? widgetPalette.colBackgroundHover : widgetPalette.colBackground
 
         Loader {
             id: rowLoader
@@ -57,13 +68,13 @@ MouseArea {
                 MaterialSymbol {
                     text: "keyboard"
                     iconSize: 18
-                    color: Appearance.colors.colPrimary
+                    color: root.containsMouse ? widgetPalette.colBackgroundHover : widgetPalette.colBackground
                 }
                 StyledText {
                     text: root.abbreviateLayoutCode(HyprlandXkb.currentLayoutCode)
                     font.pixelSize: Appearance.font.pixelSize.small
                     font.weight: Font.Black
-                    color: Appearance.colors.colOnSecondaryContainer
+                    color: root.containsMouse ? widgetPalette.colBackgroundHover : widgetPalette.colBackground
                     animateChange: true
                 }
             }
@@ -79,13 +90,13 @@ MouseArea {
                 MaterialShape {
                     Layout.alignment: Qt.AlignHCenter
                     shapeString: "Cookie12Sided"
-                    color: Appearance.colors.colPrimary
+                    color: root.containsMouse ? widgetPalette.colBackgroundHover : widgetPalette.colBackground
                     implicitSize: Appearance.sizes.verticalBarWidth - 18
                     MaterialSymbol {
                         anchors.centerIn: parent
                         text: "keyboard"
                         iconSize: 16
-                        color: Appearance.colors.colOnPrimary
+                        color: widgetPalette.colOnBackground
                     }
                 }
                 StyledText {
@@ -93,15 +104,19 @@ MouseArea {
                     text: root.abbreviateLayoutCode(HyprlandXkb.currentLayoutCode)
                     font.pixelSize: 10
                     font.weight: Font.Black
-                    color: Appearance.colors.colOnSecondaryContainer
+                    color: root.containsMouse ? widgetPalette.colBackgroundHover : widgetPalette.colBackground
                     animateChange: true
                 }
             }
         }
     }
 
-    KeyboardLayoutPopup {
-        id: popup
-        hoverTarget: root
+    // Lazy: popup controller is only built on approach (same as ExpressiveSports).
+    PopupLoader {
+        active: BarInteraction.enablePopups
+            && (BarInteraction.clickToShow || root.containsMouse || held)
+        sourceComponent: KeyboardLayoutPopup {
+            hoverTarget: root
+        }
     }
 }

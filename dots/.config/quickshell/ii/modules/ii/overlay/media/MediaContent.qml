@@ -23,34 +23,13 @@ StyledOverlayWidget {
     
     readonly property MprisPlayer currentPlayer: MprisController.activePlayer
     
-    property bool downloaded: false
-    property string displayedArtFilePath: root.downloaded ? Qt.resolvedUrl(artFilePath) : ""
+    readonly property string displayedArtFilePath: CoverArt.source(root.artUrl)
+    readonly property bool downloaded: root.displayedArtFilePath !== ""
 
     property var artUrl: MprisController.artUrl
-    property string artDownloadLocation: Directories.coverArt
-    property string artFileName: Qt.md5(artUrl)
-    property string artFilePath: `${artDownloadLocation}/${artFileName}`
 
-    onArtFilePathChanged: updateArt()
 
     readonly property bool showSlider: Config.options.overlay.media.showSlider
-
-    function updateArt() {
-        coverArtDownloader.targetFile = root.artUrl 
-        coverArtDownloader.artFilePath = root.artFilePath
-        root.downloaded = false
-        coverArtDownloader.running = true
-    }
-
-    Process { // Cover art downloader
-        id: coverArtDownloader
-        property string targetFile: root.artUrl
-        property string artFilePath: root.artFilePath
-        command: [ "bash", "-c", `[ -f ${artFilePath} ] || curl -sSL '${targetFile}' -o '${artFilePath}'` ]
-        onExited: (exitCode, exitStatus) => {
-            root.downloaded = true
-        }
-    }
 
     contentItem: OverlayBackground {
         id: contentItem
@@ -91,10 +70,15 @@ StyledOverlayWidget {
                     highlightColor: Appearance.colors.colPrimary
                     trackColor: Appearance.colors.colSecondaryContainer
                     handleColor: Appearance.colors.colPrimary
-                    value: (root.currentPlayer?.length ?? 0) > 0 ? Math.min(1, Math.max(0, root.currentPlayer.position / root.currentPlayer.length)) : 0
-                    onMoved: {
-                        root.currentPlayer.position = value * root.currentPlayer.length;
-                    }
+                    value: MprisController.trackProgressOf(root.currentPlayer)
+                    // Nothing to seek to while the player publishes no length.
+                    enabled: MprisController.hasTrackLength(root.currentPlayer)
+                    onMoved: MprisController.seekFraction(root.currentPlayer, value)
+                    // QQuickSlider writes `value` itself while the user drags, which destroys
+                    // the binding below it. Without this the bar froze where the drag left it
+                    // and never followed the track again.
+                    onPressedChanged: if (!pressed)
+                        value = Qt.binding(() => MprisController.trackProgressOf(root.currentPlayer))
                 }
             }
             
@@ -124,7 +108,7 @@ StyledOverlayWidget {
                     MouseArea {
                         cursorShape: Qt.PointingHandCursor
                         anchors.fill: parent
-                        onClicked: root.updateArt()
+                        onClicked: CoverArt.retry(root.artUrl)
                     }
 
                     StyledImage { // Art image

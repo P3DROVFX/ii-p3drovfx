@@ -25,12 +25,14 @@ Item {
     /// uses the unscaled implicitHeight, so `scale` never feeds back into it.
     property bool fitToParent: false
 
+    property bool fillParent: true
+
     opacity: shown ? 1 : 0
     visible: opacity > 0
     anchors {
-        fill: parent
-        topMargin: -30 * (1 - opacity)
-        bottomMargin: 30 * (1 - opacity)
+        fill: root.fillParent ? parent : undefined
+        topMargin: root.fillParent ? -30 * (1 - opacity) : 0
+        bottomMargin: root.fillParent ? 30 * (1 - opacity) : 0
     }
 
     Behavior on opacity {

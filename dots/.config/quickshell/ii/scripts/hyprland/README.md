@@ -18,7 +18,7 @@ win. `hyprland.lua` loads `custom/env.lua` first, then `general`, `rules` and `k
 outrank anything written here.
 
 Each generated line carries a `--@` tag naming what produced it (`k` config key, `d` device, `e` env,
-`r` rule, `b` bind, `u` unbind), so reading the block back is a line-shaped parse rather than Lua
+`r` rule, `b` bind, `u` unbind, `g` global, `c` curve, `a` animation), so reading the block back is a line-shaped parse rather than Lua
 evaluation. A line whose tag this version does not recognise is kept verbatim and reported as
 unrecognised, so a newer shell's output is never silently dropped by an older one.
 
@@ -58,6 +58,13 @@ it atomically. A write that would change nothing is skipped entirely — rewriti
 Hyprland reload, which drops every runtime-only option (border size and colour, gaps, rounding, blur)
 back to whatever the Lua config says.
 
+Settings → Windows uses the same writer through `HyprlandGui.saveWindowsSettings()`.
+Its FAB explicitly saves the current window animations, gaps, border and blur settings;
+it also saves any changes already staged on the Hyprland page. The FAB compares against
+the stored entries, not against the last click, so failed writes and edits during a write
+remain pending. Animation curves precede the animation leaves that reference them.
+Shell-only transparency preferences remain in Config; they are not compositor settings.
+
 ## Workspace Profile Manager
 
 A high-performance Rust backend that captures live Hyprland clients via `hyprctl`, saves them as JSON profiles, and restores layouts on demand. Used by the Cheatsheet.
@@ -72,28 +79,31 @@ A high-performance Rust backend that captures live Hyprland clients via `hyprctl
 Only needed if you've modified the Rust source. Requires Rust/`cargo` ([install via rustup](https://rustup.rs)).
 
 ```bash
-cd ~/.config/quickshell/ii/scripts/hyprland/workspace_profile_manager_src
-cargo build --release
-cp target/release/workspace_profile_manager ../
+~/.config/quickshell/ii/scripts/rust-helpers.sh build workspace_profile_manager
 ```
 
-## Workspace Compactor
+## Workspace Arranger
 
-Renumbers the focused monitor's workspaces so the occupied ones run 1..N with no gaps — with
-apps on 2, 4 and 5, it pulls them down to 1, 2 and 3. Windows sharing a workspace stay together
-and keep their order, floating geometry is restored exactly, and tiled geometry is replayed
-best-effort so dwindle's split ratios land close to where they were. Special and named
-workspaces are left untouched. Bound to `CTRL + SUPER + C`.
+Arranges the focused monitor's workspace numbering, in both directions: it closes gaps and opens
+new workspaces in between. Nothing is moved between workspaces — the workspaces themselves are
+renumbered, so every window keeps its exact place (split tree and ratios, floating geometry,
+fullscreen state, groups). Special and named workspaces are left untouched. It was called the
+Workspace Compactor before it could insert; config written by older versions is migrated on load
+(config v30), but a custom keybind calling `workspace_compactor` must be renamed.
+
+**Closing gaps** (no arguments) renumbers the occupied workspaces to 1..N — with apps on 2, 4
+and 5, they become 1, 2 and 3. Bound to `CTRL + SUPER + C`; Settings → Workspaces → Workspace
+Arranger can also do it automatically whenever a gap appears.
 
 The active workspace follows its own contents to their new number. If it was left empty, focus
 falls back to the nearest occupied workspace below it.
 
 **Scope:** only the block of workspaces you are currently in takes part — the page the bar is
-showing. With the default block size of 10, standing on workspace 12 compacts 11–20 into 11..N and
+showing. With the default block size of 10, standing on workspace 12 arranges 11–20 as 11..N and
 leaves 1–10 exactly where they are; windows never migrate between pages.
 
 **Multi-monitor:** only the focused monitor's workspaces are touched, and the "1..N" range is
-relative to that monitor, not global — compacting monitor 2 lands its windows in its own range
+relative to that monitor, not global — arranging monitor 2 lands its windows in its own range
 instead of monitor 1's. It works out the range the same way the bar does: if
 `bar.workspaces.useWorkspaceMap` is enabled (Settings → Bar → Workspaces → Display Options), it
 reads `workspaceMap`/`shown` from `~/.config/illogical-impulse/config.json` directly, so it always
@@ -104,7 +114,16 @@ per monitor, 10 by default), reading `workspaceGroupSize` out of
 size is picked up on its own. Passing a block size as the first argument to the binary still
 overrides it (see keybind below).
 
-**Source:** `~/.config/quickshell/ii/scripts/hyprland/workspace_compactor_src/`
+**Inserting a workspace:** `--insert=before|after|first` does the reverse. It opens an empty
+workspace before or after the active one, or at the start of the block, by shifting the occupied
+workspaces in the way up by one, and takes you there. `--take` brings the focused window with it.
+The shift stops at the first free id, so later gaps are kept. When the block has no free id left,
+the binary refuses and sends a notification. Bound to `CTRL + SUPER + I` (after),
+`CTRL + SUPER + SHIFT + I` (before) and `CTRL + SUPER + Home` (first); `SUPER + ALT` instead of
+`CTRL + SUPER` takes the window along. With automatic gap closing on, an inserted workspace you
+leave empty is closed again as usual.
+
+**Source:** `~/.config/quickshell/ii/scripts/hyprland/workspace_arranger_src/`
 
 ### Building from Source
 
@@ -112,10 +131,12 @@ Requires Rust/`cargo` ([install via rustup](https://rustup.rs)). The binary is n
 it once and the keybind picks it up.
 
 ```bash
-cd ~/.config/quickshell/ii/scripts/hyprland/workspace_compactor_src
-cargo build --release
-cp target/release/workspace_compactor ../
+~/.config/quickshell/ii/scripts/rust-helpers.sh build workspace_arranger
 ```
+
+`rust-helpers.sh` installs through a rename and stamps the binary with a hash of the
+sources it came from, so `rust-helpers.sh status` can say afterwards whether an update
+has left it behind.
 
 ### Keybind
 
@@ -124,10 +145,14 @@ In `~/.config/hypr/hyprland/keybinds.lua`:
 ```lua
 local qsScripts = "$HOME/.config/quickshell/$qsConfig/scripts"
 
---#/# bind = CTRL+SUPER, C,, -- Compact workspaces into 1..N (remove empty gaps)
-hl.bind("CTRL + SUPER + C", hl.dsp.exec_cmd(qsScripts .. "/hyprland/workspace_compactor"),
-    { description = "Workspaces: Compact into 1..N (remove empty gaps)" })
+--#/# bind = CTRL+SUPER, C,, -- Close workspace gaps (renumber into 1..N)
+hl.bind("CTRL + SUPER + C", hl.dsp.exec_cmd(qsScripts .. "/hyprland/workspace_arranger"),
+    { description = "Workspaces: Close gaps (renumber into 1..N)" })
+hl.bind("CTRL + SUPER + I", hl.dsp.exec_cmd(qsScripts .. "/hyprland/workspace_arranger --insert=after"),
+    { description = "Workspaces: Insert empty workspace after current" })
 ```
+
+The shipped file binds all six insert variants (see "Inserting a workspace" above).
 
 `qsScripts` is already declared at the top of that file — you only need that line if you put the
 bind somewhere else, like `~/.config/hypr/custom/keybinds.lua`.
@@ -137,5 +162,5 @@ needs no keybind edit. Pass it as an argument only to override that (and only wh
 `useWorkspaceMap` is off — see above):
 
 ```lua
-hl.dsp.exec_cmd(qsScripts .. "/hyprland/workspace_compactor 10")
+hl.dsp.exec_cmd(qsScripts .. "/hyprland/workspace_arranger 10")
 ```

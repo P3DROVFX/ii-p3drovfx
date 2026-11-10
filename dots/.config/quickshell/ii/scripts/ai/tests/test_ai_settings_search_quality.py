@@ -20,7 +20,7 @@ SPEC = importlib.util.spec_from_file_location("ai_settings_index", GENERATOR)
 INDEX = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(INDEX)
 GENERATOR_SOURCE = GENERATOR.read_text(encoding="utf-8")
-INTEGRATION = (ROOT / "services" / "ai" / "integrations" / "AiSettingsIntegration.qml").read_text(encoding="utf-8")
+INTEGRATION = (ROOT / "services" / "AiSettingsIntegration.qml").read_text(encoding="utf-8")
 CARD = (ROOT / "services" / "ai" / "blocks" / "AiSettingResultCard.qml").read_text(encoding="utf-8")
 AI_QML = (ROOT / "services" / "Ai.qml").read_text(encoding="utf-8")
 
@@ -154,7 +154,7 @@ class OneLanguageTests(unittest.TestCase):
         self.assertIn("readonly property string language: Translation.languageCode", INTEGRATION)
 
     def test_changing_language_rebuilds_the_index(self):
-        self.assertIn("onLanguageChanged: root.rebuild()", INTEGRATION)
+        self.assertIn("root.rebuild()", INTEGRATION.split("onLanguageChanged:", 1)[1].split("\n    }", 1)[0])
 
     def test_the_deep_link_uses_the_title_the_interface_shows(self):
         opener = CARD.split("function openInSettings()", 1)[1].split("\n    }", 1)[0]
@@ -251,7 +251,7 @@ class DirectControlTests(unittest.TestCase):
         self.assertGreaterEqual(CARD.count("function onCurrentValueChanged()"), 2)
 
     def test_a_refusal_is_a_sentence_not_a_code(self):
-        self.assertIn("Ai.settingsIntegration.reasonText(verdict)", CARD)
+        self.assertIn("AiSettingsIntegration.reasonText(verdict)", CARD)
         self.assertIn("function reasonText(verdict: var): string", INTEGRATION)
 
 

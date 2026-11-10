@@ -23,6 +23,7 @@ Item {
 
     readonly property real verticalTopOffset: styleLoader.item ? (styleLoader.item.verticalTopOffset ?? 0) : 0
     readonly property real verticalBottomOffset: styleLoader.item ? (styleLoader.item.verticalBottomOffset ?? 0) : 0
+    readonly property real islandExtent: styleLoader.item ? (styleLoader.item.islandExtent ?? 0) : 0
 
     Loader {
         id: styleLoader

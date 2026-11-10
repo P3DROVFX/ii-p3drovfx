@@ -16,6 +16,7 @@ TabButton {
     Component.onCompleted: _isInitialized = true
 
     property bool expanded: false
+    property bool showShortcutBadge: false
     property bool showToggledHighlight: true
     // Keep the intrinsic size independent from root.width. When an expanded
     // button fills a layout, visualWidth may use root.width for the painted
@@ -157,9 +158,39 @@ TabButton {
                 font.weight: (toggled || root.hovered) ? Font.DemiBold : Font.Normal
                 text: buttonIcon
                 color: toggled ? root.colTextToggled : root.colText
+                // The icon only slides away; the keybind label takes its place.
+                transform: Translate {
+                    x: root.showShortcutBadge ? root.iconSize * 1.4 : 0
 
-                Behavior on color {
-                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                    Behavior on x {
+                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                    }
+                }
+                opacity: root.showShortcutBadge ? 0 : 1
+                visible: opacity > 0
+
+                Behavior on opacity {
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                }
+            }
+
+            StyledText {
+                anchors.centerIn: parent
+                text: "Ctrl + ⇥"
+                font.pixelSize: Appearance.font.pixelSize.smallest
+                font.weight: Font.Bold
+                color: root.toggled ? root.colTextToggled : root.colText
+                opacity: root.showShortcutBadge ? 1 : 0
+                visible: opacity > 0
+                transform: Translate {
+                    x: root.showShortcutBadge ? 0 : -root.iconSize
+
+                    Behavior on x {
+                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                    }
+                }
+                Behavior on opacity {
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                 }
             }
         }

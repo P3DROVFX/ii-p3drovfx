@@ -361,7 +361,8 @@ Item {
                                         fillMode: Image.PreserveAspectCrop
                                         playing: presetItem.previewActive
                                         visible: presetItem.previewActive && status === Image.Ready
-                                        layer.enabled: presetItem.previewActive && status === Image.Ready
+                                        // Not status-gated: see PhoneAppsPage launcherIcon (DPR-change crash)
+                                        layer.enabled: presetItem.previewActive
                                         layer.effect: OpacityMask {
                                             maskSource: Rectangle {
                                                 width: previewImage.width

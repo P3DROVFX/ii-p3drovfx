@@ -158,8 +158,11 @@ AbstractQuickPanel {
                 onOpenBluetoothDialog: grid.panel.openBluetoothDialog()
                 onOpenVpnDialog: grid.panel.openVpnDialog()
                 onOpenTailscaleDialog: grid.panel.openTailscaleDialog()
+                onOpenKdeConnectDialog: grid.panel.openKdeConnectDialog()
                 onOpenIdleInhibitorDialog: grid.panel.openIdleInhibitorDialog()
                 onOpenModesDialog: grid.panel.openModesDialog()
+                onOpenEasyEffectsDialog: grid.panel.openEasyEffectsDialog()
+                onOpenSmartDevicesDialog: grid.panel.openSmartDevicesDialog()
             }
         }
     }

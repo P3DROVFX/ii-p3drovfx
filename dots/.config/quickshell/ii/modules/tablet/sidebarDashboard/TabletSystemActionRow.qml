@@ -3,7 +3,6 @@ import QtQuick.Layouts
 import QtQuick.Effects
 
 import qs
-import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 
@@ -27,68 +26,19 @@ Item {
     readonly property real gap: Math.round(root.rowHeight * 0.18)
     // The circles read heavier than the pill at the same height, so they sit a notch under it.
     readonly property real circleSize: Math.round(root.rowHeight * 0.84)
-    readonly property int trayItemCount: TrayService.allItems.length
 
     RowLayout {
         anchors.fill: parent
         spacing: root.gap
 
         // ── System tray pill ────────────────────────────────────────────────
-        RippleButton {
+        // The shared component: the island's dashboard tile draws the same pill.
+        SystemTrayPill {
             id: trayPill
             Layout.fillWidth: true
             Layout.fillHeight: true
-
-            buttonRadius: Appearance.rounding.full
-            buttonRadiusPressed: Appearance.rounding.large
-            colBackground: Appearance.colors.colLayer1
-            colBackgroundHover: Appearance.colors.colLayer1Hover
-            colBackgroundActive: Appearance.colors.colLayer1Active
-            colRipple: Appearance.colors.colLayer1Active
-
-            enabled: root.trayItemCount > 0
-            opacity: enabled ? 1.0 : 0.6
-            onClicked: root.trayRequested()
-
-            contentItem: RowLayout {
-                anchors {
-                    fill: parent
-                    leftMargin: Math.round(root.rowHeight * 0.24)
-                    rightMargin: Math.round(root.rowHeight * 0.28)
-                }
-                spacing: Math.round(root.rowHeight * 0.22)
-
-                MaterialSymbol {
-                    Layout.alignment: Qt.AlignVCenter
-                    text: "info"
-                    iconSize: Math.round(root.rowHeight * 0.38)
-                    color: Appearance.colors.colOnLayer1
-                }
-
-                StyledText {
-                    Layout.fillWidth: true
-                    Layout.alignment: Qt.AlignVCenter
-                    elide: Text.ElideRight
-                    color: Appearance.colors.colOnLayer1
-                    font.pixelSize: Math.round(Appearance.font.pixelSize.normal * 1.15)
-                    font.weight: 500
-                    text: {
-                        if (root.trayItemCount === 0)
-                            return Translation.tr("No background apps");
-                        if (root.trayItemCount === 1)
-                            return Translation.tr("1 app is active");
-                        return Translation.tr("%1 apps are active").arg(root.trayItemCount);
-                    }
-                }
-
-                MaterialSymbol {
-                    Layout.alignment: Qt.AlignVCenter
-                    visible: root.trayItemCount > 0
-                    text: "chevron_right"
-                    iconSize: Math.round(root.rowHeight * 0.38)
-                    color: Appearance.colors.colSubtext
-                }
-            }
+            rowHeight: root.rowHeight
+            onTrayRequested: root.trayRequested()
         }
 
         // ── Profile picture (display only) ──────────────────────────────────

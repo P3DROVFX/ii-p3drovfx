@@ -17,7 +17,7 @@ GridLayout {
     implicitWidth: parent.width
     columns: 3
 
-    readonly property list<string> builtInColorSchemes: ["angel_light", "angel", "ayu", "cobalt2", "cursor", "dracula", "flexoki", "frappe", "github", "gruvbox", "kanagawa", "latte", "macchiato", "material_ocean", "matrix", "mercury", "mocha", "nord", "nothing_os", "open_code", "orng", "osaka_jade", "rose_pine", "sakura", "samurai", "synthwave84", "vercel", "vesper", "zen_burn", "zen_garden"]
+    readonly property list<string> builtInColorSchemes: ["angel_light", "amber_crt", "angel", "ayu", "bauhaus", "blueprint", "braun", "cobalt2", "cursor", "dracula", "everforest", "flexoki", "frappe", "game_boy", "github", "gruber_darker", "gruvbox", "gruvbox_hard", "gruvbox_material", "gruvbox_soft", "hazard", "kanagawa", "kodak", "latte", "legal_pad", "macchiato", "material_ocean", "matrix", "melange", "mercury", "mocha", "monokai_pro", "nord", "nothing_os", "one_dark", "open_code", "orng", "osaka_jade", "oxocarbon", "poimandres", "rose_pine", "sakura", "samurai", "solarized", "synthwave84", "teenage_engineering", "thinkpad", "tokyo_night", "vercel", "vesper", "zen_burn", "zen_garden"]
     property list<string> customColorSchemes: Config.options.appearance.customColorSchemes ?? []
 
     readonly property list<string> wallpaperColorSchemes: ["scheme-auto", "scheme-content", "scheme-tonal-spot", "scheme-fidelity", "scheme-intense", "scheme-vibrant", "scheme-fruit-salad", "scheme-expressive", "scheme-rainbow", "scheme-neutral", "scheme-monochrome"]
@@ -27,12 +27,23 @@ GridLayout {
     property list<string> colorSchemes: customTheme ? customColorSchemes : builtInTheme ? builtInColorSchemes : root.wallpaperColorSchemes
 
     function formatText(text) {
-        if (customTheme || builtInTheme) return text.charAt(0).toUpperCase() + text.slice(1);
+        if (customTheme || builtInTheme) {
+            const name = text.replace(/_/g, " ");
+            return name.charAt(0).toUpperCase() + name.slice(1);
+        }
         const sliced = text.split("-").slice(1).join(" ");
         return sliced.charAt(0).toUpperCase() + sliced.slice(1);
     }
 
     property int loadedCount: 0
+    /// Height of every swatch cell; hosts with room give the swatches more.
+    property real cellHeight: 64
+    /// Display name of the swatch under the pointer, "" when none is.
+    property string hoveredName: ""
+    property bool showTooltips: true
+    /// A host with several grids stacked builds only the one on show; this is
+    /// false for the ones it has not shown yet.
+    property bool populated: true
 
     // The list can change under a live grid (Edit Mode swaps the source in
     // place); pick the loading back up for the schemes not yet reached.
@@ -41,17 +52,26 @@ GridLayout {
     }
 
     Repeater {
-        model: root.colorSchemes
+        model: root.populated ? root.colorSchemes : []
         
         delegate: ColorPreviewButton {
             Layout.fillWidth: true
-            
+            Layout.preferredHeight: root.cellHeight
+            showTooltip: root.showTooltips
+
             colorScheme: modelData
             colorSchemeDisplayName: formatText(modelData)
             customTheme: root.customTheme
             builtInTheme: root.builtInTheme
             
             shouldLoad: index < root.loadedCount
+
+            onHoveredChanged: {
+                if (hovered)
+                    root.hoveredName = colorSchemeDisplayName;
+                else if (root.hoveredName === colorSchemeDisplayName)
+                    root.hoveredName = "";
+            }
         }
     }
 
@@ -62,7 +82,10 @@ GridLayout {
         running: false
 
         onTriggered: {
-            root.loadedCount += 1;
+            // A few ticks for the whole grid. Swatches read shared caches, so
+            // one-per-tick only stretched a cheap load into a second of
+            // swatches popping in one after another.
+            root.loadedCount += Math.max(1, Math.ceil(root.colorSchemes.length / 3));
 
             if (root.loadedCount >= root.colorSchemes.length)
                 loadTimer.stop();

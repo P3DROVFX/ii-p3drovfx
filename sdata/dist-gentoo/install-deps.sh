@@ -51,3 +51,58 @@ for pkg in "${metapkgs[@]}"; do
 done
 
 x sudo emerge --update --quiet dev-lang/python:3.12
+
+function install_hyprmon() {
+  local release_api="https://api.github.com/repos/erans/hyprmon/releases/latest"
+  local machine_arch asset_name download_url tmp_dir binary_name
+
+  case "$(uname -m)" in
+    x86_64)
+      machine_arch="amd64"
+      ;;
+    aarch64|arm64)
+      machine_arch="arm64"
+      ;;
+    *)
+      echo "Unsupported architecture for hyprmon: $(uname -m)" >&2
+      return 1
+      ;;
+  esac
+
+  asset_name="hyprmon-linux-${machine_arch}.tar.gz"
+  download_url=$(curl -fsSL "$release_api" \
+    | jq -r --arg asset "$asset_name" '.assets[] | select(.name == $asset) | .browser_download_url' \
+    | head -n 1)
+
+  if [[ -z "$download_url" || "$download_url" == "null" ]]; then
+    echo "Could not resolve the latest hyprmon release asset: $asset_name" >&2
+    return 1
+  fi
+
+  tmp_dir=$(mktemp -d)
+  trap 'rm -rf "$tmp_dir"' RETURN
+
+  curl -fL "$download_url" -o "$tmp_dir/$asset_name"
+  tar -xzf "$tmp_dir/$asset_name" -C "$tmp_dir"
+
+  binary_name="hyprmon-linux-${machine_arch}"
+  if [[ ! -f "$tmp_dir/$binary_name" ]]; then
+    echo "hyprmon release archive did not contain $binary_name" >&2
+    return 1
+  fi
+
+  if [[ -w "/usr/local/bin" ]]; then
+    install -m 0755 "$tmp_dir/$binary_name" "/usr/local/bin/hyprmon"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo install -m 0755 "$tmp_dir/$binary_name" "/usr/local/bin/hyprmon" 2>/dev/null || true
+  fi
+  mkdir -p "$HOME/.local/bin"
+  install -m 0755 "$tmp_dir/$binary_name" "$HOME/.local/bin/hyprmon"
+
+  "$HOME/.local/bin/hyprmon" --help >/dev/null 2>&1 || hyprmon --help >/dev/null 2>&1 || true
+}
+
+if ! command -v hyprmon >/dev/null 2>&1; then
+  echo "Installing hyprmon from the latest upstream release..."
+  install_hyprmon
+fi

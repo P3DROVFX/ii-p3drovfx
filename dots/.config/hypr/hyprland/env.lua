@@ -46,5 +46,17 @@ hl.env("QT_QPA_PLATFORM", "wayland;xcb")
 hl.env("QT_QPA_PLATFORMTHEME", "kde")
 hl.env("XDG_MENU_PREFIX", "plasma-")
 
+-- User QML modules: the shell's optional MpvWallpaper plugin installs here
+-- (quickshell/ii/scripts/videos/build-mpv-wallpaper-plugin.sh).
+prepend_unique("QML_IMPORT_PATH", { home_dir .. "/.local/lib/qt6/qml" })
+
 -- Virtual environment
 hl.env("ILLOGICAL_IMPULSE_VIRTUAL_ENV", home_dir .. "/.local/state/quickshell/.venv")
+
+-- Wireless ADB: the adb server sends a TCP keepalive every second by default, which
+-- wakes a locked phone ~30 times a minute and roughly doubled its idle drain once
+-- adbd started surviving the lock. The server reads this when it starts, so it holds
+-- for the shell, terminals and scrcpy alike. A vanished phone is caught by
+-- KdeConnectService instead, whose 30 s probe drops any network device that stops
+-- answering.
+hl.env("ADB_TCP_KEEPALIVE_INTERVAL", "60")

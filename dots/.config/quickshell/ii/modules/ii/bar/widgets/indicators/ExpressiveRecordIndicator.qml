@@ -84,7 +84,7 @@ Item {
                 ? capsuleContent.implicitHeight + Math.round(root.thickness * 0.44)
                 : root.thickness
             radius: Appearance.rounding.full
-            color: root.hovering ? theme.colContainer : theme.colAccent
+            color: root.hovering ? theme.colBackground : theme.colBackgroundVariant
             opacity: root.stateOpacity
 
             Behavior on color {
@@ -94,7 +94,7 @@ Item {
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(capsule)
             }
 
-            readonly property color colContent: root.hovering ? theme.colOnContainer : theme.colOnAccent
+            readonly property color colContent: root.hovering ? theme.colOnBackground : theme.colOnBackgroundVariant
 
             GridLayout {
                 id: capsuleContent
@@ -202,7 +202,7 @@ Item {
                 // A block against an organic badge. Matching the badge's own
                 // curvature welds the pair into one blob at bar scale.
                 radius: Appearance.rounding.small
-                color: theme.colContainer
+                color: theme.colBackground
 
                 anchors.right: root.vertical ? undefined : parent.right
                 anchors.verticalCenter: root.vertical ? undefined : parent.verticalCenter
@@ -215,7 +215,7 @@ Item {
                     stacked: root.vertical
                     stackSpacing: -3
                     pixelSize: root.timePixelSize
-                    colText: theme.colOnContainer
+                    colText: theme.colOnBackground
                     weight: 750
                     letterSpacing: -0.4
                     animate: root.animateDigits
@@ -233,7 +233,7 @@ Item {
                 id: stateBadge
                 implicitSize: badgeRoot.badgeSize
                 shape: MaterialShape.Shape.Cookie9Sided
-                color: root.hovering ? theme.colContainer : theme.colAccent
+                color: root.hovering ? theme.colBackground : theme.colBackgroundVariant
 
                 anchors.left: root.vertical ? undefined : parent.left
                 anchors.verticalCenter: root.vertical ? undefined : parent.verticalCenter
@@ -249,7 +249,7 @@ Item {
                     text: root.stateIcon
                     iconSize: Math.round(badgeRoot.badgeSize * 0.46)
                     fill: root.live ? 1 : 0
-                    color: root.hovering ? theme.colOnContainer : theme.colOnAccent
+                    color: root.hovering ? theme.colOnBackground : theme.colOnBackgroundVariant
 
                     RotationAnimator on rotation {
                         running: root.loading
@@ -298,7 +298,7 @@ Item {
                 ? ribbon.capLength + ribbon.bodyThickness
                 : root.thickness
             radius: Appearance.rounding.full
-            color: theme.colContainer
+            color: theme.colBackground
             opacity: root.stateOpacity
 
             Behavior on opacity {
@@ -310,7 +310,7 @@ Item {
                 width: root.vertical ? root.thickness : ribbon.capLength
                 height: root.vertical ? ribbon.capLength : root.thickness
                 radius: Appearance.rounding.full
-                color: root.hovering ? theme.colOnContainer : theme.colAccent
+                color: root.hovering ? theme.colOnBackground : theme.colBackgroundVariant
 
                 anchors.left: root.vertical ? undefined : parent.left
                 anchors.verticalCenter: root.vertical ? undefined : parent.verticalCenter
@@ -331,7 +331,7 @@ Item {
                         visible: root.loading
                         text: "progress_activity"
                         iconSize: root.labelPixelSize + 2
-                        color: root.hovering ? theme.colContainer : theme.colOnAccent
+                        color: root.hovering ? theme.colBackground : theme.colOnBackgroundVariant
 
                         RotationAnimator on rotation {
                             running: root.loading
@@ -352,7 +352,7 @@ Item {
                         text: root.stateIcon
                         iconSize: root.iconPixelSize
                         fill: root.live ? 1 : 0
-                        color: root.hovering ? theme.colContainer : theme.colOnAccent
+                        color: root.hovering ? theme.colBackground : theme.colOnBackgroundVariant
                     }
 
                     StyledText {
@@ -363,7 +363,7 @@ Item {
                         animateChange: !Appearance.reducedMotion
                         animationDistanceX: 0
                         animationDistanceY: Math.round(root.labelPixelSize * 0.4)
-                        color: root.hovering ? theme.colContainer : theme.colOnAccent
+                        color: root.hovering ? theme.colBackground : theme.colOnBackgroundVariant
                         font.family: Appearance.font.family.title
                         font.pixelSize: root.labelPixelSize
                         font.variableAxes: ({
@@ -380,7 +380,7 @@ Item {
                 text: root.stateIcon
                 iconSize: root.iconPixelSize
                 fill: root.live ? 1 : 0
-                color: theme.colOnContainer
+                color: theme.colOnBackground
 
                 anchors.left: root.vertical ? undefined : ribbonCap.right
                 anchors.leftMargin: root.vertical ? 0 : Math.round((ribbon.bodyLength - width) / 2)
@@ -397,7 +397,7 @@ Item {
                 stacked: root.vertical
                 stackSpacing: -3
                 pixelSize: root.timePixelSize
-                colText: theme.colOnContainer
+                colText: theme.colOnBackground
                 weight: 750
                 letterSpacing: -0.4
                 animate: root.animateDigits

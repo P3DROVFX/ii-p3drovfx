@@ -4,6 +4,9 @@
 unset LD_LIBRARY_PATH
 unset LD_PRELOAD
 
+# Resolved up front: the recording branches cd into the save directory later.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 CONFIG_FILE="$HOME/.config/illogical-impulse/config.json"
 JSON_PATH=".screenRecord.savePath"
 SERVICE_PATH=".screenRecord.service"
@@ -47,9 +50,30 @@ if [[ -z "$REC_FRAME_SYNC" || "$REC_FRAME_SYNC" == "null" ]]; then
     REC_FRAME_SYNC="cfr"
 fi
 
+REC_RECORD_AUDIO=$(jq -r ".screenRecord.recordAudio" "$CONFIG_FILE" 2>/dev/null)
+if [[ -z "$REC_RECORD_AUDIO" || "$REC_RECORD_AUDIO" == "null" ]]; then
+    REC_RECORD_AUDIO="false"
+fi
+
 REC_SHOW_NOTIFICATIONS=$(jq -r ".screenRecord.showNotifications" "$CONFIG_FILE" 2>/dev/null)
 if [[ -z "$REC_SHOW_NOTIFICATIONS" || "$REC_SHOW_NOTIFICATIONS" == "null" ]]; then
     REC_SHOW_NOTIFICATIONS="true"
+fi
+
+REC_USE_TOOLBAR=$(jq -r ".screenRecord.useToolbar" "$CONFIG_FILE" 2>/dev/null)
+if [[ -z "$REC_USE_TOOLBAR" || "$REC_USE_TOOLBAR" == "null" ]]; then
+    REC_USE_TOOLBAR="true"
+fi
+
+REC_FORMAT=$(jq -r ".screenRecord.format" "$CONFIG_FILE" 2>/dev/null)
+if [[ -z "$REC_FORMAT" || "$REC_FORMAT" == "null" ]]; then
+    REC_FORMAT="mp4"
+fi
+
+
+REC_RECORD_MIC=$(jq -r ".screenRecord.recordMic" "$CONFIG_FILE" 2>/dev/null)
+if [[ -z "$REC_RECORD_MIC" || "$REC_RECORD_MIC" == "null" ]]; then
+    REC_RECORD_MIC="false"
 fi
 
 RECORDING_DIR=""
@@ -89,7 +113,11 @@ stop_timer() {
     fi
 }
 
-trap stop_timer EXIT
+cleanup() {
+    stop_timer
+}
+
+trap cleanup EXIT
 
 getdate() {
     date '+%Y-%m-%d_%H.%M.%S'
@@ -310,7 +338,7 @@ toggle_pause() {
     # Act on the recorder FIRST, and only mirror the new state if it worked. A failed
     # pause that still flips the state file leaves the UI lying about the recording.
     if [[ "$REC_SERVICE" == "obs" ]] && { pgrep -x "obs" > /dev/null || pgrep -f "com.obsproject.Studio" > /dev/null; }; then
-        python3 "$(dirname "$0")/obs_pause.py" 2>/dev/null || return
+        python3 "$SCRIPT_DIR/obs_pause.py" 2>/dev/null || return
     elif pgrep -x wf-recorder > /dev/null; then
         # wf-recorder has no pause feature and installs no SIGUSR1 handler, so the
         # default action applies: SIGUSR1 terminates it. That is why pausing used to
@@ -345,18 +373,29 @@ if [[ "${ARGS[0]}" == "--pause" ]]; then
 fi
 
 MANUAL_REGION=""
+# The setting turns sound on for every entry point (bar, keybinds, IPC);
+# --sound still forces it for a single recording when the setting is off.
 SOUND_FLAG=0
+if [[ "$REC_RECORD_AUDIO" == "true" ]]; then
+    SOUND_FLAG=1
+fi
 FULLSCREEN_FLAG=0
 REGION_FLAG=0
+WINDOW_FLAG=0
 OBS_FLAG=0
+FORCE_RECORD_FLAG=0
 
 for ((i=0;i<${#ARGS[@]};i++)); do
-    if [[ "${ARGS[i]}" == "--region" ]]; then
+    if [[ "${ARGS[i]}" == "--force-record" ]]; then
+        FORCE_RECORD_FLAG=1
+    elif [[ "${ARGS[i]}" == "--region" ]]; then
         REGION_FLAG=1
         if (( i+1 < ${#ARGS[@]} )) && [[ ! "${ARGS[i+1]}" =~ ^-- ]]; then
             MANUAL_REGION="${ARGS[i+1]}"
             i=$((i+1))
         fi
+    elif [[ "${ARGS[i]}" == "--window" ]]; then
+        WINDOW_FLAG=1
     elif [[ "${ARGS[i]}" == "--sound" ]]; then
         SOUND_FLAG=1
     elif [[ "${ARGS[i]}" == "--fullscreen" ]]; then
@@ -376,12 +415,17 @@ if [[ $SOUND_FLAG -eq 1 ]]; then
         # expose a monitor name (for example during an audio-server restart).
         AUDIO_ARGS=("--audio")
     fi
+    # ffmpeg's AAC default of 128 kb/s audibly dulls music. wf-recorder 0.6.0
+    # drops -P options (avcodec_open2 gets NULL instead of the dictionary), so
+    # this only takes effect once a release carries the upstream fix; until
+    # then it is ignored harmlessly and audio stays at 128 kb/s.
+    AUDIO_ARGS+=("-C" "aac" "-P" "b=320k")
 fi
 
 IS_OBS_RECORDING=0
 if [[ "$REC_SERVICE" == "obs" ]]; then
     if pgrep -x "obs" > /dev/null || pgrep -f "com.obsproject.Studio" > /dev/null; then
-        STATUS=$(python3 "/home/pedro/.config/quickshell/ii/scripts/videos/obs_control.py" status 2>/dev/null)
+        STATUS=$(python3 "$SCRIPT_DIR/obs_control.py" status 2>/dev/null)
         if [[ "$STATUS" == "active" ]]; then
             IS_OBS_RECORDING=1
         fi
@@ -400,10 +444,33 @@ fi
 
 if [[ $IS_OBS_RECORDING -eq 1 ]]; then
     notify-send "Stopping OBS Recording..." "Saving file..." -a 'Recorder' &
-    python3 "/home/pedro/.config/quickshell/ii/scripts/videos/obs_control.py" stop
+    python3 "$SCRIPT_DIR/obs_control.py" stop
     sleep 1.5
     pkill -x "obs" || pkill -f "com.obsproject.Studio"
     exit 0
+fi
+
+# If toolbar is enabled, open the toolbar instead of recording directly
+if [[ "$REC_USE_TOOLBAR" == "true" && $FORCE_RECORD_FLAG -eq 0 ]]; then
+    qs -c ii ipc call recordingToolbar open
+    exit 0
+fi
+
+
+if [[ $WINDOW_FLAG -eq 1 && -z "$MANUAL_REGION" ]]; then
+    ACTIVE_WIN=$(hyprctl activewindow -j 2>/dev/null)
+    WIN_ADDR=$(echo "$ACTIVE_WIN" | jq -r '.address // empty' 2>/dev/null)
+    if [[ -n "$WIN_ADDR" && "$WIN_ADDR" != "null" && "$WIN_ADDR" != "0x0" ]]; then
+        WIN_X=$(echo "$ACTIVE_WIN" | jq -r '.at[0]' 2>/dev/null)
+        WIN_Y=$(echo "$ACTIVE_WIN" | jq -r '.at[1]' 2>/dev/null)
+        WIN_W=$(echo "$ACTIVE_WIN" | jq -r '.size[0]' 2>/dev/null)
+        WIN_H=$(echo "$ACTIVE_WIN" | jq -r '.size[1]' 2>/dev/null)
+
+        MANUAL_REGION="${WIN_X},${WIN_Y} ${WIN_W}x${WIN_H}"
+    else
+        # Fallback to interactive region selection if no window is active
+        REGION_FLAG=1
+    fi
 fi
 
 if [[ $REGION_FLAG -eq 1 && -z "$MANUAL_REGION" ]]; then
@@ -456,7 +523,7 @@ if [[ -n "$OBS_CMD" ]]; then
     # can keep waiting instead of mistaking the failure for an idle recording state.
     WEBSOCKET_READY=0
     for i in {1..30}; do
-        STATUS=$(python3 "/home/pedro/.config/quickshell/ii/scripts/videos/obs_control.py" status 2>/dev/null)
+        STATUS=$(python3 "$SCRIPT_DIR/obs_control.py" status 2>/dev/null)
         if [[ "$STATUS" == "inactive" || "$STATUS" == "active" ]]; then
             WEBSOCKET_READY=1
             break
@@ -472,7 +539,7 @@ if [[ -n "$OBS_CMD" ]]; then
     fi
 
     notify-send "Starting OBS Recording..." "Triggering via WebSocket" -a 'Recorder' &
-    python3 "/home/pedro/.config/quickshell/ii/scripts/videos/obs_control.py" start
+    python3 "$SCRIPT_DIR/obs_control.py" start
 
     # Wait for the recording to actually become active before entering the watchdog
     # loop. This is critical: a Wayland pipewire-screen-cast source may pop up the
@@ -484,7 +551,7 @@ if [[ -n "$OBS_CMD" ]]; then
         if ! pgrep -x "obs" > /dev/null && ! pgrep -f "com.obsproject.Studio" > /dev/null; then
             break
         fi
-        STATUS=$(python3 "/home/pedro/.config/quickshell/ii/scripts/videos/obs_control.py" status 2>/dev/null)
+        STATUS=$(python3 "$SCRIPT_DIR/obs_control.py" status 2>/dev/null)
         if [[ "$STATUS" == "active" ]]; then
             RECORDING_ACTIVE=1
             break
@@ -512,7 +579,7 @@ if [[ -n "$OBS_CMD" ]]; then
         if ! pgrep -x "obs" > /dev/null && ! pgrep -f "com.obsproject.Studio" > /dev/null; then
             break
         fi
-        STATUS=$(python3 "/home/pedro/.config/quickshell/ii/scripts/videos/obs_control.py" status 2>/dev/null)
+        STATUS=$(python3 "$SCRIPT_DIR/obs_control.py" status 2>/dev/null)
         if [[ "$STATUS" != "active" ]]; then
             # Recording stopped. Give OBS a moment to flush the file, then close it.
             sleep 1
@@ -547,7 +614,7 @@ if [[ -n "$OBS_CMD" ]]; then
     updatestate false
     exit 0
 else
-    FILENAME="recording_$(getdate).mp4"
+    FILENAME="recording_$(getdate).${REC_FORMAT}"
     
     CODEC=$(get_best_codec)
     CODEC_OPTS=("-c" "$CODEC")
@@ -572,6 +639,19 @@ else
     else
         CODEC_OPTS+=("--pixel-format" "yuv420p")
     fi
+
+    # wf-recorder converts the screen to limited-range video but flags the file
+    # as full range (yuvj), so players skip the range expansion and the picture looks
+    # washed out; re-encoding sites like Discord ignore the flag, which is why it
+    # looks right there. Label what is actually written: the VAAPI scaler uses
+    # BT.709, swscale (every other path) its BT.601 default.
+    if [[ "$CODEC" == *_vaapi ]]; then
+        COLOR_MATRIX="bt709"
+    else
+        COLOR_MATRIX="smpte170m"
+    fi
+    CODEC_OPTS+=("-p" "color_range=tv" "-p" "colorspace=$COLOR_MATRIX"
+        "-p" "color_primaries=bt709" "-p" "color_trc=bt709")
 
     if [[ $FULLSCREEN_FLAG -eq 1 ]]; then
         MONITOR="$(getactivemonitor)"

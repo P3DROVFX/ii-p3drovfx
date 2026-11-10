@@ -4,6 +4,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import qs.modules.common
 import qs.modules.common.functions
 
 /**
@@ -31,8 +32,28 @@ Singleton {
         return root.languages.find(language => language.id === id) ?? null;
     }
 
+    /**
+     * Given a base language id (e.g. "portuguese"), returns the id that
+     * should actually be loaded based on the current wordlistSize setting.
+     * Falls back to the base id when no extended variant exists in the manifest.
+     */
+    function resolveId(baseId) {
+        const size = Config.options.search.typingTest.wordlistSize ?? "standard";
+        if (size === "extended") {
+            const extId = baseId + "_extended";
+            if (root.languageFor(extId))
+                return extId;
+        }
+        return baseId;
+    }
+
+    /** The base language id (without _extended suffix) of the currently loaded pack. */
+    readonly property string currentBaseLanguageId: root.currentLanguageId.replace(/_extended$/, "")
+
     function request(languageId) {
-        const wanted = root.languageFor(languageId) ? languageId : root.fallbackLanguageId;
+        // languageId is always the base id (e.g. "portuguese"); resolveId picks the variant.
+        const resolved = root.resolveId(languageId);
+        const wanted = root.languageFor(resolved) ? resolved : root.fallbackLanguageId;
         root.requestedLanguageId = wanted;
         if (!root.manifestLoaded) {
             root.loading = true;
@@ -140,4 +161,13 @@ Singleton {
     }
 
     Component.onCompleted: root.request(root.fallbackLanguageId)
+
+    // Re-load whenever the wordlist size setting changes so the engine
+    // immediately gets the right pack without the user switching language.
+    Connections {
+        target: Config.options.search.typingTest
+        function onWordlistSizeChanged() {
+            root.request(root.currentBaseLanguageId || root.fallbackLanguageId);
+        }
+    }
 }

@@ -4,6 +4,7 @@ import "../../../.."
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.ii.onScreenDisplay
+import qs.modules.ii.onScreenDisplay.tuner
 import qs.services
 import Quickshell
 
@@ -276,6 +277,9 @@ Rectangle {
                         StyledSwitch {
                             checked: Config.options.osd.showValues
                             onCheckedChanged: {
+                                // Only a real change shows the OSD: the switch also fires while the page builds
+                                if (Config.options.osd.showValues === checked)
+                                    return;
                                 Config.options.osd.showValues = checked;
                                 root.triggerRealOsd();
                             }
@@ -317,6 +321,32 @@ Rectangle {
                 shape: MaterialShape.Shape.Cookie7Sided
                 onMoved: function(newValue) {
                     root.previewValue = newValue;
+                }
+            }
+        }
+
+        // ==========================================
+        // 4. TUNER STYLE
+        // ==========================================
+        Loader {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 110
+            active: root.currentStyle === "tuner"
+            visible: active
+
+            sourceComponent: Item {
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: tunerFace.osdWidth
+                    height: tunerFace.osdHeight
+                    radius: height / 2
+                    color: Appearance.colors.colLayer0
+
+                    TunerIndicator {
+                        id: tunerFace
+                        anchors.fill: parent
+                        indicator: "volume"
+                    }
                 }
             }
         }

@@ -1,0 +1,308 @@
+pragma ComponentBehavior: Bound
+
+import QtQuick
+import QtQuick.Layouts
+import Quickshell
+import Quickshell.Widgets
+import qs.services
+import qs.modules.common
+import qs.modules.common.widgets
+
+// A folder's contents, not its menu: left-clicking a group opens this card
+// beside the icon — the context dialog's surface language (same card colour,
+// border, corner, scrim and reveal) and its rows (ContextActionButton), one
+// per app inside, each launching on click. For an extended group the card
+// lists the members past the three on its face. The context menu stays where
+// it belongs: right-click.
+FocusScope {
+    id: root
+    required property var entry
+    // The tile's rect in this layer's coordinates, handed in by the layer so
+    // the card can sit under it (or above it when the screen edge is closer).
+    required property rect tileRect
+    // Room kept from each screen edge, raised by the host over the bar and dock.
+    property var insets: ({ left: 8, top: 8, right: 8, bottom: 8 })
+    signal closeRequested()
+    // The header's two group operations, carried to the layer that owns the
+    // store: rename opens the context dialog on its rename page, ungroup
+    // dissolves the members back onto the desktop.
+    signal renameRequested()
+    signal ungroupRequested()
+    // Extend the group into the big 2x2 block, or shrink it back.
+    signal extendRequested()
+
+    // An extended group shows its first apps on the desktop; the popup holds
+    // the ones its mini group gathers, or all of them when there is none.
+    readonly property var apps: (entry.apps ?? []).slice(entry.large && (entry.apps ?? []).length > 4 ? 3 : 0)
+    readonly property real cardWidth: 300
+    property real reveal: 0
+    property bool closing: false
+    // The mode's shrink, undone: this card is laid out and drawn in SCREEN
+    // pixels (DesktopShortcutsLayer's counterScale; 1 outside the mode).
+    // tileRect arrives in surface coordinates, so the anchor maths converts
+    // it by 1/counterScale and converts the settled screen-space corner
+    // back — with counterScale=1 every line below is the old one.
+    property real counterScale: 1
+
+    function dismiss() {
+        if (closing)
+            return;
+        closing = true;
+        revealMotion.stop();
+        revealMotion.to = 0;
+        revealMotion.start();
+    }
+    // The cascade of the item context dialog's own language, applied to the
+    // grid: header first, then one slice per grid ROW (a per-cell cascade
+    // would make a row's far cells lag their own line). One scalar, LINEAR,
+    // pure arithmetic, exits in reverse for free — every slice eases itself
+    // (smoothstep), and the two clocks are separate: the card lands in the
+    // first slice and stands still while the grid waves in inside it.
+    readonly property real bodySpan: 0.22
+    readonly property real plateSpan: 0.22
+    readonly property real rowLead: 0.2
+    readonly property real rowSpan: 0.55
+    function ease(t: real): real {
+        return t * t * (3 - 2 * t);
+    }
+    readonly property real bodyReveal: root.ease(Math.min(1, reveal / bodySpan))
+    readonly property real plateReveal: root.ease(Math.min(1, reveal / plateSpan))
+
+    function rowReveal(index: int, count: int): real {
+        const step = count > 1
+            ? Math.min(0.041, (1 - root.rowLead - root.rowSpan) / (count - 1)) : 0;
+        const t = (root.reveal - root.rowLead - index * step) / root.rowSpan;
+        return root.ease(Math.max(0, Math.min(1, t)));
+    }
+    function launch(app) {
+        DesktopShortcuts.launch(app);
+        root.dismiss();
+    }
+
+    focus: true
+    Component.onCompleted: {
+        root.forceActiveFocus();
+        revealMotion.start();
+    }
+    Keys.onEscapePressed: event => {
+        event.accepted = true;
+        root.dismiss();
+    }
+
+    NumberAnimation {
+        id: revealMotion
+        target: root
+        property: "reveal"
+        to: 1
+        duration: Appearance.reducedMotion ? 0
+            : root.closing ? Appearance.animation.popupExit.duration
+                : Appearance.animation.popupEnter.duration
+        easing.type: Easing.Linear
+        onFinished: { if (root.closing) root.closeRequested(); }
+    }
+
+    // The card spills past the shrunk canvas in Edit Mode (PointerBoundsEscape).
+    PointerBoundsEscape {}
+
+    // Click anywhere outside closes. The scrim covers the whole layer, so a
+    // press on another icon closes the folder rather than launching through.
+    MouseArea {
+        anchors.fill: parent
+        acceptedButtons: Qt.AllButtons
+        onClicked: root.dismiss()
+        onWheel: wheel => wheel.accepted = true
+    }
+
+    // The card leaves its icon the way a folder opens: one below the tile
+    // slides down out of it, one above slides up out of it, so the movement
+    // reads as travel from the thing it belongs to, not as a generic fade.
+    readonly property bool opensDownward: card.y > tileRect.y + tileRect.height / 2
+    Rectangle {
+        id: card
+        readonly property real gap: 8
+        x: {
+            const k = root.counterScale;
+            const ts = root.tileRect;
+            Math.max(root.insets.left, Math.min(root.width - width - root.insets.right,
+                (ts.x + ts.width / 2) / k - width / 2)) * k
+        }
+        y: {
+            const k = root.counterScale;
+            const tsy = root.tileRect.y / k;
+            const tsh = root.tileRect.height / k;
+            (tsy + tsh + implicitHeight + card.gap + root.insets.bottom > root.height
+                ? Math.max(root.insets.top, tsy - implicitHeight - card.gap)
+                : tsy + tsh + card.gap) * k
+        }
+        width: Math.min(root.width - 2 * card.gap, root.cardWidth)
+        height: implicitHeight
+        implicitHeight: cardLayout.implicitHeight + 24
+        radius: Appearance.rounding.windowRounding
+        color: Appearance.m3colors.m3surfaceContainer
+        border.width: 1
+        border.color: Appearance.colors.colLayer0Border
+        opacity: Math.min(1, root.reveal * 8)
+        scale: root.counterScale * (0.94 + 0.06 * root.bodyReveal)
+        transformOrigin: Item.TopLeft
+        transform: Translate { y: (1 - root.bodyReveal) * (root.opensDownward ? -10 : 10) }
+        // The counter-scaled card spills past the shrunk canvas in Edit Mode.
+        PointerBoundsEscape {}
+        ColumnLayout {
+            id: cardLayout
+            anchors.fill: parent
+            anchors.margins: 12
+            anchors.topMargin: 8
+            spacing: 4
+
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: 4
+                Layout.rightMargin: 4
+                spacing: 8
+                opacity: root.plateReveal
+                // The group's own face: the same 2×2 member mosaic the tile
+                // draws, shrunk to header size, so the card is unmistakably
+                // the icon you clicked.
+                Grid {
+                    Layout.alignment: Qt.AlignVCenter
+                    columns: 2
+                    spacing: 2
+                    Repeater {
+                        model: root.apps.slice(0, 4)
+                        delegate: IconImage {
+                            required property var modelData
+                            implicitSize: 11
+                            source: DesktopShortcuts.iconSource(modelData.icon, "image-missing")
+                        }
+                    }
+                }
+                StyledText {
+                    Layout.fillWidth: true
+                    text: root.entry.name || root.entry.id || ""
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    font.weight: Font.Medium
+                    elide: Text.ElideRight
+                }
+                StyledText {
+                    visible: root.apps.length > 0
+                    text: `${root.apps.length}`
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: Appearance.colors.colSubtext
+                }
+                // Rename and ungroup, as small icon buttons at the header's
+                // end — the grid stays about launching, the header about
+                // managing. No borders, no plate; the hover circle is the
+                // affordance.
+                RippleButton {
+                    implicitWidth: 34
+                    implicitHeight: 34
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: "transparent"
+                    colBackgroundHover: Appearance.colors.colLayer1
+                    colRipple: Appearance.colors.colLayer1Active
+                    scaleBehaviorEnabled: false
+                    pointingHandCursor: true
+                    activeFocusOnTab: true
+                    onClicked: root.renameRequested()
+                    Keys.onReturnPressed: clicked()
+                    contentItem: MaterialSymbol {
+                        text: "edit"
+                        iconSize: 18
+                        color: Appearance.m3colors.m3onSurface
+                        horizontalAlignment: Text.AlignHCenter
+                    }
+                }
+                RippleButton {
+                    visible: !root.entry.stack
+                    implicitWidth: 34
+                    implicitHeight: 34
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: "transparent"
+                    colBackgroundHover: Appearance.colors.colLayer1
+                    colRipple: Appearance.colors.colLayer1Active
+                    scaleBehaviorEnabled: false
+                    pointingHandCursor: true
+                    activeFocusOnTab: true
+                    onClicked: root.extendRequested()
+                    Keys.onReturnPressed: clicked()
+                    contentItem: MaterialSymbol {
+                        text: root.entry.large ? "close_fullscreen" : "open_in_full"
+                        iconSize: 18
+                        color: Appearance.m3colors.m3onSurface
+                        horizontalAlignment: Text.AlignHCenter
+                    }
+                }
+                RippleButton {
+                    // A stack is kept by the stacks option, not by hand:
+                    // ungrouping one would only see it re-form.
+                    visible: !root.entry.stack
+                    implicitWidth: 34
+                    implicitHeight: 34
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: "transparent"
+                    colBackgroundHover: Appearance.colors.colLayer1
+                    colRipple: Appearance.colors.colLayer1Active
+                    scaleBehaviorEnabled: false
+                    pointingHandCursor: true
+                    activeFocusOnTab: true
+                    onClicked: root.ungroupRequested()
+                    Keys.onReturnPressed: clicked()
+                    contentItem: MaterialSymbol {
+                        text: "folder_off"
+                        iconSize: 18
+                        color: Appearance.m3colors.m3onSurface
+                        horizontalAlignment: Text.AlignHCenter
+                    }
+                }
+            }
+
+            Flickable {
+                id: appFlickable
+                Layout.fillWidth: true
+                Layout.preferredHeight: Math.min(380, appList.implicitHeight)
+                visible: root.apps.length > 0
+                contentHeight: appList.implicitHeight
+                boundsBehavior: Flickable.StopAtBounds
+                clip: true
+
+                TouchpadScrollHandler {
+                    flickable: appFlickable
+                }
+                ColumnLayout {
+                    id: appList
+                    width: parent.width
+                    spacing: 3
+                    Repeater {
+                        model: root.apps
+                        delegate: ContextActionButton {
+                            required property var modelData
+                            required property int index
+                            readonly property real arrived: root.rowReveal(index, root.apps.length)
+                            textLabel: modelData.name || modelData.id
+                            iconSource: DesktopShortcuts.iconSource(modelData.icon, "image-missing")
+                            // The card's own corner and padding: its 12px margin
+                            // plus the 1px border.
+                            hostRadius: card.radius
+                            hostInset: 13
+                            opacity: arrived
+                            visualScale: 0.965 + 0.035 * arrived
+                            transformOrigin: Item.TopLeft
+                            opacityBehaviorEnabled: root.reveal >= 1
+                            onClicked: root.launch(modelData)
+                        }
+                    }
+                }
+            }
+
+            StyledText {
+                Layout.fillWidth: true
+                Layout.margins: 4
+                visible: root.apps.length === 0
+                text: Translation.tr("No applications in this group")
+                font.pixelSize: Appearance.font.pixelSize.small
+                color: Appearance.colors.colSubtext
+                wrapMode: Text.Wrap
+            }
+        }
+    }
+}

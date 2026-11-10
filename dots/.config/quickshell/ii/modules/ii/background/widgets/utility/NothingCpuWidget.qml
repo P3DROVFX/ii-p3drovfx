@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -12,7 +13,7 @@ AbstractBackgroundWidget {
 
     configEntryName: "resource_nothing_cpu"
 
-    visibleWhenLocked: root.lockBehavior === "keep"
+    visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "custom"
                     || root.lockBehavior === "center"
                     || root.lockBehavior === "lockOnly"
 
@@ -40,6 +41,24 @@ AbstractBackgroundWidget {
     // Resource Data
     readonly property real cpuUsagePct: ResourceUsage.cpuUsage
     readonly property real cpuTemp: ResourceUsage.cpuTemp
+    property bool _temperatureMetricRequested: false
+
+    function syncTemperatureMetricRequest() {
+        const wanted = root.visible && !root.isPreview;
+        if (_temperatureMetricRequested === wanted)
+            return;
+        ResourceUsage.requestMetric("temperature", wanted);
+        _temperatureMetricRequested = wanted;
+    }
+
+    Component.onCompleted: syncTemperatureMetricRequest()
+    Component.onDestruction: {
+        if (_temperatureMetricRequested)
+            ResourceUsage.requestMetric("temperature", false);
+    }
+    onVisibleChanged: syncTemperatureMetricRequest()
+    onIsPreviewChanged: syncTemperatureMetricRequest()
+
     readonly property string detailText: {
         if (root.cpuTemp > 0)
             return Math.round(root.cpuTemp) + "°C · PROCESSOR";

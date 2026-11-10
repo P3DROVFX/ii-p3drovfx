@@ -29,9 +29,18 @@ Scope {
     property var requestData: ({})
     property string apiKey: ""
     property string apiKeyEnvVarName: "API_KEY"
+    /** Where scripts go and what they are called; each attempt adds its own suffix. */
     property string scriptPath: ""
     /** Helper that writes attachments into the body. See `buildScript`. */
     property string attachScriptPath: ""
+
+    /**
+     * This attempt's script, unique to it. A shared path let the previous
+     * round's cleanup — an `rm` that runs whenever its process gets to it —
+     * delete the script a tool follow-up had just written, and bash exited 127
+     * before curl ran. Every task with the same `scriptPath` raced the same way.
+     */
+    property string runScriptPath: ""
 
     /**
      * The request body is written next to the script and handed to curl as a
@@ -39,7 +48,7 @@ Scope {
      * base64 image is already past what one may hold — and the body needs no
      * shell escaping at all.
      */
-    readonly property string bodyPath: CF.FileUtils.trimFileProtocol(root.scriptPath) + ".json"
+    readonly property string bodyPath: root.runScriptPath.length > 0 ? root.runScriptPath + ".json" : ""
 
     // ── Tunables ──────────────────────────────────────────────────────────
     readonly property int connectTimeout: Math.max(1, Config.options?.ai?.connectTimeout ?? 15)
@@ -156,20 +165,16 @@ Scope {
         // and the facade's parsed flag must not leak into it.
         root.strategy.reset();
         root.parsedAny = false;
-        const scriptFilePath = CF.FileUtils.trimFileProtocol(root.scriptPath);
-        // Written before the script that reads it, and rewritten on every
-        // attempt: a retry re-runs the attachment step over a fresh body.
-        //
-        // The path is dropped first because these files are deleted once the
-        // request ends, and a view still pointing at the old path writes
-        // nothing when asked for bytes it believes are already there — the
-        // script is the same every time, so from the second request on there
-        // was no file left to run and curl was never reached at all. The views
-        // write synchronously; see below for why that matters here.
-        bodyFile.path = "";
+        const stem = CF.FileUtils.trimFileProtocol(root.scriptPath).replace(/\.sh$/, "");
+        root.runScriptPath = `${stem}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}.sh`;
+        const scriptFilePath = root.runScriptPath;
+        // Written before the script that reads it, and on every attempt: a
+        // retry re-runs the attachment step over a fresh body. A fresh path
+        // also means a view never holds bytes it believes are already on disk
+        // and skips the write. The views write synchronously; see below for
+        // why that matters here.
         bodyFile.path = Qt.resolvedUrl(root.bodyPath);
         bodyFile.setText(JSON.stringify(root.requestData));
-        scriptFile.path = "";
         scriptFile.path = Qt.resolvedUrl(scriptFilePath);
         scriptFile.setText(root.buildScript());
         // Rebuilt every launch: a key must never outlive the model it
@@ -256,16 +261,12 @@ Scope {
         message.done = false;
     }
 
+    // After every attempt, not only the last: a retry writes its own pair.
     function cleanupTemporaryFiles() {
-        const scriptFilePath = CF.FileUtils.trimFileProtocol(root.scriptPath);
-        const bodyFilePath = CF.FileUtils.trimFileProtocol(root.bodyPath);
-        const files = [];
-        if (scriptFilePath.length > 0)
-            files.push(scriptFilePath);
-        if (bodyFilePath.length > 0)
-            files.push(bodyFilePath);
-        if (files.length > 0)
-            Quickshell.execDetached(["rm", "-f", "--", ...files]);
+        if (root.runScriptPath.length === 0)
+            return;
+        Quickshell.execDetached(["rm", "-f", "--", root.runScriptPath, root.bodyPath]);
+        root.runScriptPath = "";
     }
 
     function finish(reason: string, status: int, code: int) {
@@ -338,6 +339,7 @@ Scope {
         onExited: (exitCode, exitStatus) => {
             watchdog.stop();
             root.exitCode = exitCode;
+            root.cleanupTemporaryFiles();
 
             if (root.aborted) {
                 root.finish("aborted", root.httpStatus, exitCode);

@@ -3,6 +3,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import QtQuick
+import Qt5Compat.GraphicalEffects
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Bluetooth
@@ -15,6 +16,29 @@ import "androidStyle/QuickToggleLayout.js" as QuickToggleLayout
 AbstractQuickPanel {
     id: root
     property bool editMode: false
+
+    // ── Hosting ───────────────────────────────────────────────────────────────
+    // The sidebar is the default host and sets none of these. Another host (the Dynamic
+    // Island dashboard) hands in its own layout object and turns off what it does not
+    // use; the grid, the resize, the reorder and the tray are the same code either way.
+
+    /** A layout object ({ columns, pages, layoutVersion }) that replaces the family's. */
+    property var layoutOverride: null
+    /** Which family's catalogue entries are offered (QuickToggleCatalog `families`). */
+    property string familyId: PanelFamily.current
+    /** One page, no indicator, no page controls and no wheel paging. */
+    property bool pagingEnabled: true
+    /** The sidebar's pinned sliders above the grid. */
+    property bool showFixedSliders: true
+    /** A grid with a fixed number of rows; edits that would overflow it are refused. */
+    property int maxRows: -1
+    /** See QuickToggleEditController.growToFit. */
+    property var growToFit: null
+    /** Shown in place of the page controls while editing, when paging is off. */
+    property Component editToolbar: null
+
+    /** A tile (the island's toolbar) asks the host to enter or leave edit mode. */
+    signal editModeToggleRequested()
     // Full-screen hosts can own the vertical axis for the complete panel. In that mode the
     // unused-toggle tray publishes its natural height and never steals a drag from the
     // surrounding Flickable; horizontal paging remains local to this component.
@@ -83,7 +107,7 @@ AbstractQuickPanel {
     // Toggles config
     readonly property list<string> availableToggleTypes: QuickToggleCatalog.allTypes()
     function isToggleVisible(toggleType) {
-        return QuickToggleCatalog.availableForFamily(toggleType, PanelFamily.current)
+        return QuickToggleCatalog.availableForFamily(toggleType, root.familyId)
     }
     /**
      * The layout object this family owns, and the one every edit writes to.
@@ -93,7 +117,7 @@ AbstractQuickPanel {
      * sharing the key meant adapting either silently rearranged the other. See
      * PanelFamily.quickToggleLayout.
      */
-    readonly property var layoutConfig: PanelFamily.quickToggleLayout()
+    readonly property var layoutConfig: root.layoutOverride ?? PanelFamily.quickToggleLayout()
 
     readonly property int columns: root.layoutConfig?.columns ?? 4
 
@@ -105,7 +129,7 @@ AbstractQuickPanel {
             return [[]];
         // Not `layoutConfig.pages`: a family that has never been edited borrows the
         // desktop's arrangement rather than opening on a blank grid.
-        const stored = PanelFamily.quickTogglePages();
+        const stored = root.layoutOverride ? root.layoutOverride.pages : PanelFamily.quickTogglePages();
         if (!stored || stored.length === 0)
             return [[]];
         return QuickToggleCatalog.normalizePages(stored, root.columns, {
@@ -118,6 +142,11 @@ AbstractQuickPanel {
         config: root.layoutConfig
         persistedPages: root.pages
         columns: root.columns
+        cellWidth: root.baseCellWidth
+        cellHeight: root.baseCellHeight
+        spacing: root.spacing
+        maxRows: root.maxRows
+        growToFit: root.growToFit
         // Hold a fresh swap for exactly as long as the delegates take to slide
         // into their new slots, so a hesitating pointer cannot re-order the
         // grid while it is still visibly reflowing. Zero when animations are
@@ -160,26 +189,204 @@ AbstractQuickPanel {
 
     readonly property list<var> unusedToggles: {
         const types = availableToggleTypes.filter(type => root.isToggleVisible(type) && !allUsedTypes.includes(type));
-        return types.map(type => QuickToggleCatalog.item(type, type, undefined, undefined, root.columns));
+        // A variant group is one entry: the design the user has cycled to, among the
+        // group's designs still off the grid.
+        const shown = [];
+        const seenGroups = {};
+        for (let i = 0; i < types.length; i++) {
+            const group = QuickToggleCatalog.variantGroup(types[i]);
+            if (group === "") {
+                shown.push(types[i]);
+                continue;
+            }
+            if (seenGroups[group])
+                continue;
+            seenGroups[group] = true;
+            shown.push(root.trayVariantFor(group, types));
+        }
+        return shown.map(type => QuickToggleCatalog.item(type, type, undefined, undefined, root.columns));
     }
 
-    readonly property var packedUnusedToggles: QuickToggleLayout.pack(root.unusedToggles, root.columns)
-    readonly property list<var> positionedUnusedToggles: QuickToggleLayout.positionedItems(
-        root.unusedToggles,
-        root.packedUnusedToggles,
-        root.baseCellWidth,
-        root.baseCellHeight,
-        root.spacing,
-        root.compactRowHeight,
-        root.compactToggleTypes
-    )
+    // ── Variant groups in the tray ────────────────────────────────────────────
+    /**
+     * The design each variant group shows in the tray, by group: { weather: "weatherCard" }.
+     * Tray state only - it is never saved, and it never changes a tile on the grid.
+     */
+    property var trayVariantChoice: ({})
+
+    /** A group's designs that can still be added (off the grid, allowed in this host). */
+    function trayVariants(group, availableTypes) {
+        const pool = availableTypes ?? root.availableToggleTypes.filter(type =>
+            root.isToggleVisible(type) && !root.allUsedTypes.includes(type));
+        return QuickToggleCatalog.variantsOf(group).filter(type => pool.includes(type));
+    }
+
+    function trayVariantFor(group, availableTypes) {
+        const variants = root.trayVariants(group, availableTypes);
+        const chosen = root.trayVariantChoice[group];
+        return variants.includes(chosen) ? chosen : variants[0];
+    }
+
+    /** Show the next (1) or previous (-1) design of a group in the tray. */
+    function cycleTrayVariant(group, delta) {
+        const variants = root.trayVariants(group);
+        if (variants.length < 2)
+            return;
+        const current = Math.max(0, variants.indexOf(root.trayVariantFor(group)));
+        const next = variants[(current + delta + variants.length) % variants.length];
+        const choice = Object.assign({}, root.trayVariantChoice);
+        choice[group] = next;
+        root.trayVariantChoice = choice;
+    }
+
+    /**
+     * The tray section that is open, by id. One at a time, and only the open one is
+     * built: the tray holds every tile that is not on the grid, so building all of
+     * them at once is what makes opening edit mode expensive. Not saved - edit mode
+     * opens on the first section.
+     */
+    property string trayExpandedSection: ""
+    /** A section's header, which is also its height while closed. */
+    readonly property real traySectionHeaderHeight: 44
+    /**
+     * The island animates its own height, and it has to animate toward where the tray
+     * is *going*, not where it is: sized from the live height it would be easing toward
+     * a value that is itself easing, and would always trail the section (opening) or
+     * run ahead of it (closing). So the sections animate, and this says what they
+     * animate to - see `targetImplicitHeight`.
+     */
+    readonly property real trayTargetColumnHeight: {
+        const sections = root.traySections;
+        if (sections.length === 0)
+            return 0;
+        let total = 8 * (sections.length - 1);   // trayColumn.spacing
+        for (let i = 0; i < sections.length; i++) {
+            total += root.traySectionHeaderHeight;
+            if (sections[i].id === root.trayExpandedSection)
+                total += root.trayBadgeOverhang + sections[i].height + 10;
+        }
+        return total;
+    }
+    readonly property real trayTargetHeight: root.trayMaxHeight < 0
+        ? root.trayTargetColumnHeight : Math.min(root.trayTargetColumnHeight, root.trayMaxHeight)
+
+    /** The tray's height right now, as its sections animate. */
+    readonly property real trayLiveHeight: unusedTogglesLoader.item ? unusedTogglesLoader.item.implicitHeight : 0
+    /**
+     * Everything but the tray, measured while the tray is at rest.
+     *
+     * The target below cannot be written as "what the panel is now, plus what the tray
+     * still has to move": the panel's height and the tray's own are separate bindings
+     * that settle at different points within a frame, so their difference flickers -
+     * and a host easing toward it restarts its animation every frame (the island took
+     * exactly twice its duration to arrive). Holding the still part instead makes the
+     * target exact and constant for the whole animation.
+     */
+    property real nonTrayHeight: 0
+    function syncNonTrayHeight() {
+        if (Math.abs(root.trayLiveHeight - root.trayTargetHeight) < 0.5)
+            root.nonTrayHeight = root.implicitHeight - root.trayLiveHeight;
+    }
+    onImplicitHeightChanged: root.syncNonTrayHeight()
+    onTrayLiveHeightChanged: root.syncNonTrayHeight()
+    onTrayTargetHeightChanged: root.syncNonTrayHeight()
+
+    /**
+     * The height the panel is heading for. A host that animates its own size (the
+     * island) sizes itself from this, so the two move as one; the panel's own layout
+     * keeps animating as usual.
+     */
+    readonly property real targetImplicitHeight: {
+        if (!root.editMode || !unusedTogglesLoader.item)
+            return root.implicitHeight;
+        return root.nonTrayHeight + root.trayTargetHeight;
+    }
+
+    /**
+     * Sections open and close on the island's own morph, so the two move as one. The
+     * shell's spatial preset is both longer and bouncier, which read as the tray
+     * arriving before (or after) the surface holding it.
+     */
+    readonly property int traySectionDuration: Math.round(420 * Appearance.animMultiplier)
+    function toggleTraySection(sectionId) {
+        root.trayExpandedSection = root.trayExpandedSection === sectionId ? "" : sectionId;
+    }
+    // Opening edit mode, or losing the open section, falls back to the first one.
+    onTraySectionsChanged: {
+        if (root.traySections.length === 0)
+            return;
+        if (!root.traySections.some(section => section.id === root.trayExpandedSection))
+            root.trayExpandedSection = root.traySections[0].id;
+    }
+
+    // ── Tray sections ─────────────────────────────────────────────────────────
+    // The tray offers what is not on the grid grouped into a few broad sections, each
+    // packed on its own with the same packer the grid uses.
+    readonly property var trayCategoryMeta: ({
+        connectivity: { label: Translation.tr("Connectivity"), icon: "wifi" },
+        system: { label: Translation.tr("System & tools"), icon: "tune" },
+        sliders: { label: Translation.tr("Sliders"), icon: "linear_scale" },
+        widgets: { label: Translation.tr("Widgets"), icon: "widgets" }
+    })
+
+    /**
+     * A section is as wide as the grid above it, so its edges line up with the tiles'.
+     * The tiles inside it therefore pack a little narrower, inset far enough that their
+     * add badges stay inside the section.
+     */
+    readonly property real traySectionInset: root.trayBadgeOverhang + 4
+    readonly property real trayCellWidth: Math.max(1,
+        (root.gridWidth - 2 * root.traySectionInset - root.spacing * Math.max(0, root.columns - 1))
+        / Math.max(1, root.columns))
+
+    function packedHeight(packed) {
+        const rows = packed ? packed.rowsUsed : 0;
+        if (rows === 0)
+            return 0;
+        const rowHeights = QuickToggleLayout.rowPixelHeights(
+            packed, root.baseCellHeight, root.spacing, root.compactRowHeight, root.compactToggleTypes);
+        if (!rowHeights)
+            return rows * (root.baseCellHeight + root.spacing) - root.spacing;
+        let total = 0;
+        for (let i = 0; i < rowHeights.length; i++)
+            total += rowHeights[i] + root.spacing;
+        return Math.max(0, total - root.spacing);
+    }
+
+    readonly property var traySections: {
+        const sections = [];
+        const order = QuickToggleCatalog.categoryOrder();
+        for (let c = 0; c < order.length; c++) {
+            const id = order[c];
+            const items = root.unusedToggles.filter(item => QuickToggleCatalog.category(item.type) === id);
+            if (items.length === 0)
+                continue;
+            const packed = QuickToggleLayout.pack(items, root.columns, root.trayCellWidth, root.baseCellHeight, root.spacing);
+            const meta = root.trayCategoryMeta[id] ?? { label: id, icon: "category" };
+            sections.push({
+                id: id,
+                label: meta.label,
+                icon: meta.icon,
+                items: QuickToggleLayout.positionedItems(items, packed, root.trayCellWidth, root.baseCellHeight,
+                    root.spacing, root.compactRowHeight, root.compactToggleTypes),
+                height: root.packedHeight(packed)
+            });
+        }
+        return sections;
+    }
 
     // One packer owns both visible geometry and height. Delegates are decorated
     // by stable id below; their model order remains the persisted order.
     readonly property list<var> packedPages: {
         var result = [];
         for (var i = 0; i < geometryPages.length; i++)
-            result.push(QuickToggleLayout.pack(geometryPages[i] || [], root.columns));
+            result.push(QuickToggleLayout.pack(
+                geometryPages[i] || [],
+                root.columns,
+                root.baseCellWidth,
+                root.baseCellHeight,
+                root.spacing
+            ));
         return result;
     }
 
@@ -216,7 +423,7 @@ AbstractQuickPanel {
     }
 
     // Dynamic height based on current page
-    readonly property real currentContentHeight: pageHeight(currentPage) + (editMode ? 14 : 0)
+    readonly property real currentContentHeight: Math.max(pageHeight(currentPage), editController.resizePreviewBottom) + (editMode ? 14 : 0)
 
     // How tall the panel is allowed to get, handed down by whoever hosts it.
     // Negative means unconstrained, which is what a host that does not measure
@@ -327,7 +534,7 @@ AbstractQuickPanel {
                 sourceValues: {
                     var list = [];
                     const cfg = Config.options.sidebar.quickSliders;
-                    if (cfg.enable) {
+                    if (root.showFixedSliders && cfg.enable) {
                         if (cfg.showBrightness)
                             list.push(QuickToggleCatalog.item("brightnessSlider", "brightnessSlider", root.columns, 1, root.columns));
                         if (cfg.showGamma)
@@ -365,10 +572,13 @@ AbstractQuickPanel {
                     onOpenLocalSendDialog: root.openLocalSendDialog()
                     onOpenVpnDialog: root.openVpnDialog()
                     onOpenTailscaleDialog: root.openTailscaleDialog()
+                    onOpenKdeConnectDialog: root.openKdeConnectDialog()
                     onOpenDnsOverTlsDialog: root.openDnsOverTlsDialog()
                     onOpenIdleInhibitorDialog: root.openIdleInhibitorDialog()
                     onOpenScreenShaderDialog: root.openScreenShaderDialog()
                     onOpenModesDialog: root.openModesDialog()
+                    onOpenEasyEffectsDialog: root.openEasyEffectsDialog()
+                    onOpenSmartDevicesDialog: root.openSmartDevicesDialog()
                 }
             }
         }
@@ -385,7 +595,7 @@ AbstractQuickPanel {
                 y: -(1 - flickableContainer.reveal) * root.baseCellHeight * 0.7
             }
 
-            clip: true
+            clip: !root.editMode
 
             Flickable {
                 id: flickable
@@ -409,6 +619,9 @@ AbstractQuickPanel {
                 MouseArea {
                     anchors.fill: parent
                     acceptedButtons: Qt.NoButton
+                    // Off with paging: a single page has nothing to page to, and taking
+                    // the wheel would starve the host (the island pages with it).
+                    enabled: root.pagingEnabled
                     onWheel: function (wheelEvent) {
                         if (root.externalVerticalScroll
                                 && Math.abs(wheelEvent.angleDelta.y) >= Math.abs(wheelEvent.angleDelta.x)) {
@@ -464,6 +677,9 @@ AbstractQuickPanel {
 
                             Item {
                                 id: pageContentCanvas
+                                // Keep delegates and their mouse grabs alive during cross-page
+                                // reorder, but do not paint inactive pages outside the viewport.
+                                opacity: !root.editMode || pageContainer.isCurrent ? 1 : 0
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 width: root.gridWidth
                                 anchors.top: parent.top
@@ -501,10 +717,13 @@ AbstractQuickPanel {
                                         onOpenLocalSendDialog: root.openLocalSendDialog()
                                         onOpenVpnDialog: root.openVpnDialog()
                                         onOpenTailscaleDialog: root.openTailscaleDialog()
+                                        onOpenKdeConnectDialog: root.openKdeConnectDialog()
                                         onOpenDnsOverTlsDialog: root.openDnsOverTlsDialog()
                                         onOpenIdleInhibitorDialog: root.openIdleInhibitorDialog()
                                         onOpenScreenShaderDialog: root.openScreenShaderDialog()
                                         onOpenModesDialog: root.openModesDialog()
+                                        onOpenEasyEffectsDialog: root.openEasyEffectsDialog()
+                                        onOpenSmartDevicesDialog: root.openSmartDevicesDialog()
                                     }
                                 }
                             }
@@ -519,7 +738,7 @@ AbstractQuickPanel {
             id: pageIndicators
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: 6
-            visible: root.displayPages.length > 1
+            visible: root.pagingEnabled && root.displayPages.length > 1
 
             Repeater {
                 model: root.displayPages.length
@@ -551,10 +770,26 @@ AbstractQuickPanel {
             }
         }
 
+        // Edit mode: the host's own controls, when it has no pages to manage
+        FadeLoader {
+            shown: root.editMode && !root.pagingEnabled && root.editToolbar !== null
+            fade: false
+            keepAlive: false
+            anchors {
+                left: parent.left
+                right: parent.right
+            }
+            sourceComponent: root.editToolbar
+        }
+
         // Edit mode: page navigation + add page buttons
         FadeLoader {
-            shown: root.editMode
+            shown: root.editMode && root.pagingEnabled
             fade: false
+            // Destroy page-nav controls when not in edit mode — they are only
+            // needed while the user is rearranging tiles and hold several
+            // RippleButton instances in memory when keepAlive is true.
+            keepAlive: false
             anchors {
                 left: parent.left
                 right: parent.right
@@ -680,6 +915,7 @@ AbstractQuickPanel {
         FadeLoader {
             shown: root.editMode
             fade: false
+            keepAlive: false
             anchors {
                 left: parent.left
                 right: parent.right
@@ -692,26 +928,55 @@ AbstractQuickPanel {
             }
         }
 
-        // Unused toggles (edit mode)
+        // Unused toggles (edit mode) — keepAlive: false so the entire drawer
+        // (up to ~40 toggle delegates) is destroyed when edit mode is off.
+        // This is the largest single contributor to idle RAM when quick toggles
+        // are configured: every unused toggle type creates a full QML delegate.
         FadeLoader {
             id: unusedTogglesLoader
             shown: root.editMode
             fade: false
+            keepAlive: false
             anchors {
                 left: parent.left
                 right: parent.right
-                // Reach into the panel's own padding so the rightmost badges
-                // are inside the clip instead of against it.
-                rightMargin: -root.padding
             }
             sourceComponent: Item {
                 id: trayViewport
                 implicitHeight: trayFlickable.implicitHeight
 
+                // The same treatment as the sidebar's task list: one mask rounds the
+                // viewport's corners and fades whichever edge has more content past it,
+                // so scrolled sections leave through a curve instead of a straight cut.
+                layer.enabled: visible
+                layer.effect: OpacityMask {
+                    maskSource: Rectangle {
+                        id: trayMask
+                        width: trayViewport.width
+                        height: trayViewport.height
+                        radius: Appearance.rounding.large
+                        readonly property real fadeFraction: Math.min(0.5, trayEdgeFade.fadeSize / Math.max(1, height))
+                        property real topAlpha: trayEdgeFade.overflowing && trayEdgeFade.startGap > trayEdgeFade.edgeTolerance ? 0 : 1
+                        property real bottomAlpha: trayEdgeFade.overflowing && trayEdgeFade.endGap > trayEdgeFade.edgeTolerance ? 0 : 1
+                        Behavior on topAlpha {
+                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                        }
+                        Behavior on bottomAlpha {
+                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                        }
+                        gradient: Gradient {
+                            GradientStop { position: 0; color: Qt.rgba(1, 1, 1, trayMask.topAlpha) }
+                            GradientStop { position: trayMask.fadeFraction; color: "white" }
+                            GradientStop { position: 1 - trayMask.fadeFraction; color: "white" }
+                            GradientStop { position: 1; color: Qt.rgba(1, 1, 1, trayMask.bottomAlpha) }
+                        }
+                    }
+                }
+
                 StyledFlickable {
                     id: trayFlickable
                     anchors.fill: parent
-                    readonly property real fullHeight: unusedCanvas.implicitHeight + root.trayBadgeOverhang
+                    readonly property real fullHeight: trayColumn.implicitHeight
                     implicitHeight: root.trayMaxHeight < 0 ? fullHeight
                         : Math.min(fullHeight, root.trayMaxHeight)
                     contentWidth: width
@@ -719,55 +984,207 @@ AbstractQuickPanel {
                     clip: true
                     interactive: !root.externalVerticalScroll && contentHeight > height
 
-                    Item {
-                        id: unusedCanvas
-                        y: root.trayBadgeOverhang
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        width: root.gridWidth
-                        implicitHeight: Math.max(0, root.packedUnusedToggles.rowsUsed
-                            * (root.baseCellHeight + root.spacing) - root.spacing)
-                        height: implicitHeight
+                    Column {
+                        id: trayColumn
+                        width: parent.width
+                        spacing: 8
 
-                        StableQuickToggleModel {
-                            id: unusedToggleModel
-                            sourceValues: root.positionedUnusedToggles
+                        // Keyed by section id: an edit updates the sections it touches
+                        // instead of rebuilding the tray (see TraySectionModel).
+                        TraySectionModel {
+                            id: traySectionModel
+                            sourceValues: root.traySections
                         }
 
                         Repeater {
-                            model: unusedToggleModel
-                            delegate: AndroidToggleDelegateChooser {
+                            model: traySectionModel
 
-                                editMode: root.editMode
-                                baseCellWidth: root.baseCellWidth
-                                baseCellHeight: root.baseCellHeight
-                                spacing: root.spacing
-                                isUnused: true
-                                pageIndex: root.currentPage
-                                gridColumns: root.columns
-                                panel: root
-                                gridRef: unusedCanvas
+                            delegate: Rectangle {
+                                id: section
+                                required property var sectionData
+                                readonly property var modelData: section.sectionData
 
-                                onOpenAudioOutputDialog: root.openAudioOutputDialog()
-                                onOpenAudioInputDialog: root.openAudioInputDialog()
-                                onOpenBluetoothDialog: root.openBluetoothDialog()
-                                onOpenNightLightDialog: root.openNightLightDialog()
-                                onOpenWifiDialog: root.openWifiDialog()
-                                onOpenDarkModeDialog: root.openDarkModeDialog()
-                                onOpenLocalSendDialog: root.openLocalSendDialog()
-                                onOpenVpnDialog: root.openVpnDialog()
-                                onOpenTailscaleDialog: root.openTailscaleDialog()
-                                onOpenDnsOverTlsDialog: root.openDnsOverTlsDialog()
-                                onOpenIdleInhibitorDialog: root.openIdleInhibitorDialog()
-                                onOpenScreenShaderDialog: root.openScreenShaderDialog()
-                                onOpenModesDialog: root.openModesDialog()
+                                readonly property bool expanded: root.trayExpandedSection === section.modelData.id
+                                /** The header's own height, and the closed section's. */
+                                readonly property real headerHeight: root.traySectionHeaderHeight
+                                readonly property real openHeight: section.headerHeight
+                                    + root.trayBadgeOverhang + unusedCanvas.height + 10
+
+                                width: trayColumn.width
+                                /**
+                                 * One motion: the section grows and its tiles are revealed
+                                 * by the growth, the way the island reveals the face it
+                                 * opens into - no second animation fading the tiles in.
+                                 */
+                                implicitHeight: section.expanded ? section.openHeight : section.headerHeight
+                                Behavior on implicitHeight {
+                                    NumberAnimation {
+                                        duration: root.traySectionDuration
+                                        easing.type: Easing.BezierSpline
+                                        easing.bezierCurve: Appearance.animationCurves.standard
+                                    }
+                                }
+                                radius: Appearance.rounding.large
+                                color: Appearance.colors.colLayer2
+
+                                // The whole header opens and closes the section.
+                                MouseArea {
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.top: parent.top
+                                    height: section.headerHeight
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.toggleTraySection(section.modelData.id)
+                                }
+
+                                RowLayout {
+                                    id: sectionHeader
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    // Clear of the corner's curve at both ends.
+                                    anchors.leftMargin: 18
+                                    anchors.rightMargin: 16
+                                    anchors.top: parent.top
+                                    height: section.headerHeight
+                                    spacing: 8
+
+                                    MaterialSymbol {
+                                        text: section.modelData.icon
+                                        iconSize: Appearance.font.pixelSize.large
+                                        color: Appearance.colors.colOnLayer2
+                                    }
+                                    StyledText {
+                                        text: section.modelData.label
+                                        font.pixelSize: Appearance.font.pixelSize.small
+                                        font.weight: Font.DemiBold
+                                        color: Appearance.colors.colOnLayer2
+                                    }
+                                    // What a closed section holds.
+                                    StyledText {
+                                        text: section.modelData.items.length
+                                        font.pixelSize: Appearance.font.pixelSize.smaller
+                                        color: Appearance.colors.colSubtext
+                                    }
+                                    Item { Layout.fillWidth: true }
+                                    MaterialSymbol {
+                                        text: "expand_more"
+                                        iconSize: Appearance.font.pixelSize.large
+                                        color: Appearance.colors.colOnLayer2
+                                        rotation: section.expanded ? 180 : 0
+                                        // The same motion as the section it belongs to.
+                                        Behavior on rotation {
+                                            NumberAnimation {
+                                                duration: root.traySectionDuration
+                                                easing.type: Easing.BezierSpline
+                                                easing.bezierCurve: Appearance.animationCurves.standard
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // The growing section reveals its tiles. The clip lives
+                                // here rather than on the section: a rectangular clip over
+                                // the section would cut its own rounded corners.
+                                Item {
+                                    id: sectionBody
+                                    y: section.headerHeight
+                                    width: parent.width
+                                    height: Math.max(0, section.height - section.headerHeight)
+                                    clip: true
+                                    visible: sectionBody.height > 0
+
+                                Item {
+                                    id: unusedCanvas
+                                    /**
+                                     * Only the open section's tiles exist, and they outlive
+                                     * the close: destroyed at the first frame, the tiles
+                                     * would vanish and leave an empty box collapsing.
+                                     */
+                                    readonly property bool live: section.expanded
+                                        || section.height > section.headerHeight + 1
+                                    y: root.trayBadgeOverhang
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    width: parent.width - 2 * root.traySectionInset
+                                    height: section.modelData.height
+
+                                    // Toggles and sliders are built for real; widget
+                                    // tiles stand in as previews (QuickToggleTrayPreview),
+                                    // which is what keeps opening edit mode cheap.
+                                    StableQuickToggleModel {
+                                        id: unusedToggleModel
+                                        sourceValues: unusedCanvas.live
+                                            ? section.modelData.items.filter(item =>
+                                                !QuickToggleCatalog.usesTrayPreview(item.type))
+                                            : []
+                                    }
+
+                                    Repeater {
+                                        model: unusedCanvas.live
+                                            ? section.modelData.items.filter(item =>
+                                                QuickToggleCatalog.usesTrayPreview(item.type))
+                                            : []
+                                        delegate: QuickToggleTrayPreview {
+                                            required property int index
+                                            required property var modelData
+                                            buttonIndex: index
+                                            buttonData: modelData
+                                            isUnused: true
+                                            editMode: root.editMode
+                                            baseCellWidth: root.trayCellWidth
+                                            baseCellHeight: root.baseCellHeight
+                                            cellSpacing: root.spacing
+                                            cellSize: modelData.sizeW
+                                            pageIndex: root.currentPage
+                                            gridColumns: root.columns
+                                            panel: root
+                                            gridRef: unusedCanvas
+                                        }
+                                    }
+
+                                    Repeater {
+                                        model: unusedToggleModel
+                                        delegate: AndroidToggleDelegateChooser {
+                                            editMode: root.editMode
+                                            baseCellWidth: root.trayCellWidth
+                                            baseCellHeight: root.baseCellHeight
+                                            spacing: root.spacing
+                                            isUnused: true
+                                            pageIndex: root.currentPage
+                                            gridColumns: root.columns
+                                            panel: root
+                                            gridRef: unusedCanvas
+                                        }
+                                    }
+
+                                    // Arrows over tiles that have other designs: on top of
+                                    // the tiles, placed from the same packed geometry.
+                                    Repeater {
+                                        model: unusedCanvas.live
+                                            ? section.modelData.items.filter(item =>
+                                                root.trayVariants(QuickToggleCatalog.variantGroup(item.type)).length > 1)
+                                            : []
+                                        delegate: QuickToggleVariantSwitcher {
+                                            required property var modelData
+                                            item: modelData
+                                            panel: root
+                                            cellWidth: root.trayCellWidth
+                                            cellHeight: root.baseCellHeight
+                                            cellSpacing: root.spacing
+                                        }
+                                    }
+                                }
+                                }
                             }
                         }
                     }
                 }
 
                 ScrollEdgeFade {
+                    id: trayEdgeFade
                     target: trayFlickable
-                    color: root.color
+                    blurEdges: true
+                    fadeSize: Math.round(Appearance.font.pixelSize.huge * 1.8)
+                    color: "transparent"
                 }
             }
         }

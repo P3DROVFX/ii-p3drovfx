@@ -4,6 +4,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Services.Mpris
 import qs.services
 import qs.modules.common
 import qs.modules.common.functions
@@ -12,7 +13,11 @@ Singleton {
     id: root
 
     property list<real> visualizerPoints: []
-    readonly property bool active: MprisController.activePlayer ? MprisController.activePlayer.isPlaying : false
+    // Anything playing, not just the player the shell happens to treat as active: with
+    // two players open (a paused browser tab and a playing music app) the "active" one can
+    // be the paused one, and the visualizers would sit still under audible music.
+    readonly property bool active: (MprisController.activePlayer?.isPlaying ?? false)
+        || Mpris.players.values.some(player => player?.isPlaying === true)
 
     Process {
         id: cavaProc

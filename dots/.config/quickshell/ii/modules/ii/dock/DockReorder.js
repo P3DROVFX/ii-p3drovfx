@@ -349,6 +349,12 @@ function withManualKey(manualKeys, orderKey) {
 // index they used to occupy, flagged so the delegate can play an exit instead
 // of vanishing with its delegate. `retained` is the caller's list of
 // { key, item, index, at } records.
+// Pin/unpin changes the persistent order key, not the running app's identity.
+function identity(item) {
+    return item?.type === "app" && item.appId
+        ? "app:" + item.appId : String(item?.orderKey ?? "");
+}
+
 function mergeExitingItems(items, retained, now, durationMs) {
     var source = (items || []).slice();
     var held = retained || [];
@@ -357,7 +363,7 @@ function mergeExitingItems(items, retained, now, durationMs) {
 
     var live = {};
     for (var i = 0; i < source.length; i++) {
-        var key = source[i] ? String(source[i].orderKey ?? "") : "";
+        var key = identity(source[i]);
         if (key !== "")
             live[key] = true;
     }
@@ -367,11 +373,15 @@ function mergeExitingItems(items, retained, now, durationMs) {
         var record = held[h];
         if (!record || !record.item)
             continue;
-        if (live[String(record.key)] === true)
+        if (live[identity(record.item)] === true)
             continue;
         if (finiteOr(now, 0) - finiteOr(record.at, 0) > Math.max(0, finiteOr(durationMs, 0)))
             continue;
-        pending.push(record);
+        const earlier = pending.findIndex(entry => identity(entry.item) === identity(record.item));
+        if (earlier < 0)
+            pending.push(record);
+        else if (record.at >= pending[earlier].at)
+            pending[earlier] = record;
     }
 
     pending.sort(function (a, b) { return finiteOr(a.index, 0) - finiteOr(b.index, 0); });
@@ -395,7 +405,7 @@ function collectAddedKeys(previous, next, now) {
     var before = {};
     var source = previous || [];
     for (var i = 0; i < source.length; i++) {
-        var key = source[i] ? String(source[i].orderKey ?? "") : "";
+        var key = identity(source[i]);
         if (key !== "")
             before[key] = true;
     }
@@ -407,7 +417,7 @@ function collectAddedKeys(previous, next, now) {
         if (!item || item.__exiting === true)
             continue;
         var itemKey = String(item.orderKey ?? "");
-        if (itemKey === "" || before[itemKey] === true)
+        if (itemKey === "" || before[identity(item)] === true)
             continue;
         added[itemKey] = finiteOr(now, 0);
     }
@@ -421,7 +431,7 @@ function collectRemovedItems(previous, next, now) {
     var after = next || [];
     var live = {};
     for (var i = 0; i < after.length; i++) {
-        var key = after[i] ? String(after[i].orderKey ?? "") : "";
+        var key = identity(after[i]);
         if (key !== "")
             live[key] = true;
     }
@@ -432,7 +442,7 @@ function collectRemovedItems(previous, next, now) {
         if (!item || item.__exiting === true)
             continue;
         var itemKey = String(item.orderKey ?? "");
-        if (itemKey === "" || live[itemKey] === true)
+        if (itemKey === "" || live[identity(item)] === true)
             continue;
         removed.push({
             key: itemKey,
@@ -442,4 +452,65 @@ function collectRemovedItems(previous, next, now) {
         });
     }
     return removed;
+}
+
+// The order a drop commits, built from what the dock showed rather than from
+// dock.order alone. The dock shows items the saved order never names (widgets
+// added later land before the trailing actions, running apps are appended,
+// the live preview sits by the phone), so a move resolved inside dock.order
+// put the item wherever that list happened to end — usually far from where the
+// preview had it.
+//
+// `visualKeys`: one array of order keys per visible item (a group stands for
+// its members), in the order the drop leaves them. Every visible key is
+// written explicitly in that sequence. Saved entries the dock does not show
+// right now (closed running apps, hidden widgets, stacked members, markers)
+// stay right after the visible entry they followed, never after the moved
+// one (`movedKeys`), which would drag them along.
+function orderFromVisual(order, visualKeys, movedKeys) {
+    const saved = toStringArray(order);
+    const moved = {};
+    for (const key of toStringArray(movedKeys))
+        moved[key] = true;
+
+    const shown = [];
+    const isShown = {};
+    for (const keys of (visualKeys ?? [])) {
+        for (const key of toStringArray(keys)) {
+            if (isShown[key])
+                continue;
+            isShown[key] = true;
+            shown.push(key);
+        }
+    }
+
+    const head = [];
+    const after = {};
+    let anchor = "";
+    for (const entry of saved) {
+        if (isShown[entry]) {
+            if (!moved[entry])
+                anchor = entry;
+            continue;
+        }
+        if (anchor === "")
+            head.push(entry);
+        else
+            (after[anchor] = after[anchor] ?? []).push(entry);
+    }
+
+    const result = [];
+    const written = {};
+    const write = function (key) {
+        if (written[key])
+            return;
+        written[key] = true;
+        result.push(key);
+    };
+    head.forEach(write);
+    for (const key of shown) {
+        write(key);
+        (after[key] ?? []).forEach(write);
+    }
+    return result;
 }

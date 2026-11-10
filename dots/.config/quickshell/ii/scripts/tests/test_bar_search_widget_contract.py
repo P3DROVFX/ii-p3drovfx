@@ -27,12 +27,16 @@ class BarSearchWidgetContractTest(unittest.TestCase):
 
     def test_widget_is_wired_through_the_bar_and_settings_registries(self):
         config = self.read("modules/common/Config.qml")
+        component_registry = self.read("modules/common/BarComponentRegistry.qml")
         style_registry = self.read("modules/ii/bar/registry/BarWidgetRegistry.qml")
         settings_registry = self.read("modules/common/SettingsPageRegistry.qml")
         waffle = self.read("modules/settings/configs/widgets/BarWidgetsWaffleConfig.qml")
 
         self.assertIn('property string search: "default"', config)
-        self.assertIn('"id": "search"', config)
+        # Config.qml stores the selected style; widget IDs belong to the
+        # component registry and to the user's optional layout arrays. Search
+        # is not a default Bar item, so it must not be required in Config.qml.
+        self.assertIn('id: "search"', component_registry)
         self.assertIn('case "search":', style_registry)
         self.assertIn('widgets/SearchBarWidgetConfig.qml', settings_registry)
         self.assertIn('root.openComponentPage("search")', waffle)
@@ -82,6 +86,11 @@ class BarSearchWidgetContractTest(unittest.TestCase):
 
         for widget in WIDGET_DIR.glob("*SearchBarWidget.qml"):
             body = widget.read_text(encoding="utf-8")
+            if widget.name == "SculptSearchBarWidget.qml":
+                # Sculpt draws through its variants; every one carries the badge.
+                for variant in ("SculptSearchField", "SculptSearchDisplay", "SculptSearchSplit"):
+                    self.assertIn("SearchShortcutBadge", (WIDGET_DIR / f"{variant}.qml").read_text(encoding="utf-8"))
+                continue
             self.assertIn("SearchShortcutBadge", body)
             self.assertNotIn("&& !root.vertical", body)
             self.assertNotIn('Translation.tr("Search launcher")', body)

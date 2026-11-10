@@ -144,6 +144,22 @@ def normalize_spec(raw: dict[str, Any]) -> dict[str, Any]:
     if export_format not in ("mp4", "mp3", "gif"):
         export_format = "mp4"
 
+    # GIF specific settings:
+    gif_fps = max(5, min(60, as_int(raw.get("gifFps"), 15)))
+    gif_scale = max(0.1, min(1.0, as_float(raw.get("gifScale"), 1.0)))
+    gif_width = max(0, as_int(raw.get("gifWidth"), 0))
+    gif_dither = str(raw.get("gifDither", "bayer")).strip().lower()
+    if gif_dither not in ("bayer", "floyd_steinberg", "sierra2_4a", "none", "ordered"):
+        gif_dither = "bayer"
+    gif_bayer_scale = max(0, min(5, as_int(raw.get("gifBayerScale"), 3)))
+    gif_stats_mode = str(raw.get("gifStatsMode", "diff")).strip().lower()
+    if gif_stats_mode not in ("diff", "full", "single"):
+        gif_stats_mode = "diff"
+    gif_colors = max(16, min(256, as_int(raw.get("gifColors"), 256)))
+    gif_diff_mode = str(raw.get("gifDiffMode", "rectangle")).strip().lower()
+    if gif_diff_mode not in ("rectangle", "none"):
+        gif_diff_mode = "rectangle"
+
     return {
         "input": input_file,
         "format": export_format,
@@ -166,6 +182,17 @@ def normalize_spec(raw: dict[str, Any]) -> dict[str, Any]:
         "audioBitrate": str(raw.get("audioBitrate", "192k")),
         "replaceOriginal": bool(raw.get("replaceOriginal", False)),
         "outputPath": str(raw.get("outputPath", "")).strip(),
+        "outputResolution": str(raw.get("outputResolution", "original")).strip().lower(),
+        "playbackRate": max(0.1, min(4.0, as_float(raw.get("playbackRate"), 1.0))),
+        # GIF settings
+        "gifFps": gif_fps,
+        "gifScale": gif_scale,
+        "gifWidth": gif_width,
+        "gifDither": gif_dither,
+        "gifBayerScale": gif_bayer_scale,
+        "gifStatsMode": gif_stats_mode,
+        "gifColors": gif_colors,
+        "gifDiffMode": gif_diff_mode,
     }
 
 
@@ -209,6 +236,35 @@ def crop_filter(spec: dict[str, Any], metadata: dict[str, Any]) -> str | None:
     return f"crop={width}:{height}:{x}:{y}"
 
 
+def build_atempo(rate: float) -> list[str]:
+    """Build a chain of atempo filters (each limited to [0.5, 2.0])."""
+    filters: list[str] = []
+    remaining = rate
+    # For speeds > 2.0, chain multiple atempo=2.0
+    while remaining > 2.0 + 1e-6:
+        filters.append("atempo=2.0")
+        remaining /= 2.0
+    # For speeds < 0.5, chain multiple atempo=0.5
+    while remaining < 0.5 - 1e-6:
+        filters.append("atempo=0.5")
+        remaining *= 2.0
+    filters.append(f"atempo={remaining:.6f}")
+    return filters
+
+
+def resolution_filter(spec: dict[str, Any], metadata: dict[str, Any]) -> str | None:
+    """Return a scale filter if a non-original output resolution is selected."""
+    target = spec.get("outputResolution", "original")
+    target_heights = {"1080p": 1080, "720p": 720, "480p": 480}
+    target_h = target_heights.get(target)
+    if not target_h:
+        return None
+    source_h = as_int((metadata.get("video") or {}).get("height"))
+    if source_h > 0 and source_h <= target_h:
+        return None  # source already smaller or equal, skip
+    return f"scale=-2:{target_h}:flags=lanczos"
+
+
 def filter_chain(spec: dict[str, Any], metadata: dict[str, Any]) -> str | None:
     filters: list[str] = []
     crop = crop_filter(spec, metadata)
@@ -225,7 +281,46 @@ def filter_chain(spec: dict[str, Any], metadata: dict[str, Any]) -> str | None:
         filters.append("hflip")
     if spec["flipVertical"]:
         filters.append("vflip")
+    rate = spec.get("playbackRate", 1.0)
+    if abs(rate - 1.0) > 0.01:
+        filters.append(f"setpts=PTS/{rate:.6f}")
+    res = resolution_filter(spec, metadata)
+    if res:
+        filters.append(res)
     return ",".join(filters) or None
+
+
+def gif_filter_complex(spec: dict[str, Any], metadata: dict[str, Any]) -> str:
+    parts: list[str] = []
+    base_transforms = filter_chain(spec, metadata)
+    if base_transforms:
+        parts.append(base_transforms)
+
+    gif_width = spec.get("gifWidth", 0)
+    gif_scale = spec.get("gifScale", 1.0)
+    if gif_width > 0:
+        parts.append(f"scale=min(iw\\,{gif_width}):-2:flags=lanczos")
+    elif gif_scale < 0.999:
+        parts.append(f"scale=trunc(iw*{gif_scale:.4f}/2)*2:-2:flags=lanczos")
+
+    gif_fps = spec.get("gifFps", 15)
+    parts.append(f"fps={gif_fps}")
+
+    pre_chain = ",".join(parts)
+    stats_mode = spec.get("gifStatsMode", "diff")
+    max_colors = spec.get("gifColors", 256)
+    dither = spec.get("gifDither", "bayer")
+    bayer_scale = spec.get("gifBayerScale", 3)
+    diff_mode = spec.get("gifDiffMode", "rectangle")
+
+    dither_param = f"dither={dither}"
+    if dither == "bayer":
+        dither_param += f":bayer_scale={bayer_scale}"
+
+    palettegen_str = f"palettegen=stats_mode={stats_mode}:max_colors={max_colors}"
+    paletteuse_str = f"paletteuse={dither_param}:diff_mode={diff_mode}"
+
+    return f"{pre_chain},split[s0][s1];[s0]{palettegen_str}[p];[s1][p]{paletteuse_str}"
 
 
 def ffmpeg_command(spec: dict[str, Any], metadata: dict[str, Any], output: str, progress: bool = False) -> list[str]:
@@ -275,18 +370,19 @@ def ffmpeg_command(spec: dict[str, Any], metadata: dict[str, Any], output: str, 
             dur_sec,
             "-i",
             spec["input"],
+            "-vf",
+            gif_filter_complex(spec, metadata),
         ]
-        filters = filter_chain(spec, metadata)
-        fps = "fps=15"
-        vf_chain = f"{filters},{fps}" if filters else fps
-        filter_complex = f"{vf_chain},split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer:bayer_scale=3"
-        command.extend(["-vf", filter_complex])
         if progress:
             command.extend(["-progress", "pipe:1", "-nostats"])
         command.append(output)
         return command
 
     # Default: MP4
+    rate = spec.get("playbackRate", 1.0)
+    # When speeding up/down, we need to read more/less source material.
+    # -t is specified in source time, so divide by rate to get correct source duration.
+    source_dur_sec = f"{(duration / rate):.3f}" if abs(rate - 1.0) > 0.01 else dur_sec
     command = [
         "ffmpeg",
         "-hide_banner",
@@ -298,7 +394,7 @@ def ffmpeg_command(spec: dict[str, Any], metadata: dict[str, Any], output: str, 
         "-ss",
         start_sec,
         "-t",
-        dur_sec,
+        source_dur_sec,
     ]
     filters = filter_chain(spec, metadata)
     if filters:
@@ -307,7 +403,11 @@ def ffmpeg_command(spec: dict[str, Any], metadata: dict[str, Any], output: str, 
     if spec["mute"]:
         command.append("-an")
     else:
-        command.extend(["-map", "0:a:0?", "-c:a", "aac", "-b:a", spec["audioBitrate"]])
+        if abs(rate - 1.0) > 0.01:
+            atempo = ",".join(build_atempo(rate))
+            command.extend(["-map", "0:a:0?", "-c:a", "aac", "-b:a", spec["audioBitrate"], "-af", atempo])
+        else:
+            command.extend(["-map", "0:a:0?", "-c:a", "aac", "-b:a", spec["audioBitrate"]])
     command.extend(["-movflags", "+faststart"])
     if progress:
         command.extend(["-progress", "pipe:1", "-nostats"])
@@ -427,6 +527,73 @@ def estimate(spec: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def lossless_cut_video(spec: dict[str, Any]) -> int:
+    """Fast trim using -c copy (no re-encode). Precision limited to keyframe boundaries."""
+    input_file = spec["input"]
+    metadata = probe_video(input_file)
+    start_sec = f"{spec['startSeconds']:.3f}"
+    duration = selected_duration(spec, as_float(metadata.get("duration")))
+    dur_sec = f"{duration:.3f}"
+
+    final_path, replaces_source = output_path_for(spec)
+    if final_path.resolve() == Path(input_file).expanduser().resolve() and not spec["replaceOriginal"]:
+        raise ValueError("Output path cannot be the input path")
+    temporary_path = temporary_output_path(final_path)
+
+    notify("Trimming Video…", "Lossless cut — no re-encode…")
+    emit({"event": "started", "duration": duration, "outputPath": str(final_path), "format": "mp4"})
+
+    command = [
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel", "error",
+        "-y",
+        "-ss", start_sec,
+        "-t", dur_sec,
+        "-i", input_file,
+        "-c", "copy",
+        "-avoid_negative_ts", "make_zero",
+        "-movflags", "+faststart",
+        "-progress", "pipe:1",
+        "-nostats",
+        str(temporary_path),
+    ]
+
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
+    assert process.stdout is not None
+    for raw_line in process.stdout:
+        line = raw_line.strip()
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        if key == "out_time_ms":
+            elapsed = as_float(value) / 1_000_000
+            emit({"event": "progress", "value": max(0.0, min(1.0, elapsed / duration)), "elapsed": elapsed})
+        elif key == "progress" and value == "end":
+            emit({"event": "progress", "value": 1.0, "elapsed": duration})
+
+    stderr = process.stderr.read() if process.stderr is not None else ""
+    return_code = process.wait()
+    if return_code != 0 or not temporary_path.exists():
+        temporary_path.unlink(missing_ok=True)
+        message = stderr.strip() or "ffmpeg lossless cut failed"
+        emit({"event": "error", "message": message})
+        notify("Lossless Cut Failed", message[:240], "critical")
+        return 1
+
+    os.replace(temporary_path, final_path)
+    emit({
+        "event": "finished",
+        "outputPath": str(final_path),
+        "size": final_path.stat().st_size,
+        "replacedSource": replaces_source,
+        "format": "mp4",
+        "lossless": True,
+    })
+    notify("Video Trimmed", f"Lossless cut saved to {final_path}")
+    return 0
+
+
 def export_video(spec: dict[str, Any]) -> int:
     metadata = probe_video(spec["input"])
     fmt = spec.get("format", "mp4")
@@ -539,6 +706,43 @@ def legacy_spec(argv: list[str]) -> dict[str, Any]:
     })
 
 
+def snapshot_frame(raw: dict[str, Any]) -> int:
+    """Extract a single frame at `positionSeconds` and save as JPEG."""
+    input_file = str(raw.get("input", "")).strip()
+    if not input_file:
+        raise ValueError("No input video provided for snapshot")
+
+    pos = max(0.0, as_float(raw.get("positionSeconds"), 0.0))
+    out_dir = Path(str(raw.get("outputDir", ""))).expanduser() if raw.get("outputDir") else Path.home() / "Pictures"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    stem = Path(input_file).stem
+    pos_str = f"{int(pos // 60):02d}m{int(pos % 60):02d}s{int((pos % 1) * 100):02d}"
+    out_path = out_dir / f"{stem}_snapshot_{pos_str}.jpg"
+
+    # Avoid overwriting
+    counter = 1
+    while out_path.exists():
+        out_path = out_dir / f"{stem}_snapshot_{pos_str}_{counter}.jpg"
+        counter += 1
+
+    cmd = [
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+        "-ss", f"{pos:.3f}",
+        "-i", input_file,
+        "-frames:v", "1",
+        "-q:v", "2",
+        str(out_path),
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0 or not out_path.exists():
+        raise RuntimeError(f"Snapshot failed: {result.stderr.strip()}")
+
+    emit({"ok": True, "event": "snapshot_done", "path": str(out_path)})
+    notify("Snapshot Saved", str(out_path), "normal")
+    return 0
+
+
 def main(argv: list[str]) -> int:
     try:
         if not argv:
@@ -555,6 +759,10 @@ def main(argv: list[str]) -> int:
             return generate_thumbnails(argv[1], as_int(argv[2], 8), argv[3])
         if command == "export":
             return export_video(normalize_spec(json.loads(argv[1])))
+        if command == "lossless_cut":
+            return lossless_cut_video(normalize_spec(json.loads(argv[1])))
+        if command == "snapshot":
+            return snapshot_frame(json.loads(argv[1]))
         return export_video(legacy_spec(argv))
     except Exception as error:
         emit({"ok": False, "event": "error", "message": str(error)})

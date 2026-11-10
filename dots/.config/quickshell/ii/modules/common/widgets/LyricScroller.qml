@@ -24,6 +24,8 @@ Item {
     property real defaultLyricsSize: Appearance.font.pixelSize.normal * 1.5
     property string textAlign: "center"
     property bool changeTextWeight: false
+    property color activeColor: Appearance.colors.colOnLayer0
+    property color inactiveColor: Appearance.colors.colSubtext
 
     property int lastIndex: -1
     property bool isMovingForward: true
@@ -72,6 +74,8 @@ Item {
                 gradientDensity: 1 - root.gradientDensity
                 defaultLyricsSize: root.defaultLyricsSize
                 changeTextWeight: root.changeTextWeight
+                activeColor: root.activeColor
+                inactiveColor: root.inactiveColor
                 textHorizontalAlignment: root.textAlign === "left"  ? Text.AlignLeft  :
                              root.textAlign === "right" ? Text.AlignRight :
                                                           Text.AlignHCenter

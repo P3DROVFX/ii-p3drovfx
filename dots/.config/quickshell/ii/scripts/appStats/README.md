@@ -2,7 +2,7 @@
 
 Per-app usage and energy sampler: foreground/background screen time, watt-hours,
 CPU and GPU time, memory, launches and sessions — plus the battery's own level and
-charge history where there is one — the data behind the usage overlay.
+charge history where there is one — the data behind the App usage app.
 
 **Binary:** `~/.config/quickshell/ii/scripts/appStats/app_stats`
 **Source:** `~/.config/quickshell/ii/scripts/appStats/app_stats_src/`
@@ -34,9 +34,7 @@ Both are below — paste the block, then press **Super + U**.
 # 1. Build the sampler. rust is the only build requirement; the first build fetches
 #    libc and serde_json, so it needs network. Result is ~530 KB.
 yay -S --needed rust
-cd ~/.config/quickshell/ii/scripts/appStats/app_stats_src
-cargo build --release
-cp target/release/app_stats ../
+~/.config/quickshell/ii/scripts/rust-helpers.sh build app_stats
 
 # 2. Let your own user read the RAPL energy counters. Skip on AMD or in a VM —
 #    there is no intel-rapl there — and set energySource to "battery" instead.
@@ -94,9 +92,9 @@ hl.layer_rule({ match = { namespace = "quickshell:usage" }, ignore_alpha = 0.6})
 hl.layer_rule({ match = { namespace = "quickshell:usage" }, animation = "slide bottom"})
 ```
 
-On the shell side: `services/AppStats.qml`, the `modules/ii/usage/` overlay, the
-`appStats` group in `modules/common/Config.qml`, `UsageStatsConfig.qml` registered in
-`SettingsPageRegistry` under System, `Directories.appStats`, `usageOpen` in
+On the shell side: `services/AppStats.qml`, the `modules/ii/usage/` app, the
+`appStats` group in `modules/common/Config.qml`, `UsageSettingsPage.qml` (the app's own settings page), the App usage card in `OverlaysConfig.qml` (Apps & Overlays), registered in
+`SettingsPageRegistry` under Tools, `Directories.appStats`, `usageOpen` in
 `GlobalStates.qml`, and a `PanelLoader` for `Usage` in both panel families.
 
 One line is not optional: `shell.qml` touches `AppStats.stateDir` on startup. The
@@ -106,7 +104,8 @@ singleton is lazy, so without it nothing is collected until the overlay is first
 
 ### Configuration
 
-Settings → System → **App Usage** covers all of it. The same keys live under
+Settings → System → **App Usage** turns collection and the overlay on or off; everything
+else is in the overlay itself, behind the gear next to its close button. The same keys live under
 `Config.options.appStats` in `~/.config/illogical-impulse/config.json`.
 
 Everything in the first table is a command-line flag the daemon reads once at
@@ -123,6 +122,7 @@ startup, so changing one relaunches it.
 | `gpuFullEvery`     | `30`              | samples between full GPU rescans                                                                                                                                          |
 | `idleTimeoutSec`   | `300`             | seconds without input before foreground time stops; `0` disables the idle monitor                                                                                         |
 | `trackHeadless`    | `true`            | record processes that own no window                                                                                                                                       |
+| `trackNetwork`     | `true`            | record TCP data per app from the kernel's socket counters (see [Network data](#network-data))                                                                            |
 
 The rest are read live by the overlay.
 
@@ -133,7 +133,7 @@ The rest are read live by the overlay.
 | `defaultGranularity` | `"day"` | `day`, `week` or `month`                                                                                                       |
 | `defaultMetric`      | `"fg"`  | `fg`, `focus`, `energy`, `cpu` or `gpu`                                                                                        |
 | `rememberLastView`   | `true`  | reopen on the last granularity, metric and view instead of the defaults above                                                  |
-| `lastView`           | `"apps"`| which half of the overlay reopens: `apps` or `battery`. Ignored on a machine with no battery                                   |
+| `lastView`           | `"apps"`| which page reopens: `apps`, `battery`, `network` or `limits`. A page that is not there falls back to `apps`                    |
 | `weekStartsMonday`   | `true`  | which day a calendar week runs from                                                                                            |
 | `keepSelection`      | `false` | keep the picked app across openings                                                                                            |
 | `showComparison`     | `false` | percent change against the period before. Off by default: it parses that period as well, doubling the files a month view reads |
@@ -160,6 +160,8 @@ It is a normal program: run it in a terminal and watch the NDJSON.
 | `--energy`         | `auto`                                      | `rapl`, `battery`, `auto` or `off`                                                                                |
 | `--gpu-full-every` | `30`                                        | intervals between full GPU rescans (a new window forces one)                                                      |
 | `--no-headless`    | —                                           | skip processes that own no window                                                                                 |
+| `--no-network`     | —                                           | skip the socket dump, the fd walk and the close listener; no data is recorded                                     |
+| `--net-helper`     | `/usr/local/lib/ii/app_stats_net`           | the eBPF helper to try before falling back on the socket counters                                                 |
 | `--quiet`          | —                                           | write day files, print nothing                                                                                    |
 
 ## Protocol
@@ -194,7 +196,14 @@ a month of history and retention is an unlink. Each app maps hours to a fixed tu
 | 2   | `focus`  | s    |     | 8   | `mJbg`     | mJ    |
 | 3   | `cpu`    | s    |     | 9   | `launches` | count |
 | 4   | `gpu`    | s    |     | 10  | `sessions` | count |
-| 5   | `ramAvg` | MiB  |     |     |            |       |
+| 5   | `ramAvg` | MiB  |     | 11  | `netRx`    | KiB   |
+|     |          |      |     | 12  | `netTx`    | KiB   |
+|     |          |      |     | 13  | `netBg`    | KiB   |
+
+`netRx`/`netTx` are TCP payload received and sent; `netBg` is the part of both that
+moved while the app was in the background, split by time within each sample the way
+energy is. The three are written only when one of them is non-zero, so a row that
+never touched the network keeps the 11-field shape and older files read unchanged.
 
 `focus` is a subset of `fg`: on a tiling WM every mapped window on the active
 workspace is "foreground", which inflates screen time, so focused time is recorded
@@ -206,7 +215,8 @@ of them adds three. The overlay shows the latter as "Appearances" for that reaso
 
 The `__system` row is the device, not an app. Its `fg` is screen time counted once
 however many windows were up, its `bg` the time the machine was awake with nothing
-on screen, and `mJbg` the energy no app accounts for.
+on screen, `mJbg` the energy no app accounts for, and `netRx`/`netTx` the data the
+physical interfaces carried that no app accounts for.
 
 On a machine with a battery the file carries one more section, `bat`, holding the
 pack's full capacity in mWh and its own hour tuple. It sits beside `apps` rather than
@@ -253,6 +263,84 @@ into an explicit `__system` bucket instead of being normalised away. On this mac
 that residual is **50–60 %** at light load, which is the honest measure of how much
 weight the per-app numbers can bear.
 
+## Network data
+
+Two ways to count it. The sampler uses the first when it is installed and falls back on
+the second on its own — at startup, or the moment the helper stops answering. The
+overlay says which one is on screen ("Exact" / "Approximate").
+
+### Exact: the eBPF helper (`app_stats_net`)
+
+A small helper loads two kinds of eBPF program
+(`app_stats_net_src/src/bpf/net.bpf.c`), the way Android counts per-app data:
+
+- **Counting** — `cgroup_skb` ingress/egress programs on the root cgroup see every IP
+  packet any socket sends or receives, TCP and UDP alike, and add its length at IP level
+  to that socket's cookie. QUIC, connections lasting milliseconds and other users'
+  traffic are all counted. A buffer the kernel coalesced (GRO on receive, GSO/TSO on
+  send) arrives as one with a single header; the headers of its other segments are added
+  back from `gso_segs` (IPv4 20 / IPv6 40 bytes, plus TCP 32 or UDP 8), so the figures
+  add up to what the network cards carried rather than ~4 % under it.
+- **Ownership** — `fentry` programs on `tcp_sendmsg`/`tcp_recvmsg`/`udp(v6)_sendmsg`/
+  `udp(v6)_recvmsg` run in the process doing the I/O and tag the socket with its tgid,
+  parent tgid and process name (the thread-group leader's, not the I/O thread's), once. Bytes counted before a socket is tagged wait on its cookie.
+- The sampler folds each process onto its app. One that exited before the sampler looked
+  is placed through its recorded parent — a half-second `curl` belongs to the terminal it
+  ran in — and failing that under its own name, as a background row.
+
+Unattributed is then only traffic of no socket at all (ARP, DHCP, ICMP, forwarding) and
+link-layer framing the interfaces count. With a VPN (Tailscale, WireGuard), tunnelled
+traffic is counted twice — for the app inside the tunnel and for the tunnel daemon
+carrying it — so the rows can add up to more than the interfaces carried. Both are real.
+
+**Install, once:**
+
+```bash
+~/.config/quickshell/ii/scripts/appStats/install-net-helper.sh            # build + install
+~/.config/quickshell/ii/scripts/appStats/install-net-helper.sh status
+~/.config/quickshell/ii/scripts/appStats/install-net-helper.sh uninstall
+```
+
+Needs `clang` and `libbpf` (headers and library) to build. It installs a root-owned
+copy at `/usr/local/lib/ii/app_stats_net`, mode `0750` group `wheel`, with file
+capabilities — the helper never runs as root:
+
+| Capability      | Why                                                              |
+| --------------- | ---------------------------------------------------------------- |
+| `CAP_BPF`       | load the programs and create their maps                          |
+| `CAP_PERFMON`   | the `fentry` programs, and reading the parent of the current task |
+| `CAP_NET_ADMIN` | attach the packet counters to the root cgroup                    |
+
+Only `wheel` may run it, because it sees every user's per-process traffic. Every program
+is attached through a BPF link the helper owns, so all of them detach when it exits —
+it exits with the sampler (stdin closes, and a parent-death signal backs that up).
+Nothing is pinned or left behind. Replacing the file drops its capabilities, so a
+rebuild goes through the script again; that is also why it is not one of the helpers
+`rust-helpers.sh` rebuilds unattended. Opening App usage after installing restarts the
+sampler onto it.
+
+### Approximate: the socket counters (no privileges)
+
+- Each sample dumps every TCP socket through `NETLINK_SOCK_DIAG` — the request
+  `ss -ti` makes — and reads `tcpi_bytes_received` and `tcpi_bytes_acked` (sent,
+  retransmissions excluded) from its `tcp_info`.
+- A new socket is matched to its process once, through `/proc/<pid>/fd/*` pointing at
+  `socket:[<inode>]`, then followed by its kernel cookie.
+- When the kernel frees a socket it broadcasts its final counters on the sock_diag
+  destroy group, which any user may join; the tail since the last sample goes to the
+  app already matched to that socket.
+
+What this cannot match lands in Unattributed: **UDP** (QUIC/HTTP/3, a large share of
+browser traffic, has no counters there), **connections that open and close between two
+samples** (a 10 MiB download finished in half a second lands there whole), other users'
+sockets, and TCP/IP headers. In daily use that left about three quarters of the traffic
+unattributed, which is why the helper exists.
+
+In both modes the device total is the physical interfaces' `rx_bytes`/`tx_bytes` (those
+with a `device` link — Wi-Fi, Ethernet, a USB tether; never a tunnel, bridge or
+loopback), connections to the machine itself are left out, and the residual is shown as
+its own row rather than spread over the apps.
+
 ## Requirements
 
 None of these are checked at startup; each one missing costs a category of data
@@ -277,7 +365,14 @@ rather than stopping the daemon.
 Measured on this machine at the default 10 s interval, ~450 processes, Brave and
 Discord running: **6.8 ms of CPU per sample — 0.07 % of one core**, 3.5 MB RSS.
 
-Most of that is the `/proc` sweep. The GPU scan is kept cheap by remembering which
+Network data on the socket counters adds about **3 ms per sample** (A/B against
+`--no-network` at a 2 s interval with a browser open, 2026-11-04): one netlink dump, an
+fd walk only on samples where a new socket appeared, and a listener that sleeps until a
+socket closes. At the default interval that is about 0.03 % of one core. The eBPF helper
+replaces all three with one map read per sample; its kernel side costs a map update per
+packet and a lookup per send/receive call.
+
+Most of the rest is the `/proc` sweep. The GPU scan is kept cheap by remembering which
 fds of which processes are DRM fds: a full sweep opens every fd of every process,
 while the scans in between reopen only the handful that matter. Removing that cache
 roughly doubles the cost.

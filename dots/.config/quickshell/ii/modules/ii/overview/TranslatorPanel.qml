@@ -4,12 +4,20 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
+import qs.modules.ii.clock.components
+import qs.modules.ii.sidebarPolicies.translator
 import QtQuick
 import QtQuick.Layouts
-import QtQuick.Controls
 import Quickshell
-import Quickshell.Io
 
+/**
+ * The sidebar's translator, laid out for the overview's wide panel: the same language
+ * bar, source pane, hero translation and dictionary, side by side instead of stacked.
+ *
+ * The search field is the input — the source pane mirrors it — so everything else is
+ * reached by shortcut: Enter copies, Ctrl+Enter swaps, Ctrl+S reads the translation
+ * aloud, Ctrl+V pastes, Shift+Del clears; Down walks into the language bar.
+ */
 Item {
     id: root
     // Every motion in the overview and its panels answers to one switch:
@@ -25,72 +33,45 @@ Item {
     signal requestSetSearchQuery(string query)
     signal requestFocusSearchInput()
 
-    // Colors
-    property color colLangBtn: Appearance.colors.colSecondaryContainer
-    property color colLangBtnHover: Appearance.colors.colSecondaryContainerHover
-    property color colLangBtnActive: Appearance.colors.colSecondaryContainerActive
-    property color colLangText: Appearance.colors.colOnSecondaryContainer
-
-    property color colSwapBtn: Appearance.colors.colTertiaryContainer
-    property color colSwapBtnHover: Appearance.colors.colTertiaryContainerHover
-    property color colSwapBtnActive: Appearance.colors.colTertiaryContainerActive
-    property color colSwapIcon: Appearance.colors.colOnTertiaryContainer
-
-    property color colInputBox: Appearance.colors.colSurfaceContainerHigh
-    property color colInputText: Appearance.colors.colOnSurface
-
-    property color colResultBox: Appearance.colors.colSurfaceContainerHigh
-    property color colResultText: Appearance.colors.colOnSurface
-
-    property color colBtn: Appearance.colors.colSurfaceContainerHighest
-    property color colBtnHover: Appearance.colors.colSurfaceContainerHighestHover
-    property color colBtnActive: Appearance.colors.colSurfaceContainerHighestActive
-    property color colIcon: Appearance.colors.colOnSurfaceVariant
-
-    // States & Options
-    property string targetLanguage: {
-        let def = Config.options.language.translator.defaultTargetLanguage;
-        if (def && def !== "" && def !== "auto") return def;
-        return Config.options.language.translator.targetLanguage || "pt";
-    }
-    property string sourceLanguage: {
-        let def = Config.options.language.translator.defaultSourceLanguage;
-        if (def && def !== "" && def !== "auto") return def;
-        return Config.options.language.translator.sourceLanguage || "auto";
-    }
-
-    property string translatedText: ""
-    property string secondTranslatedText: ""
-    property list<string> languages: []
     property bool showLanguageSelector: false
     property bool languageSelectorTarget: false // true for target, false for source
 
-    // Keyboard navigation focus index
-    // -1 = SearchBar (default)
-    // 0 = Source Lang Button, 1 = Swap, 2 = Target Lang Button
-    // 3 = Paste, 4 = Clear, 5 = Copy, 6 = Search Web
+    // Keyboard focus in the language bar:
+    // -1 = search field (default), 0 = source tile, 1 = swap, 2 = target tile.
     property int focusedControlIndex: -1
+
+    readonly property bool hasInput: session.hasInput
+    readonly property bool showDictionary: session.hasDictionary && !session.error
+    readonly property string sourceTileName: TranslatorService.sourceLanguage === "auto" && session.detected
+        ? TranslatorService.displayName(session.detected)
+        : TranslatorService.displayName(TranslatorService.sourceLanguage)
+
+    function textSizeFor(length: int): int {
+        if (length <= 48)
+            return Appearance.font.pixelSize.huge + 6;
+        if (length <= 160)
+            return Appearance.font.pixelSize.huge;
+        return Appearance.font.pixelSize.large;
+    }
 
     function showLanguageSelectorDialog(isTargetLang) {
         root.languageSelectorTarget = isTargetLang;
         root.showLanguageSelector = true;
     }
 
+    /// Swaps the languages and, like every translator, the texts with them.
     function swapLanguages() {
-        let temp = root.sourceLanguage;
-        root.sourceLanguage = root.targetLanguage;
-        root.targetLanguage = temp;
-        // Trigger translation
-        if (root.searchQuery.trim().length > 0) {
-            translateTimer.restart();
-        }
+        const translation = session.translation;
+        if (!TranslatorService.swap(session.detected))
+            return;
+        if (translation.length > 0 && !session.busy)
+            root.requestSetSearchQuery(translation);
     }
 
     function pasteFromClipboard() {
-        let clipboardText = Quickshell.clipboardText;
-        if (clipboardText) {
+        const clipboardText = Quickshell.clipboardText;
+        if (clipboardText)
             root.requestSetSearchQuery(clipboardText);
-        }
     }
 
     function clearInput() {
@@ -98,117 +79,65 @@ Item {
     }
 
     function copyTranslation() {
-        if (root.translatedText.length > 0) {
-            Quickshell.clipboardText = root.translatedText;
-        }
+        if (session.translation.length > 0)
+            resultCard.copy(session.translation);
     }
 
-    function searchWeb() {
-        if (root.translatedText.length > 0) {
-            let url = Config.options.search.engineBaseUrl + root.translatedText;
-            for (let site of Config.options.search.excludedSites) {
-                url += ` -site:${site}`;
-            }
-            Qt.openUrlExternally(url);
-        }
+    function speakTranslation() {
+        TranslatorService.speak("overview:target", session.translation, session.targetCode);
     }
 
-    function isControlVisible(index) {
-        if (index === 0 || index === 1 || index === 2 || index === 3) return true;
-        if (index === 4) return root.searchQuery.length > 0;
-        if (index === 5 || index === 6) return root.translatedText.length > 0;
-        return false;
+    function speakSource() {
+        TranslatorService.speak("overview:source", session.trimmed, session.effectiveSource);
     }
 
     function navigateDown() {
-        if (focusedControlIndex === -1) {
-            focusedControlIndex = 0;
-        } else if (focusedControlIndex === 0) {
-            focusedControlIndex = 3;
-        } else if (focusedControlIndex === 1) {
-            if (isControlVisible(4)) focusedControlIndex = 4;
-            else if (isControlVisible(5)) focusedControlIndex = 5;
-            else focusedControlIndex = 3;
-        } else if (focusedControlIndex === 2) {
-            if (isControlVisible(6)) focusedControlIndex = 6;
-            else if (isControlVisible(5)) focusedControlIndex = 5;
-            else if (isControlVisible(4)) focusedControlIndex = 4;
-            else focusedControlIndex = 3;
-        }
+        if (root.focusedControlIndex === -1)
+            root.focusedControlIndex = 0;
     }
 
     function navigateUp() {
-        if (focusedControlIndex === 3 || focusedControlIndex === 4) {
-            focusedControlIndex = 0;
-        } else if (focusedControlIndex === 5 || focusedControlIndex === 6) {
-            focusedControlIndex = 2;
-        } else if (focusedControlIndex === 0 || focusedControlIndex === 1 || focusedControlIndex === 2) {
-            focusedControlIndex = -1;
-            root.requestFocusSearchInput();
-        }
+        if (root.focusedControlIndex !== -1)
+            root.focusInput();
     }
 
     function navigateLeft() {
-        if (focusedControlIndex === 2) {
-            focusedControlIndex = 1;
-        } else if (focusedControlIndex === 1) {
-            focusedControlIndex = 0;
-        } else if (focusedControlIndex > 3 && focusedControlIndex <= 6) {
-            for (let i = focusedControlIndex - 1; i >= 3; i--) {
-                if (isControlVisible(i)) {
-                    focusedControlIndex = i;
-                    break;
-                }
-            }
-        }
+        if (root.focusedControlIndex > 0)
+            root.focusedControlIndex--;
     }
 
     function navigateRight() {
-        if (focusedControlIndex === 0) {
-            focusedControlIndex = 1;
-        } else if (focusedControlIndex === 1) {
-            focusedControlIndex = 2;
-        } else if (focusedControlIndex >= 3 && focusedControlIndex < 6) {
-            for (let i = focusedControlIndex + 1; i <= 6; i++) {
-                if (isControlVisible(i)) {
-                    focusedControlIndex = i;
-                    break;
-                }
-            }
-        }
+        if (root.focusedControlIndex >= 0 && root.focusedControlIndex < 2)
+            root.focusedControlIndex++;
     }
 
     function activateSelected() {
-        if (focusedControlIndex === -1) {
-            root.copyTranslation();
-        } else if (focusedControlIndex === 0) {
+        if (root.focusedControlIndex === 0)
             root.showLanguageSelectorDialog(false);
-        } else if (focusedControlIndex === 1) {
+        else if (root.focusedControlIndex === 1)
             root.swapLanguages();
-        } else if (focusedControlIndex === 2) {
+        else if (root.focusedControlIndex === 2)
             root.showLanguageSelectorDialog(true);
-        } else if (focusedControlIndex === 3) {
-            root.pasteFromClipboard();
-        } else if (focusedControlIndex === 4) {
-            root.clearInput();
-        } else if (focusedControlIndex === 5) {
+        else
             root.copyTranslation();
-        } else if (focusedControlIndex === 6) {
-            root.searchWeb();
-        }
     }
 
     function focusInput() {
-        focusedControlIndex = -1;
+        root.focusedControlIndex = -1;
         root.requestFocusSearchInput();
     }
 
     // Global panel shortcuts (SearchBar dispatches these by name whenever
-    // this panel is active — see the "secondary"/"paste"/"delete" keybinds
-    // in Config.options.search.keybindings). Plain Enter already reaches
-    // copyTranslation() through activateSelected().
+    // this panel is active — see the "secondary"/"save"/"paste"/"delete"
+    // keybinds in Config.options.search.keybindings). Plain Enter already
+    // reaches copyTranslation() through activateSelected().
     function secondaryActivateSelected(): bool {
         root.swapLanguages();
+        return true;
+    }
+
+    function saveSelected(): bool {
+        root.speakTranslation();
         return true;
     }
 
@@ -227,95 +156,23 @@ Item {
         return true;
     }
 
-    // This is a flat panel — there is no sub-level to back out of. Without
-    // this, Backspace on an empty query falls through to
-    // SearchWidget.exitActivePanel() and kicks the user back to plain Search,
-    // so clearing the text to retype something silently exits the panel and
-    // the "@" prefix has to be typed again to get back in.
-    // Translation logic
-    onSearchQueryChanged: {
-        translateTimer.restart();
-        focusedControlIndex = -1;
-    }
-    onTargetLanguageChanged: {
-        translateProc.canTransliterate = true
+    onSearchQueryChanged: root.focusedControlIndex = -1
+
+    onShowLanguageSelectorChanged: {
+        // The sheet's search field held focus; hand it back to the search field.
+        if (!root.showLanguageSelector)
+            Qt.callLater(root.requestFocusSearchInput);
     }
 
-    Timer {
-        id: translateTimer
-        interval: Config.options.sidebar.translator.delay ?? 300
-        repeat: false
-        onTriggered: () => {
-            if (root.searchQuery.trim().length > 0) {
-                translateProc.running = false;
-                translateProc.buffer = "";
-                translateProc.running = true;
-            } else {
-                root.translatedText = "";
-                root.secondTranslatedText = "";
-            }
-        }
+    Component.onCompleted: TranslatorService.ensureLanguages()
+    Component.onDestruction: {
+        if (TranslatorService.speakingKey.startsWith("overview:"))
+            TranslatorService.stopSpeaking();
     }
 
-    Process {
-        id: translateProc
-        property bool canTransliterate: true
-        property string buffer: ""
-        function buildTarget() {
-            const s = StringUtils.shellSingleQuoteEscape
-            const tgt = s(root.targetLanguage)
-            // If transliteration detected, return `language+@language`; else `language`
-            return canTransliterate ? `${tgt}+@${tgt}` : tgt
-        }
-        command: {
-            const s = StringUtils.shellSingleQuoteEscape
-            const src = s(root.sourceLanguage)
-            const tgt = buildTarget()
-            const inp = s(root.searchQuery.trim())
-
-            return ["bash", "-c",
-                `trans -brief -no-bidi -source '${src}' -target '${tgt}' '${inp}'`
-            ]
-        }
-        stdout: SplitParser {
-            onRead: d => translateProc.buffer += d + "\n"
-        }
-        onStarted: {
-            buffer = ""
-            root.translatedText = ""
-            root.secondTranslatedText = ""
-        }
-        onExited: () => {
-            // Split output in half, first half is translation
-            const lines = buffer.trim().split(/\r?\n/).filter(Boolean)
-            if (!lines.length) return
-            const mid = lines.length >> 1
-            const tr = lines.slice(0, mid).join("\n").trim()
-            const tl = lines.slice(mid).join("\n").trim()
-            root.translatedText = tr
-            // If second half is unique, it is the transliteration
-            const hasSecond = tl.length > 0 && tl !== tr
-            translateProc.canTransliterate = hasSecond
-            root.secondTranslatedText = hasSecond ? tl : ""
-        }
-    }
-
-    Process {
-        id: getLanguagesProc
-        command: ["trans", "-list-languages", "-no-bidi"]
-        property list<string> bufferList: ["auto"]
-        running: true
-        stdout: SplitParser {
-            onRead: data => {
-                getLanguagesProc.bufferList.push(data.trim());
-            }
-        }
-        onExited: (exitCode, exitStatus) => {
-            let langs = getLanguagesProc.bufferList.filter(lang => lang.trim().length > 0 && lang !== "auto").sort((a, b) => a.localeCompare(b));
-            langs.unshift("auto");
-            root.languages = langs;
-            getLanguagesProc.bufferList = [];
-        }
+    TranslatorSession {
+        id: session
+        text: root.searchQuery
     }
 
     SearchPanelScaffold {
@@ -325,522 +182,181 @@ Item {
         primaryHint: ({ label: Translation.tr("Copy"), actionId: "activate", keys: ["↵"] })
         hints: [
             { label: Translation.tr("Swap languages"), actionId: "secondary", keys: ["Ctrl", "↵"] },
+            { label: Translation.tr("Listen"), actionId: "save", keys: ["Ctrl", "S"] },
             { label: Translation.tr("Paste"), actionId: "paste", keys: ["Ctrl", "V"] },
             { label: Translation.tr("Clear"), actionId: "delete", keys: ["⇧", "Del"] }
         ]
 
         ColumnLayout {
-        anchors.fill: parent
-        spacing: 12
-
-        // Top Row: Language Selectors & Swap Button
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 10
-
-            RippleButton {
-                id: srcLangBtn
-                Layout.fillWidth: true
-                Layout.preferredWidth: 1
-                Layout.preferredHeight: 46
-                buttonRadius: Appearance.rounding.full
-                colBackground: pressed ? colLangBtnActive : (hovered ? colLangBtnHover : colLangBtn)
-                PointingHandInteraction {}
-
-                contentItem: Item {
-                    RowLayout {
-                        anchors.centerIn: parent
-                        width: Math.min(parent.width - 24, implicitWidth)
-                        spacing: 6
-
-                        StyledText {
-                            text: root.sourceLanguage
-                            color: colLangText
-                            font.pixelSize: Appearance.font.pixelSize.normal
-                            font.bold: true
-                            elide: Text.ElideRight
-                            Layout.fillWidth: true
-                            horizontalAlignment: Text.AlignHCenter
-                        }
-                        MaterialSymbol {
-                            text: "arrow_drop_down"
-                            color: colLangText
-                            iconSize: Appearance.font.pixelSize.larger
-                            Layout.alignment: Qt.AlignVCenter
-                        }
-                    }
-                }
-                onClicked: {
-                    root.focusedControlIndex = 0;
-                    root.showLanguageSelectorDialog(false);
-                }
-
-                // Keyboard focus highlight ring
-                Rectangle {
-                    anchors.fill: parent
-                    anchors.margins: -3
-                    color: "transparent"
-                    border.color: root.focusedControlIndex === 0 ? Appearance.colors.colPrimary : "transparent"
-                    border.width: 2
-                    radius: parent.buttonRadius + 3
-                }
+            id: content
+            anchors.fill: parent
+            spacing: ClockStyle.gapSmall
+            // The sheet takes the panel; the panes step out of its way.
+            opacity: root.showLanguageSelector ? 0 : 1
+            visible: opacity > 0
+            Behavior on opacity {
+                enabled: !root.animationsDisabled
+                animation: ClockStyle.motionFast.numberAnimation.createObject(this)
             }
 
-            RippleButton {
-                id: swapBtn
-                implicitWidth: 46
-                implicitHeight: 46
-                buttonRadius: Appearance.rounding.full
-                colBackground: pressed ? colSwapBtnActive : (hovered ? colSwapBtnHover : colSwapBtn)
-                PointingHandInteraction {}
-
-                contentItem: Item {
-                    anchors.fill: parent
-                    MaterialSymbol {
-                        anchors.centerIn: parent
-                        text: "swap_horiz"
-                        color: colSwapIcon
-                        iconSize: Appearance.font.pixelSize.larger
-                    }
-                }
-                onClicked: {
-                    root.focusedControlIndex = 1;
-                    root.swapLanguages();
-                }
-
-                Rectangle {
-                    anchors.fill: parent
-                    anchors.margins: -3
-                    color: "transparent"
-                    border.color: root.focusedControlIndex === 1 ? Appearance.colors.colPrimary : "transparent"
-                    border.width: 2
-                    radius: parent.buttonRadius + 3
-                }
-            }
-
-            RippleButton {
-                id: targetLangBtn
+            // ── Language bar ────────────────────────────────────────────
+            RowLayout {
+                id: languageBar
                 Layout.fillWidth: true
-                Layout.preferredWidth: 1
-                Layout.preferredHeight: 46
-                buttonRadius: Appearance.rounding.full
-                colBackground: pressed ? colLangBtnActive : (hovered ? colLangBtnHover : colLangBtn)
-                PointingHandInteraction {}
+                Layout.fillHeight: false
+                spacing: ClockStyle.gapTiny
 
-                contentItem: Item {
-                    RowLayout {
-                        anchors.centerIn: parent
-                        width: Math.min(parent.width - 24, implicitWidth)
-                        spacing: 6
-
-                        StyledText {
-                            text: root.targetLanguage
-                            color: colLangText
-                            font.pixelSize: Appearance.font.pixelSize.normal
-                            font.bold: true
-                            elide: Text.ElideRight
-                            Layout.fillWidth: true
-                            horizontalAlignment: Text.AlignHCenter
-                        }
-                        MaterialSymbol {
-                            text: "arrow_drop_down"
-                            color: colLangText
-                            iconSize: Appearance.font.pixelSize.larger
-                            Layout.alignment: Qt.AlignVCenter
-                        }
-                    }
-                }
-                onClicked: {
-                    root.focusedControlIndex = 2;
-                    root.showLanguageSelectorDialog(true);
-                }
-
-                Rectangle {
-                    anchors.fill: parent
-                    anchors.margins: -3
-                    color: "transparent"
-                    border.color: root.focusedControlIndex === 2 ? Appearance.colors.colPrimary : "transparent"
-                    border.width: 2
-                    radius: parent.buttonRadius + 3
-                }
-            }
-        }
-
-        // Horizontal Split View (Input / Output columns)
-        RowLayout {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            spacing: 12
-
-            // Left Side: Input Preview
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                radius: Appearance.rounding.large
-                color: colInputBox
-
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: 12
-                    spacing: 8
-
-                    StyledFlickable {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        clip: true
-                        contentHeight: inputPreviewText.implicitHeight
-
-                        StyledText {
-                            id: inputPreviewText
-                            width: parent.width
-                            wrapMode: Text.Wrap
-                            text: root.searchQuery !== "" ? root.searchQuery : Translation.tr("Start typing to translate...")
-                            font.pixelSize: Appearance.font.pixelSize.normal
-                            color: root.searchQuery !== "" ? colInputText : Appearance.colors.colSubtext
-                            opacity: root.searchQuery !== "" ? 1.0 : 0.6
-                        }
-                    }
-
-                    // Left Bottom Actions Row
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 8
-
-                        StyledText {
-                            text: root.searchQuery.length + " " + Translation.tr("characters")
-                            color: Appearance.colors.colSubtext
-                            font.pixelSize: Appearance.font.pixelSize.smaller
-                        }
-
-                        Item { Layout.fillWidth: true }
-
-                        RippleButton {
-                            id: pasteBtn
-                            implicitWidth: 38
-                            implicitHeight: 38
-                            buttonRadius: Appearance.rounding.full
-                            colBackground: pressed ? colBtnActive : (hovered ? colBtnHover : colBtn)
-                            PointingHandInteraction {}
-
-                            contentItem: Item {
-                                anchors.fill: parent
-                                MaterialSymbol {
-                                    anchors.centerIn: parent
-                                    text: "content_paste"
-                                    color: colIcon
-                                    iconSize: 18
-                                }
-                            }
-                            onClicked: {
-                                root.focusedControlIndex = 3;
-                                root.pasteFromClipboard();
-                            }
-
-                            Rectangle {
-                                anchors.fill: parent
-                                anchors.margins: -2
-                                color: "transparent"
-                                border.color: root.focusedControlIndex === 3 ? Appearance.colors.colPrimary : "transparent"
-                                border.width: 2
-                                radius: parent.buttonRadius + 2
-                            }
-
-                            StyledToolTip { text: Translation.tr("Paste from Clipboard") }
-                        }
-
-                        RippleButton {
-                            id: clearBtn
-                            implicitWidth: 38
-                            implicitHeight: 38
-                            buttonRadius: Appearance.rounding.full
-                            colBackground: pressed ? colBtnActive : (hovered ? colBtnHover : colBtn)
-                            visible: root.searchQuery.length > 0
-                            PointingHandInteraction {}
-
-                            contentItem: Item {
-                                anchors.fill: parent
-                                MaterialSymbol {
-                                    anchors.centerIn: parent
-                                    text: "close"
-                                    color: colIcon
-                                    iconSize: 18
-                                }
-                            }
-                            onClicked: {
-                                root.focusedControlIndex = 4;
-                                root.clearInput();
-                            }
-
-                            Rectangle {
-                                anchors.fill: parent
-                                anchors.margins: -2
-                                color: "transparent"
-                                border.color: root.focusedControlIndex === 4 ? Appearance.colors.colPrimary : "transparent"
-                                border.width: 2
-                                radius: parent.buttonRadius + 2
-                            }
-
-                            StyledToolTip { text: Translation.tr("Clear Input") }
-                        }
-                    }
-                }
-            }
-
-            // Right Side: Translated Output
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                radius: Appearance.rounding.large
-                color: colResultBox
-
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: 12
-                    spacing: 8
-
-                StyledFlickable {
+                TranslatorLanguageTile {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    Layout.minimumHeight: 0
-                    clip: true
-
-                    contentHeight: contentColumn.implicitHeight
-
-                    ColumnLayout {
-                        id: contentColumn
-                        width: parent.width
-                        spacing: 8
-
-                        // Main translated output
-                        StyledText {
-                            text: root.translatedText !== "" ? root.translatedText : Translation.tr("Translation will appear here...")
-                            visible: true
-
-                            wrapMode: Text.Wrap
-                            font.pixelSize: Appearance.font.pixelSize.huge
-                            color: root.translatedText !== "" ? colResultText : Appearance.colors.colSubtext
-                            opacity: root.translatedText !== "" ? 1.0 : 0.6
-
-                            Layout.fillWidth: true
-                        }
-
-                        // Transliteration translated output
-                        Rectangle {
-                            id: transliterationBubble
-
-                            Layout.fillWidth: true
-                            visible: root.secondTranslatedText.length > 0
-                            
-                            opacity: visible ? 1 : 0
-                            Behavior on opacity {
-                        enabled: !root.animationsDisabled
-                        NumberAnimation {
-                            duration: 120
-                        }
-                    }
-
-                            radius: Appearance.rounding.large
-                            color: Qt.darker(colResultBox, 1.8)
-
-                            implicitHeight: transliterationText.implicitHeight + 20
-                            property bool hovered: false
-
-                            HoverHandler {
-                                onHoveredChanged: transliterationBubble.hovered = hovered
-                            }
-
-                            StyledText {
-                                id: transliterationText
-
-                                text: root.secondTranslatedText
-                                wrapMode: Text.Wrap
-                                color: colResultText
-
-                                anchors {
-                                    top: parent.top
-                                    left: parent.left
-                                    right: parent.right
-                                    margins: 10
-                                    bottomMargin: 10
-                                }
-                            }
-
-                            // Copy button
-                            RippleButton {
-                                implicitWidth: 28
-                                implicitHeight: 28
-                                buttonRadius: Appearance.rounding.full
-
-                                anchors {
-                                    right: parent.right
-                                    bottom: parent.bottom
-                                    margins: 6
-                                }
-
-                                opacity: transliterationBubble.hovered ? 1.0 : 0.0
-                                visible: opacity > 0.01
-                                colBackground: pressed ? colBtnActive : (hovered ? colBtnHover : colBtn)
-                                Behavior on opacity {
-                        enabled: !root.animationsDisabled
-                        NumberAnimation {
-                            duration: 150
-                        }
-                    }
-
-                                contentItem: Item {
-                                    anchors.fill: parent
-
-                                    MaterialSymbol {
-                                        anchors.centerIn: parent
-                                        text: "content_copy"
-                                        color: colIcon
-                                        font.pixelSize: 14
-                                    }
-                                }
-
-                                onClicked: Quickshell.clipboardText = root.secondTranslatedText
-                            }
-                        }
+                    Layout.preferredWidth: 0
+                    Layout.minimumWidth: 0
+                    caption: TranslatorService.sourceLanguage === "auto" && session.detected ? Translation.tr("Detected") : Translation.tr("From")
+                    language: root.sourceTileName
+                    keyboardFocused: root.focusedControlIndex === 0
+                    onClicked: {
+                        root.focusedControlIndex = 0;
+                        root.showLanguageSelectorDialog(false);
                     }
                 }
 
-                    // Right Bottom Actions Row
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 8
+                TranslatorSwapButton {
+                    Layout.alignment: Qt.AlignVCenter
+                    turns: TranslatorService.swapTurns
+                    enabled: TranslatorService.sourceLanguage !== "auto" || session.detected.length > 0
+                    keyboardFocused: root.focusedControlIndex === 1
+                    tooltip: Translation.tr("Swap languages (Ctrl+Enter)")
+                    onClicked: {
+                        root.focusedControlIndex = 1;
+                        root.swapLanguages();
+                    }
+                }
 
-                        Item { Layout.fillWidth: true }
-
-                        RippleButton {
-                            id: copyBtn
-                            implicitWidth: 38
-                            implicitHeight: 38
-                            buttonRadius: Appearance.rounding.full
-                            colBackground: pressed ? colBtnActive : (hovered ? colBtnHover : colBtn)
-                            visible: root.translatedText.length > 0
-                            PointingHandInteraction {}
-
-                            contentItem: Item {
-                                anchors.fill: parent
-                                MaterialSymbol {
-                                    anchors.centerIn: parent
-                                    text: "content_copy"
-                                    color: colIcon
-                                    iconSize: 18
-                                }
-                            }
-                            onClicked: {
-                                root.focusedControlIndex = 5;
-                                root.copyTranslation();
-                            }
-
-                            Rectangle {
-                                anchors.fill: parent
-                                anchors.margins: -2
-                                color: "transparent"
-                                border.color: root.focusedControlIndex === 5 ? Appearance.colors.colPrimary : "transparent"
-                                border.width: 2
-                                radius: parent.buttonRadius + 2
-                            }
-
-                            StyledToolTip { text: Translation.tr("Copy Translation") }
-                        }
-
-                        RippleButton {
-                            id: searchBtn
-                            implicitWidth: 38
-                            implicitHeight: 38
-                            buttonRadius: Appearance.rounding.full
-                            colBackground: pressed ? colBtnActive : (hovered ? colBtnHover : colBtn)
-                            visible: root.translatedText.length > 0
-                            PointingHandInteraction {}
-
-                            contentItem: Item {
-                                anchors.fill: parent
-                                MaterialSymbol {
-                                    anchors.centerIn: parent
-                                    text: "travel_explore"
-                                    color: colIcon
-                                    iconSize: 18
-                                }
-                            }
-                            onClicked: {
-                                root.focusedControlIndex = 6;
-                                root.searchWeb();
-                            }
-
-                            Rectangle {
-                                anchors.fill: parent
-                                anchors.margins: -2
-                                color: "transparent"
-                                border.color: root.focusedControlIndex === 6 ? Appearance.colors.colPrimary : "transparent"
-                                border.width: 2
-                                radius: parent.buttonRadius + 2
-                            }
-
-                            StyledToolTip { text: Translation.tr("Search on Web") }
-                        }
+                TranslatorLanguageTile {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.preferredWidth: 0
+                    Layout.minimumWidth: 0
+                    caption: Translation.tr("To")
+                    language: TranslatorService.displayName(TranslatorService.targetLanguage)
+                    keyboardFocused: root.focusedControlIndex === 2
+                    onClicked: {
+                        root.focusedControlIndex = 2;
+                        root.showLanguageSelectorDialog(true);
                     }
                 }
             }
-        }
+
+            // ── Panes ───────────────────────────────────────────────────
+            // Source and translation share the row; the dictionary slides in from
+            // the right when the text is a word. Its slot animates width and clips
+            // while the card inside keeps its settled width, so it slides instead
+            // of reflowing.
+            RowLayout {
+                id: panes
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                spacing: ClockStyle.gapSmall
+
+                readonly property real dictionarySettledWidth: Math.round((panes.width - ClockStyle.gapSmall * 2) * 0.32)
+                property real dictionaryProgress: root.showDictionary ? 1 : 0
+                Behavior on dictionaryProgress {
+                    enabled: !root.animationsDisabled
+                    animation: ClockStyle.motionDefault.numberAnimation.createObject(this)
+                }
+
+                TranslatorSourceCard {
+                    id: sourceCard
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.preferredWidth: 10
+                    Layout.horizontalStretchFactor: 10
+                    editable: false
+                    externalText: root.searchQuery
+                    textSize: root.textSizeFor(root.searchQuery.length)
+                    sourceName: root.sourceTileName
+                    phonetic: session.sourceTransliteration
+                    correction: session.correction
+                    canSpeak: root.hasInput && session.effectiveSource.length > 0
+                    speaking: TranslatorService.speakingKey === "overview:source"
+                    speakFailed: TranslatorService.failedSpeakKey === "overview:source"
+                    onPasteRequested: root.pasteFromClipboard()
+                    onClearRequested: root.clearInput()
+                    onSpeakRequested: root.speakSource()
+                    onCorrectionAccepted: text => root.requestSetSearchQuery(text)
+                }
+
+                TranslatorResultCard {
+                    id: resultCard
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.preferredWidth: 12
+                    Layout.horizontalStretchFactor: 12
+                    text: session.translation
+                    transliteration: session.transliteration
+                    alternatives: session.alternatives
+                    dictionary: session.dictionary
+                    error: root.hasInput ? session.error : ""
+                    targetName: TranslatorService.displayName(TranslatorService.targetLanguage)
+                    busy: session.busy
+                    textSize: root.textSizeFor(session.translation.length)
+                    turns: TranslatorService.swapTurns
+                    canSpeak: true
+                    speaking: TranslatorService.speakingKey === "overview:target"
+                    speakFailed: TranslatorService.failedSpeakKey === "overview:target"
+                    emptyHint: Translation.tr("Type in the search field — Enter copies the translation, Ctrl+S reads it aloud")
+                    onSpeakRequested: root.speakTranslation()
+                    onRetryRequested: session.retry()
+                }
+
+                Item {
+                    id: dictionarySlot
+                    Layout.fillHeight: true
+                    Layout.preferredWidth: Math.round(panes.dictionarySettledWidth * panes.dictionaryProgress)
+                    // The row's spacing would leave a gap for the closed slot.
+                    Layout.leftMargin: -ClockStyle.gapSmall * (1 - panes.dictionaryProgress)
+                    visible: panes.dictionaryProgress > 0
+                    clip: true
+                    opacity: panes.dictionaryProgress
+
+                    TranslatorDictionaryCard {
+                        anchors {
+                            top: parent.top
+                            bottom: parent.bottom
+                            right: parent.right
+                        }
+                        width: panes.dictionarySettledWidth
+                        headword: session.trimmed
+                        phonetic: session.sourceTransliteration
+                        languageName: TranslatorService.displayName(session.effectiveSource)
+                        definitions: session.definitions
+                        examples: session.examples
+                        synonyms: session.synonyms
+                        onLookupRequested: word => root.requestSetSearchQuery(word)
+                    }
+                }
+            }
         }
     }
 
     Loader {
         anchors.fill: parent
+        anchors.margins: scaffold.contentMargin
         active: root.showLanguageSelector
         visible: root.showLanguageSelector
         z: 9999
-        sourceComponent: SelectionDialog {
-            id: languageSelectorDialog
-            titleText: Translation.tr("Select Language")
-            items: root.languages
-            defaultChoice: root.languageSelectorTarget ? root.targetLanguage : root.sourceLanguage
-            enableSearch: true
-            focus: true
-
-            Keys.onPressed: event => {
-                if (event.key === Qt.Key_Escape) {
-                    root.showLanguageSelector = false;
-                    event.accepted = true;
-                } else if (event.key === Qt.Key_Down) {
-                    if (choiceListView.currentIndex < choiceListView.count - 1) {
-                        choiceListView.currentIndex++;
-                        choiceListView.positionViewAtIndex(choiceListView.currentIndex, ListView.Contain);
-                    }
-                    event.accepted = true;
-                } else if (event.key === Qt.Key_Up) {
-                    if (choiceListView.currentIndex > 0) {
-                        choiceListView.currentIndex--;
-                        choiceListView.positionViewAtIndex(choiceListView.currentIndex, ListView.Contain);
-                    }
-                    event.accepted = true;
-                } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                    languageSelectorDialog.selected(languageSelectorDialog.selectedItem);
-                    event.accepted = true;
-                }
-            }
-            onCanceled: () => {
+        sourceComponent: TranslatorLanguageSheet {
+            colPage: "transparent"
+            forTarget: root.languageSelectorTarget
+            current: root.languageSelectorTarget ? TranslatorService.targetLanguage : TranslatorService.sourceLanguage
+            detected: session.detected
+            onDismissed: root.showLanguageSelector = false
+            onPicked: language => {
                 root.showLanguageSelector = false;
-            }
-            onSelected: result => {
-                root.showLanguageSelector = false;
-                if (!result || result.length === 0)
-                    return;
-
-                if (root.languageSelectorTarget) {
-                    root.targetLanguage = result;
-                    Config.options.language.translator.targetLanguage = result;
-                } else {
-                    root.sourceLanguage = result;
-                    Config.options.language.translator.sourceLanguage = result;
-                }
-
-                translateTimer.restart();
-            }
-            Component.onCompleted: {
-                forceActiveFocus();
+                if (root.languageSelectorTarget)
+                    TranslatorService.setTarget(language);
+                else
+                    TranslatorService.setSource(language);
             }
         }
     }

@@ -111,7 +111,7 @@ Item {
                 visible: root.showTime
                 implicitSize: duo.shapeSize
                 shape: MaterialShape.Shape.Square
-                color: theme.colContainer
+                color: theme.colBackground
 
                 StyledText {
                     anchors.centerIn: parent
@@ -127,7 +127,7 @@ Item {
                         "tnum": 1
                     })
                     font.letterSpacing: -0.6
-                    color: theme.colOnContainer
+                    color: theme.colOnBackground
                 }
             }
 
@@ -138,7 +138,7 @@ Item {
                 Layout.alignment: Qt.AlignCenter
                 implicitSize: duo.shapeSize
                 shape: MaterialShape.Shape.Cookie7Sided
-                color: root.hovering ? theme.colContainer : theme.colAccent
+                color: root.hovering ? theme.colBackground : theme.colBackgroundVariant
 
                 Behavior on color {
                     animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
@@ -149,7 +149,7 @@ Item {
                     visible: root.showTime
                     value: root.secondsText
                     pixelSize: duo.digitSize
-                    colText: root.hovering ? theme.colOnContainer : theme.colOnAccent
+                    colText: root.hovering ? theme.colOnBackground : theme.colOnBackgroundVariant
                     weight: 800
                     letterSpacing: -0.4
                     animate: root.animateDigits
@@ -161,7 +161,7 @@ Item {
                     text: root.stateIcon
                     iconSize: Math.round(duo.shapeSize * 0.46)
                     fill: root.live ? 1 : 0
-                    color: root.hovering ? theme.colOnContainer : theme.colOnAccent
+                    color: root.hovering ? theme.colOnBackground : theme.colOnBackgroundVariant
 
                     RotationAnimator on rotation {
                         running: root.loading
@@ -194,7 +194,7 @@ Item {
             // A block, not a capsule: the Expressive family owns the pill, and
             // two pills side by side in one bar are indistinguishable.
             radius: Math.min(Appearance.rounding.small, Math.round(root.thickness * 0.26))
-            color: root.hovering ? theme.colContainer : theme.colAccent
+            color: root.hovering ? theme.colBackground : theme.colBackgroundVariant
             opacity: root.stateOpacity
 
             Behavior on color {
@@ -204,7 +204,7 @@ Item {
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(slab)
             }
 
-            readonly property color colContent: root.hovering ? theme.colOnContainer : theme.colOnAccent
+            readonly property color colContent: root.hovering ? theme.colOnBackground : theme.colOnBackgroundVariant
 
             RecordTimerText {
                 id: slabBody

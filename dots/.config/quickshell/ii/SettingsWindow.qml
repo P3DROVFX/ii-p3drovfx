@@ -11,6 +11,8 @@ import Quickshell.Widgets
 import qs.services
 import qs.modules.common
 import qs.modules.common.functions as CF
+import qs.modules.common.widgets
+import Qt5Compat.GraphicalEffects
 import "modules/settings"
 
 FloatingWindow {
@@ -28,6 +30,29 @@ FloatingWindow {
     property int resultsCount: 0
     property string activeSearchQuery: ""
     property string pendingSearchText: ""
+    // Enter was pressed for pendingSearchText: a miss shakes the bar.
+    property bool pendingSearchAccepted: false
+    property string typedSearch: ""
+
+    // Results follow typing, like the launcher; a burst of keystrokes scores
+    // and builds once.
+    Timer {
+        id: liveSearchTimer
+        interval: 120
+        onTriggered: {
+            if (root.typedSearch.trim() === "")
+                return;
+            if (!SearchRegistry.indexed) {
+                root.pendingSearchText = root.typedSearch;
+                root.pendingSearchAccepted = false;
+                SearchRegistry.ensureIndexing();
+                return;
+            }
+            root.acceptSearch(root.typedSearch, false);
+        }
+    }
+
+    readonly property bool settingsPerformanceMode: Config.options?.appearance?.settingsPerformanceMode ?? false
 
     property string pendingSectionHighlight: ""
     property string pendingSubPage: ""
@@ -43,29 +68,43 @@ FloatingWindow {
     property string observedHistorySubPage: ""
     property var pendingNavigationRestore: null
 
-    function findSubPageHost(node) {
-        if (!node)
-            return null;
-        if (node.navigationPath !== undefined)
-            return node;
+    // Top-level ConfigSubPageHosts register here when they are created. This
+    // used to be a walk over the whole page tree inside a binding, which ran
+    // again for every item the page added while it was being built.
+    property var subPageHosts: []
 
-        if (node.item) {
-            const itemHost = root.findSubPageHost(node.item);
-            if (itemHost)
-                return itemHost;
+    function registerSubPageHost(host) {
+        if (root.subPageHosts.indexOf(host) === -1)
+            root.subPageHosts = root.subPageHosts.concat([host]);
+    }
+
+    function unregisterSubPageHost(host) {
+        if (root.subPageHosts.indexOf(host) !== -1)
+            root.subPageHosts = root.subPageHosts.filter(entry => entry !== host);
+    }
+
+    function isWithin(node, ancestor) {
+        for (let p = node; p; p = p.parent) {
+            if (p === ancestor)
+                return true;
         }
+        return false;
+    }
 
-        const children = node.children || [];
-        for (let i = 0; i < children.length; ++i) {
-            const childHost = root.findSubPageHost(children[i]);
-            if (childHost)
-                return childHost;
+    function findSubPageHost(page) {
+        if (!page)
+            return null;
+        if (page.navigationPath !== undefined)
+            return page;
+        for (const host of root.subPageHosts) {
+            if (host && root.isWithin(host, page))
+                return host;
         }
         return null;
     }
 
     function currentSubPagePath() {
-        const host = root.findSubPageHost(pageLoader.item);
+        const host = root.activeNavigationHost;
         if (host && host.navigationPath !== undefined)
             return host.navigationPath.map(value => value.toString());
 
@@ -119,7 +158,7 @@ FloatingWindow {
                 && pageLoader.item.restoreSubPage(String(path[0])))
             return true;
         const resolved = path.map(entry => root.resolveSubPageEntry(entry));
-        const host = root.findSubPageHost(pageLoader.item);
+        const host = root.activeNavigationHost;
         if (host && host.restoreNavigationPath) {
             host.restoreNavigationPath(resolved);
             return true;
@@ -275,7 +314,18 @@ FloatingWindow {
         return true;
     }
 
+    // A page with unsaved edits registers itself here while it is shown (power/FanControlConfig).
+    // Navigation asks it first: interceptLeave(proceed) returns true when it takes over, shows
+    // its own confirmation and calls proceed() once the user saves or discards.
+    property var leaveGuard: null
+    function guardLeave(proceed): bool {
+        const guard = root.leaveGuard;
+        return !!guard && typeof guard.interceptLeave === "function" && guard.interceptLeave(proceed);
+    }
+
     function navigateBack() {
+        if (root.guardLeave(() => root.navigateBack()))
+            return true;
         if (!root.navigationHistoryActive || root.restoringNavigation
                 || root.navigationHistory.length === 0)
             return false;
@@ -289,6 +339,8 @@ FloatingWindow {
     }
 
     function navigateForward() {
+        if (root.guardLeave(() => root.navigateForward()))
+            return true;
         if (!root.navigationHistoryActive || root.restoringNavigation
                 || root.navigationForwardHistory.length === 0)
             return false;
@@ -328,7 +380,9 @@ FloatingWindow {
     }
 
     function pageIndexById(id) {
-        return SettingsPageRegistry.pageIndexById(id);
+        // A page folded into another (registry `movedTo`) opens its new home
+        const moved = SettingsPageRegistry.pageById(id)?.movedTo;
+        return SettingsPageRegistry.pageIndexById(moved ?? id);
     }
 
     /**
@@ -346,6 +400,136 @@ FloatingWindow {
             return;
         if (pageLoader.status === Loader.Ready)
             pendingHighlightTimer.restart();
+    }
+
+    /*
+     * A search landmark - a heading on a hero card, pane or chip - has no
+     * ContentSection to claim the highlight request. Sections and controls
+     * claim theirs within a tick; whatever is left after that is looked up as
+     * text in the page (retrying while lazy parts and sub-pages build) and
+     * flashed in place.
+     */
+    Connections {
+        target: SearchRegistry
+        function onCurrentSearchChanged() {
+            if (SearchRegistry.currentSearch !== "")
+                landmarkLocator.locate(SearchRegistry.currentSearch);
+        }
+    }
+
+    Timer {
+        id: landmarkLocator
+        property string wanted: ""
+        property int attempts: 0
+        interval: 120
+        repeat: true
+
+        function locate(text) {
+            wanted = text;
+            attempts = 0;
+            restart();
+        }
+
+        onTriggered: {
+            // The search page keeps its query in currentSearch: not a request.
+            if (root.currentPage === root.pageIndexById("search")
+                    || SearchRegistry.currentSearch !== wanted) {
+                stop();
+                return;
+            }
+            attempts++;
+            const target = root.findTextItem(pageLoader.item, wanted);
+            if (target === "claimed") {
+                stop();
+                return;
+            }
+            if (target) {
+                stop();
+                root.flashItem(target);
+                SearchRegistry.currentSearch = "";
+            } else if (attempts >= 12) {
+                // Left set, as before: a section that builds later still claims it.
+                stop();
+            }
+        }
+    }
+
+    // The item showing `text`, or "claimed" when a section or slider bearing it
+    // highlights itself.
+    function findTextItem(rootItem, text) {
+        if (!rootItem || !text)
+            return null;
+        const wanted = text.toLowerCase();
+        let stack = [rootItem];
+        while (stack.length > 0) {
+            const item = stack.pop();
+            if (!item || !item.visible || item.opacity <= 0.01)
+                continue;
+            // Sections and sliders watch currentSearch and flash themselves
+            // (a lazy section can arrive after the first look).
+            if (item.currentSearch !== undefined
+                    && (String(item.title ?? "").toLowerCase() === wanted
+                        || String(item.text ?? "").toLowerCase() === wanted))
+                return "claimed";
+            if (typeof item.text === "string" && item.width > 0 && item.height > 0
+                    && item.text.toLowerCase() === wanted)
+                return item;
+            const kids = item.children;
+            for (let i = kids.length - 1; i >= 0; i--)
+                stack.push(kids[i]);
+        }
+        return null;
+    }
+
+    function flashItem(target) {
+        let p = target.parent;
+        while (p) {
+            if (p.contentY !== undefined && p.contentItem !== undefined
+                    && p.contentHeight > p.height + 1) {
+                const y = p.contentItem.mapFromItem(target, 0, 0).y - 100;
+                p.contentY = Math.max(0, Math.min(y, p.contentHeight - p.height));
+                break;
+            }
+            p = p.parent;
+        }
+        // A label stretched across its row is flashed where its words are.
+        let x = 0;
+        let width = target.width;
+        if (target.paintedWidth !== undefined && target.paintedWidth < target.width) {
+            width = target.paintedWidth;
+            if (target.horizontalAlignment === Text.AlignHCenter)
+                x = (target.width - width) / 2;
+            else if (target.horizontalAlignment === Text.AlignRight)
+                x = target.width - width;
+        }
+        landmarkFlashComponent.createObject(target, {
+            x: x - 6,
+            y: -6,
+            width: width + 12,
+            height: target.height + 12
+        });
+    }
+
+    Component {
+        id: landmarkFlashComponent
+
+        Rectangle {
+            id: flash
+            radius: Appearance.rounding.small
+            color: Appearance.colors.colPrimary
+            opacity: 0
+            z: 1000
+
+            SequentialAnimation {
+                running: true
+                SequentialAnimation {
+                    loops: 3
+                    NumberAnimation { target: flash; property: "opacity"; to: 0.3; duration: 150 }
+                    NumberAnimation { target: flash; property: "opacity"; to: 0; duration: 150 }
+                }
+                ScriptAction { script: flash.destroy() }
+            }
+        }
     }
 
     function consumePendingSettingsPage() {
@@ -400,6 +584,8 @@ FloatingWindow {
 
     /// Ctrl+PageUp/PageDown: same visible order as cycling, but stops at the ends.
     function stepNavPage(delta) {
+        if (root.guardLeave(() => root.stepNavPage(delta)))
+            return;
         const visible = root.navPageIndices;
         if (visible.length === 0)
             return;
@@ -412,6 +598,8 @@ FloatingWindow {
     }
 
     function cycleNavPage(delta) {
+        if (root.guardLeave(() => root.cycleNavPage(delta)))
+            return;
         const visible = root.navPageIndices;
         if (visible.length === 0)
             return;
@@ -439,6 +627,20 @@ FloatingWindow {
                     }))
             })).filter(g => g.pages.length > 0)
 
+    // Whether pages should be built: the window may still be hidden while
+    // its first content comes in, and hidden-while-open must not stop that.
+    readonly property bool pageWanted: GlobalStates.settingsOpen && !GlobalStates.settingsSuspendedForScreenshot
+
+    // Map the window once its sidebar is complete; a rebuilt group list is
+    // created asynchronously and would otherwise land group by group. The
+    // page loads after and is revealed whole (see pageLoader).
+    readonly property bool readyToShow: sidebarV2.built
+
+    onReadyToShowChanged: {
+        if (root.readyToShow && GlobalStates.settingsOpen && !root.visible)
+            root.visible = true;
+    }
+
     title: "illogical-impulse Settings"
     implicitWidth: 1100
     implicitHeight: 750
@@ -448,7 +650,7 @@ FloatingWindow {
     Connections {
         target: GlobalStates
         function onSettingsOpenChanged() {
-            root.visible = GlobalStates.settingsOpen;
+            root.visible = GlobalStates.settingsOpen && root.readyToShow;
             if (GlobalStates.settingsOpen) {
                 if (GlobalStates.settingsSuspendedForScreenshot) {
                     GlobalStates.settingsSuspendedForScreenshot = false;
@@ -459,6 +661,7 @@ FloatingWindow {
                 settingsSearchBar.forceFocus();
                 root.consumePendingSettingsPage();
                 Qt.callLater(() => root.beginNavigationSession());
+                Qt.callLater(() => root.ensurePageReady());
             } else {
                 root.pendingSearchText = "";
                 SearchRegistry.setSettingsActive(false);
@@ -481,11 +684,17 @@ FloatingWindow {
     Connections {
         target: SearchRegistry
         function onIndexReady() {
-            if (!root.visible || root.pendingSearchText === "")
+            if (!root.visible)
                 return;
+            if (root.pendingSearchText === "") {
+                root.ensurePageReady();
+                return;
+            }
             const query = root.pendingSearchText;
+            const accepted = root.pendingSearchAccepted;
             root.pendingSearchText = "";
-            root.acceptSearch(query);
+            root.pendingSearchAccepted = false;
+            root.acceptSearch(query, accepted);
         }
     }
 
@@ -505,8 +714,8 @@ FloatingWindow {
     }
 
     Component.onCompleted: {
-        root.visible = GlobalStates.settingsOpen;
-        if (root.visible) {
+        root.visible = GlobalStates.settingsOpen && root.readyToShow;
+        if (GlobalStates.settingsOpen) {
             // The deep link that opened this window fired before the window
             // existed: the loader below shell.qml only starts building it when
             // `settingsOpen` turns true, so both Connections above missed the
@@ -528,23 +737,40 @@ FloatingWindow {
             "hl.window_rule({ match = { title = '^(illogical-impulse Settings)$' }, no_blur = false, ignorealpha = " + a + " })"]);
     }
 
-    function acceptSearch(text) {
+    Component.onDestruction: {
+        if (!GlobalStates.settingsOpen)
+            SearchRegistry.setSettingsActive(false);
+    }
+
+    // `accepted`: Enter, not typing. Only Enter shakes the bar on a miss and
+    // flashes the result that names the query.
+    function acceptSearch(text, accepted = true) {
         const result = SearchRegistry.getDynamicSearchResults(text);
 
         if (result == null || result.length === 0) {
-            settingsSearchBar.shakeNoResults();
-            root.activeSearchQuery = "";
+            if (accepted)
+                settingsSearchBar.shakeNoResults();
             root.resultsCount = 0;
             root.lastSearchIndex = -1;
-            if (root.currentPage === root.pageIndexById("search")) {
-                root.currentPage = root.previousPage;
+            if (text.trim() === "") {
+                root.activeSearchQuery = "";
+                if (root.currentPage === root.pageIndexById("search"))
+                    root.currentPage = root.previousPage;
+                return;
             }
+            // Typing on through a miss keeps the results page, saying so,
+            // rather than jumping back and forth between pages.
+            if (root.currentPage !== root.pageIndexById("search"))
+                root.previousPage = root.currentPage;
+            root.activeSearchQuery = text;
+            SearchRegistry.query = text;
+            root.currentPage = root.pageIndexById("search");
             return;
         }
 
         let totalWidgets = 0;
         for (let s of result) {
-            totalWidgets += s.items.length;
+            totalWidgets += s.items.length + (s.landmarks?.length ?? 0) + (s.components?.length ?? 0) + (s.page ? 1 : 0);
             for (let sub of s.subsections) {
                 totalWidgets += sub.items.length;
             }
@@ -557,13 +783,19 @@ FloatingWindow {
             root.previousPage = root.currentPage;
         }
         root.activeSearchQuery = text;
-        SearchRegistry.currentSearch = text;
+        SearchRegistry.query = text;
+        if (accepted)
+            SearchRegistry.currentSearch = text;
         root.currentPage = root.pageIndexById("search");
     }
 
     function ensurePageReady() {
-        if (!root.visible || !Config.ready)
+        if (!root.pageWanted || !Config.ready)
             return;
+        if (root.currentPage === root.pageIndexById("search") && !SearchRegistry.indexed) {
+            SearchRegistry.ensureIndexing();
+            return;
+        }
         if (pageLoader.status === Loader.Loading || pageLoader.status === Loader.Ready)
             return;
         pageLoader.beginGatedLoad(root.pages[root.currentPage].component);
@@ -628,25 +860,37 @@ FloatingWindow {
                 resultsCount: root.resultsCount
 
                 onTextChanged: text => {
-                    if (text === "")
-                        root.pendingSearchText = "";
+                    root.typedSearch = text;
+                    // Index while the query is being typed: the index is
+                    // dropped whenever Settings closes, and rebuilding it on
+                    // Enter added its whole cost to the first search.
+                    if (text !== "") {
+                        SearchRegistry.ensureIndexing();
+                        liveSearchTimer.restart();
+                    }
                     if (text === "") {
+                        liveSearchTimer.stop();
+                        root.pendingSearchText = "";
+                        root.pendingSearchAccepted = false;
                         if (root.currentPage === root.pageIndexById("search")) {
                             root.currentPage = root.previousPage;
                         }
                         root.activeSearchQuery = "";
                         root.resultsCount = 0;
                         root.lastSearchIndex = -1;
+                        SearchRegistry.clearIndex();
                     }
                 }
 
                 onAccepted: text => {
+                    liveSearchTimer.stop();
                     if (text.trim() === "") {
                         root.acceptSearch(text);
                         return;
                     }
                     if (!SearchRegistry.indexed) {
                         root.pendingSearchText = text;
+                        root.pendingSearchAccepted = true;
                         SearchRegistry.ensureIndexing();
                         return;
                     }
@@ -675,19 +919,32 @@ FloatingWindow {
                 groups: root.pageGroups
 
                 onPageSelected: idx => {
+                    if (root.guardLeave(() => root.currentPage = idx))
+                        return;
                     root.currentPage = idx;
                 }
             }
             // The page's viewport, clipped to the window's own corner rather
-            // than to a square. `clip: true` on a Rectangle ignores its
-            // `radius` — the rounding was declared here all along and never
-            // reached the content, so a page scrolled to its end had its last
-            // row cut straight across the curve.
-            ClippingRectangle { // Content container
+            // than to a square. `clip: true` on its own ignores the radius, so
+            // a page scrolled to its end had its last row cut straight across
+            // the curve. Over the opaque window background the corners are
+            // painted over instead of masked: a mask renders the whole page
+            // into an offscreen texture and redraws it on every change.
+            Item { // Content container
+                id: contentViewport
+                readonly property bool opaqueBackground: Appearance.colors.colLayer0.a >= 1
+
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                color: "transparent"
-                radius: Appearance.windowRounding
+                clip: true
+                layer.enabled: !opaqueBackground
+                layer.effect: OpacityMask {
+                    maskSource: Rectangle {
+                        width: contentViewport.width
+                        height: contentViewport.height
+                        radius: Appearance.windowRounding
+                    }
+                }
 
                 Loader {
                     id: pageLoader
@@ -697,7 +954,14 @@ FloatingWindow {
                     transformOrigin: Item.Left
 
                     active: Config.ready && pageLoadArmed
-                    asynchronous: true
+                    // Built whole inside one frame when the window is on screen:
+                    // incubating asynchronously there gets a few ms per frame while
+                    // anything animates, which made a page take 3-4x longer to show.
+                    // Hidden (the first page, built while the window maps) stays async.
+                    asynchronous: !root.visible
+                    // An incubating page is parented as soon as it exists and
+                    // would be drawn piece by piece. Show it once it is whole.
+                    visible: status === Loader.Ready
 
                     property bool pageLoadArmed: false
                     property bool _skeletonGateActive: false
@@ -709,10 +973,15 @@ FloatingWindow {
                     property bool _waitingForLoad: false
 
                     function beginGatedLoad(nextSource) {
-                        if (!nextSource || nextSource === "")
+                        if (!root.pageWanted || !nextSource || nextSource === "")
                             return;
 
+                        pageActivationTimer.stop();
+                        pendingHighlightTimer.stop();
+                        scrollTimer.stop();
+                        switchAnimIncoming.stop();
                         pageLoadArmed = false;
+                        source = "";
                         _skeletonGateActive = true;
                         _waitingForLoad = true;
                         // The skeleton is a fallback for pages slow enough that
@@ -758,7 +1027,12 @@ FloatingWindow {
                         }
                         if (_waitingForLoad) {
                             _waitingForLoad = false;
-                            switchAnimIncoming.start();
+                            if (root.settingsPerformanceMode) {
+                                pageLoader.opacity = 1;
+                                pageLoader.scale = 1;
+                            } else {
+                                switchAnimIncoming.start();
+                            }
                         }
                         if (root.restoringNavigation && root.pendingNavigationRestore
                                 && root.pendingNavigationRestore.page === root.currentPage) {
@@ -789,7 +1063,11 @@ FloatingWindow {
                         interval: 16
                         repeat: false
                         onTriggered: {
-                            if (root.visible && Config.ready)
+                            // No gc() here: a forced full collection stalled
+                            // every page switch by ~30 ms on a slow CPU. The
+                            // engine collects on its own, and closing Settings
+                            // still collects (shell.qml).
+                            if (root.pageWanted && Config.ready)
                                 pageLoader.pageLoadArmed = true;
                         }
                     }
@@ -823,8 +1101,22 @@ FloatingWindow {
                         target: root
                         function onCurrentPageChanged() {
                             root.handleObservedPageChanged();
-                            switchAnimOutgoing.complete();
-                            switchAnimOutgoing.start();
+                            const leavingSearch = pageLoader.source.toString().endsWith("/SearchPage.qml");
+                            pageLoader.pageLoadArmed = false;
+                            pageLoader.source = "";
+                            pageActivationTimer.stop();
+                            pendingHighlightTimer.stop();
+                            scrollTimer.stop();
+                            switchAnimIncoming.stop();
+                            pageLoader._waitingForLoad = false;
+                            pageLoader.resetPageSkeleton();
+                            if (leavingSearch) {
+                                root.activeSearchQuery = "";
+                                root.resultsCount = 0;
+                                root.lastSearchIndex = -1;
+                                SearchRegistry.clearIndex();
+                            }
+                            root.ensurePageReady();
                         }
                         function onScrollPosChanged() {
                             if (root.scrollPos == -1)
@@ -837,37 +1129,18 @@ FloatingWindow {
                         id: scrollTimer
                         interval: 250
                         onTriggered: {
-                            pageLoader.item.contentY = root.scrollPos;
+                            if (pageLoader.item)
+                                pageLoader.item.contentY = root.scrollPos;
                             root.scrollPos = -1;
                         }
                     }
 
-                    SequentialAnimation {
-                        id: switchAnimOutgoing
 
-                        ParallelAnimation {
-                            NumberAnimation {
-                                target: pageLoader
-                                property: "opacity"
-                                from: 1
-                                to: 0
-                                duration: 100
-                                easing.type: Easing.OutQuad
-                            }
-                            NumberAnimation {
-                                target: pageLoader
-                                property: "scale"
-                                from: 1
-                                to: 0.97
-                                duration: 100
-                                easing.type: Easing.OutQuad
-                            }
-                        }
-                        onFinished: {
-                            pageLoader.x = 0;
-                            pageLoader.beginGatedLoad(root.pages[root.currentPage].component);
-                        }
-                    }
+                    // Animating opacity/scale over a whole page makes the
+                    // renderer rebuild every merged batch each frame; a layer
+                    // turns it into one textured quad for the fade.
+                    layer.enabled: switchAnimIncoming.running
+                    layer.smooth: true
 
                     SequentialAnimation {
                         id: switchAnimIncoming
@@ -899,7 +1172,15 @@ FloatingWindow {
                     anchors.fill: parent
                     z: 1
                 }
-            } // closes Rectangle (Content container)
+
+                CornerCutouts {
+                    anchors.fill: parent
+                    z: 2
+                    visible: contentViewport.opaqueBackground
+                    radius: Appearance.windowRounding
+                    color: Appearance.colors.colLayer0
+                }
+            } // closes Item (Content container)
         } // closes RowLayout (Window content)
 
     } // closes ColumnLayout

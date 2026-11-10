@@ -48,13 +48,9 @@ Item {
         // Performance Mode leaves the entire mask subtree unloaded, including
         // the offscreen layer texture. Normal Mode retains the existing fade.
         layer.enabled: root.allowScrollFade && flickable.contentHeight > flickable.height
-        layer.effect: fadeMaskLoader.item
-
-        Loader {
-            id: fadeMaskLoader
-            active: root.allowScrollFade
-            sourceComponent: fadeMaskComponent
-        }
+        // layer.effect takes a Component in Qt 6; assigning the Loader's
+        // instance silently failed AND kept an orphan OpacityMask alive.
+        layer.effect: root.allowScrollFade ? fadeMaskComponent : null
 
         Component {
             id: fadeMaskComponent

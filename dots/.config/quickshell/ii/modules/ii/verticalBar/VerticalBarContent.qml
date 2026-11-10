@@ -74,16 +74,26 @@ Item { // Bar content region
     readonly property bool isDynamicIsland: BarInteraction.cornerStyle === 3
     readonly property bool isHugIslandMode: root.isIslandMode && BarInteraction.cornerStyle === 0
 
+    // Float + Connect: an open sidebar card is fused with the bar, and the top layer
+    // paints the two as one shape with one shadow, so the bar's own pill steps aside.
+    property bool fusedToSidebar: false
+
     // Hug/Rect vertical bars are welded to the wrapped frame ring, so the shell
     // shadow is generated once in WrappedFrameVisuals, underneath every panel.
     // Float and Dynamic Island bars keep their own shadow: they really do float
     // above the frame surface.
     readonly property bool weldedToFrame: Config.options.appearance.fakeScreenRounding === 3
         && (BarInteraction.cornerStyle === 0 || BarInteraction.cornerStyle === 2)
+        && Config.options.bar.barBackgroundStyle !== 3
     readonly property string barEdge: Config.options.bar.bottom ? "right" : "left"
     readonly property real frameThickness: Config.options.appearance.fakeScreenRounding === 3 ? Config.options.appearance.wrappedFrameThickness : 0
 
-    property color islandFillColor: Config.options.bar.expressiveColors ? root.activeTheme.barBackground : Appearance.colors.colLayer0
+    // What the Dynamic Island pill takes of the edge: its height and the concave fillet
+    // it flares into the screen edge above and below. Read by the bar window, which
+    // publishes it for the dock (GlobalStates.barIslands).
+    readonly property real islandExtent: root.isDynamicIsland ? barBackground.height + 2 * barBackground.islandRadius : 0
+
+    property color islandFillColor: Config.options.bar.amoledBackground ? "#000000" : Config.options.bar.expressiveColors ? root.activeTheme.barBackground : Appearance.colors.colLayer0
 
     // Background
     Rectangle {
@@ -91,11 +101,16 @@ Item { // Bar content region
         z: -10
         anchors {
             fill: root.isDynamicIsland ? undefined : parent
-            centerIn: root.isDynamicIsland ? parent : undefined
-            margins: (BarInteraction.cornerStyle === 1) ? Appearance.sizes.hyprlandGapsOut : 0
+            verticalCenter: root.isDynamicIsland ? parent.verticalCenter : undefined
+            left: root.isDynamicIsland ? (!Config.options.bar.bottom ? parent.left : undefined) : undefined
+            right: root.isDynamicIsland ? (Config.options.bar.bottom ? parent.right : undefined) : undefined
+            leftMargin: root.isDynamicIsland ? (!Config.options.bar.bottom ? root.frameThickness : 0) : ((BarInteraction.cornerStyle === 1) ? Appearance.sizes.hyprlandGapsOut : 0)
+            rightMargin: root.isDynamicIsland ? (Config.options.bar.bottom ? root.frameThickness : 0) : ((BarInteraction.cornerStyle === 1) ? Appearance.sizes.hyprlandGapsOut : 0)
+            topMargin: (BarInteraction.cornerStyle === 1) ? Appearance.sizes.hyprlandGapsOut : 0
+            bottomMargin: (BarInteraction.cornerStyle === 1) ? Appearance.sizes.hyprlandGapsOut : 0
         }
 
-        property color actualColor: root.showBarBackground ? (Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
+        property color actualColor: root.showBarBackground ? (Config.options.bar.amoledBackground ? "#000000" : Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
         Behavior on actualColor {
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(barBackground)
         }
@@ -122,11 +137,11 @@ Item { // Bar content region
             }
         }
 
-        width: parent.width
+        width: root.isDynamicIsland ? Math.max(0, parent.width - root.frameThickness) : parent.width
         height: root.isDynamicIsland ? (Math.max(islandSections.implicitHeight + 24, 200)) : parent.height
 
-        color: root.isIslandMode ? "transparent" : barBackground.actualColor
-        readonly property real availablePillExtension: Math.max(0, width - root.frameThickness)
+        color: (root.isIslandMode || root.weldedToFrame || root.fusedToSidebar) ? "transparent" : barBackground.actualColor
+        readonly property real availablePillExtension: Math.max(0, width)
         readonly property real islandRadius: Math.min(Appearance.rounding.screenRounding, Math.floor(availablePillExtension / 2))
         property real baseRadius: root.isDynamicIsland ? islandRadius : (BarInteraction.cornerStyle === 1 || Config.options.appearance.fakeScreenRounding === 4 ? Appearance.rounding.full : 0)
 
@@ -149,7 +164,7 @@ Item { // Bar content region
             }
         }
 
-        layer.enabled: !root.isIslandMode && !root.weldedToFrame && Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
+        layer.enabled: !root.isIslandMode && !root.weldedToFrame && !root.fusedToSidebar && Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
@@ -168,8 +183,8 @@ Item { // Bar content region
         color: barBackground.color
         corner: Config.options.bar.bottom ? RoundCorner.CornerEnum.BottomRight : RoundCorner.CornerEnum.BottomLeft
         visible: root.isDynamicIsland && root.showBarBackground
-        anchors.leftMargin: (!Config.options.bar.bottom) ? root.frameThickness : 0
-        anchors.rightMargin: Config.options.bar.bottom ? root.frameThickness : 0
+        anchors.leftMargin: 0
+        anchors.rightMargin: 0
     }
     RoundCorner {
         anchors.top: barBackground.bottom
@@ -179,8 +194,8 @@ Item { // Bar content region
         color: barBackground.color
         corner: Config.options.bar.bottom ? RoundCorner.CornerEnum.TopRight : RoundCorner.CornerEnum.TopLeft
         visible: root.isDynamicIsland && root.showBarBackground
-        anchors.leftMargin: (!Config.options.bar.bottom) ? root.frameThickness : 0
-        anchors.rightMargin: Config.options.bar.bottom ? root.frameThickness : 0
+        anchors.leftMargin: 0
+        anchors.rightMargin: 0
     }
 
 
@@ -366,7 +381,11 @@ Item { // Bar content region
             id: topSectionLayout
             spacing: 4
             Repeater {
-                model: Config.options.bar.layouts.left
+                // Delegates are instantiated even when this tree is invisible,
+                // so the model is empty outside island mode: without this gate
+                // EVERY bar widget existed twice (here and in the sections
+                // below), which is where the vertical bar's ~80 MB went.
+                model: root.isDynamicIsland ? Config.options.bar.layouts.left : root._emptyLayout
                 delegate: Bar.BarComponent {
                     vertical: true
                     list: Config.options.bar.layouts.left
@@ -384,7 +403,7 @@ Item { // Bar content region
             id: centerSectionLayout
             spacing: 4
             Repeater {
-                model: root.leftList
+                model: root.isDynamicIsland ? root.leftList : root._emptyLayout
                 delegate: Bar.BarComponent {
                     vertical: true
                     list: Config.options.bar.layouts.center
@@ -393,7 +412,7 @@ Item { // Bar content region
                 }
             }
             Repeater {
-                model: root.centerList
+                model: root.isDynamicIsland ? root.centerList : root._emptyLayout
                 delegate: Bar.BarComponent {
                     vertical: true
                     list: Config.options.bar.layouts.center
@@ -402,7 +421,7 @@ Item { // Bar content region
                 }
             }
             Repeater {
-                model: root.rightList
+                model: root.isDynamicIsland ? root.rightList : root._emptyLayout
                 delegate: Bar.BarComponent {
                     vertical: true
                     list: Config.options.bar.layouts.center
@@ -421,7 +440,7 @@ Item { // Bar content region
             id: bottomSectionLayout
             spacing: 4
             Repeater {
-                model: Config.options.bar.layouts.right
+                model: root.isDynamicIsland ? Config.options.bar.layouts.right : root._emptyLayout
                 delegate: Bar.BarComponent {
                     vertical: true
                     list: Config.options.bar.layouts.right
@@ -450,8 +469,8 @@ Item { // Bar content region
             Brightness.increaseBrightness()
         onMovedAway: GlobalStates.osdBrightnessOpen = false
         onPressed: event => {
-            if (event.button === Qt.LeftButton)
-                GlobalStates.sidebarLeftOpen = !GlobalStates.sidebarLeftOpen;
+            if (event.button === Qt.LeftButton && Config.options.bar.sidebarClickOpen)
+                GlobalStates.toggleLeftSidebar(root.screen?.name);
         }
     }
 
@@ -467,7 +486,9 @@ Item { // Bar content region
 
         Repeater {
             id: leftRepeater
-            model: Config.options.bar.layouts.left
+            // The island tree owns the widgets in Dynamic Island mode; an
+            // invisible twin here would still instantiate every delegate.
+            model: root.isDynamicIsland ? root._emptyLayout : Config.options.bar.layouts.left
             delegate: Bar.BarComponent {
                 vertical: true
                 list: leftRepeater.model
@@ -505,7 +526,7 @@ Item { // Bar content region
             }
             Repeater {
                 id: middleLeftRepeater
-                model: root.leftList
+                model: root.isDynamicIsland ? root._emptyLayout : root.leftList
                 delegate: Bar.BarComponent {
                     growthEdge: "trailing"
                     vertical: true
@@ -523,7 +544,7 @@ Item { // Bar content region
                 verticalCenter: parent.verticalCenter
             }
             Repeater {
-                model: root.centerList
+                model: root.isDynamicIsland ? root._emptyLayout : root.centerList
                 delegate: Bar.BarComponent {
                     vertical: true
                     list: Config.options.bar.layouts.center
@@ -542,7 +563,7 @@ Item { // Bar content region
             }
             Repeater {
                 id: middleRightRepeater
-                model: root.rightList
+                model: root.isDynamicIsland ? root._emptyLayout : root.rightList
                 delegate: Bar.BarComponent {
                     growthEdge: "leading"
                     vertical: true
@@ -566,7 +587,7 @@ Item { // Bar content region
 
         Repeater {
             id: rightRepeater
-            model: Config.options.bar.layouts.right
+            model: root.isDynamicIsland ? root._emptyLayout : Config.options.bar.layouts.right
             delegate: Bar.BarComponent {
                 vertical: true
                 list: rightRepeater.model
@@ -594,9 +615,8 @@ Item { // Bar content region
             Audio.incrementVolume()
         onMovedAway: GlobalStates.osdVolumeOpen = false
         onPressed: event => {
-            if (event.button === Qt.LeftButton) {
-                GlobalStates.sidebarRightOpen = !GlobalStates.sidebarRightOpen;
-            }
+            if (event.button === Qt.LeftButton && Config.options.bar.sidebarClickOpen)
+                GlobalStates.toggleRightSidebar(root.screen?.name);
         }
     }
 }

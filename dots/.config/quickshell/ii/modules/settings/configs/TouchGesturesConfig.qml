@@ -29,6 +29,40 @@ Item {
         forceWidth: false
         opacity: subPageOverlay.slideProgress
 
+        // ── Touchpad ──────────────────────────────────────────────────────────
+        ContentSection {
+            icon: "touchpad_mouse"
+            title: Translation.tr("Touchpad")
+            tooltip: Translation.tr("Three, four and five finger swipes and pinches on the touchpad.")
+
+            ConfigSubpageRow {
+                buttonIcon: "gesture"
+                title: Translation.tr("Touchpad gestures")
+                description: Translation.tr("Choose what each swipe and pinch does, or add your own")
+                summary: !TouchpadGestures.enabled ? Translation.tr("Off")
+                    : TouchpadGestures.bindings.length === 1 ? Translation.tr("1 gesture")
+                    : Translation.tr("%1 gestures").arg(TouchpadGestures.bindings.length)
+                onClicked: subPageOverlay.open(Qt.resolvedUrl("widgets/TouchpadGesturesConfig.qml"))
+            }
+        }
+
+        // ── Graphics tablet ───────────────────────────────────────────────────
+        ContentSection {
+            icon: "stylus_note"
+            title: Translation.tr("Graphics Tablet")
+            tooltip: Translation.tr("OpenTabletDriver express keys and pen buttons running shell actions, like live draw and its tools.")
+
+            ConfigSubpageRow {
+                buttonIcon: "stylus"
+                title: Translation.tr("Tablet buttons")
+                description: Translation.tr("Map express keys and pen buttons to live draw, undo, spotlight, board and other shell actions")
+                summary: !TabletButtons.enabled ? Translation.tr("Off")
+                    : Translation.tr("%1 buttons").arg(TabletButtons.auxActions.concat(TabletButtons.penActions)
+                        .filter(id => TabletButtons.handedToShell(id)).length)
+                onClicked: subPageOverlay.open(Qt.resolvedUrl("widgets/TabletButtonsConfig.qml"))
+            }
+        }
+
         // ── Master & Daemon Status ────────────────────────────────────────────
         ContentSection {
             icon: "touch_app"
@@ -66,13 +100,39 @@ Item {
                 }
 
                 HelperCodeBox {
-                    visible: !TouchGestureService.binaryExists
+                    // Also shown when the daemon is behind its sources: an update
+                    // replaces those and carries the built binary across, so gestures
+                    // can keep running last month's code without a sign of it.
+                    visible: !TouchGestureService.binaryExists || TouchGestureService.helperOutdated
+                        || TouchGestureService.building || TouchGestureService.buildResult === "failed"
                     Layout.fillWidth: true
                     icon: "terminal"
-                    title: Translation.tr("Compile Rust Helper Daemon")
-                    text: Translation.tr("To compile and install the native touch listener daemon, run this command in your terminal (requires Rust toolchain and cargo). After compiling, restart Quickshell to start the daemon:")
-                    codeSnippet: "cd " + Directories.scriptPath + "/touchGestures/touch_gestures_src && cargo build --release && cp target/release/touch_gestures ../touch_gestures"
+                    title: TouchGestureService.helperOutdated ? Translation.tr("Update the gesture daemon")
+                        : Translation.tr("Compile Rust Helper Daemon")
+                    text: TouchGestureService.helperState === "stale" ? Translation.tr("The daemon on this machine was built from an older version of its source. Gestures keep working as they are; rebuilding takes about a minute and the daemon restarts itself onto the new binary.")
+                        : (TouchGestureService.helperState === "unknown" ? Translation.tr("The daemon was built before the shell started recording what it was built from, so there is no way to tell whether it is current. Rebuilding settles it.")
+                        : Translation.tr("To compile and install the native touch listener daemon, run this command in your terminal (requires Rust toolchain and cargo), or press the button:"))
+                    codeSnippet: Directories.rustHelpersScriptPath + " build touch_gestures"
                     snippetWrapMode: Text.Wrap
+
+                    actionText: TouchGestureService.helperOutdated ? Translation.tr("Rebuild it now") : Translation.tr("Build it now")
+                    actionIcon: "build"
+                    actionBusy: TouchGestureService.building
+                    busyText: Translation.tr("Building…")
+                    statusIsError: TouchGestureService.buildResult === "failed" || !TouchGestureService.cargoAvailable
+                    statusText: {
+                        if (!TouchGestureService.cargoAvailable)
+                            return Translation.tr("Rust and cargo are not installed, so the build cannot run here.");
+                        if (TouchGestureService.building)
+                            return Translation.tr("Compiling — this takes about a minute the first time.");
+                        if (TouchGestureService.buildResult === "failed")
+                            return Translation.tr("The build failed: %1").arg(
+                                TouchGestureService.buildOutput.split("\n").slice(-3).join(" "));
+                        return "";
+                    }
+                    onActionClicked: TouchGestureService.buildHelper()
+
+                    Component.onCompleted: TouchGestureService.refreshHelperState()
                 }
 
                 HelperCodeBox {
@@ -287,24 +347,266 @@ Item {
 
         // ── Touchpad & Scrolling ──────────────────────────────────────────────
         ContentSection {
+            id: scrollingSection
             icon: "mouse"
             title: Translation.tr("Touchpad & Scrolling")
-            tooltip: Translation.tr("Enhanced touchpad scroll acceleration.")
+            tooltip: Translation.tr("How far lists move for each touchpad swipe and mouse wheel notch.")
+
+            readonly property var opts: Config.options?.interactions?.scrolling ?? null
+            readonly property var defaults: ({
+                    "fasterTouchpadScroll": false,
+                    "touchpadScrollFactor": 450,
+                    "touchpadKinetic": true,
+                    "mouseScrollFactor": 120,
+                    "uniformMouseWheel": false,
+                    "mouseScrollDeltaThreshold": 120
+                })
+            // Changes are saved in one batch once they settle: Config re-reads its
+            // own file right after a save and drops anything changed in between.
+            property var pendingWrites: ({})
+
+            function queueWrite(key, value) {
+                const next = Object.assign({}, scrollingSection.pendingWrites);
+                next[key] = value;
+                scrollingSection.pendingWrites = next;
+                writeTimer.restart();
+            }
+
+            function flushWrites() {
+                if (!scrollingSection.opts)
+                    return;
+                const writes = scrollingSection.pendingWrites;
+                for (const key of Object.keys(writes))
+                    scrollingSection.opts[key] = writes[key];
+                scrollingSection.pendingWrites = ({});
+            }
+
+            function resetDefaults() {
+                writeTimer.stop();
+                scrollingSection.pendingWrites = Object.assign({}, scrollingSection.defaults);
+                scrollingSection.flushWrites();
+            }
+
+            Timer {
+                id: writeTimer
+                interval: 350
+                onTriggered: scrollingSection.flushWrites()
+            }
 
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Appearance.sizes.elevationMargin / 2
 
                 ConfigSwitch {
+                    id: kineticSwitch
+                    buttonIcon: "moving"
+                    text: Translation.tr("Touchpad kinetic scrolling")
+                    description: Translation.tr("The content keeps gliding for a moment after the fingers lift. Off: it stops where the fingers stop.")
+                    Binding {
+                        target: kineticSwitch
+                        property: "checked"
+                        value: scrollingSection.opts?.touchpadKinetic ?? true
+                        when: !writeTimer.running
+                        restoreMode: Binding.RestoreNone
+                    }
+                    onCheckedChanged: {
+                        if (Config.ready && scrollingSection.opts && checked !== scrollingSection.opts.touchpadKinetic)
+                            scrollingSection.queueWrite("touchpadKinetic", checked);
+                    }
+                }
+
+                ConfigSwitch {
+                    id: fasterSwitch
                     buttonIcon: "speed"
                     text: Translation.tr("Faster touchpad scrolling")
-                    checked: Config.options.interactions.scrolling.fasterTouchpadScroll ?? false
+                    description: Translation.tr("Speed up touchpad scrolling in menus, panels and lists.")
+                    Binding {
+                        target: fasterSwitch
+                        property: "checked"
+                        value: scrollingSection.opts?.fasterTouchpadScroll ?? false
+                        when: !writeTimer.running
+                        restoreMode: Binding.RestoreNone
+                    }
                     onCheckedChanged: {
-                        Config.options.interactions.scrolling.fasterTouchpadScroll = checked;
+                        if (Config.ready && scrollingSection.opts && checked !== scrollingSection.opts.fasterTouchpadScroll)
+                            scrollingSection.queueWrite("fasterTouchpadScroll", checked);
                     }
-                    StyledToolTip {
-                        text: Translation.tr("Enables accelerated smooth scrolling across menus, panels, and lists when using a touchpad.")
+                }
+
+                ConfigSlider {
+                    id: touchpadSpeedSlider
+                    buttonIcon: "swipe_vertical"
+                    text: Translation.tr("Touchpad speed")
+                    // Only used while faster scrolling is on
+                    enabled: fasterSwitch.checked
+                    opacity: enabled ? 1 : 0.4
+                    usePercentTooltip: false
+                    // Shown as a share of the default speed (450)
+                    from: 45
+                    to: 900
+                    stepSize: 22.5
+                    stopIndicatorValues: [ScrollWheel.touchpadSpeedDefault]
+                    badgeText: Math.round(value / ScrollWheel.touchpadSpeedDefault * 100) + "%"
+                    tooltipContent: badgeText
+                    Binding {
+                        target: touchpadSpeedSlider
+                        property: "value"
+                        value: scrollingSection.opts?.touchpadScrollFactor ?? 450
+                        when: !touchpadSpeedSlider.pressed && !writeTimer.running
+                        restoreMode: Binding.RestoreNone
                     }
+                    onMoved: scrollingSection.queueWrite("touchpadScrollFactor", Math.round(value))
+
+                    Behavior on opacity {
+                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                    }
+                }
+
+                ConfigSlider {
+                    id: mouseStepSlider
+                    buttonIcon: "mouse"
+                    text: Translation.tr("Mouse wheel step")
+                    usePercentTooltip: false
+                    from: 40
+                    to: 400
+                    stepSize: 10
+                    stopIndicatorValues: [120]
+                    badgeText: Translation.tr("%1 px").arg(Math.round(value))
+                    tooltipContent: badgeText
+                    Binding {
+                        target: mouseStepSlider
+                        property: "value"
+                        value: scrollingSection.opts?.mouseScrollFactor ?? 120
+                        when: !mouseStepSlider.pressed && !writeTimer.running
+                        restoreMode: Binding.RestoreNone
+                    }
+                    onMoved: scrollingSection.queueWrite("mouseScrollFactor", Math.round(value))
+                }
+
+                ConfigSwitch {
+                    id: uniformSwitch
+                    buttonIcon: "format_line_spacing"
+                    text: Translation.tr("Same wheel step in every list")
+                    description: Translation.tr("When off, some panels keep the default mouse wheel scrolling.")
+                    Binding {
+                        target: uniformSwitch
+                        property: "checked"
+                        value: scrollingSection.opts?.uniformMouseWheel ?? false
+                        when: !writeTimer.running
+                        restoreMode: Binding.RestoreNone
+                    }
+                    onCheckedChanged: {
+                        if (Config.ready && scrollingSection.opts && checked !== scrollingSection.opts.uniformMouseWheel)
+                            scrollingSection.queueWrite("uniformMouseWheel", checked);
+                    }
+                }
+
+                // Somewhere to feel the settings, and to see which device the shell
+                // thinks it is reading, which is what the threshold below decides.
+                Rectangle {
+                    id: scrollTestPad
+                    Layout.fillWidth: true
+                    implicitHeight: 168
+                    radius: Appearance.rounding.normal
+                    color: Appearance.colors.colLayer2
+
+                    property string readout: Translation.tr("Scroll here to try your settings")
+
+                    StyledFlickable {
+                        id: testFlickable
+                        anchors {
+                            fill: parent
+                            margins: 8
+                            bottomMargin: 36
+                        }
+                        clip: true
+                        contentWidth: width
+                        contentHeight: testColumn.implicitHeight
+                        onWheelScrolled: (step, notch) => {
+                            scrollTestPad.readout = notch
+                                ? Translation.tr("Detected: mouse wheel · %1 px per notch").arg(Math.round(Math.abs(step)))
+                                : Translation.tr("Detected: touchpad · %1 px per event").arg(Math.abs(step).toFixed(1));
+                        }
+
+                        ColumnLayout {
+                            id: testColumn
+                            width: testFlickable.width
+                            spacing: 4
+
+                            Repeater {
+                                model: 30
+                                delegate: Rectangle {
+                                    required property int index
+                                    Layout.fillWidth: true
+                                    implicitHeight: 32
+                                    radius: Appearance.rounding.small
+                                    color: index % 2 === 0 ? Appearance.colors.colLayer3 : Appearance.colors.colLayer1
+
+                                    StyledText {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        x: 12
+                                        text: Translation.tr("Row %1").arg(index + 1)
+                                        color: Appearance.colors.colOnLayer2
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    StyledText {
+                        anchors {
+                            left: parent.left
+                            bottom: parent.bottom
+                            leftMargin: 16
+                            bottomMargin: 10
+                        }
+                        text: scrollTestPad.readout
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        color: Appearance.colors.colSubtext
+                    }
+                }
+
+                ContentSubsection {
+                    title: Translation.tr("Advanced")
+                    icon: "tune"
+                    collapsible: true
+                    expanded: false
+
+                    ConfigSpinBox {
+                        id: thresholdSpin
+                        icon: "sensors"
+                        text: Translation.tr("Mouse detection threshold")
+                        from: 10
+                        to: 960
+                        stepSize: 10
+                        Binding {
+                            target: thresholdSpin
+                            property: "value"
+                            value: scrollingSection.opts?.mouseScrollDeltaThreshold ?? 120
+                            when: !writeTimer.running
+                            restoreMode: Binding.RestoreNone
+                        }
+                        onValueChanged: {
+                            if (Config.ready && scrollingSection.opts && value !== scrollingSection.opts.mouseScrollDeltaThreshold)
+                                scrollingSection.queueWrite("mouseScrollDeltaThreshold", value);
+                        }
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        wrapMode: Text.Wrap
+                        text: Translation.tr("Scroll steps this size or bigger count as a mouse wheel, smaller ones as a touchpad. The test area above shows the step your device sends.")
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        color: Appearance.colors.colSubtext
+                    }
+                }
+
+                RippleButtonWithIcon {
+                    Layout.alignment: Qt.AlignRight
+                    buttonRadius: Appearance.rounding.small
+                    materialIcon: "restart_alt"
+                    mainText: Translation.tr("Reset scrolling to defaults")
+                    onClicked: scrollingSection.resetDefaults()
                 }
             }
         }

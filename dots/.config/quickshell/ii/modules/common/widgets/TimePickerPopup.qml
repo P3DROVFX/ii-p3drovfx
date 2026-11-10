@@ -27,6 +27,39 @@ Item {
     property int stage: 0
     property bool pm: false
     property bool suppressInputSync: false
+    property bool keyboardShortcutsEnabled: false
+    property bool showShortcutHints: false
+
+    function handleKey(event) {
+        if (!root.opened || !root.keyboardShortcutsEnabled) return false;
+        root.showShortcutHints = event.key === Qt.Key_Control || !!(event.modifiers & Qt.ControlModifier);
+        if (event.key === Qt.Key_Escape) {
+            if (!event.isAutoRepeat) root.dismiss();
+            return true;
+        }
+        if (event.modifiers === Qt.ControlModifier && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)) {
+            if (!event.isAutoRepeat) root.confirm();
+            return true;
+        }
+        if (event.modifiers === Qt.ControlModifier && (event.key === Qt.Key_H || event.key === Qt.Key_M)) {
+            const field = event.key === Qt.Key_H ? hourInput : minuteInput;
+            field.forceActiveFocus(Qt.ShortcutFocusReason);
+            field.selectAll();
+            return true;
+        }
+        if (event.modifiers === Qt.ControlModifier && event.key === Qt.Key_P && root.use12Hour) {
+            if (!event.isAutoRepeat) root.setMeridiem(!root.pm);
+            return true;
+        }
+        return false;
+    }
+
+    function releaseKey(event) {
+        if (event.key === Qt.Key_Control || !(event.modifiers & Qt.ControlModifier)) root.showShortcutHints = false;
+    }
+
+    Keys.onPressed: event => event.accepted = root.handleKey(event)
+    Keys.onReleased: event => root.releaseKey(event)
 
     signal accepted(int pickedHour, int pickedMinute)
     signal dismissed
@@ -52,10 +85,15 @@ Item {
         root.stage = 0;
         root.syncInputs();
         root.opened = true;
+        if (root.keyboardShortcutsEnabled) {
+            hourInput.forceActiveFocus(Qt.ShortcutFocusReason);
+            hourInput.selectAll();
+        }
     }
 
     function close() {
         root.opened = false;
+        root.showShortcutHints = false;
     }
 
     function dismiss() {
@@ -278,6 +316,11 @@ Item {
                                     return;
                                 root.setHourFromDisplay(value);
                             }
+                            Keys.priority: Keys.BeforeItem
+                            Keys.onPressed: event => event.accepted = root.handleKey(event)
+                            Keys.onReleased: event => root.releaseKey(event)
+                            KeyNavigation.tab: root.keyboardShortcutsEnabled ? minuteInput : null
+                            KeyNavigation.backtab: root.keyboardShortcutsEnabled ? minuteInput : null
                             Keys.onEscapePressed: root.dismiss()
                         }
 
@@ -334,6 +377,11 @@ Item {
                                     return;
                                 root.minute = Math.max(0, Math.min(59, value));
                             }
+                            Keys.priority: Keys.BeforeItem
+                            Keys.onPressed: event => event.accepted = root.handleKey(event)
+                            Keys.onReleased: event => root.releaseKey(event)
+                            KeyNavigation.tab: root.keyboardShortcutsEnabled ? hourInput : null
+                            KeyNavigation.backtab: root.keyboardShortcutsEnabled ? hourInput : null
                             Keys.onEscapePressed: root.dismiss()
                         }
 
@@ -530,6 +578,17 @@ Item {
                     onClicked: root.confirm()
                 }
             }
+        }
+    }
+    StyledText {
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 10
+        text: "Ctrl + H / M · Ctrl + Enter · Esc" + (root.use12Hour ? " · Ctrl + P" : "")
+        font.pixelSize: Appearance.font.pixelSize.smallest
+        opacity: root.keyboardShortcutsEnabled && root.showShortcutHints ? 1 : 0
+        Behavior on opacity {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
         }
     }
 

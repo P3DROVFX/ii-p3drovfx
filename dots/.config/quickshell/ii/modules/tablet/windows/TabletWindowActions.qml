@@ -165,7 +165,8 @@ Singleton {
         const target = root.normalizeAddress(address);
         if (target.length === 0)
             return;
-        Hyprland.dispatch(`hl.dsp.window.float({ action = '${floating ? "on" : "off"}', window = "address:${target}" })`);
+        Hyprland.dispatch(`hl.dsp.window.float({ action = '${floating ? "set" : "disable"}', window = "address:${target}" })`);
+        Hyprland.dispatch(`${floating ? "setfloating" : "settiled"} address:${target}`);
     }
 
     function toggleFloating(address) {

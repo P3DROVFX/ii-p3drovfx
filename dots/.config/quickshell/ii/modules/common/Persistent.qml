@@ -28,6 +28,16 @@ Singleton {
 
     property bool applyingPersistentState: false
 
+    // Assigning a list always notifies, even with identical contents, and
+    // every notification on Config.options schedules a config.json rewrite
+    // that the file watcher then reloads — a second full reload after each
+    // external change. Mirror a list only when it actually differs.
+    function _mirrorList(target, key, source) {
+        const next = Array.from(source || []);
+        if (JSON.stringify(Array.from(target[key] || [])) !== JSON.stringify(next))
+            target[key] = next;
+    }
+
     function tryMigrateAndSyncUserData() {
         if (!root.ready || !Config.ready || root.applyingPersistentState) return;
 
@@ -75,7 +85,7 @@ Singleton {
 
             // Sync Persistent values to Config.options as a compatibility mirror
             if (Config.options.search) {
-                Config.options.search.aliases = Array.from(root.states.search.aliases || []);
+                root._mirrorList(Config.options.search, "aliases", root.states.search.aliases);
             }
             if (Config.options.googleDrive) {
                 const src = root.states.googleDrive;
@@ -86,8 +96,8 @@ Singleton {
                 dst.syncOnNetworkChange = src.syncOnNetworkChange;
                 dst.bandwidthLimitKbps = src.bandwidthLimitKbps;
                 dst.pauseOnMeteredConnection = src.pauseOnMeteredConnection;
-                dst.backupFolders = Array.from(src.backupFolders || []);
-                dst.excludePatterns = Array.from(src.excludePatterns || []);
+                root._mirrorList(dst, "backupFolders", src.backupFolders);
+                root._mirrorList(dst, "excludePatterns", src.excludePatterns);
                 dst.driveBasePath = src.driveBasePath;
                 dst.notifyOnComplete = src.notifyOnComplete;
                 dst.notifyOnError = src.notifyOnError;
@@ -98,7 +108,7 @@ Singleton {
                 dst.lastSyncStatus = src.lastSyncStatus;
                 dst.lastSyncFileCount = src.lastSyncFileCount;
                 dst.lastSyncSizeMb = src.lastSyncSizeMb;
-                dst.syncHistory = Array.from(src.syncHistory || []);
+                root._mirrorList(dst, "syncHistory", src.syncHistory);
                 dst.totalDriveUsageMb = src.totalDriveUsageMb;
                 dst.driveQuotaMb = src.driveQuotaMb;
                 dst.driveBackupUsageMb = src.driveBackupUsageMb;
@@ -227,6 +237,8 @@ Singleton {
             id: persistentStatesJsonAdapter
 
             property string hyprlandInstanceSignature: ""
+            // Per-output desktop shortcuts; independent of tablet home pages and presets.
+            property string desktopShortcutsJson: "{}"
 
             property JsonObject migrations: JsonObject {
                 property int presetUserDataVersion: 0
@@ -246,6 +258,8 @@ Singleton {
                 // Ctrl+letter result keybinds: { letter, key, name, type,
                 // iconName, iconType, filePath, query }. See LauncherSearch.
                 property list<var> resultKeybinds: []
+                // Dictionary lookups the user stayed on: "lang|word", newest first.
+                property list<string> dictionaryHistory: []
             }
 
             // Typing test scores. Only aggregate metrics are kept — never the
@@ -338,6 +352,15 @@ Singleton {
             property JsonObject background: JsonObject {
                 property bool widgetsMigrated: false
                 property bool lockBehaviorMigrated: false
+                // The last wallpapers applied, newest first (see
+                // Wallpapers.recordRecent). The desktop menu's strip.
+                property list<string> recentWallpapers: []
+                // Preset names, most recently applied first (PresetStore.applyPreset).
+                property list<string> recentPresets: []
+                // How Edit Mode's Style catalogue orders the presets:
+                // "recent", "name" or "newest", and whether it is reversed.
+                property string presetSort: "recent"
+                property bool presetSortReversed: false
                 property JsonObject mediaMode: JsonObject {
                     property real userScrollOffset: 0
                     property real localMediaVolume: 0.8
@@ -357,6 +380,31 @@ Singleton {
              * the edge of a monitor that does not exist here. Same reasoning the backup
              * folder and the Google Drive settings already follow.
              */
+            property JsonObject clockApp: JsonObject {
+                property real width: 1040
+                property real height: 760
+                property string tab: "alarms"
+                property bool railExpanded: true
+            }
+            property JsonObject easyEffectsApp: JsonObject {
+                property string tab: "presets"
+                property string pipeline: "output"
+                property bool railExpanded: true
+            }
+            property JsonObject usageApp: JsonObject {
+                property bool railExpanded: true
+            }
+            property JsonObject modesApp: JsonObject {
+                property bool railExpanded: true
+            }
+            property JsonObject healthApp: JsonObject {
+                property string tab: "overview"
+                property bool railExpanded: true
+                /// The crash-dump access offer was answered after an in-app build.
+                property bool dumpAccessAsked: false
+                /// The recommended pacman hook offer was answered.
+                property bool qtHookAsked: false
+            }
             property JsonObject notes: JsonObject {
                 property real width: 1500
                 property real height: 940
@@ -428,6 +476,15 @@ Singleton {
                 // Dev tools page: the tool and category shown when it reopens.
                 property string devToolsToolId: ""
                 property string devToolsCategory: "all"
+                property string devToolsImageFormat: "keep"
+                property int devToolsImageQuality: 80
+                property int devToolsImageScale: 100
+                property bool devToolsImageKeepMetadata: false
+            }
+
+            property JsonObject passwordManager: JsonObject {
+                // Item ids only, most recent first — never names or secrets.
+                property list<string> recent: []
             }
 
             property JsonObject clipboard: JsonObject {
@@ -481,6 +538,11 @@ Singleton {
                             property JsonObject scrcpy: JsonObject {
                                 property list<string> recentPackages: []
                             }
+                            // Mirror / Webcam / Microphone group at the bottom of the tab
+                            property JsonObject peripherals: JsonObject {
+                                property bool collapsed: false
+                                property int tab: 0
+                            }
                         }
                 }
                 property JsonObject bottomGroup: JsonObject {
@@ -499,6 +561,13 @@ Singleton {
 
             property JsonObject hyprland: JsonObject {
                 property string layout: "dwindle"
+            }
+
+            property JsonObject overview: JsonObject {
+                // Real Gnome: screen name -> { x, y, width, height } of the free area
+                // under the workspace thumbnails, last measured. The first open after a
+                // start lands the plane there instead of on an estimate.
+                property var realGnomeAreas: ({})
             }
 
             property JsonObject idle: JsonObject {
@@ -546,12 +615,17 @@ Singleton {
                 // Action sequences paused on a wait or a delay, resumed by the
                 // engine when due: [{kind, id, index, dueAt, resumed, source, failed}]
                 property list<var> pendingSteps: []
+                // Tracked shell commands, newest first (ModeTasks):
+                // [{runId, owner, kind, label, command, dir, startedAt, endedAt, state, exitCode, lost, report}]
+                property list<var> taskRuns: []
             }
 
             property JsonObject overlay: JsonObject {
                 property list<string> open: ["crosshair", "recorder", "media", "volumeMixer", "resources"]
                 property JsonObject crosshair: JsonObject {
                     property bool pinned: false
+                    // Pinned by the auto pin, which only takes back its own pins
+                    property bool autoPinned: false
                     property bool clickthrough: true
                     property real x: 827
                     property real y: 441
@@ -619,11 +693,23 @@ Singleton {
                 }
                 property JsonObject discordVoice: JsonObject {
                     property bool pinned: false
+                    // Pinned by the auto pin, which only takes back its own pins
+                    property bool autoPinned: false
                     property bool clickthrough: false
                     property real x: 80
                     property real y: 600
                     property real width: 344
                     property real height: 200
+                }
+                property JsonObject perfMonitor: JsonObject {
+                    property bool pinned: true
+                    // Pinned by the auto pin, which only takes back its own pins
+                    property bool autoPinned: false
+                    property bool clickthrough: true
+                    property real x: 24
+                    property real y: 80
+                    property real width: 0
+                    property real height: 0
                 }
             }
 
@@ -646,6 +732,13 @@ Singleton {
                 property int seconds: 0
                 property bool loading: false
                 property bool paused: false
+            }
+
+            property JsonObject bar: JsonObject {
+                // The centre layout stashed when "Dynamic Island in bar center"
+                // took the group over. Restored on the way out if the user has
+                // not rebuilt the centre meanwhile; see DynamicIslandConfig.
+                property list<var> centerStash: []
             }
 
             property JsonObject settings: JsonObject {
@@ -672,6 +765,9 @@ Singleton {
                     property int start: 0
                     property bool isBreak: false
                     property int cycle: 0
+                    // Focus sessions finished today (the dock tile marks them).
+                    property string todayDate: ""
+                    property int todayCount: 0
                 }
                 property JsonObject stopwatch: JsonObject {
                     property bool running: false
@@ -687,10 +783,45 @@ Singleton {
                 }
             }
             property list<var> alarms: []
+            // Alarm reliability: when the ring check last ran (so a suspend or a crash is
+            // caught up on the next tick) and the alarms that were too late to ring.
+            property JsonObject alarmState: JsonObject {
+                property real lastCheck: 0
+                property list<var> missed: []
+            }
+            // Bedtime tracking: one entry per night ({ night, target, lastActive,
+            // lateSeconds }), newest last, and which reminders already went out.
+            property JsonObject bedtime: JsonObject {
+                property list<var> nights: []
+                property string windDownNotified: ""
+                property string bedtimeNotified: ""
+                property real lastNudge: 0
+                // Intrusive mode: snoozes taken tonight, keyed like the reminders (night@target).
+                property string intrusiveMark: ""
+                property int snoozeCount: 0
+                property real snoozedUntil: 0
+            }
+            // Screen-time limits: today's ignores, extra time and sent warnings, as
+            // one JSON document so the day can be reset in a single write.
+            property JsonObject screenTime: JsonObject {
+                property string date: ""
+                property string dayJson: "{}"
+            }
             property JsonObject water: JsonObject {
                 property int glassesDrunk: 0
                 property string lastDate: ""
                 property real lastNotify: 0
+                // { "<y-m-d>": glasses } for the last two weeks (the dock card's week).
+                property string historyJson: "{}"
+            }
+            // Dock utility widgets: what they hold between sessions.
+            property JsonObject dockUtilities: JsonObject {
+                // Files and Screenshots: when their panel was last opened (ms);
+                // anything newer counts as new.
+                property real filesSeen: 0
+                property real screenshotsSeen: 0
+                property list<string> shelf: []
+                property list<string> colors: []
             }
             property JsonObject media: JsonObject {
             }

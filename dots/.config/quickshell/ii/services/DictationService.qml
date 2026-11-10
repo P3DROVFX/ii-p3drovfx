@@ -493,7 +493,9 @@ Singleton {
         property bool restarting: false
         running: Config.ready && root.enabled && root.installed && root.modelReady
             && root.configApplied && !root.externalDaemon
-        command: ProcUtils.pdeath(["voxtype", "daemon"])
+        // The model loads when a recording starts, while the audio is already being
+        // captured, instead of holding ~60 MB of RAM and ~150 MB of VRAM all session.
+        command: ProcUtils.pdeath(["voxtype", "--on-demand-loading", "daemon"])
         stderr: SplitParser {
             onRead: data => {
                 // voxtype logs to stderr; only the failures are worth keeping.

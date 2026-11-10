@@ -1,0 +1,6392 @@
+[
+ {
+  "slug": "apple-iphone-13",
+  "name": "iPhone 13",
+  "year": 2021,
+  "height_mm": 146.7,
+  "width_mm": 71.5,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "medium",
+  "camera": "notch",
+  "notch_width_frac": 0.3,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "mute-switch",
+    "start": 0.09,
+    "length": 0.03
+   },
+   {
+    "side": "left",
+    "kind": "volume-up",
+    "start": 0.16,
+    "length": 0.045
+   },
+   {
+    "side": "left",
+    "kind": "volume-down",
+    "start": 0.23,
+    "length": 0.045
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.14,
+    "length": 0.05
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#f9d9dc",
+  "notes": ""
+ },
+ {
+  "slug": "apple-iphone-13-mini",
+  "name": "iPhone 13 mini",
+  "year": 2021,
+  "height_mm": 131.5,
+  "width_mm": 64.2,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "medium",
+  "camera": "notch",
+  "notch_width_frac": 0.34,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "mute-switch",
+    "start": 0.09,
+    "length": 0.035
+   },
+   {
+    "side": "left",
+    "kind": "volume-up",
+    "start": 0.17,
+    "length": 0.05
+   },
+   {
+    "side": "left",
+    "kind": "volume-down",
+    "start": 0.25,
+    "length": 0.05
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.15,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#f9d9dc",
+  "notes": ""
+ },
+ {
+  "slug": "apple-iphone-13-pro",
+  "name": "iPhone 13 Pro",
+  "year": 2021,
+  "height_mm": 146.7,
+  "width_mm": 71.5,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "medium",
+  "camera": "notch",
+  "notch_width_frac": 0.3,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "mute-switch",
+    "start": 0.09,
+    "length": 0.03
+   },
+   {
+    "side": "left",
+    "kind": "volume-up",
+    "start": 0.16,
+    "length": 0.045
+   },
+   {
+    "side": "left",
+    "kind": "volume-down",
+    "start": 0.23,
+    "length": 0.045
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.14,
+    "length": 0.05
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#a9c2d6",
+  "notes": ""
+ },
+ {
+  "slug": "apple-iphone-13-pro-max",
+  "name": "iPhone 13 Pro Max",
+  "year": 2021,
+  "height_mm": 160.8,
+  "width_mm": 78.1,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "medium",
+  "camera": "notch",
+  "notch_width_frac": 0.28,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "mute-switch",
+    "start": 0.09,
+    "length": 0.03
+   },
+   {
+    "side": "left",
+    "kind": "volume-up",
+    "start": 0.15,
+    "length": 0.04
+   },
+   {
+    "side": "left",
+    "kind": "volume-down",
+    "start": 0.21,
+    "length": 0.04
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.13,
+    "length": 0.045
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#a9c2d6",
+  "notes": ""
+ },
+ {
+  "slug": "apple-iphone-14",
+  "name": "iPhone 14",
+  "year": 2022,
+  "height_mm": 146.7,
+  "width_mm": 71.5,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "medium",
+  "camera": "notch",
+  "notch_width_frac": 0.3,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "mute-switch",
+    "start": 0.09,
+    "length": 0.03
+   },
+   {
+    "side": "left",
+    "kind": "volume-up",
+    "start": 0.16,
+    "length": 0.045
+   },
+   {
+    "side": "left",
+    "kind": "volume-down",
+    "start": 0.23,
+    "length": 0.045
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.14,
+    "length": 0.05
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#9fb8c8",
+  "notes": ""
+ },
+ {
+  "slug": "apple-iphone-14-plus",
+  "name": "iPhone 14 Plus",
+  "year": 2022,
+  "height_mm": 160.8,
+  "width_mm": 78.1,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "medium",
+  "camera": "notch",
+  "notch_width_frac": 0.28,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "mute-switch",
+    "start": 0.09,
+    "length": 0.03
+   },
+   {
+    "side": "left",
+    "kind": "volume-up",
+    "start": 0.15,
+    "length": 0.04
+   },
+   {
+    "side": "left",
+    "kind": "volume-down",
+    "start": 0.21,
+    "length": 0.04
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.13,
+    "length": 0.045
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#9fb8c8",
+  "notes": ""
+ },
+ {
+  "slug": "apple-iphone-14-pro",
+  "name": "iPhone 14 Pro",
+  "year": 2022,
+  "height_mm": 147.5,
+  "width_mm": 71.5,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "pill-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "mute-switch",
+    "start": 0.09,
+    "length": 0.03
+   },
+   {
+    "side": "left",
+    "kind": "volume-up",
+    "start": 0.16,
+    "length": 0.045
+   },
+   {
+    "side": "left",
+    "kind": "volume-down",
+    "start": 0.23,
+    "length": 0.045
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.14,
+    "length": 0.05
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#5f5868",
+  "notes": ""
+ },
+ {
+  "slug": "apple-iphone-14-pro-max",
+  "name": "iPhone 14 Pro Max",
+  "year": 2022,
+  "height_mm": 160.7,
+  "width_mm": 77.6,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "pill-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "mute-switch",
+    "start": 0.09,
+    "length": 0.03
+   },
+   {
+    "side": "left",
+    "kind": "volume-up",
+    "start": 0.15,
+    "length": 0.04
+   },
+   {
+    "side": "left",
+    "kind": "volume-down",
+    "start": 0.21,
+    "length": 0.04
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.13,
+    "length": 0.045
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#5f5868",
+  "notes": ""
+ },
+ {
+  "slug": "apple-iphone-se-2022",
+  "name": "iPhone SE (2022)",
+  "year": 2022,
+  "height_mm": 138.4,
+  "width_mm": 67.3,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thick",
+  "camera": "bezel",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "mute-switch",
+    "start": 0.09,
+    "length": 0.04
+   },
+   {
+    "side": "left",
+    "kind": "volume-up",
+    "start": 0.17,
+    "length": 0.06
+   },
+   {
+    "side": "left",
+    "kind": "volume-down",
+    "start": 0.26,
+    "length": 0.06
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.13,
+    "length": 0.06
+   }
+  ],
+  "home_button": true,
+  "spen": false,
+  "frame_hex": "#1e1e20",
+  "notes": ""
+ },
+ {
+  "slug": "apple-iphone-15",
+  "name": "iPhone 15",
+  "year": 2023,
+  "height_mm": 147.6,
+  "width_mm": 71.6,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "pill-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "mute-switch",
+    "start": 0.09,
+    "length": 0.03
+   },
+   {
+    "side": "left",
+    "kind": "volume-up",
+    "start": 0.16,
+    "length": 0.045
+   },
+   {
+    "side": "left",
+    "kind": "volume-down",
+    "start": 0.23,
+    "length": 0.045
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.14,
+    "length": 0.05
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#f5dee1",
+  "notes": ""
+ },
+ {
+  "slug": "apple-iphone-15-plus",
+  "name": "iPhone 15 Plus",
+  "year": 2023,
+  "height_mm": 160.9,
+  "width_mm": 77.8,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "pill-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "mute-switch",
+    "start": 0.09,
+    "length": 0.03
+   },
+   {
+    "side": "left",
+    "kind": "volume-up",
+    "start": 0.15,
+    "length": 0.04
+   },
+   {
+    "side": "left",
+    "kind": "volume-down",
+    "start": 0.21,
+    "length": 0.04
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.13,
+    "length": 0.045
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#f5dee1",
+  "notes": ""
+ },
+ {
+  "slug": "apple-iphone-15-pro",
+  "name": "iPhone 15 Pro",
+  "year": 2023,
+  "height_mm": 146.6,
+  "width_mm": 70.6,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "pill-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "action",
+    "start": 0.09,
+    "length": 0.03
+   },
+   {
+    "side": "left",
+    "kind": "volume-up",
+    "start": 0.16,
+    "length": 0.045
+   },
+   {
+    "side": "left",
+    "kind": "volume-down",
+    "start": 0.23,
+    "length": 0.045
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.14,
+    "length": 0.05
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#8a8477",
+  "notes": ""
+ },
+ {
+  "slug": "apple-iphone-15-pro-max",
+  "name": "iPhone 15 Pro Max",
+  "year": 2023,
+  "height_mm": 159.9,
+  "width_mm": 76.7,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "pill-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "action",
+    "start": 0.09,
+    "length": 0.03
+   },
+   {
+    "side": "left",
+    "kind": "volume-up",
+    "start": 0.15,
+    "length": 0.04
+   },
+   {
+    "side": "left",
+    "kind": "volume-down",
+    "start": 0.21,
+    "length": 0.04
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.13,
+    "length": 0.045
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#8a8477",
+  "notes": ""
+ },
+ {
+  "slug": "apple-iphone-16",
+  "name": "iPhone 16",
+  "year": 2024,
+  "height_mm": 147.6,
+  "width_mm": 71.6,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "pill-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "action",
+    "start": 0.09,
+    "length": 0.03
+   },
+   {
+    "side": "left",
+    "kind": "volume-up",
+    "start": 0.16,
+    "length": 0.045
+   },
+   {
+    "side": "left",
+    "kind": "volume-down",
+    "start": 0.23,
+    "length": 0.045
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.14,
+    "length": 0.05
+   },
+   {
+    "side": "right",
+    "kind": "camera-control",
+    "start": 0.85,
+    "length": 0.05
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#7c8dc0",
+  "notes": ""
+ },
+ {
+  "slug": "apple-iphone-16-plus",
+  "name": "iPhone 16 Plus",
+  "year": 2024,
+  "height_mm": 160.9,
+  "width_mm": 77.8,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "pill-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "action",
+    "start": 0.09,
+    "length": 0.03
+   },
+   {
+    "side": "left",
+    "kind": "volume-up",
+    "start": 0.15,
+    "length": 0.04
+   },
+   {
+    "side": "left",
+    "kind": "volume-down",
+    "start": 0.21,
+    "length": 0.04
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.13,
+    "length": 0.045
+   },
+   {
+    "side": "right",
+    "kind": "camera-control",
+    "start": 0.85,
+    "length": 0.05
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#7c8dc0",
+  "notes": ""
+ },
+ {
+  "slug": "apple-iphone-16-pro",
+  "name": "iPhone 16 Pro",
+  "year": 2024,
+  "height_mm": 149.6,
+  "width_mm": 71.5,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "pill-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "action",
+    "start": 0.09,
+    "length": 0.03
+   },
+   {
+    "side": "left",
+    "kind": "volume-up",
+    "start": 0.16,
+    "length": 0.045
+   },
+   {
+    "side": "left",
+    "kind": "volume-down",
+    "start": 0.23,
+    "length": 0.045
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.14,
+    "length": 0.05
+   },
+   {
+    "side": "right",
+    "kind": "camera-control",
+    "start": 0.85,
+    "length": 0.05
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#c7bba1",
+  "notes": ""
+ },
+ {
+  "slug": "apple-iphone-16-pro-max",
+  "name": "iPhone 16 Pro Max",
+  "year": 2024,
+  "height_mm": 163.0,
+  "width_mm": 77.6,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "pill-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "action",
+    "start": 0.09,
+    "length": 0.03
+   },
+   {
+    "side": "left",
+    "kind": "volume-up",
+    "start": 0.15,
+    "length": 0.04
+   },
+   {
+    "side": "left",
+    "kind": "volume-down",
+    "start": 0.21,
+    "length": 0.04
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.13,
+    "length": 0.045
+   },
+   {
+    "side": "right",
+    "kind": "camera-control",
+    "start": 0.85,
+    "length": 0.05
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#c7bba1",
+  "notes": ""
+ },
+ {
+  "slug": "apple-iphone-16e",
+  "name": "iPhone 16e",
+  "year": 2025,
+  "height_mm": 146.7,
+  "width_mm": 71.5,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "medium",
+  "camera": "notch",
+  "notch_width_frac": 0.3,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "action",
+    "start": 0.09,
+    "length": 0.03
+   },
+   {
+    "side": "left",
+    "kind": "volume-up",
+    "start": 0.16,
+    "length": 0.045
+   },
+   {
+    "side": "left",
+    "kind": "volume-down",
+    "start": 0.23,
+    "length": 0.045
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.14,
+    "length": 0.05
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1c1c1e",
+  "notes": ""
+ },
+ {
+  "slug": "apple-iphone-17",
+  "name": "iPhone 17",
+  "year": 2025,
+  "height_mm": 149.6,
+  "width_mm": 71.5,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "pill-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "action",
+    "start": 0.09,
+    "length": 0.03
+   },
+   {
+    "side": "left",
+    "kind": "volume-up",
+    "start": 0.16,
+    "length": 0.045
+   },
+   {
+    "side": "left",
+    "kind": "volume-down",
+    "start": 0.23,
+    "length": 0.045
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.14,
+    "length": 0.05
+   },
+   {
+    "side": "right",
+    "kind": "camera-control",
+    "start": 0.85,
+    "length": 0.05
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#dcd3e8",
+  "notes": ""
+ },
+ {
+  "slug": "apple-iphone-17-pro",
+  "name": "iPhone 17 Pro",
+  "year": 2025,
+  "height_mm": 150.0,
+  "width_mm": 71.9,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "pill-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "action",
+    "start": 0.09,
+    "length": 0.03
+   },
+   {
+    "side": "left",
+    "kind": "volume-up",
+    "start": 0.16,
+    "length": 0.045
+   },
+   {
+    "side": "left",
+    "kind": "volume-down",
+    "start": 0.23,
+    "length": 0.045
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.14,
+    "length": 0.05
+   },
+   {
+    "side": "right",
+    "kind": "camera-control",
+    "start": 0.85,
+    "length": 0.05
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#c7653a",
+  "notes": ""
+ },
+ {
+  "slug": "apple-iphone-17-pro-max",
+  "name": "iPhone 17 Pro Max",
+  "year": 2025,
+  "height_mm": 163.4,
+  "width_mm": 78.0,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "pill-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "action",
+    "start": 0.09,
+    "length": 0.03
+   },
+   {
+    "side": "left",
+    "kind": "volume-up",
+    "start": 0.15,
+    "length": 0.04
+   },
+   {
+    "side": "left",
+    "kind": "volume-down",
+    "start": 0.21,
+    "length": 0.04
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.13,
+    "length": 0.045
+   },
+   {
+    "side": "right",
+    "kind": "camera-control",
+    "start": 0.85,
+    "length": 0.05
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#c7653a",
+  "notes": ""
+ },
+ {
+  "slug": "apple-iphone-air",
+  "name": "iPhone Air",
+  "year": 2025,
+  "height_mm": 156.2,
+  "width_mm": 74.7,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "pill-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "action",
+    "start": 0.09,
+    "length": 0.03
+   },
+   {
+    "side": "left",
+    "kind": "volume-up",
+    "start": 0.15,
+    "length": 0.04
+   },
+   {
+    "side": "left",
+    "kind": "volume-down",
+    "start": 0.21,
+    "length": 0.04
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.13,
+    "length": 0.045
+   },
+   {
+    "side": "right",
+    "kind": "camera-control",
+    "start": 0.85,
+    "length": 0.05
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#afc9dd",
+  "notes": ""
+ },
+ {
+  "slug": "apple-iphone-17e",
+  "name": "iPhone 17e",
+  "year": 2026,
+  "height_mm": 146.7,
+  "width_mm": 71.5,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "medium",
+  "camera": "notch",
+  "notch_width_frac": 0.3,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "action",
+    "start": 0.09,
+    "length": 0.03
+   },
+   {
+    "side": "left",
+    "kind": "volume-up",
+    "start": 0.16,
+    "length": 0.045
+   },
+   {
+    "side": "left",
+    "kind": "volume-down",
+    "start": 0.23,
+    "length": 0.045
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.14,
+    "length": 0.05
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1c1c1e",
+  "notes": ""
+ },
+ {
+  "slug": "cmf-phone-1",
+  "name": "CMF Phone 1",
+  "year": 2024,
+  "height_mm": 162.7,
+  "width_mm": 76.6,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "volume-rocker",
+    "start": 0.2,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.26,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#FF6B1A",
+  "notes": "Iconic bright orange launch colourway; screw-accented removable back panel is a back-only detail."
+ },
+ {
+  "slug": "cmf-phone-2-pro",
+  "name": "CMF Phone 2 Pro",
+  "year": 2025,
+  "height_mm": 163.6,
+  "width_mm": 77.0,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "volume-rocker",
+    "start": 0.2,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.26,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#FF6B1A",
+  "notes": "Continues CMF's orange accent design language and modular screw-back aesthetic (back-only)."
+ },
+ {
+  "slug": "fairphone-4",
+  "name": "FP4",
+  "year": 2021,
+  "height_mm": 161.6,
+  "width_mm": 75.5,
+  "form": "bar",
+  "corner": "square",
+  "bezel": "thick",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "volume-rocker",
+    "start": 0.2,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.26,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#6B7A6E",
+  "notes": "Notably thick, uniform bezels on all sides (repairable/modular design priority); boxy, minimal corner radius."
+ },
+ {
+  "slug": "fairphone-5",
+  "name": "FP5",
+  "year": 2023,
+  "height_mm": 161.6,
+  "width_mm": 75.8,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thick",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "volume-rocker",
+    "start": 0.2,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.26,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#AFC6D6",
+  "notes": "Softer, more rounded corners than FP4 but bezels remain characteristically thick and uniform."
+ },
+ {
+  "slug": "fairphone-6",
+  "name": "FP6",
+  "year": 2025,
+  "height_mm": 156.57,
+  "width_mm": 73.28,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thick",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "volume-rocker",
+    "start": 0.2,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.26,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#7C8B7E",
+  "notes": "Continues thick-bezel repairable design language, marginally slimmer body than FP5; dimensions estimated from memory, not independently verified this session."
+ },
+ {
+  "slug": "google-pixel-6",
+  "name": "Pixel 6",
+  "year": 2021,
+  "height_mm": 158.6,
+  "width_mm": 74.8,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.17,
+    "length": 0.06
+   },
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.26,
+    "length": 0.13
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#2B2B2E",
+  "notes": "Flat front glass (no curved edges, unlike 6 Pro); two-tone camera bar is a back-only detail."
+ },
+ {
+  "slug": "google-pixel-6-pro",
+  "name": "Pixel 6 Pro",
+  "year": 2021,
+  "height_mm": 163.9,
+  "width_mm": 75.9,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.17,
+    "length": 0.06
+   },
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.26,
+    "length": 0.13
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#2B2B2E",
+  "notes": "Curved-edge display glass wraps the side rails, most distinctive silhouette trait of this generation."
+ },
+ {
+  "slug": "google-pixel-6a",
+  "name": "Pixel 6a",
+  "year": 2022,
+  "height_mm": 152.2,
+  "width_mm": 71.8,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thick",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.19,
+    "length": 0.07
+   },
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.29,
+    "length": 0.13
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#E4E1D8",
+  "notes": "Flat sides, no curved glass; chin visibly thicker than top/sides. Side fingerprint built into power button."
+ },
+ {
+  "slug": "google-pixel-7",
+  "name": "Pixel 7",
+  "year": 2022,
+  "height_mm": 155.6,
+  "width_mm": 73.2,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.17,
+    "length": 0.06
+   },
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.26,
+    "length": 0.13
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#28282A",
+  "notes": "Flat sides, uniform thin bezels; camera bar color-matched to frame (back-only detail)."
+ },
+ {
+  "slug": "google-pixel-7-pro",
+  "name": "Pixel 7 Pro",
+  "year": 2022,
+  "height_mm": 162.9,
+  "width_mm": 76.6,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.17,
+    "length": 0.06
+   },
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.26,
+    "length": 0.13
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#82806E",
+  "notes": "Last generation with pronounced curved-glass side profile before Google flattened the design in the 8 series."
+ },
+ {
+  "slug": "google-pixel-7a",
+  "name": "Pixel 7a",
+  "year": 2023,
+  "height_mm": 152.0,
+  "width_mm": 72.9,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thick",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.19,
+    "length": 0.07
+   },
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.29,
+    "length": 0.13
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#6D93A4",
+  "notes": "Chin bezel considerably thicker than the rest, most visibly budget of the a-series covered here."
+ },
+ {
+  "slug": "google-pixel-8",
+  "name": "Pixel 8",
+  "year": 2023,
+  "height_mm": 150.5,
+  "width_mm": 70.8,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.17,
+    "length": 0.06
+   },
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.26,
+    "length": 0.13
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#28282A",
+  "notes": "Google roughly doubled the front corner radius vs Pixel 7, first generation with the pronounced 'squircle' corners."
+ },
+ {
+  "slug": "google-pixel-8-pro",
+  "name": "Pixel 8 Pro",
+  "year": 2023,
+  "height_mm": 162.6,
+  "width_mm": 76.5,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.17,
+    "length": 0.06
+   },
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.26,
+    "length": 0.13
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#7E99A8",
+  "notes": "Flattened the curved-glass sides entirely while going rounder in the corners vs 7 Pro; a real design inflection point."
+ },
+ {
+  "slug": "google-pixel-fold",
+  "name": "Pixel Fold",
+  "year": 2023,
+  "height_mm": 139.7,
+  "width_mm": 158.7,
+  "form": "book-fold",
+  "corner": "rounded",
+  "bezel": "thick",
+  "camera": "bezel",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.19,
+    "length": 0.07
+   },
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.29,
+    "length": 0.13
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#2C2C2E",
+  "notes": "Inner-screen selfie camera sits in a bezel strip above the display rather than a punch-hole cutout; unfolded shape is nearly square/slightly wide, very distinct vs bar phones."
+ },
+ {
+  "slug": "google-pixel-8a",
+  "name": "Pixel 8a",
+  "year": 2024,
+  "height_mm": 152.1,
+  "width_mm": 72.7,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thick",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.19,
+    "length": 0.07
+   },
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.29,
+    "length": 0.13
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#A9BE93",
+  "notes": "8-series rounded-corner shape combined with a-series' thicker chin."
+ },
+ {
+  "slug": "google-pixel-9",
+  "name": "Pixel 9",
+  "year": 2024,
+  "height_mm": 152.8,
+  "width_mm": 72.0,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.17,
+    "length": 0.06
+   },
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.26,
+    "length": 0.13
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#2B2B2C",
+  "notes": "Flat non-curved front glass, boxier silhouette than Pixel 8, even bezels on all sides."
+ },
+ {
+  "slug": "google-pixel-9-pro",
+  "name": "Pixel 9 Pro",
+  "year": 2024,
+  "height_mm": 152.8,
+  "width_mm": 72.0,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.17,
+    "length": 0.06
+   },
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.26,
+    "length": 0.13
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#7C7C68",
+  "notes": "Identical footprint to base Pixel 9, first year Pro and base share the same body size."
+ },
+ {
+  "slug": "google-pixel-9-pro-fold",
+  "name": "Pixel 9 Pro Fold",
+  "year": 2024,
+  "height_mm": 155.2,
+  "width_mm": 150.2,
+  "form": "book-fold",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-right",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.19,
+    "length": 0.07
+   },
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.29,
+    "length": 0.13
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#2B2B2C",
+  "notes": "Google narrowed/lengthened the cover screen vs the 2023 Pixel Fold so folded aspect ratio looks like an ordinary phone; inner camera moved to an actual hole-punch cutout instead of a bezel strip."
+ },
+ {
+  "slug": "google-pixel-9-pro-xl",
+  "name": "Pixel 9 Pro XL",
+  "year": 2024,
+  "height_mm": 162.8,
+  "width_mm": 76.6,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.17,
+    "length": 0.06
+   },
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.26,
+    "length": 0.13
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#7C7C68",
+  "notes": "Same design as 9 Pro, taller/wider body for the 6.8\" screen."
+ },
+ {
+  "slug": "google-pixel-10",
+  "name": "Pixel 10",
+  "year": 2025,
+  "height_mm": 152.8,
+  "width_mm": 72.0,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.17,
+    "length": 0.06
+   },
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.26,
+    "length": 0.13
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#C7CDD1",
+  "notes": "Same footprint and front design as Pixel 9; third rear camera is a back-only change."
+ },
+ {
+  "slug": "google-pixel-10-pro",
+  "name": "Pixel 10 Pro",
+  "year": 2025,
+  "height_mm": 152.8,
+  "width_mm": 72.0,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.17,
+    "length": 0.06
+   },
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.26,
+    "length": 0.13
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#B9C9AE",
+  "notes": "Front design essentially unchanged from Pixel 9 Pro."
+ },
+ {
+  "slug": "google-pixel-10-pro-fold",
+  "name": "Pixel 10 Pro Fold",
+  "year": 2025,
+  "height_mm": 155.2,
+  "width_mm": 150.4,
+  "form": "book-fold",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-right",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.19,
+    "length": 0.07
+   },
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.29,
+    "length": 0.13
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#2B2B2C",
+  "notes": "Same normal-phone folded aspect ratio as 9 Pro Fold, thinner even bezels."
+ },
+ {
+  "slug": "google-pixel-10-pro-xl",
+  "name": "Pixel 10 Pro XL",
+  "year": 2025,
+  "height_mm": 162.8,
+  "width_mm": 76.6,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.17,
+    "length": 0.06
+   },
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.26,
+    "length": 0.13
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#B9C9AE",
+  "notes": "Same design as 10 Pro, taller/wider body."
+ },
+ {
+  "slug": "google-pixel-9a",
+  "name": "Pixel 9a",
+  "year": 2025,
+  "height_mm": 154.7,
+  "width_mm": 73.3,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thick",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.19,
+    "length": 0.07
+   },
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.29,
+    "length": 0.13
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#DAD6CE",
+  "notes": "Bottom bezel only marginally thicker than top/sides (evened out vs 8a's uneven chin), plastic back."
+ },
+ {
+  "slug": "google-pixel-10a",
+  "name": "Pixel 10a",
+  "year": 2026,
+  "height_mm": 153.9,
+  "width_mm": 73.0,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thick",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.19,
+    "length": 0.07
+   },
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.29,
+    "length": 0.13
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#DCE5DE",
+  "notes": "Own a-series-only color palette this gen; thick but symmetric bezels, plastic back."
+ },
+ {
+  "slug": "google-pixel-11",
+  "name": "Pixel 11",
+  "year": 2026,
+  "height_mm": 152.8,
+  "width_mm": 72.0,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.17,
+    "length": 0.06
+   },
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.26,
+    "length": 0.13
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#C7CDD1",
+  "notes": "Front design essentially unchanged from Pixel 10; main differentiator is a rear LED ring (back-only)."
+ },
+ {
+  "slug": "google-pixel-11-pro",
+  "name": "Pixel 11 Pro",
+  "year": 2026,
+  "height_mm": 152.7,
+  "width_mm": 71.9,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.17,
+    "length": 0.06
+   },
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.26,
+    "length": 0.13
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#C9BBA0",
+  "notes": "New glossy color-matched frames (Dune/Pine) vs prior matte two-tone frames; front layout otherwise unchanged."
+ },
+ {
+  "slug": "google-pixel-11-pro-fold",
+  "name": "Pixel 11 Pro Fold",
+  "year": 2026,
+  "height_mm": 155.2,
+  "width_mm": 150.4,
+  "form": "book-fold",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.19,
+    "length": 0.07
+   },
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.29,
+    "length": 0.13
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#2B2B2C",
+  "notes": "Normal-phone folded aspect ratio, consistent with 9/10 Pro Fold generation."
+ },
+ {
+  "slug": "google-pixel-11-pro-xl",
+  "name": "Pixel 11 Pro XL",
+  "year": 2026,
+  "height_mm": 162.7,
+  "width_mm": 76.5,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.17,
+    "length": 0.06
+   },
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.26,
+    "length": 0.13
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#C9BBA0",
+  "notes": "Same design as 11 Pro, taller/wider body."
+ },
+ {
+  "slug": "motorola-edge-2022",
+  "name": "motorola edge (2022)",
+  "year": 2022,
+  "height_mm": 161.2,
+  "width_mm": 71.2,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.16,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.3,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#202a44",
+  "notes": "US-market model, same chassis/front design as international Edge 30 Pro (lower-confidence mapping, unverified)"
+ },
+ {
+  "slug": "motorola-edge-30",
+  "name": "motorola edge 30",
+  "year": 2022,
+  "height_mm": 160.9,
+  "width_mm": 71.8,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.16,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.3,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#4b4b4d",
+  "notes": "Slim flat-ish AMOLED, in-display fingerprint, thin body (7.6mm)"
+ },
+ {
+  "slug": "motorola-edge-30-fusion",
+  "name": "motorola edge 30 fusion",
+  "year": 2022,
+  "height_mm": 160.6,
+  "width_mm": 72.4,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.16,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.3,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#a63a50",
+  "notes": "Curved endless-edge display, Viva Magenta launch colour"
+ },
+ {
+  "slug": "motorola-edge-30-neo",
+  "name": "motorola edge 30 neo",
+  "year": 2022,
+  "height_mm": 158.4,
+  "width_mm": 71.2,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.16,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.3,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#c9cbc7",
+  "notes": "Flat display, compact 30-series"
+ },
+ {
+  "slug": "motorola-edge-30-pro",
+  "name": "motorola edge 30 pro",
+  "year": 2022,
+  "height_mm": 161.2,
+  "width_mm": 71.2,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.16,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.3,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#202a44",
+  "notes": "Curved endless-edge display"
+ },
+ {
+  "slug": "motorola-edge-30-ultra",
+  "name": "motorola edge 30 ultra",
+  "year": 2022,
+  "height_mm": 163.2,
+  "width_mm": 74.6,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "under-display",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.16,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.3,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1b1b1d",
+  "notes": "Motorola's first under-display selfie camera, no visible hole; curved endless-edge display"
+ },
+ {
+  "slug": "motorola-moto-g-stylus-2022",
+  "name": "moto g stylus 5G - 2022",
+  "year": 2022,
+  "height_mm": 165.44,
+  "width_mm": 75.96,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "medium",
+  "camera": "hole-left",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.14,
+    "length": 0.11
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.26,
+    "length": 0.08
+   }
+  ],
+  "home_button": false,
+  "spen": true,
+  "frame_hex": "#2e2e30",
+  "notes": "Stylus silo on bottom edge; side fingerprint reader merged into power button"
+ },
+ {
+  "slug": "motorola-razr-2022",
+  "name": "motorola razr 2022",
+  "year": 2022,
+  "height_mm": 169.5,
+  "width_mm": 73.95,
+  "form": "flip",
+  "corner": "very-rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.36,
+    "length": 0.1
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.48,
+    "length": 0.08
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#2b2b2b",
+  "notes": "Unfolded dims; visible hinge crease line across the middle of the inner display; small outer cover screen"
+ },
+ {
+  "slug": "motorola-edge-2023",
+  "name": "motorola edge (2023)",
+  "year": 2023,
+  "height_mm": 160.6,
+  "width_mm": 71.99,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.16,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.3,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1c1c1e",
+  "notes": "US-market model, likely shares chassis/front design with international Edge 40 (lower-confidence mapping, unverified)"
+ },
+ {
+  "slug": "motorola-edge-40",
+  "name": "motorola edge 40",
+  "year": 2023,
+  "height_mm": 159.9,
+  "width_mm": 71.99,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.16,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.3,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1c1c1e",
+  "notes": "Curved endless-edge display, compact flagship"
+ },
+ {
+  "slug": "motorola-edge-40-neo",
+  "name": "motorola edge 40 neo",
+  "year": 2023,
+  "height_mm": 161.09,
+  "width_mm": 71.99,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.16,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.3,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#b7a9c9",
+  "notes": "Slightly flatter than Pro; pastel Soft Lavender launch colour"
+ },
+ {
+  "slug": "motorola-edge-40-pro",
+  "name": "motorola edge 40 pro",
+  "year": 2023,
+  "height_mm": 161.2,
+  "width_mm": 72.6,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.16,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.3,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1a1a1c",
+  "notes": "Curved endless-edge display"
+ },
+ {
+  "slug": "motorola-moto-g-stylus-2023",
+  "name": "moto g stylus 5G - 2023",
+  "year": 2023,
+  "height_mm": 168.4,
+  "width_mm": 76.4,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "medium",
+  "camera": "hole-left",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.14,
+    "length": 0.11
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.26,
+    "length": 0.08
+   }
+  ],
+  "home_button": false,
+  "spen": true,
+  "frame_hex": "#1f3a5f",
+  "notes": "Stylus silo on bottom edge; dimensions approximate (low confidence)"
+ },
+ {
+  "slug": "motorola-moto-g84",
+  "name": "moto g84 5g",
+  "year": 2023,
+  "height_mm": 160.05,
+  "width_mm": 73.96,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.16,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.3,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#a63a50",
+  "notes": "Curved pOLED display, unusual for its price tier; in-display fingerprint"
+ },
+ {
+  "slug": "motorola-razr-40",
+  "name": "motorola razr 40",
+  "year": 2023,
+  "height_mm": 170.83,
+  "width_mm": 73.95,
+  "form": "flip",
+  "corner": "very-rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.36,
+    "length": 0.1
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.48,
+    "length": 0.08
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#9cae94",
+  "notes": "Unfolded dims; hinge crease line; small cover screen; Sage Green vegan-leather launch colour"
+ },
+ {
+  "slug": "motorola-razr-40-ultra",
+  "name": "motorola razr 40 ultra",
+  "year": 2023,
+  "height_mm": 170.83,
+  "width_mm": 73.95,
+  "form": "flip",
+  "corner": "very-rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.36,
+    "length": 0.1
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.48,
+    "length": 0.08
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#a63a50",
+  "notes": "Unfolded dims; sold as razr+ 2023 in the US; hinge crease line; large 3.6in outer cover screen"
+ },
+ {
+  "slug": "motorola-edge-2024",
+  "name": "motorola edge (2024)",
+  "year": 2024,
+  "height_mm": 161.35,
+  "width_mm": 71.99,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.16,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.3,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#f0c3a0",
+  "notes": "US-market model, likely shares chassis/front design with international Edge 50 Pro (lower-confidence mapping, unverified)"
+ },
+ {
+  "slug": "motorola-edge-50",
+  "name": "motorola edge 50",
+  "year": 2024,
+  "height_mm": 160.1,
+  "width_mm": 71.9,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.16,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.3,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#3c5a45",
+  "notes": "Vanilla Edge 50, limited-market release; dimensions approximate, low confidence"
+ },
+ {
+  "slug": "motorola-edge-50-fusion",
+  "name": "motorola edge 50 fusion",
+  "year": 2024,
+  "height_mm": 160.1,
+  "width_mm": 71.9,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.16,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.3,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#e0507a",
+  "notes": "Curved endless-edge display, mid-range"
+ },
+ {
+  "slug": "motorola-edge-50-neo",
+  "name": "motorola edge 50 neo",
+  "year": 2024,
+  "height_mm": 158.44,
+  "width_mm": 71.99,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.16,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.3,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#d9633b",
+  "notes": "Flat display, compact"
+ },
+ {
+  "slug": "motorola-edge-50-pro",
+  "name": "motorola edge 50 pro",
+  "year": 2024,
+  "height_mm": 161.35,
+  "width_mm": 71.99,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.16,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.3,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#f0c3a0",
+  "notes": "Curved endless-edge display, Peach Fuzz launch colour with vegan-leather back"
+ },
+ {
+  "slug": "motorola-edge-50-ultra",
+  "name": "motorola edge 50 ultra",
+  "year": 2024,
+  "height_mm": 161.35,
+  "width_mm": 72.4,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.16,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.3,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#cdb499",
+  "notes": "Curved endless-edge display"
+ },
+ {
+  "slug": "motorola-moto-g-stylus-2024",
+  "name": "moto g stylus 5G - 2024",
+  "year": 2024,
+  "height_mm": 161.7,
+  "width_mm": 73.8,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.14,
+    "length": 0.11
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.26,
+    "length": 0.08
+   }
+  ],
+  "home_button": false,
+  "spen": true,
+  "frame_hex": "#1f4e8c",
+  "notes": "Redesigned with curved display and unified centre-hole camera like Edge series; stylus silo on bottom edge; dimensions approximate"
+ },
+ {
+  "slug": "motorola-moto-g85",
+  "name": "moto g85 5g",
+  "year": 2024,
+  "height_mm": 161.32,
+  "width_mm": 73.98,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.16,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.3,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#23477a",
+  "notes": "Curved pOLED display; in-display fingerprint"
+ },
+ {
+  "slug": "motorola-razr-50",
+  "name": "motorola razr 50",
+  "year": 2024,
+  "height_mm": 171.2,
+  "width_mm": 74.0,
+  "form": "flip",
+  "corner": "very-rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.36,
+    "length": 0.1
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.48,
+    "length": 0.08
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#e75d8c",
+  "notes": "Unfolded dims; hinge crease line"
+ },
+ {
+  "slug": "motorola-razr-50-ultra",
+  "name": "motorola razr 50 ultra",
+  "year": 2024,
+  "height_mm": 171.24,
+  "width_mm": 73.99,
+  "form": "flip",
+  "corner": "very-rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.36,
+    "length": 0.1
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.48,
+    "length": 0.08
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#4f9a72",
+  "notes": "Unfolded dims; sold as razr+ 2024 in the US; hinge crease line; large full-cover outer screen"
+ },
+ {
+  "slug": "motorola-edge-2025",
+  "name": "motorola edge (2025)",
+  "year": 2025,
+  "height_mm": 160.1,
+  "width_mm": 72.0,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.16,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.3,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#e2a68b",
+  "notes": "US-market model, likely shares chassis/front design with international Edge 60 Fusion (lower-confidence mapping, unverified)"
+ },
+ {
+  "slug": "motorola-edge-60",
+  "name": "motorola edge 60",
+  "year": 2025,
+  "height_mm": 160.1,
+  "width_mm": 71.99,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.16,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.3,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#2b3a4a",
+  "notes": "Dimensions approximate (low confidence, no web verification)"
+ },
+ {
+  "slug": "motorola-edge-60-fusion",
+  "name": "motorola edge 60 fusion",
+  "year": 2025,
+  "height_mm": 160.1,
+  "width_mm": 72.0,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.16,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.3,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#e2a68b",
+  "notes": "Dimensions approximate (low confidence)"
+ },
+ {
+  "slug": "motorola-edge-60-pro",
+  "name": "motorola edge 60 pro",
+  "year": 2025,
+  "height_mm": 161.35,
+  "width_mm": 72.6,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.16,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.3,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#2b4c8c",
+  "notes": "Curved endless-edge display; dimensions approximate (low confidence)"
+ },
+ {
+  "slug": "motorola-moto-g-stylus-2025",
+  "name": "moto g stylus 5G - 2025",
+  "year": 2025,
+  "height_mm": 161.53,
+  "width_mm": 73.76,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.14,
+    "length": 0.11
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.26,
+    "length": 0.08
+   }
+  ],
+  "home_button": false,
+  "spen": true,
+  "frame_hex": "#33503a",
+  "notes": "Stylus silo on bottom edge; dimensions approximate (low confidence)"
+ },
+ {
+  "slug": "motorola-moto-g86",
+  "name": "moto g86 5g",
+  "year": 2025,
+  "height_mm": 161.5,
+  "width_mm": 74.0,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.16,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.3,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#2c4a72",
+  "notes": "Successor to g85; existence and exact dimensions unverified/low confidence, no web search performed"
+ },
+ {
+  "slug": "motorola-razr-60",
+  "name": "motorola razr 60",
+  "year": 2025,
+  "height_mm": 171.4,
+  "width_mm": 74.0,
+  "form": "flip",
+  "corner": "very-rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.36,
+    "length": 0.1
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.48,
+    "length": 0.08
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#8c2f39",
+  "notes": "Unfolded dims (approximate, low confidence); hinge crease line"
+ },
+ {
+  "slug": "motorola-razr-60-ultra",
+  "name": "motorola razr 60 ultra",
+  "year": 2025,
+  "height_mm": 171.4,
+  "width_mm": 74.0,
+  "form": "flip",
+  "corner": "very-rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.36,
+    "length": 0.1
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.48,
+    "length": 0.08
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#c94f6d",
+  "notes": "Unfolded dims (approximate, low confidence); sold as razr+ 2025 in the US; hinge crease line; large outer cover screen"
+ },
+ {
+  "slug": "nothing-phone-1",
+  "name": "Phone (1)",
+  "year": 2022,
+  "height_mm": 159.2,
+  "width_mm": 75.8,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "volume-rocker",
+    "start": 0.2,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.28,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#E8E8E6",
+  "notes": "Transparent back and Glyph LED interface are back-only, not visible from front; symmetric bezels."
+ },
+ {
+  "slug": "nothing-phone-2",
+  "name": "Phone (2)",
+  "year": 2023,
+  "height_mm": 162.1,
+  "width_mm": 76.4,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "volume-rocker",
+    "start": 0.2,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.28,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#3A3A3A",
+  "notes": "Nothing marketed near-uniform thin bezels around the display as a headline feature."
+ },
+ {
+  "slug": "nothing-phone-2a",
+  "name": "Phone (2a)",
+  "year": 2024,
+  "height_mm": 161.7,
+  "width_mm": 76.3,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "volume-rocker",
+    "start": 0.2,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.28,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1C1C1C",
+  "notes": "Budget-tier bezels slightly thicker than Phone (2), still fairly even."
+ },
+ {
+  "slug": "nothing-phone-2a-plus",
+  "name": "Phone (2a) Plus",
+  "year": 2024,
+  "height_mm": 161.7,
+  "width_mm": 76.3,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "volume-rocker",
+    "start": 0.2,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.28,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1C1C1C",
+  "notes": "Same body/front design as Phone (2a), internal spec bump only."
+ },
+ {
+  "slug": "nothing-phone-3",
+  "name": "Phone (3)",
+  "year": 2025,
+  "height_mm": 160.6,
+  "width_mm": 75.6,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "volume-rocker",
+    "start": 0.2,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.28,
+    "length": 0.06
+   },
+   {
+    "side": "right",
+    "kind": "other",
+    "start": 0.36,
+    "length": 0.05
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1A1A1A",
+  "notes": "Dedicated 'Essential Key' button added below power (right side); Glyph Matrix display is back-only."
+ },
+ {
+  "slug": "nothing-phone-3a",
+  "name": "Phone (3a)",
+  "year": 2025,
+  "height_mm": 163.5,
+  "width_mm": 77.5,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "volume-rocker",
+    "start": 0.2,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.28,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1A1A1A",
+  "notes": "Distinctive raised camera console is a back-only detail; front layout continues 2a-series language."
+ },
+ {
+  "slug": "nothing-phone-3a-pro",
+  "name": "Phone (3a) Pro",
+  "year": 2025,
+  "height_mm": 163.5,
+  "width_mm": 77.5,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "volume-rocker",
+    "start": 0.2,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.28,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1A1A1A",
+  "notes": "Slightly taller/wider than base 3a to fit larger periscope camera module (back-only)."
+ },
+ {
+  "slug": "oneplus-10-pro",
+  "name": "OnePlus 10 Pro",
+  "year": 2022,
+  "height_mm": 163.0,
+  "width_mm": 73.9,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-left",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "volume-rocker",
+    "start": 0.13,
+    "length": 0.1
+   },
+   {
+    "side": "right",
+    "kind": "alert-slider",
+    "start": 0.08,
+    "length": 0.04
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.15,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1F3D2B",
+  "notes": "quad-curved display edges"
+ },
+ {
+  "slug": "oneplus-10t",
+  "name": "OnePlus 10T",
+  "year": 2022,
+  "height_mm": 163.0,
+  "width_mm": 75.4,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "volume-rocker",
+    "start": 0.12,
+    "length": 0.1
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.14,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1B3A2E",
+  "notes": "flat display, no alert slider (dropped for this model)"
+ },
+ {
+  "slug": "oneplus-nord-2t",
+  "name": "OnePlus Nord 2T",
+  "year": 2022,
+  "height_mm": 159.1,
+  "width_mm": 73.2,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "volume-rocker",
+    "start": 0.13,
+    "length": 0.1
+   },
+   {
+    "side": "right",
+    "kind": "alert-slider",
+    "start": 0.08,
+    "length": 0.04
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.15,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#3C5F52",
+  "notes": ""
+ },
+ {
+  "slug": "oneplus-nord-ce-2",
+  "name": "OnePlus Nord CE 2",
+  "year": 2022,
+  "height_mm": 159.1,
+  "width_mm": 73.2,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "volume-rocker",
+    "start": 0.12,
+    "length": 0.1
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.14,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#3A3A3C",
+  "notes": "no alert slider"
+ },
+ {
+  "slug": "oneplus-11",
+  "name": "OnePlus 11",
+  "year": 2023,
+  "height_mm": 163.1,
+  "width_mm": 74.1,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-left",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "volume-rocker",
+    "start": 0.13,
+    "length": 0.1
+   },
+   {
+    "side": "right",
+    "kind": "alert-slider",
+    "start": 0.08,
+    "length": 0.04
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.15,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1F3B2E",
+  "notes": "curved display edges"
+ },
+ {
+  "slug": "oneplus-nord-3",
+  "name": "OnePlus Nord 3",
+  "year": 2023,
+  "height_mm": 162.9,
+  "width_mm": 75.1,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "volume-rocker",
+    "start": 0.13,
+    "length": 0.1
+   },
+   {
+    "side": "right",
+    "kind": "alert-slider",
+    "start": 0.08,
+    "length": 0.04
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.15,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#4A6B5C",
+  "notes": ""
+ },
+ {
+  "slug": "oneplus-nord-ce-3",
+  "name": "OnePlus Nord CE 3",
+  "year": 2023,
+  "height_mm": 162.9,
+  "width_mm": 75.3,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "volume-rocker",
+    "start": 0.12,
+    "length": 0.1
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.14,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1E5FA8",
+  "notes": "no alert slider"
+ },
+ {
+  "slug": "oneplus-open",
+  "name": "OnePlus Open",
+  "year": 2023,
+  "height_mm": 153.4,
+  "width_mm": 143.1,
+  "form": "book-fold",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-left",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "volume-rocker",
+    "start": 0.13,
+    "length": 0.1
+   },
+   {
+    "side": "right",
+    "kind": "alert-slider",
+    "start": 0.08,
+    "length": 0.04
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.15,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#2B4A3E",
+  "notes": "book-fold foldable, unfolded dims shown; visible crease; separate outer cover screen"
+ },
+ {
+  "slug": "oneplus-12",
+  "name": "OnePlus 12",
+  "year": 2024,
+  "height_mm": 164.3,
+  "width_mm": 75.8,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "volume-rocker",
+    "start": 0.13,
+    "length": 0.1
+   },
+   {
+    "side": "right",
+    "kind": "alert-slider",
+    "start": 0.08,
+    "length": 0.04
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.15,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#2E4F3E",
+  "notes": "symmetrical thin bezels, curved display"
+ },
+ {
+  "slug": "oneplus-12r",
+  "name": "OnePlus 12R",
+  "year": 2024,
+  "height_mm": 163.3,
+  "width_mm": 75.3,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "volume-rocker",
+    "start": 0.13,
+    "length": 0.1
+   },
+   {
+    "side": "right",
+    "kind": "alert-slider",
+    "start": 0.08,
+    "length": 0.04
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.15,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#2A4D8F",
+  "notes": "flat display"
+ },
+ {
+  "slug": "oneplus-nord-4",
+  "name": "OnePlus Nord 4",
+  "year": 2024,
+  "height_mm": 162.76,
+  "width_mm": 75.3,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "volume-rocker",
+    "start": 0.12,
+    "length": 0.1
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.14,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#B8BCC0",
+  "notes": "unibody metal frame, alert slider dropped"
+ },
+ {
+  "slug": "oneplus-nord-ce-4",
+  "name": "OnePlus Nord CE 4",
+  "year": 2024,
+  "height_mm": 162.6,
+  "width_mm": 75.5,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "volume-rocker",
+    "start": 0.12,
+    "length": 0.1
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.14,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#7C9885",
+  "notes": "no alert slider, metal frame"
+ },
+ {
+  "slug": "oneplus-13",
+  "name": "OnePlus 13",
+  "year": 2025,
+  "height_mm": 162.9,
+  "width_mm": 76.5,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "volume-rocker",
+    "start": 0.13,
+    "length": 0.1
+   },
+   {
+    "side": "right",
+    "kind": "alert-slider",
+    "start": 0.08,
+    "length": 0.04
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.15,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#14283C",
+  "notes": "flat display, symmetrical bezels"
+ },
+ {
+  "slug": "oneplus-13r",
+  "name": "OnePlus 13R",
+  "year": 2025,
+  "height_mm": 162.7,
+  "width_mm": 76.2,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "volume-rocker",
+    "start": 0.13,
+    "length": 0.1
+   },
+   {
+    "side": "right",
+    "kind": "alert-slider",
+    "start": 0.08,
+    "length": 0.04
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.15,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#3A3F52",
+  "notes": "flat display"
+ },
+ {
+  "slug": "oneplus-13s",
+  "name": "OnePlus 13s",
+  "year": 2025,
+  "height_mm": 146.2,
+  "width_mm": 71.2,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "volume-rocker",
+    "start": 0.13,
+    "length": 0.1
+   },
+   {
+    "side": "right",
+    "kind": "alert-slider",
+    "start": 0.08,
+    "length": 0.04
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.15,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#C1440E",
+  "notes": "compact flagship; low-confidence dimensions, limited market availability (not verified against GSMArena)"
+ },
+ {
+  "slug": "oneplus-15",
+  "name": "OnePlus 15",
+  "year": 2025,
+  "height_mm": 161.4,
+  "width_mm": 76.7,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "volume-rocker",
+    "start": 0.13,
+    "length": 0.1
+   },
+   {
+    "side": "right",
+    "kind": "alert-slider",
+    "start": 0.08,
+    "length": 0.04
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.15,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#C9BFAE",
+  "notes": "flat display; model number skips 14 (superstition)"
+ },
+ {
+  "slug": "oneplus-nord-5",
+  "name": "OnePlus Nord 5",
+  "year": 2025,
+  "height_mm": 162.9,
+  "width_mm": 76.9,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "left",
+    "kind": "volume-rocker",
+    "start": 0.12,
+    "length": 0.1
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.14,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#2E4B6E",
+  "notes": "low-confidence dimensions (not verified against GSMArena), no alert slider"
+ },
+ {
+  "slug": "samsung-galaxy-a52s",
+  "name": "Galaxy A52s",
+  "year": 2021,
+  "height_mm": 159.9,
+  "width_mm": 74.5,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.16,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.26,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1C1C1E",
+  "notes": "in-display fingerprint sensor, thicker chin bezel than flagship, plastic frame"
+ },
+ {
+  "slug": "samsung-galaxy-z-flip3",
+  "name": "Galaxy Z Flip3",
+  "year": 2021,
+  "height_mm": 166.0,
+  "width_mm": 72.2,
+  "form": "flip",
+  "corner": "rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.2,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.31,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#E3D5C8",
+  "notes": "visible hinge crease line; small separate cover display not shown (icon uses unfolded main screen)"
+ },
+ {
+  "slug": "samsung-galaxy-z-fold3",
+  "name": "Galaxy Z Fold3",
+  "year": 2021,
+  "height_mm": 158.2,
+  "width_mm": 128.1,
+  "form": "book-fold",
+  "corner": "rounded",
+  "bezel": "medium",
+  "camera": "under-display",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.2,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.31,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1C1C1E",
+  "notes": "visible hinge crease; under-display selfie camera on inner screen; S Pen supported via case, no built-in silo"
+ },
+ {
+  "slug": "samsung-galaxy-a33",
+  "name": "Galaxy A33",
+  "year": 2022,
+  "height_mm": 159.7,
+  "width_mm": 74.0,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thick",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.16,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.26,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1C1C1E",
+  "notes": "side-mounted fingerprint reader in power button, thick chin bezel, plastic frame"
+ },
+ {
+  "slug": "samsung-galaxy-a53",
+  "name": "Galaxy A53",
+  "year": 2022,
+  "height_mm": 159.6,
+  "width_mm": 74.8,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.16,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.26,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1C1C1E",
+  "notes": "in-display fingerprint sensor, plastic frame"
+ },
+ {
+  "slug": "samsung-galaxy-s21-fe",
+  "name": "Galaxy S21 FE",
+  "year": 2022,
+  "height_mm": 155.7,
+  "width_mm": 74.5,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.18,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.29,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#3B3B3D",
+  "notes": "flat display"
+ },
+ {
+  "slug": "samsung-galaxy-s22",
+  "name": "Galaxy S22",
+  "year": 2022,
+  "height_mm": 146.0,
+  "width_mm": 70.6,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.18,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.29,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1C1C1E",
+  "notes": ""
+ },
+ {
+  "slug": "samsung-galaxy-s22-plus",
+  "name": "Galaxy S22+",
+  "year": 2022,
+  "height_mm": 157.4,
+  "width_mm": 75.8,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.18,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.29,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1C1C1E",
+  "notes": ""
+ },
+ {
+  "slug": "samsung-galaxy-s22-ultra",
+  "name": "Galaxy S22 Ultra",
+  "year": 2022,
+  "height_mm": 163.3,
+  "width_mm": 77.9,
+  "form": "bar",
+  "corner": "square",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.18,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.29,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": true,
+  "frame_hex": "#1C1C1E",
+  "notes": "flat display, square corners, built-in S Pen silo"
+ },
+ {
+  "slug": "samsung-galaxy-z-flip4",
+  "name": "Galaxy Z Flip4",
+  "year": 2022,
+  "height_mm": 165.2,
+  "width_mm": 71.9,
+  "form": "flip",
+  "corner": "rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.2,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.31,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#6E5C82",
+  "notes": "visible hinge crease line"
+ },
+ {
+  "slug": "samsung-galaxy-z-fold4",
+  "name": "Galaxy Z Fold4",
+  "year": 2022,
+  "height_mm": 155.1,
+  "width_mm": 130.1,
+  "form": "book-fold",
+  "corner": "rounded",
+  "bezel": "medium",
+  "camera": "under-display",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.2,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.31,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1C1C1E",
+  "notes": "visible hinge crease; under-display selfie camera on inner screen"
+ },
+ {
+  "slug": "samsung-galaxy-a34",
+  "name": "Galaxy A34",
+  "year": 2023,
+  "height_mm": 161.3,
+  "width_mm": 78.1,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thick",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.16,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.26,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1C1C1E",
+  "notes": "side-mounted fingerprint reader in power button, plastic frame"
+ },
+ {
+  "slug": "samsung-galaxy-a54",
+  "name": "Galaxy A54",
+  "year": 2023,
+  "height_mm": 158.2,
+  "width_mm": 76.7,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.16,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.26,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1C1C1E",
+  "notes": "in-display fingerprint sensor"
+ },
+ {
+  "slug": "samsung-galaxy-s23",
+  "name": "Galaxy S23",
+  "year": 2023,
+  "height_mm": 146.3,
+  "width_mm": 70.9,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.18,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.29,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#171719",
+  "notes": ""
+ },
+ {
+  "slug": "samsung-galaxy-s23-fe",
+  "name": "Galaxy S23 FE",
+  "year": 2023,
+  "height_mm": 158.0,
+  "width_mm": 76.5,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.18,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.29,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#B4CFC4",
+  "notes": ""
+ },
+ {
+  "slug": "samsung-galaxy-s23-plus",
+  "name": "Galaxy S23+",
+  "year": 2023,
+  "height_mm": 157.8,
+  "width_mm": 76.2,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.18,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.29,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#171719",
+  "notes": ""
+ },
+ {
+  "slug": "samsung-galaxy-s23-ultra",
+  "name": "Galaxy S23 Ultra",
+  "year": 2023,
+  "height_mm": 163.4,
+  "width_mm": 78.1,
+  "form": "bar",
+  "corner": "square",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.18,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.29,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": true,
+  "frame_hex": "#171719",
+  "notes": "flat display, square corners, built-in S Pen silo"
+ },
+ {
+  "slug": "samsung-galaxy-z-flip5",
+  "name": "Galaxy Z Flip5",
+  "year": 2023,
+  "height_mm": 165.1,
+  "width_mm": 71.9,
+  "form": "flip",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.2,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.31,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#AFC9B9",
+  "notes": "visible hinge crease line; much larger cover screen than Flip4, not shown here"
+ },
+ {
+  "slug": "samsung-galaxy-z-fold5",
+  "name": "Galaxy Z Fold5",
+  "year": 2023,
+  "height_mm": 154.9,
+  "width_mm": 129.9,
+  "form": "book-fold",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "under-display",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.2,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.31,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#B8C4D0",
+  "notes": "waterdrop hinge folds flush, thinner bezels; under-display selfie camera on inner screen"
+ },
+ {
+  "slug": "samsung-galaxy-a35",
+  "name": "Galaxy A35",
+  "year": 2024,
+  "height_mm": 161.7,
+  "width_mm": 78.0,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.16,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.26,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1C1C1E",
+  "notes": "side-mounted fingerprint reader in power button, plastic frame"
+ },
+ {
+  "slug": "samsung-galaxy-a55",
+  "name": "Galaxy A55",
+  "year": 2024,
+  "height_mm": 161.1,
+  "width_mm": 77.4,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.16,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.26,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1C1C1E",
+  "notes": "in-display fingerprint sensor, first A-series with an aluminum frame"
+ },
+ {
+  "slug": "samsung-galaxy-s24",
+  "name": "Galaxy S24",
+  "year": 2024,
+  "height_mm": 147.0,
+  "width_mm": 70.6,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.18,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.29,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1C1C1E",
+  "notes": "flat aluminum frame"
+ },
+ {
+  "slug": "samsung-galaxy-s24-fe",
+  "name": "Galaxy S24 FE",
+  "year": 2024,
+  "height_mm": 161.3,
+  "width_mm": 76.6,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.18,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.29,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#3A3A3C",
+  "notes": ""
+ },
+ {
+  "slug": "samsung-galaxy-s24-plus",
+  "name": "Galaxy S24+",
+  "year": 2024,
+  "height_mm": 158.5,
+  "width_mm": 75.9,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.18,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.29,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1C1C1E",
+  "notes": "flat aluminum frame"
+ },
+ {
+  "slug": "samsung-galaxy-s24-ultra",
+  "name": "Galaxy S24 Ultra",
+  "year": 2024,
+  "height_mm": 162.3,
+  "width_mm": 79.0,
+  "form": "bar",
+  "corner": "square",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.18,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.29,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": true,
+  "frame_hex": "#4A4A4C",
+  "notes": "flat titanium frame, square corners, built-in S Pen silo"
+ },
+ {
+  "slug": "samsung-galaxy-z-flip6",
+  "name": "Galaxy Z Flip6",
+  "year": 2024,
+  "height_mm": 165.1,
+  "width_mm": 71.9,
+  "form": "flip",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.2,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.31,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#4A6B8A",
+  "notes": "visible hinge crease line"
+ },
+ {
+  "slug": "samsung-galaxy-z-fold6",
+  "name": "Galaxy Z Fold6",
+  "year": 2024,
+  "height_mm": 153.5,
+  "width_mm": 132.6,
+  "form": "book-fold",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "under-display",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.2,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.31,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#28304A",
+  "notes": "wider/shorter aspect than Fold5; last Fold generation with an under-display selfie camera on the inner screen"
+ },
+ {
+  "slug": "samsung-galaxy-a36",
+  "name": "Galaxy A36",
+  "year": 2025,
+  "height_mm": 163.4,
+  "width_mm": 78.2,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.16,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.26,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1C1C1E",
+  "notes": "side-mounted fingerprint reader in power button, plastic frame; dimensions approximate, not independently source-verified"
+ },
+ {
+  "slug": "samsung-galaxy-a56",
+  "name": "Galaxy A56",
+  "year": 2025,
+  "height_mm": 162.2,
+  "width_mm": 77.6,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.16,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.26,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1C1C1E",
+  "notes": "in-display fingerprint sensor, aluminum frame; dimensions approximate, not independently source-verified"
+ },
+ {
+  "slug": "samsung-galaxy-s25",
+  "name": "Galaxy S25",
+  "year": 2025,
+  "height_mm": 146.9,
+  "width_mm": 70.5,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.18,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.29,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#AEDDE0",
+  "notes": "flat aluminum frame"
+ },
+ {
+  "slug": "samsung-galaxy-s25-edge",
+  "name": "Galaxy S25 Edge",
+  "year": 2025,
+  "height_mm": 158.2,
+  "width_mm": 75.6,
+  "form": "bar",
+  "corner": "square",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.18,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.29,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#C9DDE0",
+  "notes": "thinnest Samsung phone to date (5.8mm), flat titanium frame, minimal bezels"
+ },
+ {
+  "slug": "samsung-galaxy-s25-fe",
+  "name": "Galaxy S25 FE",
+  "year": 2025,
+  "height_mm": 161.3,
+  "width_mm": 76.6,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.18,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.29,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1F2A44",
+  "notes": ""
+ },
+ {
+  "slug": "samsung-galaxy-s25-plus",
+  "name": "Galaxy S25+",
+  "year": 2025,
+  "height_mm": 158.4,
+  "width_mm": 75.8,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.18,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.29,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#AEDDE0",
+  "notes": "flat aluminum frame"
+ },
+ {
+  "slug": "samsung-galaxy-s25-ultra",
+  "name": "Galaxy S25 Ultra",
+  "year": 2025,
+  "height_mm": 162.8,
+  "width_mm": 77.6,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.18,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.29,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": true,
+  "frame_hex": "#2C2C2E",
+  "notes": "flat titanium frame, slightly softer corners than S24 Ultra, built-in S Pen silo"
+ },
+ {
+  "slug": "samsung-galaxy-z-flip7",
+  "name": "Galaxy Z Flip7",
+  "year": 2025,
+  "height_mm": 165.6,
+  "width_mm": 75.6,
+  "form": "flip",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.2,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.31,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1C1C1E",
+  "notes": "visible hinge crease line; widened body vs Flip6 for a larger cover screen; dimensions approximate, not independently source-verified"
+ },
+ {
+  "slug": "samsung-galaxy-z-flip7-fe",
+  "name": "Galaxy Z Flip7 FE",
+  "year": 2025,
+  "height_mm": 165.1,
+  "width_mm": 71.9,
+  "form": "flip",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.2,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.31,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1c1c1e",
+  "notes": ""
+ },
+ {
+  "slug": "samsung-galaxy-z-fold7",
+  "name": "Galaxy Z Fold7",
+  "year": 2025,
+  "height_mm": 158.4,
+  "width_mm": 143.2,
+  "form": "book-fold",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.2,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.31,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#3B4A5A",
+  "notes": "major redesign, much thinner and wider; switched from under-display to a visible punch-hole selfie camera on inner screen"
+ },
+ {
+  "slug": "samsung-galaxy-a37",
+  "name": "Galaxy A37 5G",
+  "year": 2026,
+  "height_mm": 162.9,
+  "width_mm": 78.2,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.16,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.26,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#4b4a52",
+  "notes": ""
+ },
+ {
+  "slug": "samsung-galaxy-a57",
+  "name": "Galaxy A57 5G",
+  "year": 2026,
+  "height_mm": 161.5,
+  "width_mm": 76.8,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.16,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.26,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#6e6e70",
+  "notes": ""
+ },
+ {
+  "slug": "samsung-galaxy-s26",
+  "name": "Galaxy S26",
+  "year": 2026,
+  "height_mm": 149.6,
+  "width_mm": 71.7,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.18,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.29,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#A8C8E0",
+  "notes": ""
+ },
+ {
+  "slug": "samsung-galaxy-s26-fe",
+  "name": "Galaxy S26 FE",
+  "year": 2026,
+  "height_mm": 161.6,
+  "width_mm": 76.9,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.18,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.29,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#4A4A4A",
+  "notes": ""
+ },
+ {
+  "slug": "samsung-galaxy-s26-plus",
+  "name": "Galaxy S26+",
+  "year": 2026,
+  "height_mm": 158.4,
+  "width_mm": 75.8,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.18,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.29,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#A8C8E0",
+  "notes": ""
+ },
+ {
+  "slug": "samsung-galaxy-s26-ultra",
+  "name": "Galaxy S26 Ultra",
+  "year": 2026,
+  "height_mm": 163.6,
+  "width_mm": 78.1,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.18,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.29,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": true,
+  "frame_hex": "#4A3F63",
+  "notes": ""
+ },
+ {
+  "slug": "samsung-galaxy-z-flip8",
+  "name": "Galaxy Z Flip8",
+  "year": 2026,
+  "height_mm": 166.9,
+  "width_mm": 75.4,
+  "form": "flip",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.2,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.31,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#4b4b4d",
+  "notes": ""
+ },
+ {
+  "slug": "samsung-galaxy-z-fold8",
+  "name": "Galaxy Z Fold8",
+  "year": 2026,
+  "height_mm": 123.9,
+  "width_mm": 161.4,
+  "form": "book-fold",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.22,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.38,
+    "length": 0.08
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#4A4A4A",
+  "notes": "wide passport-style fold, 4:3 landscape inner screen; punch-hole on the right panel"
+ },
+ {
+  "slug": "samsung-galaxy-z-fold8-ultra",
+  "name": "Galaxy Z Fold8 Ultra",
+  "year": 2026,
+  "height_mm": 158.4,
+  "width_mm": 143.2,
+  "form": "book-fold",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.2,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.31,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#48494B",
+  "notes": "new higher-tier Fold above standard Fold8, keeps Fold7's screen footprint but thinner; punch-hole selfie camera; launched Aug 2026"
+ },
+ {
+  "slug": "sony-xperia-5-iii",
+  "name": "Xperia 5 III",
+  "year": 2021,
+  "height_mm": 157.0,
+  "width_mm": 68.0,
+  "form": "bar",
+  "corner": "square",
+  "bezel": "medium",
+  "camera": "bezel",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.3,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.45,
+    "length": 0.07
+   },
+   {
+    "side": "right",
+    "kind": "shutter",
+    "start": 0.85,
+    "length": 0.05
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#3f5a4a",
+  "notes": "Compact 21:9 flagship, released October 2021; camera in top bezel; dedicated shutter button"
+ },
+ {
+  "slug": "sony-xperia-1-iv",
+  "name": "Xperia 1 IV",
+  "year": 2022,
+  "height_mm": 165.0,
+  "width_mm": 71.0,
+  "form": "bar",
+  "corner": "square",
+  "bezel": "medium",
+  "camera": "bezel",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.3,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.45,
+    "length": 0.07
+   },
+   {
+    "side": "right",
+    "kind": "shutter",
+    "start": 0.85,
+    "length": 0.05
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1c1c1e",
+  "notes": "Tall 21:9 display, selfie camera kept in flat top bezel (no notch/hole); dedicated two-stage camera shutter button"
+ },
+ {
+  "slug": "sony-xperia-10-iv",
+  "name": "Xperia 10 IV",
+  "year": 2022,
+  "height_mm": 153.0,
+  "width_mm": 67.0,
+  "form": "bar",
+  "corner": "square",
+  "bezel": "medium",
+  "camera": "bezel",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.3,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.45,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#a79bc9",
+  "notes": "21:9 mid-range display, camera still in top bezel like the flagship line; no dedicated shutter button"
+ },
+ {
+  "slug": "sony-xperia-5-iv",
+  "name": "Xperia 5 IV",
+  "year": 2022,
+  "height_mm": 156.0,
+  "width_mm": 67.0,
+  "form": "bar",
+  "corner": "square",
+  "bezel": "medium",
+  "camera": "bezel",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.3,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.45,
+    "length": 0.07
+   },
+   {
+    "side": "right",
+    "kind": "shutter",
+    "start": 0.85,
+    "length": 0.05
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1c1c1e",
+  "notes": "21:9 display, camera in top bezel; dedicated shutter button"
+ },
+ {
+  "slug": "sony-xperia-1-v",
+  "name": "Xperia 1 V",
+  "year": 2023,
+  "height_mm": 165.0,
+  "width_mm": 70.0,
+  "form": "bar",
+  "corner": "square",
+  "bezel": "medium",
+  "camera": "bezel",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.3,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.45,
+    "length": 0.07
+   },
+   {
+    "side": "right",
+    "kind": "shutter",
+    "start": 0.85,
+    "length": 0.05
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#6b6a52",
+  "notes": "Tall 21:9 display, selfie camera in top bezel; dedicated shutter button"
+ },
+ {
+  "slug": "sony-xperia-10-v",
+  "name": "Xperia 10 V",
+  "year": 2023,
+  "height_mm": 154.0,
+  "width_mm": 68.0,
+  "form": "bar",
+  "corner": "square",
+  "bezel": "medium",
+  "camera": "bezel",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.3,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.45,
+    "length": 0.07
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#a79bc9",
+  "notes": "21:9 display, camera in top bezel; no dedicated shutter button; camera position moderate confidence (may have switched to punch-hole, unverified)"
+ },
+ {
+  "slug": "sony-xperia-5-v",
+  "name": "Xperia 5 V",
+  "year": 2023,
+  "height_mm": 154.0,
+  "width_mm": 68.0,
+  "form": "bar",
+  "corner": "square",
+  "bezel": "medium",
+  "camera": "bezel",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.3,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.45,
+    "length": 0.07
+   },
+   {
+    "side": "right",
+    "kind": "shutter",
+    "start": 0.85,
+    "length": 0.05
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#2c3e58",
+  "notes": "21:9 display, camera in top bezel; dedicated shutter button"
+ },
+ {
+  "slug": "sony-xperia-1-vi",
+  "name": "Xperia 1 VI",
+  "year": 2024,
+  "height_mm": 164.3,
+  "width_mm": 74.3,
+  "form": "bar",
+  "corner": "square",
+  "bezel": "medium",
+  "camera": "bezel",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.3,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.45,
+    "length": 0.07
+   },
+   {
+    "side": "right",
+    "kind": "shutter",
+    "start": 0.85,
+    "length": 0.05
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#c8c9cb",
+  "notes": "Dropped the traditional 21:9 ratio for a shorter, wider ~19.5:9 flat-sided display; camera stayed in the top bezel"
+ },
+ {
+  "slug": "sony-xperia-10-vi",
+  "name": "Xperia 10 VI",
+  "year": 2024,
+  "height_mm": 155.0,
+  "width_mm": 68.0,
+  "form": "bar",
+  "corner": "square",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.3,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.45,
+    "length": 0.07
+   },
+   {
+    "side": "right",
+    "kind": "shutter",
+    "start": 0.85,
+    "length": 0.05
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#4c6b52",
+  "notes": "Flatter frame like Xperia 1 VI, moved to centred punch-hole camera and gained a dedicated shutter button; camera-style transition generation is moderate confidence, unverified"
+ },
+ {
+  "slug": "sony-xperia-1-vii",
+  "name": "Xperia 1 VII",
+  "year": 2025,
+  "height_mm": 165.0,
+  "width_mm": 74.0,
+  "form": "bar",
+  "corner": "square",
+  "bezel": "medium",
+  "camera": "bezel",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.3,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.45,
+    "length": 0.07
+   },
+   {
+    "side": "right",
+    "kind": "shutter",
+    "start": 0.85,
+    "length": 0.05
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1c1c1e",
+  "notes": "Dimensions and camera-in-bezel design carried over from Xperia 1 VI; unverified, no web search performed"
+ },
+ {
+  "slug": "sony-xperia-10-vii",
+  "name": "Xperia 10 VII",
+  "year": 2025,
+  "height_mm": 155.0,
+  "width_mm": 68.0,
+  "form": "bar",
+  "corner": "square",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.3,
+    "length": 0.12
+   },
+   {
+    "side": "right",
+    "kind": "fingerprint-power",
+    "start": 0.45,
+    "length": 0.07
+   },
+   {
+    "side": "right",
+    "kind": "shutter",
+    "start": 0.85,
+    "length": 0.05
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#e8e8e6",
+  "notes": "Punch-hole camera, dedicated shutter button; dimensions unverified, no web search performed"
+ },
+ {
+  "slug": "xiaomi-12",
+  "name": "Xiaomi 12",
+  "year": 2022,
+  "height_mm": 152.7,
+  "width_mm": 69.9,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.1,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.2,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#7C6992",
+  "notes": "compact flagship, curved display edges"
+ },
+ {
+  "slug": "xiaomi-12-pro",
+  "name": "Xiaomi 12 Pro",
+  "year": 2022,
+  "height_mm": 163.6,
+  "width_mm": 74.6,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.1,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.2,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#4A5A8C",
+  "notes": "curved display edges"
+ },
+ {
+  "slug": "xiaomi-12t",
+  "name": "Xiaomi 12T",
+  "year": 2022,
+  "height_mm": 162.9,
+  "width_mm": 75.9,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.1,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.2,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#2B4C7E",
+  "notes": "flat display"
+ },
+ {
+  "slug": "xiaomi-12t-pro",
+  "name": "Xiaomi 12T Pro",
+  "year": 2022,
+  "height_mm": 163.1,
+  "width_mm": 75.9,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.1,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.2,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1F3A5F",
+  "notes": "flat display"
+ },
+ {
+  "slug": "xiaomi-poco-f4",
+  "name": "POCO F4",
+  "year": 2022,
+  "height_mm": 159.9,
+  "width_mm": 73.7,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.1,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.2,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#3E5C4A",
+  "notes": ""
+ },
+ {
+  "slug": "xiaomi-redmi-note-11-pro",
+  "name": "Redmi Note 11 Pro",
+  "year": 2022,
+  "height_mm": 163.6,
+  "width_mm": 75.6,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.1,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.2,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#2B4C8C",
+  "notes": "global variant (distinct from India-only variant)"
+ },
+ {
+  "slug": "xiaomi-13",
+  "name": "Xiaomi 13",
+  "year": 2023,
+  "height_mm": 152.8,
+  "width_mm": 71.5,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.1,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.2,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#7C9070",
+  "notes": "compact flagship, curved display edges"
+ },
+ {
+  "slug": "xiaomi-13-pro",
+  "name": "Xiaomi 13 Pro",
+  "year": 2023,
+  "height_mm": 162.9,
+  "width_mm": 74.6,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.1,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.2,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#111111",
+  "notes": "curved display edges, ceramic back option"
+ },
+ {
+  "slug": "xiaomi-13-ultra",
+  "name": "Xiaomi 13 Ultra",
+  "year": 2023,
+  "height_mm": 163.2,
+  "width_mm": 74.6,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.1,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.2,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#5C6B4E",
+  "notes": "curved display edges; released globally in select markets (Europe/Asia), not North America"
+ },
+ {
+  "slug": "xiaomi-13t",
+  "name": "Xiaomi 13T",
+  "year": 2023,
+  "height_mm": 162.2,
+  "width_mm": 75.7,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.1,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.2,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#4F6F52",
+  "notes": ""
+ },
+ {
+  "slug": "xiaomi-13t-pro",
+  "name": "Xiaomi 13T Pro",
+  "year": 2023,
+  "height_mm": 162.2,
+  "width_mm": 75.7,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.1,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.2,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#3A5F8A",
+  "notes": ""
+ },
+ {
+  "slug": "xiaomi-poco-f5",
+  "name": "POCO F5",
+  "year": 2023,
+  "height_mm": 162.9,
+  "width_mm": 76.0,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.1,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.2,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1A1A1A",
+  "notes": ""
+ },
+ {
+  "slug": "xiaomi-poco-f5-pro",
+  "name": "POCO F5 Pro",
+  "year": 2023,
+  "height_mm": 162.6,
+  "width_mm": 74.95,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.1,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.2,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#2E4B8C",
+  "notes": "curved display edges (rebadged Redmi K60)"
+ },
+ {
+  "slug": "xiaomi-redmi-note-12-pro",
+  "name": "Redmi Note 12 Pro",
+  "year": 2023,
+  "height_mm": 162.9,
+  "width_mm": 76.0,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "medium",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.1,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.2,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#3F5E4A",
+  "notes": "global variant"
+ },
+ {
+  "slug": "xiaomi-redmi-note-13-pro",
+  "name": "Redmi Note 13 Pro",
+  "year": 2023,
+  "height_mm": 161.1,
+  "width_mm": 74.2,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.1,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.2,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#7C5C9C",
+  "notes": "curved AMOLED display edges; global variant"
+ },
+ {
+  "slug": "xiaomi-redmi-note-13-pro-plus",
+  "name": "Redmi Note 13 Pro+",
+  "year": 2023,
+  "height_mm": 161.4,
+  "width_mm": 74.2,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.1,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.2,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#8C6FA8",
+  "notes": "curved display edges; global variant"
+ },
+ {
+  "slug": "xiaomi-14",
+  "name": "Xiaomi 14",
+  "year": 2024,
+  "height_mm": 152.8,
+  "width_mm": 71.5,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.1,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.2,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#6B7F6B",
+  "notes": "compact flagship, curved display edges"
+ },
+ {
+  "slug": "xiaomi-14-ultra",
+  "name": "Xiaomi 14 Ultra",
+  "year": 2024,
+  "height_mm": 161.4,
+  "width_mm": 75.3,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.1,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.2,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#E8E5DD",
+  "notes": "curved display edges"
+ },
+ {
+  "slug": "xiaomi-14t",
+  "name": "Xiaomi 14T",
+  "year": 2024,
+  "height_mm": 160.8,
+  "width_mm": 75.1,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.1,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.2,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#33475B",
+  "notes": "flat display"
+ },
+ {
+  "slug": "xiaomi-14t-pro",
+  "name": "Xiaomi 14T Pro",
+  "year": 2024,
+  "height_mm": 160.4,
+  "width_mm": 75.1,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.1,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.2,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#33475B",
+  "notes": "flat display"
+ },
+ {
+  "slug": "xiaomi-poco-f6",
+  "name": "POCO F6",
+  "year": 2024,
+  "height_mm": 160.5,
+  "width_mm": 74.3,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.1,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.2,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#4A6B52",
+  "notes": "curved display edges (rebadged Redmi Turbo 3)"
+ },
+ {
+  "slug": "xiaomi-poco-f6-pro",
+  "name": "POCO F6 Pro",
+  "year": 2024,
+  "height_mm": 161.4,
+  "width_mm": 74.5,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.1,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.2,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#111111",
+  "notes": "curved display edges (rebadged Redmi K70)"
+ },
+ {
+  "slug": "xiaomi-15",
+  "name": "Xiaomi 15",
+  "year": 2025,
+  "height_mm": 152.3,
+  "width_mm": 71.2,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.1,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.2,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#232323",
+  "notes": "compact flagship, curved display edges"
+ },
+ {
+  "slug": "xiaomi-15-ultra",
+  "name": "Xiaomi 15 Ultra",
+  "year": 2025,
+  "height_mm": 161.3,
+  "width_mm": 75.3,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.1,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.2,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#B9C4C9",
+  "notes": "curved display edges"
+ },
+ {
+  "slug": "xiaomi-15t",
+  "name": "Xiaomi 15T",
+  "year": 2025,
+  "height_mm": 159.7,
+  "width_mm": 75.0,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.1,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.2,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#34506B",
+  "notes": "flat display; dimensions approximate, not individually verified"
+ },
+ {
+  "slug": "xiaomi-15t-pro",
+  "name": "Xiaomi 15T Pro",
+  "year": 2025,
+  "height_mm": 159.7,
+  "width_mm": 75.0,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.1,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.2,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#34506B",
+  "notes": "flat display; dimensions approximate, not individually verified"
+ },
+ {
+  "slug": "xiaomi-poco-f7",
+  "name": "POCO F7",
+  "year": 2025,
+  "height_mm": 161.0,
+  "width_mm": 75.0,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.1,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.2,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#F5C518",
+  "notes": "dimensions approximate, not individually verified"
+ },
+ {
+  "slug": "xiaomi-poco-f7-pro",
+  "name": "POCO F7 Pro",
+  "year": 2025,
+  "height_mm": 161.0,
+  "width_mm": 75.0,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.1,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.2,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#F5C518",
+  "notes": "dimensions approximate, not individually verified"
+ },
+ {
+  "slug": "xiaomi-poco-f7-ultra",
+  "name": "POCO F7 Ultra",
+  "year": 2025,
+  "height_mm": 161.4,
+  "width_mm": 75.3,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.1,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.2,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#1A1A1A",
+  "notes": "curved display edges; lower confidence on exact specs, not individually verified"
+ },
+ {
+  "slug": "xiaomi-redmi-note-14-pro",
+  "name": "Redmi Note 14 Pro",
+  "year": 2025,
+  "height_mm": 160.5,
+  "width_mm": 74.2,
+  "form": "bar",
+  "corner": "rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.1,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.2,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#A98FC4",
+  "notes": "global variant; dimensions approximate"
+ },
+ {
+  "slug": "xiaomi-redmi-note-14-pro-plus",
+  "name": "Redmi Note 14 Pro+",
+  "year": 2025,
+  "height_mm": 161.3,
+  "width_mm": 74.3,
+  "form": "bar",
+  "corner": "very-rounded",
+  "bezel": "thin",
+  "camera": "hole-center",
+  "notch_width_frac": null,
+  "buttons": [
+   {
+    "side": "right",
+    "kind": "volume-rocker",
+    "start": 0.1,
+    "length": 0.09
+   },
+   {
+    "side": "right",
+    "kind": "power",
+    "start": 0.2,
+    "length": 0.06
+   }
+  ],
+  "home_button": false,
+  "spen": false,
+  "frame_hex": "#A98FC4",
+  "notes": "curved display edges; global variant; dimensions approximate"
+ }
+]

@@ -10,6 +10,7 @@ import "edit_mode.js" as EditMode
 Singleton {
     readonly property string desktopTab: EditMode.DESKTOP_TAB
     readonly property string lockscreenTab: EditMode.LOCKSCREEN_TAB
+    readonly property string aodTab: EditMode.AOD_TAB
     readonly property int undoLimit: EditMode.UNDO_LIMIT
 
     function tabIndex(...args) {

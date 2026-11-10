@@ -5,8 +5,19 @@ import QtQuick.Layouts
 import Quickshell
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.ii.editMode
+import qs.modules.settings.configs.bar
 import qs.services
 
+/**
+ * Settings → Bar.
+ *
+ * Where the bar sits and how big it is, drawn rather than listed: the edge picked on a
+ * drawing of the screen, the height in big digits with a gauge, the shell mode as one
+ * sliding track, and the auto-hide trigger as cards that draw their zone. The look and
+ * the layout are a card each that shows what is behind it. Plain behaviour stays in the
+ * original switches. Search indexes sections/BarPlacementSection.qml for all of it.
+ */
 Item {
     id: barConfigRoot
     anchors.fill: parent
@@ -14,28 +25,80 @@ Item {
     property alias contentY: page.contentY
     property alias activeSubPage: subPageOverlay.activeSubPage
 
-    property string autoSwitchNoticeMessage: ""
+    readonly property real gap: 12
+    readonly property real wideBreak: 620
+    readonly property real entryBreak: 720
+    readonly property real entryHeight: 204
+    readonly property real entryCompactHeight: 92
 
-    readonly property int barWidgetCount: (Config.options.bar.layouts.left?.length ?? 0)
-        + (Config.options.bar.layouts.center?.length ?? 0)
-        + (Config.options.bar.layouts.right?.length ?? 0)
+    readonly property var bar: Config.options.bar
+
+    property string autoSwitchNoticeMessage: ""
+    // The island hangs from the top edge of a horizontal bar: hiding the bar under it
+    // leaves a floating island with nothing to retract into and stacks the reveal
+    // strip against the island's own hover region. Auto-hide is the island's setting
+    // (`floatingNotch.autoHide`), not the bar's, while this combination is on.
+    readonly property bool islandOwnsTopEdge: (barConfigRoot.bar.floatingNotch.enable
+        || barConfigRoot.bar.floatingNotch.centerInBar) && !barConfigRoot.bar.vertical
+    readonly property bool autoHideLocked: ShellModePolicy.barPositionLocked || barConfigRoot.islandOwnsTopEdge
+    readonly property bool tablet: Config.options.panelFamily === "tablet"
+
+    readonly property var layouts: barConfigRoot.bar.layouts
+    readonly property int barWidgetCount: (barConfigRoot.layouts.left?.length ?? 0)
+        + (barConfigRoot.layouts.center?.length ?? 0)
+        + (barConfigRoot.layouts.right?.length ?? 0)
+
+    readonly property var cornerNames: [Translation.tr("Hug"), Translation.tr("Float"), Translation.tr("Rect"), Translation.tr("Island")]
+    readonly property var backgroundNames: [Translation.tr("Transparent"), Translation.tr("Visible"), Translation.tr("Adaptive"), Translation.tr("Islands")]
+    readonly property var groupNames: [Translation.tr("Pills"), Translation.tr("Island groups"), Translation.tr("No groups")]
+
+    readonly property var revealPresets: [
+        { "value": "instant", "label": Translation.tr("Instant"), "width": 6, "delay": 0 },
+        { "value": "dwell", "label": Translation.tr("Hold"), "width": 16, "delay": 250 },
+        { "value": "wide", "label": Translation.tr("Wide edge"), "width": 32, "delay": 0 },
+        { "value": "cautious", "label": Translation.tr("Cautious"), "width": 32, "delay": 250 }
+    ]
 
     Timer {
         id: autoSwitchNoticeTimer
         interval: 6000
-        repeat: false
-        onTriggered: {
-            barConfigRoot.autoSwitchNoticeMessage = "";
-        }
+        onTriggered: barConfigRoot.autoSwitchNoticeMessage = ""
     }
 
     function triggerAutoSwitchNotice(msg: string) {
-        autoSwitchNoticeMessage = msg;
+        barConfigRoot.autoSwitchNoticeMessage = msg;
         autoSwitchNoticeTimer.restart();
+    }
+
+    function openSubPage(file) {
+        barConfigRoot.activeSubPage = Qt.resolvedUrl("widgets/" + file);
     }
 
     function openWidgetPage(componentId) {
         page.openWidgetPage(componentId);
+    }
+
+    function setPosition(value) {
+        const isVertical = (value & 2) !== 0;
+        const isBottom = (value & 1) !== 0;
+        if (!isVertical && !isBottom && barConfigRoot.bar.floatingNotch.enable)
+            barConfigRoot.triggerAutoSwitchNotice(Translation.tr("Floating Dynamic Island is not supported with the bar at the Top. It was automatically disabled."));
+        if (!isVertical && barConfigRoot.bar.cornerStyle === 3 && Config.options.sidebar.sidebarStyle === "connect")
+            barConfigRoot.triggerAutoSwitchNotice(Translation.tr("Dynamic Island is only supported in vertical orientation in Connect mode. Shell mode was automatically switched to Default."));
+        ShellModePolicy.setBarPosition(value);
+    }
+
+    /** Glyphs of the first widgets of a layout list, from the registry. */
+    function glyphsOf(list, count) {
+        const out = [];
+        for (const entry of (list ?? [])) {
+            const info = BarComponentRegistry.getComponent(entry.id);
+            if (info && info.icon)
+                out.push(info.icon);
+            if (out.length >= count)
+                break;
+        }
+        return out;
     }
 
     ContentPage {
@@ -43,18 +106,17 @@ Item {
 
         function openWidgetPage(componentId) {
             const compInfo = BarComponentRegistry.getComponent(componentId);
-            if (compInfo) {
-                if (typeof compInfo.pageId !== "undefined") {
-                    var win = barConfigRoot.QsWindow.window;
-                    if (win && win.pageIndexById !== undefined) {
-                        if (compInfo.sectionTitle)
-                            win.pendingSectionHighlight = Translation.tr(compInfo.sectionTitle);
-
-                        win.currentPage = win.pageIndexById(compInfo.pageId);
-                    }
-                } else if (compInfo.configPage) {
-                    barConfigRoot.activeSubPage = Qt.resolvedUrl("widgets/" + compInfo.configPage);
+            if (!compInfo)
+                return;
+            if (typeof compInfo.pageId !== "undefined") {
+                const win = barConfigRoot.QsWindow.window;
+                if (win && win.pageIndexById !== undefined) {
+                    if (compInfo.sectionTitle)
+                        win.pendingSectionHighlight = Translation.tr(compInfo.sectionTitle);
+                    win.currentPage = win.pageIndexById(compInfo.pageId);
                 }
+            } else if (compInfo.configPage) {
+                barConfigRoot.activeSubPage = Qt.resolvedUrl("widgets/" + compInfo.configPage);
             }
         }
 
@@ -63,313 +125,428 @@ Item {
         opacity: subPageOverlay.slideProgress
         visible: opacity > 0
 
-        // ── Shell mode ────────────────────────────────────────────────────
+        // ── Where it sits ─────────────────────────────────────────────────
         ContentSection {
-            icon: "phone_android"
-            title: Translation.tr("Shell mode")
-            tooltip: Translation.tr("Switch between Default desktop mode and Connect mode.")
+            icon: "space_bar"
+            title: Translation.tr("Bar basics & placement")
 
+            Item {
+                id: placement
+                Layout.fillWidth: true
+
+                readonly property bool wide: width >= barConfigRoot.wideBreak
+                // Position beside the size on a wide page, above it on a narrow one; the
+                // shell mode spans the row under both.
+                readonly property real positionWidth: placement.wide ? Math.round((width - barConfigRoot.gap) * 0.55) : width
+                readonly property real sideX: placement.wide ? placement.positionWidth + barConfigRoot.gap : 0
+                readonly property real sideY: placement.wide ? 0 : positionCard.height + barConfigRoot.gap
+                readonly property real topRowHeight: placement.wide ? Math.max(positionCard.height, dials.height) : placement.sideY + dials.height
+
+                implicitHeight: placement.topRowHeight + barConfigRoot.gap + modeToggle.implicitHeight
+
+                // Position: Edit Mode's chips, on a slab like the panel they come from.
+                Rectangle {
+                    id: positionCard
+                    width: placement.positionWidth
+                    height: placement.wide ? Math.max(positionChips.implicitHeight + 28, dials.height) : positionChips.implicitHeight + 28
+                    radius: Appearance.rounding.verylarge
+                    color: Appearance.colors.colLayer1
+
+                    EditOptionChips {
+                        id: positionChips
+                        anchors {
+                            left: parent.left
+                            right: parent.right
+                            verticalCenter: parent.verticalCenter
+                            margins: 14
+                        }
+                        compact: false
+                        enabled: !barConfigRoot.tablet
+                        label: Translation.tr("Position")
+                        currentValue: barConfigRoot.tablet ? 0 : (barConfigRoot.bar.bottom ? 1 : 0) | (barConfigRoot.bar.vertical ? 2 : 0)
+                        options: {
+                            const locked = ShellModePolicy.barPositionLocked || barConfigRoot.tablet;
+                            return [
+                                { "displayName": Translation.tr("Top"), "icon": "arrow_upward", "value": 0 },
+                                { "displayName": Translation.tr("Left"), "icon": "arrow_back", "value": 2, "enabled": !locked },
+                                { "displayName": Translation.tr("Bottom"), "icon": "arrow_downward", "value": 1, "enabled": !locked },
+                                { "displayName": Translation.tr("Right"), "icon": "arrow_forward", "value": 3, "enabled": !locked }
+                            ];
+                        }
+                        onSelected: value => barConfigRoot.setPosition(value)
+                    }
+                }
+
+                Row {
+                    id: dials
+                    x: placement.sideX
+                    y: placement.sideY
+                    width: placement.width - placement.sideX
+                    spacing: barConfigRoot.gap
+                    readonly property int count: barConfigRoot.bar.vertical ? 2 : 1
+                    readonly property real cell: (width - spacing * (count - 1)) / count
+                    height: heightDial.implicitHeight
+
+                    BarSizeDial {
+                        id: heightDial
+                        width: dials.cell
+                        caption: Translation.tr("Bar height")
+                        symbol: "height"
+                        value: barConfigRoot.bar.sizes.height
+                        from: 30
+                        to: 50
+                        onMoved: next => Config.options.bar.sizes.height = next
+                    }
+                    BarSizeDial {
+                        visible: barConfigRoot.bar.vertical
+                        width: dials.cell
+                        caption: Translation.tr("Bar width")
+                        symbol: "width"
+                        value: barConfigRoot.bar.sizes.width
+                        from: 30
+                        to: 50
+                        onMoved: next => Config.options.bar.sizes.width = next
+                    }
+                }
+
+                BarModeToggle {
+                    id: modeToggle
+                    y: placement.topRowHeight + barConfigRoot.gap
+                    width: placement.width
+                    currentValue: Config.options.sidebar.sidebarStyle
+                    options: [
+                        {
+                            "value": "default",
+                            "label": Translation.tr("Default"),
+                            "caption": Translation.tr("Bar, search and sidebars as separate panels"),
+                            "icon": "view_sidebar",
+                            "shape": MaterialShape.Shape.Cookie9Sided,
+                            "enabled": ShellModePolicy.canSelectDefault
+                        },
+                        {
+                            "value": "connect",
+                            "label": Translation.tr("Connect"),
+                            "caption": Translation.tr("Bar, search and sidebars join into one panel"),
+                            "icon": "link",
+                            "shape": MaterialShape.Shape.Clover4Leaf,
+                            "enabled": ShellModePolicy.canSelectConnect
+                        }
+                    ]
+                    onSelected: value => ShellModePolicy.setMode(value)
+                }
+            }
+
+            // Why something above is locked, one line each.
             ColumnLayout {
                 Layout.fillWidth: true
-                spacing: Appearance.sizes.elevationMargin / 2
+                Layout.topMargin: visibleChildren.length > 0 ? 4 : 0
+                spacing: 4
 
-                ContentSubsection {
-                    title: Translation.tr("Style")
-                    icon: "style"
-                    Layout.fillWidth: true
-
-                    NoticeBox {
-                        Layout.fillWidth: true
-                        visible: ShellModePolicy.barPositionLocked
-                        materialIcon: "lock"
-                        text: Translation.tr("Shell mode is locked to Default while 'Dynamic Island in bar center' is active. The search runs independently of the Dynamic Island in this mode.")
-                    }
-
-                    ConfigSelectionArray {
-                        id: shellStyleSelector
-                        currentValue: Config.options.sidebar.sidebarStyle
-                        onSelected: newValue => ShellModePolicy.setMode(newValue)
-                        options: {
-                            var opts = [{
-                                "displayName": Translation.tr("Default"),
-                                "icon": "view_sidebar",
-                                "value": "default"
-                            }, {
-                                "displayName": Translation.tr("Connect"),
-                                "icon": "phone_android",
-                                "value": "connect",
-                                "enabled": ShellModePolicy.canSelectConnect
-                            }];
-                            opts[0].enabled = ShellModePolicy.canSelectDefault;
-                            return opts;
-                        }
-                    }
-                }
-
-                NoticeBox {
-                    Layout.fillWidth: true
+                BarHint {
                     visible: barConfigRoot.autoSwitchNoticeMessage.length > 0
-                    materialIcon: "info"
+                    icon: "info"
                     text: barConfigRoot.autoSwitchNoticeMessage
                 }
-
-                NoticeBox {
-                    Layout.fillWidth: true
-                    visible: ShellModePolicy.defaultBlockedReasonKey.length > 0
-                    materialIcon: "water_drop"
-                    text: Translation.tr(ShellModePolicy.defaultBlockedReasonKey)
-
-                    ShortcutBox {
-                        targetPageId: "dynamicIsland"
-                        targetSectionTitle: Translation.tr("Floating Dynamic Island")
-                        materialIcon: "arrow_forward"
-                        text: Translation.tr("Go to Dynamic Island settings")
-                        linkText: Translation.tr("Go there")
-                    }
+                BarHint {
+                    visible: barConfigRoot.tablet
+                    icon: "tablet_android"
+                    text: Translation.tr("Tablet mode keeps the bar at the top.")
                 }
-
-                NoticeBox {
-                    Layout.fillWidth: true
-                    visible: ShellModePolicy.connectBlockedReasonKey.length > 0
-                    materialIcon: "block"
+                BarHint {
+                    visible: !barConfigRoot.tablet && ShellModePolicy.barPositionLocked
+                    icon: "lock"
+                    text: Translation.tr("Top and Default only while the island sits in the bar centre.")
+                    linkText: Translation.tr("Island")
+                    targetPageId: "dynamicIsland"
+                    targetSectionTitle: Translation.tr("Dynamic Island in Bar Center")
+                }
+                BarHint {
+                    visible: ShellModePolicy.connectBlockedReasonKey.length > 0 && !ShellModePolicy.barPositionLocked
+                    icon: "lock"
                     text: Translation.tr(ShellModePolicy.connectBlockedReasonKey)
                 }
-
-                NoticeBox {
-                    Layout.fillWidth: true
-                    visible: Config.options.bar.autoHide.enable
-                    text: Translation.tr("Bar auto-hide is not supported by Search Connect Mode yet. Disable auto-hide to use the drop search.")
+                BarHint {
+                    visible: ShellModePolicy.defaultBlockedReasonKey.length > 0
+                    icon: "lock"
+                    text: Translation.tr(ShellModePolicy.defaultBlockedReasonKey)
+                    linkText: Translation.tr("Island")
+                    targetPageId: "dynamicIsland"
+                    targetSectionTitle: Translation.tr("Floating Dynamic Island")
                 }
             }
         }
 
-        // ── Bar basics & Navigation ───────────────────────────────────────
+        // ── Hiding ────────────────────────────────────────────────────────
         ContentSection {
-            icon: "space_bar"
-            title: Translation.tr("Bar basics & placement")
-            tooltip: Translation.tr("Set bar position, dimensions and jump to detailed appearance or layout configuration.")
+            icon: "visibility_off"
+            title: Translation.tr("Auto-hide")
 
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: Appearance.sizes.elevationMargin / 2
-
-                ContentSubsection {
-                    title: Translation.tr("Bar position")
-                    icon: "dock"
-
-                    NoticeBox {
-                        Layout.fillWidth: true
-                        visible: Config.options.panelFamily === "tablet"
-                        materialIcon: "tablet_android"
-                        text: Translation.tr("Bar position is fixed to Top in Tablet mode.")
-                    }
-
-                    NoticeBox {
-                        Layout.fillWidth: true
-                        visible: Config.options.panelFamily !== "tablet" && ShellModePolicy.barPositionLocked
-                        materialIcon: "lock"
-                        text: Translation.tr("Bar position is locked to Top while 'Dynamic Island in bar center' is active. Disable that feature first to change position.")
-                    }
-
-                    ConfigSelectionArray {
-                        visible: Config.options.panelFamily !== "tablet"
-                        currentValue: (Config.options.bar.bottom ? 1 : 0) | (Config.options.bar.vertical ? 2 : 0)
-                        onSelected: (newValue) => {
-                            const isVertical = (newValue & 2) !== 0;
-                            if (!isVertical && Config.options.bar.cornerStyle === 3 && Config.options.sidebar.sidebarStyle === "connect") {
-                                barConfigRoot.triggerAutoSwitchNotice(Translation.tr("Dynamic Island is only supported in vertical orientation in Connect mode. Shell mode was automatically switched to Default."));
-                            }
-                            ShellModePolicy.setBarPosition(newValue);
-                        }
-                        options: {
-                            const locked = ShellModePolicy.barPositionLocked;
-                            return [{
-                                "displayName": Translation.tr("Top"),
-                                "icon": "arrow_upward",
-                                "value": 0
-                            }, {
-                                "displayName": Translation.tr("Left"),
-                                "icon": "arrow_back",
-                                "value": 2,
-                                "enabled": !locked
-                            }, {
-                                "displayName": Translation.tr("Bottom"),
-                                "icon": "arrow_downward",
-                                "value": 1,
-                                "enabled": !locked
-                            }, {
-                                "displayName": Translation.tr("Right"),
-                                "icon": "arrow_forward",
-                                "value": 3,
-                                "enabled": !locked
-                            }];
-                        }
-                    }
-                }
-
-                ConfigSpinBox {
-                    icon: "height"
-                    text: Translation.tr("Bar height")
-                    value: Config.options.bar.sizes.height
-                    from: 30
-                    to: 50
-                    stepSize: 1
-                    onValueChanged: {
-                        Config.options.bar.sizes.height = value;
-                    }
-                }
-
-                ConfigSpinBox {
-                    visible: Config.options.bar.vertical
-                    icon: "width"
-                    text: Translation.tr("Bar width")
-                    value: Config.options.bar.sizes.width
-                    from: 30
-                    to: 50
-                    stepSize: 1
-                    onValueChanged: {
-                        Config.options.bar.sizes.width = value;
-                    }
-                }
-
+            BarPair {
+                id: pair1
                 ConfigSwitch {
+                    groupHorizontal: pair1.horizontal
                     buttonIcon: "visibility_off"
                     text: Translation.tr("Automatically hide")
-                    checked: Config.options.bar.autoHide.enable
-                    enabled: !ShellModePolicy.barPositionLocked
+                    checked: barConfigRoot.bar.autoHide.enable
+                    enabled: !barConfigRoot.autoHideLocked
                     onCheckedChanged: Config.options.bar.autoHide.enable = checked
                     StyledToolTip {
-                        text: ShellModePolicy.barPositionLocked ? Translation.tr("Auto-hide is locked while 'Dynamic Island in bar center' is active.") : Translation.tr("Automatically hide the bar when not in use")
+                        text: barConfigRoot.autoHideLocked
+                            ? Translation.tr("Auto-hide is locked while the Dynamic Island is active on a horizontal bar; the island has its own auto-hide.")
+                            : Translation.tr("Automatically hide the bar when not in use")
                     }
                 }
-
-                ContentSubsection {
-                    title: Translation.tr("Sensitivity & trigger")
-                    icon: "touch_app"
-                    visible: Config.options.bar.autoHide.enable
-
-                    ConfigSelectionArray {
-                        currentValue: Config.options.bar.autoHide.mode ?? "instant"
-                        onSelected: (newValue) => {
-                            Config.options.bar.autoHide.mode = newValue;
-                            if (newValue === "instant") {
-                                Config.options.bar.autoHide.hoverRegionWidth = 6;
-                                Config.options.bar.autoHide.hoverDelay = 0;
-                            } else if (newValue === "dwell") {
-                                Config.options.bar.autoHide.hoverRegionWidth = 16;
-                                Config.options.bar.autoHide.hoverDelay = 250;
-                            } else if (newValue === "wide") {
-                                Config.options.bar.autoHide.hoverRegionWidth = 32;
-                                Config.options.bar.autoHide.hoverDelay = 0;
-                            } else if (newValue === "cautious") {
-                                Config.options.bar.autoHide.hoverRegionWidth = 32;
-                                Config.options.bar.autoHide.hoverDelay = 250;
-                            }
-                        }
-                        options: [
-                            {
-                                "displayName": Translation.tr("Instant"),
-                                "icon": "bolt",
-                                "value": "instant",
-                                "tooltip": Translation.tr("Reveals immediately on edge touch (6px edge, 0ms delay)")
-                            },
-                            {
-                                "displayName": Translation.tr("Hold"),
-                                "icon": "timer",
-                                "value": "dwell",
-                                "tooltip": Translation.tr("Requires holding pointer on edge for 250ms (16px edge, 250ms delay)")
-                            },
-                            {
-                                "displayName": Translation.tr("Wide edge"),
-                                "icon": "open_in_full",
-                                "value": "wide",
-                                "tooltip": Translation.tr("Large 32px trigger area for easy multi-monitor activation (32px edge, 0ms delay)")
-                            },
-                            {
-                                "displayName": Translation.tr("Cautious"),
-                                "icon": "security",
-                                "value": "cautious",
-                                "tooltip": Translation.tr("Wide 32px area requiring a 250ms hold, ideal for multi-monitor setups (32px edge, 250ms delay)")
-                            }
-                        ]
-                    }
-                }
-
-                ConfigSpinBox {
-                    visible: Config.options.bar.autoHide.enable
-                    icon: "straighten"
-                    text: Translation.tr("Trigger area width (px)")
-                    value: Config.options.bar.autoHide.hoverRegionWidth
-                    from: 2
-                    to: 64
-                    stepSize: 2
-                    onValueChanged: {
-                        Config.options.bar.autoHide.hoverRegionWidth = value;
-                    }
-                    StyledToolTip {
-                        text: Translation.tr("Width of the interactive edge zone that detects the pointer")
-                    }
-                }
-
-                ConfigSpinBox {
-                    visible: Config.options.bar.autoHide.enable
-                    icon: "hourglass_top"
-                    text: Translation.tr("Hold delay (ms)")
-                    value: Config.options.bar.autoHide.hoverDelay
-                    from: 0
-                    to: 1000
-                    stepSize: 50
-                    onValueChanged: {
-                        Config.options.bar.autoHide.hoverDelay = value;
-                    }
-                    StyledToolTip {
-                        text: Translation.tr("Delay in milliseconds the pointer must stay on the edge before the bar reveals")
-                    }
-                }
-
                 ConfigSwitch {
-                    visible: Config.options.bar.autoHide.enable
+                    groupHorizontal: pair1.horizontal
                     buttonIcon: "keyboard"
                     text: Translation.tr("Reveal with Super key")
-                    checked: Config.options.bar.autoHide.showWhenPressingSuper.enable
+                    enabled: barConfigRoot.bar.autoHide.enable
+                    checked: barConfigRoot.bar.autoHide.showWhenPressingSuper.enable
                     onCheckedChanged: Config.options.bar.autoHide.showWhenPressingSuper.enable = checked
                     StyledToolTip {
                         text: Translation.tr("Temporarily reveals the bar while holding the Super/Windows key")
                     }
                 }
+            }
 
-                ConfigSubpageRow {
-                    buttonIcon: "palette"
+            BarRevealPicker {
+                Layout.fillWidth: true
+                Layout.topMargin: 8
+                visible: barConfigRoot.bar.autoHide.enable
+                presets: barConfigRoot.revealPresets
+                currentWidth: barConfigRoot.bar.autoHide.hoverRegionWidth
+                currentDelay: barConfigRoot.bar.autoHide.hoverDelay
+                onSelected: preset => {
+                    Config.options.bar.autoHide.mode = preset.value;
+                    Config.options.bar.autoHide.hoverRegionWidth = preset.width;
+                    Config.options.bar.autoHide.hoverDelay = preset.delay;
+                }
+            }
+
+            BarPair {
+                id: pair2
+                Layout.topMargin: 4
+                visible: barConfigRoot.bar.autoHide.enable
+                ConfigSpinBox {
+                    groupHorizontal: pair2.horizontal
+                    icon: "straighten"
+                    text: Translation.tr("Trigger area (px)")
+                    from: 2
+                    to: 64
+                    stepSize: 2
+                    value: barConfigRoot.bar.autoHide.hoverRegionWidth
+                    onValueChanged: Config.options.bar.autoHide.hoverRegionWidth = value
+                    StyledToolTip {
+                        text: Translation.tr("Width of the interactive edge zone that detects the pointer")
+                    }
+                }
+                ConfigSpinBox {
+                    groupHorizontal: pair2.horizontal
+                    icon: "hourglass_top"
+                    text: Translation.tr("Hold delay (ms)")
+                    from: 0
+                    to: 1000
+                    stepSize: 50
+                    value: barConfigRoot.bar.autoHide.hoverDelay
+                    onValueChanged: Config.options.bar.autoHide.hoverDelay = value
+                    StyledToolTip {
+                        text: Translation.tr("Delay in milliseconds the pointer must stay on the edge before the bar reveals")
+                    }
+                }
+            }
+
+            BarHint {
+                Layout.topMargin: 4
+                visible: barConfigRoot.bar.autoHide.enable && ShellModePolicy.connectModeActive
+                icon: "travel_explore"
+                text: Translation.tr("Connect's drop search needs the bar on screen.")
+            }
+        }
+
+        // ── Its look and its contents ─────────────────────────────────────
+        ContentSection {
+            icon: "palette"
+            title: Translation.tr("Look & layout")
+
+            Item {
+                id: entries
+                Layout.fillWidth: true
+                readonly property bool row: width >= barConfigRoot.entryBreak
+                readonly property real cardWidth: entries.row ? Math.floor((width - barConfigRoot.gap * 2) / 3) : width
+                readonly property real cardHeight: entries.row ? barConfigRoot.entryHeight : barConfigRoot.entryCompactHeight
+                implicitHeight: entries.row ? entries.cardHeight : entries.cardHeight * 3 + barConfigRoot.gap * 2
+
+                // Appearance: the corner style as a big condensed word.
+                BarEntryCard {
+                    id: lookCard
+                    x: 0
+                    y: 0
+                    width: entries.cardWidth
+                    height: entries.cardHeight
+                    compact: !entries.row
+                    symbol: "palette"
+                    shapeIdle: MaterialShape.Shape.Cookie9Sided
+                    shapeHover: MaterialShape.Shape.Flower
                     title: Translation.tr("Appearance & style")
-                    description: Translation.tr("Corners, background styles, glow, drop shadows, and brand icon")
-                    summary: (Config.options.bar.cornerStyle === 0 ? "Hug" : Config.options.bar.cornerStyle === 1 ? "Float" : Config.options.bar.cornerStyle === 2 ? "Rect" : "Dynamic Island") + " · " + (Config.options.bar.barBackgroundStyle === 0 ? "Transparent" : Config.options.bar.barBackgroundStyle === 1 ? "Visible" : Config.options.bar.barBackgroundStyle === 2 ? "Adaptive" : "Islands")
-                    onClicked: subPageOverlay.open(Qt.resolvedUrl("widgets/BarAppearanceConfig.qml"))
+                    summary: (barConfigRoot.backgroundNames[barConfigRoot.bar.barBackgroundStyle] ?? "") + " · "
+                        + (barConfigRoot.groupNames[barConfigRoot.bar.barGroupStyle] ?? "")
+                    onClicked: barConfigRoot.openSubPage("BarAppearanceConfig.qml")
+
+                    StyledText {
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: parent.width
+                        text: barConfigRoot.cornerNames[barConfigRoot.bar.cornerStyle] ?? ""
+                        horizontalAlignment: lookCard.compact ? Text.AlignRight : Text.AlignLeft
+                        font.family: Appearance.font.family.main
+                        font.pixelSize: Math.round(Math.min(lookCard.compact ? 34 : 56, parent.height))
+                        font.variableAxes: ({ "wght": 800, "wdth": 28, "ROND": 0 })
+                        font.capitalization: Font.AllUppercase
+                        color: Appearance.colors.colPrimary
+                        elide: Text.ElideRight
+                    }
                 }
 
-                ConfigSubpageRow {
-                    buttonIcon: "view_stream"
-                    title: Translation.tr("Bar Widgets & Widgets Layout")
-                    description: Translation.tr("Left, center, and right widget placement and reordering")
-                    summary: barConfigRoot.barWidgetCount + " " + Translation.tr("widgets · 3 groups")
-                    onClicked: subPageOverlay.open(Qt.resolvedUrl("widgets/BarLayoutConfig.qml"))
+                // Layout: how many widgets, split by where they sit.
+                BarEntryCard {
+                    id: layoutCard
+                    x: entries.row ? entries.cardWidth + barConfigRoot.gap : 0
+                    y: entries.row ? 0 : entries.cardHeight + barConfigRoot.gap
+                    width: entries.cardWidth
+                    height: entries.cardHeight
+                    compact: !entries.row
+                    symbol: "view_stream"
+                    shapeIdle: MaterialShape.Shape.Cookie7Sided
+                    shapeHover: MaterialShape.Shape.Clover4Leaf
+                    compactDisplayWidth: 56
+                    title: Translation.tr("Widgets & layout")
+                    summary: Translation.tr("Left, centre and right")
+                    onClicked: barConfigRoot.openSubPage("BarLayoutConfig.qml")
+
+                    Item {
+                        anchors.fill: parent
+
+                        StyledText {
+                            id: countDigits
+                            anchors.verticalCenter: parent.verticalCenter
+                            x: layoutCard.compact ? parent.width - width : 0
+                            text: barConfigRoot.barWidgetCount
+                            font.family: Appearance.font.family.main
+                            font.pixelSize: Math.round(Math.min(layoutCard.compact ? 38 : 60, parent.height))
+                            font.variableAxes: ({ "wght": 760, "wdth": 40, "ROND": 100 })
+                            color: Appearance.colors.colPrimary
+                        }
+
+                        // Three sections, each as wide as its share of the widgets.
+                        Row {
+                            id: split
+                            visible: !layoutCard.compact
+                            anchors.verticalCenter: parent.verticalCenter
+                            x: countDigits.width + 14
+                            width: parent.width - x
+                            spacing: 3
+                            readonly property var counts: [barConfigRoot.layouts.left?.length ?? 0, barConfigRoot.layouts.center?.length ?? 0, barConfigRoot.layouts.right?.length ?? 0]
+                            readonly property var lists: [barConfigRoot.layouts.left, barConfigRoot.layouts.center, barConfigRoot.layouts.right]
+                            readonly property int used: split.counts.filter(c => c > 0).length
+                            readonly property int firstUsed: split.counts.findIndex(c => c > 0)
+                            readonly property int lastUsed: 2 - [...split.counts].reverse().findIndex(c => c > 0)
+                            readonly property real unit: (width - spacing * (split.used - 1) - split.used * 28) / Math.max(1, barConfigRoot.barWidgetCount)
+
+                            Repeater {
+                                model: 3
+                                delegate: Rectangle {
+                                    id: segment
+                                    required property int index
+                                    readonly property int count: split.counts[segment.index]
+                                    visible: segment.count > 0
+                                    width: segment.count > 0 ? 28 + split.unit * segment.count : -split.spacing
+                                    height: 30
+                                    topLeftRadius: segment.index === split.firstUsed ? height / 2 : Appearance.rounding.verysmall
+                                    bottomLeftRadius: segment.index === split.firstUsed ? height / 2 : Appearance.rounding.verysmall
+                                    topRightRadius: segment.index === split.lastUsed ? height / 2 : Appearance.rounding.verysmall
+                                    bottomRightRadius: segment.index === split.lastUsed ? height / 2 : Appearance.rounding.verysmall
+                                    color: segment.index === 1 ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSecondaryContainer
+                                    clip: true
+
+                                    Row {
+                                        anchors.centerIn: parent
+                                        spacing: 2
+                                        Repeater {
+                                            model: barConfigRoot.glyphsOf(split.lists[segment.index], Math.max(1, Math.floor((segment.width - 12) / 16)))
+                                            delegate: MaterialSymbol {
+                                                required property string modelData
+                                                text: modelData
+                                                iconSize: 14
+                                                color: segment.index === 1 ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSecondaryContainer
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Widget settings: the widgets that have options of their own.
+                BarEntryCard {
+                    id: widgetsCard
+                    x: entries.row ? (entries.cardWidth + barConfigRoot.gap) * 2 : 0
+                    y: entries.row ? 0 : (entries.cardHeight + barConfigRoot.gap) * 2
+                    width: entries.cardWidth
+                    height: entries.cardHeight
+                    compact: !entries.row
+                    symbol: "widgets"
+                    shapeIdle: MaterialShape.Shape.Cookie6Sided
+                    shapeHover: MaterialShape.Shape.SoftBurst
+                    compactDisplayWidth: 84
+                    title: Translation.tr("Widgets & Waffle")
+                    summary: Translation.tr("Clock, weather, battery and more")
+                    onClicked: barConfigRoot.openSubPage("BarWidgetsWaffleConfig.qml")
+
+                    // Overlapping glyph discs, the first one primary.
+                    Row {
+                        anchors.verticalCenter: parent.verticalCenter
+                        x: widgetsCard.compact ? parent.width - width : 0
+                        spacing: -8
+                        Repeater {
+                            model: widgetsCard.compact ? ["schedule", "partly_cloudy_day", "battery_full"]
+                                : ["schedule", "partly_cloudy_day", "battery_full", "music_note", "grid_view"]
+                            delegate: Rectangle {
+                                required property string modelData
+                                required property int index
+                                width: widgetsCard.compact ? 34 : 44
+                                height: width
+                                radius: width / 2
+                                z: -index
+                                color: index === 0 ? Appearance.colors.colPrimary : Appearance.colors.colSecondaryContainer
+                                border.width: 3
+                                border.color: widgetsCard.hovered ? Appearance.colors.colLayer1Hover : Appearance.colors.colLayer1
+                                MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    text: modelData
+                                    iconSize: widgetsCard.compact ? 16 : 20
+                                    fill: 1
+                                    color: index === 0 ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        // ── Behavior & Interactions ───────────────────────────────────────
+        // ── Behaviour ─────────────────────────────────────────────────────
         ContentSection {
             icon: "tune"
             title: Translation.tr("Behavior & Interactions")
-            tooltip: Translation.tr("Configure scroll actions, bar popups, floating popups, and monitor targeting.")
 
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: Appearance.sizes.elevationMargin / 2
-
+            BarPair {
+                id: pair3
                 ConfigSwitch {
+                    groupHorizontal: pair3.horizontal
                     buttonIcon: "swap_vert"
                     text: Translation.tr("Scroll actions")
-                    checked: Config.options.bar.enableVolumeScroll || Config.options.bar.enableBrightnessScroll
+                    checked: barConfigRoot.bar.enableVolumeScroll || barConfigRoot.bar.enableBrightnessScroll
                     configPage: Qt.resolvedUrl("widgets/BarScrollActionsConfig.qml")
                     property bool readyForToggle: false
                     Component.onCompleted: readyForToggle = true
@@ -379,12 +556,29 @@ Item {
                         Config.options.bar.enableVolumeScroll = checked;
                         Config.options.bar.enableBrightnessScroll = checked;
                     }
+                    StyledToolTip {
+                        text: Translation.tr("Scroll over the bar's ends to change volume and brightness")
+                    }
                 }
-
                 ConfigSwitch {
+                    groupHorizontal: pair3.horizontal
+                    buttonIcon: "left_click"
+                    text: Translation.tr("Click bar to open sidebars")
+                    checked: barConfigRoot.bar.sidebarClickOpen
+                    onCheckedChanged: Config.options.bar.sidebarClickOpen = checked
+                    StyledToolTip {
+                        text: Translation.tr("Left-clicking empty bar space toggles the left and right sidebars (Float, Hug and Rect styles)")
+                    }
+                }
+            }
+
+            BarPair {
+                id: pair4
+                ConfigSwitch {
+                    groupHorizontal: pair4.horizontal
                     buttonIcon: "tooltip"
                     text: Translation.tr("Bar popups")
-                    checked: Config.options.bar.tooltips.enableTooltips
+                    checked: barConfigRoot.bar.tooltips.enableTooltips
                     configPage: Qt.resolvedUrl("widgets/BarTooltipsConfig.qml")
                     property bool readyForToggle: false
                     Component.onCompleted: readyForToggle = true
@@ -393,12 +587,15 @@ Item {
                             return;
                         Config.options.bar.tooltips.enableTooltips = checked;
                     }
+                    StyledToolTip {
+                        text: Translation.tr("Small popups that open when hovering widgets on the bar")
+                    }
                 }
-
                 ConfigSwitch {
+                    groupHorizontal: pair4.horizontal
                     buttonIcon: "open_in_new"
                     text: Translation.tr("Floating popups")
-                    checked: Config.options.bar.tooltips.enablePopups
+                    checked: barConfigRoot.bar.tooltips.enablePopups
                     configPage: Qt.resolvedUrl("widgets/BarPopupsConfig.qml")
                     property bool readyForToggle: false
                     Component.onCompleted: readyForToggle = true
@@ -407,51 +604,31 @@ Item {
                             return;
                         Config.options.bar.tooltips.enablePopups = checked;
                     }
-                }
-
-                ConfigSwitch {
-                    buttonIcon: "desktop_windows"
-                    text: Translation.tr("Only show bar on single monitor")
-                    checked: Config.options.bar.onlyShowOnSingleMonitor
-                    onCheckedChanged: {
-                        Config.options.bar.onlyShowOnSingleMonitor = checked;
-                        if (checked && Config.options.bar.singleMonitorName === "" && Quickshell.screens.length > 0)
-                            Config.options.bar.singleMonitorName = Quickshell.screens[0].name;
-                    }
                     StyledToolTip {
-                        text: Translation.tr("Display the bar on only one chosen monitor instead of all monitors")
-                    }
-                }
-
-                ContentSubsection {
-                    title: Translation.tr("Selected Monitor")
-                    icon: "settings_input_hdmi"
-                    visible: Config.options.bar.onlyShowOnSingleMonitor
-
-                    MonitorPicker {
-                        currentValue: Config.options.bar.singleMonitorName
-                        onSelected: newValue => Config.options.bar.singleMonitorName = newValue
+                        text: Translation.tr("Cards that appear on their own: keyboard layout, display modes and others")
                     }
                 }
             }
-        }
 
-        // ── Widgets & Waffle ──────────────────────────────────────────────
-        ContentSection {
-            icon: "widgets"
-            title: Translation.tr("Widgets & Waffle")
-            tooltip: Translation.tr("Configure individual bar widgets and Waffle panel tweaks.")
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: Appearance.sizes.elevationMargin / 2
-
-                ConfigSubpageRow {
-                    buttonIcon: "widgets"
-                    title: Translation.tr("Widgets & Waffle Settings")
-                    description: Translation.tr("Configure individual bar widgets and Waffle panel tweaks")
-                    onClicked: subPageOverlay.open(Qt.resolvedUrl("widgets/BarWidgetsWaffleConfig.qml"))
+            ConfigSwitch {
+                buttonIcon: "desktop_windows"
+                text: Translation.tr("Only show bar on single monitor")
+                checked: barConfigRoot.bar.onlyShowOnSingleMonitor
+                onCheckedChanged: {
+                    Config.options.bar.onlyShowOnSingleMonitor = checked;
+                    if (checked && Config.options.bar.singleMonitorName === "" && Quickshell.screens.length > 0)
+                        Config.options.bar.singleMonitorName = Quickshell.screens[0].name;
                 }
+                StyledToolTip {
+                    text: Translation.tr("Display the bar on only one chosen monitor instead of all monitors")
+                }
+            }
+
+            MonitorPicker {
+                visible: barConfigRoot.bar.onlyShowOnSingleMonitor
+                Layout.topMargin: 4
+                currentValue: barConfigRoot.bar.singleMonitorName
+                onSelected: newValue => Config.options.bar.singleMonitorName = newValue
             }
         }
     }

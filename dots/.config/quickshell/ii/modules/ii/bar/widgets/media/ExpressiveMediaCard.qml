@@ -53,48 +53,8 @@ Item {
 
     readonly property string trackTitle: player?.trackTitle || Translation.tr("No media")
     readonly property string trackArtist: player?.trackArtist || Translation.tr("Unknown Artist")
-    readonly property string artUrl: MprisController.artUrl
-    readonly property bool isLocalArt: artUrl.startsWith("file://")
-
-    property string artDownloadLocation: Directories.coverArt
-    property string artFileName: Qt.md5(artUrl)
-    property string artFilePath: `${artDownloadLocation}/${artFileName}`
-    property bool artDownloaded: false
-
-    readonly property string artSource: {
-        if (!artUrl)
-            return "";
-        if (isLocalArt)
-            return artUrl;
-        return artDownloaded ? Qt.resolvedUrl(artFilePath) : "";
-    }
-
-    onArtFilePathChanged: {
-        if (!artUrl || artUrl.length === 0) {
-            artDownloaded = false;
-            return;
-        }
-        if (isLocalArt) {
-            artDownloaded = true;
-            return;
-        }
-        artDownloader.targetFile = artUrl;
-        artDownloader.artFilePath = artFilePath;
-        artDownloader.artTempPath = artFilePath + ".tmp";
-        artDownloaded = false;
-        artDownloader.running = true;
-    }
-
-    Process {
-        id: artDownloader
-        property string targetFile: root.artUrl
-        property string artFilePath: root.artFilePath
-        property string artTempPath: root.artFilePath + ".tmp"
-        command: ["bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
-        onExited: {
-            artDownloaded = true;
-        }
-    }
+    readonly property string artUrl: player?.trackArtUrl ?? ""
+    readonly property string artSource: CoverArt.source(root.artUrl)
 
     implicitWidth: cardPadding * 2 + albumContainerSize + cardSpacing + 350
     implicitHeight: 240
@@ -239,7 +199,7 @@ Item {
                             Layout.alignment: Qt.AlignTop
 
                             Text {
-                                text: StringUtils.friendlyTimeForSeconds(Math.min(root.player?.position ?? 0, root.player?.length ?? Infinity))
+                                text: StringUtils.friendlyTimeForSeconds(MprisController.trackPositionOf(root.player))
                                 color: root.colTimeMain
                                 font.pixelSize: root.timerPrimarySize
                                 font.weight: Font.ExtraBold
@@ -247,7 +207,8 @@ Item {
                             }
 
                             Text {
-                                text: StringUtils.friendlyTimeForSeconds(root.player?.length ?? 0)
+                                text: MprisController.hasTrackLength(root.player)
+                                    ? StringUtils.friendlyTimeForSeconds(root.player.length) : "\u2013\u2013:\u2013\u2013"
                                 color: root.colTimeSub
                                 font.pixelSize: root.timerSecondarySize
                                 font.weight: Font.Regular
@@ -301,11 +262,19 @@ Item {
                                 active: root.player?.canSeek ?? false
                                 sourceComponent: StyledSlider {
                                     configuration: StyledSlider.Configuration.Wavy
+                                    animateWave: (root.player?.isPlaying ?? false) && root.visible
                                     highlightColor: root.colProgressHighlight
                                     trackColor: root.colProgressTrack
                                     handleColor: root.colProgressHighlight
-                                    value: (root.player?.length ?? 0) > 0 ? Math.min(1, Math.max(0, root.player.position / root.player.length)) : 0
-                                    onMoved: root.player.position = value * root.player.length
+                                    value: MprisController.trackProgressOf(root.player)
+                                    // Nothing to seek to while the player publishes no length.
+                                    enabled: MprisController.hasTrackLength(root.player)
+                                    onMoved: MprisController.seekFraction(root.player, value)
+                                    // QQuickSlider writes `value` itself while the user drags, which destroys
+                                    // the binding below it. Without this the bar froze where the drag left it
+                                    // and never followed the track again.
+                                    onPressedChanged: if (!pressed)
+                                        value = Qt.binding(() => MprisController.trackProgressOf(root.player))
                                 }
                             }
 
@@ -316,12 +285,13 @@ Item {
                                     left: parent.left
                                     right: parent.right
                                 }
-                                active: !(root.player?.canSeek ?? false)
+                                active: !!root.player && !sliderLoader.active
                                 sourceComponent: StyledProgressBar {
                                     wavy: root.player?.isPlaying
+                                    animateWave: (root.player?.isPlaying ?? false) && root.visible
                                     highlightColor: root.colProgressHighlight
                                     trackColor: root.colProgressTrack
-                                    value: (root.player?.length ?? 0) > 0 ? Math.min(1, Math.max(0, root.player.position / root.player.length)) : 0
+                                    value: MprisController.trackProgressOf(root.player)
                                 }
                             }
                         }

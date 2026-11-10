@@ -23,12 +23,22 @@ Singleton {
     // react to GlobalStates reliably.
     property bool presetBarHidden: false
     property bool presetRecoloring: false
+    // True while the preset's heavy work runs (config sections, panel windows,
+    // palette). Nothing on screen may start moving then — the work stalls the
+    // GUI thread and anything animating through it stutters — so widgets keep
+    // their places, the wallpaper transition waits and the palette snaps in
+    // instead of crossfading, and everything moves once this drops.
+    property bool presetHoldMotion: false
+    // The first part of that hold, while the bar is still leaving: external
+    // config changes wait for it, so the slide-out runs on an idle thread.
+    property bool presetWorkDeferred: false
     property bool phoneCameraRunning: false
     property bool phoneMicRunning: false
     property int mediaModeCount: 0
     readonly property bool mediaModeActive: mediaModeCount > 0
     property var mediaModeMonitors: []
     property int mediaModeCloseAllTrigger: 0
+    property bool mediaModeActivatedKeepAwake: false
     // A serial keeps repeated requests observable, including two quick-toggle
     // presses while the same Media Mode window is already open. BackgroundRoot
     // remains the per-screen lifecycle owner; this singleton only carries the
@@ -102,16 +112,132 @@ Singleton {
         root.notesAppOpen = true;
     }
 
+    /// The clock app window. Built on demand and destroyed on close, like the notes app.
+    property bool clockAppOpen: false
+    /// A tab the clock app should land on when it opens, consumed on arrival.
+    property string clockAppPendingTab: ""
+
+    /// A reminder the Reminders tab should open in its editor, consumed on arrival.
+    property string reminderToOpen: ""
+
+    function openClockApp(tab = ""): void {
+        root.clockAppPendingTab = String(tab ?? "");
+        root.clockAppOpen = true;
+    }
+
+    /// The EasyEffects app window, built on demand like the clock app.
+    property bool easyEffectsAppOpen: false
+    /// A tab the EasyEffects app should land on when it opens, consumed on arrival.
+    property string easyEffectsAppPendingTab: ""
+
+    function openEasyEffectsApp(tab = ""): void {
+        root.easyEffectsAppPendingTab = String(tab ?? "");
+        root.easyEffectsAppOpen = true;
+    }
+
+    /// The App usage window (Super+U), built on demand like the clock app.
+    property bool usageOpen: false
+    /// A tab the usage app should land on when it opens, consumed on arrival.
+    property string usageAppPendingTab: ""
+
+    function openUsageApp(tab = ""): void {
+        root.usageAppPendingTab = String(tab ?? "");
+        root.usageOpen = true;
+    }
+
+    /// The Modes & Routines window (Super+Y), built on demand like the clock app.
+    property bool modesOpen: false
+    /// A tab the modes app should land on when it opens, consumed on arrival.
+    property string modesAppPendingTab: ""
+
+    function openModesApp(tab = ""): void {
+        root.modesAppPendingTab = String(tab ?? "");
+        root.modesOpen = true;
+    }
+
+    /// The System Health window (Ctrl+Super+H), built on demand like the clock app.
+    property bool healthAppOpen: false
+    /// A tab the health app should land on when it opens, consumed on arrival.
+    property string healthAppPendingTab: ""
+    /// A finding the health app should open in its sheet on arrival ("unit:user:x.service").
+    property string healthAppPendingFinding: ""
+
+    function openHealthApp(tab = "", findingId = ""): void {
+        root.healthAppPendingTab = String(tab ?? "");
+        root.healthAppPendingFinding = String(findingId ?? "");
+        root.healthAppOpen = true;
+    }
+
     property bool mediaControlsOpen: false
     property bool mediaControlsPinned: false
-    // Names of screens currently blacked out by the OLED saver overlay. Independent
-    // per monitor: toggling one monitor doesn't affect the others.
+    // Names of screens showing the Always On Display (the OLED saver). Read by the desktop
+    // overlay (OledSaver) and, while locked, by LockSurface, BackgroundRoot and the
+    // widgets window.
     property var oledSaverMonitors: []
+
+    function toggleOledSaver(): void {
+        if (!(Config.options?.oledSaver?.enable ?? true))
+            return;
+        const all = Quickshell.screens.map(s => s.name);
+        root.oledSaverMonitors = (root.oledSaverMonitors ?? []).length > 0 ? [] : all;
+    }
+
+    function closeOledSaver(): void {
+        root.oledSaverMonitors = [];
+    }
+    // The AOD draws one of its own clocks (AodClockFace) instead of the lock's widgets.
+    readonly property bool aodUsesClockFace: ["flip", "dial", "expressive", "dots", "analog", "info"].includes(Config.options?.oledSaver?.clockStyle ?? "widgets")
+    // Anti burn-in pixel shift for Always On Display (OLED saver).
+    // Shifts widgets every minute to a nearby position to prevent OLED burn-in.
+    property real aodBurnInShiftX: 0
+    property real aodBurnInShiftY: 0
+    readonly property bool aodBurnInActive: (Config.options?.oledSaver?.enable ?? true)
+        && (Config.options?.oledSaver?.antiBurnIn ?? true)
+        && root.oledSaverMonitors.length > 0
+
+    function stepAodBurnIn(): void {
+        const maxRadius = 24;
+        const minStep = 8;
+        let nx = 0;
+        let ny = 0;
+        for (let i = 0; i < 30; i++) {
+            const angle = Math.random() * 2 * Math.PI;
+            const dist = 6 + Math.random() * (maxRadius - 6);
+            nx = Math.round(Math.cos(angle) * dist);
+            ny = Math.round(Math.sin(angle) * dist);
+            if (Math.hypot(nx - root.aodBurnInShiftX, ny - root.aodBurnInShiftY) >= minStep) {
+                break;
+            }
+        }
+        root.aodBurnInShiftX = nx;
+        root.aodBurnInShiftY = ny;
+    }
+
+    Timer {
+        id: aodBurnInTimer
+        interval: 60000
+        repeat: true
+        running: root.aodBurnInActive
+        onRunningChanged: {
+            if (!running) {
+                root.aodBurnInShiftX = 0;
+                root.aodBurnInShiftY = 0;
+            }
+        }
+        onTriggered: root.stepAodBurnIn()
+    }
+    // The island's window, published so the OLED saver's focus grab can let the pointer
+    // reach it; a grab refuses pointer focus to every surface it does not list.
+    property var islandWindow: null
     property bool osdBrightnessOpen: false
     property bool osdVolumeOpen: false
     property bool oskOpen: false
     property bool overlayOpen: false
     property bool overviewOpen: false
+    /** A clipboard entry's text is being dragged toward the island's drop area. */
+    property bool islandTextDragActive: false
+    /** A file is being dragged out of a utility widget (e.g. drop shelf). Keeps cards standing during native drag. */
+    property bool fileDragActive: false
     // The ii family can route its Overview entry points to the Tablet Family's
     // existing app drawer. overviewOpen remains the canonical public intent so
     // legacy close/toggle assignments still affect whichever surface is active;
@@ -174,13 +300,18 @@ Singleton {
         const monitors = HyprlandData.monitors;
         if (!monitors)
             return false;
+        // Name only: since Hyprland 0.57 a special workspace carries no numeric id.
         return monitors.some(mon => mon.specialWorkspace && mon.specialWorkspace.name !== "");
     }
+    property bool scratchpadEmptyOverlayActive: false
     readonly property bool overviewBackgroundActive: {
         const background = Config.options && Config.options.background;
         const allowOverviewBg = Config.options && Config.options.overview && Config.options.overview.animationStyle !== "none";
-        return Boolean(background && background.zoomOutEnabled
-            && ((root.classicOverviewOpen && allowOverviewBg) || root.cheatsheetOpen || root.scratchpadOpen || root.usageOpen || root.modesOpen));
+        return Boolean(background && (background.useBackgroundOverviewAlways
+            || (background.zoomOutEnabled
+                // On the scrolling layouts the scrolloverview plugin draws the
+                // overview, and the wallpaper stays where it is.
+                && ((root.classicOverviewOpen && allowOverviewBg && !root.scrollingLayoutActive) || root.cheatsheetOpen))));
     }
 
     // BackgroundRoot owns one controller per monitor. Other background surfaces
@@ -360,8 +491,6 @@ Singleton {
     // between them were an IPC call and a keybind, neither of which is discoverable.
     property bool shellSwitcherOpen: false
     property bool superDown: false
-    property bool usageOpen: false
-    property bool modesOpen: false
     // Transient "Work mode on" banner: set by the Modes engine for ~3 s.
     // Payload: { kind: "mode"|"routine", id, icon, color, title, subtitle }
     property bool modeFlashActive: false
@@ -372,8 +501,15 @@ Singleton {
     // ask a SearchWidget directly, and closing the whole Overview from inside
     // a panel loses a level of navigation the user expects Super to walk back.
     property bool searchPanelActive: false
+    /// True while the launcher is hosting a search panel that was opened
+    /// directly (keybind/IPC) rather than by searching. A direct open has no
+    /// "plain search" step below it, so the first Esc/Backspace should close
+    /// the whole surface instead of revealing the empty overview grid.
+    property bool panelOpenedDirectly: false
     property bool wallpaperSelectorOpen: false
-    property string wallpaperSelectorTarget: "desktop" // "desktop" or "lockscreen"
+    // A bar popup with a text field is open (Passwords): type-to-search must not bind the letters.
+    property bool barPopupTypingOpen: false
+    property string wallpaperSelectorTarget: "desktop" // "desktop", "lockscreen", "lightmode" or "screen:<name>" (one screen's own, WallpaperLayout)
     property bool workspaceShowNumbers: false
     property bool filePickerOpen: false
     property bool videoEditorPopupOpen: false
@@ -455,7 +591,8 @@ Singleton {
     //   widgets  "category:<key>"
     //   bar      "appearance" | "component:<id>"
     //   dock     "appearance" | "widgets" | "apps:<key>"
-    //   style    "wallpapers" | "colours"
+    //   wallpaper "wallpapers" | "wallpapers:lockscreen" | "wallpapers:lightmode" | "wallpapers:screen"
+    //   style    "colours"
     //
     // A page address belongs to the section that minted it, and the panel
     // ignores one that does not - rather than this clearing it on every
@@ -467,6 +604,10 @@ Singleton {
     // mode's real key surface - reads it to know when to take the keyboard back
     // (BackgroundWidgetsWindow).
     property bool editSearchFocused: false
+    // A desktop widget's text field that is being typed into (To-Do, Translator),
+    // as "<screen>|<owner>". The desktop's surface on that screen takes the
+    // keyboard while it is set (BackgroundWidgetsWindow); WidgetTextEntry owns it.
+    property string widgetTypingOwner: ""
     // Ctrl+F. The key arrives on the canvas, which is the only surface in the
     // mode holding a keyboard, and the drawer on the edited screen answers it.
     signal editSearchFocusRequested()
@@ -493,6 +634,15 @@ Singleton {
     // The desktop's right-click menu: which screen, where on it. Session
     // state like the widget menu's; exists in and out of Edit Mode.
     property bool desktopMenuOpen: false
+    // Desktop icon dialogs alive (the item menu and its rename field). They
+    // take the keyboard through a layer surface, which leaves no focused
+    // window behind: type-to-search reads this to leave their keys alone.
+    property int desktopDialogCount: 0
+    readonly property bool desktopDialogOpen: root.desktopDialogCount > 0
+    // The exit runs inside the live surface (DesktopMenuCard's reveal), so
+    // `open` stays true while the card plays out; only the card's
+    // exitFinished may clear it, through finishDesktopMenuClose.
+    property bool desktopMenuClosing: false
     property string desktopMenuScreenName: ""
     property real desktopMenuX: 0
     property real desktopMenuY: 0
@@ -513,10 +663,18 @@ Singleton {
         root.desktopMenuScreenName = screenName;
         root.desktopMenuX = x;
         root.desktopMenuY = y;
+        root.desktopMenuClosing = false;
         root.desktopMenuOpen = true;
     }
 
     function closeDesktopMenu() {
+        if (!root.desktopMenuOpen || root.desktopMenuClosing)
+            return;
+        root.desktopMenuClosing = true;
+    }
+
+    function finishDesktopMenuClose() {
+        root.desktopMenuClosing = false;
         root.desktopMenuOpen = false;
     }
 
@@ -664,6 +822,16 @@ Singleton {
     // stage 7b; until then this only ever holds the desktop.
     property string editTab: EditModeLogic.desktopTab
     readonly property bool editLockPreview: root.editMode && root.editTab === EditModeLogic.lockscreenTab
+    // The AOD tab: the lock's layout again (the AOD keeps the lock's widgets where
+    // the lock keeps them), on black and in grey, or the AOD's own clock instead.
+    readonly property bool editAodPreview: root.editMode && root.editTab === EditModeLogic.aodTab
+    // Either face that places widgets where the lock does.
+    readonly property bool editLockLayout: root.editLockPreview || root.editAodPreview
+    property real editAodProgress: root.editAodPreview ? 1 : 0
+    Behavior on editAodProgress {
+        enabled: !Appearance.reducedMotion
+        animation: Appearance.animation.elementMove.numberAnimation.createObject(root)
+    }
     // The tab's own scalar, beside the boolean rather than instead of it.
     //
     // The Lockscreen tab is a FILTER on the same desktop, and flipping it used
@@ -682,22 +850,135 @@ Singleton {
     // "The lock's LOOK is on screen": the real lock session or the preview of
     // it. The one derivation the theme sites are meant to read, so the preview
     // can never show the lock's wallpaper under the desktop's palette.
-    readonly property bool lockLookActive: root.screenLocked || root.editLockPreview
+    readonly property bool lockLookActive: root.screenLocked || root.editLockLayout
 
     // The edge each dock occupies, published by the dock window itself
     // (screen name -> { side, thickness }). The dock is the one place that
     // knows its padding and style, so the mode's viewport reads this rather
     // than deriving the dock's size a second time.
     property var dockInsets: ({})
-    function setDockInset(screenName, side, thickness) {
+    // `reserved` is the exclusive zone the dock holds for windows right now: its
+    // thickness while pinned and revealed, 0 otherwise. A surface that ignores the
+    // compositor's zones reads it to stay clear of the dock the way zone-respecting
+    // ones do. `shown` is the thickness a full-width tray covers right now, pinned
+    // or not: the top layer paints that tray as part of the wrapped frame.
+    // `concave` is the radius of the full-width rounded style's inward corners, which the
+    // top layer draws at the ends of that tray.
+    function setDockInset(screenName, side, thickness, reserved, shown, concave) {
         if (!screenName)
             return;
         const next = Object.assign({}, root.dockInsets);
         if (!side || !(thickness > 0))
             delete next[screenName];
         else
-            next[screenName] = { "side": side, "thickness": thickness };
+            next[screenName] = { "side": side, "thickness": thickness, "reserved": reserved > 0 ? reserved : 0, "shown": shown > 0 ? shown : 0, "concave": concave > 0 ? concave : 0 };
         root.dockInsets = next;
+    }
+
+    // A connected sidebar pushes a pinned vertical dock, but the dock is its own layer
+    // surface and the compositor pairs its frames with the top layer's a tick apart:
+    // followed live, it flickered beside the sliding sidebar. For the slide the dock
+    // hands a snapshot of itself to the top layer, which draws it glued to the sidebar
+    // (screen name -> { url, side, inset, y, width, height }; inset is the gap between
+    // the screen edge and the dock at rest). The top layer answers in dockPushCopyShown
+    // once a frame with the copy is on screen, and only then does the real dock hide.
+    property var dockPushCopies: ({})
+    property var dockPushCopyShown: ({})
+    function setDockPushCopy(screenName, copy) {
+        if (!screenName)
+            return;
+        const next = Object.assign({}, root.dockPushCopies);
+        if (copy)
+            next[screenName] = copy;
+        else
+            delete next[screenName];
+        root.dockPushCopies = next;
+        if (!copy)
+            root.setDockPushCopyShown(screenName, false);
+    }
+    function setDockPushCopyShown(screenName, shown) {
+        if (!screenName || !!root.dockPushCopyShown[screenName] === shown)
+            return;
+        const next = Object.assign({}, root.dockPushCopyShown);
+        if (shown)
+            next[screenName] = true;
+        else
+            delete next[screenName];
+        root.dockPushCopyShown = next;
+    }
+
+    // Screens whose top layer paints the wrapped frame's band under a top/bottom dock
+    // (screen name -> true). The dock leaves its tray to the band there: Hyprland blurs
+    // every surface on its own, so a tray of its own never matched the frame beside it,
+    // and stacked on the band the translucent fill read as a second, darker shade.
+    property var dockBandScreens: ({})
+    function setDockBand(screenName, banded) {
+        if (!screenName || !!root.dockBandScreens[screenName] === banded)
+            return;
+        const next = Object.assign({}, root.dockBandScreens);
+        if (banded)
+            next[screenName] = true;
+        else
+            delete next[screenName];
+        root.dockBandScreens = next;
+    }
+    // While search lifts the top layer to Overlay, over the dock, the frame keeps the band's
+    // shape and its rounded joins but leaves the band itself hollow (screen name -> the
+    // frame's colour), and the dock fills its tray with that colour. Dropping the band
+    // instead flattened the joins and swapped two surfaces in one frame (a flicker).
+    property var dockBandCover: ({})
+    function setDockBandCover(screenName, color) {
+        if (!screenName)
+            return;
+        const next = Object.assign({}, root.dockBandCover);
+        if (color)
+            next[screenName] = color;
+        else if (next[screenName] === undefined)
+            return;
+        else
+            delete next[screenName];
+        root.dockBandCover = next;
+    }
+
+    // What the Dynamic Island bar style really occupies of its edge, published by the
+    // real bar window (screen name -> { edge, extent, reserve }). The style reserves a
+    // full strip for windows but draws only a pill centred in it, so a full-width dock
+    // reads this to take the strip back where the pill is not.
+    //   extent  the pill's length along the edge, concave fillets included
+    //   reserve the strip's thickness beyond the wrapped frame's own ring
+    property var barIslands: ({})
+    function setBarIsland(screenName, edge, extent, reserve) {
+        if (!screenName)
+            return;
+        const prev = root.barIslands[screenName];
+        if (!edge || !(extent > 0)) {
+            if (!prev)
+                return;
+            const gone = Object.assign({}, root.barIslands);
+            delete gone[screenName];
+            root.barIslands = gone;
+            return;
+        }
+        // Whole pixels: the pill's height follows widgets that animate, and every
+        // publish wakes each dock's sizing.
+        const e = Math.round(extent);
+        const r = Math.round(reserve);
+        if (prev && prev.edge === edge && prev.extent === e && prev.reserve === r)
+            return;
+        const next = Object.assign({}, root.barIslands);
+        next[screenName] = { "edge": edge, "extent": e, "reserve": r };
+        root.barIslands = next;
+    }
+
+    // The live docks, newest last: the Settings dock preview reads the first one's
+    // model (`modelItems`) and helpers instead of deriving the dock's contents again.
+    property var dockContents: []
+    function registerDockContent(item) {
+        if (item && root.dockContents.indexOf(item) < 0)
+            root.dockContents = root.dockContents.concat([item]);
+    }
+    function unregisterDockContent(item) {
+        root.dockContents = root.dockContents.filter(entry => entry !== item);
     }
 
     // The screen a right-click asked the mode for, read once by the entry
@@ -759,7 +1040,9 @@ Singleton {
             return;
         // The bar and the dock are no part of the lock's face: asking for one
         // of them from the lock preview means the desktop.
-        if (root.editLockPreview && section !== "widgets" && section !== "lock" && section !== "style")
+        if (root.editLockPreview && section !== "widgets" && section !== "lock" && section !== "style" && section !== "wallpaper")
+            root.editTab = EditModeLogic.desktopTab;
+        if (root.editAodPreview && section !== "widgets" && section !== "aod")
             root.editTab = EditModeLogic.desktopTab;
         root.editDrawerOpen = true;
     }
@@ -797,10 +1080,18 @@ Singleton {
     // entry waits for the exit's animation, since a mode that is still on
     // the way out refuses to open.
     property string _editReopenMonitor: ""
+    // The Wallpaper catalogue survives the hop: going from one screen's
+    // picture to the next is the whole point of having one per screen, and
+    // the exit would otherwise close the panel on the way.
+    property string _editReopenPage: ""
+    property bool _editReopenWallpaper: false
     function switchEditMonitor(monitorName) {
         if (!root.editMode || !monitorName || monitorName === root.editModeMonitor)
             return;
         root._editReopenMonitor = monitorName;
+        root._editReopenWallpaper = root.editDrawerOpen && root.editDrawerSection === "wallpaper"
+            && !root.editLockLayout;
+        root._editReopenPage = root._editReopenWallpaper ? root.editDrawerPage : "";
         root.closeEditMode();
         editReopenTimer.restart();
     }
@@ -810,8 +1101,16 @@ Singleton {
         repeat: false
         onTriggered: {
             const monitor = root._editReopenMonitor;
+            const wallpaper = root._editReopenWallpaper;
+            const page = root._editReopenPage;
             root._editReopenMonitor = "";
-            if (monitor !== "")
+            root._editReopenWallpaper = false;
+            root._editReopenPage = "";
+            if (monitor === "")
+                return;
+            if (wallpaper)
+                root.openEditCatalogue("wallpaper", monitor, page);
+            else
                 root.openEditMode(monitor);
         }
     }
@@ -879,7 +1178,7 @@ Singleton {
         // A special workspace is summoned over the desktop; close it first,
         // as the lock does.
         const specName = mData.specialWorkspace?.name ?? "";
-        if (specName !== "" && (mData.specialWorkspace?.id ?? 0) !== 0) {
+        if (specName !== "") {
             let clean = specName.startsWith("special:") ? specName.substring(8) : specName;
             if (!clean)
                 clean = "special";
@@ -894,7 +1193,7 @@ Singleton {
                     monitors: [{
                         name: mon,
                         activeWorkspaceId: ws,
-                        index: Quickshell.screens.findIndex(s => s.name === mon)
+                        index: HyprlandData.workspaceMapIndex(mon)
                     }],
                     windowList: HyprlandData.windowList || [],
                     allMonitors: HyprlandData.monitors || [],
@@ -949,6 +1248,9 @@ Singleton {
         // the session menu cover it, media mode promotes the wallpaper over
         // everything, and Connect mode rebuilds the bar the mode will edit.
         function onScreenLockedChanged() {
+            // The lock grabs the keyboard, so the Super release from Super+L
+            // never reaches the workspaceNumber shortcut and superDown latches.
+            root.superDown = false;
             if (root.screenLocked) {
                 root.editMode = false;
                 return;
@@ -968,8 +1270,13 @@ Singleton {
         }
 
         function onMediaModeActiveChanged() {
-            if (root.mediaModeActive)
+            if (root.mediaModeActive) {
                 root.editMode = false;
+            } else if (root.mediaModeActivatedKeepAwake) {
+                root.mediaModeActivatedKeepAwake = false;
+                if (Idle.inhibit && !Idle.timed)
+                    Idle.toggleInhibit(false);
+            }
         }
 
         function onConnectModeActiveChanged() {
@@ -997,13 +1304,24 @@ Singleton {
     // push order would leave the widget at 60.
     property var _editHistoryBatch: null
     property bool _editHistoryReplaying: false
+    // Sent before an undo or redo: a store still holding an edit it has not
+    // written yet (a run of wheel steps waiting for its timer) writes it now,
+    // so Ctrl+Z takes that edit back instead of reverting under it.
+    signal editHistoryWillReplay()
+
+    property int _editHistoryBatchDepth: 0
 
     function editHistoryBeginBatch() {
         if (root._editHistoryBatch === null)
             root._editHistoryBatch = [];
+        root._editHistoryBatchDepth++;
     }
 
     function editHistoryEndBatch() {
+        if (root._editHistoryBatchDepth > 0)
+            root._editHistoryBatchDepth--;
+        if (root._editHistoryBatchDepth > 0)
+            return;
         const entries = root._editHistoryBatch;
         root._editHistoryBatch = null;
         if (entries === null || entries.length === 0)
@@ -1047,6 +1365,7 @@ Singleton {
     }
 
     function editUndo() {
+        root.editHistoryWillReplay();
         if (root._editHistoryBatch !== null)
             root.editHistoryEndBatch();
         const popped = EditModeLogic.undoPop(root.editUndoStack);
@@ -1058,6 +1377,7 @@ Singleton {
     }
 
     function editRedo() {
+        root.editHistoryWillReplay();
         const popped = EditModeLogic.undoPop(root.editRedoStack);
         root.editRedoStack = popped.stack;
         if (popped.entry === null)
@@ -1148,9 +1468,129 @@ Singleton {
         }
     }
     property string activeSearchMonitor: ""
+    // The monitor the overview opened on, held while it is open and through its
+    // close. The zoom, the window captures and the Real Gnome picker belong to
+    // it, not to whichever monitor the pointer is over: following Hyprland's
+    // focus moved the overview mid-gesture as soon as a dragged window crossed
+    // to another monitor. Empty while nothing holds it; then the focused one.
+    property string overviewMonitorLatch: ""
+    readonly property string overviewMonitor: root.overviewMonitorLatch !== ""
+        ? root.overviewMonitorLatch : (Hyprland.focusedMonitor?.name ?? "")
+    Timer {
+        id: overviewMonitorReleaseTimer
+        // Outlives the close animation, so the closing zoom stays where it opened.
+        interval: 1500
+        onTriggered: {
+            if (!root.overviewOpen)
+                root.overviewMonitorLatch = "";
+        }
+    }
     property real activeSearchHeight: 0
     property real activeSearchWidth: 0
     property string activeSearchQuery: ""
+    // Real Gnome overview: screen name -> the free area under the workspace
+    // thumbnails (screen coordinates), where the wallpaper plane lands.
+    property var realGnomeAreas: ({})
+    // The screen that last measured its own area (the one holding the search): the
+    // others derive theirs from it so every monitor's plane lands the same way.
+    property string realGnomeAreaScreen: ""
+    // Real Gnome opens on every monitor, not only the one under the pointer.
+    readonly property bool realGnomeMirrored: Quickshell.screens.length > 1
+        && (Config.options?.background?.overviewBackgroundStyle ?? "") === "real-gnome"
+        && (Config.options?.background?.realGnomeAllMonitors ?? false)
+        && !root.scrollingLayoutActive
+        && !(Config.options?.background?.useBackgroundOverviewAlways ?? false)
+    function realGnomeAreaFor(screenName) {
+        const own = root.realGnomeAreas[screenName];
+        const source = root.realGnomeAreaScreen;
+        if (source === "" || source === screenName)
+            return own;
+        const sourceRect = root.realGnomeAreas[source];
+        const sourceScreen = Quickshell.screens.find(s => s.name === source);
+        const screen = Quickshell.screens.find(s => s.name === screenName);
+        if (!sourceRect || !sourceScreen || !screen)
+            return own;
+        const monitors = HyprlandData.monitors ?? [];
+        const sourceReserved = monitors.find(m => m.name === source)?.reserved ?? [0, 0, 0, 0];
+        const reserved = monitors.find(m => m.name === screenName)?.reserved ?? [0, 0, 0, 0];
+        const topInset = sourceRect.y - sourceReserved[1];
+        const bottomInset = (sourceScreen.height - sourceReserved[3]) - (sourceRect.y + sourceRect.height);
+        return Qt.rect(reserved[0], reserved[1] + topInset,
+            screen.width - reserved[0] - reserved[2],
+            screen.height - reserved[1] - reserved[3] - topInset - bottomInset);
+    }
+    function setRealGnomeArea(screenName, rect) {
+        root.realGnomeAreaScreen = screenName;
+        const current = root.realGnomeAreas[screenName];
+        if (current && Math.abs(current.x - rect.x) < 0.5 && Math.abs(current.y - rect.y) < 0.5
+                && Math.abs(current.width - rect.width) < 0.5 && Math.abs(current.height - rect.height) < 0.5)
+            return;
+        const next = Object.assign({}, root.realGnomeAreas);
+        next[screenName] = rect;
+        root.realGnomeAreas = next;
+        const stored = Persistent.states.overview?.realGnomeAreas?.[screenName];
+        if (!stored || Math.abs(stored.x - rect.x) >= 0.5 || Math.abs(stored.y - rect.y) >= 0.5
+                || Math.abs(stored.width - rect.width) >= 0.5 || Math.abs(stored.height - rect.height) >= 0.5) {
+            const saved = Object.assign({}, Persistent.states.overview.realGnomeAreas);
+            saved[screenName] = { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+            Persistent.states.overview.realGnomeAreas = saved;
+        }
+    }
+    // Real Gnome window picker: screen name -> [{ address, title, x, y, width, height }]
+    // of each window's slot at full open (screen coordinates), and the window
+    // the pointer is over, shared by the capture layer and the overview's input.
+    property var realGnomePickerSlots: ({})
+    function setRealGnomePickerSlots(screenName, slots) {
+        const next = Object.assign({}, root.realGnomePickerSlots);
+        next[screenName] = slots;
+        root.realGnomePickerSlots = next;
+    }
+    property string realGnomeHoveredWindow: ""
+    // Real Gnome workspace slide: the plane's wallpaper exactly as the background draws
+    // it (screen name -> { source, x, y, width, height, decodeWidth, decodeHeight, mipmap },
+    // unscaled screen coordinates), so the strip's cards paint the same pixels; and the
+    // screen whose plane steps aside while the cards carry the whole strip.
+    property var realGnomePlaneWallpapers: ({})
+    function setRealGnomePlaneWallpaper(screenName, value) {
+        const current = root.realGnomePlaneWallpapers[screenName];
+        if (current && JSON.stringify(current) === JSON.stringify(value))
+            return;
+        const next = Object.assign({}, root.realGnomePlaneWallpapers);
+        next[screenName] = value;
+        root.realGnomePlaneWallpapers = next;
+    }
+    // Screens whose plane is hidden while the strip's cards carry the workspaces.
+    property var realGnomePlaneHiddenScreens: ({})
+    function setRealGnomePlaneHidden(screenName, hidden) {
+        if (Boolean(root.realGnomePlaneHiddenScreens[screenName]) === hidden)
+            return;
+        const next = Object.assign({}, root.realGnomePlaneHiddenScreens);
+        if (hidden)
+            next[screenName] = true;
+        else
+            delete next[screenName];
+        root.realGnomePlaneHiddenScreens = next;
+    }
+    // Real Gnome window drag. The held window (hidden at its slot), the screen it is
+    // being dragged over, how many workspaces that screen's strip is previewed away
+    // from its active one (a real switch would end the drag, so it only happens on
+    // drop), and the workspace a drop is switching to, so the strip lands there
+    // without sliding again. The proxy is drawn by every monitor's picker from one
+    // rect in global (layout) coordinates.
+    property string realGnomeDraggedWindow: ""
+    property string realGnomePressedWindow: ""
+    // "", "drag" (held), "return" (springing back to its slot) or "drop" (landed elsewhere).
+    property string realGnomeDragPhase: ""
+    property string realGnomeDragTargetScreen: ""
+    property int realGnomeDragShift: 0
+    property int realGnomeDragCommitWs: 0
+    property string realGnomeDragCommitScreen: ""
+    property rect realGnomeDragRect: Qt.rect(0, 0, 0, 0)
+    property real realGnomeDragOpacity: 1.0
+    property real realGnomeDragScale: 1.0
+    // Gnome-like overviews: the focused monitor's zoom waits at 0 until the window
+    // captures have a frame and Hyprland has hidden the real windows under them.
+    property bool overviewZoomHeld: false
     // Search panels are lazy and may be hosted on any monitor. Keep a small
     // transient intent here so callers do not need to know which SearchWidget
     // instance will render it.
@@ -1180,6 +1620,12 @@ Singleton {
     property real osdDropBottomRadius: 0
 
     property string osdCurrentIndicator: "volume"
+    // What the "toggle" OSD indicator draws: { icon, label, state: "on" | "off" | "", caption }.
+    property var osdPill: ({ icon: "", label: "", state: "", caption: "" })
+    // A pill asked for over IPC (`osd pill`); OnScreenDisplay decides whether it shows.
+    signal osdPillRequested(string icon, string label, string state)
+    // A plain notice that names its sender: the Tuner style prints `caption` above `label`.
+    signal osdNoticeRequested(string icon, string caption, string label)
     property string osdProtectionMessage: ""
     signal osdInteraction
     property bool policiesExtended: false
@@ -1225,23 +1671,12 @@ Singleton {
 
     // Media Popup placement (transient, non-persistent)
     property rect mediaPopupRect: Qt.rect(0, 0, 0, 0)
+    // Raw hover of the bar media widget. MediaControls owns the open debounce
+    // and the close grace, exactly as StyledPopup does for the other popups.
     property bool mediaWidgetHovered: false
-    property Timer mediaWidgetHoverTimer: Timer {
-        id: mediaWidgetHoverTimer
-        interval: 400
-        repeat: false
-        onTriggered: {
-            root.mediaWidgetHovered = false;
-        }
-    }
 
     function setMediaWidgetHovered(hovered) {
-        if (hovered) {
-            mediaWidgetHoverTimer.stop();
-            root.mediaWidgetHovered = true;
-        } else {
-            mediaWidgetHoverTimer.restart();
-        }
+        root.mediaWidgetHovered = hovered;
     }
 
     // Color Picker Popup
@@ -1260,9 +1695,20 @@ Singleton {
         }
     }
 
+    // Display modes popup (Win+P style: extend, duplicate, only on one screen)
+    property bool displayModesPopupOpen: false
+
+    function toggleDisplayModes() {
+        root.displayModesPopupOpen = !root.displayModesPopupOpen;
+    }
+
     function launchColorPicker() {
         Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "colorPickerLaunch", "trigger"]);
     }
+
+    /// The mirror session the dock widget drives: scrcpy running either as a
+    /// normal window or launched through KDE Connect's lifecycle.
+    readonly property bool phoneMirrorRunning: PhoneScrcpyService.mirrorRunning || KdeConnectService.scrcpyRunning
 
     IpcHandler {
         target: "pickColor"
@@ -1303,6 +1749,19 @@ Singleton {
         }
     }
 
+    function toggleVideoEditor(path) {
+        if (root.videoEditorOpen) {
+            root.videoEditorRenderPageOpen = false;
+            root.videoEditorPopupOpen = false;
+            root.videoEditorOpen = false;
+        } else {
+            root.videoEditorRenderPageOpen = false;
+            root.videoEditorPath = (path && typeof path === "string" && path !== "") ? path : "";
+            root.videoEditorPopupOpen = false;
+            root.videoEditorOpen = true;
+        }
+    }
+
     IpcHandler {
         target: "videoEditorRender"
         function mock(state: string, progress: real, format: string, errorMsg: string): void {
@@ -1318,15 +1777,23 @@ Singleton {
             root.videoEditorOpen = true;
             root.videoEditorMockRender(state, progress, format, errorMsg);
         }
-        function open(path: string): void {
+        function open(): void {
             root.videoEditorRenderPageOpen = false;
-            if (path && path !== "") {
-                root.videoEditorPath = path;
-            } else if (!root.videoEditorPath || root.videoEditorPath === "") {
-                root.videoEditorPath = "/home/pedro/Videos/recording_2026-09-01_00.52.23.mp4";
-            }
+            root.videoEditorPath = "";
             root.videoEditorPopupOpen = false;
             root.videoEditorOpen = true;
+        }
+        function openFile(path: string): void {
+            root.videoEditorRenderPageOpen = false;
+            root.videoEditorPath = (path && typeof path === "string" && path !== "") ? path : "";
+            root.videoEditorPopupOpen = false;
+            root.videoEditorOpen = true;
+        }
+        function toggle(): void {
+            root.toggleVideoEditor();
+        }
+        function toggleFile(path: string): void {
+            root.toggleVideoEditor(path);
         }
         function close(): void {
             root.videoEditorRenderPageOpen = false;
@@ -1337,6 +1804,125 @@ Singleton {
             root.videoEditorRenderPageOpen = false;
             root.videoEditorBackRequested();
         }
+    }
+
+    IpcHandler {
+        target: "videoEditor"
+        function toggle(): void {
+            root.toggleVideoEditor();
+        }
+        function toggleFile(path: string): void {
+            root.toggleVideoEditor(path);
+        }
+        function open(): void {
+            root.videoEditorRenderPageOpen = false;
+            root.videoEditorPath = "";
+            root.videoEditorPopupOpen = false;
+            root.videoEditorOpen = true;
+        }
+        function openFile(path: string): void {
+            root.videoEditorRenderPageOpen = false;
+            root.videoEditorPath = (path && typeof path === "string" && path !== "") ? path : "";
+            root.videoEditorPopupOpen = false;
+            root.videoEditorOpen = true;
+        }
+        function close(): void {
+            root.videoEditorRenderPageOpen = false;
+            root.videoEditorPopupOpen = false;
+            root.videoEditorOpen = false;
+        }
+    }
+
+    GlobalShortcut {
+        name: "videoEditorToggle"
+        description: "Toggles the video editor"
+        onPressed: root.toggleVideoEditor()
+    }
+
+    // Floating Recording Toolbar
+    property bool recordingToolbarOpen: false
+    property bool recordingToolbarOptionsOpen: false
+
+    function openRecordingToolbar() {
+        root.recordingToolbarOpen = true;
+    }
+
+    function closeRecordingToolbar() {
+        root.recordingToolbarOpen = false;
+        root.recordingToolbarOptionsOpen = false;
+    }
+
+    function toggleRecordingToolbar() {
+        root.recordingToolbarOpen = !root.recordingToolbarOpen;
+        if (!root.recordingToolbarOpen) {
+            root.recordingToolbarOptionsOpen = false;
+        }
+    }
+
+    function toggleRecordingToolbarOptions() {
+        root.recordingToolbarOpen = true;
+        root.recordingToolbarOptionsOpen = !root.recordingToolbarOptionsOpen;
+    }
+
+    function openRecordingToolbarOptions() {
+        root.recordingToolbarOpen = true;
+        root.recordingToolbarOptionsOpen = true;
+    }
+
+    property string recordingToolbarSection: ""
+
+    function setRecordingToolbarSection(section: string) {
+        root.recordingToolbarOpen = true;
+        root.recordingToolbarSection = (root.recordingToolbarSection === section) ? "" : section;
+    }
+
+    signal recordRegionRequested(sound: bool)
+
+    function startRegionRecording(sound) {
+        root.recordRegionRequested(!!sound);
+    }
+
+    IpcHandler {
+        target: "recordingToolbar"
+
+        function toggle(): void {
+            root.toggleRecordingToolbar();
+        }
+
+        function open(): void {
+            root.openRecordingToolbar();
+        }
+
+        function close(): void {
+            root.closeRecordingToolbar();
+        }
+
+        function toggleOptions(): void {
+            root.toggleRecordingToolbarOptions();
+        }
+
+        function openOptions(): void {
+            root.openRecordingToolbarOptions();
+        }
+
+        function toggleSection(section: string): void {
+            root.setRecordingToolbarSection(section);
+        }
+
+        function openSection(section: string): void {
+            root.recordingToolbarOpen = true;
+            root.recordingToolbarSection = section;
+        }
+
+        function recordRegion(sound: string): void {
+            root.startRegionRecording(sound === "true" || sound === "1");
+        }
+    }
+
+    GlobalShortcut {
+        name: "recordingToolbarToggle"
+        description: "Toggles the floating recording toolbar"
+        onPressed: root.toggleRecordingToolbar()
     }
 
     function toggleSettings() {
@@ -1415,7 +2001,7 @@ Singleton {
             monitors: [{
                 name: mon,
                 activeWorkspaceId: ws,
-                index: Quickshell.screens.findIndex(screen => screen.name === mon)
+                index: HyprlandData.workspaceMapIndex(mon)
             }],
             windowList: HyprlandData.windowList || [],
             allMonitors: HyprlandData.monitors || [],
@@ -1593,6 +2179,14 @@ Singleton {
             root.osdVolumeOpen = true;
             root.osdInteraction();
         }
+
+        // An on/off pill for things the shell cannot see by itself (a touchpad toggle
+        // script, a vendor hotkey daemon). `state` is "on", "off" or "" for a plain notice;
+        // `icon` is a Material Symbols name.
+        //   qs -c ii ipc call osd pill touch_app "Touchpad enabled" on
+        function pill(icon: string, label: string, state: string): void {
+            root.osdPillRequested(icon, label, state);
+        }
     }
 
     GlobalShortcut {
@@ -1603,10 +2197,11 @@ Singleton {
 
     readonly property bool connectModeActive: ShellModePolicy.connectModeActive
 
-    // In Float mode (cornerStyle 1), sidebars remain as separate PanelWindows
+    // With a horizontal Float bar (cornerStyle 1), sidebars remain as separate PanelWindows
     // rather than being embedded in the TopLayer. Only search/OSD are integrated.
+    // A vertical Float bar embeds them as floating cards that fuse with the bar.
     readonly property bool connectSidebarsSeparate: {
-        return connectModeActive && Config.options.bar.cornerStyle === 1;
+        return connectModeActive && Config.options.bar.cornerStyle === 1 && !Config.options.bar.vertical;
     }
 
     readonly property bool searchCenterMode: {
@@ -1629,21 +2224,98 @@ Singleton {
         return true;
     }
 
-    // The floating Dynamic Island is the sole owner of the search surface
-    // while it is enabled. Its PanelWindow chooses the configured target
-    // monitor, so ownership must not depend on the monitor that opened it.
-    readonly property bool floatingNotchOwnsSearch: {
-        if (!Config.ready || !root.classicOverviewOpen)
-            return false;
-        if (root.searchCenterMode)
-            return false;
+    /**
+     * Whether the Dynamic Island is drawing search right now.
+     *
+     * Written by IslandPolicy, which is the one place that decides what the island owns;
+     * this is a plain property rather than a binding because IslandPolicy reads
+     * GlobalStates, and a singleton that reads back would be a cycle - which fails
+     * silently and would leave the island unloaded.
+     *
+     * The island is the search surface whenever it is enabled. It used to bow out in
+     * bar-centre mode, which meant the same keybind opened two visually different
+     * launchers depending on a setting that has nothing to do with search.
+     */
+    property bool islandOwnsSearch: false
 
-        const notch = Config.options.bar.floatingNotch;
-        if (!notch || !notch.enable || notch.centerInBar)
-            return false;
+    /**
+     * Whether search would open in the island if it were opened now. `islandOwnsSearch`
+     * only turns true once it has; this is the answer beforehand, for a caller that has to
+     * choose how to open it. Written by IslandPolicy as well.
+     */
+    property bool islandHostsSearch: false
 
-        return true;
-    }
+    /**
+     * Whether the island draws the wallpaper picker instead of the standalone selector.
+     * Written by IslandPolicy, for the same reason as `islandOwnsSearch` above.
+     */
+    property bool islandOwnsWallpaper: false
+
+    /**
+     * Whether the island lays out the workspace overview itself, instead of showing the
+     * desktop overview at its own size with its own animations. Written by IslandPolicy.
+     */
+    property bool islandOwnsOverview: false
+
+    /**
+     * Whether the island draws the session menu instead of the full-screen session
+     * screen. Written by IslandPolicy, like the flags above.
+     */
+    property bool islandOwnsSession: false
+
+    /**
+     * The island is on and draws password prompts for the routes the user opted into;
+     * see AskpassService. Written by IslandPolicy, like the flags above.
+     */
+    property bool islandOwnsAskpass: false
+
+    /**
+     * Whether the island shows a picked colour, and an incoming file transfer, in place
+     * of their floating popups. Written by IslandPolicy, like the flags above.
+     */
+    property bool islandOwnsColorPicker: false
+    property bool islandOwnsLocalSendRequest: false
+    /** The display modes card is drawn on the island instead of floating. */
+    property bool islandOwnsDisplayModes: false
+    /** A ringing alarm is the island's, not the fullscreen popup's or a notification's. */
+    property bool islandOwnsAlarm: false
+    /** Alt+Tab draws on the island rather than as the floating panel. See WindowSwitcher. */
+    property bool islandOwnsWindowSwitcher: false
+    /** A reminder's full-screen alert shows on the island instead. */
+    property bool islandOwnsReminder: false
+    /** Music recognition reports on the island instead of in notifications. */
+    property bool islandOwnsSongRec: false
+    /**
+     * The island shows background jobs, so the shell's own long jobs (a media download,
+     * a speed test) report there. Read before touching ProgressService, which would
+     * otherwise start its job monitor for someone who never sees it.
+     */
+    property bool islandOwnsProgress: false
+    /**
+     * The shell itself holds the fingerprint reader (enrolling or testing a finger in
+     * Settings), which draws its own prompt. Written by the Fingerprint service.
+     */
+    property bool fingerprintClaimedByShell: false
+    /**
+     * A Discord client (Discord, Vesktop, Equibop, ...) has had a window this session.
+     *
+     * DiscordVoice is a Python bridge retrying Discord's RPC socket every few seconds, so
+     * anything that merely reads it starts that for good. The island and the dashboard
+     * tile only touch it once this is set. A latch: a client closed to the tray is still
+     * running, and once seen the check below stops walking the window list.
+     */
+    property bool discordClientSeen: false
+    readonly property var _discordClasses: ["discord", "discord-canary", "discordcanary", "discord-ptb",
+        "discordptb", "vesktop", "equibop", "webcord", "legcord", "armcord"]
+    readonly property bool _discordWindowOpen: !root.discordClientSeen
+        && (HyprlandData.windowList ?? []).some(client =>
+            root._discordClasses.indexOf(String(client?.class ?? "").toLowerCase()) !== -1)
+    // Latched a turn later: setting it here re-evaluated `_discordWindowOpen`, which
+    // reads it, from inside its own change notification (a binding loop).
+    on_DiscordWindowOpenChanged: if (root._discordWindowOpen) Qt.callLater(() => root.discordClientSeen = true)
+
+    // Kept for the surfaces that still read the old name.
+    readonly property bool floatingNotchOwnsSearch: root.islandOwnsSearch
 
     readonly property bool osdConnectActive: {
         if (!connectModeActive)
@@ -1664,11 +2336,20 @@ Singleton {
     Connections {
         target: Config
         function onReadyChanged() {
-            if (Config.ready) {
+            if (Config.ready)
                 root.enforceSidebarStyle();
-            }
         }
     }
+
+    /**
+     * Hyprland's native scrolling layout and zscroll (`lua:zscroll`, rows of
+     * windows on a vertical tape) both keep a workspace larger than the screen.
+     * Everything that lays itself out for "the scrolling layout" - the plugin
+     * overview behind the search, the wallpaper - asks this, not the raw layout name.
+     */
+    readonly property bool scrollingLayoutActive: Persistent.states.hyprland.layout === "scrolling"
+        || root.zscrollLayoutActive
+    readonly property bool zscrollLayoutActive: Persistent.states.hyprland.layout === "lua:zscroll"
 
     Connections {
         target: Config.ready ? Config.options.bar : null
@@ -1768,8 +2449,136 @@ Singleton {
     // open caused massive CPU usage (380%+) because every minor visual
     // change (timer ticks, notification syncs, infinite pulse animations)
     // forced a full FBO re-render of the entire sidebar subtree.
-    readonly property bool leftSidebarAnimating: leftSidebarAnimation.running
-    readonly property bool rightSidebarAnimating: rightSidebarAnimation.running
+    readonly property bool leftSidebarAnimating: leftSidebarAnimation.running || leftSidebarDragging
+    readonly property bool rightSidebarAnimating: rightSidebarAnimation.running || rightSidebarDragging
+
+    // ── Surfaces held by a touchpad gesture (services/TouchpadGestures.qml) ─
+    // A panel that follows the fingers is opened for real the moment the swipe starts -
+    // its flag, focus and content all behave as for any other open - and only its reveal
+    // is taken away from the animation and held at `gestureDragProgress` until the fingers
+    // lift and the service has settled it. Everything below that draws a reveal reads one
+    // of the three `*Dragging` flags to know its own clock is not the one in charge.
+    /// "sidebarLeft", "sidebarRight", "overview", or "" when nothing is held.
+    property string gestureDragSurface: ""
+    /// How far open the held surface is, 0..1.
+    property real gestureDragProgress: 0
+    readonly property bool policiesDragging: gestureDragSurface === "sidebarLeft"
+    readonly property bool dashboardDragging: gestureDragSurface === "sidebarRight"
+    readonly property bool overviewDragging: gestureDragSurface === "overview"
+    /// The same two sidebars by the screen edge they occupy, as Connect mode draws them.
+    readonly property bool leftSidebarDragging: {
+        switch (Config.options.sidebar.position) {
+        case "inverted":
+            return dashboardDragging;
+        case "left":
+            return dashboardDragging || policiesDragging;
+        case "right":
+            return false;
+        default:
+            return policiesDragging;
+        }
+    }
+    readonly property bool rightSidebarDragging: {
+        switch (Config.options.sidebar.position) {
+        case "inverted":
+            return policiesDragging;
+        case "left":
+            return false;
+        case "right":
+            return dashboardDragging || policiesDragging;
+        default:
+            return dashboardDragging;
+        }
+    }
+
+    // ── Sidebar slide ───────────────────────────────────────────────────────
+    // 0 = off screen, 1 = seated. A Behavior rather than a handler (the open flags already
+    // have theirs below). The Default-style sidebar windows stay mapped until their
+    // progress is back at 0.
+    property real dashboardSlideProgress: dashboardDragging ? gestureDragProgress : (dashboardPanelOpen ? 1 : 0)
+    property real policiesSlideProgress: policiesDragging ? gestureDragProgress : (policiesPanelOpen ? 1 : 0)
+
+    Behavior on dashboardSlideProgress {
+        id: dashboardSlideBehavior
+        enabled: !Appearance.reducedMotion && !root.dashboardDragging
+        NumberAnimation {
+            id: dashboardSlideAnimation
+            duration: Appearance.animation.sidebarSlide.enterDuration
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Appearance.animation.sidebarSlide.enterCurve
+        }
+    }
+
+    Behavior on policiesSlideProgress {
+        id: policiesSlideBehavior
+        enabled: !Appearance.reducedMotion && !root.policiesDragging
+        NumberAnimation {
+            id: policiesSlideAnimation
+            duration: Appearance.animation.sidebarSlide.enterDuration
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Appearance.animation.sidebarSlide.enterCurve
+        }
+    }
+
+    // ── Sidebar parallax ────────────────────────────────────────────────────
+    // The wallpaper's own clock, started by the same flags as the slide but on a longer
+    // curve that is soft at both ends. Riding the slide progress made the wallpaper kick off
+    // and stop as hard as the sidebar; a Behavior chasing the open flags in the wallpaper
+    // itself would stack on the workspace chase. Consumers turn their own x Behaviors off
+    // while this runs, so nothing smooths it twice.
+    property real dashboardParallaxProgress: dashboardPanelOpen ? 1 : 0
+    property real policiesParallaxProgress: policiesPanelOpen ? 1 : 0
+
+    Behavior on dashboardParallaxProgress {
+        enabled: !Appearance.reducedMotion
+        NumberAnimation {
+            id: dashboardParallaxAnimation
+            duration: Appearance.animation.sidebarSlide.parallaxDuration
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Appearance.animation.sidebarSlide.parallaxCurve
+        }
+    }
+
+    Behavior on policiesParallaxProgress {
+        enabled: !Appearance.reducedMotion
+        NumberAnimation {
+            id: policiesParallaxAnimation
+            duration: Appearance.animation.sidebarSlide.parallaxDuration
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Appearance.animation.sidebarSlide.parallaxCurve
+        }
+    }
+
+    readonly property bool sidebarParallaxAnimating: dashboardParallaxAnimation.running || policiesParallaxAnimation.running
+
+    /// The parallax progress of whatever occupies each screen edge — the same mapping as
+    /// effectiveLeftOpen/effectiveRightOpen.
+    readonly property real effectiveLeftParallaxProgress: {
+        if (PanelFamily.nativeAppWindows)
+            return 0;
+        switch (Config.options.sidebar.position) {
+        case "inverted":
+            return dashboardParallaxProgress;
+        case "left":
+            return Math.max(dashboardParallaxProgress, policiesParallaxProgress);
+        case "right":
+            return 0;
+        default:
+            return policiesParallaxProgress;
+        }
+    }
+    readonly property real effectiveRightParallaxProgress: {
+        switch (Config.options.sidebar.position) {
+        case "inverted":
+            return policiesParallaxProgress;
+        case "left":
+            return 0;
+        case "right":
+            return Math.max(dashboardParallaxProgress, policiesParallaxProgress);
+        default:
+            return dashboardParallaxProgress;
+        }
+    }
 
     NumberAnimation {
         id: leftSidebarAnimation
@@ -1785,42 +2594,51 @@ Singleton {
         easing.type: Easing.OutQuart
     }
 
-    onLeftSidebarTargetWidthChanged: {
+    onLeftSidebarTargetWidthChanged: root._chaseLeftSidebarWidth()
+    onRightSidebarTargetWidthChanged: root._chaseRightSidebarWidth()
+    onLeftSidebarDraggingChanged: root._chaseLeftSidebarWidth()
+    onRightSidebarDraggingChanged: root._chaseRightSidebarWidth()
+    onGestureDragProgressChanged: {
+        if (root.leftSidebarDragging)
+            root._chaseLeftSidebarWidth();
+        if (root.rightSidebarDragging)
+            root._chaseRightSidebarWidth();
+    }
+
+    function _chaseLeftSidebarWidth() {
         leftSidebarAnimation.stop();
+        if (root.leftSidebarDragging) {
+            animatedLeftSidebarWidth = leftSidebarTargetWidth * root.gestureDragProgress;
+            return;
+        }
         if ((Config.options?.appearance?.animationMultiplier ?? 1.0) <= 0.25) {
             animatedLeftSidebarWidth = leftSidebarTargetWidth;
             return;
         }
-        if (leftSidebarTargetWidth > 0) {
-            leftSidebarAnimation.duration = Appearance.animation.elementMoveEnter.duration;
-            leftSidebarAnimation.easing.type = Easing.OutQuart;
-            leftSidebarAnimation.to = leftSidebarTargetWidth;
-            leftSidebarAnimation.start();
-        } else {
-            leftSidebarAnimation.duration = Appearance.animation.elementMoveEnter.duration;
-            leftSidebarAnimation.easing.type = Easing.OutQuart;
-            leftSidebarAnimation.to = leftSidebarTargetWidth;
-            leftSidebarAnimation.start();
-        }
+        // Connect mode opens by width on the Default slide's enter curve, in both directions:
+        // a shrinking panel stays on screen, so an accelerating exit would visibly stop dead.
+        leftSidebarAnimation.duration = Appearance.animation.sidebarSlide.enterDuration;
+        leftSidebarAnimation.easing.type = Easing.BezierSpline;
+        leftSidebarAnimation.easing.bezierCurve = Appearance.animation.sidebarSlide.enterCurve;
+        leftSidebarAnimation.to = leftSidebarTargetWidth;
+        leftSidebarAnimation.start();
     }
 
-    onRightSidebarTargetWidthChanged: {
+    function _chaseRightSidebarWidth() {
         rightSidebarAnimation.stop();
+        if (root.rightSidebarDragging) {
+            animatedRightSidebarWidth = rightSidebarTargetWidth * root.gestureDragProgress;
+            return;
+        }
         if ((Config.options?.appearance?.animationMultiplier ?? 1.0) <= 0.25) {
             animatedRightSidebarWidth = rightSidebarTargetWidth;
             return;
         }
-        if (rightSidebarTargetWidth > 0) {
-            rightSidebarAnimation.duration = Appearance.animation.elementMoveEnter.duration;
-            rightSidebarAnimation.easing.type = Easing.OutQuart;
-            rightSidebarAnimation.to = rightSidebarTargetWidth;
-            rightSidebarAnimation.start();
-        } else {
-            rightSidebarAnimation.duration = Appearance.animation.elementMoveEnter.duration;
-            rightSidebarAnimation.easing.type = Easing.OutQuart;
-            rightSidebarAnimation.to = rightSidebarTargetWidth;
-            rightSidebarAnimation.start();
-        }
+        rightSidebarAnimation.duration = Appearance.animation.sidebarSlide.enterDuration;
+        rightSidebarAnimation.easing.type = Easing.BezierSpline;
+        rightSidebarAnimation.easing.bezierCurve = Appearance.animation.sidebarSlide.enterCurve;
+        rightSidebarAnimation.to = rightSidebarTargetWidth;
+        rightSidebarAnimation.start();
     }
 
     Component.onCompleted: {
@@ -1863,7 +2681,116 @@ Singleton {
      */
     property int policiesHoldOpen: 0
 
+    /**
+     * A rectangle the left sidebar cuts out of its own input region, in the
+     * panel surface's own coordinates. The embedded phone mirror is the only
+     * user: a real scrcpy window sits exactly there, under a picture the panel
+     * paints over it, and the cut-out is what lets a click reach the phone
+     * instead of stopping at the panel. Empty means no cut-out.
+     */
+    property rect policiesPointerHole: Qt.rect(0, 0, 0, 0)
+    readonly property bool policiesPointerHoleActive: policiesPointerHole.width > 0 && policiesPointerHole.height > 0
+
+    /** The left sidebar's live layer surface, for whatever asked for the
+     *  cut-out to resolve its position against. Empty while it is unmapped. */
+    property string policiesSurfaceNamespace: ""
+    property string policiesSurfaceScreen: ""
+
+    /**
+     * One-shot navigation requests for the left sidebar: a tab to show, named
+     * by its icon, and a sub-page for the Phone tab to open once it is there.
+     * Whichever tab acts on one clears it, so a request that arrives before
+     * the sidebar's content exists still lands when it does.
+     */
+    property string policiesRequestTabIcon: ""
+    property url phoneRequestSubPage: ""
+
+    /** Opens the phone's screen inside the left sidebar — or, when the sidebar
+     *  mirror is switched off in Settings, as the scrcpy window it used to be. */
+    function openPhoneMirror(): void {
+        if (!(Config.options?.phone?.scrcpy?.embed?.enabled ?? true)) {
+            PhoneScrcpyService.openMirrorWindow();
+            return;
+        }
+        root.phoneRequestSubPage = Qt.resolvedUrl("modules/ii/sidebarPolicies/phone/PhoneMirrorPage.qml");
+        root.policiesRequestTabIcon = "smartphone";
+        root.openLeftSidebar();
+    }
+
+    /** The Phone tab's "Type on phone" pad: the PC keyboard typing into the phone. */
+    function openPhoneKeyboard(): void {
+        root.phoneRequestSubPage = Qt.resolvedUrl("modules/ii/sidebarPolicies/phone/PhoneKeyboardPage.qml");
+        root.policiesRequestTabIcon = "smartphone";
+        root.openLeftSidebar();
+    }
+
+    IpcHandler {
+        target: "phone"
+
+        /** Opens the pad that types on the phone from the PC keyboard. */
+        function keyboard(): void {
+            root.openPhoneKeyboard();
+        }
+
+        function mirror(): void {
+            root.openPhoneMirror();
+        }
+
+        function closeMirror(): void {
+            root.phoneRequestSubPage = "";
+            root.sidebarLeftOpen = false;
+        }
+
+        /** The mirror in its own floating window, toolbar and all. */
+        function mirrorWindow(): void {
+            PhoneScrcpyService.openMirrorWindow();
+        }
+
+        /** Ends every mirror of the phone screen, windowed or in the sidebar. */
+        function stopMirroring(): void {
+            PhoneScrcpyService.stopMirroring();
+        }
+
+        /** Starts or stops recording the phone screen to ~/Videos. */
+        function toggleRecording(): void {
+            PhoneScrcpyService.toggleRecording();
+        }
+    }
+
     property bool requestVolumeDialog: false
+
+    /**
+     * A quick-toggle details page the island should open, by id.
+     *
+     * Surfaces that need a setting the island itself holds - the media card's audio
+     * output pill - ask for the page here and the island's surface consumes it. They
+     * used to send the user to the right sidebar instead, which is the wrong place
+     * entirely when the island is the thing on screen.
+     */
+    property string islandDashboardPage: ""
+
+    /** Whether the island, rather than the right sidebar, holds the quick settings. */
+    property bool islandOwnsDashboard: false
+    property bool islandDashboardOpen: false
+
+    function openIslandPage(pageId) {
+        root.islandDashboardPage = pageId;
+    }
+
+    /**
+     * Open the audio output picker wherever the shell currently keeps it: a page inside
+     * the island when it is on, the right sidebar's dialog otherwise.
+     */
+    function openAudioOutputSettings() {
+        if (root.islandOwnsDashboard) {
+            root.openIslandPage("audioOutput");
+            return;
+        }
+        root.openRightSidebar();
+        Qt.callLater(() => {
+            root.requestVolumeDialog = true;
+        });
+    }
 
     readonly property bool effectiveLeftOpen: {
         if (PanelFamily.nativeAppWindows)
@@ -2290,6 +3217,7 @@ Singleton {
         root.searchPendingPanel = requested;
         root.searchPendingPanelQuery = String(initialQuery ?? "");
         root.searchPanelNavigationRequest++;
+        root.panelOpenedDirectly = true;
         root.openSearch(monitorName);
     }
 
@@ -2313,6 +3241,7 @@ Singleton {
         root.searchPendingPanel = "fileBrowser";
         root.searchPendingPanelQuery = "";
         root.searchPanelNavigationRequest++;
+        root.panelOpenedDirectly = true;
         root.openSearch(monitorName);
     }
 
@@ -2364,6 +3293,7 @@ Singleton {
                 root.appDrawerOpen = false;
                 root.activeSearchMonitor = "";
                 root.searchPanelActive = false;
+                root.panelOpenedDirectly = false;
                 resetSearchOnlyModeTimer.start();
             }
             return;
@@ -2377,12 +3307,16 @@ Singleton {
             if (root.activeSearchMonitor === "") {
                 root.activeSearchMonitor = Hyprland.focusedMonitor?.name ?? "";
             }
+            overviewMonitorReleaseTimer.stop();
+            root.overviewMonitorLatch = root.activeSearchMonitor;
         } else {
             root.activeSearchMonitor = "";
+            overviewMonitorReleaseTimer.restart();
             // A panel cannot outlive the surface that hosted it, and a flag
             // left set would make the next Super press try to leave a panel
             // that is not there instead of opening the launcher.
             root.searchPanelActive = false;
+            root.panelOpenedDirectly = false;
             resetSearchOnlyModeTimer.start();
         }
     }
@@ -2600,6 +3534,10 @@ Singleton {
         name: "workspaceNumber"
         description: "Hold to show workspace numbers, release to show icons"
         onPressed: {
+            // searchToggleRelease is a release bind and never sees this press, so
+            // re-arm it here: Super+V and friends clear the flag, and Hyprland skips
+            // the release that would have consumed it.
+            root.superReleaseMightTrigger = true;
             if (!PanelFamily.touchFirst)
                 root.superDown = true;
         }
@@ -2669,5 +3607,102 @@ Singleton {
         function setImmersiveOptionsOpen(open: bool): void {
             root.mediaModeImmersiveOptionsOpen = open;
         }
+
+        // Manual music video background for the open Media Mode session.
+        function setMusicVideo(on: bool): void {
+            if (on)
+                MusicVideoService.start();
+            else
+                MusicVideoService.stop();
+        }
+
+        // Sync diagnostics: phase, measured drift, playback speed and seek lead.
+        function musicVideoStatus(): string {
+            return MusicVideoService.debugStatus();
+        }
+    }
+    // ── Bar Popups IPC State ───────────────────────────────────────────────────
+    property var openBarPopups: ({})
+    property string activeBarPopupMonitor: ""
+    readonly property bool anyBarPopupOpen: Object.keys(openBarPopups).length > 0
+
+    readonly property var _barPopupAliases: ({
+        "clock": "clock", "calendar": "clock", "date": "clock", "time": "clock",
+        "weather": "weather",
+        "battery": "battery",
+        "bluetooth": "bluetooth",
+        "resources": "resources", "systemmonitor": "resources", "usage": "resources",
+        "keyboard": "keyboard", "keyboardlayout": "keyboard", "layout": "keyboard",
+        "activewindow": "activeWindow", "window": "activeWindow",
+        "sports": "sports",
+        "portwatcher": "portWatcher", "ports": "portWatcher",
+        "passwords": "passwords", "passwordmanager": "passwords", "bitwarden": "passwords",
+        "privacy": "privacy",
+        "aiplanusage": "aiPlanUsage", "aiplan": "aiPlanUsage",
+        "media": "media", "mediacontrols": "media",
+        "tray": "tray", "systray": "tray",
+        "record": "record", "screenrecord": "record",
+        "dictation": "dictation",
+        "mode": "mode", "modes": "mode",
+        "screenshare": "screenShare", "share": "screenShare",
+        "shellupdate": "shellUpdate", "shellupdates": "shellUpdate", "update": "shellUpdate"
+    })
+
+    function normalizeBarPopupId(id) {
+        if (!id)
+            return "";
+        return _barPopupAliases[String(id).toLowerCase()] ?? String(id);
+    }
+
+    function isBarPopupOpen(popupId, screenName) {
+        const key = root.normalizeBarPopupId(popupId);
+        if (!key || !root.openBarPopups[key])
+            return false;
+        return !root.activeBarPopupMonitor || root.activeBarPopupMonitor === screenName;
+    }
+
+    function setBarPopupOpen(popupId, open, monitorName) {
+        const key = root.normalizeBarPopupId(popupId);
+        if (!key)
+            return;
+
+        if (open && monitorName !== undefined && monitorName !== "")
+            root.activeBarPopupMonitor = monitorName;
+
+        let updated = Object.assign({}, root.openBarPopups);
+        if (open) {
+            updated[key] = true;
+            if (key === "media")
+                root.mediaControlsOpen = true;
+        } else {
+            delete updated[key];
+            if (key === "media")
+                root.mediaControlsOpen = false;
+        }
+        root.openBarPopups = updated;
+
+        if (!open && !root.anyBarPopupOpen)
+            root.activeBarPopupMonitor = "";
+    }
+
+    function openBarPopup(popupId, monitorName) {
+        root.setBarPopupOpen(popupId, true, monitorName);
+    }
+
+    function closeBarPopup(popupId, monitorName) {
+        root.setBarPopupOpen(popupId, false, monitorName);
+    }
+
+    function toggleBarPopup(popupId, monitorName) {
+        if (root.isBarPopupOpen(popupId, monitorName))
+            root.closeBarPopup(popupId, monitorName);
+        else
+            root.openBarPopup(popupId, monitorName);
+    }
+
+    function closeAllBarPopups() {
+        root.openBarPopups = ({});
+        root.mediaControlsOpen = false;
+        root.activeBarPopupMonitor = "";
     }
 }

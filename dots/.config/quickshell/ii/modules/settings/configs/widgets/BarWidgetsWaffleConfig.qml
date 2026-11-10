@@ -272,6 +272,15 @@ ContentPage {
             }
 
             ServiceCard {
+                cardIcon: "speed"
+                cardShape: "Circle"
+                cardHue: 140
+                title: Translation.tr("Network speed")
+                description: Translation.tr("Live download and upload speed, as a plain readout or an expressive pill")
+                onOpenCard: root.openComponentPage("network_speed")
+            }
+
+            ServiceCard {
                 cardIcon: "battery_android_6"
                 cardShape: "Circle"
                 cardHue: 140

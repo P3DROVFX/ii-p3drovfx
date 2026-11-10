@@ -4,6 +4,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.modules.ii.modes
+import qs.modules.ii.clock.components
 import QtQuick
 import QtQuick.Layouts
 
@@ -12,24 +13,45 @@ import QtQuick.Layouts
  * unfolds from; every change goes back through it.
  */
 ColumnLayout {
+    id: form
     required property var row
 
     spacing: 10
 
-    readonly property bool isTemp: String(row.trigger.metric).endsWith("Temp")
+    readonly property string metric: String(row.trigger.metric ?? "cpuUsage")
+    readonly property bool isTemp: form.metric.endsWith("Temp")
+    // The metric as two small choices: what is read, and — for the processors — whether
+    // its load or its temperature.
+    readonly property string reads: form.metric.startsWith("cpu") ? "cpu"
+        : (form.metric.startsWith("gpu") ? "gpu" : form.metric)
+    readonly property bool hasReading: form.reads === "cpu" || form.reads === "gpu"
 
-    StyledComboBox {
-        Layout.preferredWidth: 240
-        model: [
-            Translation.tr("CPU load"), Translation.tr("CPU temperature"),
-            Translation.tr("GPU load"), Translation.tr("GPU temperature"),
-            Translation.tr("Memory used"), Translation.tr("Swap used"), Translation.tr("Disk used")
+    function metricFor(src, temp) {
+        if (src !== "cpu" && src !== "gpu")
+            return src;
+        return src + (temp ? "Temp" : "Usage");
+    }
+
+    FormChoice {
+        current: form.reads
+        onPicked: v => form.row.set({ metric: form.metricFor(v, form.isTemp) })
+        options: [
+            { displayName: Translation.tr("CPU"), value: "cpu" },
+            { displayName: Translation.tr("GPU"), value: "gpu" },
+            { displayName: Translation.tr("Memory"), value: "memory" },
+            { displayName: Translation.tr("Swap"), value: "swap" },
+            { displayName: Translation.tr("Disk"), value: "disk" }
         ]
-        currentIndex: Math.max(0, ["cpuUsage", "cpuTemp", "gpuUsage", "gpuTemp", "memory", "swap", "disk"]
-            .indexOf(row.trigger.metric))
-        onActivated: index => row.set({
-            metric: ["cpuUsage", "cpuTemp", "gpuUsage", "gpuTemp", "memory", "swap", "disk"][index]
-        })
+    }
+
+    FormChoice {
+        visible: form.hasReading
+        current: form.isTemp ? "temp" : "load"
+        onPicked: v => form.row.set({ metric: form.metricFor(form.reads, v === "temp") })
+        options: [
+            { displayName: Translation.tr("Load"), value: "load" },
+            { displayName: Translation.tr("Temperature"), value: "temp" }
+        ]
     }
 
     RowLayout {
@@ -62,17 +84,16 @@ ColumnLayout {
         text: Translation.tr("Read every few seconds with 5 units of slack, so a value on the line does not flap.")
     }
 
+    // A number on the clock's filled field surface; empty means "not set".
     component NumberField: Rectangle {
         id: field
         property var value: null
         signal committed(var value)
 
-        implicitWidth: 72
-        implicitHeight: 36
-        radius: Appearance.rounding.full
-        color: Appearance.colors.colLayer3
-        border.width: input.activeFocus ? 2 : 0
-        border.color: Appearance.colors.colPrimary
+        implicitWidth: 80
+        implicitHeight: 40
+        radius: ClockStyle.radiusSmall
+        color: input.activeFocus ? ClockStyle.colFieldHover : ClockStyle.colField
 
         StyledTextInput {
             id: input
@@ -84,8 +105,10 @@ ColumnLayout {
             horizontalAlignment: TextInput.AlignHCenter
             verticalAlignment: TextInput.AlignVCenter
             text: field.value === null || field.value === undefined ? "" : String(field.value)
-            color: Appearance.colors.colOnLayer3
-            font.family: Appearance.font.family.numbers
+            color: ClockStyle.colOnSurface
+            font.family: ClockStyle.fontMain
+            font.variableAxes: ClockStyle.axesDigitsBold
+            font.pixelSize: ClockStyle.textLarge + 1
             validator: IntValidator {
                 bottom: 0
                 top: 1000

@@ -17,7 +17,7 @@ AbstractBackgroundWidget {
 
     configEntryName: "at_a_glance"
 
-    visibleWhenLocked: root.lockBehavior === "keep"
+    visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "custom"
                     || root.lockBehavior === "center"
                     || root.lockBehavior === "lockOnly"
                     || (Config.options.lock.centerWidget === "at_a_glance")

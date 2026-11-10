@@ -1,0 +1,18 @@
+[package]
+name = "sni_watcher"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Pure-Rust D-Bus: no libdbus headers to find, so the helper builds the same way
+# on every distro the setup script supports.
+zbus = "5"
+async-io = "2"
+enumflags2 = "0.7"
+futures-util = { version = "0.3", default-features = false, features = ["std", "async-await"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
+codegen-units = 1

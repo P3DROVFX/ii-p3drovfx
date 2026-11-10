@@ -305,11 +305,37 @@ Singleton {
         return 0;
     }
 
-    function scoreSite(site: var, query: string, tokens: var): int {
+    /**
+     * The fields a site is matched on, normalized once per index change.
+     *
+     * Every keystroke used to lowercase and trim three fields of every site
+     * before testing a single token against them.
+     */
+    function siteRecord(site: var): var {
         const host = root.normalized(site?.host).replace(/^www\./, "");
         const title = root.normalized(site?.title);
         const path = root.normalized(site?.path);
-        const searchable = host + " " + title + " " + path;
+        return {
+            site: site,
+            host: host,
+            title: title,
+            path: path,
+            searchable: host + " " + title + " " + path
+        };
+    }
+
+    readonly property var siteRecords: (root.sites ?? []).map(site => root.siteRecord(site))
+
+    function scoreSite(site: var, query: string, tokens: var): int {
+        return root.scoreSiteRecord(root.siteRecord(site), query, tokens);
+    }
+
+    function scoreSiteRecord(record: var, query: string, tokens: var): int {
+        const site = record.site;
+        const host = record.host;
+        const title = record.title;
+        const path = record.path;
+        const searchable = record.searchable;
         for (let i = 0; i < tokens.length; i++) {
             if (!searchable.includes(tokens[i]))
                 return -1;
@@ -342,13 +368,12 @@ Singleton {
             return [];
         const tokens = normalizedQuery.split(/\s+/).filter(token => token.length > 0);
         const matches = [];
-        const source = root.sites ?? [];
-        for (let i = 0; i < source.length; i++) {
-            const site = source[i];
-            const score = root.scoreSite(site, normalizedQuery, tokens);
+        const records = root.siteRecords;
+        for (let i = 0; i < records.length; i++) {
+            const score = root.scoreSiteRecord(records[i], normalizedQuery, tokens);
             if (score < 0)
                 continue;
-            matches.push(Object.assign({}, site, { matchScore: score }));
+            matches.push(Object.assign({}, records[i].site, { matchScore: score }));
         }
         matches.sort((left, right) => {
             if (right.matchScore !== left.matchScore)

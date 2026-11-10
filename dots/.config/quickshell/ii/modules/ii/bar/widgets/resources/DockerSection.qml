@@ -306,6 +306,10 @@ Item {
                     easing.type: Appearance.animation.elementMove.type
                 }
             }
+
+            TouchpadScrollHandler {
+                flickable: containersListView
+            }
         }
     }
 

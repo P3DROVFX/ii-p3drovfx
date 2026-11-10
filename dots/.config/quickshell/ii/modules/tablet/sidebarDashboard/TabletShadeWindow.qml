@@ -42,7 +42,10 @@ PanelWindow {
     // When open or dragging the entire window is interactive; when closed only the top edge
     // is, so everything else passes through to the desktop.
     mask: Region {
-        item: (root.progress > 0.001 || topMouseDragArea.pressed || TabletDashboardGestureController.tracking) ? contentWrapper : topEdgeCaptureStrip
+        item: (root.progress > 0.001 || topMouseDragArea.pressed || TabletDashboardGestureController.tracking) ? contentWrapper
+            // With the drawer or Recents up, the top 8px are theirs: a swipe that starts at
+            // the very edge to close them was opening the shade instead.
+            : (GlobalStates.otherTabletOverlayOnScreen(root.overlayName) ? null : topEdgeCaptureStrip)
     }
 
     // Always mapped so the top edge is ready to be pulled down at any time
@@ -169,9 +172,14 @@ PanelWindow {
                 opacity: 0.22 * root.progress
             }
 
-            ShadeDragArea {
-                id: shadeDragArea
-                tapCloses: true
+            // A tap on the shade's own background closes it. Drags are the gesture layer's.
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                onClicked: {
+                    if (TabletDashboardGestureController.progress > 0.5)
+                        TabletDashboardGestureController.close();
+                }
             }
         }
 
@@ -193,6 +201,7 @@ PanelWindow {
             clip: true
 
             TabletDashboardContent {
+                id: shadeContent
                 width: shadeSheet.width
                 height: root.height
                 y: -(1.0 - root.progress) * root.height * 0.08
@@ -200,18 +209,64 @@ PanelWindow {
             }
         }
 
+        /**
+         * Swipe up anywhere to close, following the finger — the way Android's shade closes.
+         *
+         * A pointer handler on an item *above* the content, not on the content itself: a
+         * handler on a parent never sees a press that a child MouseArea accepted, but one on
+         * top takes a passive grab first and lets the press carry on to the tile below. Taps
+         * therefore still reach every toggle, and only a press that turns into a vertical
+         * drag is taken over — the tile under it is cancelled rather than clicked.
+         *
+         * Outside the revealing sheet, so the sheet moving under the finger is never read
+         * back as finger movement. The mask hands the drag back to anything with vertical
+         * motion of its own (a list that scrolls, edit mode, a dialog); see
+         * TabletDashboardContent.ownsVerticalDragAt.
+         */
         Item {
-            id: shadeTopHandle
-            anchors {
-                top: parent.top
-                left: parent.left
-                right: parent.right
-            }
-            height: Math.max(48, Math.round(root.height * 0.075))
-            visible: root.progress > 0.001
+            id: closeGestureLayer
+            anchors.fill: parent
             z: 500
+            visible: root.progress > 0.001
 
-            ShadeDragArea {}
+            containmentMask: QtObject {
+                function contains(point: point): bool {
+                    if (closeDrag.active)
+                        return true;
+                    return !shadeContent.ownsVerticalDragAt(closeGestureLayer, point.x, point.y);
+                }
+            }
+
+            DragHandler {
+                id: closeDrag
+                target: null
+                xAxis.enabled: false
+                // Not ApprovesTakeOverByAnything: once the shade has the drag, a list or a
+                // slider under the finger must not pull it back mid-gesture.
+                grabPermissions: PointerHandler.CanTakeOverFromItems
+                    | PointerHandler.CanTakeOverFromHandlersOfDifferentType
+
+                property real startProgress: 1
+
+                onActiveChanged: {
+                    if (closeDrag.active) {
+                        closeDrag.startProgress = TabletDashboardGestureController.progress;
+                        TabletDashboardGestureController.startTracking(root.screenName);
+                    } else {
+                        TabletDashboardGestureController.endTracking(closeDrag.centroid.velocity.y,
+                                                                     closeDrag.startProgress);
+                    }
+                }
+
+                onTranslationChanged: {
+                    if (!closeDrag.active)
+                        return;
+                    TabletDashboardGestureController.updateProgress(
+                        closeDrag.startProgress
+                            + closeDrag.translation.y / TabletDashboardGestureController.dragDistance(root.height),
+                        closeDrag.centroid.velocity.y);
+                }
+            }
         }
 
         // ── TOP EDGE CAPTURE STRIP (independent from the bar) ────────────────
@@ -278,74 +333,6 @@ PanelWindow {
                         TabletDashboardGestureController.cancelTracking();
                     }
                 }
-            }
-        }
-    }
-
-    // Drag surfaces for the shade. Both are outside the sliding surface on purpose: an area
-    // that moves with the sheet would see its own coordinate shift as pointer movement and
-    // feed the gesture back into itself.
-    component ShadeDragArea: MouseArea {
-        id: dragArea
-        anchors.fill: parent
-        acceptedButtons: Qt.LeftButton
-        preventStealing: true
-
-        // A press that never turns into a drag counts as a tap outside the content.
-        property bool tapCloses: false
-
-        property real startY: 0
-        property real startProgress: 1.0
-        property real lastY: 0
-        property real lastTime: 0
-        property real calculatedVelocity: 0
-        property bool dragging: false
-        property bool moved: false
-
-        onPressed: mouse => {
-            dragArea.startY = mouse.y;
-            dragArea.lastY = mouse.y;
-            dragArea.lastTime = Date.now();
-            dragArea.calculatedVelocity = 0;
-            dragArea.dragging = false;
-            dragArea.moved = false;
-            dragArea.startProgress = TabletDashboardGestureController.progress;
-        }
-
-        onPositionChanged: mouse => {
-            const deltaY = mouse.y - dragArea.startY;
-            if (!dragArea.dragging) {
-                if (Math.abs(deltaY) < 10)
-                    return;
-                dragArea.dragging = true;
-                TabletDashboardGestureController.startTracking(root.screenName);
-            }
-            const now = Date.now();
-            const dt = Math.max(1, now - dragArea.lastTime);
-            dragArea.calculatedVelocity = ((mouse.y - dragArea.lastY) / dt) * 1000.0;
-            dragArea.lastY = mouse.y;
-            dragArea.lastTime = now;
-            dragArea.moved = true;
-
-            const p = dragArea.startProgress + deltaY / TabletDashboardGestureController.dragDistance(root.height);
-            TabletDashboardGestureController.updateProgress(Math.max(0.0, Math.min(1.0, p)), dragArea.calculatedVelocity);
-        }
-
-        onReleased: {
-            if (dragArea.dragging) {
-                dragArea.dragging = false;
-                TabletDashboardGestureController.endTracking(dragArea.calculatedVelocity, dragArea.startProgress);
-            } else if (dragArea.tapCloses && !dragArea.moved && TabletDashboardGestureController.progress > 0.5) {
-                TabletDashboardGestureController.close();
-            }
-        }
-
-        // Treated as a release: if something steals the grab mid-drag, settling by position
-        // is far less jarring than snapping straight back to where the gesture started.
-        onCanceled: {
-            if (dragArea.dragging) {
-                dragArea.dragging = false;
-                TabletDashboardGestureController.endTracking(dragArea.calculatedVelocity, dragArea.startProgress);
             }
         }
     }

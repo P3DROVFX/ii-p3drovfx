@@ -166,6 +166,8 @@ Singleton {
         return BitwiseFuzzy.search(prepared, list, {
             key: "name",
             threshold: settings?.threshold ?? 0.30,
+            // A typo is a few wrong keys, not most of the word: one in three at most.
+            maxEdits: Math.max(1, Math.ceil(search.length / 3)),
             limit: Math.max(1, settings?.maxResults ?? 8)
         });
     }
@@ -228,6 +230,15 @@ Singleton {
         }
     }
 
+    // A regenerated or switched icon theme adds and removes names just the same.
+    Connections {
+        target: TaskbarApps
+        function onIconThemeRevisionChanged() {
+            root._iconExistsCache = ({});
+            root._iconCache = ({});
+        }
+    }
+
     function getReverseDomainNameAppName(str) {
         return str.split('.').slice(-1)[0];
     }
@@ -241,6 +252,19 @@ Singleton {
     }
 
     property var _iconCache: ({})
+
+    /**
+     * The icon to draw for a desktop entry. Themed icons can't recolor an absolute-path
+     * icon in place, so recolor_icons.py injects a copy named after the .desktop file; use
+     * it only while themed icons are on, so a custom icon stays custom otherwise.
+     */
+    function entryIcon(entry) {
+        const icon = String(entry?.icon ?? "");
+        if (!icon.startsWith("/") || !Config.options.appearance.icons.enableThemed)
+            return icon;
+        const id = String(entry.id ?? "").replace(/\.desktop$/, "");
+        return iconExists(id) ? id : icon;
+    }
 
     function guessIcon(str) {
         if (!str || str.length == 0)

@@ -322,6 +322,21 @@ Singleton {
     property int blurSize: Config.options.appearance.blurSize ?? 8
     readonly property string blurConfigScript: HyprlandBlur.buildScript(root.blurSize, Config.options.appearance.blur)
     onBlurConfigScriptChanged: root.scheduleBlurUpdate()
+    // Compositor blur for windows and shell surfaces (Settings > Windows): "live", "xray"
+    // (only the cached wallpaper is blurred) or "off". "off" travels in blurConfigScript, so
+    // every config reload (Game Mode, routines) re-applies it; the other modes leave
+    // blur.enabled to whoever owns it, so leaving "off" has to turn blur back on - unless
+    // Game Mode (animations off) is holding it off.
+    readonly property string compositorBlurMode: Config.options.appearance.blur?.mode ?? "live"
+    readonly property bool compositorBlurOff: root.compositorBlurMode === "off"
+    onCompositorBlurOffChanged: {
+        if (Config.ready && !root.compositorBlurOff)
+            Quickshell.execDetached(["sh", "-c", "hyprctl getoption animations:enabled -j | grep -qE '\"(int|bool)\": *(0|false)' "
+                + "|| hyprctl eval 'hl.config({ decoration = { blur = { enabled = true } } })'"]);
+    }
+    onCompositorBlurModeChanged: root.pushHyprlandLayerRules()
+    readonly property bool opaqueWindows: Config.options.appearance.blur?.opaqueWindows ?? false
+    onOpaqueWindowsChanged: root.pushHyprlandLayerRules()
     property bool _blurUpdatePending: false
     property bool _blurLayerRulesPending: false
 
@@ -367,26 +382,120 @@ Singleton {
     }
 
     property real ignoreAlpha: Config.options.appearance.ignoreAlpha ?? 0.2
+    // Opaque shell (transparency off): drop shadows are drawn (colShadow, the island's
+    // NotchShadow, ~0.3 alpha) and the blur behind opaque panels is invisible anyway.
+    // A threshold below the shadows blurs their margin into a hard-edged frosted ring
+    // around every shadowed surface, so the layer rules never go under 0.31 then.
+    // A transparent shell keeps the configured threshold untouched.
+    readonly property bool shellTransparent: Config.options?.appearance?.transparency?.enable ?? false
+    readonly property real layerIgnoreAlpha: root.shellTransparent ? root.ignoreAlpha : Math.max(root.ignoreAlpha, 0.31)
 
     // Hyprland ignores pixels with opacity <= ignore_alpha. The bar and both
     // Dynamic Island variants use colLayer0, whose opacity follows the
     // configured background transparency. Keep the threshold below that
     // rendered opacity, otherwise the entire island is excluded from blur.
-    readonly property real barIgnoreAlpha: Math.min(root.ignoreAlpha, Math.max(0, 1 - root.backgroundTransparency - 0.01))
+    //
+    // A transparent bar (barBackgroundStyle 0) draws only the group pills, which
+    // are colLayer1 (content transparency), and their rounded edges are
+    // antialiased. A low threshold blurs every partly covered edge pixel too, so
+    // a 1px ring of the blurred backdrop (bright wherever a window sits under
+    // the bar) outlines each pill. Hold the threshold just under the pill's own
+    // opacity: the body still blurs, the edge pixels keep the sharp backdrop.
+    readonly property real barIgnoreAlpha: (Config.options?.bar?.barBackgroundStyle ?? 1) === 0
+        ? Math.max(0, 1 - root.contentTransparency - 0.01)
+        : root.islandIgnoreAlpha
+    // The island always paints colLayer0 (background transparency), whatever the
+    // bar style: tying it to the transparent bar's pill opacity put the threshold
+    // above the island's own alpha and dropped its blur. Its drop shadow and the body's
+    // antialiased edge pixels (measured at 0.55-0.65 of the body's alpha) blur into a
+    // bright ring under a lower threshold. An opaque shell holds it just under the body
+    // (0.99), as for the dock. A transparent one goes no lower than 0.65 of the body's
+    // alpha: a threshold right under it drops the whole island's blur, so the margin
+    // stays wide. A higher configured threshold still wins.
+    readonly property real bodyAlpha: Math.max(0, 1 - root.backgroundTransparency)
+    readonly property real islandIgnoreAlpha: Math.min(root.shellTransparent ? Math.max(root.ignoreAlpha, 0.65 * root.bodyAlpha) : 1, Math.max(0, root.bodyAlpha - 0.01))
+
+    // The dock's tray is colLayer0 (background transparency): hold the threshold just
+    // under it, as for the bar, or every antialiased edge of its widgets blurs too and
+    // a ring of the bright backdrop outlines each one. On the wrapped frame's band the
+    // dock paints no tray at all - the band below already carries the blur - so only
+    // opaque pixels pass. Set by the dock (Dock.qml), which knows when it is on the band.
+    property bool dockOnFrameBand: false
+    // Dock popups (window preview) are blurred with the dock layer's ignore_alpha, so while
+    // one is open the band drops to the card's threshold instead of 0.99.
+    property int dockPopupsOpen: 0
+    readonly property real dockIgnoreAlpha: root.dockOnFrameBand && root.dockPopupsOpen <= 0 ? 0.99 : Math.max(0, 1 - root.backgroundTransparency - 0.01)
 
     // Popups only need compositor blur when transparency is enabled; for opaque popups,
     // compositor blur behind a 100% opaque surface is completely invisible and causes
     // Hyprland to blur the drop shadow pixels into a thick frosted halo when ignore_alpha is low.
     readonly property bool popupBlurEnabled: (Config.options?.appearance?.transparency?.enable ?? false) && (Config.options?.appearance?.transparency?.popups ?? false)
-    readonly property real popupIgnoreAlpha: Math.min(root.ignoreAlpha, Math.max(0, 1 - root.backgroundTransparency - 0.01))
+    readonly property real popupIgnoreAlpha: Math.min(root.layerIgnoreAlpha, Math.max(0, 1 - root.backgroundTransparency - 0.01))
+
+    // Desktop widgets: compositor blur behind a see-through widget background.
+    // Their background alpha (the scheme surface times the tint, set by
+    // WidgetColorScheme) bounds the threshold - above it the whole card would be
+    // left unblurred. Opaque widgets need no blur, and a screen whose widgets blur
+    // themselves under open windows (BackgroundWidgetsWindow) turns it off: over the
+    // already blurred wallpaper it only adds a hard-edged, noise-grained patch.
+    // Every screen's widget layer has its own namespace (quickshell:backgroundWidgets:<screen>),
+    // so each gets its own rule and one screen's windows never touch another's glass.
+    // Bound by BackgroundWidgetsWindow, so the two singletons never build each other.
+    property real widgetBackgroundAlpha: 1
+    property var widgetSelfBlurScreens: ({})
+    function setWidgetSelfBlur(screenName: string, active: bool): void {
+        if (screenName === "" || root.widgetSelfBlurScreens[screenName] === active)
+            return;
+        const next = Object.assign({}, root.widgetSelfBlurScreens);
+        next[screenName] = active;
+        root.widgetSelfBlurScreens = next;
+    }
+    function forgetWidgetScreen(screenName: string): void {
+        if (!(screenName in root.widgetSelfBlurScreens))
+            return;
+        const next = Object.assign({}, root.widgetSelfBlurScreens);
+        delete next[screenName];
+        root.widgetSelfBlurScreens = next;
+    }
+    // Screens whose desktop shows a glass app group: the group is the only
+    // translucent thing there when the widgets are opaque, so it asks for the
+    // compositor blur on its own.
+    property var desktopGlassScreens: ({})
+    function setDesktopGlass(screenName: string, active: bool): void {
+        if (screenName === "" || (root.desktopGlassScreens[screenName] === true) === active)
+            return;
+        const next = Object.assign({}, root.desktopGlassScreens);
+        if (active)
+            next[screenName] = true;
+        else
+            delete next[screenName];
+        root.desktopGlassScreens = next;
+    }
+    // A glass group's alpha: always above the blur's ignore_alpha, so it is
+    // blurred whatever the widgets do.
+    readonly property real desktopGlassAlpha: Math.max(0.4, root.ignoreAlpha + 0.08)
+    readonly property bool backgroundWidgetsTranslucent: root.widgetBackgroundAlpha > 0.01 && root.widgetBackgroundAlpha < 0.99
+    readonly property real backgroundWidgetsIgnoreAlpha: Math.min(root.ignoreAlpha, Math.max(0, root.widgetBackgroundAlpha - 0.01))
+    // Serialised so the rules are re-pushed only when a screen's answer changes.
+    readonly property string backgroundWidgetsRules: {
+        let out = "";
+        for (const screen of Object.keys(root.widgetSelfBlurScreens)) {
+            const blur = (root.backgroundWidgetsTranslucent || root.desktopGlassScreens[screen] === true) && root.widgetSelfBlurScreens[screen] !== true;
+            out += "hl.layer_rule({ name = 'ii:appearance:background-widgets:" + screen + "', match = { namespace = '^quickshell:backgroundWidgets:" + screen + "$' }, blur = "
+                + (blur ? "true" : "false") + ", ignore_alpha = " + root.backgroundWidgetsIgnoreAlpha + " }) ";
+        }
+        return out;
+    }
 
     function getLayerRulesScript(): string {
-        var a = root.ignoreAlpha;
+        var a = root.layerIgnoreAlpha;
         var barA = root.barIgnoreAlpha;
         var script = "";
         // Named rules merge on re-declaration: dragging Ignore Alpha must update
         // the existing rules, not keep adding anonymous rules to the compositor.
-        script += "hl.layer_rule({ name = 'ii:appearance:layers', match = { namespace = 'quickshell.*' }, blur = true, blur_popups = true, ignore_alpha = " + a + " }) ";
+        // xray is explicit: rules.lua turns it off for every shell layer.
+        const xray = root.compositorBlurMode === "xray" ? "true" : "false";
+        script += "hl.layer_rule({ name = 'ii:appearance:layers', match = { namespace = 'quickshell.*' }, blur = true, blur_popups = true, xray = " + xray + ", ignore_alpha = " + a + " }) ";
         if (root.popupBlurEnabled) {
             var popupA = root.popupIgnoreAlpha;
             script += "hl.layer_rule({ name = 'ii:appearance:popup-family', match = { namespace = 'quickshell:.*[pP]opup' }, blur = true, blur_popups = true, ignore_alpha = " + popupA + " }) ";
@@ -395,14 +504,42 @@ Singleton {
             script += "hl.layer_rule({ name = 'ii:appearance:popup-family', match = { namespace = 'quickshell:.*[pP]opup' }, blur = false, blur_popups = false, ignore_alpha = 0.5 }) ";
             script += "hl.layer_rule({ name = 'ii:appearance:popup', match = { namespace = 'quickshell:popup' }, blur = false, blur_popups = false, ignore_alpha = 0.5 }) ";
         }
-        script += "hl.layer_rule({ name = 'ii:appearance:bar', match = { namespace = 'quickshell:(bar|floatingNotch)' }, blur = true, ignore_alpha = " + barA + " }) ";
+        script += "hl.layer_rule({ name = 'ii:appearance:bar', match = { namespace = 'quickshell:bar' }, blur = true, xray = " + xray + ", ignore_alpha = " + barA + " }) ";
+        script += "hl.layer_rule({ name = 'ii:appearance:dock', match = { namespace = 'quickshell:dock' }, blur = true, xray = " + xray + ", ignore_alpha = " + root.dockIgnoreAlpha + " }) ";
+        script += "hl.layer_rule({ name = 'ii:appearance:island', match = { namespace = 'quickshell:floatingNotch' }, blur = true, xray = " + xray + ", ignore_alpha = " + root.islandIgnoreAlpha + " }) ";
+        // The sidebars' body is colLayer0 too: the island's threshold keeps their
+        // antialiased edges from blurring into a 1px ring.
+        script += "hl.layer_rule({ name = 'ii:appearance:sidebars', match = { namespace = '^quickshell:sidebar(Left|Right)$' }, blur = true, xray = " + xray + ", ignore_alpha = " + root.islandIgnoreAlpha + " }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:background', match = { namespace = 'quickshell:background' }, blur = false }) ";
+        // The idle dim scrim's 50% black sits above every ignore_alpha, so the
+        // quickshell.* rule above would blur the screen behind it (with xray: down
+        // to the bare wallpaper) instead of just darkening it.
+        script += "hl.layer_rule({ name = 'ii:appearance:idle-dim', match = { namespace = '^quickshell:idleDim$' }, blur = false }) ";
+        // See backgroundWidgetsRules. Re-declared on every change; rules.lua keeps them off
+        // until the shell has pushed these.
+        script += root.backgroundWidgetsRules;
+        // Both Media Mode designs share this namespace. The classic one relies on
+        // compositor blur; the Immersive one draws its own and, over the music video,
+        // compositor blur would hit only the pixels above ignore_alpha and carve
+        // sharp holes into it. So blur follows the design that is selected.
+        script += "hl.layer_rule({ name = 'ii:appearance:media-mode', match = { namespace = 'quickshell:mediaMode' }, blur = " + (root.mediaModeImmersive ? "false" : "true") + " }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:corners', match = { namespace = 'quickshell:screenCorners' }, order = 10 }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:session', match = { namespace = 'quickshell:session' }, blur = true, ignore_alpha = 0.0 }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:task-view', match = { namespace = 'quickshell:wTaskView' }, blur = true, ignore_alpha = 0.0 }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:overview-transition', match = { namespace = 'quickshell:overviewWindowTransition' }, blur = false }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:workspace-overlay', match = { namespace = 'quickshell:workspaceBlurOverlay' }, blur = true, ignore_alpha = 0.0, order = -1, animation = 'fade' }) ";
-        script += "hl.layer_rule({ name = 'ii:appearance:notification-animation', match = { namespace = 'quickshell:notificationPopup' }, no_anim = true }) ";
+        // The popup slides in over the dock, bar, screen corners and every other shell
+        // surface. Hyprland draws lower orders on top, so -2 clears the default 0 those
+        // surfaces sit at (and the -1 overlays), while live draw keeps its -5 ink above all.
+        script += "hl.layer_rule({ name = 'ii:appearance:notification-animation', match = { namespace = 'quickshell:notificationPopup' }, no_anim = true, order = -2 }) ";
+        // These layer surfaces animate their content with the Windows preset. Never also
+        // animate the fullscreen transparent layer (or alter animations for other overlays).
+        script += "hl.layer_rule({ name = 'ii:appearance:window-animation-overlays', match = { namespace = '^quickshell:(usage|modes|cheatsheet)$' }, no_anim = true }) ";
+        // Opaque app windows (Settings > Windows). A named rule cannot be dropped at
+        // runtime, so turning it off re-declares it with a match nothing has.
+        script += root.opaqueWindows
+            ? "hl.window_rule({ name = 'ii:appearance:opaque-windows', match = { class = '.*' }, opacity = '1.0 override 1.0 override 1.0 override', opaque = true }) "
+            : "hl.window_rule({ name = 'ii:appearance:opaque-windows', match = { class = '^ii-no-window-has-this-class$' } }) ";
         // ignore_alpha is a layer effect, not a supported window-rule field.
         script += "hl.window_rule({ name = 'ii:appearance:settings', match = { title = '^(illogical-impulse Settings)$' }, no_blur = false }) ";
         return script;
@@ -418,8 +555,12 @@ Singleton {
 
     onIgnoreAlphaChanged: root.pushHyprlandLayerRules()
     onBarIgnoreAlphaChanged: root.pushHyprlandLayerRules()
+    onDockIgnoreAlphaChanged: root.pushHyprlandLayerRules()
+    onBackgroundWidgetsRulesChanged: root.pushHyprlandLayerRules()
     onPopupBlurEnabledChanged: root.pushHyprlandLayerRules()
     onPopupIgnoreAlphaChanged: root.pushHyprlandLayerRules()
+    readonly property bool mediaModeImmersive: Config.options?.background?.mediaMode?.immersive ?? false
+    onMediaModeImmersiveChanged: root.pushHyprlandLayerRules()
 
     Connections {
         target: Config.options?.appearance?.transparency ?? null
@@ -582,6 +723,25 @@ Singleton {
                     "wght": 550,
                     "ROND": 100
                 })
+
+            // Every distinct axes value makes Qt open a new FreeType face of the font: a
+            // fresh 4 MB mmap of the whole file (~1.4 MB resident, never shared in RSS) that
+            // the font cache only trims ~5 engines per 10 s. An axis that follows an animated
+            // value therefore creates one face per frame, hundreds per session (that was the
+            // 1.5 -> 2.2 GB regression). Interpolated axes must go through blend()/snap(),
+            // which keep the number of distinct values to steps + 1 per pair of endpoints.
+            readonly property int steps: 3
+            function snap(t: real): real {
+                return Math.round(Math.max(0, Math.min(1, t)) * steps) / steps;
+            }
+            function blend(from: real, to: real, t: real): real {
+                return Math.round(from + (to - from) * snap(t));
+            }
+            // For an axis that carries meaning along its whole range (a clock whose width
+            // tracks the minute): n steps instead of the shell-wide default.
+            function blendIn(from: real, to: real, t: real, n: int): real {
+                return Math.round(from + (to - from) * Math.round(Math.max(0, Math.min(1, t)) * n) / n);
+            }
         }
         property QtObject pixelSize: QtObject {
             property int smallest: 10
@@ -681,6 +841,29 @@ Singleton {
             }
         }
 
+        // Context menus and popups opening under the cursor: the WINDOW the
+        // cascade lives in. The reveal scalar runs LINEAR and every slice
+        // eases its own arrival — the sidebar's rhythm (StaggeredEntrance:
+        // 26 ms stagger, ~400 ms fade per row). Two clocks, strictly
+        // separate: the card body + plate land in the first ~22% (the menu
+        // pops in and STANDS STILL), and the rows wave in inside it from
+        // there to 100%. One global curve over the scalar was the blink
+        // (emphasizedDecel is ~85% done at 30% of its time — every row
+        // flashed at once); a body that grows across the whole window makes
+        // the menu itself perform as a cascade item and hides the rows'
+        // wave behind its drift. The exit stays short and flat: a menu
+        // waving away, not a page leaving.
+        // Duration only: the scalar runs Linear and the slices carry the
+        // easing, so there is no curve to hand out. Kept short: 640 ms read
+        // well once, then made a menu opened many times a day feel stuck.
+        property QtObject popupEnter: QtObject {
+            property int duration: Math.round(280 * root.animMultiplier)
+        }
+
+        property QtObject popupExit: QtObject {
+            property int duration: Math.round(150 * root.animMultiplier)
+        }
+
         property QtObject elementMoveSlow: QtObject {
             property int duration: Math.round(animationCurves.expressiveEffectsDuration * 2.5 * root.animMultiplier)
             property int type: Easing.BezierSpline
@@ -721,6 +904,25 @@ Singleton {
                     duration: root.animation.elementMoveFast.duration
                     easing.type: root.animation.elementMoveFast.type
                     easing.bezierCurve: root.animation.elementMoveFast.bezierCurve
+                }
+            }
+        }
+
+        /**
+         * A selection that follows the keyboard (Alt+Tab's highlight). Shorter than
+         * elementMoveFast so a held key reads as one motion, and deliberately without
+         * `alwaysRunToEnd`: a Behavior retargets from wherever the value is, and running
+         * each leg to its end would queue every press behind the last one.
+         */
+        property QtObject elementMoveSnap: QtObject {
+            property int duration: Math.round(150 * root.animMultiplier)
+            property int type: Easing.BezierSpline
+            property list<real> bezierCurve: animationCurves.expressiveFastSpatial
+            property Component numberAnimation: Component {
+                NumberAnimation {
+                    duration: root.animation.elementMoveSnap.duration
+                    easing.type: root.animation.elementMoveSnap.type
+                    easing.bezierCurve: root.animation.elementMoveSnap.bezierCurve
                 }
             }
         }
@@ -798,6 +1000,21 @@ Singleton {
             }
         }
 
+        // Sidebars sliding in and out, and the wallpaper parallax that follows them.
+        // No overshoot anywhere: expressive spatial curves kick off at ~3x linear speed and
+        // bounce the wallpaper past its rest, which reads as hard. The sidebar enters on M3
+        // emphasized (gentle start, long settle) and leaves accelerating, like end4's layer
+        // animations; the wallpaper runs its own, longer emphasized clock in both directions,
+        // since an accelerating exit is invisible for a sidebar but stops the wallpaper dead.
+        property QtObject sidebarSlide: QtObject {
+            property int enterDuration: Math.round(500 * root.animMultiplier)
+            property int exitDuration: Math.round(500 * root.animMultiplier)
+            property list<real> enterCurve: root.animationCurves.emphasized
+            property list<real> exitCurve: root.animationCurves.emphasized
+            property int parallaxDuration: Math.round(700 * root.animMultiplier)
+            property list<real> parallaxCurve: root.animationCurves.emphasized
+        }
+
         property QtObject clickBounce: QtObject {
             property int duration: Math.round(400 * root.animMultiplier)
             property int type: Easing.BezierSpline
@@ -813,26 +1030,26 @@ Singleton {
             }
         }
 
-        // Continuous magnification follows a moving pointer target, so it
-        // uses a spring instead of restarting a one-shot easing curve.
+        // One lens shared by every dock icon. pointerLag smooths the pointer the
+        // lens follows (critically damped, never overshoots); strengthDuration
+        // is how long the lens takes to grow in on enter. Past the window edge
+        // there are no pointer samples, so the exit is timed: exitDuration, on
+        // a curve that starts and ends gently.
         property QtObject dockMagnificationScale: QtObject {
             property QtObject fast: QtObject {
-                property real spring: 5.2
-                property real damping: 0.36
-                property real mass: 0.82
-                property real epsilon: 0.002
+                property real pointerLag: 0
+                property int strengthDuration: Math.round(90 * root.animMultiplier)
+                property int exitDuration: Math.round(220 * root.animMultiplier)
             }
             property QtObject balanced: QtObject {
-                property real spring: 3.8
-                property real damping: 0.34
-                property real mass: 0.95
-                property real epsilon: 0.002
+                property real pointerLag: 28
+                property int strengthDuration: Math.round(150 * root.animMultiplier)
+                property int exitDuration: Math.round(280 * root.animMultiplier)
             }
             property QtObject smooth: QtObject {
-                property real spring: 2.8
-                property real damping: 0.38
-                property real mass: 1.1
-                property real epsilon: 0.002
+                property real pointerLag: 60
+                property int strengthDuration: Math.round(220 * root.animMultiplier)
+                property int exitDuration: Math.round(340 * root.animMultiplier)
             }
             property int hoverExitGrace: 90
         }
@@ -922,6 +1139,9 @@ Singleton {
         // The M3 toolbar's height: one number the toolbar and the band Edit Mode reserves for it
         // both read.
         property real toolbarHeight: 46
+        // Edit Mode's toolbar: taller than the M3 default, so its groups read
+        // as surfaces of their own (EditModeChromeContent, EditModeInsets).
+        property real editModeToolbarHeight: 60
         // Edit Mode's viewport: the gap between the shrunk desktop and what surrounds it, the
         // tighter gap between the chrome and the usable area's edge, and the width the widget
         // drawer opens into (reserved from the first frame so the desktop never resizes mid-edit).

@@ -19,6 +19,139 @@ Singleton {
 
     property int _internalStartTime: 0
 
+    // Wall clock in seconds, and the only thing that moves while an agent works.
+    // `agents` used to be rebuilt every second just to carry a new runtime; because the
+    // island keys its Repeater off that array, every widget was destroyed and recreated
+    // once a second, which restarted their entry animations and their internal state.
+    // Consumers now render `runtimeFor(agent)` against this tick instead.
+    property int nowSeconds: Math.floor(Date.now() / 1000)
+
+    // Live token counts for the built-in chat. Kept out of `agents` so a streaming
+    // response does not count as a change to the agent set.
+    readonly property int internalTokensIn: (typeof Ai !== "undefined" && Ai.tokenCount.input > 0) ? Ai.tokenCount.input : 0
+    readonly property int internalTokensOut: (typeof Ai !== "undefined" && Ai.tokenCount.output > 0) ? Ai.tokenCount.output : 0
+
+    /**
+     * Go to where an agent is running: its terminal's window, on whatever workspace
+     * that is. Only a CLI has one - the built-in chat has no process - and the return
+     * value says whether there was anywhere to go.
+     */
+    function focusAgent(agent): bool {
+        const pid = agent?.pid ?? 0;
+        if (pid <= 0)
+            return false;
+        const hints = [agent.name ?? "", (agent.cwd ?? "").split("/").pop()].filter(hint => hint !== "");
+        Quickshell.execDetached(["python3", `${Directories.scriptPath}/ai/focus_agent_window.py`,
+            String(pid)].concat(hints));
+        return true;
+    }
+
+    /**
+     * What an agent is doing, in words.
+     *
+     * The island used to show a name and a clock and nothing else, so "thinking",
+     * "running a command", "waiting for you to answer" and "finished" all looked
+     * identical. The CLI reports these through its hooks; the built-in chat reports the
+     * same vocabulary, so one function covers both.
+     */
+    function statusLabel(agent) {
+        if (!agent)
+            return "";
+        const tool = agent.tool ?? "";
+        switch (agent.state) {
+        case "working":
+            return Translation.tr("Working");
+        case "thinking":
+            return Translation.tr("Thinking");
+        case "streaming":
+            return Translation.tr("Answering");
+        case "tool":
+            return tool !== "" ? Translation.tr("Running %1").arg(tool) : Translation.tr("Running a tool");
+        case "asking":
+            return Translation.tr("Waiting for your answer");
+        case "needsAction":
+            return Translation.tr("Needs your approval");
+        case "compacting":
+            return Translation.tr("Compacting");
+        case "interrupted":
+            return Translation.tr("Interrupted");
+        case "done":
+            return Translation.tr("Done");
+        case "waitingInput":
+            return Translation.tr("Waiting for you");
+        case "running":
+            // The CPU fallback knows only that something is happening.
+            return Translation.tr("Working");
+        }
+        return Translation.tr("Active");
+    }
+
+    /** A token count at a glance: three significant figures at most, never a wall. */
+    function formatTokens(count) {
+        const value = count ?? 0;
+        if (value <= 0)
+            return "";
+        if (value < 1000)
+            return String(value);
+        if (value < 1000000)
+            return (value / 1000).toFixed(value < 10000 ? 1 : 0) + "k";
+        return (value / 1000000).toFixed(1) + "M";
+    }
+
+    function runtimeFor(agent) {
+        if (!agent)
+            return 0;
+        const startedAt = agent.startedAtEpoch ?? 0;
+        if (startedAt > 0)
+            return Math.max(0, root.nowSeconds - startedAt);
+        return agent.runtime ?? 0;
+    }
+
+    // What the island actually distinguishes. Runtime and token counts are excluded on
+    // purpose: they change constantly and would defeat the whole point.
+    function agentsSignature(list) {
+        return list.map(agent => [
+            agent.id, agent.state, agent.tool ?? "", agent.requiresAttention === true, agent.name,
+            agent.announce === true
+        ].join(":")).join("|");
+    }
+
+    property string _agentsSignature: ""
+
+    /**
+     * The numbers that move while an agent works, keyed by agent id.
+     *
+     * Kept out of `agents` deliberately. That array is only reassigned when the *set*
+     * changes, because the island keys a Repeater off it and a new array rebuilds every
+     * delegate; token counts change several times a turn and would do exactly that. The
+     * presentations read these through `metricsFor()` instead, so a growing count
+     * repaints a label and nothing else.
+     */
+    property var agentMetrics: ({})
+
+    readonly property var emptyMetrics: ({ tokensIn: 0, tokensOut: 0, model: "", tool: "", cwd: "" })
+
+    function metricsFor(agent) {
+        if (!agent || !agent.id)
+            return root.emptyMetrics;
+        return root.agentMetrics[agent.id] ?? root.emptyMetrics;
+    }
+
+    function updateMetrics(list) {
+        const next = {};
+        for (let i = 0; i < list.length; i++) {
+            const agent = list[i];
+            next[agent.id] = {
+                tokensIn: agent.tokensIn ?? 0,
+                tokensOut: agent.tokensOut ?? 0,
+                model: agent.model ?? "",
+                tool: agent.tool ?? "",
+                cwd: agent.cwd ?? ""
+            };
+        }
+        root.agentMetrics = next;
+    }
+
     // Monitor for CLI AI agents
     Process {
         id: monitorProc
@@ -54,14 +187,17 @@ Singleton {
         root.updateCombinedAgents();
     }
 
+    // A session resting on a finished turn shows a stopped clock, and can sit there for
+    // hours; only a turn that is still running has anything to count.
+    readonly property bool hasRunningClock: agents.some(agent => (agent.startedAtEpoch ?? 0) > 0)
+
     Timer {
         id: ticker
         interval: 1000
         repeat: true
-        running: root.hasActiveAgents
-        onTriggered: {
-            root.updateCombinedAgents();
-        }
+        triggeredOnStart: true
+        running: root.hasRunningClock
+        onTriggered: root.nowSeconds = Math.floor(Date.now() / 1000)
     }
 
     function updateCombinedAgents() {
@@ -82,7 +218,9 @@ Singleton {
                 "icon": "google-gemini-symbolic",
                 "color": Appearance.colors.colPrimary,
                 "runtime": runtime,
-                "state": attention.needsAction ? "needsAction" : ((msg && msg.thinking) ? "thinking" : "streaming"),
+                "startedAtEpoch": root._internalStartTime,
+                "state": attention.needsAction ? "needsAction" : ((msg && msg.thinking) ? "thinking" : "working"),
+                "tool": "",
                 "priority": attention.needsAction ? 0 : 10,
                 "requiresAttention": attention.needsAction,
                 "deepLink": attention.deepLink,
@@ -98,6 +236,16 @@ Singleton {
             list.push(root.cliAgents[i]);
         }
 
-        root.agents = list.sort((left, right) => Number(left.priority ?? 20) - Number(right.priority ?? 20));
+        list.sort((left, right) => Number(left.priority ?? 20) - Number(right.priority ?? 20));
+
+        // Always, even when the set is unchanged: this is the channel the live numbers
+        // travel on.
+        root.updateMetrics(list);
+
+        const signature = root.agentsSignature(list);
+        if (signature === root._agentsSignature)
+            return;
+        root._agentsSignature = signature;
+        root.agents = list;
     }
 }

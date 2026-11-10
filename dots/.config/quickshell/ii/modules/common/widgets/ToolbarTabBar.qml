@@ -26,9 +26,8 @@ Item {
         if (nextIndex === root.currentIndex)
             return;
 
-        if (root.requestOnly)
-            root.indexSelected(nextIndex);
-        else
+        root.indexSelected(nextIndex);
+        if (!root.requestOnly)
             root.currentIndex = nextIndex;
     }
 
@@ -36,6 +35,7 @@ Item {
     implicitWidth: contentItem.implicitWidth
     implicitHeight: 40
     property bool showShortcutHints: false
+    property bool showShortcutNumbers: true
     // See ToolbarTabButton: keeps a three-tab bar inside a narrow panel.
     property bool collapseInactiveLabels: false
     property int _delegateRevision: 0
@@ -45,9 +45,10 @@ Item {
         required property var modelData
         current: index == root.currentIndex
         text: modelData.name
-        materialSymbol: modelData.icon
+        materialSymbol: modelData.icon ?? ""
         collapseInactiveLabel: root.collapseInactiveLabels
-        shortcutIndex: index + 1
+        shortcutIndex: root.showShortcutNumbers ? (index + 1) : 0
+        shortcutText: String(modelData.shortcut ?? "")
         showShortcut: root.showShortcutHints
         onClicked: {
             root.setCurrentIndex(index);

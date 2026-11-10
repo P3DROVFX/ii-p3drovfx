@@ -96,6 +96,18 @@ ContentPage {
             Layout.fillWidth: true
             spacing: 4
 
+            ConfigSwitch {
+                buttonIcon: "push_pin"
+                text: Translation.tr("Pin while a game is running")
+                checked: Config.options.crosshair.autoPin
+                onCheckedChanged: {
+                    Config.options.crosshair.autoPin = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("The crosshair pins itself when a game is detected and goes away when it closes. Turn this off to keep it pinned yourself.")
+                }
+            }
+
             MaterialTextArea {
                 Layout.fillWidth: true
                 placeholderText: Translation.tr("Crosshair code (in Valorant's format)")
@@ -203,34 +215,6 @@ ContentPage {
     }
 
     ContentSection {
-        title: Translation.tr("Notes")
-        icon: "sticky_note_2"
-
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 4
-
-            ConfigSwitch {
-                buttonIcon: "tab"
-                text: Translation.tr("Show tabs")
-                checked: Config.options.overlay.notes.showTabs
-                onCheckedChanged: {
-                    Config.options.overlay.notes.showTabs = checked;
-                }
-            }
-            ConfigSwitch {
-                enabled: Config.options.overlay.notes.showTabs
-                buttonIcon: "edit_note"
-                text: Translation.tr("Allow editing the icon")
-                checked: Config.options.overlay.notes.allowEditingIcon
-                onCheckedChanged: {
-                    Config.options.overlay.notes.allowEditingIcon = checked;
-                }
-            }
-        }
-    }
-
-    ContentSection {
         title: Translation.tr("Discord Voice")
         icon: "record_voice_over"
 
@@ -327,6 +311,59 @@ ContentPage {
                 checked: Config.options.overlay.discordVoice.speakingPulseContinuous
                 onCheckedChanged: {
                     Config.options.overlay.discordVoice.speakingPulseContinuous = checked;
+                }
+            }
+            ConfigSwitch {
+                buttonIcon: "group_add"
+                text: Translation.tr("Join and leave notices")
+                checked: Config.options.overlay.discordVoice.joinLeaveNotices
+                onCheckedChanged: {
+                    Config.options.overlay.discordVoice.joinLeaveNotices = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Shows a short notice in the overlay when someone joins or leaves your voice channel.")
+                }
+            }
+            ConfigSwitch {
+                buttonIcon: "chat"
+                text: Translation.tr("DM and mention notices")
+                checked: Config.options.overlay.discordVoice.messageNotices
+                onCheckedChanged: {
+                    Config.options.overlay.discordVoice.messageNotices = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Shows direct messages and mentions in the overlay, following your Discord notification settings. Needs the Vesktop companion.")
+                }
+            }
+            ConfigSwitch {
+                buttonIcon: "visibility"
+                enabled: Config.options.overlay.discordVoice.messageNotices
+                text: Translation.tr("Show message text")
+                checked: Config.options.overlay.discordVoice.messagePreview
+                onCheckedChanged: {
+                    Config.options.overlay.discordVoice.messagePreview = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Turn off to show only who wrote, e.g. while streaming.")
+                }
+            }
+            ConfigSwitch {
+                buttonIcon: "touch_app"
+                text: Translation.tr("Push-to-talk indicator")
+                checked: Config.options.overlay.discordVoice.pttIndicator
+                onCheckedChanged: {
+                    Config.options.overlay.discordVoice.pttIndicator = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("While Discord is set to push to talk, shows a bar that lights up as you transmit.")
+                }
+            }
+            ConfigSwitch {
+                buttonIcon: "push_pin"
+                text: Translation.tr("Pin while a call is running")
+                checked: Config.options.overlay.discordVoice.autoPin
+                onCheckedChanged: {
+                    Config.options.overlay.discordVoice.autoPin = checked;
                 }
             }
         }

@@ -5,6 +5,7 @@ import qs.services
 
 import qs.modules.common
 import qs.modules.common.panels.shellSwitcher
+import qs.modules.common.panels.windowSwitcher
 
 // ── Tablet-owned surfaces ───────────────────────────────────────────────────
 import qs.modules.tablet.appDrawer
@@ -26,12 +27,14 @@ import qs.modules.tablet.windows
 // tablet-native replacement or is dropped. Nothing under modules/tablet/ may import
 // qs.modules.ii.* — only this file, so the coupling stays countable in one place.
 import qs.modules.ii.alarmRingingPopup
+import qs.modules.ii.reminderAlertPopup
 import qs.modules.ii.background
 import qs.modules.ii.background.desktopMenu
 import qs.modules.ii.editMode
 import qs.modules.ii.bar
 import qs.modules.ii.bluetoothConnectionPopup
 import qs.modules.ii.bluetoothPairing
+import qs.modules.ii.easyEffects
 import qs.modules.ii.localSendPopup
 import qs.modules.ii.lock
 import qs.modules.ii.mediaControls
@@ -185,14 +188,19 @@ Scope {
     // modules/tablet, exactly like the drawer's tool host.
     PanelLoader { component: TabletAppWindows {} }
 
+    // The desktop apps' whole content, rail and all; the tablet window brings the close.
     Component {
         id: usageAppContent
-        UsageContent {}
+        UsageAppContent {
+            embedded: true
+        }
     }
 
     Component {
         id: modesAppContent
-        ModesContent {}
+        ModesAppContent {
+            embedded: true
+        }
     }
 
     // Cheatsheet entries are application pages, not tabs in a legacy overlay. Keeping each
@@ -276,10 +284,7 @@ Scope {
             // The action toggles the whole feature — tray and pen together. Toggling the
             // pen alone belongs to the pencil in the tray, which is where the user can
             // see what state it is in.
-            if (TabletLiveDrawStore.trayOpen)
-                TabletLiveDrawStore.close();
-            else
-                TabletLiveDrawStore.open();
+            LiveDraw.toggle();
         };
         GlobalStates.clearHomeScreenAppsHandler = () => {
             const ws = TabletHomeIcons.currentWorkspace;
@@ -348,6 +353,9 @@ Scope {
     // Every family loads the chooser: a family that did not offer it would be one the user
     // could switch into and never find the way out of.
     PanelLoader { component: ShellSwitcher {} }
+    // Alt+Tab; always loaded so its binds can be taken away when the setting goes off.
+    PanelLoader { component: WindowSwitcherPanel {} }
+    PanelLoader { component: WindowSwitcherPeek {} }
     PanelLoader { component: Polkit {} }
     // Kept loaded rather than gated: the Scope decides on its own whether BlueZ
     // is asking anything, and nothing is built until it is.
@@ -379,6 +387,10 @@ Scope {
         extraCondition: AlarmService.ringingAlarmIndex !== -1 && Config.options.time.alarms.useFullscreenPopup
         component: AlarmRingingPopup {}
     }
+    PanelLoader {
+        extraCondition: RemindersService.ringingId.length > 0 && !GlobalStates.islandOwnsReminder
+        component: ReminderAlertPopup {}
+    }
 
     // ── Input ───────────────────────────────────────────────────────────────
     // The on-screen keyboard is the only keyboard this family assumes exists.
@@ -409,6 +421,8 @@ Scope {
 
     // ── Tools ───────────────────────────────────────────────────────────────
     PanelLoader { component: MediaControls {} }
+    // The shade's EasyEffects dialog opens it, and its keybinds and IPC switch presets.
+    PanelLoader { component: EasyEffectsApp {} }
     PanelLoader { component: RegionSelector {} }
     PanelLoader {
         extraCondition: GlobalStates.screenshotOverlayOpen

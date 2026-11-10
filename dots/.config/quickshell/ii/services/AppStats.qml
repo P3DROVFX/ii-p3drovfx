@@ -11,7 +11,7 @@ import qs.modules.common.functions
 
 /**
  * Per-app usage and energy history: screen time, watt-hours, CPU and GPU time,
- * memory, launches and sessions.
+ * memory, launches, sessions and TCP data.
  *
  * Runs the `app_stats` sampler and reads back what it writes. The daemon owns every
  * measurement — /proc, DRM fdinfo, RAPL and Hyprland's event socket — and knows only
@@ -47,14 +47,19 @@ Singleton {
             mjFg: 7,
             mjBg: 8,
             launches: 9,
-            sessions: 10
+            sessions: 10,
+            // KiB of TCP payload. Absent from rows that moved none, and from every file
+            // written before the sampler counted it; both read as zero.
+            netRx: 11,
+            netTx: 12,
+            netBg: 13
         })
 
     readonly property var opts: Config.options?.appStats ?? null
     // IdleMonitor creates its native ext-idle-notify object from onPostReload.
     // Keep the whole service disabled until the async config load has completed,
     // otherwise it can ask Wayland for a notification while the seat is not ready.
-    readonly property bool enabled: Config.ready && (root.opts?.enable ?? true)
+    readonly property bool enabled: Config.ready && (root.opts?.enable ?? false)
     readonly property bool trackHeadless: root.opts?.trackHeadless ?? true
     readonly property bool showHeadless: root.opts?.showHeadless ?? false
     readonly property int intervalMs: root.opts?.sampleIntervalMs ?? 10000
@@ -63,9 +68,13 @@ Singleton {
     readonly property string retentionMode: root.opts?.retentionMode ?? "previousMonth"
     readonly property string energySource: root.opts?.energySource ?? "auto"
     readonly property int gpuFullEvery: root.opts?.gpuFullEvery ?? 30
+    readonly property bool trackNetwork: root.opts?.trackNetwork ?? true
     readonly property bool weekStartsMonday: root.opts?.weekStartsMonday ?? true
     /// Seconds of no input before foreground time is paused. 0 disables the monitor.
     readonly property int idleTimeout: root.opts?.idleTimeoutSec ?? 300
+    /// Whether the idle monitor currently holds foreground time. Read by the
+    /// screen-time limits, which count the same focused time live between flushes.
+    readonly property bool userIdle: idleMonitor.enabled && idleMonitor.isIdle
 
     readonly property string stateDir: Directories.appStats
     readonly property string binaryPath: `${Directories.scriptPath}/appStats/app_stats`
@@ -84,6 +93,19 @@ Singleton {
     /// Energy source actually in use: "rapl", "battery" or "none".
     property string source: ""
     property var lastSample: null
+    /// Whether the running sampler reports data at all; true until a sample says
+    /// otherwise, so the Network page does not flash its rebuild notice on open.
+    property bool samplerCountsNetwork: true
+    /// How the running sampler counts data: "exact" through the eBPF helper (every
+    /// packet, per socket owner), "sockets" on the TCP socket counters (no UDP, no
+    /// connection shorter than a sample), "off", or "" before it has said.
+    property string netMode: ""
+    /// Why the helper is installed but not in use, when it is.
+    property string netError: ""
+    /// Whether the helper binary exists, from the install probe.
+    property bool netHelperInstalled: false
+    readonly property string netHelperPath: "/usr/local/lib/ii/app_stats_net"
+    readonly property string netHelperScript: `${Directories.scriptPath}/appStats/install-net-helper.sh`
 
     /// "YYYY-MM-DD" -> parsed day document, or null for a day with no data. The null
     /// matters: it is what stops a missing day from being requested forever.
@@ -223,10 +245,43 @@ Singleton {
         }
     }
 
+    /// Parsed days not yet in `history`. Every assignment to `history` recomputes
+    /// each summary and chart of the overlay, so a month opening one file at a time
+    /// redid the whole month about thirty times over. Days are held here until the
+    /// batch is in (or briefly, for a straggler) and land in one assignment.
+    /// Mutated in place: nothing binds to it.
+    property var pendingDays: ({})
+
     function storeDay(date, doc) {
-        const next = Object.assign({}, root.history);
-        next[date] = doc;
-        root.history = next;
+        root.pendingDays[date] = doc;
+        const outstanding = root.loadBatch.some(d => root.history[d] === undefined && !(d in root.pendingDays));
+        if (!outstanding)
+            root.commitDays();
+        else if (!commitTimer.running)
+            commitTimer.start();
+    }
+
+    function commitDays() {
+        commitTimer.stop();
+        const pending = root.pendingDays;
+        if (Object.keys(pending).length === 0)
+            return;
+        root.pendingDays = ({});
+        root.history = Object.assign({}, root.history, pending);
+    }
+
+    /// Fingerprint of the last today file stored, so an unchanged reread is dropped.
+    property real todayHash: -1
+
+    function textHash(text) {
+        let hash = text.length;
+        for (let i = 0; i < text.length; i++)
+            hash = (hash * 31 + text.charCodeAt(i)) % 2147483647;
+        return hash;
+    }
+
+    function isKnownDay(date) {
+        return root.history[date] !== undefined || date in root.pendingDays;
     }
 
     /// Request whichever of `dates` is not cached yet. Today is excluded: it belongs
@@ -235,14 +290,14 @@ Singleton {
         const wanted = [];
         for (const date of dates) {
             if (date === root.todayDate) continue;
-            if (root.history[date] !== undefined) continue;
+            if (root.isKnownDay(date)) continue;
             if (wanted.includes(date)) continue;
             wanted.push(date);
         }
         if (wanted.length === 0) return;
         // Days still in flight stay in the batch; dropping one cancels its read.
         for (const date of root.loadBatch) {
-            if (root.history[date] === undefined && !wanted.includes(date)) wanted.push(date);
+            if (!root.isKnownDay(date) && !wanted.includes(date)) wanted.push(date);
         }
         if (wanted.length === root.loadBatch.length && wanted.every(d => root.loadBatch.includes(d))) return;
         root.loadBatch = wanted;
@@ -279,6 +334,9 @@ Singleton {
     /// flush writes today's again. Nothing here asks for confirmation; the caller does.
     function clearHistory() {
         Quickshell.execDetached(["sh", "-c", `rm -f -- "${root.stateDir}"/*.json`]);
+        commitTimer.stop();
+        root.pendingDays = ({});
+        root.todayHash = -1;
         root.history = ({});
         root.loadBatch = [];
         clearTimer.restart();
@@ -286,8 +344,20 @@ Singleton {
 
     /// Releases memory cached for historical day files back to the JS garbage collector.
     function releaseCache() {
-        root.history = ({});
+        commitTimer.stop();
+        root.deviceHoursCache.owner = null;
+        root.deviceHoursCache.table = ({});
+        root.pendingDays = ({});
         root.loadBatch = [];
+        // Today stays: the screen-time limits read it continuously, and dropping it
+        // would zero every limit until the next flush came round.
+        const today = root.history[root.todayDate];
+        const kept = ({});
+        if (today !== undefined)
+            kept[root.todayDate] = today;
+        else
+            root.todayHash = -1;
+        root.history = kept;
     }
 
     function openStateDir() {
@@ -331,11 +401,20 @@ Singleton {
         switch (msg.t) {
         case "ready":
             root.source = msg.src ?? "";
+            root.netMode = msg.netMode ?? "";
+            root.netError = msg.netError ?? "";
             root.running = true;
             root.pushState();
             break;
         case "sample":
             root.lastSample = msg;
+            // A sampler built before it counted data never sends these, which is the
+            // only way to tell "no traffic" apart from "not looking".
+            root.samplerCountsNetwork = msg.sysRx !== undefined;
+            if (msg.netMode !== undefined) {
+                root.netMode = msg.netMode;
+                root.netError = msg.netError ?? "";
+            }
             break;
         case "flush":
             todayView.reload();
@@ -359,12 +438,15 @@ Singleton {
             mjBg: 0,
             launches: 0,
             sessions: 0,
+            netRx: 0,
+            netTx: 0,
+            netBg: 0,
             hourCount: 0
         };
     }
 
-    function addTuple(rec, t) {
-        const f = root.field;
+    function addTuple(rec, t, fields) {
+        const f = fields ?? root.field;
         rec.fg += t[f.fg] ?? 0;
         rec.bg += t[f.bg] ?? 0;
         rec.focus += t[f.focus] ?? 0;
@@ -374,6 +456,9 @@ Singleton {
         rec.mjBg += t[f.mjBg] ?? 0;
         rec.launches += t[f.launches] ?? 0;
         rec.sessions += t[f.sessions] ?? 0;
+        rec.netRx += t[f.netRx] ?? 0;
+        rec.netTx += t[f.netTx] ?? 0;
+        rec.netBg += t[f.netBg] ?? 0;
         rec.ramPeak = Math.max(rec.ramPeak, t[f.ramPeak] ?? 0);
         // Each stored hour already holds a mean; averaging those means weights every
         // hour equally, so a partial hour counts as much as a full one. Close enough
@@ -402,22 +487,33 @@ Singleton {
         const wantHeadless = o.headless ?? root.showHeadless;
 
         const byKey = ({});
-        const system = root.blankRecord(root.systemKey, root.systemKey, true);
+        const systemKey = root.systemKey;
+        const system = root.blankRecord(systemKey, systemKey, true);
+        // A month is tens of thousands of stored hours, and this runs on every
+        // history update of an open overlay: property reads are hoisted out of the
+        // loop, and the hour key is only parsed when a range was actually asked for.
+        const history = root.history;
+        const f = root.field;
+        const wholeDay = from <= 0 && to >= 23;
 
         for (const date of dates) {
-            const apps = root.history[date]?.apps;
+            const apps = history[date]?.apps;
             if (!apps) continue;
             for (const key in apps) {
                 const rec = apps[key];
                 let target = system;
-                if (key !== root.systemKey) {
-                    if (!byKey[key]) byKey[key] = root.blankRecord(key, rec.exe, rec.headless);
+                if (key !== systemKey) {
                     target = byKey[key];
+                    if (!target)
+                        target = byKey[key] = root.blankRecord(key, rec.exe, rec.headless);
                 }
-                for (const hour in rec.h) {
-                    const h = parseInt(hour);
-                    if (h < from || h > to) continue;
-                    root.addTuple(target, rec.h[hour]);
+                const hours = rec.h;
+                for (const hour in hours) {
+                    if (!wholeDay) {
+                        const h = parseInt(hour);
+                        if (h < from || h > to) continue;
+                    }
+                    root.addTuple(target, hours[hour], f);
                 }
             }
         }
@@ -435,6 +531,9 @@ Singleton {
                 // of the rows on screen.
                 system.mjFg += rec.mjFg;
                 system.mjBg += rec.mjBg;
+                // Their data likewise, so the device total does not shrink with the filter.
+                system.netRx += rec.netRx;
+                system.netTx += rec.netTx;
                 continue;
             }
             list.push(rec);
@@ -461,6 +560,9 @@ Singleton {
         totals.mjBg += rec.mjBg;
         totals.launches += rec.launches;
         totals.sessions += rec.sessions;
+        totals.netRx += rec.netRx;
+        totals.netTx += rec.netTx;
+        totals.netBg += rec.netBg;
         totals.ramPeak = Math.max(totals.ramPeak, rec.ramPeak);
         totals.wh = root.wh(totals.mjFg + totals.mjBg);
     }
@@ -486,7 +588,30 @@ Singleton {
      * is decided per hour and not per day, so one hour of real device time cannot
      * blank out the rest of the day around it.
      */
+    /// deviceHours() results for the `history` object they were computed from. The
+    /// chart, the screen-time card and the comparison each ask for the same days;
+    /// a new `history` (or headless setting) discards the whole table. Mutated in
+    /// place, never reassigned: the bindings that call this must not be notified.
+    readonly property var deviceHoursCache: ({ owner: null, table: ({}) })
+
     function deviceHours(date, fieldName) {
+        const history = root.history;
+        const cacheKey = `${date}|${fieldName}|${root.showHeadless}`;
+        const cache = root.deviceHoursCache;
+        if (cache.owner !== history) {
+            cache.owner = history;
+            cache.table = ({});
+        }
+        let hours = cache.table[cacheKey];
+        if (!hours) {
+            hours = root.computeDeviceHours(date, fieldName);
+            cache.table[cacheKey] = hours;
+        }
+        // Callers may keep or reshape the series; the cached one stays untouched.
+        return hours.slice();
+    }
+
+    function computeDeviceHours(date, fieldName) {
         const idx = root.field[fieldName];
         const device = new Array(24).fill(0);
         const fallback = new Array(24).fill(0);
@@ -501,6 +626,91 @@ Singleton {
             for (const hour in rec.h) target[parseInt(hour)] += rec.h[hour][idx] ?? 0;
         }
         return device.map((value, hour) => value > 0 ? value : fallback[hour]);
+    }
+
+    /// Package energy per hour of `date` in mWh (24 entries): every row's watt-hours,
+    /// headless or not, which together are the RAPL package counter for that hour.
+    /// Shares `deviceHoursCache`, so a month of battery buckets walks each day once.
+    function packageHours(date) {
+        const history = root.history;
+        const cacheKey = `${date}|pkg`;
+        const cache = root.deviceHoursCache;
+        if (cache.owner !== history) {
+            cache.owner = history;
+            cache.table = ({});
+        }
+        let hours = cache.table[cacheKey];
+        if (!hours) {
+            hours = new Array(24).fill(0);
+            const apps = history[date]?.apps;
+            const f = root.field;
+            for (const appKey in apps ?? {}) {
+                const rec = apps[appKey];
+                for (const hour in rec.h) {
+                    const t = rec.h[hour];
+                    // Millijoules to milliwatt-hours.
+                    hours[parseInt(hour)] += ((t[f.mjFg] ?? 0) + (t[f.mjBg] ?? 0)) / 3600;
+                }
+            }
+            cache.table[cacheKey] = hours;
+        }
+        return hours;
+    }
+
+    /**
+     * The device's TCP data per hour of `date` in KiB: `{ rx, tx, matched }`, 24
+     * entries each. `rx`/`tx` are every row together — apps, hidden services and the
+     * unattributed remainder — which is what the physical interfaces carried;
+     * `matched` is the part (both directions) some process was credited with.
+     * Shares `deviceHoursCache`.
+     */
+    function networkHours(date) {
+        const history = root.history;
+        const cacheKey = `${date}|net`;
+        const cache = root.deviceHoursCache;
+        if (cache.owner !== history) {
+            cache.owner = history;
+            cache.table = ({});
+        }
+        let hours = cache.table[cacheKey];
+        if (!hours) {
+            hours = {
+                rx: new Array(24).fill(0),
+                tx: new Array(24).fill(0),
+                matched: new Array(24).fill(0)
+            };
+            const apps = history[date]?.apps;
+            const f = root.field;
+            for (const appKey in apps ?? {}) {
+                const rec = apps[appKey];
+                const isSystem = appKey === root.systemKey;
+                for (const hour in rec.h) {
+                    const t = rec.h[hour];
+                    const rx = t[f.netRx] ?? 0;
+                    const tx = t[f.netTx] ?? 0;
+                    if (rx + tx === 0) continue;
+                    const index = parseInt(hour);
+                    hours.rx[index] += rx;
+                    hours.tx[index] += tx;
+                    if (!isSystem) hours.matched[index] += rx + tx;
+                }
+            }
+            cache.table[cacheKey] = hours;
+        }
+        return hours;
+    }
+
+    /// `networkHours` rolled into one `{ rx, tx, matched }` per date, parallel to `dates`.
+    function networkDaily(dates) {
+        return dates.map(date => {
+            const hours = root.networkHours(date);
+            const sum = values => values.reduce((total, value) => total + value, 0);
+            return {
+                rx: sum(hours.rx),
+                tx: sum(hours.tx),
+                matched: sum(hours.matched)
+            };
+        });
     }
 
     /// One field summed per hour of day (24 entries) across `dates`.
@@ -549,10 +759,15 @@ Singleton {
         const stored = root.history[date]?.bat?.h;
         const out = new Array(24).fill(null);
         if (!stored) return out;
+        const pkg = root.packageHours(date);
         for (const hour in stored) {
             const index = parseInt(hour);
             const t = stored[hour];
             if (!t || !(index >= 0 && index < 24)) continue;
+            const offAc = t[6] ?? 0;
+            const charging = t[7] ?? 0;
+            const onAc = t[8] ?? 0;
+            const awake = offAc + charging + onAc;
             out[index] = {
                 // Tenths of a percent on disk; percent everywhere above this line.
                 start: (t[0] ?? 0) / 10,
@@ -561,12 +776,86 @@ Singleton {
                 high: (t[3] ?? 0) / 10,
                 outMwh: t[4] ?? 0,
                 inMwh: t[5] ?? 0,
-                offAc: t[6] ?? 0,
-                charging: t[7] ?? 0,
-                onAc: t[8] ?? 0
+                offAc: offAc,
+                charging: charging,
+                onAc: onAc,
+                pkgMwh: pkg[index],
+                // The package energy that fell in the plugged-in part of the hour, split
+                // by time: the pack says nothing about draw there, the package still does.
+                acPkgMwh: awake > 0 ? pkg[index] * (charging + onAc) / awake : 0
             };
         }
         return out;
+    }
+
+    /// The fortnight the plugged-in draw estimate learns from, whichever period is on
+    /// screen; the battery page loads it alongside its own.
+    readonly property var calibrationDates: {
+        const today = new Date(`${root.todayDate}T12:00:00`);
+        const out = [];
+        for (let i = 13; i >= 0; i--)
+            out.push(root.dateKey(new Date(today.getFullYear(), today.getMonth(), today.getDate() - i)));
+        return out;
+    }
+
+    /**
+     * What the machine draws beyond the RAPL package — screen, radios, SSD — in
+     * watts, learned from hours spent wholly on battery, where the pack measures the
+     * whole and RAPL the package. The median, so one hour at full brightness or with
+     * the radios asleep does not set it.
+     *
+     * On AC nothing measures the whole: the pack reads zero and the adapter exposes
+     * only whether it is plugged in. This is what turns the package draw there into
+     * an estimate of the machine's. NaN without RAPL (the package figures would then
+     * be battery drain themselves, zero on AC) or without a battery hour to learn from.
+     */
+    readonly property real platformWatts: {
+        root.history;
+        if (root.source !== "rapl")
+            return NaN;
+        const samples = [];
+        for (const date of root.calibrationDates) {
+            for (const bucket of root.batteryHours(date)) {
+                if (!bucket || bucket.outMwh <= 0) continue;
+                const awake = bucket.offAc + bucket.charging + bucket.onAc;
+                if (bucket.offAc < 900 || bucket.offAc < awake * 0.9) continue;
+                // Milliwatt-hours over seconds, into watts.
+                samples.push(bucket.outMwh * 3.6 / bucket.offAc - bucket.pkgMwh * 3.6 / awake);
+            }
+        }
+        if (samples.length === 0)
+            return NaN;
+        samples.sort((a, b) => a - b);
+        const mid = Math.floor(samples.length / 2);
+        const median = samples.length % 2 ? samples[mid] : (samples[mid - 1] + samples[mid]) / 2;
+        return Math.max(0, median);
+    }
+
+    /**
+     * Mean draw over a battery bucket (an hour, or a rollup of them), in watts:
+     * `{ watts, estimated }`, watts NaN when nothing can be said. Time on battery is
+     * the pack's own measurement; time plugged in is the package draw plus
+     * `platformWatts`, which is what `estimated` flags once it is the larger share.
+     */
+    function drawWatts(bucket) {
+        const none = { watts: NaN, estimated: false };
+        if (!bucket)
+            return none;
+        const acSecs = (bucket.charging ?? 0) + (bucket.onAc ?? 0);
+        const awake = (bucket.offAc ?? 0) + acSecs;
+        if (awake <= 0)
+            return none;
+        let mwh = bucket.outMwh ?? 0;
+        if (acSecs > 0) {
+            if (isNaN(root.platformWatts)) {
+                if (bucket.offAc <= 0)
+                    return none;
+                // No estimate to offer: the battery part alone.
+                return { watts: mwh * 3.6 / bucket.offAc, estimated: false };
+            }
+            mwh += (bucket.acPkgMwh ?? 0) + root.platformWatts * acSecs / 3.6;
+        }
+        return { watts: mwh * 3.6 / awake, estimated: acSecs > bucket.offAc };
     }
 
     /// Capacity of a full pack in mWh, as measured on `date`. Zero for a day with
@@ -592,6 +881,8 @@ Singleton {
             offAc: 0,
             charging: 0,
             onAc: 0,
+            pkgMwh: 0,
+            acPkgMwh: 0,
             low: NaN,
             high: NaN,
             first: NaN,
@@ -610,6 +901,8 @@ Singleton {
                 acc.offAc += bucket.offAc;
                 acc.charging += bucket.charging;
                 acc.onAc += bucket.onAc;
+                acc.pkgMwh += bucket.pkgMwh;
+                acc.acPkgMwh += bucket.acPkgMwh;
                 acc.low = isNaN(acc.low) ? bucket.low : Math.min(acc.low, bucket.low);
                 acc.high = isNaN(acc.high) ? bucket.high : Math.max(acc.high, bucket.high);
                 if (isNaN(acc.first)) acc.first = bucket.start;
@@ -707,8 +1000,17 @@ Singleton {
     }
 
     Timer {
+        id: commitTimer
+        interval: 100
+        onTriggered: root.commitDays()
+    }
+
+    // Long enough for the flush asked for by refresh() to land inside it: its
+    // file change then restarts this instead of costing a second reload, and
+    // each reload of today recomputes every figure of an open overlay.
+    Timer {
         id: reloadTimer
-        interval: 200
+        interval: 500
         onTriggered: todayView.reload()
     }
 
@@ -727,7 +1029,7 @@ Singleton {
 
     Process {
         id: installProbe
-        command: ["sh", "-c", `b=0; [ -x "${root.binaryPath}" ] && b=1; r=2; for f in /sys/class/powercap/intel-rapl:*/energy_uj; do [ -e "$f" ] || continue; if head -c1 "$f" >/dev/null 2>&1; then r=1; else r=0; fi; break; done; printf '%s %s' "$b" "$r"`]
+        command: ["sh", "-c", `b=0; [ -x "${root.binaryPath}" ] && b=1; r=2; for f in /sys/class/powercap/intel-rapl:*/energy_uj; do [ -e "$f" ] || continue; if head -c1 "$f" >/dev/null 2>&1; then r=1; else r=0; fi; break; done; n=0; [ -e "${root.netHelperPath}" ] && n=1; printf '%s %s %s' "$b" "$r" "$n"`]
 
         stdout: StdioCollector {
             onStreamFinished: {
@@ -736,6 +1038,7 @@ Singleton {
                 // shell was up — one just built — starts collecting on its own.
                 root.binaryPresent = parts[0] === "1";
                 root.raplState = parseInt(parts[1]);
+                root.netHelperInstalled = parts[2] === "1";
                 root.probed = true;
             }
         }
@@ -764,7 +1067,16 @@ Singleton {
         printErrors: false
 
         onFileChanged: reloadTimer.restart()
-        onLoaded: root.storeDay(root.todayDate, root.parseDoc(todayView.text()))
+        onLoaded: {
+            // The sampler's flush reply and the watcher both reload the same
+            // write; a second identical copy would still recompute every figure.
+            const text = todayView.text();
+            const hash = root.textHash(text);
+            if (hash === root.todayHash && root.history[root.todayDate] !== undefined)
+                return;
+            root.todayHash = hash;
+            root.storeDay(root.todayDate, root.parseDoc(text));
+        }
         onLoadFailed: error => {
             if (error === FileViewError.FileNotFound) root.storeDay(root.todayDate, null);
         }
@@ -785,7 +1097,9 @@ Singleton {
         }
     }
 
-    readonly property string launchKey: [root.intervalMs, root.flushMs, root.retentionDays, root.retentionMode, root.energySource, root.gpuFullEvery, root.trackHeadless].join("|")
+    // The helper is looked for once per sampler start, so installing or removing it
+    // relaunches the sampler; the install probe runs each time App usage opens.
+    readonly property string launchKey: [root.intervalMs, root.flushMs, root.retentionDays, root.retentionMode, root.energySource, root.gpuFullEvery, root.trackHeadless, root.trackNetwork, root.netHelperInstalled].join("|")
     onLaunchKeyChanged: root.restart()
 
     Process {
@@ -795,6 +1109,7 @@ Singleton {
         command: {
             const args = [root.binaryPath, "--state-dir", root.stateDir, "--interval-ms", `${root.intervalMs}`, "--flush-ms", `${root.flushMs}`, "--retention-days", `${root.retentionDays}`, "--retention-mode", root.retentionMode === "previousMonth" ? "previous-month" : "fixed", "--energy", root.energySource, "--gpu-full-every", `${root.gpuFullEvery}`];
             if (!root.trackHeadless) args.push("--no-headless");
+            if (!root.trackNetwork) args.push("--no-network");
             return args;
         }
 
@@ -809,6 +1124,7 @@ Singleton {
         onExited: (code, status) => {
             root.running = false;
             root.lastSample = null;
+            root.netMode = "";
             if (code !== 0 && !root.restarting) console.warn(`[AppStats] sampler exited with code ${code}`);
         }
     }

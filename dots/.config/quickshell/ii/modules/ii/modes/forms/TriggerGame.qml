@@ -6,6 +6,7 @@ import qs.modules.common.functions
 import qs.modules.ii.modes
 import QtQuick
 import QtQuick.Layouts
+import "../../../../services/modes/ModeSchema.js" as ModeSchema
 
 /**
  * Parameters of the `game` condition. `row` is the TriggerRow this form
@@ -23,6 +24,36 @@ ColumnLayout {
             { displayName: Translation.tr("Is running"), value: "running" },
             { displayName: Translation.tr("Is focused"), value: "focused" }
         ]
+    }
+
+    // How long it keeps counting once the game is gone: survives a game
+    // restarting or an alt-tab, at the cost of ending the mode later.
+    RowLayout {
+        spacing: 10
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 0
+
+            FormLabel {
+                text: row.trigger.when === "focused"
+                    ? Translation.tr("Ends after the game loses focus for")
+                    : Translation.tr("Ends after the game is closed for")
+            }
+
+            FormHint {
+                text: ModeSchema.gameOffSec(row.trigger) === 0
+                    ? Translation.tr("Ends the moment the game is gone")
+                    : Translation.tr("A game restarting or a quick alt-tab within that time keeps it going")
+            }
+        }
+
+        DurationField {
+            seconds: ModeSchema.gameOffSec(row.trigger)
+            minimum: 0
+            maximumHours: 1
+            onCommitted: sec => row.set({ offSec: sec })
+        }
     }
 
     FormHint {

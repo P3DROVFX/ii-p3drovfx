@@ -28,8 +28,8 @@ Item {
     ]
     property int selectedTab: Math.max(0, Math.min(root.tabButtonList.length - 1,
         Persistent.states.sidebar.bottomGroup.timerTab))
-    // Keybind target: the newest countdown is the one the list shows on top.
-    readonly property var firstCountdown: (TimerService.countdowns ?? [])[0] ?? null
+    property bool keyboardEnabled: false
+    property bool showShortcutHints: false
 
     function selectTab(index) {
         if (index < 0 || index >= root.tabButtonList.length || root.selectedTab === index)
@@ -39,40 +39,61 @@ Item {
         Persistent.states.sidebar.bottomGroup.timerTab = index;
     }
 
-    // These are keybinds for stopwatch and pomodoro
-    Keys.onPressed: event => {
-        if ((event.key === Qt.Key_PageDown || event.key === Qt.Key_PageUp) && event.modifiers === Qt.NoModifier) { // Switch tabs
-            if (event.key === Qt.Key_PageDown) {
-                tabBar.incrementCurrentIndex();
-            } else if (event.key === Qt.Key_PageUp) {
-                tabBar.decrementCurrentIndex();
-            }
-            event.accepted = true;
-        } else if (event.key === Qt.Key_Space || event.key === Qt.Key_S) { // Pause/resume with Space or S
-            if (tabBar.currentIndex === 0) {
-                TimerService.togglePomodoro();
-            } else if (tabBar.currentIndex === 1) {
-                TimerService.toggleStopwatch();
-            } else if (root.firstCountdown) {
-                TimerService.toggleCountdown(root.firstCountdown.id);
-            } else {
-                TimerService.startDraftCountdown();
-            }
-            event.accepted = true;
-        } else if (event.key === Qt.Key_R) { // Reset with R
-            if (tabBar.currentIndex === 0) {
-                TimerService.resetPomodoro();
-            } else if (tabBar.currentIndex === 1) {
-                TimerService.stopwatchReset();
-            } else if (root.firstCountdown) {
-                TimerService.removeCountdown(root.firstCountdown.id);
-            }
-            event.accepted = true;
-        } else if (event.key === Qt.Key_L && tabBar.currentIndex === 1) { // Record lap with L
-            TimerService.stopwatchRecordLap();
-            event.accepted = true;
-        }
+
+    function toggleActiveTimer() {
+        if (root.selectedTab === 0)
+            TimerService.togglePomodoro();
+        else if (root.selectedTab === 1)
+            TimerService.toggleStopwatch();
+        else
+            TimerService.startDraftCountdown();
     }
+
+    function resetActiveTimer() {
+        if (root.selectedTab === 0)
+            TimerService.resetPomodoro();
+        else if (root.selectedTab === 1 && !TimerService.stopwatchRunning)
+            TimerService.stopwatchReset();
+    }
+
+    function handleKey(event) {
+        if (!root.keyboardEnabled)
+            return false;
+        const plain = event.modifiers === Qt.NoModifier || event.modifiers === Qt.ControlModifier;
+        if (event.modifiers === Qt.ControlModifier && event.key >= Qt.Key_1 && event.key <= Qt.Key_3) {
+            if (!event.isAutoRepeat) root.selectTab(event.key - Qt.Key_1);
+            return true;
+        }
+        if (event.modifiers === Qt.NoModifier && (event.key === Qt.Key_PageDown || event.key === Qt.Key_PageUp)) {
+            if (!event.isAutoRepeat)
+                root.selectTab(root.selectedTab + (event.key === Qt.Key_PageDown ? 1 : -1));
+            return true;
+        }
+        if (event.modifiers === Qt.ControlModifier && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)) {
+            if (!event.isAutoRepeat) root.toggleActiveTimer();
+            return true;
+        }
+        if (root.selectedTab === 2)
+            return countdownLoader.item?.handleKey(event) ?? false;
+        if (plain && (event.key === Qt.Key_Space || event.key === Qt.Key_S)) {
+            if (!event.isAutoRepeat) root.toggleActiveTimer();
+            return true;
+        }
+        if (plain && event.key === Qt.Key_R) {
+            if (!event.isAutoRepeat) root.resetActiveTimer();
+            return true;
+        }
+        if (plain && event.key === Qt.Key_L && root.selectedTab === 1) {
+            if (!event.isAutoRepeat) TimerService.stopwatchRecordLap();
+            return true;
+        }
+        if (plain && event.key === Qt.Key_E && root.selectedTab === 0) {
+            if (!event.isAutoRepeat) TimerService.requestCustomTime();
+            return true;
+        }
+        return false;
+    }
+
 
     ColumnLayout {
         anchors.fill: parent
@@ -92,6 +113,35 @@ Item {
                 requestOnly: true
                 currentIndex: root.selectedTab
                 onIndexSelected: root.selectTab(index)
+                delegate: ToolbarTabButton {
+                    id: timerTab
+                    required property int index
+                    required property var modelData
+                    current: index === root.selectedTab
+                    text: modelData.name
+                    materialSymbol: modelData.icon
+                    collapseInactiveLabel: true
+                    onClicked: root.selectTab(index)
+                    Accessible.name: modelData.name
+                    contentItem: Row {
+                        anchors.centerIn: parent
+                        spacing: timerTab.labelCollapsed ? 0 : 6
+                        TaskShortcutContent {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: Appearance.font.pixelSize.smallest * 3
+                            height: Appearance.font.pixelSize.larger
+                            symbol: timerTab.materialSymbol
+                            fill: timerTab.current ? 1 : 0
+                            shortcut: String(timerTab.index + 1)
+                            showHint: root.showShortcutHints
+                        }
+                        StyledText {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: timerTab.text
+                            visible: !timerTab.labelCollapsed
+                        }
+                    }
+                }
             }
         }
 
@@ -114,17 +164,29 @@ Item {
             Loader {
                 active: root.selectedTab === 0
                 asynchronous: true
-                sourceComponent: PomodoroTimer { entranceTrigger: root.entranceTrigger }
+                sourceComponent: PomodoroTimer {
+                    entranceTrigger: root.entranceTrigger
+                    showShortcutHints: root.showShortcutHints
+                }
+                id: pomodoroLoader
             }
             Loader {
                 active: root.selectedTab === 1
                 asynchronous: true
-                sourceComponent: Stopwatch { entranceTrigger: root.entranceTrigger }
+                id: stopwatchLoader
+                sourceComponent: Stopwatch {
+                    entranceTrigger: root.entranceTrigger
+                    showShortcutHints: root.showShortcutHints
+                }
             }
             Loader {
                 active: root.selectedTab === 2
                 asynchronous: true
-                sourceComponent: CountdownTimer { entranceTrigger: root.entranceTrigger }
+                id: countdownLoader
+                sourceComponent: CountdownTimer {
+                    entranceTrigger: root.entranceTrigger
+                    showShortcutHints: root.showShortcutHints
+                }
             }
         }
     }

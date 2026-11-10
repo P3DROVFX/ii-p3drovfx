@@ -24,7 +24,7 @@ MouseArea {
     readonly property bool isFull: Battery.isFull
     readonly property bool isLow: percentage <= Config.options.battery.low / 100
     readonly property bool isCritical: percentage <= Config.options.battery.critical / 100
-    readonly property bool effectivelyCharging: root.isCharging || root.isPluggedIn
+    readonly property bool effectivelyCharging: (root.isCharging || root.isPluggedIn) && !Battery.showDefaultWhenFull
     readonly property bool chargeLimitReached: Battery.chargeLimitReached
     readonly property bool showCheck: root.chargeLimitReached || (root.isFull && root.effectivelyCharging)
 
@@ -33,6 +33,8 @@ MouseArea {
     readonly property bool isPerformance: root.colorByPowerProfile && (PowerProfiles.profile === PowerProfile.Performance)
 
     property color colText: Appearance.colors.colOnSurface
+    // One UI draws the percentage (and the charging bolt) inside the pill; "Show Percentage" only toggles it.
+    readonly property bool oneuiShowPercentage: (Config.options.bar.battery.showPercentage ?? "off") !== "off"
     visible: Battery.available
 
     Component.onCompleted: {
@@ -96,24 +98,30 @@ MouseArea {
                     value: root.percentage
                     highlightColor: (root.isLow && !root.effectivelyCharging) ? Appearance.m3colors.m3error : Appearance.colors.colOnSecondaryContainer
 
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: 2
+                    // Bolt + percentage punched out of the fill. Both follow the "Show Percentage" setting.
+                    textMask: Item {
+                        width: oneuiBattery.valueBarWidth
+                        height: oneuiBattery.valueBarHeight
 
-                        MaterialSymbol {
-                            id: boltIcon
-                            Layout.alignment: Qt.AlignVCenter
-                            Layout.leftMargin: -2
-                            Layout.rightMargin: -2
-                            fill: 1
-                            text: root.showCheck ? "check" : "bolt"
-                            iconSize: Appearance.font.pixelSize.smaller
-                            visible: (root.effectivelyCharging || root.showCheck) && root.percentage < 1
-                        }
-                        StyledText {
-                            Layout.alignment: Qt.AlignVCenter
-                            font: oneuiBattery.font
-                            text: oneuiBattery.text
+                        Row {
+                            anchors.centerIn: parent
+                            spacing: 0
+                            visible: root.oneuiShowPercentage
+
+                            MaterialSymbol {
+                                anchors.verticalCenter: parent.verticalCenter
+                                renderType: Text.QtRendering
+                                fill: 1
+                                text: root.showCheck ? "check" : "bolt"
+                                iconSize: Appearance.font.pixelSize.smaller
+                                visible: (root.effectivelyCharging || root.showCheck) && root.percentage < 1
+                            }
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                renderType: Text.QtRendering
+                                font: oneuiBattery.font
+                                text: oneuiBattery.text
+                            }
                         }
                     }
                 }
@@ -126,7 +134,17 @@ MouseArea {
                     width: 29
                     height: 14
 
+                    // Two-tone percentage: the part over the fill reads against the fill, the part over
+                    // the track against the track. The track is trackColor over the backdrop, so it is
+                    // flattened first to measure what the text really sits on. The backdrop has to be opaque:
+                    // colLayer0 is transparentized by backgroundTransparency, and contrastRatio ignores alpha.
+                    readonly property color colBackdrop: Appearance.m3colors.m3surface
+                    readonly property color colTrackFlat: ColorUtils.mix(batteryProgress.trackColor, colBackdrop, batteryProgress.trackColor.a)
+                    readonly property color colOnFill: ColorUtils.mostReadable(batteryProgress.highlightColor, [colBackdrop, "#FFFFFF", "#000000"])
+                    readonly property color colOnTrack: ColorUtils.mostReadable(colTrackFlat, [root.colText, colBackdrop])
+
                     Row {
+                        id: batteryRow
                         anchors.centerIn: parent
                         spacing: 1
 
@@ -153,16 +171,10 @@ MouseArea {
                                 return Qt.rgba(root.colText.r, root.colText.g, root.colText.b, 0.3);
                             }
 
+                            // No knockout: the percentage is drawn in two tones, split at the fill edge (below)
                             textMask: Item {
                                 width: 26
                                 height: 14
-                                StyledText {
-                                    anchors.centerIn: parent
-                                    font.pixelSize: 10
-                                    font.weight: Font.DemiBold
-                                    text: batteryProgress.text
-                                    color: (root.isLow && !root.effectivelyCharging) ? Appearance.m3colors.m3onError : root.colText
-                                }
                             }
                         }
 
@@ -176,13 +188,54 @@ MouseArea {
                         }
                     }
 
+                    // Percentage split at the fill edge, each part clipped to what sits under it
+                    Item {
+                        id: percentOnFill
+                        x: batteryRow.x + batteryProgress.x
+                        y: batteryRow.y + batteryProgress.y
+                        width: batteryProgress.width * batteryProgress.visualPosition
+                        height: batteryProgress.height
+                        clip: true
+
+                        StyledText {
+                            x: (batteryProgress.width - implicitWidth) / 2
+                            y: (batteryProgress.height - implicitHeight) / 2
+                            font.pixelSize: 10
+                            // Single family: StyledText's numbers branch passes a family list, which ignores variable axes
+                            font.family: Appearance.font.family.main
+                            font.variableAxes: Object.assign({}, Appearance.font.variableAxes.main, { "wght": 750 })
+                            text: batteryProgress.text
+                            color: android16Battery.colOnFill
+                        }
+                    }
+
+                    Item {
+                        id: percentOnTrack
+                        x: percentOnFill.x + percentOnFill.width
+                        y: batteryRow.y + batteryProgress.y
+                        width: batteryProgress.width - percentOnFill.width
+                        height: batteryProgress.height
+                        clip: true
+
+                        StyledText {
+                            x: (batteryProgress.width - implicitWidth) / 2 - percentOnFill.width
+                            y: (batteryProgress.height - implicitHeight) / 2
+                            font.pixelSize: 10
+                            // Single family: StyledText's numbers branch passes a family list, which ignores variable axes
+                            font.family: Appearance.font.family.main
+                            font.variableAxes: Object.assign({}, Appearance.font.variableAxes.main, { "wght": 750 })
+                            text: batteryProgress.text
+                            color: android16Battery.colOnTrack
+                        }
+                    }
+
                     MaterialSymbol {
                         visible: root.effectivelyCharging || root.showCheck
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.horizontalCenter: parent.right
                         anchors.horizontalCenterOffset: -1
                         text: root.showCheck ? "check" : "bolt"
-                        iconSize: 17
+                        iconSize: 15
                         fill: 1
                         color: Appearance.colors.colLayer0
                         z: 2
@@ -194,7 +247,7 @@ MouseArea {
                         anchors.horizontalCenter: parent.right
                         anchors.horizontalCenterOffset: -1
                         text: root.showCheck ? "check" : "bolt"
-                        iconSize: 16
+                        iconSize: 14
                         fill: 1
                         color: root.colText
                         z: 3
@@ -349,6 +402,7 @@ MouseArea {
                         implicitWidth: width
 
                         Row {
+                            id: batteryRow
                             anchors.centerIn: parent
                             spacing: 1
 
@@ -379,19 +433,10 @@ MouseArea {
                                     return Qt.rgba(color.r, color.g, color.b, opacity);
                                 }
 
-                                // Custom text mask to include the bolt icon
+                                // No knockout: the percentage is drawn over the bar in colText (below)
                                 textMask: Item {
                                     width: 26
                                     height: 14
-
-                                    StyledText {
-                                        visible: Config.options.bar.battery.showPercentageInsideBattery
-                                        anchors.centerIn: parent
-                                        font.pixelSize: 10
-                                        font.weight: Font.Bold
-                                        text: batteryProgress.text
-                                        color: (root.isLow && !root.effectivelyCharging) ? Appearance.m3colors.m3onError : root.colText
-                                    }
                                 }
                             }
 
@@ -406,6 +451,19 @@ MouseArea {
                             }
                         }
 
+                        // Centred on the bar body, positioned from the Row (Row children cannot take anchors)
+                        StyledText {
+                            visible: Config.options.bar.battery.showPercentageInsideBattery
+                            x: batteryRow.x + batteryProgress.x + (batteryProgress.width - width) / 2
+                            y: batteryRow.y + batteryProgress.y + (batteryProgress.height - height) / 2
+                            font.pixelSize: 10
+                            // Single family: StyledText's numbers branch passes a family list, which ignores variable axes
+                            font.family: Appearance.font.family.main
+                            font.variableAxes: Object.assign({}, Appearance.font.variableAxes.main, { "wght": 750 })
+                            text: batteryProgress.text
+                            color: (root.isLow && !root.effectivelyCharging) ? Appearance.m3colors.m3onError : root.colText
+                        }
+
                         MaterialSymbol {
                             visible: root.effectivelyCharging || root.showCheck
 
@@ -414,7 +472,7 @@ MouseArea {
                             anchors.horizontalCenterOffset: -1
 
                             text: root.showCheck ? "check" : "bolt"
-                            iconSize: 16
+                            iconSize: 14
                             fill: 1
                             style: Text.Outline
                             styleColor: batteryProgress.trackColor
@@ -434,8 +492,10 @@ MouseArea {
         }
     }
 
-    Loader {
-        active: !root.disablePopup
+    PopupLoader {
+        // Lazy: popup controller is only built on approach (same as ExpressiveSports).
+        active: !root.disablePopup && BarInteraction.enablePopups
+            && (BarInteraction.clickToShow || root.containsMouse || held)
         sourceComponent: popupComponent
     }
 }

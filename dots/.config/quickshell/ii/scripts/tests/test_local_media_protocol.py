@@ -73,7 +73,7 @@ class ProtocolTests(unittest.TestCase):
     def test_fixture_generator_covers_local_media_inputs_without_committed_binaries(self) -> None:
         with tempfile.TemporaryDirectory(prefix="ii-local-media-fixtures-") as temp_dir:
             fixtures = generate_fixture_set(temp_dir)
-            self.assertEqual(set(fixtures), {"wav", "mp3", "flac", "opus", "cover", "lrc", "txt", "invalid"})
+            self.assertEqual(set(fixtures), {"wav", "mp3", "flac", "flac_lyrics", "opus", "cover", "lrc", "txt", "invalid"})
             self.assertTrue(all(path.is_file() and path.stat().st_size > 0 for path in fixtures.values()))
             self.assertIn("[00:00.00]", fixtures["lrc"].read_text(encoding="utf-8"))
 
