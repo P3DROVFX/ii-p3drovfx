@@ -1,0 +1,6 @@
+module qs.modules.settings.configs.language
+
+LanguagePane 1.0 LanguagePane.qml
+AiTranslationPane 1.0 AiTranslationPane.qml
+WorldClocksPane 1.0 WorldClocksPane.qml
+FilledField 1.0 FilledField.qml

@@ -335,7 +335,7 @@ Singleton {
             "icon": "translate",
             "component": "modules/settings/configs/LanguageTimeConfig.qml",
             "subPages": ["widgets/TimeDateFormatsConfig.qml"],
-            "aliases": ["Core Services", "Language & Translation", "Time & Date", "World Clocks", "Alarms", "Translator", "Date format", "Clock format", "Custom format strings"]
+            "aliases": ["Core Services", "Language & Translation", "Translate with AI", "AI translation", "Interface language", "Time & Date", "World Clocks", "Alarms", "Translator", "Date format", "Clock format", "Custom format strings"]
         },
         {
             "id": "apis",

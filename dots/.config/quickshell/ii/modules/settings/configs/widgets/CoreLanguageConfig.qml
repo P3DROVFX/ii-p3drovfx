@@ -101,12 +101,6 @@ ContentPage {
         }
     }
 
-    Process {
-        id: translationProc
-        property string locale: ""
-        command: [Directories.aiTranslationScriptPath, translationProc.locale]
-    }
-
     ContentSection {
         icon: "neurology"
         title: Translation.tr("AI Assistant")
@@ -195,7 +189,7 @@ ContentPage {
                 colBackground: Appearance.colors.colPrimaryContainer
                 colBackgroundHover: Appearance.colors.colPrimaryContainerHover
                 colRipple: Appearance.colors.colPrimaryContainerActive
-                enabled: !translationProc.running || (translationProc.locale !== localeInput.text.trim())
+                enabled: !AiTranslation.running
 
                 RowLayout {
                     anchors.centerIn: parent
@@ -214,9 +208,7 @@ ContentPage {
                 }
 
                 onClicked: {
-                    translationProc.locale = localeInput.text.trim();
-                    translationProc.running = false;
-                    translationProc.running = true;
+                    AiTranslation.start(localeInput.text.trim(), Config.options.language.aiModel);
                 }
             }
         }

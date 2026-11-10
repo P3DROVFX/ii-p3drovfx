@@ -1,157 +1,228 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Helper script to translate missing JSON keys in batches using Google Gemini API.
+Translate the missing keys of a shell locale file in batches with an LLM.
+
+Providers:
+  gemini  Google Gemini API (key from GEMINI_API_KEY or the shell keyring)
+  claude  Claude through the local `claude` CLI, billed to the signed-in
+          Claude plan (Pro/Max) instead of an API key
+
+Machine-readable lines on stdout (the Settings page parses them):
+  @@TOTAL <keys_needing_translation> <batches>
+  @@PROGRESS <keys_done> <keys_total> <batch> <batches>
+  @@ERROR <message>
+  @@DONE <keys_translated> <keys_failed>
+
+Exit codes: 0 everything translated, 1 nothing could run, 2 some batches failed.
 """
 
-import os
-import sys
-import json
-import urllib.request
-import urllib.error
 import argparse
+import json
+import os
+import shutil
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
-def get_api_key() -> str:
-    # First try environment variable
-    api_key = os.environ.get("GEMINI_API_KEY", "")
-    if api_key:
-        return api_key.strip()
-    
-    # Try secret-tool lookup
-    try:
-        import subprocess
-        result = subprocess.run(
-            ["secret-tool", "lookup", "application", "illogical-impulse"],
-            capture_output=True, text=True, check=True
-        )
-        data = json.loads(result.stdout.strip())
-        return data.get("apiKeys", {}).get("gemini", "")
-    except Exception as e:
-        print(f"Error fetching API key via secret-tool: {e}", file=sys.stderr)
-        return ""
 
-def translate_batch(batch_dict: dict, target_locale: str, api_key: str, model: str) -> dict:
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-    headers = {
-        "x-goog-api-key": api_key,
-        "Content-Type": "application/json"
-    }
-    
-    instruction = (
+def emit(tag: str, *values) -> None:
+    print(" ".join([f"@@{tag}", *[str(v) for v in values]]), flush=True)
+
+
+def log(message: str) -> None:
+    print(message, flush=True)
+
+
+def instruction_for(target_locale: str) -> str:
+    return (
         "You are to translate the user interface of a **desktop shell**. "
         "Given a JSON object of key-value pairs, return a JSON with the exact same structure, "
         f"with keys unchanged and values translated to {target_locale}. "
+        "Keep placeholders such as %1, %2 and \\n exactly as they are. "
         "Be as **concise** as possible to save screen space, and make sure terminology is relevant "
-        '(e.g. "discharging" refers to the battery status).'
+        '(e.g. "discharging" refers to the battery status). '
+        "Reply with the JSON object only."
     )
-    
-    prompt = f"{instruction}\n```json\n{json.dumps(batch_dict, ensure_ascii=False, indent=2)}\n```\n"
-    
-    payload = {
-        "contents": [{
-            "parts": [{"text": prompt}]
-        }],
-        "generationConfig": {
-            "temperature": 0.0,
-            "responseMimeType": "application/json"
-        }
-    }
-    
-    req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
-    
-    try:
-        with urllib.request.urlopen(req) as resp:
-            res_data = json.loads(resp.read().decode("utf-8"))
-            text = res_data["candidates"][0]["content"]["parts"][0]["text"]
-            translated_dict = json.loads(text)
-            if isinstance(translated_dict, dict):
-                return translated_dict
-            else:
-                print("Warning: Response is not a JSON object", file=sys.stderr)
-                return {}
-    except Exception as e:
-        print(f"Batch translation API error: {e}", file=sys.stderr)
-        return {}
 
-def main():
-    parser = argparse.ArgumentParser(description="Translate missing JSON keys in batches using Gemini API")
-    parser.add_argument("source_file", help="Path to source en_US.json file")
-    parser.add_argument("target_file", help="Path to target locale JSON file (e.g. pt_BR.json)")
+
+def get_gemini_key() -> str:
+    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if api_key:
+        return api_key
+    try:
+        result = subprocess.run(
+            ["secret-tool", "lookup", "application", "illogical-impulse"],
+            capture_output=True, text=True, check=True,
+        )
+        return json.loads(result.stdout.strip()).get("apiKeys", {}).get("gemini", "") or ""
+    except Exception:
+        return ""
+
+
+def parse_json_object(text: str) -> dict:
+    text = text.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1] if "\n" in text else ""
+        text = text.rsplit("```", 1)[0]
+    start, end = text.find("{"), text.rfind("}")
+    if start < 0 or end < start:
+        raise ValueError("response has no JSON object")
+    data = json.loads(text[start:end + 1])
+    if not isinstance(data, dict):
+        raise ValueError("response is not a JSON object")
+    return data
+
+
+def translate_gemini(batch: dict, locale: str, model: str, api_key: str) -> dict:
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+    prompt = f"{instruction_for(locale)}\n```json\n{json.dumps(batch, ensure_ascii=False, indent=2)}\n```\n"
+    generation = {"temperature": 0.0, "responseMimeType": "application/json"}
+    # Translation needs no reasoning; thinking tokens are billed as output.
+    if model.startswith("gemini-3"):
+        generation["thinkingConfig"] = {"thinkingLevel": "low"}
+    elif model.startswith("gemini-2.5-flash"):
+        generation["thinkingConfig"] = {"thinkingBudget": 0}
+    payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": generation}
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=300) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        detail = ""
+        try:
+            detail = json.loads(e.read().decode("utf-8")).get("error", {}).get("message", "")
+        except Exception:
+            pass
+        raise RuntimeError(f"Gemini API {e.code}: {detail or e.reason}") from None
+    return parse_json_object(data["candidates"][0]["content"]["parts"][0]["text"])
+
+
+def translate_claude(batch: dict, locale: str, model: str, claude_bin: str) -> dict:
+    prompt = f"```json\n{json.dumps(batch, ensure_ascii=False, indent=2)}\n```\n"
+    # An empty working directory keeps project CLAUDE.md files out of the prompt;
+    # no tools, MCP or settings keeps the request a plain completion.
+    with tempfile.TemporaryDirectory(prefix="ii-translate-") as cwd:
+        result = subprocess.run(
+            [
+                claude_bin, "-p",
+                "--model", model,
+                "--output-format", "json",
+                "--tools", "",
+                "--strict-mcp-config",
+                "--setting-sources", "",
+                "--no-session-persistence",
+                "--system-prompt", instruction_for(locale),
+            ],
+            input=prompt, capture_output=True, text=True, cwd=cwd, timeout=600,
+        )
+    try:
+        envelope = json.loads(result.stdout)
+    except Exception:
+        tail = (result.stderr or result.stdout).strip().splitlines()[-1:] or ["no output"]
+        raise RuntimeError(f"claude CLI failed: {tail[0]}") from None
+    if envelope.get("is_error") or result.returncode != 0:
+        raise RuntimeError(f"claude CLI: {str(envelope.get('result', 'error')).strip()[:200]}")
+    return parse_json_object(envelope.get("result", ""))
+
+
+def main() -> None:
+    # SystemExit unwinds subprocess.run, which kills a claude CLI still running.
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(130))
+    parser = argparse.ArgumentParser(description="Translate missing locale keys in batches with an LLM")
+    parser.add_argument("source_file", help="Path to the source en_US.json")
+    parser.add_argument("target_file", help="Path to the target locale JSON (e.g. pt_BR.json)")
     parser.add_argument("target_locale", help="Target locale code (e.g. pt_BR)")
-    parser.add_argument("--model", default="gemini-2.5-flash", help="Gemini model name")
-    parser.add_argument("--batch-size", type=int, default=300, help="Keys per batch (default: 300)")
-    
+    parser.add_argument("--model", default="gemini-3.8-flash", help="Model id")
+    parser.add_argument("--provider", default="auto", choices=["auto", "gemini", "claude"])
+    parser.add_argument("--batch-size", type=int, default=300, help="Keys per batch")
     args = parser.parse_args()
-    
-    api_key = get_api_key()
-    if not api_key:
-        print("Error: Gemini API key not found.", file=sys.stderr)
-        sys.exit(1)
-        
-    source_path = Path(args.source_file)
-    target_path = Path(args.target_file)
-    
+
+    provider = args.provider
+    if provider == "auto":
+        provider = "claude" if args.model.startswith("claude-") else "gemini"
+
+    if provider == "gemini":
+        api_key = get_gemini_key()
+        if not api_key:
+            emit("ERROR", "No Gemini API key. Add one in Settings → AI Assistant.")
+            sys.exit(1)
+        translate = lambda batch: translate_gemini(batch, args.target_locale, args.model, api_key)
+    else:
+        claude_bin = shutil.which("claude") or str(Path.home() / ".local/bin/claude")
+        if not os.access(claude_bin, os.X_OK):
+            emit("ERROR", "The claude CLI is not installed or not in PATH.")
+            sys.exit(1)
+        translate = lambda batch: translate_claude(batch, args.target_locale, args.model, claude_bin)
+
+    source_path, target_path = Path(args.source_file), Path(args.target_file)
     if not source_path.exists():
-        print(f"Error: Source file {source_path} does not exist.", file=sys.stderr)
+        emit("ERROR", f"Source file {source_path.name} does not exist.")
         sys.exit(1)
-        
-    with open(source_path, "r", encoding="utf-8") as f:
-        source_data = json.load(f)
-        
+    source_data = json.loads(source_path.read_text(encoding="utf-8"))
+
     target_data = {}
     if target_path.exists():
         try:
-            with open(target_path, "r", encoding="utf-8") as f:
-                target_data = json.load(f)
+            target_data = json.loads(target_path.read_text(encoding="utf-8"))
         except Exception as e:
-            print(f"Warning: Could not parse existing target file: {e}", file=sys.stderr)
-            target_data = {}
+            log(f"Warning: could not parse the existing target file: {e}")
 
-    # Identify missing keys or keys where value is untranslated (same as key or empty)
-    missing_items = {}
-    for key, val in source_data.items():
-        existing_val = target_data.get(key)
-        # Key is missing OR existing value is empty
-        if existing_val is None or existing_val == "":
-            missing_items[key] = val
-
-    print(f"Total source keys: {len(source_data)}")
-    print(f"Existing valid translations: {len(target_data)}")
-    print(f"Keys needing translation: {len(missing_items)}")
-
-    if not missing_items:
-        print("All keys are already translated!")
+    missing = [(k, v) for k, v in source_data.items() if not target_data.get(k)]
+    total = len(missing)
+    batch_size = max(1, args.batch_size)
+    batches = (total + batch_size - 1) // batch_size
+    log(f"{len(source_data)} source keys, {total} need translation, {provider}:{args.model}")
+    emit("TOTAL", total, batches)
+    if total == 0:
+        emit("DONE", 0, 0)
         sys.exit(0)
 
-    items = list(missing_items.items())
-    total_missing = len(items)
-    batch_size = args.batch_size
-    
-    for i in range(0, total_missing, batch_size):
-        batch_slice = items[i:i + batch_size]
-        batch_dict = dict(batch_slice)
-        batch_num = (i // batch_size) + 1
-        total_batches = (total_missing + batch_size - 1) // batch_size
-        
-        print(f"Translating batch {batch_num}/{total_batches} ({len(batch_dict)} keys)...")
-        translated_batch = translate_batch(batch_dict, args.target_locale, api_key, args.model)
-        
-        if translated_batch:
-            # Merge translated keys into target_data
-            for k, v in translated_batch.items():
-                if k in source_data:
-                    target_data[k] = v
-            
-            # Save progress after each batch
-            target_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(target_path, "w", encoding="utf-8") as f:
-                json.dump(target_data, f, ensure_ascii=False, indent=2)
-            print(f"Batch {batch_num}/{total_batches} saved. Total translated: {len(target_data)}")
+    done = failed = 0
+    last_error = ""
+    for b in range(batches):
+        batch = dict(missing[b * batch_size:(b + 1) * batch_size])
+        translated = None
+        for attempt in range(2):
+            try:
+                translated = translate(batch)
+                break
+            except Exception as e:
+                last_error = str(e)
+                log(f"Batch {b + 1}/{batches} attempt {attempt + 1} failed: {e}")
+                time.sleep(2)
+        if translated is None:
+            failed += len(batch)
+            # A bad key or an exhausted plan fails every batch the same way.
+            if b == 0:
+                emit("ERROR", last_error)
+                sys.exit(1)
         else:
-            print(f"Failed to translate batch {batch_num}/{total_batches}", file=sys.stderr)
+            accepted = {k: v for k, v in translated.items() if k in batch and isinstance(v, str) and v}
+            target_data.update(accepted)
+            failed += len(batch) - len(accepted)
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = target_path.with_suffix(".json.part")
+            tmp.write_text(json.dumps(target_data, ensure_ascii=False, indent=2), encoding="utf-8")
+            os.replace(tmp, target_path)
+        done += len(batch)
+        emit("PROGRESS", done, total, b + 1, batches)
 
-    print(f"Translation complete! Final total keys in {target_path.name}: {len(target_data)}")
+    emit("DONE", total - failed, failed)
+    if failed:
+        emit("ERROR", f"{failed} strings were not translated. {last_error}".strip())
+        sys.exit(2)
+
 
 if __name__ == "__main__":
     main()

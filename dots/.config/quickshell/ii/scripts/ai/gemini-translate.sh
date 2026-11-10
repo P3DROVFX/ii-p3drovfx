@@ -1,62 +1,45 @@
 #!/usr/bin/env bash
+# Usage: gemini-translate.sh <target_locale> [model]
+# The model picks the provider: gemini-* uses the Gemini API key, claude-* the
+# signed-in `claude` CLI (Claude plan). Progress lines are documented in
+# gemini-translate-batch.py.
 
 if [[ -z "$1" ]]; then
     echo "Usage: $0 <target_locale> [model]"
     exit 1
 fi
 
-# Variables
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
-SHELL_CONFIG_DIR="$XDG_CONFIG_HOME/illogical-impulse"
-SHELL_CONFIG_FILE="${SHELL_CONFIG_DIR}/config.json"
+SHELL_CONFIG_FILE="$XDG_CONFIG_HOME/illogical-impulse/config.json"
 TRANSLATIONS_DIR="${SCRIPT_DIR}/../../translations"
-TRANSLATIONS_TARGET_DIR="${TRANSLATIONS_DIR}"
 SOURCE_LOCALE="en_US"
 NOTIFICATION_APP_NAME="Shell"
 TARGET_LOCALE="$1"
-MODEL="${2:-${GEMINI_MODEL:-gemini-2.5-flash}}"
+MODEL="${2:-${GEMINI_MODEL:-gemini-3.8-flash}}"
 
-# Update the source keys for translation
-"${TRANSLATIONS_DIR}/tools/manage-translations.sh" update -l "$SOURCE_LOCALE" --yes
-mkdir -p "$TRANSLATIONS_TARGET_DIR"
+# Refresh the source keys first; its chatter goes to stderr so stdout stays parseable.
+"${TRANSLATIONS_DIR}/tools/manage-translations.sh" update -l "$SOURCE_LOCALE" --yes >&2
 
-# Construct instruction
-instruction='You are to translate the user interface of a **desktop shell**. Given a JSON object of key-value pairs, return a JSON with the same structure, with keys unchanged and values translated to '"$TARGET_LOCALE"'. Be as **concise** as possible to save screen space, and make sure terminology is relevant (e.g. "discharging" refers to the battery status).'
-
-# Prepare request payload file to prevent shell argument limits
-PAYLOAD_FILE=$(mktemp)
-trap 'rm -f "$PAYLOAD_FILE"' EXIT
-
-jq -n \
-    --arg prompt_text "$instruction" \
-    --rawfile content "${TRANSLATIONS_DIR}/en_US.json" \
-    --arg temperature "0" \
-    '{
-        contents: [{
-            parts: [
-                {text: ($prompt_text + "\n```json\n" + $content + "\n```\n")}
-            ]
-        }],
-        generationConfig: {
-            temperature: ($temperature | tonumber),
-            "responseMimeType": "application/json"
-        }
-    }' > "$PAYLOAD_FILE"
-
-# Get API key
-API_KEY=$(secret-tool lookup 'application' 'illogical-impulse' | jq -r '.apiKeys.gemini')
-
-# Notify start
-notify-send "Translation started" "Translating missing keys in batches, you'll be notified when complete." -a "$NOTIFICATION_APP_NAME"
-
-# Perform batch translation for missing keys
 python3 "${SCRIPT_DIR}/gemini-translate-batch.py" \
-    "${TRANSLATIONS_DIR}/en_US.json" \
-    "${TRANSLATIONS_TARGET_DIR}/${TARGET_LOCALE}.json" \
+    "${TRANSLATIONS_DIR}/${SOURCE_LOCALE}.json" \
+    "${TRANSLATIONS_DIR}/${TARGET_LOCALE}.json" \
     "$TARGET_LOCALE" \
     --model "$MODEL" \
-    --batch-size 300
+    --batch-size 300 &
+child=$!
+# Cancel from Settings: stop the translator (it kills its own request) and exit quietly.
+trap 'kill -TERM "$child" 2>/dev/null; wait "$child"; exit 130' TERM INT
+wait "$child"
+status=$?
 
-jq --arg locale "$TARGET_LOCALE" '.language.ui = $locale' "$SHELL_CONFIG_FILE" > "${SHELL_CONFIG_FILE}.tmp" && mv "${SHELL_CONFIG_FILE}.tmp" "$SHELL_CONFIG_FILE"
-notify-send "Translation complete" "Enjoy! In case you wanna refine it, the file is in ${TRANSLATIONS_TARGET_DIR}/${TARGET_LOCALE}.json" -a "$NOTIFICATION_APP_NAME"
+if [[ $status -eq 0 ]]; then
+    jq --arg locale "$TARGET_LOCALE" '.language.ui = $locale' "$SHELL_CONFIG_FILE" > "${SHELL_CONFIG_FILE}.tmp" \
+        && cat "${SHELL_CONFIG_FILE}.tmp" > "$SHELL_CONFIG_FILE" && rm -f "${SHELL_CONFIG_FILE}.tmp"
+    notify-send "Translation complete" "The file is in translations/${TARGET_LOCALE}.json if you want to refine it." -a "$NOTIFICATION_APP_NAME"
+elif [[ $status -eq 2 ]]; then
+    notify-send "Translation incomplete" "Some strings failed. Run it again to retry only the missing ones." -a "$NOTIFICATION_APP_NAME"
+else
+    notify-send "Translation failed" "Open Settings → Language & Time for details." -a "$NOTIFICATION_APP_NAME"
+fi
+exit $status

@@ -82,6 +82,12 @@ Singleton {
         }
     }
 
+    // A locale file generated at runtime (AiTranslation) joins the language list.
+    function rescan() {
+        scanLanguagesProcess.running = false;
+        scanLanguagesProcess.running = true;
+    }
+
     function tr(text) {
         // Special cases
         if (!text) return "";

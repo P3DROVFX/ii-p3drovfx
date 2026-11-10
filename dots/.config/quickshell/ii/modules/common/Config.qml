@@ -6426,6 +6426,7 @@ Singleton {
 
             property JsonObject language: JsonObject {
                 property string ui: "en_US" // UI language. "auto" for system locale, or specific language code like "zh_CN", "en_US"
+                property string aiModel: "gemini-3.8-flash" // Model for "Translate with AI": gemini-* (API key) or claude-* (claude CLI, Claude plan)
                 property JsonObject translator: JsonObject {
                     property string engine: "auto" // Run `trans -list-engines` for available engines. auto should use google
                     property string targetLanguage: "auto" // Run `trans -list-all` for available languages
