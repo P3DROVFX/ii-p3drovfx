@@ -229,8 +229,8 @@ Singleton {
     readonly property real iconScale: root.iconSteps.includes(Config.options.background.desktopIconScale)
         ? Config.options.background.desktopIconScale : 1
     readonly property real iconSize: Math.round(56 * root.iconScale)
-    readonly property real baseCell: root.options.spacing === "compact" ? 80
-        : root.options.spacing === "wide" ? 120 : 100
+    readonly property real baseCell: root.options.spacing === "compact" ? 72
+        : root.options.spacing === "wide" ? 104 : 86
     readonly property real cellWidth: Math.round(root.baseCell * root.iconScale / 10) * 10
     readonly property real cellHeight: root.cellWidth
         + (root.options.labelLines === 2 && root.options.labels !== "never" ? 20 : 0)

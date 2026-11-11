@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Window
+import QtQuick.Effects
 import Qt5Compat.GraphicalEffects as GE
 import Quickshell
 import Quickshell.Widgets
@@ -21,8 +22,6 @@ Item {
     readonly property color colSelected: Appearance.colors.colSecondaryContainer
     readonly property real selectedAlpha: 0.82
     readonly property real focusedAlpha: 0.96
-    readonly property color colHover: Appearance.m3colors.m3surfaceContainerHighest
-    readonly property real hoverAlpha: 0.42
     readonly property color colGhost: Appearance.colors.colSecondaryContainer
     readonly property real ghostAlpha: 0.5
     readonly property var labelAxes: ({ "wght": 650, "wdth": 92, "ROND": 100 })
@@ -965,8 +964,6 @@ Item {
             if (tile.selected)
                 push(tile.entry.id, tile.x + follow.x, tile.y + follow.y,
                     root.focusId === tile.entry.id && root.selectedIds.length > 1 ? "focus" : "selected", tile.span);
-            else if (tile.hovered && !tile.dragging && root.dropTargetId !== tile.entry.id)
-                push(tile.entry.id, tile.x, tile.y, "hover", tile.span);
         }
         if (dropGhost.shown)
             push("__ghost__", dropGhost.x, dropGhost.y, "ghost", dropGhost.span);
@@ -1815,6 +1812,29 @@ Item {
                 root.dropSection = -1;
             }
 
+            // Pointer hits only the icon and its label, not the whole cell:
+            // the tile, its hover and its gesture all take this shape.
+            containmentMask: hitMask
+            QtObject {
+                id: hitMask
+                readonly property real pad: 4
+                function inRect(p, item, x, y, w, h) {
+                    const r = item.mapToItem(tile, x, y, w, h);
+                    return p.x >= r.x - pad && p.x <= r.x + r.width + pad
+                        && p.y >= r.y - pad && p.y <= r.y + r.height + pad;
+                }
+                function contains(p: point): bool {
+                    if (tile.span > 1 || tile.dragging)
+                        return p.x >= 0 && p.y >= 0 && p.x <= tile.width && p.y <= tile.height;
+                    if (hitMask.inRect(p, plate, 0, 0, plate.width, plate.height))
+                        return true;
+                    if (!labelBox.visible || labelBox.opacity < 0.5 && !tile.hovered)
+                        return false;
+                    const cw = Math.min(tileLabel.width, tileLabel.contentWidth);
+                    return hitMask.inRect(p, tileLabel, (tileLabel.width - cw) / 2, 0, cw, tileLabel.contentHeight);
+                }
+            }
+
             HoverHandler {
                 id: tileHover
             }
@@ -1858,14 +1878,12 @@ Item {
                         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                     }
                 }
-                // Hover and merge-target plates.
+                // Merge-target plate. Hover tints the icon itself instead.
                 Rectangle {
                     anchors.fill: parent
                     radius: root.plateRadius
-                    color: root.dropTargetId === tile.entry.id ? Appearance.colors.colPrimaryContainer
-                        : Qt.alpha(root.colHover, root.hoverAlpha)
-                    opacity: root.dropTargetId === tile.entry.id
-                        || (tile.hovered && !tile.selected && !tile.dragging && !root.platesOnWallpaper) ? 1 : 0
+                    color: Appearance.colors.colPrimaryContainer
+                    opacity: root.dropTargetId === tile.entry.id ? 1 : 0
                     visible: opacity > 0.001
                     Behavior on opacity {
                         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
@@ -1909,6 +1927,19 @@ Item {
                                 : plate.style === "translucent" ? root.iconSize * 0.78 : root.iconSize
                             width: glyph
                             height: glyph
+                            // Hover: a tint over the icon's own pixels, no
+                            // plate behind it. The layer lives only while
+                            // the tint shows.
+                            property real tint: tile.hovered && !tile.dragging && !tile.selected ? 1 : 0
+                            Behavior on tint {
+                                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                            }
+                            layer.enabled: glyphLoader.tint > 0.001
+                            layer.effect: MultiEffect {
+                                brightness: 0.14 * glyphLoader.tint
+                                colorization: 0.3 * glyphLoader.tint
+                                colorizationColor: Appearance.colors.colPrimary
+                            }
                             sourceComponent: tile.span > 1 ? largeGroupIcon
                                 : tile.entry.type === "group" ? groupIcon : singleIcon
                         }
@@ -2155,6 +2186,7 @@ Item {
             MouseArea {
                 id: gesture
                 anchors.fill: parent
+                containmentMask: hitMask
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
                 preventStealing: true
                 cursorShape: Qt.PointingHandCursor
