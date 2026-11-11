@@ -504,6 +504,7 @@ AbstractWidget {
         "circle_pointer_clock": true, "circular_media": true,
         "clock_expressive_card": true, "clock_flex": true,
         "clock_duo": true, "clock_hori": true, "clock_numeral": true, "clock_type_stack": true, "clock_type_weight": true,
+        "clock_hour_shape": true, "clock_bloom": true, "clock_capsule": true, "clock_dome": true, "clock_totem": true,
         "clock_type_width": true, "compact_media": true, "concentric_clock": true,
         "grid_card_clock": true, "media_cd": true, "media_cover": true, "media_deck": true,
         "media_halo": true, "media_poster": true, "month_clock": true,

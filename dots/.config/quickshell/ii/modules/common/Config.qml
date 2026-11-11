@@ -3852,6 +3852,46 @@ Singleton {
                         property bool enableRam: true
                         property bool enableDisk: true
                     }
+                    property JsonObject clock_hour_shape: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                        property bool showMinutes: true
+                    }
+                    property JsonObject clock_bloom: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                        property bool filled: false
+                    }
+                    property JsonObject clock_capsule: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                        property bool showDate: true
+                    }
+                    property JsonObject clock_dome: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                        property bool showDate: true
+                    }
+                    property JsonObject clock_totem: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                        property bool showWeek: true
+                    }
                     property JsonObject clock_type_weight: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free"

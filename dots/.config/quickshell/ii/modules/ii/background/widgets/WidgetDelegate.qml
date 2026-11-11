@@ -122,6 +122,11 @@ Item {
         "favorites_row": component_favorites_row,
         "search_pixel": component_search_pixel,
         "search_shortcuts": component_search_shortcuts,
+        "clock_hour_shape": component_clock_hour_shape,
+        "clock_bloom": component_clock_bloom,
+        "clock_capsule": component_clock_capsule,
+        "clock_dome": component_clock_dome,
+        "clock_totem": component_clock_totem,
         "clock_type_weight": component_clock_type_weight,
         "clock_type_width": component_clock_type_width,
         "clock_type_stack": component_clock_type_stack,
@@ -518,6 +523,71 @@ Item {
         id: component_triple_ring_clock
 
         TripleRingClockWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_clock_hour_shape
+
+        HourShapeClockWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_clock_bloom
+
+        BloomClockWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_clock_capsule
+
+        CapsuleClockWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_clock_dome
+
+        DomeClockWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_clock_totem
+
+        TotemClockWidget {
             screenWidth: delegateRoot.screenWidth
             screenHeight: delegateRoot.screenHeight
             scaledScreenWidth: delegateRoot.screenWidth

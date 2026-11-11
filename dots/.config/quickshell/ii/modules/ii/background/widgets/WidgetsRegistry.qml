@@ -210,6 +210,51 @@ Singleton {
             "configPage": "widgets/DesktopTripleRingClockConfig.qml"
         },
         {
+            "widgetId": "clock_hour_shape",
+            "name": Translation.tr("Hour Shape Clock (1x1)"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/HourShapeClockWidget.qml"),
+            "icon": "interests",
+            "description": Translation.tr("1x1 card-less clock: every hour has its own shape and the body morphs when the hour turns; the minutes ride a moon on its rim."),
+            "configPage": "widgets/DesktopShapeClocksConfig.qml"
+        },
+        {
+            "widgetId": "clock_bloom",
+            "name": Translation.tr("Bloom Clock (1x1)"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/BloomClockWidget.qml"),
+            "icon": "filter_vintage",
+            "description": Translation.tr("1x1 clock that is its own sunny shape: heavy condensed hours over light italic minutes."),
+            "configPage": "widgets/DesktopShapeClocksConfig.qml"
+        },
+        {
+            "widgetId": "clock_capsule",
+            "name": Translation.tr("Capsule Clock (2x1)"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/CapsuleClockWidget.qml"),
+            "icon": "pill",
+            "description": Translation.tr("2x1 clock that is its own scalloped capsule, the cookie clock's edge stretched wide, with the time on one line and the date beside it."),
+            "configPage": "widgets/DesktopShapeClocksConfig.qml"
+        },
+        {
+            "widgetId": "clock_dome",
+            "name": Translation.tr("Dome Clock (2x1)"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/DomeClockWidget.qml"),
+            "icon": "clock_loader_60",
+            "description": Translation.tr("2x1 clock shaped as a half dial of the day: a hand sweeps from midnight on the left through noon at the top, the time on a pill at its pivot."),
+            "configPage": "widgets/DesktopShapeClocksConfig.qml"
+        },
+        {
+            "widgetId": "clock_totem",
+            "name": Translation.tr("Totem Clock (1x2)"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/TotemClockWidget.qml"),
+            "icon": "view_agenda",
+            "description": Translation.tr("1x2 stack of cut-outs: an arch with the hour, a cookie with the minutes leaning out under it, and the date over a row of the week."),
+            "configPage": "widgets/DesktopShapeClocksConfig.qml"
+        },
+        {
             "widgetId": "clock_type_weight",
             "name": Translation.tr("Weight Clock (1x1)"),
             "category": "Clock",
