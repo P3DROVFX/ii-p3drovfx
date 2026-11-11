@@ -34,6 +34,15 @@ ListView {
     /** Caps the wait for the last row of a long list. */
     property int staggerMaximum: 320
     property bool animateMovement: false
+    /** Row entrance (`add`). A view that animates its own rows' entrance turns it off. */
+    property bool animateAdd: animateAppearance
+    /**
+     * `addDisplaced`/`removeDisplaced`. A Transition captures its target y when it
+     * starts, so a row that changes height mid-flight leaves its neighbours parked
+     * on stale positions until the next relayout. Views whose rows resize turn it
+     * off and animate the displacement visually instead.
+     */
+    property bool animateDisplacement: animateAppearance
     property bool dismissToLeft: false
     property bool useSlideInAnimation: false
 
@@ -228,7 +237,7 @@ ListView {
     }
 
     add: Transition {
-        enabled: root.animateAppearance
+        enabled: root.animateAdd
         ParallelAnimation {
             // Slide Animation
             NumberAnimation {
@@ -299,7 +308,7 @@ ListView {
     }
 
     addDisplaced: Transition {
-        enabled: root.animateAppearance
+        enabled: root.animateDisplacement
         ParallelAnimation {
             NumberAnimation {
                 property: "y"
@@ -398,7 +407,7 @@ ListView {
 
     // This is movement when something is removed, not removing animation!
     removeDisplaced: Transition {
-        enabled: root.animateAppearance
+        enabled: root.animateDisplacement
         ParallelAnimation {
             NumberAnimation {
                 property: "y"
