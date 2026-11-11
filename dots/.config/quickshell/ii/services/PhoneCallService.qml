@@ -63,6 +63,9 @@ Singleton {
     function answer() {
         if (root.callState !== "ringing")
             return;
+        // A simulated call (IPC `simulate`): play it out here, there is no phone to ask.
+        if (root._simulated)
+            return root._setState("talking");
         if (!IiLinkService.phoneCommand("answer"))
             root._key(79);   // KEYCODE_HEADSETHOOK: answers a ringing call
     }
@@ -70,13 +73,15 @@ Singleton {
     function decline() {
         if (root.callState === "idle")
             return;
+        if (root._simulated)
+            return root._setState("idle");
         if (!IiLinkService.phoneCommand("end"))
             root._key(6);    // KEYCODE_ENDCALL: rejects a ringing call, ends one in progress
     }
 
     /** Silences the ringer without rejecting. */
     function silence() {
-        if (root.callState !== "ringing")
+        if (root.callState !== "ringing" || root._simulated)
             return;
         if (!IiLinkService.phoneCommand("silence"))
             root._key(25);   // KEYCODE_VOLUME_DOWN
@@ -212,6 +217,9 @@ Singleton {
             }
             root._simulated = true;
             KdeConnectService.callEvent("", state, number, contact);
+        }
+        function status(): string {
+            return JSON.stringify({ state: root.callState, name: root.displayName, linkLive: root.linkLive, adbLive: root.adbLive, simulated: root._simulated });
         }
         function answer(): void { root.answer(); }
         function decline(): void { root.decline(); }

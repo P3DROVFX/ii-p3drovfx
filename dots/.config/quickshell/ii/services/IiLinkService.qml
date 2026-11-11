@@ -365,6 +365,12 @@ Singleton {
         return "";
     }
     readonly property bool callsLive: root.callDev !== ""
+    // A phone that reports calls needs PhoneCallService loaded, whichever surface (the
+    // island or the corner popup) shows the call.
+    onCallsLiveChanged: {
+        if (root.callsLive)
+            PhoneCallService.callState;
+    }
 
     /// state: "idle", "ringing" or "talking"; name: the caller as the phone shows it.
     signal callReported(string state, string name)

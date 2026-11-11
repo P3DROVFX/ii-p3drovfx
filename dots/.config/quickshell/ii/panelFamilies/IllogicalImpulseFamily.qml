@@ -159,6 +159,11 @@ Scope {
         panelUrl: Qt.resolvedUrl("../modules/ii/bluetoothConnectionPopup/BluetoothConnectionPopup.qml")
     }
     PanelUrlLoader {
+        // A call on the phone, when the island is not the one showing it.
+        extraCondition: !IslandPolicy.ownsPhoneCall
+        panelUrl: Qt.resolvedUrl("../modules/ii/phoneCallPopup/PhoneCallPopup.qml")
+    }
+    PanelUrlLoader {
         extraCondition: !IslandPolicy.ownsKeyboardPopup
         panelUrl: Qt.resolvedUrl("../modules/ii/keyboardLayoutTransitionPopup/KeyboardLayoutTransitionPopup.qml")
     }
