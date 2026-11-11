@@ -457,6 +457,42 @@ fn handle_op(state: &State, line: &str) {
                 }
             }
         }
+        // A file for a phone: a `file` header, then the bytes as binary frames, read
+        // and queued off the async thread. The shell is told `fileSent` when it is all
+        // on its way (the phone answers `ok`/`err` with the same id itself).
+        "sendFile" => {
+            let dev = op["dev"].as_str().unwrap_or("").to_string();
+            let tx = state.lock().unwrap().conns.get(&dev).map(|c| c.tx.clone());
+            let id = op["id"].as_u64().unwrap_or(0);
+            let Some(tx) = tx else {
+                emit(json!({"ev": "fileSendFailed", "dev": dev, "id": id}));
+                return;
+            };
+            let path = PathBuf::from(op["path"].as_str().unwrap_or(""));
+            let header = json!({"t": "file", "id": id, "purpose": op["purpose"],
+                "name": op["name"].as_str().map(str::to_owned)
+                    .unwrap_or_else(|| path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default())});
+            let delete = op["delete"].as_bool().unwrap_or(false);
+            tokio::task::spawn_blocking(move || {
+                let data = match fs::read(&path) {
+                    Ok(d) if !d.is_empty() && d.len() as u64 <= files::MAX_SIZE => d,
+                    _ => {
+                        emit(json!({"ev": "fileSendFailed", "dev": dev, "id": id}));
+                        return;
+                    }
+                };
+                let mut header = header;
+                header["size"] = json!(data.len());
+                let mut ok = tx.send(Message::Text(header.to_string().into())).is_ok();
+                for chunk in data.chunks(256 * 1024) {
+                    ok = ok && tx.send(Message::Binary(chunk.to_vec().into())).is_ok();
+                }
+                if delete {
+                    let _ = fs::remove_file(&path);
+                }
+                emit(json!({"ev": if ok { "fileSent" } else { "fileSendFailed" }, "dev": dev, "id": id}));
+            });
+        }
         "kick" => {
             let dev = op["dev"].as_str().unwrap_or("");
             let s = state.lock().unwrap();

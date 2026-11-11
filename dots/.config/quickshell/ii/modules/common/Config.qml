@@ -2849,6 +2849,12 @@ Singleton {
                 property JsonObject audio: JsonObject {
                     property bool enable: true
                 }
+                // Screenshots both ways: the PC's go to the phone's gallery (queued until
+                // it connects), the phone's land in Pictures/Screenshots/Phone with the
+                // screenshot preview.
+                property JsonObject screenshots: JsonObject {
+                    property bool enable: true
+                }
                 // The clipboard both ways, images included: what is copied here reaches
                 // the phone while the link is up; the phone sends its own on request.
                 property JsonObject clipboard: JsonObject {

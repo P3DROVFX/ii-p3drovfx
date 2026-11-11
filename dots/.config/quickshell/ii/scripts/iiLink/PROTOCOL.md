@@ -138,6 +138,7 @@ the connection closing. One file at a time per phone.
 | `share` | `iiTools.share.enable` | moves it to `~/Downloads` under its own name (`name (1).ext` when taken, mode 0644), then `target` `downloads` says so in a notification (Open / Show in folder), `shelf` adds it to the FileShelf, `ai` (images only) attaches it to the AI chat and opens it. |
 | `clip` | `iiTools.clipboard.enable` | `wl-copy --type <image mime>` from the file, then deletes it. |
 | `appIcon` | — | moves `<package>.png` to `<state>/icons/`, for the notifications. |
+| `screenshot` | `iiTools.screenshots.enable` | a phone screenshot: to `~/Pictures/Screenshots/Phone/<name>`, onto the clipboard, and into the screenshot preview. The other way the phone (cap `shots`) saves it to its gallery (Pictures/ii tools) with a notification. |
 | `wallpaper` | `iiTools.wallpaper.enable` | moves it to the wallpapers folder as `phone-<date>-<name>`, then `Wallpapers.select` / `selectLockscreen`. `bad_arg` unless the name is an image, `busy` while one is being filed. |
 
 Actions in `iilink/1`, all toggles:
@@ -176,6 +177,7 @@ sides. Changing the meaning of an existing one does: that is `iilink/2`, on a ne
 | `{"op":"unpair","id"}` | Also tells the phone `unpaired` and closes it. |
 | `{"op":"send","dev":"<id>"\|"*","m":{…}}` | |
 | `{"op":"kick","dev"}` | Close a connection. |
+| `{"op":"sendFile","dev","id","path","name"?,"purpose","delete"?}` | A file to a phone: the same `file` header and binary frames, the other way. `fileSent` / `fileSendFailed` with the id once queued; `delete` removes the file then. |
 
 `peers` always comes before `pairingEnd`: the shell keeps the helper alive only while a
 phone is paired or a pairing is open, and must never see neither.

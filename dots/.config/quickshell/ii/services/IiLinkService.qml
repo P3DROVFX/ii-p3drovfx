@@ -35,6 +35,7 @@ Singleton {
     readonly property bool notifsEnabled: root.opts?.notifications?.enable ?? true
     readonly property bool shareEnabled: root.opts?.share?.enable ?? true
     readonly property bool clipEnabled: root.opts?.clipboard?.enable ?? true
+    readonly property bool shotsEnabled: root.opts?.screenshots?.enable ?? true
     readonly property int port: root.opts?.port ?? 47210
 
     readonly property string helperDir: `${Directories.scriptPath}/iiLink`
@@ -126,6 +127,7 @@ Singleton {
         .concat(root.notifsEnabled ? ["notifs"] : [])
         .concat(root.shareEnabled ? ["share"] : [])
         .concat(root.clipEnabled ? ["clip"] : [])
+        .concat(root.shotsEnabled ? ["shots"] : [])
 
     // What is on right now, read from the same state the shell itself draws from.
     readonly property bool _aodUp: (GlobalStates.oledSaverMonitors ?? []).length > 0
@@ -540,13 +542,113 @@ Singleton {
     }
 
     /// Text from the phone (`clip` command).
-    function _clipFromPhone(arg): string {
+    function _clipFromPhone(dev, arg): string {
         const text = String(arg?.text ?? "");
         if (text.length === 0)
             return "bad_arg";
         Cliphist.markInternalCopy();
         Quickshell.clipboardText = text;
+        root._announceClip(dev, text.replace(/\s+/g, " ").trim().slice(0, 160));
         return "";
+    }
+
+    /// Says a copy arrived: a popup only (phone-like: never kept in the history).
+    function _announceClip(dev, body): void {
+        const phone = root.connections[dev]?.name || Translation.tr("the phone");
+        Notifications.publishInternalNotification({
+            appName: "ii tools",
+            appIcon: "edit-paste",
+            summary: Translation.tr("Copied from %1").arg(phone),
+            body: body,
+            phone: true
+        });
+    }
+
+    // ── Screenshots ─────────────────────────────────────────────────────
+    // PC → phone: a region snip (the preview's image) or a full-screen shot (an image
+    // copied at exactly a monitor's size: Print, Ctrl+Print and the gesture all copy
+    // it) is copied to the outbox and sent to the phone's gallery when it is connected,
+    // now or later. Phone → PC: see _handleFile ("screenshot").
+
+    readonly property string outboxDir: `${root.stateDir}/outbox`
+    readonly property string phoneShotDir: `${FileUtils.trimFileProtocol(Directories.pictures)}/Screenshots/Phone`
+    readonly property string shotDev: {
+        if (!root.shotsEnabled)
+            return "";
+        for (const id of Object.keys(root.connections)) {
+            if ((root.phoneCaps[id] ?? []).includes("shots"))
+                return id;
+        }
+        return "";
+    }
+    /// Only the last few wait for a phone that is away.
+    readonly property int outboxMax: 5
+    property double _lastShotAt: 0
+
+    readonly property bool _watchShots: root.enabled && root.shotsEnabled && root.hasPeers
+    Connections {
+        target: root._watchShots ? GlobalStates : null
+        function onScreenshotOverlayImagePathChanged() {
+            const path = GlobalStates.screenshotOverlayImagePath;
+            // A phone screenshot shown in the preview is not sent back.
+            if (path !== "" && !path.startsWith(root.phoneShotDir))
+                root._queueShot(path, "");
+        }
+    }
+    Connections {
+        target: root._watchShots ? Cliphist : null
+        function onEntryAdded(entry) {
+            const size = /(\d+)x(\d+) \]\]$/.exec(String(entry));
+            if (!size || !Cliphist.entryIsImage(entry))
+                return;
+            const w = Number(size[1]), h = Number(size[2]);
+            const fullScreen = (HyprlandData.monitors ?? []).some(m => (m.width === w && m.height === h) || (m.width === h && m.height === w));
+            // A region snip copies too: it is already queued from the preview.
+            if (fullScreen && Date.now() - root._lastShotAt > 3000)
+                root._queueShot("", Cliphist.entryKey(entry));
+        }
+    }
+
+    /// From a file, or from a cliphist entry; then send if a phone is there.
+    function _queueShot(path, cliphistId): void {
+        root._lastShotAt = Date.now();
+        const dest = `${root.outboxDir}/pc-${Qt.formatDateTime(new Date(), "yyyyMMdd-HHmmss-zzz")}.png`;
+        // The snip's file may still be being written when the preview opens: wait for it.
+        const source = path !== "" ? `for i in $(seq 30); do [ -s "$2" ] && break; sleep 0.1; done; cp -- "$2" "$3"`
+            : `${Cliphist.cliphistBinary} decode "$2" > "$3"`;
+        // Copy, then keep only the newest few.
+        shotQueue.command = ["sh", "-c", `mkdir -p -m 700 -- "$1" && ${source} && ls -1t -- "$1" | tail -n +${root.outboxMax + 1} | while read f; do rm -f -- "$1/$f"; done`,
+            "sh", root.outboxDir, path !== "" ? path : cliphistId, dest];
+        shotQueue.running = true;
+    }
+    Process {
+        id: shotQueue
+        onExited: code => {
+            if (code === 0)
+                root._flushShots();
+        }
+    }
+
+    onShotDevChanged: root._flushShots()
+
+    property int _fileSerial: 1
+    function _flushShots(): void {
+        if (root.shotDev === "" || shotList.running)
+            return;
+        shotList.running = true;
+    }
+    Process {
+        id: shotList
+        command: ["sh", "-c", `ls -1tr -- "$1" 2>/dev/null`, "sh", root.outboxDir]
+        stdout: SplitParser {
+            onRead: name => {
+                if (root.shotDev === "" || name.trim() === "")
+                    return;
+                // The helper deletes each file once it is on its way.
+                root.send({ op: "sendFile", dev: root.shotDev, id: 900000 + root._fileSerial++, path: `${root.outboxDir}/${name.trim()}`,
+                    name: name.trim(), purpose: "screenshot", delete: true });
+            }
+        }
     }
 
     // ── Shared from the phone ───────────────────────────────────────────
@@ -632,6 +734,21 @@ Singleton {
             root.sendTo(dev, { t: "ok", id: id });
             return;
         }
+        // A screenshot taken on the phone: kept with the others, on this clipboard, and
+        // shown in the screenshot preview.
+        if (ev.purpose === "screenshot") {
+            if (!root.shotsEnabled)
+                return refuse("disabled");
+            if (!root._imageName.test(name))
+                return refuse("bad_arg");
+            const dest = `${root.phoneShotDir}/${name}`;
+            Cliphist.markInternalCopy();
+            phoneShot.dest = dest;
+            phoneShot.command = ["sh", "-c", 'mkdir -p -- "$1" && mv -f -- "$2" "$3" && chmod 644 -- "$3" && wl-copy --type image/png < "$3"', "sh", root.phoneShotDir, path, dest];
+            phoneShot.running = true;
+            root.sendTo(dev, { t: "ok", id: id });
+            return;
+        }
         // An image copied on the phone: onto this clipboard, then gone from disk.
         if (ev.purpose === "clip") {
             if (!root.clipEnabled)
@@ -641,6 +758,7 @@ Singleton {
             const mime = /\.png$/i.test(name) ? "image/png" : /\.webp$/i.test(name) ? "image/webp" : "image/jpeg";
             Cliphist.markInternalCopy();
             Quickshell.execDetached(["sh", "-c", 'wl-copy --type "$1" < "$2"; rm -f -- "$2"', "sh", mime, path]);
+            root._announceClip(dev, Translation.tr("An image"));
             root.sendTo(dev, { t: "ok", id: id });
             return;
         }
@@ -678,6 +796,22 @@ Singleton {
         root._pendingWallpaper = { dev: dev, id: id, dest: dest, target: String(ev.target ?? "desktop") };
         wallpaperMove.command = ["sh", "-c", 'mkdir -p -- "$1" && mv -f -- "$2" "$3"', "sh", folder, path, dest];
         wallpaperMove.running = true;
+    }
+
+    Process {
+        id: phoneShot
+        property string dest: ""
+        onExited: code => {
+            if (code !== 0)
+                return;
+            GlobalStates.screenshotOverlayMonitor = Hyprland.focusedMonitor?.name ?? "";
+            GlobalStates.screenshotOverlayRegionX = 0;
+            GlobalStates.screenshotOverlayRegionY = 0;
+            GlobalStates.screenshotOverlayRegionW = 0;
+            GlobalStates.screenshotOverlayRegionH = 0;
+            GlobalStates.screenshotOverlayImagePath = phoneShot.dest;
+            GlobalStates.screenshotOverlayOpen = true;
+        }
     }
 
     Process {
@@ -954,7 +1088,7 @@ Singleton {
             const action = String(m.a ?? "");
             let why;
             if (action === "clip")
-                why = root.clipEnabled ? root._clipFromPhone(m.arg) : "disabled";
+                why = root.clipEnabled ? root._clipFromPhone(dev, m.arg) : "disabled";
             else if (action === "share")
                 why = root.shareEnabled ? root._share(m.arg) : "disabled";
             else if (action === "deck")

@@ -238,6 +238,14 @@ Item {
             }
 
             ConfigSwitch {
+                buttonIcon: "screenshot_region"
+                text: Translation.tr("Screenshots")
+                description: Translation.tr("Screenshots taken here reach the phone's gallery; the phone's land in Pictures/Screenshots/Phone with the preview")
+                checked: Config.options.iiTools.screenshots.enable
+                onCheckedChanged: Config.options.iiTools.screenshots.enable = checked
+            }
+
+            ConfigSwitch {
                 buttonIcon: "content_paste"
                 text: Translation.tr("Clipboard")
                 description: Translation.tr("What you copy here reaches the phone, images included; the phone sends its own from a tile, the share sheet or the app")
