@@ -2849,6 +2849,10 @@ Singleton {
                 property JsonObject audio: JsonObject {
                     property bool enable: true
                 }
+                // Images shared from the phone become the wallpaper (desktop, lock or both).
+                property JsonObject wallpaper: JsonObject {
+                    property bool enable: true
+                }
                 // The phone as a stream deck: the shell's actions, apps and these commands.
                 property JsonObject deck: JsonObject {
                     property bool enable: true

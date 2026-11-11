@@ -238,6 +238,14 @@ Item {
             }
 
             ConfigSwitch {
+                buttonIcon: "wallpaper"
+                text: Translation.tr("Wallpaper from the phone")
+                description: Translation.tr("Images shared to \"Set on PC\" are saved to the wallpapers folder and applied")
+                checked: Config.options.iiTools.wallpaper.enable
+                onCheckedChanged: Config.options.iiTools.wallpaper.enable = checked
+            }
+
+            ConfigSwitch {
                 buttonIcon: "grid_view"
                 text: Translation.tr("Deck")
                 description: Translation.tr("The phone as a stream deck: shell actions, apps and your own commands, with live state")

@@ -93,6 +93,25 @@ Commands with an argument, answered with `ok` or `err` (`bad_arg`, `not_found`, 
 | `eeBypass` | `true` / `false` | audio |
 | `deck` | a deck id: `g:<gesture action>`, `c:<command id>`, `app:<desktop id>`, `discordMute`, `discordDeafen` (`locked`, `unavailable`, `not_found`) | deck |
 
+## Files
+
+A file is a header, then its bytes as binary frames (the app sends 256 KiB each):
+
+```
+{"t":"file","id":N,"name":"photo.jpg","size":S,"purpose":"wallpaper","target":"desktop"|"lock"|"both"}
+```
+
+The helper writes the bytes to `<state>/incoming/<dev>-<id>.part` (0600) and, once `size`
+bytes arrived, renames it and emits `{"ev":"file","dev","id","path","name","purpose","target"}`.
+The shell moves or deletes it and answers `ok` / `err` with the same `id`. The helper
+itself refuses with `err`: `bad_arg` (no size), `too_large` (over 64 MiB), `write` (more
+bytes than announced, disk error). A new header drops an unfinished file, and so does
+the connection closing. One file at a time per phone.
+
+| `purpose` | Needs | The shell |
+| --- | --- | --- |
+| `wallpaper` | `iiTools.wallpaper.enable` | moves it to the wallpapers folder as `phone-<date>-<name>`, then `Wallpapers.select` / `selectLockscreen`. `bad_arg` unless the name is an image, `busy` while one is being filed. |
+
 Actions in `iilink/1`, all toggles:
 
 | Action | On while | Running it while on |

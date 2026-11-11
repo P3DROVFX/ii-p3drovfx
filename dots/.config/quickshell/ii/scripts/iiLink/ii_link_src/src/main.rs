@@ -9,6 +9,7 @@
 //! It is started only while a phone is paired (or being paired), and sleeps on its
 //! sockets and stdin: no timers run while nothing happens.
 
+mod files;
 mod icons;
 
 use std::collections::HashMap;
@@ -343,6 +344,8 @@ async fn serve(stream: TcpStream, addr: SocketAddr, acceptor: TlsAcceptor, state
         let _ = sink.close().await;
     });
 
+    let dir = state.lock().unwrap().dir.clone();
+    let mut incoming: Option<files::Incoming> = None;
     loop {
         match timeout(IDLE_TIMEOUT, stream.next()).await {
             Ok(Some(Ok(Message::Text(text)))) => match serde_json::from_str::<Value>(text.as_str()) {
@@ -363,17 +366,46 @@ async fn serve(stream: TcpStream, addr: SocketAddr, acceptor: TlsAcceptor, state
                         let _ = tx.send(Message::Text(reply.to_string().into()));
                     });
                 }
+                // A file follows as binary frames; a new header drops an unfinished one.
+                Ok(m) if m["t"] == "file" => {
+                    if let Some(old) = incoming.take() {
+                        old.discard();
+                    }
+                    match files::start(&dir, &dev, &m) {
+                        Ok(inc) => incoming = Some(inc),
+                        Err(reply) => {
+                            let _ = tx.send(Message::Text(reply.to_string().into()));
+                        }
+                    }
+                }
                 Ok(m) if m.is_object() => emit(json!({"ev": "msg", "dev": dev, "m": m})),
                 _ => {}
             },
-            // Pings are answered by tungstenite itself; binary frames (files) arrive
-            // with the features that need them.
+            Ok(Some(Ok(Message::Binary(data)))) => {
+                if let Some(inc) = incoming.as_mut() {
+                    match inc.write(&data, &dev) {
+                        files::Step::More => {}
+                        files::Step::Done(event) => {
+                            incoming = None;
+                            emit(event);
+                        }
+                        files::Step::Failed(reply) => {
+                            incoming = None;
+                            let _ = tx.send(Message::Text(reply.to_string().into()));
+                        }
+                    }
+                }
+            }
+            // Pings are answered by tungstenite itself.
             Ok(Some(Ok(Message::Close(_)))) | Ok(Some(Err(_))) | Ok(None) | Err(_) => break,
             Ok(Some(Ok(_))) => {}
         }
     }
 
     writer.abort();
+    if let Some(inc) = incoming.take() {
+        inc.discard();
+    }
     let mut s = state.lock().unwrap();
     if s.conns.get(&dev).is_some_and(|c| c.serial == serial) {
         s.conns.remove(&dev);

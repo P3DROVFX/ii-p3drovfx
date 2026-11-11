@@ -30,6 +30,7 @@ Singleton {
     readonly property bool remoteEnabled: root.opts?.remote?.enable ?? true
     readonly property bool audioEnabled: root.opts?.audio?.enable ?? true
     readonly property bool deckEnabled: root.opts?.deck?.enable ?? true
+    readonly property bool wallpaperEnabled: root.opts?.wallpaper?.enable ?? true
     readonly property int port: root.opts?.port ?? 47210
 
     readonly property string helperDir: `${Directories.scriptPath}/iiLink`
@@ -116,6 +117,7 @@ Singleton {
     readonly property var capabilities: (root.remoteEnabled ? ["remote", "workspaces", "modes", "presets"] : [])
         .concat(root.audioEnabled ? ["audio"] : [])
         .concat(root.deckEnabled ? ["deck"] : [])
+        .concat(root.wallpaperEnabled ? ["wallpaper"] : [])
 
     // What is on right now, read from the same state the shell itself draws from.
     readonly property bool _aodUp: (GlobalStates.oledSaverMonitors ?? []).length > 0
@@ -339,6 +341,56 @@ Singleton {
             .map(e => ({ id: e.id, name: e.name, icon: e.icon }))
             .sort((a, b) => a.name.localeCompare(b.name));
         return { t: "apps", list: list };
+    }
+
+    // ── Files from the phone ────────────────────────────────────────────
+    // The helper lands a finished upload in its incoming/ folder; here it becomes what
+    // it was sent for, or is deleted.
+
+    readonly property var _imageName: /\.(jpe?g|png|webp|avif|bmp|gif|jxl|heic|heif)$/i
+    property var _pendingWallpaper: null
+
+    function _handleFile(dev, ev): void {
+        const id = Number(ev.id ?? 0);
+        const path = String(ev.path ?? "");
+        const name = String(ev.name ?? "");
+        const refuse = code => {
+            Quickshell.execDetached(["rm", "-f", "--", path]);
+            root.sendTo(dev, { t: "err", id: id, code: code });
+        };
+        if (ev.purpose !== "wallpaper")
+            return refuse("unknown_action");
+        if (!root.wallpaperEnabled)
+            return refuse("disabled");
+        if (!root._imageName.test(name))
+            return refuse("bad_arg");
+        if (wallpaperMove.running)
+            return refuse("busy");
+        const folder = FileUtils.trimFileProtocol(Wallpapers.defaultFolder.toString());
+        // Dated, so a phone photo never overwrites a wallpaper of the same name.
+        const dest = `${folder}/phone-${Qt.formatDateTime(new Date(), "yyyyMMdd-HHmmss")}-${name}`;
+        root._pendingWallpaper = { dev: dev, id: id, dest: dest, target: String(ev.target ?? "desktop") };
+        wallpaperMove.command = ["sh", "-c", 'mkdir -p -- "$1" && mv -f -- "$2" "$3"', "sh", folder, path, dest];
+        wallpaperMove.running = true;
+    }
+
+    Process {
+        id: wallpaperMove
+        onExited: code => {
+            const p = root._pendingWallpaper;
+            root._pendingWallpaper = null;
+            if (!p)
+                return;
+            if (code !== 0) {
+                root.sendTo(p.dev, { t: "err", id: p.id, code: "write" });
+                return;
+            }
+            if (p.target !== "lock")
+                Wallpapers.select(p.dest);
+            if (p.target === "lock" || p.target === "both")
+                Wallpapers.selectLockscreen(p.dest);
+            root.sendTo(p.dev, { t: "ok", id: p.id });
+        }
     }
 
     readonly property bool _remoteLive: root.phoneConnected && root.remoteEnabled
@@ -643,6 +695,9 @@ Singleton {
             root.connections = next;
             break;
         }
+        case "file":
+            root._handleFile(String(ev.dev), ev);
+            break;
         case "msg":
             if (ev.m && typeof ev.m === "object")
                 root._handleMessage(String(ev.dev), ev.m);
