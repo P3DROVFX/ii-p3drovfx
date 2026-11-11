@@ -24,6 +24,10 @@ import qs.modules.common
  *
  * Without ADB the ringing card still shows, silences nothing and leaves on its own
  * timer; an answered call cannot be followed, so it simply ends.
+ *
+ * With the ii tools app reporting calls over ii link (`IiLinkService.callsLive`), the
+ * phone itself says what the call is now, and the buttons go to Android's own call
+ * controls: no ADB, no polling, and the end of the call is known for sure.
  */
 Singleton {
     id: root
@@ -37,6 +41,10 @@ Singleton {
     property double stateSince: 0
     /** Whether ADB answered the last poll: the buttons only mean something then. */
     property bool adbLive: false
+    /** The app reports calls over ii link: state and buttons go through it. */
+    readonly property bool linkLive: IiLinkService.callsLive
+    /** Whether the buttons can do anything right now. */
+    readonly property bool controllable: root.linkLive || root.adbLive
 
     readonly property bool active: root.callState !== "idle"
     /** A call injected over IPC for testing: ADB knows nothing about it, so don't ask. */
@@ -55,20 +63,23 @@ Singleton {
     function answer() {
         if (root.callState !== "ringing")
             return;
-        root._key(79);   // KEYCODE_HEADSETHOOK: answers a ringing call
+        if (!IiLinkService.phoneCommand("answer"))
+            root._key(79);   // KEYCODE_HEADSETHOOK: answers a ringing call
     }
 
     function decline() {
         if (root.callState === "idle")
             return;
-        root._key(6);    // KEYCODE_ENDCALL: rejects a ringing call, ends one in progress
+        if (!IiLinkService.phoneCommand("end"))
+            root._key(6);    // KEYCODE_ENDCALL: rejects a ringing call, ends one in progress
     }
 
-    /** Silences the ringer without rejecting: a volume key does that while ringing. */
+    /** Silences the ringer without rejecting. */
     function silence() {
         if (root.callState !== "ringing")
             return;
-        root._key(25);   // KEYCODE_VOLUME_DOWN
+        if (!IiLinkService.phoneCommand("silence"))
+            root._key(25);   // KEYCODE_VOLUME_DOWN
     }
 
     function _key(code) {
@@ -77,6 +88,19 @@ Singleton {
         // Answering and hanging up show on the next poll; ask for it now.
         pollTimer.restart();
         root._poll();
+    }
+
+    // ── ii link: the phone says what the call is ────────────────────────────
+    Connections {
+        target: IiLinkService
+        function onCallReported(state, name) {
+            if (root._simulated)
+                return;
+            if (name !== "" && root.contactName === "")
+                root.contactName = name;
+            if (state === "ringing" || state === "talking" || state === "idle")
+                root._setState(state);
+        }
     }
 
     // ── KDE Connect: a call started ─────────────────────────────────────────
@@ -95,7 +119,7 @@ Singleton {
                 root._setState("ringing");
                 // Always try: the transport goes cold while idle, and warming it on
                 // the first ring is what makes Answer work a second later.
-                if (!root._simulated)
+                if (!root._simulated && !root.linkLive)
                     KdeConnectService._probeAdb();
             } else if (state === "talking") {
                 root._setState("talking");
@@ -110,6 +134,7 @@ Singleton {
         root.stateSince = Date.now();
         if (next === "idle") {
             root.adbLive = false;
+            root.contactName = "";
             root._simulated = false;
             root._failedPolls = 0;
         } else {
@@ -121,7 +146,7 @@ Singleton {
     property int _failedPolls: 0
 
     function _poll() {
-        if (root.callState === "idle" || root._simulated || statePoll.running)
+        if (root.callState === "idle" || root._simulated || root.linkLive || statePoll.running)
             return;
         statePoll.running = true;
     }
@@ -130,7 +155,7 @@ Singleton {
         id: pollTimer
         interval: 2000
         repeat: true
-        running: root.active && !root._simulated
+        running: root.active && !root._simulated && !root.linkLive
         onTriggered: root._poll()
     }
 
@@ -172,7 +197,7 @@ Singleton {
     // ringing into voicemail after about 30 s.
     Timer {
         interval: 45000
-        running: root.callState === "ringing" && !root.adbLive
+        running: root.callState === "ringing" && !root.controllable
         onTriggered: root._setState("idle")
     }
 

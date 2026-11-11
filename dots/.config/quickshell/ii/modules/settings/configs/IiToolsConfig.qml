@@ -238,6 +238,14 @@ Item {
             }
 
             ConfigSwitch {
+                buttonIcon: "call"
+                text: Translation.tr("Calls")
+                description: Translation.tr("The call card follows the phone and answers, declines and dials without ADB")
+                checked: Config.options.iiTools.calls.enable
+                onCheckedChanged: Config.options.iiTools.calls.enable = checked
+            }
+
+            ConfigSwitch {
                 buttonIcon: "wallpaper"
                 text: Translation.tr("Wallpaper from the phone")
                 description: Translation.tr("Images shared to \"Set on PC\" are saved to the wallpapers folder and applied")

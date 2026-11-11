@@ -31,7 +31,7 @@ Item {
     readonly property string phase: root.source ? root.source.phase : PhoneCallService.callState
     readonly property bool ringing: root.phase === "ringing"
     /** Without ADB the buttons cannot reach the phone; say so instead of pretending. */
-    readonly property bool canAct: root.sample !== null || PhoneCallService.adbLive || PhoneCallService._simulated
+    readonly property bool canAct: root.sample !== null || PhoneCallService.controllable || PhoneCallService._simulated
     /** Example data from the Settings preview (IslandPreviewStage); null on the island. */
     property var sample: null
     readonly property string callerName: root.sample ? root.sample.displayName : PhoneCallService.displayName

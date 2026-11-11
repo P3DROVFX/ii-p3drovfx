@@ -86,6 +86,11 @@ Singleton {
 
     function openDialer(number: string): void {
         if (!number) return
+        // The ii tools app places the call itself, no ADB needed.
+        if (IiLinkService.phoneCommand("dial", number)) {
+            KdeConnectService.dispatchActionFeedback(Translation.tr("Calling %1…").arg(number), true)
+            return
+        }
         if (!KdeConnectService.activeReachable) {
             KdeConnectService.dispatchActionFeedback(Translation.tr("Phone is not connected or reachable"), false)
             return

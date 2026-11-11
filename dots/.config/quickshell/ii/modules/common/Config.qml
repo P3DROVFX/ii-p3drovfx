@@ -2849,6 +2849,11 @@ Singleton {
                 property JsonObject audio: JsonObject {
                     property bool enable: true
                 }
+                // Calls reported by the app: the call card follows the phone and its buttons
+                // work without ADB. Off, or app not reporting: the ADB path as before.
+                property JsonObject calls: JsonObject {
+                    property bool enable: true
+                }
                 // Images shared from the phone become the wallpaper (desktop, lock or both).
                 property JsonObject wallpaper: JsonObject {
                     property bool enable: true

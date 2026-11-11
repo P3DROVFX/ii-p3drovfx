@@ -31,6 +31,7 @@ Singleton {
     readonly property bool audioEnabled: root.opts?.audio?.enable ?? true
     readonly property bool deckEnabled: root.opts?.deck?.enable ?? true
     readonly property bool wallpaperEnabled: root.opts?.wallpaper?.enable ?? true
+    readonly property bool callsEnabled: root.opts?.calls?.enable ?? true
     readonly property int port: root.opts?.port ?? 47210
 
     readonly property string helperDir: `${Directories.scriptPath}/iiLink`
@@ -118,6 +119,7 @@ Singleton {
         .concat(root.audioEnabled ? ["audio"] : [])
         .concat(root.deckEnabled ? ["deck"] : [])
         .concat(root.wallpaperEnabled ? ["wallpaper"] : [])
+        .concat(root.callsEnabled ? ["calls"] : [])
 
     // What is on right now, read from the same state the shell itself draws from.
     readonly property bool _aodUp: (GlobalStates.oledSaverMonitors ?? []).length > 0
@@ -341,6 +343,36 @@ Singleton {
             .map(e => ({ id: e.id, name: e.name, icon: e.icon }))
             .sort((a, b) => a.name.localeCompare(b.name));
         return { t: "apps", list: list };
+    }
+
+    // ── Calls ───────────────────────────────────────────────────────────
+    // The app reports the phone's call state (it opens the link itself when a call
+    // rings, even from the background) and takes answer / end / silence / dial.
+
+    /// dev id → the capabilities that phone announced (`caps`), e.g. ["calls"].
+    property var phoneCaps: ({})
+    /// The connected phone that reports calls; "" when none (PhoneCallService then
+    /// falls back to ADB).
+    readonly property string callDev: {
+        if (!root.callsEnabled)
+            return "";
+        for (const id of Object.keys(root.connections)) {
+            if ((root.phoneCaps[id] ?? []).includes("calls"))
+                return id;
+        }
+        return "";
+    }
+    readonly property bool callsLive: root.callDev !== ""
+
+    /// state: "idle", "ringing" or "talking"; name: the caller as the phone shows it.
+    signal callReported(string state, string name)
+
+    /// answer, end, silence, or dial with the number as `arg`. False when no phone listens.
+    function phoneCommand(action, arg): bool {
+        if (!root.callsLive)
+            return false;
+        root.sendTo(root.callDev, arg === undefined ? { t: "phone", a: action } : { t: "phone", a: action, arg: String(arg) });
+        return true;
     }
 
     // ── Files from the phone ────────────────────────────────────────────
@@ -633,6 +665,16 @@ Singleton {
         case "ping":
             root.sendTo(dev, { t: "pong", id: Number(m.id ?? 0) });
             return;
+        case "caps": {
+            const next = Object.assign({}, root.phoneCaps);
+            next[dev] = Array.isArray(m.caps) ? m.caps.map(String) : [];
+            root.phoneCaps = next;
+            return;
+        }
+        case "call":
+            if (root.callsEnabled && dev === root.callDev)
+                root.callReported(String(m.state ?? "idle"), String(m.name ?? ""));
+            return;
         case "get":
             if (m.what === "apps" && root.deckEnabled)
                 root.sendTo(dev, root._apps());
@@ -693,6 +735,9 @@ Singleton {
             const next = Object.assign({}, root.connections);
             delete next[ev.dev];
             root.connections = next;
+            const caps = Object.assign({}, root.phoneCaps);
+            delete caps[ev.dev];
+            root.phoneCaps = caps;
             break;
         }
         case "file":
