@@ -62,10 +62,32 @@ After `authOk` every frame is a JSON object with a `t` field:
 | shell → phone | `{"t":"hello","v":1,"name":"…","caps":["remote"],"actions":[{id,name,icon,toggle}]}` | Sent on connect and whenever an integration is switched on or off. `icon` is a Material Symbol name; `toggle` actions have an on/off state. |
 | shell → phone | `{"t":"state","on":["lock","mediaMode"]}` | The toggle actions that are on. Sent after `hello` and on every change, whatever caused it (the phone, a keybind, the lock timing out). |
 | phone → shell | `{"t":"cmd","id":N,"a":"<action id>"}` | Run an action from `actions`. |
+| phone → shell | `{"t":"cmd","id":N,"a":"<command>","arg":…}` | A command with an argument (table below). |
+| shell → phone | `{"t":"workspaces","active":N,"list":[{id,windows}]}` | cap `workspaces`. Normal workspaces that exist. |
+| shell → phone | `{"t":"modes","active":"<id>"\|"","list":[{id,name,icon}]}` | cap `modes`. Empty list when Modes is off. |
+| shell → phone | `{"t":"presets","active":"<name>"\|"","list":["<name>",…]}` | cap `presets`. |
+| shell → phone | `{"t":"audio","out":id,"in":id,"outputs":[dev],"inputs":[dev],"apps":[dev],"ee":{on,preset,presets}\|null}` | cap `audio`. `dev` is `{id,name,vol,mute}`, `vol` 0–1; ids are PipeWire node ids. |
 | shell → phone | `{"t":"ok","id":N}` / `{"t":"err","id":N,"code":"…"}` | `disabled`, `unknown_action`, `locked` (unlocking, or the desktop AOD, while the PC is locked). |
 | phone → shell | `{"t":"ping","id":N}` → `{"t":"pong","id":N}` | Round-trip check. |
 | phone → helper | `{"t":"unpair"}` | "Forget this PC": the helper drops the device and closes. |
 | shell → phone | `{"t":"unpaired"}` | The PC forgot this phone; the app forgets the PC. |
+
+Topics (`workspaces`, `modes`, `presets`, `audio`) are pushed whole: once when a phone
+connects or the integration is switched on, then on every change. Audio is coalesced to
+at most one push per 60 ms while a volume is being dragged.
+
+Commands with an argument, answered with `ok` or `err` (`bad_arg`, `not_found`, `disabled`):
+
+| Command | `arg` | Needs |
+| --- | --- | --- |
+| `workspace` | workspace number, 1–100 | remote |
+| `mode` | mode id: toggles it; `""` ends the active mode | remote |
+| `preset` | preset name from `presets` (applying one reloads the shell; the phone reconnects) | remote |
+| `volume` | `{id, vol}` (0–1) for a device or an app stream | audio |
+| `mute` | `{id, mute}` | audio |
+| `default` | device id: becomes the default output or input | audio |
+| `eePreset` | EasyEffects output preset name | audio |
+| `eeBypass` | `true` / `false` | audio |
 
 Actions in `iilink/1`, all toggles:
 
@@ -75,6 +97,7 @@ Actions in `iilink/1`, all toggles:
 | `lockAod` | locked with the AOD up | leaves the AOD for the lock screen, still locked |
 | `oledSaver` | the desktop AOD is up (not locked) | leaves it; refused while locked |
 | `mediaMode` | media mode is open | closes it |
+| `scratchpad` | the scratchpad is shown | hides it |
 
 Adding a message never needs a version bump: unknown `t` values are ignored on both
 sides. Changing the meaning of an existing one does: that is `iilink/2`, on a new path.

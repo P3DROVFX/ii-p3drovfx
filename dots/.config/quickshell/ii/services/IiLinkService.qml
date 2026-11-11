@@ -3,7 +3,9 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Io
+import Quickshell.Services.Pipewire
 import qs
 import qs.modules.common
 import qs.modules.common.functions
@@ -26,6 +28,7 @@ Singleton {
     readonly property var opts: Config.options?.iiTools ?? null
     readonly property bool enabled: Config.ready && (root.opts?.enable ?? true)
     readonly property bool remoteEnabled: root.opts?.remote?.enable ?? true
+    readonly property bool audioEnabled: root.opts?.audio?.enable ?? true
     readonly property int port: root.opts?.port ?? 47210
 
     readonly property string helperDir: `${Directories.scriptPath}/iiLink`
@@ -105,10 +108,12 @@ Singleton {
         { id: "lock", name: Translation.tr("Lock"), icon: "lock", toggle: true },
         { id: "lockAod", name: Translation.tr("Lock and AOD"), icon: "screen_lock_portrait", toggle: true },
         { id: "oledSaver", name: Translation.tr("Always-on display"), icon: "brightness_empty", toggle: true },
-        { id: "mediaMode", name: Translation.tr("Media mode"), icon: "music_note", toggle: true }
+        { id: "mediaMode", name: Translation.tr("Media mode"), icon: "music_note", toggle: true },
+        { id: "scratchpad", name: Translation.tr("Scratchpad"), icon: "inventory_2", toggle: true }
     ]
     readonly property var allowedActions: root.remoteEnabled ? root.actions : []
-    readonly property var capabilities: root.remoteEnabled ? ["remote"] : []
+    readonly property var capabilities: (root.remoteEnabled ? ["remote", "workspaces", "modes", "presets"] : [])
+        .concat(root.audioEnabled ? ["audio"] : [])
 
     // What is on right now, read from the same state the shell itself draws from.
     readonly property bool _aodUp: (GlobalStates.oledSaverMonitors ?? []).length > 0
@@ -124,6 +129,8 @@ Singleton {
             on.push("oledSaver");
         if (GlobalStates.mediaModeActive)
             on.push("mediaMode");
+        if (GlobalStates.scratchpadOpen)
+            on.push("scratchpad");
         return on;
     }
     // A string, so the push happens on a real change and not on every re-evaluation.
@@ -166,9 +173,211 @@ Singleton {
         case "mediaMode":
             GlobalStates.requestMediaMode("toggle");
             return "";
+        case "scratchpad":
+            Hyprland.dispatch(`hl.dsp.workspace.toggle_special("special")`);
+            return "";
         }
         return "unknown_action";
     }
+
+    // ── Live topics: workspaces, modes, presets, audio ──────────────────
+    // Each is pushed whole on a real change, keyed on its text. A key is "" while no
+    // phone is connected (or its integration is off), so nothing is computed for nobody.
+    // Going live is a change too: that is how the first phone (or a topic switched on in
+    // Settings) gets each topic. A second phone gets them from `_topics`.
+
+    function _workspaces(): var {
+        const list = Array.from(HyprlandData.workspaces ?? []).map(w => ({ id: w.id, windows: w.windows ?? 0 }));
+        list.sort((a, b) => a.id - b.id);
+        return { t: "workspaces", active: HyprlandData.activeWorkspace?.id ?? 0, list: list };
+    }
+
+    function _modes(): var {
+        if (!Modes.enabled)
+            return { t: "modes", active: "", list: [] };
+        return {
+            t: "modes",
+            active: Modes.activeModeId,
+            list: Array.from(Modes.modes ?? []).map(m => ({ id: m.id, name: m.name, icon: m.icon }))
+        };
+    }
+
+    /// Preset names, from `presets.sh list`: read on connect and when the folder changes.
+    property var _presetNames: []
+    function _presets(): var {
+        return { t: "presets", active: PresetStore.activePreset, list: root._presetNames };
+    }
+
+    function _vol(v): real {
+        return Math.round((v ?? 0) * 100) / 100;
+    }
+    function _node(n): var {
+        return { id: n.id, name: Audio.friendlyDeviceName(n), vol: root._vol(n.audio?.volume), mute: n.audio?.muted ?? false };
+    }
+    function _audio(): var {
+        const ee = EasyEffects.available ? {
+            on: EasyEffects.active,
+            preset: EasyEffects.outputPreset,
+            presets: Array.from(EasyEffects.outputPresets)
+        } : null;
+        return {
+            t: "audio",
+            out: Audio.sink?.id ?? -1,
+            "in": Audio.source?.id ?? -1,
+            outputs: Array.from(Audio.outputDevices).map(root._node),
+            inputs: Array.from(Audio.inputDevices).map(root._node),
+            apps: Array.from(Audio.outputAppNodes).map(n => ({
+                id: n.id, name: Audio.appNodeDisplayName(n), vol: root._vol(n.audio?.volume), mute: n.audio?.muted ?? false
+            })),
+            ee: ee
+        };
+    }
+
+    readonly property bool _remoteLive: root.phoneConnected && root.remoteEnabled
+    readonly property bool _audioLive: root.phoneConnected && root.audioEnabled
+
+    // Volumes are read only from nodes Pipewire is asked to track: devices and app
+    // streams, only while a phone listens.
+    PwObjectTracker {
+        objects: root._audioLive ? Array.from(Audio.outputDevices).concat(Array.from(Audio.inputDevices), Array.from(Audio.outputAppNodes)) : []
+    }
+
+    readonly property string _workspacesKey: root._remoteLive ? JSON.stringify(root._workspaces()) : ""
+    readonly property string _modesKey: root._remoteLive ? JSON.stringify(root._modes()) : ""
+    readonly property string _presetsKey: root._remoteLive ? JSON.stringify(root._presets()) : ""
+    readonly property string _audioKey: root._audioLive ? JSON.stringify(root._audio()) : ""
+
+    property var _sentKeys: ({})
+    function _publish(name, key): void {
+        const prev = root._sentKeys[name] ?? "";
+        root._sentKeys[name] = key;
+        if (key !== "" && key !== prev)
+            root.sendTo("*", JSON.parse(key));
+    }
+    on_WorkspacesKeyChanged: root._publish("workspaces", root._workspacesKey)
+    on_ModesKeyChanged: root._publish("modes", root._modesKey)
+    on_PresetsKeyChanged: root._publish("presets", root._presetsKey)
+    // A volume dragged on the PC changes many times a second: coalesce to ~16 pushes/s.
+    on_AudioKeyChanged: {
+        if (root._audioKey === "")
+            root._sentKeys["audio"] = "";
+        else if (!audioPush.running)
+            audioPush.start();
+    }
+    Timer {
+        id: audioPush
+        interval: 60
+        onTriggered: root._publish("audio", root._audioKey)
+    }
+
+    /// The topics, for a phone that connects while another is already live.
+    function _topics(dev): void {
+        if (root.remoteEnabled) {
+            root.sendTo(dev, root._workspaces());
+            root.sendTo(dev, root._modes());
+            root.sendTo(dev, root._presets());
+        }
+        if (root.audioEnabled)
+            root.sendTo(dev, root._audio());
+    }
+
+    function _listPresets(): void {
+        presetList.running = false;
+        presetList.running = true;
+    }
+    Connections {
+        // Not a reference while no phone listens, so the store is never loaded for this.
+        target: root._remoteLive ? PresetStore : null
+        function onPresetFilesChanged() {
+            root._listPresets();
+        }
+    }
+    Process {
+        id: presetList
+        command: [`${Directories.scriptPath}/presets.sh`, "list"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const names = [];
+                for (const line of this.text.split("\n")) {
+                    try {
+                        const p = JSON.parse(line);
+                        if (p?.name)
+                            names.push(String(p.name));
+                    } catch (e) {}
+                }
+                root._presetNames = names;
+            }
+        }
+    }
+
+    function _nodeById(id): var {
+        return Pipewire.nodes.values.find(n => n.id === Number(id)) ?? null;
+    }
+
+    /// Runs a command that carries an argument; returns "" when done, or why not.
+    function _runArg(action, arg): string {
+        switch (action) {
+        case "workspace": {
+            const n = Number(arg);
+            if (!Number.isInteger(n) || n < 1 || n > 100)
+                return "bad_arg";
+            Hyprland.dispatch(`hl.dsp.focus({ workspace = ${n} })`);
+            return "";
+        }
+        case "mode": {
+            const id = String(arg ?? "");
+            if (id === "")
+                return Modes.deactivate("manual") ? "" : "not_found";
+            if (!Modes.modeById(id))
+                return "not_found";
+            Modes.toggle(id);
+            return "";
+        }
+        case "preset": {
+            const name = String(arg ?? "");
+            if (!root._presetNames.includes(name))
+                return "not_found";
+            if (PresetStore.activePreset !== name)
+                PresetStore.applyPreset(name);
+            return "";
+        }
+        case "volume":
+        case "mute": {
+            const node = root._nodeById(arg?.id);
+            if (!node?.audio)
+                return "not_found";
+            if (action === "volume")
+                node.audio.volume = Math.max(0, Math.min(1, Number(arg.vol ?? 0)));
+            else
+                node.audio.muted = arg.mute === true;
+            return "";
+        }
+        case "default": {
+            const node = root._nodeById(arg);
+            if (!node || node.isStream || !node.audio)
+                return "not_found";
+            if (node.isSink)
+                Audio.setDefaultSink(node);
+            else
+                Audio.setDefaultSource(node);
+            return "";
+        }
+        case "eePreset": {
+            const name = String(arg ?? "");
+            if (!Array.from(EasyEffects.outputPresets).includes(name))
+                return "not_found";
+            EasyEffects.loadPreset(name, "output");
+            return "";
+        }
+        case "eeBypass":
+            EasyEffects.setBypass(arg === true);
+            return "";
+        }
+        return "unknown_action";
+    }
+
+    readonly property var _remoteArgActions: ["workspace", "mode", "preset"]
+    readonly property var _audioArgActions: ["volume", "mute", "default", "eePreset", "eeBypass"]
 
     Timer {
         id: lockAodTimer
@@ -243,12 +452,15 @@ Singleton {
         case "cmd": {
             const id = Number(m.id ?? 0);
             const action = String(m.a ?? "");
-            const allowed = root.allowedActions.some(a => a.id === action);
-            if (!allowed) {
-                root.sendTo(dev, { t: "err", id: id, code: root.remoteEnabled ? "unknown_action" : "disabled" });
-                return;
-            }
-            const why = root._run(action);
+            let why;
+            if (root._remoteArgActions.includes(action))
+                why = root.remoteEnabled ? root._runArg(action, m.arg) : "disabled";
+            else if (root._audioArgActions.includes(action))
+                why = root.audioEnabled ? root._runArg(action, m.arg) : "disabled";
+            else if (root.allowedActions.some(a => a.id === action))
+                why = root._run(action);
+            else
+                why = root.remoteEnabled ? "unknown_action" : "disabled";
             root.sendTo(dev, why === "" ? { t: "ok", id: id } : { t: "err", id: id, code: why });
             return;
         }
@@ -293,11 +505,18 @@ Singleton {
                 root.peers = root.peers.concat([{ id: String(ev.dev.id), name: String(ev.dev.name ?? ""), model: String(ev.dev.model ?? ""), pairedAt: Date.now(), lastSeen: Date.now() }]);
             break;
         case "connected": {
+            // hello first; assigning `connections` then makes the topics live, which
+            // sends them to the first phone.
+            const wasLive = root.phoneConnected;
+            root.sendTo(ev.dev, root._hello());
+            root.sendTo(ev.dev, root._state());
             const next = Object.assign({}, root.connections);
             next[ev.dev] = { id: String(ev.dev), name: String(ev.name ?? ""), model: String(ev.model ?? ""), addr: String(ev.addr ?? ""), since: Date.now() };
             root.connections = next;
-            root.sendTo(ev.dev, root._hello());
-            root.sendTo(ev.dev, root._state());
+            if (wasLive)
+                root._topics(ev.dev);
+            if (root.remoteEnabled)
+                root._listPresets();
             break;
         }
         case "disconnected": {

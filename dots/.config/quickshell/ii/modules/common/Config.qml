@@ -2845,6 +2845,10 @@ Singleton {
                 property JsonObject remote: JsonObject {
                     property bool enable: true
                 }
+                // The PC's audio from the phone: devices, apps, EasyEffects.
+                property JsonObject audio: JsonObject {
+                    property bool enable: true
+                }
                 property JsonObject liveUpdates: JsonObject {
                     property bool enable: true
                 }

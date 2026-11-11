@@ -216,9 +216,17 @@ Item {
             ConfigSwitch {
                 buttonIcon: "settings_remote"
                 text: Translation.tr("Remote control")
-                description: Translation.tr("Lock, always-on display and media mode from the phone")
+                description: Translation.tr("Lock, media mode, workspaces, scratchpad, modes and presets from the phone")
                 checked: Config.options.iiTools.remote.enable
                 onCheckedChanged: Config.options.iiTools.remote.enable = checked
+            }
+
+            ConfigSwitch {
+                buttonIcon: "volume_up"
+                text: Translation.tr("PC audio")
+                description: Translation.tr("Output and input devices, volume per app and EasyEffects presets from the phone")
+                checked: Config.options.iiTools.audio.enable
+                onCheckedChanged: Config.options.iiTools.audio.enable = checked
             }
 
             ConfigSwitch {
