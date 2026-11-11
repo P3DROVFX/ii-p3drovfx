@@ -1,0 +1,27 @@
+[package]
+name = "ii_link"
+version = "0.1.0"
+edition = "2021"
+description = "ii link helper for the Quickshell ii shell: the TLS WebSocket the ii tools Android app connects to, relayed to the shell as NDJSON."
+
+[dependencies]
+# One thread, woken only by a socket or stdin: the helper idles at zero wakeups.
+tokio = { version = "1", default-features = false, features = ["rt", "net", "io-util", "io-std", "macros", "sync", "time"] }
+# ring rather than aws-lc: no C toolchain or cmake in the build.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring"] }
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+rcgen = { version = "0.14", default-features = false, features = ["ring", "crypto"] }
+ring = "0.17"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+hex = "0.4"
+if-addrs = "0.15"
+qrcodegen = "1.8"
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
+codegen-units = 1

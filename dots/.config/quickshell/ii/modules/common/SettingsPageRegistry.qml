@@ -442,6 +442,14 @@ Singleton {
             "aliases": ["Core Services", "Bluetooth Device Images", "LocalSend", "Phone", "KDE Connect", "File Sharing", "Share files"]
         },
         {
+            "id": "iiTools",
+            "name": "ii tools",
+            "icon": "phonelink",
+            "component": "modules/settings/configs/IiToolsConfig.qml",
+            "subPages": [],
+            "aliases": ["Android", "Phone app", "Companion app", "Pair phone", "Remote control", "Live updates", "ii link"]
+        },
+        {
             "id": "privacy",
             "name": "Privacy & Content",
             "icon": "policy",

@@ -120,6 +120,8 @@ ShellRoot {
             PhoneAlarmService.enabled; // Mirrors the phone's next alarm over ADB
         if (Config.options?.health?.enable ?? true)
             HealthService.enabled; // Runs health_watch: failed services, crashes, new errors, disks
+        if (Config.options?.iiTools?.enable ?? true)
+            IiLinkService.enabled; // ii tools phone link: reads peers.json, runs ii_link only with a paired phone
         const timetable = Config.options?.calendar?.timetable;
         const hasCalendarSubscriptions = (timetable?.imports?.enable ?? false) || ((timetable?.subscriptions ?? []).length > 0);
         if (hasCalendarSubscriptions)

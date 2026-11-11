@@ -2836,6 +2836,20 @@ Singleton {
                 }
             }
 
+            // The ii tools Android app (~/Projects/ii-tools). Nothing runs until a phone
+            // is paired: the link helper starts only with a paired (or pairing) phone.
+            property JsonObject iiTools: JsonObject {
+                property bool enable: true
+                // TCP for the link, UDP for discovery (the same number).
+                property int port: 47210
+                property JsonObject remote: JsonObject {
+                    property bool enable: true
+                }
+                property JsonObject liveUpdates: JsonObject {
+                    property bool enable: true
+                }
+            }
+
             property JsonObject localsend: JsonObject {
                 property bool autoStart: true
                 property string downloadPath: Directories.localSendDownloadPath.replace("file://", "")

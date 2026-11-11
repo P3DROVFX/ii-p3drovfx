@@ -167,7 +167,8 @@ Singleton {
     /** Newest first: {publicId, id, package, appName, title, text, lines[],
      *  progress (0..1 or -1), indeterminate, chrono, countdown, color, iconPath,
      *  posted}. Empty when the phone is unreachable. */
-    readonly property var liveUpdates: (root._enabled && root.activeReachable) ? root._liveRelays : []
+    readonly property var liveUpdates: (root._enabled && root.activeReachable
+        && (Config.options?.iiTools?.liveUpdates?.enable ?? true)) ? root._liveRelays : []
 
     function isLiveRelay(n) {
         if (!n) return false

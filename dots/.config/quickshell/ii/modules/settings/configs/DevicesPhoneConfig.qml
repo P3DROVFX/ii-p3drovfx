@@ -27,6 +27,11 @@ Item {
         opacity: subPageOverlay.slideProgress
         visible: opacity > 0
 
+        IiToolsBanner {
+            Layout.fillWidth: true
+            Layout.bottomMargin: 8
+        }
+
         NoticeBox {
             Layout.fillWidth: true
             isFirst: true

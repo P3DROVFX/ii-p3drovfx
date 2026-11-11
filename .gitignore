@@ -72,6 +72,11 @@ __pycache__/
 /dots/.config/quickshell/ii/scripts/health/health_watch_src/target/
 /dots/.config/quickshell/ii/scripts/health/health_watch_src/Cargo.lock
 
+# Compiled binary — build it from ii_link_src/ instead (see scripts/iiLink/PROTOCOL.md)
+/dots/.config/quickshell/ii/scripts/iiLink/ii_link
+/dots/.config/quickshell/ii/scripts/iiLink/ii_link_src/target/
+/dots/.config/quickshell/ii/scripts/iiLink/ii_link_src/Cargo.lock
+
 # What each locally built helper was built from — written by scripts/rust-helpers.sh,
 # meaningful only on the machine that compiled it.
 /dots/.config/quickshell/ii/scripts/*/.*.stamp
