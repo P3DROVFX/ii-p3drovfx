@@ -167,8 +167,17 @@ Singleton {
     /** Newest first: {publicId, id, package, appName, title, text, lines[],
      *  progress (0..1 or -1), indeterminate, chrono, countdown, color, iconPath,
      *  posted}. Empty when the phone is unreachable. */
-    readonly property var liveUpdates: (root._enabled && root.activeReachable
-        && (Config.options?.iiTools?.liveUpdates?.enable ?? true)) ? root._liveRelays : []
+    readonly property var liveUpdates: {
+        if (!(Config.options?.iiTools?.liveUpdates?.enable ?? true))
+            return []
+        // Over ii link while it is up (the app then posts no relay copy); a relay of the
+        // same live update still in KDE Connect's list is the stale one.
+        const linked = IiLinkService.linkLives.map(p => root._liveFromPayload(p, `ii:live:${p.id ?? ""}`,
+            IiLinkService.iconFor(String(p.pkg ?? ""))))
+        const ids = new Set(linked.map(l => l.id))
+        const relayed = (root._enabled && root.activeReachable) ? root._liveRelays.filter(l => !ids.has(l.id)) : []
+        return linked.concat(relayed).sort((a, b) => b.posted - a.posted)
+    }
 
     function isLiveRelay(n) {
         if (!n) return false
@@ -182,28 +191,33 @@ Singleton {
         const b64 = body.slice(at + root.liveRelayMarker.length).trim().split(/[^A-Za-z0-9_\-+\/=]/)[0]
         try {
             const p = JSON.parse(root._base64UrlToUtf8(b64))
-            const max = Number(p.max ?? 0)
-            return {
-                publicId: String(n.publicId ?? n.key ?? ""),
-                id: String(p.id ?? ""),
-                package: String(p.pkg ?? ""),
-                appName: String(p.app ?? p.pkg ?? ""),
-                title: String(p.title ?? ""),
-                text: String(p.text ?? ""),
-                sub: String(p.sub ?? ""),
-                critical: String(p.crit ?? ""),
-                lines: Array.isArray(p.lines) ? p.lines.map(String) : [],
-                progress: max > 0 ? Math.max(0, Math.min(1, Number(p.progress ?? 0) / max)) : -1,
-                indeterminate: p.indeterminate === true,
-                chrono: Number(p.chrono ?? 0),
-                countdown: p.countdown === true,
-                color: String(p.color ?? ""),
-                iconPath: String(n.iconPath ?? ""),
-                posted: Number(p.posted ?? 0),
-            }
+            return root._liveFromPayload(p, String(n.publicId ?? n.key ?? ""), String(n.iconPath ?? ""))
         } catch (e) {
             console.warn("[KdeConnect] Bad live relay payload:", e)
             return null
+        }
+    }
+
+    /** A live update from its payload: an `iilive1:` relay's, or one sent over ii link. */
+    function _liveFromPayload(p, publicId, iconPath) {
+        const max = Number(p.max ?? 0)
+        return {
+            publicId: publicId,
+            id: String(p.id ?? ""),
+            package: String(p.pkg ?? ""),
+            appName: String(p.app ?? p.pkg ?? ""),
+            title: String(p.title ?? ""),
+            text: String(p.text ?? ""),
+            sub: String(p.sub ?? ""),
+            critical: String(p.crit ?? ""),
+            lines: Array.isArray(p.lines) ? p.lines.map(String) : [],
+            progress: max > 0 ? Math.max(0, Math.min(1, Number(p.progress ?? 0) / max)) : -1,
+            indeterminate: p.indeterminate === true,
+            chrono: Number(p.chrono ?? 0),
+            countdown: p.countdown === true,
+            color: String(p.color ?? ""),
+            iconPath: iconPath,
+            posted: Number(p.posted ?? 0),
         }
     }
 
@@ -786,7 +800,7 @@ Singleton {
             break
         case "sync_notifications":
             if (ev.id === root.activeDeviceId) {
-                root.notifications = root._normaliseNotifications(ev.notifications ?? [])
+                root.notifications = root._withLink(root._normaliseNotifications(ev.notifications ?? []))
             }
             break
         case "notif_cleared":
@@ -997,6 +1011,49 @@ Singleton {
         }
     }
 
+    // ── Notifications mirrored over ii link ─────────────────────────────────
+    // With the ii tools app the phone's notifications also arrive over ii link, with
+    // their actions and replies. They join this list as `ii:<key>`, and KDE Connect's
+    // copy of the same text is left out; without the link nothing changes.
+    Connections {
+        target: IiLinkService
+        function onLinkNotificationsChanged() {
+            root.notifications = root._withLink(root.notifications)
+        }
+    }
+
+    function _isLinkId(publicId) {
+        return String(publicId ?? "").startsWith("ii:")
+    }
+
+    function _withLink(list) {
+        const base = list.filter(n => !root._isLinkId(n.publicId))
+        const linked = IiLinkService.linkNotifications
+        if (linked.length === 0)
+            return base
+        const sigs = new Set(linked.map(n => root._phoneSignature(n.title, n.text)))
+        const kept = base.filter(n => n.live === true || !sigs.has(root._phoneSignature(n.summary, n.body)))
+        return kept.concat(linked.map(n => {
+            const reply = n.actions.find(a => a.reply)
+            return {
+                publicId: `ii:${n.key}`,
+                appName: n.app,
+                summary: n.title || n.app,
+                body: n.text,
+                ticker: "",
+                time: n.time,
+                dismissable: true,
+                iconPath: IiLinkService.iconFor(n.pkg),
+                image: n.image,
+                actions: n.actions.filter(a => !a.reply).map(a => ({ key: String(a.i), label: a.label })),
+                replyId: reply ? String(reply.i) : "",
+                replyPlaceholder: reply?.hint || Translation.tr("Reply"),
+                package: n.pkg,
+                live: false,
+            }
+        }))
+    }
+
     function _normaliseNotifications(list) {
         const existing = {}
         for (let i = 0; i < root.notifications.length; i++) {
@@ -1159,6 +1216,10 @@ Singleton {
 
     function discardNotification(publicId) {
         if (!publicId) return
+        if (root._isLinkId(publicId)) {
+            IiLinkService.notifDismiss(publicId.slice(3))
+            return
+        }
         // Calls `dismiss()` on the per-notification leaf interface at
         // `/modules/kdeconnect/devices/<dev>/notifications/<publicId>`.
         // This is the *correct* way to dismiss a notification on the phone:
@@ -1195,6 +1256,10 @@ Singleton {
     }
 
     function sendAction(devId, key, action) {
+        if (root._isLinkId(key)) {
+            IiLinkService.notifAction(key.slice(3), Number(action))
+            return
+        }
         if (!devId || !key) return
         const identity = root._shellQuote(key)
         const actionArg = root._shellQuote(action ?? "")
@@ -1205,6 +1270,13 @@ Singleton {
 
     function replyNotification(publicId, message) {
         if (!publicId || !message) return
+        if (root._isLinkId(publicId)) {
+            const n = root.notifications.find(x => x.publicId === publicId)
+            if (!n || n.replyId === "") return
+            IiLinkService.notifReply(publicId.slice(3), Number(n.replyId), message)
+            root.actionFeedback(Translation.tr("Reply sent"), true)
+            return
+        }
         const devId = root.activeDeviceId
         const notif = root.notifications.find(n => n.publicId === publicId)
         if (!notif || !notif.replyId) return
@@ -1716,7 +1788,7 @@ Singleton {
      */
     function openNotificationIntent(publicId) {
         const notif = root.notifications.find(n => n.publicId === publicId)
-            ?? root._liveRelays.find(n => n.publicId === publicId)
+            ?? root.liveUpdates.find(n => n.publicId === publicId)
         if (!notif) return
 
         const pkg = notif.package || ""

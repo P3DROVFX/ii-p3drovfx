@@ -96,6 +96,25 @@ Commands with an argument, answered with `ok` or `err` (`bad_arg`, `not_found`, 
 | `eeBypass` | `true` / `false` | audio |
 | `deck` | a deck id: `g:<gesture action>`, `c:<command id>`, `app:<desktop id>`, `discordMute`, `discordDeafen` (`locked`, `unavailable`, `not_found`) | deck |
 
+## Notifications
+
+Needs `notifs` in the shell's `caps` (Settings → ii tools → Notifications) and in the
+phone's. The app opens the link for a burst of notifications and keeps it until 2 min
+after the last one; a PC it cannot reach is not retried for 5 min.
+
+| Direction | Message | |
+| --- | --- | --- |
+| phone → shell | `{"t":"notifs","list":[n]}` | The whole current list, on every connect (once `hello` shows `notifs`). |
+| phone → shell | `{"t":"notif","n":n}` | Posted or updated. A new text pops up on the desktop. |
+| phone → shell | `{"t":"notifGone","key"}` | Removed on the phone. |
+| shell → phone | `{"t":"notifAct","key","a":"dismiss"\|"action"\|"reply","i":N,"text":"…"}` | `i` indexes `n.actions`; `reply` fills the action's free-form RemoteInput. |
+| phone → shell | `{"t":"live","p":{…}}` / `{"t":"liveGone","id"}` | A live update while the link is up: the same payload as an `iilive1:` relay, which the app then does not post. |
+
+`n` is `{key, pkg, app, title, text, time, image?, actions?: [{i, label, reply, hint}]}`;
+`image` is a base64 JPEG of at most 480 px (a big picture or the sender's photo). App
+icons go once per app per PC as files (`purpose: "appIcon"`, name `<package>.png`), kept
+in `<state>/icons/`.
+
 ## Files
 
 A file is a header, then its bytes as binary frames (the app sends 256 KiB each):
@@ -113,6 +132,7 @@ the connection closing. One file at a time per phone.
 
 | `purpose` | Needs | The shell |
 | --- | --- | --- |
+| `appIcon` | — | moves `<package>.png` to `<state>/icons/`, for the notifications. |
 | `wallpaper` | `iiTools.wallpaper.enable` | moves it to the wallpapers folder as `phone-<date>-<name>`, then `Wallpapers.select` / `selectLockscreen`. `bad_arg` unless the name is an image, `busy` while one is being filed. |
 
 Actions in `iilink/1`, all toggles:

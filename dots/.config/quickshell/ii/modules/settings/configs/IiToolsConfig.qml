@@ -238,6 +238,14 @@ Item {
             }
 
             ConfigSwitch {
+                buttonIcon: "notifications"
+                text: Translation.tr("Notifications")
+                description: Translation.tr("Phone notifications with icons, images, actions and replies; KDE Connect's copies are left out")
+                checked: Config.options.iiTools.notifications.enable
+                onCheckedChanged: Config.options.iiTools.notifications.enable = checked
+            }
+
+            ConfigSwitch {
                 buttonIcon: "call"
                 text: Translation.tr("Calls")
                 description: Translation.tr("The call card follows the phone and answers, declines and dials without ADB")

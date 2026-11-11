@@ -32,6 +32,7 @@ Singleton {
     readonly property bool deckEnabled: root.opts?.deck?.enable ?? true
     readonly property bool wallpaperEnabled: root.opts?.wallpaper?.enable ?? true
     readonly property bool callsEnabled: root.opts?.calls?.enable ?? true
+    readonly property bool notifsEnabled: root.opts?.notifications?.enable ?? true
     readonly property int port: root.opts?.port ?? 47210
 
     readonly property string helperDir: `${Directories.scriptPath}/iiLink`
@@ -120,6 +121,7 @@ Singleton {
         .concat(root.deckEnabled ? ["deck"] : [])
         .concat(root.wallpaperEnabled ? ["wallpaper"] : [])
         .concat(root.callsEnabled ? ["calls"] : [])
+        .concat(root.notifsEnabled ? ["notifs"] : [])
 
     // What is on right now, read from the same state the shell itself draws from.
     readonly property bool _aodUp: (GlobalStates.oledSaverMonitors ?? []).length > 0
@@ -375,6 +377,93 @@ Singleton {
         return true;
     }
 
+    // ── Notifications ───────────────────────────────────────────────────
+    // The app mirrors the phone's notifications while the link is up (it opens it for a
+    // burst and keeps it 2 min after): a full list on connect, then each change. The
+    // Phone tab (KdeConnectService) and the desktop popups read them from here.
+
+    readonly property string iconDir: `${root.stateDir}/icons`
+    /// [{ key, pkg, app, title, text, time, image, actions: [{ i, label, reply, hint }] }]
+    property var linkNotifications: []
+    /// Live updates sent over the link: the same payload as an `iilive1:` relay.
+    property var linkLives: []
+    readonly property string notifDev: {
+        if (!root.notifsEnabled)
+            return "";
+        for (const id of Object.keys(root.connections)) {
+            if ((root.phoneCaps[id] ?? []).includes("notifs"))
+                return id;
+        }
+        return "";
+    }
+    readonly property bool notifsLive: root.notifDev !== ""
+    /// A phone has mirrored notifications since the shell started: KDE Connect's popups
+    /// of the same notifications are hidden from then on (both travel the same LAN).
+    property bool mirrorsNotifications: false
+    onNotifsLiveChanged: {
+        if (root.notifsLive)
+            root.mirrorsNotifications = true;
+    }
+
+    function iconFor(pkg): string {
+        return /^[A-Za-z0-9._]+$/.test(pkg ?? "") ? `${root.iconDir}/${pkg}.png` : "";
+    }
+
+    function _notif(n): var {
+        const actions = Array.isArray(n?.actions) ? n.actions : [];
+        return {
+            key: String(n?.key ?? ""),
+            pkg: String(n?.pkg ?? ""),
+            app: String(n?.app ?? ""),
+            title: String(n?.title ?? ""),
+            text: String(n?.text ?? ""),
+            time: Number(n?.time ?? Date.now()),
+            image: typeof n?.image === "string" && n.image !== "" ? `data:image/jpeg;base64,${n.image}` : "",
+            actions: actions.map(a => ({ i: Number(a?.i ?? 0), label: String(a?.label ?? ""), reply: a?.reply === true, hint: String(a?.hint ?? "") }))
+        };
+    }
+
+    function _upsertNotif(n): void {
+        const list = root.linkNotifications.filter(x => x.key !== n.key);
+        list.push(n);
+        root.linkNotifications = list;
+    }
+
+    /// A new notification (not an update of the same text) pops up like any phone one.
+    function _popupNotif(n, previous): void {
+        if (previous && previous.title === n.title && previous.text === n.text)
+            return;
+        if (!(Config.options?.phone?.mirrorNotificationsToDesktop ?? true) || Notifications.popupInhibited)
+            return;
+        if (KdeConnectService.isRepeatedPhoneNotification(n.title, n.text))
+            return;
+        Notifications.publishInternalNotification({
+            appName: n.app,
+            appIcon: root.iconFor(n.pkg),
+            summary: n.title || n.app,
+            body: n.text,
+            phone: true,
+            sound: true,
+            actions: [{ identifier: "__qs_phonelive_open", text: Translation.tr("Open") }],
+            actionPayload: { publicId: `ii:${n.key}` }
+        });
+    }
+
+    function _send(m): void {
+        if (root.notifsLive)
+            root.sendTo(root.notifDev, m);
+    }
+    function notifDismiss(key): void {
+        root._send({ t: "notifAct", key: String(key), a: "dismiss" });
+        root.linkNotifications = root.linkNotifications.filter(x => x.key !== key);
+    }
+    function notifAction(key, index): void {
+        root._send({ t: "notifAct", key: String(key), a: "action", i: Number(index) });
+    }
+    function notifReply(key, index, text): void {
+        root._send({ t: "notifAct", key: String(key), a: "reply", i: Number(index), text: String(text) });
+    }
+
     // ── Files from the phone ────────────────────────────────────────────
     // The helper lands a finished upload in its incoming/ folder; here it becomes what
     // it was sent for, or is deleted.
@@ -390,6 +479,16 @@ Singleton {
             Quickshell.execDetached(["rm", "-f", "--", path]);
             root.sendTo(dev, { t: "err", id: id, code: code });
         };
+        // An app's icon for the notifications, filed once per app.
+        if (ev.purpose === "appIcon") {
+            const pkg = name.replace(/\.png$/, "");
+            const dest = root.iconFor(pkg);
+            if (dest === "")
+                return refuse("bad_arg");
+            Quickshell.execDetached(["sh", "-c", 'mkdir -p -m 700 -- "$1" && mv -f -- "$2" "$3"', "sh", root.iconDir, path, dest]);
+            root.sendTo(dev, { t: "ok", id: id });
+            return;
+        }
         if (ev.purpose !== "wallpaper")
             return refuse("unknown_action");
         if (!root.wallpaperEnabled)
@@ -671,6 +770,34 @@ Singleton {
             root.phoneCaps = next;
             return;
         }
+        case "notifs":
+            if (dev === root.notifDev)
+                root.linkNotifications = Array.isArray(m.list) ? m.list.map(root._notif).filter(n => n.key !== "") : [];
+            return;
+        case "notif": {
+            if (dev !== root.notifDev)
+                return;
+            const n = root._notif(m.n);
+            if (n.key === "")
+                return;
+            const previous = root.linkNotifications.find(x => x.key === n.key) ?? null;
+            root._upsertNotif(n);
+            root._popupNotif(n, previous);
+            return;
+        }
+        case "notifGone":
+            root.linkNotifications = root.linkNotifications.filter(x => x.key !== String(m.key ?? ""));
+            return;
+        case "live": {
+            if (dev !== root.notifDev || !m.p || typeof m.p !== "object")
+                return;
+            const id = String(m.p.id ?? "");
+            root.linkLives = root.linkLives.filter(x => String(x.id ?? "") !== id).concat([m.p]);
+            return;
+        }
+        case "liveGone":
+            root.linkLives = root.linkLives.filter(x => String(x.id ?? "") !== String(m.id ?? ""));
+            return;
         case "call":
             if (root.callsEnabled && dev === root.callDev)
                 root.callReported(String(m.state ?? "idle"), String(m.name ?? ""));
@@ -738,6 +865,11 @@ Singleton {
             const caps = Object.assign({}, root.phoneCaps);
             delete caps[ev.dev];
             root.phoneCaps = caps;
+            // Without the phone that sent them they go stale: KDE Connect's list takes over.
+            if (!root.notifsLive) {
+                root.linkNotifications = [];
+                root.linkLives = [];
+            }
             break;
         }
         case "file":
@@ -768,6 +900,10 @@ Singleton {
         function unpair(id: string): void {
             root.unpair(id);
         }
+        /// The notifications mirrored over the link: app, title and actions, newest last.
+        function notifications(): string {
+            return JSON.stringify(root.linkNotifications.map(n => ({ app: n.app, title: n.title, text: n.text, actions: n.actions.length, image: n.image !== "" })));
+        }
         function status(): string {
             return JSON.stringify({
                 enabled: root.enabled,
@@ -776,6 +912,9 @@ Singleton {
                 peers: root.peers,
                 connected: root.connectedList,
                 pairing: root.pairing ? root.pairing.url : null,
+                notifications: root.linkNotifications.length,
+                lives: root.linkLives.length,
+                mirrorsNotifications: root.mirrorsNotifications,
                 error: root.lastError
             });
         }

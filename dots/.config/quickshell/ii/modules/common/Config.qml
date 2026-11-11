@@ -2849,6 +2849,11 @@ Singleton {
                 property JsonObject audio: JsonObject {
                     property bool enable: true
                 }
+                // Phone notifications over the link: Phone tab and popups, with icons,
+                // images, actions and replies. KDE Connect's copies are then left out.
+                property JsonObject notifications: JsonObject {
+                    property bool enable: true
+                }
                 // Calls reported by the app: the call card follows the phone and its buttons
                 // work without ADB. Off, or app not reporting: the ADB path as before.
                 property JsonObject calls: JsonObject {
