@@ -19,6 +19,7 @@ def objects(kind):
 
 
 def alternates():
+    sinks = objects("sinks")
     for card in objects("cards"):
         active = card["active_profile"]
         if not active or not active.startswith("HiFi ("):
@@ -41,9 +42,17 @@ def alternates():
                 removed = active_ports - new_ports
                 if new_ports - active_ports != {name} or len(removed) != 1:
                     continue
-                if ports[removed.pop()]["properties"].get("port.type") != opposite:
+                active_port = removed.pop()
+                if ports[active_port]["properties"].get("port.type") != opposite:
                     continue
+                card_sinks = [sink for sink in sinks
+                              if sink["properties"].get("device.id") == card["properties"]["object.id"]]
+                # Real sink names, so the picker never guesses UCM naming.
+                active_sink = next((sink["name"] for sink in card_sinks
+                                    if sink.get("active_port") == active_port), None)
                 yield {
+                    "activeSink": active_sink,
+                    "otherSinks": [sink["name"] for sink in card_sinks if sink["name"] != active_sink],
                     "card": card["name"],
                     "deviceId": card["properties"]["object.id"],
                     "port": name,
@@ -82,10 +91,13 @@ def switch(card, port, profile):
         pactl("set-default-sink", sink)
         wait_for(lambda: pactl("get-default-sink") == sink)
         return sink
-    except (RuntimeError, subprocess.SubprocessError):
-        pactl("set-card-profile", card, choice["previousProfile"])
-        wait_for(lambda: any(sink["name"] == previous_sink for sink in objects("sinks")))
-        pactl("set-default-sink", previous_sink)
+    except (RuntimeError, subprocess.SubprocessError) as error:
+        try:
+            pactl("set-card-profile", card, choice["previousProfile"])
+            wait_for(lambda: any(sink["name"] == previous_sink for sink in objects("sinks")))
+            pactl("set-default-sink", previous_sink)
+        except (RuntimeError, subprocess.SubprocessError) as rollback_error:
+            raise RuntimeError(f"{error} (rollback failed: {rollback_error})") from error
         raise
 
 

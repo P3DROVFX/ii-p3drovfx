@@ -66,7 +66,8 @@ StyledFlickable {
     }
 
     function deviceActiveAt(i) {
-        return activeDeviceNames.includes(deviceRowNames[i]);
+        const key = deviceRowNames[i];
+        return activeDeviceNames.includes(analogRows[key]?.node?.name ?? key);
     }
 
     function toggleMultiOutputMember(node) {
@@ -113,24 +114,34 @@ StyledFlickable {
     property var analogAlternates: []
     property bool analogSwitchFailed: false
     readonly property bool outputSwitching: isSink && Audio.analogOutputSwitching
+    // Stable rows per card and output type (Headphones above Speakers), keyed
+    // independently of sink names so PipeWire replacing the sink keeps them.
     readonly property var analogRows: {
         const rows = {};
         for (const alternate of analogAlternates) {
-            const prefix = alternate.card.replace(/^alsa_card\./, "alsa_output.") + ".HiFi__";
-            // Keep both UCM rows while PipeWire replaces the live sink.
-            rows[prefix + "Headphones__sink"] = {
-                type: "headphones",
-                alternate: alternate.type === "headphones" ? alternate : null
-            };
-            rows[prefix + "Speaker__sink"] = {
-                type: "speaker",
-                alternate: alternate.type === "speaker" ? alternate : null
-            };
+            const known = alternate.otherSinks ?? [];
+            const live = devices.find(device => device.name === alternate.activeSink)
+                ?? devices.find(device => String(device.properties?.["device.id"]) === String(alternate.deviceId)
+                    && !known.includes(device.name))
+                ?? null;
+            // A sink other than the reported one means the profile changed before the next query.
+            const switched = !!live && live.name !== alternate.activeSink;
+            const opposite = alternate.type === "speaker" ? "headphones" : "speaker";
+            const liveType = switched ? alternate.type : opposite;
+            for (const type of ["headphones", "speaker"]) {
+                rows[`analog:${alternate.card}:${type}`] = {
+                    type: type,
+                    node: type === liveType ? live : null,
+                    alternate: type === alternate.type && !switched ? alternate : null
+                };
+            }
         }
         return rows;
     }
+    readonly property var analogNodeNames: Object.values(analogRows)
+        .filter(row => row.node).map(row => row.node.name)
     readonly property var deviceRowNames: devices.map(node => node.name)
-        .filter(name => !analogRows[name]).concat(Object.keys(analogRows))
+        .filter(name => !analogNodeNames.includes(name)).concat(Object.keys(analogRows))
     readonly property bool hasApps: appPwNodes.length > 0
     readonly property bool hasDevices: deviceRowNames.length > 0
 
@@ -140,7 +151,15 @@ StyledFlickable {
         command: [Audio.analogOutputPython, Audio.analogOutputScript, "list"]
         stdout: StdioCollector { id: analogOutputChoices }
         onExited: exitCode => {
-            root.analogAlternates = exitCode === 0 ? JSON.parse(analogOutputChoices.text) : [];
+            let choices = [];
+            if (exitCode === 0) {
+                try {
+                    choices = JSON.parse(analogOutputChoices.text);
+                } catch (e) {
+                    console.warn(`[VolumeDialog] Bad analog output list: ${e}`);
+                }
+            }
+            root.analogAlternates = Array.isArray(choices) ? choices : [];
         }
     }
 
@@ -321,7 +340,8 @@ StyledFlickable {
                     delegate: VolumeDeviceEntry {
                         Layout.fillWidth: true
                         required property string modelData
-                        node: root.devices.find(device => device.name === modelData) ?? null
+                        node: root.analogRows[modelData] ? root.analogRows[modelData].node
+                            : (root.devices.find(device => device.name === modelData) ?? null)
                         analogOutput: root.analogRows[modelData] ?? null
                         isSink: root.isSink
                         totalCount: root.deviceRowNames.length
@@ -637,9 +657,7 @@ StyledFlickable {
                     elide: Text.ElideRight
                     font.pixelSize: Appearance.font.pixelSize.small
                     color: devEntry.isActive ? Appearance.colors.colOnPrimary : devEntry.node?.audio?.muted ? Appearance.colors.colSubtext : Appearance.colors.colOnSurface
-                    text: devEntry.analogOutput ? devEntry.analogOutputName
-                        : devEntry.node?.properties["device.profile.description"] === "Speaker" ? Translation.tr("Speakers")
-                        : Audio.friendlyDeviceName(devEntry.node)
+                    text: devEntry.analogOutput ? devEntry.analogOutputName : Audio.friendlyDeviceName(devEntry.node)
                     font.bold: devEntry.isActive
                     opacity: (devEntry.isActive && mainMouseArea.pressed) ? 0.0 : 1.0
                     Behavior on opacity {

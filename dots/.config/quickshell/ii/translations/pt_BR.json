@@ -15679,5 +15679,9 @@
     "2x1 clock shaped as a half dial of the day: a hand sweeps from midnight on the left through noon at the top, the time on a pill at its pivot.": "Relógio 2x1 em forma de meio mostrador do dia: um ponteiro vai da meia-noite à esquerda ao meio-dia no topo, com a hora numa pílula no pivô.",
     "Paint the shape in the accent colour instead of the widget surface.": "Pinta o shape com a cor de destaque em vez da superfície do widget.",
     "Weekday, day and month stacked beside the time.": "Dia da semana, dia e mês empilhados ao lado da hora.",
-    "The weekday and the date in the dome's two feet.": "O dia da semana e a data nos dois pés da cúpula."
+    "The weekday and the date in the dome's two feet.": "O dia da semana e a data nos dois pés da cúpula.",
+    "Speakers": "Alto-falantes",
+    "Headphones": "Fones de ouvido",
+    "Switching output…": "Trocando a saída…",
+    "Could not switch audio output.": "Não foi possível trocar a saída de áudio."
 }
