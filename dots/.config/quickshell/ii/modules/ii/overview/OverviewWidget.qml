@@ -233,6 +233,10 @@ Item {
     /** A window is being dragged (past the press threshold). */
     property bool windowDragging: false
 
+    OverviewWarpGuard {
+        suspended: root.windowDragging
+    }
+
     property int dragDropType: -1 // 0: workspace, 1: window
 
     property string draggingFromWindowAddress
