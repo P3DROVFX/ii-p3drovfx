@@ -29,6 +29,7 @@ Singleton {
     readonly property bool enabled: Config.ready && (root.opts?.enable ?? true)
     readonly property bool remoteEnabled: root.opts?.remote?.enable ?? true
     readonly property bool audioEnabled: root.opts?.audio?.enable ?? true
+    readonly property bool deckEnabled: root.opts?.deck?.enable ?? true
     readonly property int port: root.opts?.port ?? 47210
 
     readonly property string helperDir: `${Directories.scriptPath}/iiLink`
@@ -114,12 +115,13 @@ Singleton {
     readonly property var allowedActions: root.remoteEnabled ? root.actions : []
     readonly property var capabilities: (root.remoteEnabled ? ["remote", "workspaces", "modes", "presets"] : [])
         .concat(root.audioEnabled ? ["audio"] : [])
+        .concat(root.deckEnabled ? ["deck"] : [])
 
     // What is on right now, read from the same state the shell itself draws from.
     readonly property bool _aodUp: (GlobalStates.oledSaverMonitors ?? []).length > 0
     readonly property var activeActions: {
         if (!root.remoteEnabled)
-            return [];
+            return root._deckActive;
         const on = [];
         if (GlobalStates.screenLocked)
             on.push("lock");
@@ -131,7 +133,7 @@ Singleton {
             on.push("mediaMode");
         if (GlobalStates.scratchpadOpen)
             on.push("scratchpad");
-        return on;
+        return on.concat(root._deckActive);
     }
     // A string, so the push happens on a real change and not on every re-evaluation.
     readonly property string _stateKey: root.activeActions.join(",")
@@ -233,6 +235,112 @@ Singleton {
         };
     }
 
+    // ── Deck ────────────────────────────────────────────────────────────
+    // The shell's action catalog (the one gestures and bubbles bind to), the custom
+    // commands from Settings → ii tools, and apps on request. Ids are namespaced:
+    // `g:<gesture action>`, `c:<command id>`, `app:<desktop id>`, `discordMute`…
+
+    // Not offered: tablet- and pen-only entries, and what only means something on a
+    // touchscreen in front of the PC.
+    readonly property var _deckSkip: ["none", "back", "home", "recents", "appDrawer", "dragWindow", "osk", "hubMode", "welcome"]
+    function _deckGroup(id): string {
+        if (["regionScreenshot", "fullscreenScreenshot", "regionSearch", "regionOcr", "screenTranslate", "colorPicker", "regionRecord", "regionRecordWithSound", "liveDraw"].includes(id))
+            return "capture";
+        if (["mediaControls", "mediaPlayPause", "mediaNext", "mediaPrev", "audioMute", "micMute"].includes(id))
+            return "media";
+        if (["scratchpad", "closeWindow", "toggleFullscreen", "toggleFloating", "workspaceNext", "workspacePrev", "overview"].includes(id))
+            return "windows";
+        if (["wallpaperSelector", "wallpaperRandom", "toggleLightDark", "barToggle", "brightnessUp", "brightnessDown"].includes(id))
+            return "look";
+        return "shell";
+    }
+    // Gesture actions with a state worth lighting a key for.
+    readonly property var _deckToggles: ["lock", "oledSaver", "scratchpad", "micMute", "audioMute", "mediaPlayPause", "regionRecord", "regionRecordWithSound", "toggleLightDark", "barToggle"]
+
+    readonly property var deckCommands: Array.from(root.opts?.deck?.commands ?? [])
+
+    function _deck(): var {
+        const list = TouchGestureActionRegistry.availableActionsForFamily("ii", false)
+            .filter(a => !root._deckSkip.includes(a.id))
+            .map(a => ({ id: `g:${a.id}`, name: Translation.tr(a.name), icon: a.icon, group: root._deckGroup(a.id), toggle: root._deckToggles.includes(a.id) }));
+        list.push({ id: "discordMute", name: Translation.tr("Discord mute"), icon: "mic_off", group: "discord", toggle: true });
+        list.push({ id: "discordDeafen", name: Translation.tr("Discord deafen"), icon: "headset_off", group: "discord", toggle: true });
+        for (const c of root.deckCommands) {
+            if (c?.id && c?.command)
+                list.push({ id: `c:${c.id}`, name: String(c.name || c.id), icon: String(c.icon || "terminal"), group: "custom", toggle: false });
+        }
+        return { t: "deck", list: list };
+    }
+
+    readonly property bool _recording: Persistent.states?.screenRecord?.active ?? false
+    readonly property var _deckActive: {
+        if (!root.deckEnabled || !root.phoneConnected)
+            return [];
+        const on = [];
+        const add = (id, cond) => {
+            if (cond)
+                on.push(id);
+        };
+        add("g:lock", GlobalStates.screenLocked);
+        add("g:oledSaver", root._aodUp);
+        add("g:scratchpad", GlobalStates.scratchpadOpen);
+        add("g:micMute", Audio.source?.audio?.muted ?? false);
+        add("g:audioMute", Audio.sink?.audio?.muted ?? false);
+        add("g:mediaPlayPause", MprisController.activePlayer?.isPlaying ?? false);
+        add("g:regionRecord", root._recording);
+        add("g:regionRecordWithSound", root._recording);
+        add("g:toggleLightDark", Appearance.m3colors.darkmode);
+        add("g:barToggle", GlobalStates.barOpen);
+        add("discordMute", DiscordVoice.channel !== null && DiscordVoice.muted);
+        add("discordDeafen", DiscordVoice.channel !== null && DiscordVoice.deafened);
+        return on;
+    }
+
+    function _runDeck(id): string {
+        if (id.startsWith("g:")) {
+            const action = id.slice(2);
+            if (root._deckSkip.includes(action) || !TouchGestureActionRegistry.actions.some(a => a.id === action))
+                return "not_found";
+            if (action === "lock" && GlobalStates.screenLocked)
+                return "locked";
+            TouchGestureActionRegistry.trigger(action, Hyprland.focusedMonitor?.name ?? "");
+            return "";
+        }
+        if (id.startsWith("c:")) {
+            const c = root.deckCommands.find(c => `c:${c?.id}` === id);
+            if (!c?.command)
+                return "not_found";
+            Quickshell.execDetached(["bash", "-c", String(c.command)]);
+            return "";
+        }
+        if (id.startsWith("app:")) {
+            const entry = DesktopEntries.byId(id.slice(4));
+            if (!entry)
+                return "not_found";
+            entry.execute();
+            return "";
+        }
+        if (id === "discordMute" || id === "discordDeafen") {
+            if (DiscordVoice.channel === null)
+                return "unavailable";
+            if (id === "discordMute")
+                DiscordVoice.setMuted(!DiscordVoice.muted);
+            else
+                DiscordVoice.setDeafened(!DiscordVoice.deafened);
+            return "";
+        }
+        return "not_found";
+    }
+
+    /// Installed apps, sent only when the phone asks (its picker is open).
+    function _apps(): var {
+        const list = Array.from(DesktopEntries.applications.values)
+            .filter(e => !e.noDisplay)
+            .map(e => ({ id: e.id, name: e.name, icon: e.icon }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+        return { t: "apps", list: list };
+    }
+
     readonly property bool _remoteLive: root.phoneConnected && root.remoteEnabled
     readonly property bool _audioLive: root.phoneConnected && root.audioEnabled
 
@@ -245,6 +353,7 @@ Singleton {
     readonly property string _workspacesKey: root._remoteLive ? JSON.stringify(root._workspaces()) : ""
     readonly property string _modesKey: root._remoteLive ? JSON.stringify(root._modes()) : ""
     readonly property string _presetsKey: root._remoteLive ? JSON.stringify(root._presets()) : ""
+    readonly property string _deckKey: (root.phoneConnected && root.deckEnabled) ? JSON.stringify(root._deck()) : ""
     readonly property string _audioKey: root._audioLive ? JSON.stringify(root._audio()) : ""
 
     property var _sentKeys: ({})
@@ -257,6 +366,7 @@ Singleton {
     on_WorkspacesKeyChanged: root._publish("workspaces", root._workspacesKey)
     on_ModesKeyChanged: root._publish("modes", root._modesKey)
     on_PresetsKeyChanged: root._publish("presets", root._presetsKey)
+    on_DeckKeyChanged: root._publish("deck", root._deckKey)
     // A volume dragged on the PC changes many times a second: coalesce to ~16 pushes/s.
     on_AudioKeyChanged: {
         if (root._audioKey === "")
@@ -279,6 +389,8 @@ Singleton {
         }
         if (root.audioEnabled)
             root.sendTo(dev, root._audio());
+        if (root.deckEnabled)
+            root.sendTo(dev, root._deck());
     }
 
     function _listPresets(): void {
@@ -453,7 +565,9 @@ Singleton {
             const id = Number(m.id ?? 0);
             const action = String(m.a ?? "");
             let why;
-            if (root._remoteArgActions.includes(action))
+            if (action === "deck")
+                why = root.deckEnabled ? root._runDeck(String(m.arg ?? "")) : "disabled";
+            else if (root._remoteArgActions.includes(action))
                 why = root.remoteEnabled ? root._runArg(action, m.arg) : "disabled";
             else if (root._audioArgActions.includes(action))
                 why = root.audioEnabled ? root._runArg(action, m.arg) : "disabled";
@@ -466,6 +580,10 @@ Singleton {
         }
         case "ping":
             root.sendTo(dev, { t: "pong", id: Number(m.id ?? 0) });
+            return;
+        case "get":
+            if (m.what === "apps" && root.deckEnabled)
+                root.sendTo(dev, root._apps());
             return;
         }
     }

@@ -2849,6 +2849,12 @@ Singleton {
                 property JsonObject audio: JsonObject {
                     property bool enable: true
                 }
+                // The phone as a stream deck: the shell's actions, apps and these commands.
+                property JsonObject deck: JsonObject {
+                    property bool enable: true
+                    // [{ id, name, icon, command }]: run with bash -c when tapped.
+                    property list<var> commands: []
+                }
                 property JsonObject liveUpdates: JsonObject {
                     property bool enable: true
                 }

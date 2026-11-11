@@ -9,6 +9,8 @@
 //! It is started only while a phone is paired (or being paired), and sleeps on its
 //! sockets and stdin: no timers run while nothing happens.
 
+mod icons;
+
 use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
@@ -322,7 +324,7 @@ async fn serve(stream: TcpStream, addr: SocketAddr, acceptor: TlsAcceptor, state
         s.conn_serial += 1;
         let serial = s.conn_serial;
         // A phone that reconnects before its old socket timed out replaces it.
-        if let Some(old) = s.conns.insert(dev.clone(), Conn { serial, tx }) {
+        if let Some(old) = s.conns.insert(dev.clone(), Conn { serial, tx: tx.clone() }) {
             let _ = old.tx.send(Message::Close(None));
         }
         let peer = s.peers.iter().find(|p| p.id == dev);
@@ -348,6 +350,18 @@ async fn serve(stream: TcpStream, addr: SocketAddr, acceptor: TlsAcceptor, state
                 Ok(m) if m["t"] == "unpair" => {
                     handle_op(&state, &json!({"op": "unpair", "id": dev}).to_string());
                     break;
+                }
+                // Icons are drawn here, from the font, without bothering the shell; on a
+                // blocking thread, since the font is read from disk for each request.
+                Ok(m) if m["t"] == "icons" => {
+                    let names: Vec<String> = m["names"].as_array().map(|a| {
+                        a.iter().filter_map(|v| v.as_str().map(str::to_owned)).take(icons::MAX_NAMES).collect()
+                    }).unwrap_or_default();
+                    let tx = tx.clone();
+                    tokio::task::spawn_blocking(move || {
+                        let reply = json!({"t": "icons", "paths": icons::paths(&names)});
+                        let _ = tx.send(Message::Text(reply.to_string().into()));
+                    });
                 }
                 Ok(m) if m.is_object() => emit(json!({"ev": "msg", "dev": dev, "m": m})),
                 _ => {}

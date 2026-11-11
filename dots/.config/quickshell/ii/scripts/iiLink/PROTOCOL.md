@@ -69,6 +69,9 @@ After `authOk` every frame is a JSON object with a `t` field:
 | shell → phone | `{"t":"audio","out":id,"in":id,"outputs":[dev],"inputs":[dev],"apps":[dev],"ee":{on,preset,presets}\|null}` | cap `audio`. `dev` is `{id,name,vol,mute}`, `vol` 0–1; ids are PipeWire node ids. |
 | shell → phone | `{"t":"ok","id":N}` / `{"t":"err","id":N,"code":"…"}` | `disabled`, `unknown_action`, `locked` (unlocking, or the desktop AOD, while the PC is locked). |
 | phone → shell | `{"t":"ping","id":N}` → `{"t":"pong","id":N}` | Round-trip check. |
+| shell → phone | `{"t":"deck","list":[{id,name,icon,group,toggle}]}` | cap `deck`. The deck catalog; toggle keys are on while their id is in `state.on`. |
+| phone → shell | `{"t":"get","what":"apps"}` → `{"t":"apps","list":[{id,name,icon}]}` | Installed apps, only while the deck picker asks. |
+| phone → helper | `{"t":"icons","names":["…"]}` → `{"t":"icons","paths":{name:"<svg path>"}}` | Answered by the helper itself, from the Material Symbols Rounded font (fontconfig). Path data in the 0–960 box, y down, like the official SVGs. Up to 64 names; unknown names are left out. |
 | phone → helper | `{"t":"unpair"}` | "Forget this PC": the helper drops the device and closes. |
 | shell → phone | `{"t":"unpaired"}` | The PC forgot this phone; the app forgets the PC. |
 
@@ -88,6 +91,7 @@ Commands with an argument, answered with `ok` or `err` (`bad_arg`, `not_found`, 
 | `default` | device id: becomes the default output or input | audio |
 | `eePreset` | EasyEffects output preset name | audio |
 | `eeBypass` | `true` / `false` | audio |
+| `deck` | a deck id: `g:<gesture action>`, `c:<command id>`, `app:<desktop id>`, `discordMute`, `discordDeafen` (`locked`, `unavailable`, `not_found`) | deck |
 
 Actions in `iilink/1`, all toggles:
 

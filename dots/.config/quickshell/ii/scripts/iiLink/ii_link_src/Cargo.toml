@@ -19,6 +19,8 @@ serde_json = "1"
 hex = "0.4"
 if-addrs = "0.15"
 qrcodegen = "1.8"
+# Draws any Material Symbol for the app from the font the shell already uses.
+ttf-parser = { version = "0.25", default-features = false, features = ["std", "opentype-layout", "glyph-names"] }
 
 [profile.release]
 opt-level = "z"

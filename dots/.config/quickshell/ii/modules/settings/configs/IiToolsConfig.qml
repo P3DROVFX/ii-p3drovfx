@@ -236,6 +236,49 @@ Item {
                 checked: Config.options.iiTools.liveUpdates.enable
                 onCheckedChanged: Config.options.iiTools.liveUpdates.enable = checked
             }
+
+            ConfigSwitch {
+                buttonIcon: "grid_view"
+                text: Translation.tr("Deck")
+                description: Translation.tr("The phone as a stream deck: shell actions, apps and your own commands, with live state")
+                checked: Config.options.iiTools.deck.enable
+                onCheckedChanged: Config.options.iiTools.deck.enable = checked
+            }
+        }
+
+        // ── Deck commands ───────────────────────────────────────────────
+        ContentSection {
+            visible: Config.options.iiTools.deck.enable
+            icon: "terminal"
+            title: Translation.tr("Deck commands")
+
+            StyledText {
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                color: Appearance.colors.colSubtext
+                text: Translation.tr("Keys the phone can add to its deck. Each runs with bash on this PC when tapped; the icon is a Material Symbol name.")
+            }
+
+            Repeater {
+                model: Config.options.iiTools.deck.commands
+                delegate: DeckCommandRow {
+                    required property var modelData
+                    required property int index
+                    Layout.fillWidth: true
+                    command: modelData
+                    commandIndex: index
+                }
+            }
+
+            RippleButtonWithIcon {
+                materialIcon: "add"
+                mainText: Translation.tr("Add command")
+                onClicked: {
+                    const list = Array.from(Config.options.iiTools.deck.commands);
+                    list.push({ id: Date.now().toString(36), name: Translation.tr("New command"), icon: "terminal", command: "" });
+                    Config.options.iiTools.deck.commands = list;
+                }
+            }
         }
 
         // ── Diagnostics ─────────────────────────────────────────────────
@@ -300,6 +343,70 @@ Item {
         elide: Text.ElideMiddle
         font.family: Appearance.font.family.monospace
         font.pixelSize: Appearance.font.pixelSize.small
+    }
+
+    component DeckCommandRow: Rectangle {
+        id: cmdRow
+        property var command
+        property int commandIndex
+
+        function update(field, value): void {
+            const list = Array.from(Config.options.iiTools.deck.commands);
+            const next = Object.assign({}, list[cmdRow.commandIndex]);
+            next[field] = value;
+            list[cmdRow.commandIndex] = next;
+            Config.options.iiTools.deck.commands = list;
+        }
+
+        implicitHeight: cmdLayout.implicitHeight + 24
+        radius: Appearance.rounding.normal
+        color: Appearance.colors.colLayer2
+
+        ColumnLayout {
+            id: cmdLayout
+            anchors.fill: parent
+            anchors.margins: 12
+            spacing: 8
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                MaterialSymbol {
+                    text: cmdRow.command?.icon || "terminal"
+                    iconSize: Appearance.font.pixelSize.huge
+                    color: Appearance.colors.colOnLayer2
+                }
+                MaterialTextField {
+                    Layout.fillWidth: true
+                    placeholderText: Translation.tr("Name")
+                    text: cmdRow.command?.name ?? ""
+                    onEditingFinished: cmdRow.update("name", text.trim())
+                }
+                MaterialTextField {
+                    Layout.preferredWidth: 160
+                    placeholderText: Translation.tr("Icon")
+                    text: cmdRow.command?.icon ?? ""
+                    onEditingFinished: cmdRow.update("icon", text.trim())
+                }
+                RippleButtonWithIcon {
+                    materialIcon: "delete"
+                    mainText: ""
+                    onClicked: {
+                        const list = Array.from(Config.options.iiTools.deck.commands);
+                        list.splice(cmdRow.commandIndex, 1);
+                        Config.options.iiTools.deck.commands = list;
+                    }
+                }
+            }
+            MaterialTextField {
+                Layout.fillWidth: true
+                placeholderText: Translation.tr("Command, e.g. notify-send hi")
+                font.family: Appearance.font.family.monospace
+                text: cmdRow.command?.command ?? ""
+                onEditingFinished: cmdRow.update("command", text)
+            }
+        }
     }
 
     component DeviceRow: Rectangle {
