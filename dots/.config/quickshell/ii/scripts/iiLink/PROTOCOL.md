@@ -75,6 +75,7 @@ After `authOk` every frame is a JSON object with a `t` field:
 | phone → shell | `{"t":"caps","caps":["calls"]}` | What this phone does for the PC. Sent on connect and when it changes. |
 | phone → shell | `{"t":"call","state":"idle"\|"ringing"\|"talking","name":"…"}` | The phone's call state; `name` is the caller as the dialer's notification shows it. The app opens the link itself when a call rings, even in the background, and keeps it until 10 s after the call. |
 | shell → phone | `{"t":"phone","a":"answer"\|"end"\|"silence"\|"dial","arg":"<number>"}` | cap `calls` on both sides. No reply: the next `call` is the answer. |
+| shell → phone | `{"t":"clip","text":"…"}` / `{"t":"clip","mime":"image/png","data":"<base64>"}` | cap `clip` on both sides. What was just copied on the PC (images up to 5 MiB), and the latest copy when a phone connects. |
 | phone → helper | `{"t":"unpair"}` | "Forget this PC": the helper drops the device and closes. |
 | shell → phone | `{"t":"unpaired"}` | The PC forgot this phone; the app forgets the PC. |
 
@@ -94,6 +95,7 @@ Commands with an argument, answered with `ok` or `err` (`bad_arg`, `not_found`, 
 | `default` | device id: becomes the default output or input | audio |
 | `eePreset` | EasyEffects output preset name | audio |
 | `eeBypass` | `true` / `false` | audio |
+| `clip` | `{text}`: onto the PC's clipboard (an image comes as a file, purpose `clip`) | clipboard |
 | `share` | `{to: "browser"\|"ai"\|"note"\|"reminder"\|"task", text}`. `browser` takes only an `http(s)` link. | share |
 | `deck` | a deck id: `g:<gesture action>`, `c:<command id>`, `app:<desktop id>`, `discordMute`, `discordDeafen` (`locked`, `unavailable`, `not_found`) | deck |
 
@@ -134,6 +136,7 @@ the connection closing. One file at a time per phone.
 | `purpose` | Needs | The shell |
 | --- | --- | --- |
 | `share` | `iiTools.share.enable` | moves it to `~/Downloads` under its own name (`name (1).ext` when taken, mode 0644), then `target` `downloads` says so in a notification (Open / Show in folder), `shelf` adds it to the FileShelf, `ai` (images only) attaches it to the AI chat and opens it. |
+| `clip` | `iiTools.clipboard.enable` | `wl-copy --type <image mime>` from the file, then deletes it. |
 | `appIcon` | — | moves `<package>.png` to `<state>/icons/`, for the notifications. |
 | `wallpaper` | `iiTools.wallpaper.enable` | moves it to the wallpapers folder as `phone-<date>-<name>`, then `Wallpapers.select` / `selectLockscreen`. `bad_arg` unless the name is an image, `busy` while one is being filed. |
 

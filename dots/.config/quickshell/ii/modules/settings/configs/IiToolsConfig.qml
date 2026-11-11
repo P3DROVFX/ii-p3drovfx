@@ -238,6 +238,14 @@ Item {
             }
 
             ConfigSwitch {
+                buttonIcon: "content_paste"
+                text: Translation.tr("Clipboard")
+                description: Translation.tr("What you copy here reaches the phone, images included; the phone sends its own from a tile, the share sheet or the app")
+                checked: Config.options.iiTools.clipboard.enable
+                onCheckedChanged: Config.options.iiTools.clipboard.enable = checked
+            }
+
+            ConfigSwitch {
                 buttonIcon: "share"
                 text: Translation.tr("Send to PC")
                 description: Translation.tr("From the phone's share sheet: links, notes, reminders, tasks, the AI chat, Downloads and the file shelf")

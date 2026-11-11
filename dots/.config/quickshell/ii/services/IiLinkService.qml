@@ -34,6 +34,7 @@ Singleton {
     readonly property bool callsEnabled: root.opts?.calls?.enable ?? true
     readonly property bool notifsEnabled: root.opts?.notifications?.enable ?? true
     readonly property bool shareEnabled: root.opts?.share?.enable ?? true
+    readonly property bool clipEnabled: root.opts?.clipboard?.enable ?? true
     readonly property int port: root.opts?.port ?? 47210
 
     readonly property string helperDir: `${Directories.scriptPath}/iiLink`
@@ -124,6 +125,7 @@ Singleton {
         .concat(root.callsEnabled ? ["calls"] : [])
         .concat(root.notifsEnabled ? ["notifs"] : [])
         .concat(root.shareEnabled ? ["share"] : [])
+        .concat(root.clipEnabled ? ["clip"] : [])
 
     // What is on right now, read from the same state the shell itself draws from.
     readonly property bool _aodUp: (GlobalStates.oledSaverMonitors ?? []).length > 0
@@ -472,6 +474,81 @@ Singleton {
         root._send({ t: "notifAct", key: String(key), a: "reply", i: Number(index), text: String(text) });
     }
 
+    // ── Clipboard ───────────────────────────────────────────────────────
+    // Copied here → the phone (live while the link is up, and the latest on connect).
+    // From the phone → this clipboard, marked as the shell's own copy so it is neither
+    // announced nor sent back.
+
+    readonly property string clipDev: {
+        if (!root.clipEnabled)
+            return "";
+        for (const id of Object.keys(root.connections)) {
+            if ((root.phoneCaps[id] ?? []).includes("clip"))
+                return id;
+        }
+        return "";
+    }
+    /// Images bigger than this stay on the PC (a link message is at most 8 MiB, base64 grows it).
+    readonly property int clipImageMax: 5 * 1024 * 1024
+    /// The cliphist id last sent, so a reconnecting phone only gets what is new.
+    property string _clipSent: ""
+
+    Connections {
+        target: root.clipDev !== "" ? Cliphist : null
+        function onEntryAdded(entry) {
+            root._sendClip(entry);
+        }
+    }
+    onClipDevChanged: {
+        // A phone that just connected gets the latest copy, if it has not had it.
+        if (root.clipDev !== "" && Cliphist.entries.length > 0)
+            root._sendClip(Cliphist.entries[0]);
+    }
+
+    function _sendClip(entry): void {
+        const key = Cliphist.entryKey(entry);
+        if (root.clipDev === "" || key === "" || key === root._clipSent)
+            return;
+        root._clipSent = key;
+        // From cliphist itself: its list shows only a preview, and Quickshell's own
+        // clipboard text does not follow copies made in other apps. One process per copy.
+        clipDecode.dev = root.clipDev;
+        clipDecode.image = Cliphist.entryIsImage(entry);
+        // Text as it is (Qt reads it as UTF-8); an image as base64 for the JSON message.
+        clipDecode.command = ["sh", "-c", `${Cliphist.cliphistBinary} decode "$1" | head -c ${root.clipImageMax + 1}${clipDecode.image ? " | base64 -w0" : ""}`, "sh", key];
+        clipDecode.running = true;
+    }
+
+    Process {
+        id: clipDecode
+        property string dev: ""
+        property bool image: false
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const data = this.text;
+                if (data.length === 0)
+                    return;
+                if (!clipDecode.image) {
+                    root.sendTo(clipDecode.dev, { t: "clip", text: data });
+                    return;
+                }
+                // Past the limit (the base64 of max + 1 bytes): the image stays on the PC.
+                if (data.trim().length <= Math.ceil(root.clipImageMax / 3) * 4)
+                    root.sendTo(clipDecode.dev, { t: "clip", mime: "image/png", data: data.trim() });
+            }
+        }
+    }
+
+    /// Text from the phone (`clip` command).
+    function _clipFromPhone(arg): string {
+        const text = String(arg?.text ?? "");
+        if (text.length === 0)
+            return "bad_arg";
+        Cliphist.markInternalCopy();
+        Quickshell.clipboardText = text;
+        return "";
+    }
+
     // ── Shared from the phone ───────────────────────────────────────────
     // "Send to PC" in Android's share sheet. Text arrives as the `share` command, files
     // as uploads with purpose "share" (see _handleFile).
@@ -552,6 +629,18 @@ Singleton {
             if (dest === "")
                 return refuse("bad_arg");
             Quickshell.execDetached(["sh", "-c", 'mkdir -p -m 700 -- "$1" && mv -f -- "$2" "$3"', "sh", root.iconDir, path, dest]);
+            root.sendTo(dev, { t: "ok", id: id });
+            return;
+        }
+        // An image copied on the phone: onto this clipboard, then gone from disk.
+        if (ev.purpose === "clip") {
+            if (!root.clipEnabled)
+                return refuse("disabled");
+            if (!root._imageName.test(name))
+                return refuse("bad_arg");
+            const mime = /\.png$/i.test(name) ? "image/png" : /\.webp$/i.test(name) ? "image/webp" : "image/jpeg";
+            Cliphist.markInternalCopy();
+            Quickshell.execDetached(["sh", "-c", 'wl-copy --type "$1" < "$2"; rm -f -- "$2"', "sh", mime, path]);
             root.sendTo(dev, { t: "ok", id: id });
             return;
         }
@@ -864,7 +953,9 @@ Singleton {
             const id = Number(m.id ?? 0);
             const action = String(m.a ?? "");
             let why;
-            if (action === "share")
+            if (action === "clip")
+                why = root.clipEnabled ? root._clipFromPhone(m.arg) : "disabled";
+            else if (action === "share")
                 why = root.shareEnabled ? root._share(m.arg) : "disabled";
             else if (action === "deck")
                 why = root.deckEnabled ? root._runDeck(String(m.arg ?? "")) : "disabled";
