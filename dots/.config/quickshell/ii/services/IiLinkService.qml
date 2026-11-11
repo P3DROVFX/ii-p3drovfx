@@ -33,6 +33,7 @@ Singleton {
     readonly property bool wallpaperEnabled: root.opts?.wallpaper?.enable ?? true
     readonly property bool callsEnabled: root.opts?.calls?.enable ?? true
     readonly property bool notifsEnabled: root.opts?.notifications?.enable ?? true
+    readonly property bool shareEnabled: root.opts?.share?.enable ?? true
     readonly property int port: root.opts?.port ?? 47210
 
     readonly property string helperDir: `${Directories.scriptPath}/iiLink`
@@ -122,6 +123,7 @@ Singleton {
         .concat(root.wallpaperEnabled ? ["wallpaper"] : [])
         .concat(root.callsEnabled ? ["calls"] : [])
         .concat(root.notifsEnabled ? ["notifs"] : [])
+        .concat(root.shareEnabled ? ["share"] : [])
 
     // What is on right now, read from the same state the shell itself draws from.
     readonly property bool _aodUp: (GlobalStates.oledSaverMonitors ?? []).length > 0
@@ -470,6 +472,64 @@ Singleton {
         root._send({ t: "notifAct", key: String(key), a: "reply", i: Number(index), text: String(text) });
     }
 
+    // ── Shared from the phone ───────────────────────────────────────────
+    // "Send to PC" in Android's share sheet. Text arrives as the `share` command, files
+    // as uploads with purpose "share" (see _handleFile).
+
+    /**
+     * The file arriving for "Send to PC", for the corner popup:
+     * { id, dev, from, name, size, received, state: "receiving" | "done" | "failed", path }.
+     */
+    property var transfer: null
+
+    function _setTransfer(fields): void {
+        root.transfer = Object.assign({}, root.transfer ?? {}, fields);
+    }
+
+    function _transferMatches(dev, id): bool {
+        return root.transfer !== null && root.transfer.dev === dev && root.transfer.id === Number(id);
+    }
+
+    /// Where shared files land: Downloads, as KDE Connect does.
+    readonly property string shareDir: FileUtils.trimFileProtocol(Directories.downloads)
+
+    function _askAi(text): void {
+        const context = Ai.shellContext.makeContext("phone", "phone-share", Translation.tr("Shared from the phone"), text, false);
+        if (Ai.attachContext(context))
+            GlobalStates.openLeftSidebar();
+    }
+
+    /// {to, text}; returns "" when done, or why not.
+    function _share(arg): string {
+        const text = String(arg?.text ?? "").trim();
+        if (text.length === 0)
+            return "bad_arg";
+        const firstLine = text.split("\n")[0].trim();
+        const rest = text.slice(text.indexOf("\n") + 1).trim();
+        switch (String(arg?.to ?? "")) {
+        case "browser":
+            // Web links only: a shared text is never opened as a file or a command.
+            if (!/^https?:\/\/\S+$/i.test(text))
+                return "bad_arg";
+            Qt.openUrlExternally(text);
+            return "";
+        case "ai":
+            root._askAi(text);
+            return "";
+        case "note": {
+            const result = NotesService.create(firstLine.slice(0, 60), text, null);
+            return result?.ok ? "" : String(result?.error ?? "failed");
+        }
+        case "reminder":
+            RemindersService.create({ title: firstLine.slice(0, 120), notes: text.includes("\n") ? rest : "" });
+            return "";
+        case "task":
+            Todo.addTask(text);
+            return "";
+        }
+        return "bad_arg";
+    }
+
     // ── Files from the phone ────────────────────────────────────────────
     // The helper lands a finished upload in its incoming/ folder; here it becomes what
     // it was sent for, or is deleted.
@@ -495,6 +555,26 @@ Singleton {
             root.sendTo(dev, { t: "ok", id: id });
             return;
         }
+        if (ev.purpose === "share") {
+            if (!root.shareEnabled)
+                return refuse("disabled");
+            const target = String(ev.target ?? "downloads");
+            if (target === "ai" && !root._imageName.test(name))
+                return refuse("bad_arg");
+            if (shareMove.running)
+                return refuse("busy");
+            shareMove.pending = { dev: dev, id: id, name: name, target: target };
+            // The original name, and "name (1).ext" when it is taken: never overwrite.
+            shareMove.command = ["sh", "-c", `
+                dir="$1"; src="$2"; name="$3"
+                mkdir -p -- "$dir" || exit 1
+                case "$name" in ?*.*) base="\${name%.*}"; ext=".\${name##*.}" ;; *) base="$name"; ext="" ;; esac
+                dest="$dir/$name"; n=1
+                while [ -e "$dest" ]; do dest="$dir/$base ($n)$ext"; n=$((n + 1)); done
+                mv -f -- "$src" "$dest" && chmod 644 -- "$dest" && printf %s "$dest"`, "sh", root.shareDir, path, name];
+            shareMove.running = true;
+            return;
+        }
         if (ev.purpose !== "wallpaper")
             return refuse("unknown_action");
         if (!root.wallpaperEnabled)
@@ -509,6 +589,36 @@ Singleton {
         root._pendingWallpaper = { dev: dev, id: id, dest: dest, target: String(ev.target ?? "desktop") };
         wallpaperMove.command = ["sh", "-c", 'mkdir -p -- "$1" && mv -f -- "$2" "$3"', "sh", folder, path, dest];
         wallpaperMove.running = true;
+    }
+
+    Process {
+        id: shareMove
+        property var pending: null
+        stdout: StdioCollector {
+            id: shareDest
+        }
+        onExited: code => {
+            const p = shareMove.pending;
+            shareMove.pending = null;
+            const dest = String(shareDest.text ?? "").trim();
+            if (!p)
+                return;
+            if (code !== 0 || dest === "") {
+                if (root._transferMatches(p.dev, p.id))
+                    root._setTransfer({ state: "failed" });
+                return root.sendTo(p.dev, { t: "err", id: p.id, code: "write" });
+            }
+            if (p.target === "ai") {
+                Ai.attachFile(dest);
+                GlobalStates.openLeftSidebar();
+            } else if (p.target === "shelf") {
+                FileShelf.add([dest]);
+            }
+            // The popup turns into "Received", with Open and Show in folder.
+            if (root._transferMatches(p.dev, p.id))
+                root._setTransfer({ state: "done", path: dest, name: dest.split("/").pop() });
+            root.sendTo(p.dev, { t: "ok", id: p.id });
+        }
     }
 
     Process {
@@ -754,7 +864,9 @@ Singleton {
             const id = Number(m.id ?? 0);
             const action = String(m.a ?? "");
             let why;
-            if (action === "deck")
+            if (action === "share")
+                why = root.shareEnabled ? root._share(m.arg) : "disabled";
+            else if (action === "deck")
                 why = root.deckEnabled ? root._runDeck(String(m.arg ?? "")) : "disabled";
             else if (root._remoteArgActions.includes(action))
                 why = root.remoteEnabled ? root._runArg(action, m.arg) : "disabled";
@@ -878,7 +990,27 @@ Singleton {
             }
             break;
         }
+        case "fileStart":
+            // Only "Send to PC" files are announced; wallpapers and app icons show themselves.
+            if (ev.purpose === "share" && root.shareEnabled) {
+                root.transfer = {
+                    id: Number(ev.id ?? 0), dev: String(ev.dev), from: root.connections[ev.dev]?.name ?? "",
+                    name: String(ev.name ?? ""), size: Number(ev.size ?? 0), received: 0, state: "receiving", path: ""
+                };
+                GlobalStates.phoneFilePopupOpen = true;
+            }
+            break;
+        case "fileProgress":
+            if (root._transferMatches(String(ev.dev), ev.id))
+                root._setTransfer({ received: Number(ev.received ?? 0) });
+            break;
+        case "fileAbort":
+            if (root._transferMatches(String(ev.dev), ev.id) && root.transfer.state === "receiving")
+                root._setTransfer({ state: "failed" });
+            break;
         case "file":
+            if (root._transferMatches(String(ev.dev), ev.id))
+                root._setTransfer({ received: root.transfer.size });
             root._handleFile(String(ev.dev), ev);
             break;
         case "msg":

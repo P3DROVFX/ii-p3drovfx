@@ -94,6 +94,7 @@ Commands with an argument, answered with `ok` or `err` (`bad_arg`, `not_found`, 
 | `default` | device id: becomes the default output or input | audio |
 | `eePreset` | EasyEffects output preset name | audio |
 | `eeBypass` | `true` / `false` | audio |
+| `share` | `{to: "browser"\|"ai"\|"note"\|"reminder"\|"task", text}`. `browser` takes only an `http(s)` link. | share |
 | `deck` | a deck id: `g:<gesture action>`, `c:<command id>`, `app:<desktop id>`, `discordMute`, `discordDeafen` (`locked`, `unavailable`, `not_found`) | deck |
 
 ## Notifications
@@ -132,6 +133,7 @@ the connection closing. One file at a time per phone.
 
 | `purpose` | Needs | The shell |
 | --- | --- | --- |
+| `share` | `iiTools.share.enable` | moves it to `~/Downloads` under its own name (`name (1).ext` when taken, mode 0644), then `target` `downloads` says so in a notification (Open / Show in folder), `shelf` adds it to the FileShelf, `ai` (images only) attaches it to the AI chat and opens it. |
 | `appIcon` | — | moves `<package>.png` to `<state>/icons/`, for the notifications. |
 | `wallpaper` | `iiTools.wallpaper.enable` | moves it to the wallpapers folder as `phone-<date>-<name>`, then `Wallpapers.select` / `selectLockscreen`. `bad_arg` unless the name is an image, `busy` while one is being filed. |
 
@@ -159,6 +161,10 @@ sides. Changing the meaning of an existing one does: that is `iilink/2`, on a ne
 | `{"ev":"pairingEnd","reason":"paired"\|"cancel"\|"timeout"}` | |
 | `{"ev":"connected","dev","addr","name","model"}` / `{"ev":"disconnected","dev"}` | |
 | `{"ev":"msg","dev","m":{…}}` | A message from an authenticated phone. |
+| `{"ev":"fileStart","dev","id","name","size","purpose","target"}` | A file header was accepted; bytes follow. |
+| `{"ev":"fileProgress","dev","id","received"}` | At most every 1 % and 150 ms. |
+| `{"ev":"fileAbort","dev","id"}` | A file dropped before its end (bad chunk, new header, socket closed). |
+| `{"ev":"file","dev","id","path","name","purpose","target"}` | A file arrived whole (see *Files*). |
 | `{"ev":"error","code"?,"msg"}` | E.g. `code: "port"` when the port is taken. |
 
 | Shell → helper | |

@@ -370,9 +370,13 @@ async fn serve(stream: TcpStream, addr: SocketAddr, acceptor: TlsAcceptor, state
                 Ok(m) if m["t"] == "file" => {
                     if let Some(old) = incoming.take() {
                         old.discard();
+                        emit(old.aborted(&dev));
                     }
                     match files::start(&dir, &dev, &m) {
-                        Ok(inc) => incoming = Some(inc),
+                        Ok(inc) => {
+                            emit(inc.started(&dev));
+                            incoming = Some(inc);
+                        }
                         Err(reply) => {
                             let _ = tx.send(Message::Text(reply.to_string().into()));
                         }
@@ -385,12 +389,15 @@ async fn serve(stream: TcpStream, addr: SocketAddr, acceptor: TlsAcceptor, state
                 if let Some(inc) = incoming.as_mut() {
                     match inc.write(&data, &dev) {
                         files::Step::More => {}
+                        files::Step::Progress(event) => emit(event),
                         files::Step::Done(event) => {
                             incoming = None;
                             emit(event);
                         }
                         files::Step::Failed(reply) => {
-                            incoming = None;
+                            if let Some(inc) = incoming.take() {
+                                emit(inc.aborted(&dev));
+                            }
                             let _ = tx.send(Message::Text(reply.to_string().into()));
                         }
                     }
@@ -405,6 +412,7 @@ async fn serve(stream: TcpStream, addr: SocketAddr, acceptor: TlsAcceptor, state
     writer.abort();
     if let Some(inc) = incoming.take() {
         inc.discard();
+        emit(inc.aborted(&dev));
     }
     let mut s = state.lock().unwrap();
     if s.conns.get(&dev).is_some_and(|c| c.serial == serial) {

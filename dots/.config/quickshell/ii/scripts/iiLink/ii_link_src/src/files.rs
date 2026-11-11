@@ -8,6 +8,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 
@@ -19,15 +20,22 @@ pub struct Incoming {
     pub id: u64,
     path: PathBuf,
     file: File,
+    size: u64,
     remaining: u64,
     name: String,
     meta: Value,
+    /// Progress is told at most every 1 % or 150 ms, whichever comes later.
+    last_told: (u64, Instant),
 }
+
+const PROGRESS_EVERY: Duration = Duration::from_millis(150);
 
 /// What a header or a chunk led to.
 pub enum Step {
     /// Waiting for more bytes.
     More,
+    /// Waiting for more bytes; the `fileProgress` event for the shell.
+    Progress(Value),
     /// The file is complete: the `file` event for the shell.
     Done(Value),
     /// Refused or broken: the `err` reply for the phone.
@@ -73,13 +81,26 @@ pub fn start(dir: &Path, dev: &str, header: &Value) -> Result<Incoming, Value> {
         id,
         path,
         file,
+        size,
         remaining: size,
         name: clean_name(header["name"].as_str().unwrap_or("")),
         meta: json!({"purpose": header["purpose"], "target": header["target"]}),
+        last_told: (0, Instant::now()),
     })
 }
 
 impl Incoming {
+    /// The `fileStart` event: what is coming, before its first byte.
+    pub fn started(&self, dev: &str) -> Value {
+        json!({"ev": "fileStart", "dev": dev, "id": self.id, "name": self.name, "size": self.size,
+            "purpose": self.meta["purpose"], "target": self.meta["target"]})
+    }
+
+    /// The `fileAbort` event, for a transfer dropped before its end.
+    pub fn aborted(&self, dev: &str) -> Value {
+        json!({"ev": "fileAbort", "dev": dev, "id": self.id})
+    }
+
     pub fn write(&mut self, data: &[u8], dev: &str) -> Step {
         let len = data.len() as u64;
         if len > self.remaining || self.file.write_all(data).is_err() {
@@ -88,6 +109,12 @@ impl Incoming {
         }
         self.remaining -= len;
         if self.remaining > 0 {
+            let received = self.size - self.remaining;
+            let step = (self.size / 100).max(1);
+            if received - self.last_told.0 >= step && self.last_told.1.elapsed() >= PROGRESS_EVERY {
+                self.last_told = (received, Instant::now());
+                return Step::Progress(json!({"ev": "fileProgress", "dev": dev, "id": self.id, "received": received}));
+            }
             return Step::More;
         }
         let done = self.path.with_file_name(format!("{dev}-{}-{}", self.id, self.name));

@@ -238,6 +238,14 @@ Item {
             }
 
             ConfigSwitch {
+                buttonIcon: "share"
+                text: Translation.tr("Send to PC")
+                description: Translation.tr("From the phone's share sheet: links, notes, reminders, tasks, the AI chat, Downloads and the file shelf")
+                checked: Config.options.iiTools.share.enable
+                onCheckedChanged: Config.options.iiTools.share.enable = checked
+            }
+
+            ConfigSwitch {
                 buttonIcon: "notifications"
                 text: Translation.tr("Notifications")
                 description: Translation.tr("Phone notifications with icons, images, actions and replies; KDE Connect's copies are left out")

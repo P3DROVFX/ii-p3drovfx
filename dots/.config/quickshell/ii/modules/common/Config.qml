@@ -2849,6 +2849,11 @@ Singleton {
                 property JsonObject audio: JsonObject {
                     property bool enable: true
                 }
+                // "Send to PC" in the phone's share sheet: links to the browser or the AI
+                // chat, text to notes, reminders or tasks, files to the shelf or the AI.
+                property JsonObject share: JsonObject {
+                    property bool enable: true
+                }
                 // Phone notifications over the link: Phone tab and popups, with icons,
                 // images, actions and replies. KDE Connect's copies are then left out.
                 property JsonObject notifications: JsonObject {
