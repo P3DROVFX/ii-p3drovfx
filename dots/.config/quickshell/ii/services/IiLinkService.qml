@@ -36,6 +36,7 @@ Singleton {
     readonly property bool shareEnabled: root.opts?.share?.enable ?? true
     readonly property bool clipEnabled: root.opts?.clipboard?.enable ?? true
     readonly property bool shotsEnabled: root.opts?.screenshots?.enable ?? true
+    readonly property bool shotsAutoToPhone: root.opts?.screenshots?.autoToPhone ?? true
     readonly property int port: root.opts?.port ?? 47210
 
     readonly property string helperDir: `${Directories.scriptPath}/iiLink`
@@ -585,14 +586,41 @@ Singleton {
     readonly property int outboxMax: 5
     property double _lastShotAt: 0
 
-    readonly property bool _watchShots: root.enabled && root.shotsEnabled && root.hasPeers
+    readonly property bool _watchShots: root.enabled && root.shotsEnabled && root.shotsAutoToPhone && root.hasPeers
+    /// The screenshot preview's "Save to phone gallery": shown when sending is by hand.
+    readonly property bool canSaveShotToPhone: root.enabled && root.shotsEnabled && !root.shotsAutoToPhone && root.hasPeers
+    /// The phone it goes to, by name, for the button and the message.
+    readonly property string shotPhoneName: root.connections[root.shotDev]?.name || (root.peers[0]?.name ?? "")
+
+    /**
+     * From the preview: the image as shown (cropped like the preview when it has a region),
+     * into the outbox, to the phone now or when it next connects.
+     */
+    function saveShotToPhone(path, region): void {
+        if (!root.canSaveShotToPhone || path === "")
+            return;
+        root._lastShotAt = Date.now();
+        const dest = `${root.outboxDir}/pc-${Qt.formatDateTime(new Date(), "yyyyMMdd-HHmmss-zzz")}.png`;
+        // Like the automatic path: the preview's capture is a raw PPM; a real PNG goes.
+        shotQueue.command = ["sh", "-c", `mkdir -p -m 700 -- "$1" && magick "$2" ${root._cropArgs(region)} "$3"`, "sh", root.outboxDir, path, dest];
+        shotQueue.running = true;
+        Notifications.publishInternalNotification({
+            appName: "ii tools",
+            appIcon: "camera-photo",
+            summary: root.shotDev !== "" ? Translation.tr("Saving to %1").arg(root.shotPhoneName) : Translation.tr("Saved when %1 connects").arg(root.shotPhoneName || Translation.tr("the phone")),
+            body: Translation.tr("Screenshot, into the phone's gallery"),
+            phone: true
+        });
+    }
     Connections {
         target: root._watchShots ? GlobalStates : null
         function onScreenshotOverlayImagePathChanged() {
             const path = GlobalStates.screenshotOverlayImagePath;
             // A phone screenshot shown in the preview is not sent back.
-            if (path !== "" && !path.startsWith(root.phoneShotDir))
-                root._queueShot(path, "");
+            if (path === "" || path.startsWith(root.phoneShotDir))
+                return;
+            // The region is set right after the path, in the same handler: read it then.
+            Qt.callLater(() => root._queueShot(path, "", root._overlayRegion()));
         }
     }
     Connections {
@@ -605,17 +633,34 @@ Singleton {
             const fullScreen = (HyprlandData.monitors ?? []).some(m => (m.width === w && m.height === h) || (m.width === h && m.height === w));
             // A region snip copies too: it is already queued from the preview.
             if (fullScreen && Date.now() - root._lastShotAt > 3000)
-                root._queueShot("", Cliphist.entryKey(entry));
+                root._queueShot("", Cliphist.entryKey(entry), null);
         }
     }
 
-    /// From a file, or from a cliphist entry; then send if a phone is there.
-    function _queueShot(path, cliphistId): void {
+    function _overlayRegion(): var {
+        return { x: GlobalStates.screenshotOverlayRegionX, y: GlobalStates.screenshotOverlayRegionY,
+            w: GlobalStates.screenshotOverlayRegionW, h: GlobalStates.screenshotOverlayRegionH };
+    }
+
+    /// `magick` arguments that crop to a region, when it has one.
+    function _cropArgs(region): string {
+        return region && region.w > 0 && region.h > 0
+            ? `-crop ${Math.round(region.w)}x${Math.round(region.h)}+${Math.round(region.x)}+${Math.round(region.y)} +repage`
+            : "";
+    }
+
+    /**
+     * From a file (the preview's capture) or a cliphist entry; then send if a phone is
+     * there. The preview's capture is a raw PPM of the whole monitor, still being written
+     * when the preview opens: wait until it stops growing, then crop it to what the
+     * preview shows and write a real PNG (a phone cannot open PPM; it showed black).
+     */
+    function _queueShot(path, cliphistId, region): void {
         root._lastShotAt = Date.now();
         const dest = `${root.outboxDir}/pc-${Qt.formatDateTime(new Date(), "yyyyMMdd-HHmmss-zzz")}.png`;
-        // The snip's file may still be being written when the preview opens: wait for it.
-        const source = path !== "" ? `for i in $(seq 30); do [ -s "$2" ] && break; sleep 0.1; done; cp -- "$2" "$3"`
-            : `${Cliphist.cliphistBinary} decode "$2" > "$3"`;
+        const settle = `last=-1; for i in $(seq 40); do now=$(stat -c %s -- "$2" 2>/dev/null || echo 0); [ "$now" -gt 0 ] && [ "$now" = "$last" ] && break; last=$now; sleep 0.1; done`;
+        const source = path !== "" ? `${settle}; magick "$2" ${root._cropArgs(region)} "$3"`
+            : `${Cliphist.cliphistBinary} decode "$2" | magick - "$3"`;
         // Copy, then keep only the newest few.
         shotQueue.command = ["sh", "-c", `mkdir -p -m 700 -- "$1" && ${source} && ls -1t -- "$1" | tail -n +${root.outboxMax + 1} | while read f; do rm -f -- "$1/$f"; done`,
             "sh", root.outboxDir, path !== "" ? path : cliphistId, dest];

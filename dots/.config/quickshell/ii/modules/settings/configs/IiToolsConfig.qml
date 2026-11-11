@@ -246,6 +246,15 @@ Item {
             }
 
             ConfigSwitch {
+                visible: Config.options.iiTools.screenshots.enable
+                buttonIcon: "send_to_mobile"
+                text: Translation.tr("Send PC screenshots automatically")
+                description: Translation.tr("Off: the screenshot preview offers \"Save to phone\" instead")
+                checked: Config.options.iiTools.screenshots.autoToPhone
+                onCheckedChanged: Config.options.iiTools.screenshots.autoToPhone = checked
+            }
+
+            ConfigSwitch {
                 buttonIcon: "content_paste"
                 text: Translation.tr("Clipboard")
                 description: Translation.tr("What you copy here reaches the phone, images included; the phone sends its own from a tile, the share sheet or the app")

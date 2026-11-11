@@ -2854,6 +2854,9 @@ Singleton {
                 // screenshot preview.
                 property JsonObject screenshots: JsonObject {
                     property bool enable: true
+                    // Every PC screenshot to the phone's gallery; off, the screenshot
+                    // preview offers "Save to phone gallery" instead.
+                    property bool autoToPhone: true
                 }
                 // The clipboard both ways, images included: what is copied here reaches
                 // the phone while the link is up; the phone sends its own on request.
