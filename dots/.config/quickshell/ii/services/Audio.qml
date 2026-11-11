@@ -83,6 +83,36 @@ Singleton {
         Pipewire.preferredDefaultAudioSink = node;
     }
 
+    readonly property string analogOutputScript: `${Directories.scriptPath}/audio/analog-output.py`
+    readonly property string analogOutputPython: {
+        const venv = Quickshell.env("ILLOGICAL_IMPULSE_VIRTUAL_ENV");
+        return venv ? venv.replace(/^~\//, Quickshell.env("HOME") + "/") + "/bin/python" : "python3";
+    }
+    readonly property bool analogOutputSwitching: analogOutputSwitch.running
+    signal analogOutputSwitchFinished(bool success)
+
+    function switchAnalogOutput(choice) {
+        if (root.analogOutputSwitching || multiOutputProc.running) return;
+        analogOutputSwitch.command = [root.analogOutputPython, root.analogOutputScript, "switch",
+            choice.card, choice.port, choice.profile];
+        analogOutputSwitch.running = true;
+    }
+
+    Process {
+        id: analogOutputSwitch
+        stdout: StdioCollector { id: analogOutputResult }
+        stderr: StdioCollector { id: analogOutputError }
+        onExited: exitCode => {
+            const sinkName = analogOutputResult.text.trim();
+            const success = exitCode === 0 && sinkName.length > 0;
+            if (success && root.multiOutputActive)
+                root.setMultiOutputSinks([sinkName]);
+            if (!success)
+                console.warn("[Audio] " + analogOutputError.text.trim());
+            root.analogOutputSwitchFinished(success);
+        }
+    }
+
     function setDefaultSource(node) {
         Pipewire.preferredDefaultAudioSource = node;
     }
