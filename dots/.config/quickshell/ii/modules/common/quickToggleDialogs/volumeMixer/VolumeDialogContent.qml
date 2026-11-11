@@ -66,7 +66,7 @@ StyledFlickable {
     }
 
     function deviceActiveAt(i) {
-        return i >= 0 && i < devices.length && activeDeviceNames.indexOf(devices[i].name) !== -1;
+        return activeDeviceNames.includes(deviceRowNames[i]);
     }
 
     function toggleMultiOutputMember(node) {
@@ -110,8 +110,62 @@ StyledFlickable {
     required property bool isSink
     readonly property list<var> appPwNodes: isSink ? Audio.outputAppNodes : Audio.inputAppNodes
     readonly property list<var> devices: isSink ? Audio.outputDevices : Audio.inputDevices
+    property var analogAlternates: []
+    property bool analogSwitchFailed: false
+    readonly property bool outputSwitching: isSink && Audio.analogOutputSwitching
+    readonly property var analogRows: {
+        const rows = {};
+        for (const alternate of analogAlternates) {
+            const prefix = alternate.card.replace(/^alsa_card\./, "alsa_output.") + ".HiFi__";
+            // Keep both UCM rows while PipeWire replaces the live sink.
+            rows[prefix + "Headphones__sink"] = {
+                type: "headphones",
+                alternate: alternate.type === "headphones" ? alternate : null
+            };
+            rows[prefix + "Speaker__sink"] = {
+                type: "speaker",
+                alternate: alternate.type === "speaker" ? alternate : null
+            };
+        }
+        return rows;
+    }
+    readonly property var deviceRowNames: devices.map(node => node.name)
+        .filter(name => !analogRows[name]).concat(Object.keys(analogRows))
     readonly property bool hasApps: appPwNodes.length > 0
-    readonly property bool hasDevices: devices.length > 0
+    readonly property bool hasDevices: deviceRowNames.length > 0
+
+    Process {
+        id: analogOutputQuery
+        running: root.isSink
+        command: [Audio.analogOutputPython, Audio.analogOutputScript, "list"]
+        stdout: StdioCollector { id: analogOutputChoices }
+        onExited: exitCode => {
+            root.analogAlternates = exitCode === 0 ? JSON.parse(analogOutputChoices.text) : [];
+        }
+    }
+
+    Process {
+        running: root.isSink
+        command: ProcUtils.pdeath(["pactl", "subscribe"])
+        environment: ({ "LC_ALL": "C" })
+        stdout: SplitParser {
+            onRead: line => {
+                if (line.includes(" on card #") && !root.outputSwitching)
+                    analogOutputQuery.running = true;
+            }
+        }
+    }
+
+    Connections {
+        target: Audio
+        enabled: root.isSink
+        function onAnalogOutputSwitchFinished(success) {
+            root.analogSwitchFailed = !success;
+            if (success)
+                root.multiOutputRequested = false;
+            analogOutputQuery.running = true;
+        }
+    }
 
     Layout.fillWidth: true
     Layout.fillHeight: true
@@ -231,6 +285,7 @@ StyledFlickable {
 
                 SelectionGroupButton {
                     visible: root.isSink && (root.devices.length >= 2 || Audio.multiOutputActive)
+                    enabled: !root.outputSwitching
                     leftmost: true
                     rightmost: true
                     buttonIcon: "speaker_group"
@@ -261,16 +316,25 @@ StyledFlickable {
 
                 Repeater {
                     model: ScriptModel {
-                        values: root.devices
+                        values: root.deviceRowNames
                     }
                     delegate: VolumeDeviceEntry {
                         Layout.fillWidth: true
-                        required property var modelData
-                        node: modelData
+                        required property string modelData
+                        node: root.devices.find(device => device.name === modelData) ?? null
+                        analogOutput: root.analogRows[modelData] ?? null
                         isSink: root.isSink
-                        totalCount: root.devices.length
+                        totalCount: root.deviceRowNames.length
                     }
                 }
+            }
+
+            StyledText {
+                Layout.fillWidth: true
+                visible: root.outputSwitching || root.analogSwitchFailed
+                wrapMode: Text.WordWrap
+                color: Appearance.colors.colSubtext
+                text: root.outputSwitching ? Translation.tr("Switching output…") : Translation.tr("Could not switch audio output.")
             }
         }
 
@@ -340,15 +404,24 @@ StyledFlickable {
         required property bool isSink
         required property int index
         required property int totalCount
+        property var analogOutput: null
+        readonly property var alternate: node ? null : (analogOutput?.alternate ?? null)
+        readonly property string analogOutputName: analogOutput?.type === "speaker" ? Translation.tr("Speakers") : Translation.tr("Headphones")
+        activeFocusOnTab: !!alternate && !isBlocked
+        Accessible.role: alternate ? Accessible.Button : Accessible.NoRole
+        Accessible.name: alternate ? analogOutputName : ""
+        Accessible.onPressAction: if (alternate && !isBlocked) activateDevice()
+        Keys.onReturnPressed: if (alternate && !isBlocked) activateDevice()
+        Keys.onSpacePressed: if (alternate && !isBlocked) activateDevice()
 
         PwObjectTracker {
-            objects: [devEntry.node]
+            objects: devEntry.node ? [devEntry.node] : []
         }
 
         implicitHeight: 56
         height: implicitHeight
         
-        readonly property bool isBlocked: node ? (root.unavailableDevices.indexOf(node.name) !== -1) : false
+        readonly property bool isBlocked: root.outputSwitching || (node ? root.unavailableDevices.includes(node.name) : !alternate)
         opacity: isBlocked ? 0.45 : 1.0
         
         Behavior on opacity {
@@ -416,7 +489,7 @@ StyledFlickable {
 
             MouseArea {
                 anchors.fill: parent
-                enabled: root.multiOutputMode && root.activeDeviceNames.length > 1
+                enabled: !root.outputSwitching && root.multiOutputMode && root.activeDeviceNames.length > 1
                 cursorShape: Qt.PointingHandCursor
                 onClicked: root.toggleMultiOutputMember(devEntry.node)
             }
@@ -435,6 +508,8 @@ StyledFlickable {
             bottomRightRadius: devEntry.bottomRightRadius
             
             color: devEntry.isActive ? ColorUtils.transparentize(Appearance.colors.colPrimary, 0.35) : Appearance.colors.colSurfaceContainerHighest
+            border.width: devEntry.alternate && devEntry.activeFocus ? 2 : 0
+            border.color: Appearance.colors.colPrimary
 
             Behavior on width {
                 NumberAnimation {
@@ -523,7 +598,7 @@ StyledFlickable {
                     Layout.preferredWidth: 24
                     Layout.preferredHeight: 24
                     Layout.alignment: Qt.AlignVCenter
-                    cursorShape: devEntry.isBlocked ? Qt.ArrowCursor : (devEntry.isActive ? Qt.PointingHandCursor : Qt.ArrowCursor)
+                    cursorShape: !devEntry.isBlocked && (devEntry.isActive || devEntry.alternate) ? Qt.PointingHandCursor : Qt.ArrowCursor
                     enabled: !devEntry.isBlocked
 
                     onClicked: {
@@ -537,6 +612,8 @@ StyledFlickable {
                     MaterialSymbol {
                         anchors.centerIn: parent
                         text: {
+                            if (!devEntry.node && devEntry.analogOutput)
+                                return devEntry.analogOutput.type === "speaker" ? "speaker" : "headphones";
                             if (devEntry.node?.audio?.muted) {
                                 return devEntry.isSink ? "volume_off" : "mic_off";
                             }
@@ -560,7 +637,9 @@ StyledFlickable {
                     elide: Text.ElideRight
                     font.pixelSize: Appearance.font.pixelSize.small
                     color: devEntry.isActive ? Appearance.colors.colOnPrimary : devEntry.node?.audio?.muted ? Appearance.colors.colSubtext : Appearance.colors.colOnSurface
-                    text: Audio.friendlyDeviceName(devEntry.node)
+                    text: devEntry.analogOutput ? devEntry.analogOutputName
+                        : devEntry.node?.properties["device.profile.description"] === "Speaker" ? Translation.tr("Speakers")
+                        : Audio.friendlyDeviceName(devEntry.node)
                     font.bold: devEntry.isActive
                     opacity: (devEntry.isActive && mainMouseArea.pressed) ? 0.0 : 1.0
                     Behavior on opacity {
@@ -660,6 +739,11 @@ StyledFlickable {
         }
 
         function activateDevice() {
+            if (alternate) {
+                root.analogSwitchFailed = false;
+                Audio.switchAnalogOutput(alternate);
+                return;
+            }
             if (!node)
                 return;
             if (root.multiOutputMode) {
