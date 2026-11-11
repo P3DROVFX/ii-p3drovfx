@@ -118,6 +118,18 @@ after the last one; a PC it cannot reach is not retried for 5 min.
 icons go once per app per PC as files (`purpose: "appIcon"`, name `<package>.png`), kept
 in `<state>/icons/`.
 
+## Phone data
+
+Needs `phoneData` in the shell's caps (Settings → ii tools → Phone data); the phone
+announces `status` and, with the contacts permission, `contacts`.
+
+| Direction | Message | |
+| --- | --- | --- |
+| phone → shell | `{"t":"status","battery":{level,charging,plug,temp,health}\|null,"net":{type,signal},"alarm":{at,pkg}\|null}` | On connect, when the next alarm changes (it brings the link up for that) and on battery news while connected (at most every 30 s unless plugging changed). `alarm` goes to PhoneAlarmService, which then stops polling ADB. |
+| shell → phone | `{"t":"get","what":"contacts","have":"<hash>"}` | On connect, with the version the PC keeps in `<state>/contacts.json`. |
+| phone → shell | `{"t":"contacts","hash","list":[contact]}` | Only when `hash` differs. `contact` is the shape the shell's vCard reader gives (`id, displayName, givenName, familyName, organization, phones[{value,normalized,type}], emails[{value,type}], birthday{year,month,day}`) plus `photo`, the photo's hash or `""`. |
+| shell → phone | `{"t":"get","what":"photos","keys":["<photo>",…]}` | The photos the PC lacks; each comes as a file, purpose `contactPhoto`, name `<photo>.jpg`, kept in `<state>/contacts/`. |
+
 ## Files
 
 A file is a header, then its bytes as binary frames (the app sends 256 KiB each):
@@ -137,6 +149,7 @@ the connection closing. One file at a time per phone.
 | --- | --- | --- |
 | `share` | `iiTools.share.enable` | moves it to `~/Downloads` under its own name (`name (1).ext` when taken, mode 0644), then `target` `downloads` says so in a notification (Open / Show in folder), `shelf` adds it to the FileShelf, `ai` (images only) attaches it to the AI chat and opens it. |
 | `clip` | `iiTools.clipboard.enable` | `wl-copy --type <image mime>` from the file, then deletes it. |
+| `contactPhoto` | `iiTools.phoneData.enable` | moves `<photo>.jpg` to `<state>/contacts/`. |
 | `appIcon` | — | moves `<package>.png` to `<state>/icons/`, for the notifications. |
 | `screenshot` | `iiTools.screenshots.enable` | a phone screenshot: to `~/Pictures/Screenshots/Phone/<name>`, onto the clipboard, and into the screenshot preview. The other way the phone (cap `shots`) saves it to its gallery (Pictures/ii tools) with a notification. |
 | `wallpaper` | `iiTools.wallpaper.enable` | moves it to the wallpapers folder as `phone-<date>-<name>`, then `Wallpapers.select` / `selectLockscreen`. `bad_arg` unless the name is an image, `busy` while one is being filed. |

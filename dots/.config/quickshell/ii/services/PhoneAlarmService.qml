@@ -25,12 +25,19 @@ import QtQuick
  * time before it passes, so it does not count). The Clock's own notification, when KDE
  * Connect mirrors it, is a second signal — many phones keep the ringing notification
  * "ongoing", which KDE Connect does not forward, so it cannot be the only one.
+ *
+ * With the ii tools app the phone says it itself (`fromLink`, from IiLinkService):
+ * AlarmManager's next alarm clock and its owner, sent on connect and whenever it
+ * changes. From the first such report on, ADB is no longer polled.
  */
 Singleton {
     id: root
 
     readonly property var opts: Config.options?.clockApp?.phoneAlarm ?? null
-    readonly property bool enabled: Config.ready && (root.opts?.enable ?? true) && KdeConnectService.adbPresent
+    /// The ii tools app reports the alarm: no ADB needed, none polled.
+    property bool linkSource: false
+    readonly property bool enabled: Config.ready && (root.opts?.enable ?? true) && (KdeConnectService.adbPresent || root.linkSource)
+    readonly property bool polls: root.enabled && !root.linkSource
     readonly property int pollMs: Math.max(1, root.opts?.pollMinutes ?? 10) * 60000
     readonly property var clockApps: Array.from(root.opts?.clockApps ?? []).map(app => String(app).toLowerCase())
     readonly property var ignorePackages: Array.from(root.opts?.ignorePackages ?? []).map(pkg => String(pkg))
@@ -68,7 +75,7 @@ Singleton {
         + " /^ *Alarm clock:/ { print pkg, when } END { print \"ok\" }'"
 
     function refresh(): void {
-        if (!root.enabled || pollProc.running)
+        if (!root.polls || pollProc.running)
             return;
         pollProc.command = ["adb"].concat(KdeConnectService.adbTargetArgs())
             .concat(["shell", root.listCommand]);
@@ -79,13 +86,26 @@ Singleton {
     property real announcedAt: 0
 
     function parse(text: string): void {
+        const alarms = text.split("\n")
+            .map(line => line.trim().split(/\s+/))
+            .filter(f => f.length === 2 && /^\d{11,}$/.test(f[1]))
+            .map(f => ({ pkg: f[0], at: Number(f[1]) }));
+        root._apply(alarms, /^ok$/m.test(text));
+    }
+
+    /// From the ii tools app: `alarm` is { at, pkg } or null (no alarm set).
+    function fromLink(alarm): void {
+        root.linkSource = true;
+        root._apply(alarm && Number(alarm.at) > 0 ? [{ pkg: String(alarm.pkg ?? ""), at: Number(alarm.at) }] : [], true);
+    }
+
+    function _apply(alarms, reachable): void {
         const now = Date.now();
         root.checkedAt = now;
-        root.reachable = /^ok$/m.test(text);
-        const times = text.split("\n")
-            .map(line => line.trim().split(/\s+/))
-            .filter(f => f.length === 2 && /^\d{11,}$/.test(f[1]) && root.ignorePackages.indexOf(f[0]) === -1)
-            .map(f => Number(f[1]))
+        root.reachable = reachable;
+        const times = alarms
+            .filter(a => root.ignorePackages.indexOf(a.pkg) === -1)
+            .map(a => a.at)
             .filter(ms => ms > now);
         const value = times.length > 0 ? new Date(Math.min(...times)) : null;
         const previous = root.nextAt;
@@ -123,7 +143,7 @@ Singleton {
     Timer {
         interval: root.pollMs
         repeat: true
-        running: root.enabled
+        running: root.polls
         triggeredOnStart: true
         onTriggered: root.refresh()
     }
@@ -132,7 +152,7 @@ Singleton {
     // move is how the ring is noticed, so look soon after.
     Timer {
         interval: Math.max(30000, (root.nextAt?.getTime() ?? 0) - Date.now() + 45000)
-        running: root.enabled && root.nextAt !== null
+        running: root.polls && root.nextAt !== null
         onTriggered: root.refresh()
     }
 

@@ -36,6 +36,7 @@ Singleton {
     readonly property bool shareEnabled: root.opts?.share?.enable ?? true
     readonly property bool clipEnabled: root.opts?.clipboard?.enable ?? true
     readonly property bool shotsEnabled: root.opts?.screenshots?.enable ?? true
+    readonly property bool phoneDataEnabled: root.opts?.phoneData?.enable ?? true
     readonly property bool shotsAutoToPhone: root.opts?.screenshots?.autoToPhone ?? true
     readonly property int port: root.opts?.port ?? 47210
 
@@ -129,6 +130,7 @@ Singleton {
         .concat(root.shareEnabled ? ["share"] : [])
         .concat(root.clipEnabled ? ["clip"] : [])
         .concat(root.shotsEnabled ? ["shots"] : [])
+        .concat(root.phoneDataEnabled ? ["phoneData"] : [])
 
     // What is on right now, read from the same state the shell itself draws from.
     readonly property bool _aodUp: (GlobalStates.oledSaverMonitors ?? []).length > 0
@@ -565,6 +567,74 @@ Singleton {
         });
     }
 
+    // ── Phone data: alarm, battery, network, contacts ───────────────────
+    // `status` arrives on connect and on change; the alarm goes on to PhoneAlarmService.
+    // Contacts are asked for on connect with the version this PC has; the phone sends
+    // the list only when it changed, then each missing photo as a file. Both are kept
+    // in the state folder (PhoneContactsService reads contacts.json itself).
+
+    /// { battery: { level, charging, plug, temp, health }, net: { type, signal }, at } or null.
+    property var phoneStatus: null
+    readonly property string contactsDir: `${root.stateDir}/contacts`
+
+    FileView {
+        id: contactsFile
+        path: root.phoneDataEnabled ? `${root.stateDir}/contacts.json` : ""
+        printErrors: false
+        blockLoading: true
+    }
+    function _contactsHash(): string {
+        try {
+            return String(JSON.parse(contactsFile.text())?.hash ?? "");
+        } catch (e) {
+            return "";
+        }
+    }
+
+    readonly property string dataDev: {
+        if (!root.phoneDataEnabled)
+            return "";
+        for (const id of Object.keys(root.connections)) {
+            if ((root.phoneCaps[id] ?? []).includes("contacts"))
+                return id;
+        }
+        return "";
+    }
+    onDataDevChanged: {
+        if (root.dataDev !== "")
+            root.sendTo(root.dataDev, { t: "get", what: "contacts", have: root._contactsHash() });
+    }
+
+    function _status(m): void {
+        root.phoneStatus = { battery: m.battery ?? null, net: m.net ?? null, at: Date.now() };
+        if ("alarm" in m)
+            PhoneAlarmService.fromLink(m.alarm);
+    }
+
+    function _contacts(dev, m): void {
+        const list = Array.isArray(m.list) ? m.list : [];
+        contactsFile.setText(JSON.stringify({ hash: String(m.hash ?? ""), list: list }));
+        // Photos this PC does not have yet: asked for by key, sent as files.
+        const keys = list.map(c => String(c.photo ?? "")).filter(k => /^[0-9a-f]{8,64}$/.test(k));
+        photoCheck.dev = dev;
+        photoCheck.wanted = keys;
+        photoCheck.command = ["sh", "-c", `mkdir -p -m 700 -- "$1" && ls -1 -- "$1"`, "sh", root.contactsDir];
+        photoCheck.running = true;
+    }
+    Process {
+        id: photoCheck
+        property string dev: ""
+        property var wanted: []
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const have = new Set(this.text.split("\n").map(f => f.replace(/\.jpg$/, "")));
+                const missing = [...new Set(photoCheck.wanted)].filter(k => !have.has(k));
+                if (missing.length > 0)
+                    root.sendTo(photoCheck.dev, { t: "get", what: "photos", keys: missing });
+            }
+        }
+    }
+
     // ── Screenshots ─────────────────────────────────────────────────────
     // PC → phone: a region snip (the preview's image) or a full-screen shot (an image
     // copied at exactly a monitor's size: Print, Ctrl+Print and the gesture all copy
@@ -769,6 +839,15 @@ Singleton {
             Quickshell.execDetached(["rm", "-f", "--", path]);
             root.sendTo(dev, { t: "err", id: id, code: code });
         };
+        // A contact's photo, by the key the contacts list gave it.
+        if (ev.purpose === "contactPhoto") {
+            const key = name.replace(/\.jpg$/, "");
+            if (!root.phoneDataEnabled || !/^[0-9a-f]{8,64}$/.test(key))
+                return refuse("bad_arg");
+            Quickshell.execDetached(["sh", "-c", 'mkdir -p -m 700 -- "$1" && mv -f -- "$2" "$1/$3.jpg"', "sh", root.contactsDir, path, key]);
+            root.sendTo(dev, { t: "ok", id: id });
+            return;
+        }
         // An app's icon for the notifications, filed once per app.
         if (ev.purpose === "appIcon") {
             const pkg = name.replace(/\.png$/, "");
@@ -1152,6 +1231,14 @@ Singleton {
         case "ping":
             root.sendTo(dev, { t: "pong", id: Number(m.id ?? 0) });
             return;
+        case "status":
+            if (root.phoneDataEnabled)
+                root._status(m);
+            return;
+        case "contacts":
+            if (root.phoneDataEnabled && dev === root.dataDev)
+                root._contacts(dev, m);
+            return;
         case "caps": {
             const next = Object.assign({}, root.phoneCaps);
             next[dev] = Array.isArray(m.caps) ? m.caps.map(String) : [];
@@ -1323,6 +1410,7 @@ Singleton {
                 notifications: root.linkNotifications.length,
                 lives: root.linkLives.length,
                 mirrorsNotifications: root.mirrorsNotifications,
+                phoneStatus: root.phoneStatus,
                 error: root.lastError
             });
         }

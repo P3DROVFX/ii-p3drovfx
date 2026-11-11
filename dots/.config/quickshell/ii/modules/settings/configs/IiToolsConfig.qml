@@ -238,6 +238,14 @@ Item {
             }
 
             ConfigSwitch {
+                buttonIcon: "contacts"
+                text: Translation.tr("Phone data")
+                description: Translation.tr("The phone's next alarm, contacts with photos, battery and network, without ADB or KDE Connect")
+                checked: Config.options.iiTools.phoneData.enable
+                onCheckedChanged: Config.options.iiTools.phoneData.enable = checked
+            }
+
+            ConfigSwitch {
                 buttonIcon: "screenshot_region"
                 text: Translation.tr("Screenshots")
                 description: Translation.tr("Screenshots taken here reach the phone's gallery; the phone's land in Pictures/Screenshots/Phone with the preview")
@@ -471,6 +479,20 @@ Item {
         property var device
         readonly property var conn: IiLinkService.connections[row.device?.id ?? ""] ?? null
         readonly property bool online: row.conn !== null
+        // Battery and network, when the app reports them (Phone data).
+        readonly property var statusParts: {
+            const st = IiLinkService.phoneStatus;
+            if (!row.online || !st)
+                return [];
+            const parts = [];
+            const b = st.battery;
+            if (b && b.level >= 0)
+                parts.push(`${b.level}%${b.charging ? " ⚡" : ""}${b.temp ? ` ${Number(b.temp).toFixed(0)} °C` : ""}`);
+            const n = st.net;
+            if (n && n.type && n.type !== "none")
+                parts.push(n.type === "wifi" ? "Wi-Fi" : n.type === "cellular" ? Translation.tr("Mobile data") : n.type);
+            return parts;
+        }
 
         implicitHeight: rowLayout.implicitHeight + 24
         radius: Appearance.rounding.normal
@@ -504,7 +526,7 @@ Item {
                     elide: Text.ElideRight
                     font.pixelSize: Appearance.font.pixelSize.smaller
                     color: Appearance.colors.colSubtext
-                    text: row.online ? Translation.tr("Connected · %1").arg(row.conn.addr)
+                    text: row.online ? [Translation.tr("Connected · %1").arg(row.conn.addr)].concat(row.statusParts).join(" · ")
                         : Translation.tr("Last seen %1").arg(row.device?.lastSeen ? new Date(row.device.lastSeen).toLocaleString(Qt.locale(), Locale.ShortFormat) : "—")
                 }
             }

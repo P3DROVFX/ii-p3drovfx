@@ -2849,6 +2849,11 @@ Singleton {
                 property JsonObject audio: JsonObject {
                     property bool enable: true
                 }
+                // The phone's next alarm, contacts with photos, battery and network, from
+                // the app instead of ADB and KDE Connect.
+                property JsonObject phoneData: JsonObject {
+                    property bool enable: true
+                }
                 // Screenshots both ways: the PC's go to the phone's gallery (queued until
                 // it connects), the phone's land in Pictures/Screenshots/Phone with the
                 // screenshot preview.
