@@ -64,6 +64,11 @@ DISCOVER_META_CACHE_NAME = 'discover-metadata.json'
 # value stays stable, but never let a stale negative probe hide a new preset
 # forever if GitHub's search index has not caught up yet.
 DISCOVER_META_CACHE_TTL = 6 * 60 * 60
+# raw.githubusercontent.com serves files with max-age=300, so a probe made
+# right after a push can read the previous index.json. Such a probe is keyed
+# to the new `pushed_at` all the same, and would hide the new preset for the
+# whole TTL above; probes inside this window after a push are not trusted.
+RAW_CDN_STALE_WINDOW = 6 * 60
 SEARCH_CACHE_TTL = 5 * 60
 BROWSE_TIMEOUT = 12
 METADATA_WORKERS = 4
@@ -96,7 +101,7 @@ MAX_SCREENSHOT_BYTES = 8 * 1024 * 1024
 # with more room because a wallpaper is the whole point of most presets.
 # GitHub refuses a file over 100 MB outright, and it would refuse it at the
 # push -- after the repository already exists -- so the size is checked here.
-MAX_ASSET_BYTES = 25 * 1024 * 1024
+MAX_ASSET_BYTES = 35 * 1024 * 1024
 
 # Parentheses belong here: a name collision on install produces "Name (2)",
 # and a name this program generates itself has to be one it accepts back.
@@ -286,6 +291,36 @@ def bump_version(value, part='patch'):
 
 def today():
     return datetime.date.today().isoformat()
+
+
+def now_iso():
+    """UTC in GitHub's `pushed_at` format, so the two sort as strings."""
+    return datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+
+def iso_to_epoch(value):
+    try:
+        return datetime.datetime.strptime(value, '%Y-%m-%dT%H:%M:%SZ').replace(
+            tzinfo=datetime.timezone.utc).timestamp()
+    except (TypeError, ValueError):
+        return 0
+
+
+def backfill_index_dates(directory, index_data):
+    """Give every collection entry its own `updatedAt`.
+
+    Entries written before the field existed take the date of the last
+    commit that touched their folder; without one, every preset in a
+    collection inherits the repository's push date and they sort as a block.
+    """
+    for entry in index_data.get('presets', []):
+        if not isinstance(entry, dict) or entry.get('updatedAt') or not entry.get('path'):
+            continue
+        code, out, _ = git(['log', '-1', '--format=%ct', '--', str(entry['path'])],
+                           cwd=directory, timeout=30)
+        if code == 0 and out.strip().isdigit():
+            entry['updatedAt'] = datetime.datetime.fromtimestamp(
+                int(out.strip()), datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
 def read_json(path):
@@ -777,10 +812,13 @@ def cached_repo_meta(cache, repo):
         return None
     if entry.get('branch') != repo.get('default_branch', 'main'):
         return None
-    if entry.get('updatedAt') != (repo.get('pushed_at') or repo.get('updated_at') or ''):
+    pushed_at = repo.get('pushed_at') or repo.get('updated_at') or ''
+    if entry.get('updatedAt') != pushed_at:
         return None
     checked_at = entry.get('checkedAt', 0)
     if not isinstance(checked_at, (int, float)) or time.time() - checked_at > DISCOVER_META_CACHE_TTL:
+        return None
+    if checked_at < iso_to_epoch(pushed_at) + RAW_CDN_STALE_WINDOW:
         return None
     kind = entry.get('kind')
     data = entry.get('data')
@@ -853,6 +891,7 @@ def discover_result(repo, installed, kind=None, meta_data=None, metadata_ready=F
                 'wallpaperUrl': 'https://raw.githubusercontent.com/%s/%s/%s' % (
                     slug, branch, str(wallpaper_path).lstrip('/')),
                 'repoUrl': '%s/tree/%s/%s' % (base['repoUrl'], branch, path),
+                'updatedAt': preset.get('updatedAt') or base['updatedAt'],
                 'installedAs': installed.get(full_slug, ''),
             })
             results.append(entry)
@@ -1911,6 +1950,7 @@ def cmd_publish(name, repo=None, description='', notes='', private=False, screen
             'version': version,
             'configVersion': manifest.get('configVersion'),
             'path': subpath,
+            'updatedAt': now_iso(),
         }
         if manifest.get('wallpaper'):
             p_entry['wallpaper'] = '%s/%s' % (subpath, manifest['wallpaper'])
@@ -1920,6 +1960,8 @@ def cmd_publish(name, repo=None, description='', notes='', private=False, screen
 
         index_data['presets'] = [p for p in index_data.get('presets', []) if p.get('id') != preset_id]
         index_data['presets'].append(p_entry)
+        if is_existing_repo:
+            backfill_index_dates(directory, index_data)
         presets_helper.atomic_write_json(os.path.join(directory, INDEX_NAME), index_data)
 
         write_collection_readme(directory, index_data, slug)
@@ -2021,6 +2063,7 @@ def cmd_push_update(name, version=None, bump='patch', notes='', screenshots=None
                 if p.get('id') == preset_id or p.get('path') == subpath:
                     p['version'] = new_version
                     p['configVersion'] = manifest.get('configVersion')
+                    p['updatedAt'] = now_iso()
                     if manifest.get('description'):
                         p['description'] = manifest['description']
                     if manifest.get('wallpaper'):
@@ -2029,6 +2072,7 @@ def cmd_push_update(name, version=None, bump='patch', notes='', screenshots=None
                         p['banner'] = '%s/%s' % (subpath, manifest['banner'])
                     index_screenshots(p, subpath, manifest)
                     break
+            backfill_index_dates(directory, index_data)
             presets_helper.atomic_write_json(os.path.join(directory, INDEX_NAME), index_data)
             base_slug = link.get('baseRepo') or parse_slug(link.get('repo', ''))[0]
             write_collection_readme(directory, index_data, base_slug)
@@ -2120,7 +2164,13 @@ def cmd_set_screenshots(name, screenshots=None):
                 preset_id = os.path.basename(subpath)
                 for p in index_data['presets']:
                     if p.get('id') == preset_id or p.get('path') == subpath:
+                        previous = dict(p)
                         index_screenshots(p, subpath, manifest)
+                        # Only a real change gets a new date: an unconditional
+                        # one would defeat the "nothing changed" check below.
+                        if p != previous:
+                            p['updatedAt'] = now_iso()
+                            backfill_index_dates(directory, index_data)
                         break
                 presets_helper.atomic_write_json(os.path.join(directory, INDEX_NAME), index_data)
         else:
