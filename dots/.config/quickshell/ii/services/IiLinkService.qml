@@ -41,6 +41,9 @@ Singleton {
     readonly property bool dndEnabled: root.opts?.dnd?.enable ?? true
     readonly property bool wolEnabled: root.opts?.wol?.enable ?? true
     readonly property bool perfEnabled: root.opts?.perf?.enable ?? true
+    readonly property bool mediaEnabled: root.opts?.media?.enable ?? true
+    // The helper turns the phone's players into MPRIS ones itself; it only needs telling.
+    onMediaEnabledChanged: root.send({ op: "config", media: root.mediaEnabled })
     readonly property bool pcLiveEnabled: root.opts?.pcLive?.enable ?? true
     readonly property bool shotsAutoToPhone: root.opts?.screenshots?.autoToPhone ?? true
     readonly property int port: root.opts?.port ?? 47210
@@ -141,6 +144,7 @@ Singleton {
         .concat(root.dndEnabled ? ["dnd"] : [])
         .concat(root.pcLiveEnabled ? ["pcLive"] : [])
         .concat(root.perfEnabled ? ["perf"] : [])
+        .concat(root.mediaEnabled ? ["media"] : [])
 
     // What is on right now, read from the same state the shell itself draws from.
     readonly property bool _aodUp: (GlobalStates.oledSaverMonitors ?? []).length > 0
@@ -1572,6 +1576,7 @@ Singleton {
             root.hostName = String(ev.name ?? "");
             root.addresses = ev.addrs ?? [];
             root.wakeTargets = ev.wake ?? [];
+            root.send({ op: "config", media: root.mediaEnabled });
             root.discovery = ev.discovery === true;
             if (root.pairingRequested && !root.pairing)
                 root.send({ op: "pair" });

@@ -2852,6 +2852,10 @@ Singleton {
                 property JsonObject audio: JsonObject {
                     property bool enable: true
                 }
+                // The phone's media players on the PC (as MPRIS players: media widgets, keys).
+                property JsonObject media: JsonObject {
+                    property bool enable: true
+                }
                 // CPU, GPU, RAM and FPS on the phone, sampled only while its panel is open.
                 property JsonObject perf: JsonObject {
                     property bool enable: true

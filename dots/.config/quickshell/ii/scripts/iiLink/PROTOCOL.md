@@ -159,6 +159,19 @@ actions here instead of to KDE Connect:
 | shell → phone | `{"t":"act","a":"text","text"}` | Onto the phone's clipboard, with a notification. |
 | shell → phone | `sendFile` purpose `share` | Into the phone's Downloads, with a notification that opens it. |
 
+## Media
+
+Needs `media` in the shell's caps (Settings → ii tools → Phone media); the helper is told
+with `{"op":"config","media":bool}` and handles these itself: each phone app playing
+becomes an MPRIS player, `org.mpris.MediaPlayer2.iitools_<package>`, for as long as its
+phone stays connected. The shell never sees these messages.
+
+| Direction | Message | |
+| --- | --- | --- |
+| phone → helper | `{"t":"media","source":"<package>","app","title","artist","album","playing","position":ms,"length":ms,"rate","volume":0–100,"canPlay","canPause","canNext","canPrevious","canSeek","art"?:"<base64 JPEG>"}` | On every metadata or playback change, and all of them on connect. `art` only with a new track; kept as `<state>/media/<hash>.jpg` for `mpris:artUrl`. |
+| phone → helper | `{"t":"mediaGone","source"}` | The session ended: the player goes. |
+| helper → phone | `{"t":"mediaCmd","source","a":"play"\|"pause"\|"next"\|"previous"\|"seek"\|"volume","value"?}` | From the MPRIS methods (`seek` in ms, `volume` 0–100). |
+
 ## Files
 
 A file is a header, then its bytes as binary frames (the app sends 256 KiB each):

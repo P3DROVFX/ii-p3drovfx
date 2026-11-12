@@ -11,7 +11,7 @@ import "../../../common/quickToggles/androidStyle"
  * The dashboard's 4x2 media tile, pinned to the phone's media session.
  *
  * The KDE Connect daemon mirrors the phone's playback on the session bus as
- * `org.mpris.MediaPlayer2.kdeconnect` and only publishes it while the phone
+ * `org.mpris.MediaPlayer2.kdeconnect` (or ii tools' `iitools_<app>`) and only publishes it while the phone
  * actually has media — the host uses that as the visibility gate. All metrics
  * mirror AndroidQuickPanel's grid (56px cell, 6px spacing) so the content
  * renders in its full 4x2 "wide" state exactly like in the dashboard.

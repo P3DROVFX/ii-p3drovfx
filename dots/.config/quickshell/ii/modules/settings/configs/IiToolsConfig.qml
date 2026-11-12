@@ -267,6 +267,14 @@ Item {
             }
 
             ConfigSwitch {
+                buttonIcon: "music_note"
+                text: Translation.tr("Phone media")
+                description: Translation.tr("What plays on the phone shows in the media widgets, the island and the lock screen, and the media keys control it")
+                checked: Config.options.iiTools.media.enable
+                onCheckedChanged: Config.options.iiTools.media.enable = checked
+            }
+
+            ConfigSwitch {
                 buttonIcon: "speed"
                 text: Translation.tr("Performance panel")
                 description: Translation.tr("CPU, GPU, RAM and the frame rate on the phone, sampled only while its panel is open")

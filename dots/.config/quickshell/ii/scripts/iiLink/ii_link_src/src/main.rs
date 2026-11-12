@@ -11,6 +11,7 @@
 
 mod files;
 mod icons;
+mod mpris;
 
 use std::collections::HashMap;
 use std::fs;
@@ -77,6 +78,9 @@ struct Shared {
     conns: HashMap<String, Conn>,
     conn_serial: u64,
     open_sockets: usize,
+    /// The phones' media as MPRIS players; the shell switches it (`config`).
+    media: bool,
+    media_tx: mpsc::UnboundedSender<mpris::Event>,
 }
 
 type State = Arc<Mutex<Shared>>;
@@ -409,6 +413,19 @@ async fn serve(stream: TcpStream, addr: SocketAddr, acceptor: TlsAcceptor, state
                         }
                     }
                 }
+                // The phone's players: MPRIS here, the shell need not hear about them.
+                Ok(m) if m["t"] == "media" || m["t"] == "mediaGone" => {
+                    let s = state.lock().unwrap();
+                    if s.media {
+                        let ev = if m["t"] == "media" {
+                            let phone = s.peers.iter().find(|p| p.id == dev).map(|p| p.name.clone()).unwrap_or_default();
+                            mpris::Event::Update { dev: dev.clone(), phone, tx: tx.clone(), m }
+                        } else {
+                            mpris::Event::Gone { dev: dev.clone(), source: m["source"].as_str().unwrap_or("").to_string() }
+                        };
+                        let _ = s.media_tx.send(ev);
+                    }
+                }
                 Ok(m) if m.is_object() => emit(json!({"ev": "msg", "dev": dev, "m": m})),
                 _ => {}
             },
@@ -443,6 +460,8 @@ async fn serve(stream: TcpStream, addr: SocketAddr, acceptor: TlsAcceptor, state
     }
     let mut s = state.lock().unwrap();
     if s.conns.get(&dev).is_some_and(|c| c.serial == serial) {
+        // A phone that reconnected keeps the players its new socket feeds.
+        let _ = s.media_tx.send(mpris::Event::DevGone { dev: dev.clone() });
         s.conns.remove(&dev);
         emit(json!({"ev": "disconnected", "dev": dev}));
     }
@@ -519,6 +538,16 @@ fn handle_op(state: &State, line: &str) {
                 }
                 emit(json!({"ev": if ok { "fileSent" } else { "fileSendFailed" }, "dev": dev, "id": id}));
             });
+        }
+        // Settings the shell holds: for now, whether the phones' media become MPRIS players.
+        "config" => {
+            let mut s = state.lock().unwrap();
+            if let Some(on) = op["media"].as_bool() {
+                s.media = on;
+                if !on {
+                    let _ = s.media_tx.send(mpris::Event::Disable);
+                }
+            }
         }
         "kick" => {
             let dev = op["dev"].as_str().unwrap_or("");
@@ -614,6 +643,8 @@ async fn main() {
     let udp = UdpSocket::bind(("0.0.0.0", port)).await.ok();
 
     let peers = load_peers(&dir);
+    let (media_tx, media_rx) = mpsc::unbounded_channel();
+    tokio::spawn(mpris::run(media_rx, dir.join("media")));
     let state: State = Arc::new(Mutex::new(Shared {
         dir,
         name: name.clone(),
@@ -625,6 +656,8 @@ async fn main() {
         conns: HashMap::new(),
         conn_serial: 0,
         open_sockets: 0,
+        media: false,
+        media_tx,
     }));
 
     emit(json!({"ev": "ready", "port": port, "fp": fingerprint, "name": name, "addrs": addresses(), "wake": wake_targets(), "discovery": udp.is_some()}));

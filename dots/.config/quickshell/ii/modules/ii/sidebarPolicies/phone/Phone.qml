@@ -59,12 +59,18 @@ Item {
 
     property int entranceTrigger: -1
 
-    // ─── Phone media (KDE Connect MPRIS) ───
-    // The KDE Connect daemon mirrors the phone's playback on the session bus as
-    // `org.mpris.MediaPlayer2.kdeconnect` and only publishes it while the phone
-    // actually has a media session — existence is the "has media" gate.
-    readonly property var phoneMprisPlayer: MprisController.players.find(
-        p => p.dbusName?.indexOf("kdeconnect") >= 0) ?? null
+    // ─── Phone media (MPRIS) ───
+    // Both backends mirror the phone's playback on the session bus and publish it only
+    // while the phone has a media session, so existence is the "has media" gate: KDE
+    // Connect as `org.mpris.MediaPlayer2.kdeconnect`, the ii tools helper as one
+    // `org.mpris.MediaPlayer2.iitools_<app>` per app (the one playing first).
+    readonly property var phoneMprisPlayer: {
+        if (KdeConnectService.activeIsIi) {
+            const mine = MprisController.players.filter(p => p.dbusName?.indexOf("iitools_") >= 0);
+            return mine.find(p => p.isPlaying) ?? mine[0] ?? null;
+        }
+        return MprisController.players.find(p => p.dbusName?.indexOf("kdeconnect") >= 0) ?? null;
+    }
     readonly property bool phoneHasMedia: root.phoneMprisPlayer !== null
         && (root.phoneMprisPlayer.trackTitle ?? "") !== ""
 
