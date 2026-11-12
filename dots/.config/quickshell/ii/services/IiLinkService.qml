@@ -45,6 +45,7 @@ Singleton {
     // The helper turns the phone's players into MPRIS ones itself; it only needs telling.
     onMediaEnabledChanged: root.send({ op: "config", media: root.mediaEnabled })
     readonly property bool pcLiveEnabled: root.opts?.pcLive?.enable ?? true
+    readonly property bool pcMediaEnabled: root.opts?.pcMedia?.enable ?? true
     readonly property bool shotsAutoToPhone: root.opts?.screenshots?.autoToPhone ?? true
     readonly property int port: root.opts?.port ?? 47210
 
@@ -145,6 +146,7 @@ Singleton {
         .concat(root.pcLiveEnabled ? ["pcLive"] : [])
         .concat(root.perfEnabled ? ["perf"] : [])
         .concat(root.mediaEnabled ? ["media"] : [])
+        .concat(root.pcMediaEnabled ? ["pcMedia"] : [])
 
     // What is on right now, read from the same state the shell itself draws from.
     readonly property bool _aodUp: (GlobalStates.oledSaverMonitors ?? []).length > 0
@@ -433,6 +435,13 @@ Singleton {
         if (root.notifsLive)
             root.mirrorsNotifications = true;
     }
+    // The phone sends its list on connect, but its notification access can come up after
+    // the link (the app just updated), and a shell reload loses the list: ask for it
+    // whenever a phone starts mirroring.
+    onNotifDevChanged: {
+        if (root.notifDev !== "")
+            root.sendTo(root.notifDev, { t: "get", what: "notifs" });
+    }
 
     function iconFor(pkg): string {
         return /^[A-Za-z0-9._]+$/.test(pkg ?? "") ? `${root.iconDir}/${pkg}.png` : "";
@@ -448,6 +457,8 @@ Singleton {
             text: String(n?.text ?? ""),
             time: Number(n?.time ?? Date.now()),
             image: typeof n?.image === "string" && n.image !== "" ? `data:image/jpeg;base64,${n.image}` : "",
+            // The sender's photo: an avatar, never the content preview.
+            avatar: typeof n?.avatar === "string" && n.avatar !== "" ? `data:image/jpeg;base64,${n.avatar}` : "",
             actions: actions.map(a => ({ i: Number(a?.i ?? 0), label: String(a?.label ?? ""), reply: a?.reply === true, hint: String(a?.hint ?? "") }))
         };
     }
@@ -469,6 +480,7 @@ Singleton {
         Notifications.publishInternalNotification({
             appName: n.app,
             appIcon: root.iconFor(n.pkg),
+            image: n.avatar,
             summary: n.title || n.app,
             body: n.text,
             phone: true,
@@ -807,6 +819,201 @@ Singleton {
         return "not_found";
     }
 
+    // ── The PC's media on the phone ─────────────────────────────────────
+    // The shell's active player goes to the phone that asked (`pcMedia` in its caps) as
+    // one topic, pushed on change; the position only rides along, and is re-sent when it
+    // jumps (a seek), since the phone runs the clock itself. The cover goes as a file,
+    // once per image. The phone's own players (the helper's `iitools_` buses) are never
+    // sent back to it.
+
+    readonly property string pcMediaDev: root.pcMediaEnabled ? root._capDev("pcMedia") : ""
+
+    function _isPhonePlayer(player): bool {
+        return (player?.dbusName ?? "").startsWith("org.mpris.MediaPlayer2.iitools_");
+    }
+
+    readonly property var pcMediaPlayer: {
+        if (root.pcMediaDev === "")
+            return null;
+        const active = MprisController.activePlayer;
+        if (active && !root._isPhonePlayer(active))
+            return active;
+        const list = Array.from(MprisController.players).filter(p => !root._isPhonePlayer(p));
+        return list.find(p => p.isPlaying) ?? list[0] ?? null;
+    }
+
+    readonly property string _pcArtPath: root.pcMediaPlayer ? CoverArt.localPath(root.pcMediaPlayer.trackArtUrl ?? "") : ""
+    readonly property string _pcArt: root._pcArtPath !== "" ? Qt.md5(root._pcArtPath) : ""
+
+    function _pcMedia(): var {
+        const p = root.pcMediaPlayer;
+        if (!p)
+            return { t: "pcMedia", on: false };
+        return {
+            t: "pcMedia",
+            on: true,
+            id: p.dbusName ?? "",
+            app: p.identity ?? "",
+            title: p.trackTitle ?? "",
+            artist: p.trackArtist ?? "",
+            album: p.trackAlbum ?? "",
+            playing: p.isPlaying ?? false,
+            length: Math.round(MprisController.trackLengthOf(p) * 1000),
+            rate: p.rate ?? 1,
+            canPlay: p.canPlay ?? false,
+            canPause: p.canPause ?? false,
+            canNext: p.canGoNext ?? false,
+            canPrevious: p.canGoPrevious ?? false,
+            canSeek: (p.canSeek ?? false) && MprisController.hasTrackLength(p),
+            art: root._pcArt
+        };
+    }
+
+    readonly property string _pcMediaKey: root.pcMediaDev !== "" ? JSON.stringify(root._pcMedia()) : ""
+    /// What the phone was last told about the position: {pos (s), wall (ms), playing, rate}.
+    property var _pcSent: null
+    property bool _pcForce: false
+
+    // A track change lands as several property changes in a row: one push for all.
+    on_PcMediaKeyChanged: {
+        if (root._pcMediaKey === "") {
+            root._sentKeys["pcMedia"] = "";
+            root._pcSent = null;
+        } else if (!pcMediaPush.running) {
+            pcMediaPush.start();
+        }
+    }
+    Timer {
+        id: pcMediaPush
+        interval: 150
+        onTriggered: {
+            const key = root._pcMediaKey;
+            if (key === "" || (!root._pcForce && key === (root._sentKeys["pcMedia"] ?? "")))
+                return;
+            root._pcForce = false;
+            root._sentKeys["pcMedia"] = key;
+            const m = JSON.parse(key);
+            const p = root.pcMediaPlayer;
+            if (m.on && p) {
+                const pos = MprisController.trackPositionOf(p);
+                m.position = Math.round(pos * 1000);
+                root._pcSent = { pos: pos, wall: Date.now(), playing: m.playing, rate: m.rate || 1 };
+            }
+            root.sendTo(root.pcMediaDev, m);
+        }
+    }
+    Connections {
+        target: root.pcMediaPlayer
+        // Seeks, and the 1 s ticks of whatever widget shows the player: only a jump
+        // away from where the phone's clock stands is worth a push.
+        function onPositionChanged() {
+            const s = root._pcSent;
+            const p = root.pcMediaPlayer;
+            if (!s || !p)
+                return;
+            const expected = s.pos + (s.playing ? (Date.now() - s.wall) / 1000 * s.rate : 0);
+            if (Math.abs(MprisController.trackPositionOf(p) - expected) > 2) {
+                root._pcForce = true;
+                pcMediaPush.restart();
+            }
+        }
+    }
+
+    property string _pcArtSent: ""
+    on_PcArtChanged: root._sendPcArt()
+    onPcMediaDevChanged: {
+        root._pcArtSent = "";
+        root._sendPcArt();
+    }
+    function _sendPcArt(): void {
+        if (root.pcMediaDev === "" || root._pcArt === "" || root._pcArt === root._pcArtSent)
+            return;
+        root._pcArtSent = root._pcArt;
+        root.send({ op: "sendFile", dev: root.pcMediaDev, id: 700000 + root._fileSerial++, path: root._pcArtPath,
+            name: root._pcArt, purpose: "pcMediaArt" });
+    }
+
+    /// A button on the phone's player: {a: play|pause|toggle|next|previous|seek, value (ms)}.
+    function _runPcMedia(arg): string {
+        const p = root.pcMediaPlayer;
+        if (!p)
+            return "not_found";
+        switch (String(arg?.a ?? "")) {
+        case "play":
+            p.play();
+            return "";
+        case "pause":
+            p.pause();
+            return "";
+        case "toggle":
+            p.togglePlaying();
+            return "";
+        case "next":
+            p.next();
+            return "";
+        case "previous":
+            p.previous();
+            return "";
+        case "seek": {
+            const length = MprisController.trackLengthOf(p);
+            if (!p.canSeek || length <= 0)
+                return "unsupported";
+            MprisController.seekFraction(p, Number(arg.value ?? 0) / 1000 / length);
+            root._pcForce = true;
+            pcMediaPush.restart();
+            return "";
+        }
+        }
+        return "bad_arg";
+    }
+
+    // ── Launcher icons for the Android Apps page ────────────────────────
+    // The phone draws them (the launcher's own look) and sends each as a file, into the
+    // per-device cache PhoneAppIconService already reads; adb extraction stays for KDE
+    // Connect phones.
+
+    readonly property string launcherIconDev: root._capDev("launcherIcons")
+    /// A launcher icon landed on disk.
+    signal launcherIconReady(string pkg, string path)
+
+    /// The cache folder PhoneAppIconService (and its adb extractor) use for this phone.
+    function launcherIconDir(dev): string {
+        const id = `iitools:${dev}`.replace(/[^A-Za-z0-9._-]/g, "_");
+        return `${FileUtils.trimFileProtocol(Directories.cache)}/phone_app_icons/${id}`;
+    }
+
+    function requestLauncherIcons(pkgs): bool {
+        const dev = root.launcherIconDev;
+        if (dev === "")
+            return false;
+        const list = Array.from(pkgs ?? []).map(String).filter(p => /^[A-Za-z0-9._]+$/.test(p));
+        for (let i = 0; i < list.length; i += 64)
+            root.sendTo(dev, { t: "get", what: "launcherIcons", pkgs: list.slice(i, i + 64) });
+        return true;
+    }
+
+    // Moved one at a time, so the page is told only once the file is in place.
+    property var _iconMoves: []
+    function _moveIcons(): void {
+        if (iconMover.running || root._iconMoves.length === 0)
+            return;
+        const next = root._iconMoves.shift();
+        iconMover.pkg = next.pkg;
+        iconMover.dest = `${next.dir}/${next.pkg}.png`;
+        iconMover.command = ["sh", "-c", 'mkdir -p -- "$1" && mv -f -- "$2" "$3"', "sh", next.dir, next.from, iconMover.dest];
+        iconMover.running = true;
+    }
+    Process {
+        id: iconMover
+        property string pkg: ""
+        property string dest: ""
+        onExited: exitCode => {
+            if (exitCode === 0)
+                root.launcherIconReady(iconMover.pkg, iconMover.dest);
+            Qt.callLater(root._moveIcons);
+        }
+    }
+
     // ── Performance panel ───────────────────────────────────────────────
     // The phone subscribes while its panel is on screen (`sub perf`); only then does a
     // sampler run (the same one as the performance HUD: CPU, RAM, the GPU, MangoHud's
@@ -1109,6 +1316,16 @@ Singleton {
             if (!root.phoneDataEnabled || !/^[0-9a-f]{8,64}$/.test(key))
                 return refuse("bad_arg");
             Quickshell.execDetached(["sh", "-c", 'mkdir -p -m 700 -- "$1" && mv -f -- "$2" "$1/$3.jpg"', "sh", root.contactsDir, path, key]);
+            root.sendTo(dev, { t: "ok", id: id });
+            return;
+        }
+        // A launcher icon for the Android Apps page, into the cache that page reads.
+        if (ev.purpose === "launcherIcon") {
+            const pkg = name.replace(/\.png$/, "");
+            if (!/^[A-Za-z0-9._]+$/.test(pkg))
+                return refuse("bad_arg");
+            root._iconMoves.push({ pkg: pkg, from: path, dir: root.launcherIconDir(dev) });
+            root._moveIcons();
             root.sendTo(dev, { t: "ok", id: id });
             return;
         }
@@ -1479,6 +1696,8 @@ Singleton {
             let why;
             if (action === "live")
                 why = root.pcLiveEnabled ? root._runLive(m.arg) : "disabled";
+            else if (action === "pcMedia")
+                why = root.pcMediaEnabled ? root._runPcMedia(m.arg) : "disabled";
             else if (action === "clip")
                 why = root.clipEnabled ? root._clipFromPhone(dev, m.arg) : "disabled";
             else if (action === "share")
@@ -1677,7 +1896,7 @@ Singleton {
         }
         /// The notifications mirrored over the link: app, title and actions, newest last.
         function notifications(): string {
-            return JSON.stringify(root.linkNotifications.map(n => ({ app: n.app, title: n.title, text: n.text, actions: n.actions.length, image: n.image !== "" })));
+            return JSON.stringify(root.linkNotifications.map(n => ({ app: n.app, title: n.title, text: n.text, actions: n.actions.length, image: n.image !== "", avatar: n.avatar !== "" })));
         }
         function status(): string {
             return JSON.stringify({

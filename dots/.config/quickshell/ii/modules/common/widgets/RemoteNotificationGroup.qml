@@ -309,6 +309,7 @@ Item {
                 Layout.fillWidth: false
                 visible: !(root.expanded && root.multipleNotifications)
                 appIcon: root.notificationGroup?.appIcon || ""
+                image: root.notificationGroup?.image || ""
                 summary: root.notificationGroup?.appName || ""
                 color: Appearance.colors.colSurfaceContainerHighest
             }

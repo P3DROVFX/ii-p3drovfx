@@ -45,11 +45,24 @@ Singleton {
      * back on its own.
      */
     function fetchMissing(packages: var): void {
-        if (!root.enabled || !root.available) return;
-        if (!KdeConnectService.adbReachable) return;
+        if (!root.enabled) return;
 
         const wanted = Array.from(packages ?? []).filter(name => name && !root.icons[name] && !root.pending.has(name));
         if (wanted.length === 0) return;
+
+        // An ii tools phone draws its own icons and sends them over the link: fast,
+        // the launcher's look, and no adb needed.
+        if (root.viaLink) {
+            if (!IiLinkService.requestLauncherIcons(wanted)) return;
+            wanted.forEach(name => root.pending.add(name));
+            root.batchSize += wanted.length;
+            root.outstanding = root.pending.size;
+            linkTimeout.restart();
+            return;
+        }
+
+        if (!root.available) return;
+        if (!KdeConnectService.adbReachable) return;
 
         wanted.forEach(name => {
             root.pending.add(name);
@@ -117,6 +130,38 @@ Singleton {
         const next = Object.assign({}, root.icons);
         next[packageName] = path;
         root.icons = next;
+    }
+
+    readonly property bool viaLink: KdeConnectService.activeIsIi && IiLinkService.launcherIconDev !== ""
+
+    Connections {
+        target: IiLinkService
+        function onLauncherIconReady(pkg, path) {
+            if (root.viaLink)
+                root._store(pkg, path);
+        }
+    }
+
+    // Over the link icons are cheap: the listed apps get theirs without a refresh.
+    Connections {
+        target: root.viaLink && root.enabled ? PhoneScrcpyService : null
+        function onAppsChanged() {
+            root._fetchListed();
+        }
+    }
+    function _fetchListed(): void {
+        if (root.viaLink && root.enabled)
+            root.fetchMissing((PhoneScrcpyService.apps || []).map(a => a.package));
+    }
+    onViaLinkChanged: root._fetchListed()
+    // Created only when the Android Apps page first opens, maybe with the list there.
+    Component.onCompleted: Qt.callLater(root._fetchListed)
+
+    // An app the phone cannot draw sends nothing: stop waiting for it.
+    Timer {
+        id: linkTimeout
+        interval: 20000
+        onTriggered: root._resetProgress()
     }
 
     onDeviceIdChanged: {

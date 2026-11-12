@@ -447,6 +447,8 @@ Singleton {
         // DBus iteration order, which may not match arrival time.
         for (const key in groups) {
             groups[key].notifications.sort((a, b) => (b.time || 0) - (a.time || 0))
+            // ii tools sends the sender's photo apart: the newest one heads the group.
+            groups[key].image = groups[key].notifications[0].avatar || ""
         }
         return groups
     }
@@ -1084,6 +1086,7 @@ Singleton {
                 dismissable: true,
                 iconPath: IiLinkService.iconFor(n.pkg),
                 image: n.image,
+                avatar: n.avatar,
                 actions: n.actions.filter(a => !a.reply).map(a => ({ key: String(a.i), label: a.label })),
                 replyId: reply ? String(reply.i) : "",
                 replyPlaceholder: reply?.hint || Translation.tr("Reply"),

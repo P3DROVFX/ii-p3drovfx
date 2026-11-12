@@ -491,6 +491,7 @@ Singleton {
             "internal": true,
             "appName": appName,
             "appIcon": String(options?.appIcon ?? ""),
+            "image": String(options?.image ?? ""),
             "summary": String(options?.summary ?? ""),
             "body": String(options?.body ?? ""),
             "urgency": String(options?.urgency ?? "normal"),

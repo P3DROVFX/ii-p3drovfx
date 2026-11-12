@@ -2879,6 +2879,11 @@ Singleton {
                 property JsonObject pcLive: JsonObject {
                     property bool enable: true
                 }
+                // What plays on the PC as a media player on the phone (lock screen,
+                // Quick Settings), controlling the shell's active player.
+                property JsonObject pcMedia: JsonObject {
+                    property bool enable: true
+                }
                 // The phone's next alarm, contacts with photos, battery and network, from
                 // the app instead of ADB and KDE Connect.
                 property JsonObject phoneData: JsonObject {

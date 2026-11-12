@@ -108,14 +108,17 @@ after the last one; a PC it cannot reach is not retried for 5 min.
 
 | Direction | Message | |
 | --- | --- | --- |
-| phone → shell | `{"t":"notifs","list":[n]}` | The whole current list, on every connect (once `hello` shows `notifs`). |
+| phone → shell | `{"t":"notifs","list":[n]}` | The whole current list, on every connect (once `hello` shows `notifs`), when the phone's notification access comes up after the link, and when asked. |
+| shell → phone | `{"t":"get","what":"notifs"}` | Whenever a phone starts mirroring (its `caps` gain `notifs`, or the shell reloaded). |
 | phone → shell | `{"t":"notif","n":n}` | Posted or updated. A new text pops up on the desktop. |
 | phone → shell | `{"t":"notifGone","key"}` | Removed on the phone. |
 | shell → phone | `{"t":"notifAct","key","a":"dismiss"\|"action"\|"reply","i":N,"text":"…"}` | `i` indexes `n.actions`; `reply` fills the action's free-form RemoteInput. |
 | phone → shell | `{"t":"live","p":{…}}` / `{"t":"liveGone","id"}` | A live update while the link is up: the same payload as an `iilive1:` relay, which the app then does not post. |
 
-`n` is `{key, pkg, app, title, text, time, image?, actions?: [{i, label, reply, hint}]}`;
-`image` is a base64 JPEG of at most 480 px (a big picture or the sender's photo). App
+`n` is `{key, pkg, app, title, text, time, image?, avatar?, actions?: [{i, label, reply, hint}]}`;
+`image` is content, a base64 JPEG of at most 480 px (a big picture, or a large icon that
+is not square: a video thumbnail); `avatar` is a person, at most 128 px (a square large
+icon, or the last message's sender in a chat), shown as the group's icon. App
 icons go once per app per PC as files (`purpose: "appIcon"`, name `<package>.png`), kept
 in `<state>/icons/`.
 
@@ -172,6 +175,18 @@ phone stays connected. The shell never sees these messages.
 | phone → helper | `{"t":"mediaGone","source"}` | The session ended: the player goes. |
 | helper → phone | `{"t":"mediaCmd","source","a":"play"\|"pause"\|"next"\|"previous"\|"seek"\|"volume","value"?}` | From the MPRIS methods (`seek` in ms, `volume` 0–100). |
 
+## The PC's media
+
+The other way: the shell's active player as a media player on the phone (its lock screen
+and Quick Settings). Needs `pcMedia` in both caps (Settings → ii tools → PC media on the
+phone; the app's own switch). The phone's own players (`iitools_` buses) are never sent.
+
+| Direction | Message | |
+| --- | --- | --- |
+| shell → phone | `{"t":"pcMedia","on":true,"id":"<bus>","app","title","artist","album","playing","position":ms,"length":ms,"rate","canPlay","canPause","canNext","canPrevious","canSeek","art":"<md5>"}` | On change (coalesced 150 ms) and on connect; `{"t":"pcMedia","on":false}` when nothing plays. The position is only re-sent when it jumps (a seek): the phone runs the clock from `position`, `playing` and `rate`. |
+| shell → phone | `sendFile` purpose `pcMediaArt`, name `<md5>` | The cover, once per image per connection; `art` names it. |
+| phone → shell | `cmd` `pcMedia`, arg `{"a":"play"\|"pause"\|"toggle"\|"next"\|"previous"\|"seek","value"?:ms}` | The phone's buttons. `unsupported` for a seek the player cannot do. |
+
 ## Files
 
 A file is a header, then its bytes as binary frames (the app sends 256 KiB each):
@@ -193,6 +208,7 @@ the connection closing. One file at a time per phone.
 | `clip` | `iiTools.clipboard.enable` | `wl-copy --type <image mime>` from the file, then deletes it. |
 | `contactPhoto` | `iiTools.phoneData.enable` | moves `<photo>.jpg` to `<state>/contacts/`. |
 | `appIcon` | — | moves `<package>.png` to `<state>/icons/`, for the notifications. |
+| `launcherIcon` | — | moves `<package>.png` (192 px, full bleed: an adaptive icon's safe zone fills it, unmasked) to `~/.cache/quickshell/phone_app_icons/iitools_<dev>/`, the Android Apps page's cache, which masks it to the chosen shape. Asked with `{"t":"get","what":"launcherIcons","pkgs":[…]}` (up to 64 per message; cap `launcherIcons`) for the listed apps that have none. |
 | `screenshot` | `iiTools.screenshots.enable` | a phone screenshot: to `~/Pictures/Screenshots/Phone/<name>`, onto the clipboard, and into the screenshot preview. The other way the phone (cap `shots`) saves it to its gallery (Pictures/ii tools) with a notification. |
 | `wallpaper` | `iiTools.wallpaper.enable` | moves it to the wallpapers folder as `phone-<date>-<name>`, then `Wallpapers.select` / `selectLockscreen`. `bad_arg` unless the name is an image, `busy` while one is being filed. |
 

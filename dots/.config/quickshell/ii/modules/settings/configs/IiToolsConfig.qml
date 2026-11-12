@@ -275,6 +275,14 @@ Item {
             }
 
             ConfigSwitch {
+                buttonIcon: "queue_music"
+                text: Translation.tr("PC media on the phone")
+                description: Translation.tr("What plays here shows as a media player on the phone's lock screen and Quick Settings, with play, skip and seek")
+                checked: Config.options.iiTools.pcMedia.enable
+                onCheckedChanged: Config.options.iiTools.pcMedia.enable = checked
+            }
+
+            ConfigSwitch {
                 buttonIcon: "speed"
                 text: Translation.tr("Performance panel")
                 description: Translation.tr("CPU, GPU, RAM and the frame rate on the phone, sampled only while its panel is open")
