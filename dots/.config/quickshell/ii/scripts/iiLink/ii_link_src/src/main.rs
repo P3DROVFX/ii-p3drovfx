@@ -177,6 +177,33 @@ fn addresses() -> Vec<String> {
     lan
 }
 
+/// What a phone needs to wake this PC (Wake-on-LAN): each LAN interface's MAC and its
+/// subnet broadcast. Wired ones first: Wi-Fi rarely wakes from a magic packet.
+fn wake_targets() -> Vec<Value> {
+    let mut wired = Vec::new();
+    let mut wifi = Vec::new();
+    for iface in if_addrs::get_if_addrs().unwrap_or_default() {
+        let if_addrs::IfAddr::V4(v4) = &iface.addr else { continue };
+        if !v4.ip.is_private() || v4.ip.is_loopback() {
+            continue;
+        }
+        let n = iface.name.as_str();
+        if ["docker", "br-", "veth", "virbr", "podman", "lxc", "vmnet", "tailscale", "wg"].iter().any(|p| n.starts_with(p)) {
+            continue;
+        }
+        let Ok(mac) = fs::read_to_string(format!("/sys/class/net/{n}/address")) else { continue };
+        let mac = mac.trim().to_string();
+        if mac.is_empty() || mac == "00:00:00:00:00:00" {
+            continue;
+        }
+        let is_wifi = Path::new(&format!("/sys/class/net/{n}/wireless")).exists();
+        let target = json!({"iface": n, "mac": mac, "broadcast": v4.broadcast.map(|b| b.to_string()), "wifi": is_wifi});
+        if is_wifi { wifi.push(target) } else { wired.push(target) }
+    }
+    wired.extend(wifi);
+    wired
+}
+
 fn percent_encode(s: &str) -> String {
     s.bytes()
         .map(|b| match b {
@@ -600,7 +627,7 @@ async fn main() {
         open_sockets: 0,
     }));
 
-    emit(json!({"ev": "ready", "port": port, "fp": fingerprint, "name": name, "addrs": addresses(), "discovery": udp.is_some()}));
+    emit(json!({"ev": "ready", "port": port, "fp": fingerprint, "name": name, "addrs": addresses(), "wake": wake_targets(), "discovery": udp.is_some()}));
     emit(peers_event(&state.lock().unwrap().peers));
 
     if let Some(sock) = udp {

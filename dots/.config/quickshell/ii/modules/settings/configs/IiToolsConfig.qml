@@ -319,6 +319,23 @@ Item {
             }
         }
 
+        // ── Wake-on-LAN ─────────────────────────────────────────────────
+        ContentSection {
+            icon: "power_settings_new"
+            title: Translation.tr("Wake from the phone")
+
+            ConfigSwitch {
+                buttonIcon: "settings_ethernet"
+                text: Translation.tr("Let the phone wake this PC")
+                description: IiLinkService.wakeTargets.length > 0
+                    ? Translation.tr("Sends the phone %1. Wake-on-LAN must be on in the firmware and for the adapter (usually wired only).")
+                        .arg(IiLinkService.wakeTargets.map(t => `${t.iface} ${t.mac}`).join(", "))
+                    : Translation.tr("No wired or Wi-Fi adapter with a LAN address right now.")
+                checked: Config.options.iiTools.wol.enable
+                onCheckedChanged: Config.options.iiTools.wol.enable = checked
+            }
+        }
+
         // ── Do Not Disturb ──────────────────────────────────────────────
         ContentSection {
             icon: "do_not_disturb_on"

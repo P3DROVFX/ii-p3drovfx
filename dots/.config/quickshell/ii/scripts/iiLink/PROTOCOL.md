@@ -60,7 +60,7 @@ After `authOk` every frame is a JSON object with a `t` field:
 
 | Direction | Message | Meaning |
 | --- | --- | --- |
-| shell → phone | `{"t":"hello","v":1,"name":"…","caps":["remote"],"actions":[{id,name,icon,toggle}]}` | Sent on connect and whenever an integration is switched on or off. `icon` is a Material Symbol name; `toggle` actions have an on/off state. |
+| shell → phone | `{"t":"hello","v":1,"name":"…","caps":["remote"],"actions":[{id,name,icon,toggle}],"wake":[{iface,mac,broadcast,wifi}]}` | Sent on connect and whenever an integration is switched on or off. `icon` is a Material Symbol name; `toggle` actions have an on/off state. `wake` (Settings → ii tools → Wake from the phone) is kept by the phone for Wake-on-LAN: a magic packet to each MAC, at its subnet broadcast and 255.255.255.255, ports 9 and 7. |
 | shell → phone | `{"t":"state","on":["lock","mediaMode"]}` | The toggle actions that are on. Sent after `hello` and on every change, whatever caused it (the phone, a keybind, the lock timing out). |
 | phone → shell | `{"t":"cmd","id":N,"a":"<action id>"}` | Run an action from `actions`. |
 | phone → shell | `{"t":"cmd","id":N,"a":"<command>","arg":…}` | A command with an argument (table below). |
@@ -180,7 +180,7 @@ sides. Changing the meaning of an existing one does: that is `iilink/2`, on a ne
 
 | Helper → shell | |
 | --- | --- |
-| `{"ev":"ready","port","fp","name","addrs":[…],"discovery":bool}` | Listening. |
+| `{"ev":"ready","port","fp","name","addrs":[…],"wake":[{iface,mac,broadcast,wifi}],"discovery":bool}` | Listening. `wake`: the LAN adapters, wired first. |
 | `{"ev":"peers","list":[{id,name,model,pairedAt,lastSeen}]}` | At start and on every change. |
 | `{"ev":"pairing","url","qr":["0101…",…],"expires":ms}` | A pairing window opened. |
 | `{"ev":"paired","dev":{id,name,model}}` | Sent after `peers`, before `pairingEnd`. |

@@ -38,6 +38,7 @@ Singleton {
     readonly property bool shotsEnabled: root.opts?.screenshots?.enable ?? true
     readonly property bool phoneDataEnabled: root.opts?.phoneData?.enable ?? true
     readonly property bool dndEnabled: root.opts?.dnd?.enable ?? true
+    readonly property bool wolEnabled: root.opts?.wol?.enable ?? true
     readonly property bool pcLiveEnabled: root.opts?.pcLive?.enable ?? true
     readonly property bool shotsAutoToPhone: root.opts?.screenshots?.autoToPhone ?? true
     readonly property int port: root.opts?.port ?? 47210
@@ -97,6 +98,8 @@ Singleton {
     property string fingerprint: ""
     property string hostName: ""
     property var addresses: []
+    /// [{ iface, mac, broadcast, wifi }] from the helper: what a phone needs to wake this PC.
+    property var wakeTargets: []
     property bool discovery: false
     /// "" or what last went wrong (a port in use, a broken state dir).
     property string lastError: ""
@@ -1353,7 +1356,9 @@ Singleton {
             v: 1,
             name: root.hostName,
             caps: root.capabilities,
-            actions: root.allowedActions
+            actions: root.allowedActions,
+            // Kept by the phone with the pairing: it is needed exactly when the PC is off.
+            wake: root.wolEnabled ? root.wakeTargets : []
         };
     }
 
@@ -1467,6 +1472,7 @@ Singleton {
             root.fingerprint = String(ev.fp ?? "");
             root.hostName = String(ev.name ?? "");
             root.addresses = ev.addrs ?? [];
+            root.wakeTargets = ev.wake ?? [];
             root.discovery = ev.discovery === true;
             if (root.pairingRequested && !root.pairing)
                 root.send({ op: "pair" });
