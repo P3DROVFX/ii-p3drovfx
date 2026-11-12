@@ -2884,6 +2884,10 @@ Singleton {
                 property JsonObject pcMedia: JsonObject {
                     property bool enable: true
                 }
+                // The phone's storage in the file manager (SFTP + sshfs, as KDE Connect).
+                property JsonObject files: JsonObject {
+                    property bool enable: true
+                }
                 // The phone's next alarm, contacts with photos, battery and network, from
                 // the app instead of ADB and KDE Connect.
                 property JsonObject phoneData: JsonObject {

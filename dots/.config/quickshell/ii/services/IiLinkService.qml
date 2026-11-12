@@ -46,6 +46,7 @@ Singleton {
     onMediaEnabledChanged: root.send({ op: "config", media: root.mediaEnabled })
     readonly property bool pcLiveEnabled: root.opts?.pcLive?.enable ?? true
     readonly property bool pcMediaEnabled: root.opts?.pcMedia?.enable ?? true
+    readonly property bool filesEnabled: root.opts?.files?.enable ?? true
     readonly property bool shotsAutoToPhone: root.opts?.screenshots?.autoToPhone ?? true
     readonly property int port: root.opts?.port ?? 47210
 
@@ -147,6 +148,7 @@ Singleton {
         .concat(root.perfEnabled ? ["perf"] : [])
         .concat(root.mediaEnabled ? ["media"] : [])
         .concat(root.pcMediaEnabled ? ["pcMedia"] : [])
+        .concat(root.filesEnabled ? ["files"] : [])
 
     // What is on right now, read from the same state the shell itself draws from.
     readonly property bool _aodUp: (GlobalStates.oledSaverMonitors ?? []).length > 0
@@ -967,6 +969,119 @@ Singleton {
         return "bad_arg";
     }
 
+    // ── The phone's files in the file manager ───────────────────────────
+    // As KDE Connect does: the phone runs an SFTP server while the PC has it mounted.
+    // It is asked for over the link, which also carries a fresh password and the host
+    // key (pinned in a known_hosts of our own), and sshfs mounts it under the runtime
+    // dir; the mount goes when the phone disconnects.
+
+    readonly property string filesRoot: `${Quickshell.env("XDG_RUNTIME_DIR") || "/tmp"}/ii-tools`
+    /// dev → mount point, while mounted.
+    property var filesMounts: ({})
+    property string _filesOpenDev: ""
+
+    function _filesDir(dev): string {
+        const peer = root.peers.find(p => p.id === dev);
+        const name = String(peer?.name || peer?.model || dev).replace(/[\/\0]/g, "_");
+        return `${root.filesRoot}/${name}`;
+    }
+
+    /// Opens the phone's storage in the file manager, mounting it first.
+    function browsePhoneFiles(dev): bool {
+        if (!root.filesEnabled || root.connections[dev] === undefined || !(root.phoneCaps[dev] ?? []).includes("files"))
+            return false;
+        root._filesOpenDev = dev;
+        if (root.filesMounts[dev]) {
+            root._openFiles(dev, root.filesMounts[dev].open);
+            return true;
+        }
+        root.sendTo(dev, { t: "files", a: "start" });
+        return true;
+    }
+
+    /// Shown where the button was pressed (the Phone tab's feedback, which Do Not
+    /// Disturb does not hide), and as a notification.
+    function _filesProblem(text): void {
+        console.warn("[IiLinkService] phone files:", text);
+        KdeConnectService.dispatchActionFeedback(text, false);
+        Notifications.publishInternalNotification({ appName: "ii tools", appIcon: "smartphone", summary: Translation.tr("Phone files"), body: text });
+    }
+
+    function _openFiles(dev, path): void {
+        Quickshell.execDetached(["gio", "open", path]);
+    }
+
+    function _filesReply(dev, m): void {
+        if (m.err) {
+            const why = m.err === "permission"
+                ? Translation.tr("Allow \"All files access\" for ii tools on the phone (tap its notification), then try again")
+                : Translation.tr("The phone could not share its files (%1)").arg(String(m.err));
+            root._filesProblem(why);
+            return;
+        }
+        const addr = root.connections[dev]?.addr ?? "";
+        const port = Number(m.port ?? 0);
+        const key = String(m.hostKey ?? "");
+        if (addr === "" || !(port > 0) || !/^[a-z0-9-]+ [A-Za-z0-9+\/=]+$/.test(key))
+            return;
+        const dir = root._filesDir(dev);
+        const paths = Array.isArray(m.paths) ? m.paths.map(String) : [];
+        // Internal storage first; the folder above it shows every volume.
+        const open = paths.length === 1 ? `${dir}${paths[0]}` : (paths.length > 0 ? `${dir}${paths[0]}` : dir);
+        filesMount.dev = dev;
+        filesMount.dir = dir;
+        filesMount.open = open;
+        filesMount.environment = { IILINK_PW: String(m.password ?? "") };
+        filesMount.command = ["bash", "-c",
+            'set -e; mkdir -p -m 700 -- "$1"; '
+            + 'printf "[%s]:%s %s\n" "$2" "$3" "$4" > "$5"; '
+            + 'if mountpoint -q -- "$1"; then fusermount3 -uz -- "$1" || true; fi; '
+            + 'printf %s "$IILINK_PW" | sshfs -p "$3" -o password_stdin,reconnect,ServerAliveInterval=15,ServerAliveCountMax=3,'
+            + 'UserKnownHostsFile="$5",StrictHostKeyChecking=yes,PubkeyAuthentication=no,idmap=user,'
+            + 'uid=$(id -u),gid=$(id -g),follow_symlinks,fsname=ii-tools '
+            + '"$6@$2:/" "$1"',
+            "mount", dir, addr, String(port), key, `${root.stateDir}/files_known_hosts`, String(m.user ?? "iitools")];
+        filesMount.running = true;
+    }
+
+    Process {
+        id: filesMount
+        property string dev: ""
+        property string dir: ""
+        property string open: ""
+        stderr: StdioCollector { id: filesMountErr }
+        onExited: exitCode => {
+            if (exitCode !== 0) {
+                console.warn("[IiLinkService] sshfs failed:", filesMountErr.text);
+                root._filesProblem(Translation.tr("Could not mount the phone's storage: %1").arg(filesMountErr.text.trim() || exitCode));
+                return;
+            }
+            const next = Object.assign({}, root.filesMounts);
+            next[filesMount.dev] = { dir: filesMount.dir, open: filesMount.open };
+            root.filesMounts = next;
+            if (root._filesOpenDev === filesMount.dev)
+                root._openFiles(filesMount.dev, filesMount.open);
+        }
+    }
+
+    /// The phone went away (or stops sharing): let the mount go, lazily, so an open
+    /// file manager window does not keep it busy.
+    function _unmountFiles(dev, tellPhone): void {
+        const m = root.filesMounts[dev];
+        if (!m)
+            return;
+        Quickshell.execDetached(["fusermount3", "-uz", "--", m.dir]);
+        const next = Object.assign({}, root.filesMounts);
+        delete next[dev];
+        root.filesMounts = next;
+        if (tellPhone)
+            root.sendTo(dev, { t: "files", a: "stop" });
+    }
+
+    function unmountPhoneFiles(dev): void {
+        root._unmountFiles(dev, true);
+    }
+
     // ── Launcher icons for the Android Apps page ────────────────────────
     // The phone draws them (the launcher's own look) and sends each as a file, into the
     // per-device cache PhoneAppIconService already reads; adb extraction stays for KDE
@@ -1057,6 +1172,7 @@ Singleton {
         if (caps.includes("calls")) plugins.push("kdeconnect_telephony");
         if (caps.includes("contacts")) plugins.push("kdeconnect_contacts");
         if (caps.includes("status")) plugins.push("kdeconnect_battery", "kdeconnect_connectivity_report");
+        if (caps.includes("files") && root.filesEnabled) plugins.push("kdeconnect_sftp");
         return {
             id: `iitools:${peer.id}`,
             name: peer.name || peer.model || Translation.tr("Phone"),
@@ -1734,6 +1850,9 @@ Singleton {
             if (root.phoneDataEnabled && dev === root.dataDev)
                 root._contacts(dev, m);
             return;
+        case "files":
+            root._filesReply(dev, m);
+            return;
         case "caps": {
             const next = Object.assign({}, root.phoneCaps);
             next[dev] = Array.isArray(m.caps) ? m.caps.map(String) : [];
@@ -1839,6 +1958,7 @@ Singleton {
             root.phoneCaps = caps;
             if (root._perfDev === ev.dev)
                 root._perfDev = "";
+            root._unmountFiles(ev.dev, false);
             // Without the phone that sent them they go stale: KDE Connect's list takes over.
             if (!root.notifsLive) {
                 root.linkNotifications = [];
@@ -1895,6 +2015,11 @@ Singleton {
             root.unpair(id);
         }
         /// The notifications mirrored over the link: app, title and actions, newest last.
+        /// Opens the first connected phone's storage in the file manager.
+        function browseFiles(): string {
+            const dev = Object.keys(root.connections)[0] ?? "";
+            return root.browsePhoneFiles(dev) ? "ok" : "unavailable";
+        }
         function notifications(): string {
             return JSON.stringify(root.linkNotifications.map(n => ({ app: n.app, title: n.title, text: n.text, actions: n.actions.length, image: n.image !== "", avatar: n.avatar !== "" })));
         }

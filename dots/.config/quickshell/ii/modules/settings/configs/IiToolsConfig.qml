@@ -283,6 +283,14 @@ Item {
             }
 
             ConfigSwitch {
+                buttonIcon: "folder_open"
+                text: Translation.tr("Phone files")
+                description: Translation.tr("Browse the phone's storage in the file manager (needs sshfs); mounted while you use it, gone when the phone leaves")
+                checked: Config.options.iiTools.files.enable
+                onCheckedChanged: Config.options.iiTools.files.enable = checked
+            }
+
+            ConfigSwitch {
                 buttonIcon: "speed"
                 text: Translation.tr("Performance panel")
                 description: Translation.tr("CPU, GPU, RAM and the frame rate on the phone, sampled only while its panel is open")

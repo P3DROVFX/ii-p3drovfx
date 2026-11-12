@@ -187,6 +187,25 @@ phone; the app's own switch). The phone's own players (`iitools_` buses) are nev
 | shell → phone | `sendFile` purpose `pcMediaArt`, name `<md5>` | The cover, once per image per connection; `art` names it. |
 | phone → shell | `cmd` `pcMedia`, arg `{"a":"play"\|"pause"\|"toggle"\|"next"\|"previous"\|"seek","value"?:ms}` | The phone's buttons. `unsupported` for a seek the player cannot do. |
 
+## Files on the phone
+
+The phone's storage in the PC's file manager, as with KDE Connect (cap `files` on both
+sides; Settings → ii tools → Phone files). The phone runs an SFTP server (Apache SSHD)
+only while asked; the link carries what sshfs needs, so nothing is guessed or trusted
+on the LAN.
+
+| Direction | Message | |
+| --- | --- | --- |
+| shell → phone | `{"t":"files","a":"start"}` | Start (or keep) the server and issue a new password. |
+| phone → shell | `{"t":"files","port","user":"iitools","password","hostKey":"ecdsa-sha2-nistp256 AAAA…","paths":["/storage/emulated/0",…],"names":[…]}` | The shell writes `[addr]:port hostKey` to `<state>/files_known_hosts` and mounts `sshfs -o password_stdin,StrictHostKeyChecking=yes,UserKnownHostsFile=…` at `$XDG_RUNTIME_DIR/ii-tools/<phone name>`, then `gio open`s the first path. |
+| phone → shell | `{"t":"files","err":"permission"\|"disabled"\|"no_storage"\|"failed"}` | `permission`: the phone also shows a notification that opens *All files access*. |
+| shell → phone | `{"t":"files","a":"stop"}` | The PC let go. The server also stops when the link drops; the shell unmounts (`fusermount3 -uz`) when the phone disconnects. |
+
+The host key is the phone's own (EC P-256, made once, in the app's private files); the
+password is 168 random bits, new on every start, checked by hash in constant time. The
+server listens on the first free port of 1739–1764 and serves `/` with only the storage
+volumes reachable (KDE Connect's `NativeStorageFileSystemFactory`).
+
 ## Files
 
 A file is a header, then its bytes as binary frames (the app sends 256 KiB each):

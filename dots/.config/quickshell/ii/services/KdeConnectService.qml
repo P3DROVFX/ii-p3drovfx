@@ -1455,6 +1455,11 @@ Singleton {
 
     function browseFiles(devId) {
         if (!devId) return
+        if (root._isIi(devId)) {
+            if (!IiLinkService.browsePhoneFiles(devId.slice(8)))
+                root.actionFeedback(Translation.tr("The phone is not sharing its files"), false)
+            return
+        }
         mountSftp(devId)
         sftpOpenTimer.devId = devId
         sftpOpenTimer.restart()
