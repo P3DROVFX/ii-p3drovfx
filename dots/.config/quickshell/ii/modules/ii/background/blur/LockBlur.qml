@@ -7,6 +7,9 @@ import qs.modules.common.functions as CF
 
 Item {
     id: lockBlurRoot
+    // The lock's look on this screen (GlobalStates.lockLookFor), handed in by
+    // the wallpaper that owns this treatment.
+    property bool lockLook: GlobalStates.lockLookActive
 
     required property var sourceItem
     // False until the wallpaper plane has its final size and the image has decoded. Do not build
@@ -29,7 +32,7 @@ Item {
     readonly property real sourceHeight: sourceItem ? sourceItem.height : 0
     readonly property real configuredBlurRadius: Math.max(0, Math.min(50, Config.options.lock.blur.radius ?? 40))
 
-    readonly property bool blurWanted: GlobalStates.lockLookActive || GlobalStates.scratchpadEmptyOverlayActive
+    readonly property bool blurWanted: lockBlurRoot.lockLook || GlobalStates.scratchpadEmptyOverlayActive
 
     function startBlurEntrance() {
         blurInAnimation.stop();

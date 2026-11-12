@@ -34,7 +34,7 @@ PanelWindow {
     }
 
     readonly property bool usingWrappedFrame: Config.options.appearance.fakeScreenRounding === 3 && hasBarOnThisMonitor
-    readonly property real lockTransitionProgress: GlobalStates.lockBarTransitionProgress
+    readonly property real lockTransitionProgress: GlobalStates.lockBarProgressFor(topPanel.screen ? topPanel.screen.name : "")
     readonly property bool lockTransitionActive: lockTransitionProgress > 0.01
     readonly property real lockSlideDistance: topPanel.barVertical ? Appearance.sizes.verticalBarWindowWidth + Appearance.rounding.screenRounding : Appearance.sizes.barHeight + Appearance.rounding.screenRounding
     readonly property real lockSlideOffsetX: topPanel.barVertical ? (topPanel.barOnLeft ? -lockSlideDistance : lockSlideDistance) : 0

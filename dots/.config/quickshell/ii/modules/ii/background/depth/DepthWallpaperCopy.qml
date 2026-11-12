@@ -25,6 +25,8 @@ Item {
     required property var overviewController
     required property matrix4x4 containerEditMatrix
     required property real containerScale
+    // Handed in by the widgets window: the lock's look on its screen.
+    property bool lockLook: false
 
     DepthPlaneChain {
         id: chain
@@ -50,6 +52,7 @@ Item {
 
     BarGradientOverlay {
         sourceItem: chain
+        lockLook: root.lockLook
         screenWidth: root.width
         screenHeight: root.height
     }

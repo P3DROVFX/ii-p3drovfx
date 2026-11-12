@@ -65,6 +65,9 @@ Scope {
 
                 PanelWindow { // Bar window
                     id: barRoot
+                    // Per screen: Edit Mode's lock preview moves only the edited screen's bar.
+                    readonly property real lockTransitionProgress: GlobalStates.lockBarProgressFor(barLoader.modelData ? barLoader.modelData.name : "")
+                    readonly property bool lockTransitionActive: lockTransitionProgress > 0.01
                     screen: barLoader.modelData
                     // Fullscreen windows naturally cover the bar via the Wayland compositor
                     // (Hyprland places fullscreen windows above WlrLayer.Top). No QML
@@ -201,7 +204,7 @@ Scope {
                     // WlrLayershell.layer: WlrLayer.Overlay // TODO: enable this when bar can reliably hide when fullscreen without crashing
 
                     mask: Region {
-                        item: bar.lockTransitionActive ? null : hoverMaskRegion
+                        item: barRoot.lockTransitionActive ? null : hoverMaskRegion
                     }
                     color: "transparent"
 
@@ -228,7 +231,7 @@ Scope {
                         active: Config.options.appearance.fakeScreenRounding == 3
                         anchors.fill: parent
                         visible: barRoot.shellSeated
-                        opacity: bar.lockUsesFade ? 1.0 - bar.lockTransitionProgress : 1.0
+                        opacity: bar.lockUsesFade ? 1.0 - barRoot.lockTransitionProgress : 1.0
                         sourceComponent: Component {
                             Item {
                                 anchors.fill: parent
@@ -247,9 +250,9 @@ Scope {
                         hoverEnabled: true
                         anchors.fill: parent
                         visible: barRoot.shellSeated
-                        opacity: bar.lockUsesFade ? 1.0 - bar.lockTransitionProgress : 1.0
+                        opacity: bar.lockUsesFade ? 1.0 - barRoot.lockTransitionProgress : 1.0
                         transform: Translate {
-                            x: (bar.lockUsesFade ? 0 : bar.lockSlideOffsetX * bar.lockTransitionProgress) + barRoot.shellSlideX
+                            x: (bar.lockUsesFade ? 0 : bar.lockSlideOffsetX * barRoot.lockTransitionProgress) + barRoot.shellSlideX
                         }
 
                         Item {

@@ -16490,5 +16490,8 @@
     "2x1 clock shaped as a half dial of the day: a hand sweeps from midnight on the left through noon at the top, the time on a pill at its pivot.": "2x1 clock shaped as a half dial of the day: a hand sweeps from midnight on the left through noon at the top, the time on a pill at its pivot.",
     "Paint the shape in the accent colour instead of the widget surface.": "Paint the shape in the accent colour instead of the widget surface.",
     "Weekday, day and month stacked beside the time.": "Weekday, day and month stacked beside the time.",
-    "The weekday and the date in the dome's two feet.": "The weekday and the date in the dome's two feet."
+    "The weekday and the date in the dome's two feet.": "The weekday and the date in the dome's two feet.",
+    "Speakers": "Speakers",
+    "Switching output…": "Switching output…",
+    "Could not switch audio output.": "Could not switch audio output."
 }
