@@ -2849,6 +2849,10 @@ Singleton {
                 property JsonObject audio: JsonObject {
                     property bool enable: true
                 }
+                // CPU, GPU, RAM and FPS on the phone, sampled only while its panel is open.
+                property JsonObject perf: JsonObject {
+                    property bool enable: true
+                }
                 // Tell the phone this PC's MAC addresses, so the app can wake it (Wake-on-LAN).
                 property JsonObject wol: JsonObject {
                     property bool enable: true

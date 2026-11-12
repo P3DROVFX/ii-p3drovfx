@@ -246,6 +246,14 @@ Item {
             }
 
             ConfigSwitch {
+                buttonIcon: "speed"
+                text: Translation.tr("Performance panel")
+                description: Translation.tr("CPU, GPU, RAM and the frame rate on the phone, sampled only while its panel is open")
+                checked: Config.options.iiTools.perf.enable
+                onCheckedChanged: Config.options.iiTools.perf.enable = checked
+            }
+
+            ConfigSwitch {
                 buttonIcon: "contacts"
                 text: Translation.tr("Phone data")
                 description: Translation.tr("The phone's next alarm, contacts with photos, battery and network, without ADB or KDE Connect")

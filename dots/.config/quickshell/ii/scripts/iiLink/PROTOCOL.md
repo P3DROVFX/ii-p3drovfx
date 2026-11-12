@@ -139,6 +139,13 @@ announces `status` and, with the contacts permission, `contacts`.
 | shell → phone | `{"t":"pcLive","items":[item]}` | caps `pcLive`. Pushed whole on change, at most twice a second. `item` is `{id, kind: "record"\|"timer"\|"stopwatch"\|"alarm"\|"progress", title, text?, start?, end?, paused?, remaining?, total?, progress?, actions?: [{id, label}]}`; times are epoch ms, so the phone counts by itself. |
 | phone → shell | `cmd` `live` with `{id, action}` | A button: `rec` `stop`, `pomodoro` `pause`/`resume`, a countdown's id `pause`/`resume`, `alarm` `snooze`/`stop`. |
 
+## Performance panel
+
+| Direction | Message | |
+| --- | --- | --- |
+| phone → shell | `{"t":"sub","what":"perf","on":bool}` | caps `perf`. On while the phone's panel is on screen (sent again after a reconnect); a sampler runs only then. |
+| shell → phone | `{"t":"perf","cpu":{name,usage,temp,clock,…},"gpu":{name,usage,temp,power,state,vramUsed,vramTotal,…},"ram":{used,total,…},"fps":{active,fps,frametime,…},"gamemode":bool}` | Once a second: the performance HUD's sampler (`perf_monitor.py`), frame rate from MangoHud. |
+
 ## Files
 
 A file is a header, then its bytes as binary frames (the app sends 256 KiB each):

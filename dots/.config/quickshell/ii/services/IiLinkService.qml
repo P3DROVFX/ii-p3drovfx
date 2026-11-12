@@ -9,6 +9,7 @@ import Quickshell.Services.Pipewire
 import qs
 import qs.modules.common
 import qs.modules.common.functions
+import qs.modules.ii.overlay.perfMonitor
 
 /**
  * ii link: the channel to the ii tools Android app (~/Projects/ii-tools).
@@ -39,6 +40,7 @@ Singleton {
     readonly property bool phoneDataEnabled: root.opts?.phoneData?.enable ?? true
     readonly property bool dndEnabled: root.opts?.dnd?.enable ?? true
     readonly property bool wolEnabled: root.opts?.wol?.enable ?? true
+    readonly property bool perfEnabled: root.opts?.perf?.enable ?? true
     readonly property bool pcLiveEnabled: root.opts?.pcLive?.enable ?? true
     readonly property bool shotsAutoToPhone: root.opts?.screenshots?.autoToPhone ?? true
     readonly property int port: root.opts?.port ?? 47210
@@ -138,6 +140,7 @@ Singleton {
         .concat(root.phoneDataEnabled ? ["phoneData"] : [])
         .concat(root.dndEnabled ? ["dnd"] : [])
         .concat(root.pcLiveEnabled ? ["pcLive"] : [])
+        .concat(root.perfEnabled ? ["perf"] : [])
 
     // What is on right now, read from the same state the shell itself draws from.
     readonly property bool _aodUp: (GlobalStates.oledSaverMonitors ?? []).length > 0
@@ -800,6 +803,30 @@ Singleton {
         return "not_found";
     }
 
+    // ── Performance panel ───────────────────────────────────────────────
+    // The phone subscribes while its panel is on screen (`sub perf`); only then does a
+    // sampler run (the same one as the performance HUD: CPU, RAM, the GPU, MangoHud's
+    // frame rate), and one sample a second goes out.
+
+    property string _perfDev: ""
+    PerfSampler {
+        id: perfSampler
+        active: root.perfEnabled && root._perfDev !== "" && root.connections[root._perfDev] !== undefined
+    }
+    Timer {
+        interval: 1000
+        repeat: true
+        running: perfSampler.active && perfSampler.ready
+        onTriggered: root.sendTo(root._perfDev, {
+            t: "perf",
+            cpu: Object.assign({ name: perfSampler.cpuModel }, perfSampler.cpu),
+            ram: perfSampler.ram,
+            gpu: Object.assign({ name: perfSampler.selectedGpu?.name ?? "" }, perfSampler.gpu),
+            fps: perfSampler.fps,
+            gamemode: perfSampler.gamemode !== null && (perfSampler.gamemode?.length ?? 0) > 0
+        })
+    }
+
     // ── Screenshots ─────────────────────────────────────────────────────
     // PC → phone: a region snip (the preview's image) or a full-screen shot (an image
     // copied at exactly a monitor's size: Print, Ctrl+Print and the gesture all copy
@@ -1400,6 +1427,10 @@ Singleton {
         case "ping":
             root.sendTo(dev, { t: "pong", id: Number(m.id ?? 0) });
             return;
+        case "sub":
+            if (m.what === "perf")
+                root._perfDev = m.on === true ? dev : (root._perfDev === dev ? "" : root._perfDev);
+            return;
         case "dnd":
             if (dev === root.dndDev)
                 root._phoneDndChanged(m.on === true);
@@ -1514,6 +1545,8 @@ Singleton {
             const caps = Object.assign({}, root.phoneCaps);
             delete caps[ev.dev];
             root.phoneCaps = caps;
+            if (root._perfDev === ev.dev)
+                root._perfDev = "";
             // Without the phone that sent them they go stale: KDE Connect's list takes over.
             if (!root.notifsLive) {
                 root.linkNotifications = [];
