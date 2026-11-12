@@ -827,6 +827,74 @@ Singleton {
         })
     }
 
+    // ── The phone as a KDE Connect-like device ──────────────────────────
+    // KdeConnectService lists the paired phone as one of its devices (`iitools:<id>`),
+    // so the Phone tab, the dock, widgets and quick toggles work with ii tools alone;
+    // its actions come here when that device is the one picked.
+
+    /// The paired phone, as KdeConnectService's devices look; null when none.
+    readonly property var phoneDevice: {
+        if (!root.enabled || root.peers.length === 0)
+            return null;
+        const peer = root.peers[0];
+        const conn = root.connections[peer.id] ?? null;
+        const caps = root.phoneCaps[peer.id] ?? [];
+        const st = root.phoneStatus;
+        const plugins = ["kdeconnect_share", "kdeconnect_findmyphone", "kdeconnect_ping"];
+        if (caps.includes("notifs")) plugins.push("kdeconnect_notifications");
+        if (caps.includes("clip")) plugins.push("kdeconnect_clipboard");
+        if (caps.includes("calls")) plugins.push("kdeconnect_telephony");
+        if (caps.includes("contacts")) plugins.push("kdeconnect_contacts");
+        if (caps.includes("status")) plugins.push("kdeconnect_battery", "kdeconnect_connectivity_report");
+        return {
+            id: `iitools:${peer.id}`,
+            name: peer.name || peer.model || Translation.tr("Phone"),
+            type: "smartphone",
+            icon: "smartphone",
+            reachable: conn !== null,
+            paired: true,
+            charge: conn && st?.battery ? Number(st.battery.level ?? -1) : -1,
+            charging: !!(conn && st?.battery?.charging),
+            signalType: st?.net?.type === "wifi" ? "Wi-Fi" : st?.net?.type === "cellular" ? Translation.tr("Mobile") : "",
+            signalStrength: Math.max(0, Number(st?.net?.signal ?? 0)),
+            supportedPlugins: plugins,
+            loadedPlugins: plugins,
+            reachableAddresses: conn ? [conn.addr] : [],
+            backend: "iitools"
+        };
+    }
+
+    function _peerOf(deviceId): string {
+        return String(deviceId ?? "").replace(/^iitools:/, "");
+    }
+
+    /// An action for the phone (`act`): ring, ping, url, text. False when it is away.
+    function phoneAct(deviceId, action, fields): bool {
+        const dev = root._peerOf(deviceId);
+        if (root.connections[dev] === undefined)
+            return false;
+        root.sendTo(dev, Object.assign({ t: "act", a: action }, fields ?? {}));
+        return true;
+    }
+
+    /// A file for the phone's Downloads, with a notification there.
+    function sendFileToPhone(deviceId, path): bool {
+        const dev = root._peerOf(deviceId);
+        if (root.connections[dev] === undefined || !path)
+            return false;
+        root.send({ op: "sendFile", dev: dev, id: 800000 + root._fileSerial++, path: path, purpose: "share" });
+        return true;
+    }
+
+    /// What is on this clipboard now, to the phone (the "send clipboard" button).
+    function sendClipboardToPhone(): bool {
+        if (root.clipDev === "" || Cliphist.entries.length === 0)
+            return false;
+        root._clipSent = "";
+        root._sendClip(Cliphist.entries[0]);
+        return true;
+    }
+
     // ── Screenshots ─────────────────────────────────────────────────────
     // PC → phone: a region snip (the preview's image) or a full-screen shot (an image
     // copied at exactly a monitor's size: Print, Ctrl+Print and the gesture all copy

@@ -146,6 +146,19 @@ announces `status` and, with the contacts permission, `contacts`.
 | phone → shell | `{"t":"sub","what":"perf","on":bool}` | caps `perf`. On while the phone's panel is on screen (sent again after a reconnect); a sampler runs only then. |
 | shell → phone | `{"t":"perf","cpu":{name,usage,temp,clock,…},"gpu":{name,usage,temp,power,state,vramUsed,vramTotal,…},"ram":{used,total,…},"fps":{active,fps,frametime,…},"gamemode":bool}` | Once a second: the performance HUD's sampler (`perf_monitor.py`), frame rate from MangoHud. |
 
+## The Phone tab's actions
+
+KdeConnectService lists the paired phone as a device, `iitools:<id>`, and sends its
+actions here instead of to KDE Connect:
+
+| Direction | Message | |
+| --- | --- | --- |
+| shell → phone | `{"t":"act","a":"ring"}` | Find my phone: rings at alarm volume (put back after) until "Found it", for at most a minute. |
+| shell → phone | `{"t":"act","a":"ping","text"?}` | A notification. |
+| shell → phone | `{"t":"act","a":"url","url"}` | `http(s)` only; offered as a notification (a background app may not open screens). |
+| shell → phone | `{"t":"act","a":"text","text"}` | Onto the phone's clipboard, with a notification. |
+| shell → phone | `sendFile` purpose `share` | Into the phone's Downloads, with a notification that opens it. |
+
 ## Files
 
 A file is a header, then its bytes as binary frames (the app sends 256 KiB each):

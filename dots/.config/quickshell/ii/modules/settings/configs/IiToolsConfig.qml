@@ -178,6 +178,27 @@ Item {
             }
         }
 
+        // ── The phone in the shell ──────────────────────────────────────
+        ContentSection {
+            icon: "smartphone"
+            title: Translation.tr("The phone in the shell")
+
+            ConfigSwitch {
+                buttonIcon: "swap_horiz"
+                text: Translation.tr("Use ii tools for this phone")
+                description: Translation.tr("The Phone tab, dock, widgets and quick toggles use the ii tools app instead of KDE Connect's entry for the same phone")
+                checked: Config.options.iiTools.primary
+                onCheckedChanged: {
+                    Config.options.iiTools.primary = checked;
+                    if (!checked && KdeConnectService._isIi(KdeConnectService.activeDeviceId)) {
+                        const other = KdeConnectService._kdeDevices.find(d => d.paired);
+                        if (other)
+                            KdeConnectService.selectDevice(other.id);
+                    }
+                }
+            }
+        }
+
         // ── Connection ──────────────────────────────────────────────────
         ContentSection {
             icon: "lan"

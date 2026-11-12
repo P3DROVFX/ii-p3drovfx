@@ -2840,6 +2840,9 @@ Singleton {
             // is paired: the link helper starts only with a paired (or pairing) phone.
             property JsonObject iiTools: JsonObject {
                 property bool enable: true
+                // The paired phone is the Phone tab's device (over KDE Connect's entry for
+                // the same phone): ii tools drives the dock, widgets and toggles.
+                property bool primary: true
                 // TCP for the link, UDP for discovery (the same number).
                 property int port: 47210
                 property JsonObject remote: JsonObject {

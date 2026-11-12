@@ -28,7 +28,10 @@ import Quickshell.Io
 Singleton {
     id: root
 
-    property bool available: false
+    /// KDE Connect itself is installed (kdeconnect-cli found).
+    property bool _kdeAvailable: false
+    /// A phone to talk to: KDE Connect, or the ii tools app (IiLinkService).
+    readonly property bool available: root._kdeAvailable || IiLinkService.phoneDevice !== null
     property bool ready: false
     readonly property bool hasDevices: devices.length > 0
 
@@ -42,7 +45,22 @@ Singleton {
         root._pickMdnsHost()
     }
 
-    property var devices: []
+    /// KDE Connect's own devices, as its monitor reports them.
+    property var _kdeDevices: []
+    /// Every phone: the ii tools one first (it is what the shell is moving to), then KDE
+    /// Connect's. The ii tools device behaves like any other; its actions are routed to
+    /// IiLinkService below (`_isIi`).
+    readonly property var devices: (IiLinkService.phoneDevice ? [IiLinkService.phoneDevice] : []).concat(root._kdeDevices)
+    Connections {
+        target: IiLinkService
+        function onPhoneDeviceChanged() {
+            root._sanitiseActiveDevice()
+        }
+    }
+
+    function _isIi(devId) {
+        return String(devId ?? "").startsWith("iitools:")
+    }
     readonly property var activeDevice: root._findDevice(root.activeDeviceId)
 
     /** Recent paired devices (excluding the active one) in MRU order.
@@ -541,7 +559,7 @@ Singleton {
             // Reset user-facing state so UI doesn't show stale data.
             root.scrcpyRunning = false
             root.scrcpyLaunching = false
-            root.devices = []
+            root._kdeDevices = []
             root.notifications = []
             root._liveRelays = []
             root.pendingPairRequests = []
@@ -553,8 +571,8 @@ Singleton {
         running: false
         command: ["bash", "-c", "command -v kdeconnect-cli >/dev/null"]
         onExited: (code, status) => {
-            root.available = (code === 0)
-            if (root.available) {
+            root._kdeAvailable = (code === 0)
+            if (root._kdeAvailable) {
                 root.startMonitor()
             } else {
                 // KDE Connect is the backbone of the entire Phone tab.
@@ -735,7 +753,7 @@ Singleton {
         interval: 4000
         repeat: false
         onTriggered: {
-            if (root.available && Persistent.ready) root.startMonitor()
+            if (root._kdeAvailable && Persistent.ready) root.startMonitor()
         }
     }
 
@@ -839,7 +857,7 @@ Singleton {
     }
 
     function _mergeDevice(ev) {
-        const devices = root.devices.slice()
+        const devices = root._kdeDevices.slice()
         const idx = devices.findIndex(d => d.id === ev.id)
         const normalized = {
             id: ev.id,
@@ -858,12 +876,12 @@ Singleton {
         }
         if (idx < 0) devices.push(normalized)
         else devices[idx] = Object.assign({}, devices[idx], normalized)
-        root.devices = devices
+        root._kdeDevices = devices
         if (normalized.paired) root._removePairingRequest(ev.id)
     }
 
     function _patchDevice(id, patch) {
-        const devices = root.devices.slice()
+        const devices = root._kdeDevices.slice()
         const idx = devices.findIndex(d => d.id === id)
         if (idx < 0) return
         const prev = devices[idx]
@@ -903,7 +921,7 @@ Singleton {
         }
 
         devices[idx] = merged
-        root.devices = devices
+        root._kdeDevices = devices
         if (patch.paired === true) root._removePairingRequest(id)
     }
 
@@ -947,8 +965,13 @@ Singleton {
     }
 
     function _removeDevice(id) {
-        root.devices = root.devices.filter(d => d.id !== id)
+        root._kdeDevices = root._kdeDevices.filter(d => d.id !== id)
         root._removePairingRequest(id)
+    }
+
+    /// What an ii tools action says: done, or the phone is away.
+    function _iiFeedback(ok, message) {
+        root.actionFeedback(ok ? message : Translation.tr("The phone is not connected"), ok)
     }
 
     function _feedback(message, ok) {
@@ -971,6 +994,17 @@ Singleton {
 
     function _sanitiseActiveDevice() {
         const current = root._findDevice(root.activeDeviceId)
+        // The same phone paired both ways: the ii tools side takes over (Settings →
+        // ii tools → "Use ii tools for this phone"); another phone stays as picked.
+        const ii = IiLinkService.phoneDevice
+        const preferIi = ii !== null && (Config.options?.iiTools?.primary ?? true)
+        if (preferIi && current?.id !== ii.id
+                && (!current || !current.reachable || String(current.name).toLowerCase() === String(ii.name).toLowerCase())) {
+            root.activeDeviceId = ii.id
+            root._persistActiveDeviceId(ii.id)
+            requestNotificationsRefresh()
+            return
+        }
         if (current && current.reachable && current.paired) return
         const fallback = root.devices.find(d => d.reachable && d.paired)
             || root.devices.find(d => d.paired)
@@ -1145,6 +1179,11 @@ Singleton {
     }
 
     function requestNotificationsRefresh() {
+        // The ii tools phone's notifications arrive over the link, nothing to fetch.
+        if (root._isIi(root.activeDeviceId)) {
+            root.notifications = root._withLink([])
+            return
+        }
         if (!root.activeDeviceId) {
             root.notifications = []
             root._liveRelays = []
@@ -1304,11 +1343,15 @@ Singleton {
     }
 
     function findMyPhone(devId) {
+        if (root._isIi(devId))
+            return root._iiFeedback(IiLinkService.phoneAct(devId, "ring"), Translation.tr("Ringing the phone"))
         root._call(devId, "findmyphone",
                    "org.kde.kdeconnect.device.findmyphone.ring", [])
     }
 
     function sendPing(devId, message) {
+        if (root._isIi(devId))
+            return root._iiFeedback(IiLinkService.phoneAct(devId, "ping", { text: message || "" }), Translation.tr("Ping sent"))
         const args = message ? [root._shellQuote(message)] : []
         root._call(devId, "ping",
                    "org.kde.kdeconnect.device.ping.sendPing", args)
@@ -1317,6 +1360,12 @@ Singleton {
     function shareUrl(devId, url) {
         if (!url) return
         url = root._normalizeFileUrl(url)
+        if (root._isIi(devId)) {
+            if (String(url).startsWith("file://"))
+                return root._iiFeedback(IiLinkService.sendFileToPhone(devId, FileUtils.trimFileProtocol(decodeURIComponent(url))),
+                    Translation.tr("Sending to the phone"))
+            return root._iiFeedback(IiLinkService.phoneAct(devId, "url", { url: String(url) }), Translation.tr("Sent to the phone"))
+        }
         if (String(url).startsWith("file://")) {
             // Track the outgoing transfer so the daemon's own "transfer
             // finished/failed" notification (which the shell swallows) can be
@@ -1330,6 +1379,8 @@ Singleton {
 
     function shareText(devId, text) {
         if (!text) return
+        if (root._isIi(devId))
+            return root._iiFeedback(IiLinkService.phoneAct(devId, "text", { text: String(text) }), Translation.tr("Sent to the phone"))
         root._call(devId, "share",
                    "org.kde.kdeconnect.device.share.shareText",
                    [root._shellQuote(text)])
@@ -1337,6 +1388,8 @@ Singleton {
 
     function sendClipboard(devId) {
         if (!devId) return
+        if (root._isIi(devId))
+            return root._iiFeedback(IiLinkService.sendClipboardToPhone(), Translation.tr("Clipboard sent to the phone"))
         root._call(devId, "clipboard",
                    "org.kde.kdeconnect.device.clipboard.sendClipboard", [])
     }
