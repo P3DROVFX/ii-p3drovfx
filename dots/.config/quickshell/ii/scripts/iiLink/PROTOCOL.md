@@ -187,6 +187,23 @@ phone; the app's own switch). The phone's own players (`iitools_` buses) are nev
 | shell → phone | `sendFile` purpose `pcMediaArt`, name `<md5>` | The cover, once per image per connection; `art` names it. |
 | phone → shell | `cmd` `pcMedia`, arg `{"a":"play"\|"pause"\|"toggle"\|"next"\|"previous"\|"seek","value"?:ms}` | The phone's buttons. `unsupported` for a seek the player cannot do. |
 
+## Touchpad and keyboard
+
+The phone as this PC's touchpad and keyboard (cap `touchpad` in the shell's hello;
+Settings → ii tools → Touchpad and keyboard, told to the helper with
+`{"op":"config","touchpad":bool}`). The helper handles these itself, on an input thread:
+the shell never sees them.
+
+| Direction | Message | |
+| --- | --- | --- |
+| phone → helper | `{"t":"pad","a":"start","w":mm,"h":mm}` | The touchpad screen opened: a uinput multitouch touchpad of that size (40 units/mm, 5 slots, BTN_LEFT/RIGHT/MIDDLE) and a Wayland virtual keyboard. libinput then gives it the user's touchpad settings and gestures. Again on a resize. |
+| phone → helper | `{"t":"pad","f":[[id,x,y],…]}` | Every finger down, x and y in 0–1; `[]` when all are lifted. Sent on every touch event. |
+| phone → helper | `{"t":"pad","btn":"left"\|"right"\|"middle","down":bool}` | The on-screen buttons. |
+| phone → helper | `{"t":"kbd","text":"…"}` | Typed as is, any character: each gets a keycode in the virtual keyboard's own keymap (as wtype does), so the PC's layout does not matter. |
+| phone → helper | `{"t":"kbd","key":"Return"\|"BackSpace"\|"Left"\|…\|"a","mods":["ctrl","alt","super","shift"]}` | A named key (XKB names from a fixed list) or one character, with modifiers. |
+| phone → helper | `{"t":"pad","a":"stop"}` | The screen closed; both devices go. Also when the phone disconnects. |
+| helper → phone | `{"t":"pad","err":"uinput"\|"keyboard"\|"disabled","msg"?}` | `uinput`: no write access to /dev/uinput (the `input` group); the keyboard still works. |
+
 ## Files on the phone
 
 The phone's storage in the PC's file manager, as with KDE Connect (cap `files` on both

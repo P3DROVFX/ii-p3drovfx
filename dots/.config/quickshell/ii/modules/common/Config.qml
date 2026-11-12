@@ -2888,6 +2888,10 @@ Singleton {
                 property JsonObject files: JsonObject {
                     property bool enable: true
                 }
+                // The phone as this PC's touchpad (uinput: the input group) and keyboard.
+                property JsonObject touchpad: JsonObject {
+                    property bool enable: true
+                }
                 // The phone's next alarm, contacts with photos, battery and network, from
                 // the app instead of ADB and KDE Connect.
                 property JsonObject phoneData: JsonObject {

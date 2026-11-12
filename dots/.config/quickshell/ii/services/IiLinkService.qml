@@ -47,6 +47,9 @@ Singleton {
     readonly property bool pcLiveEnabled: root.opts?.pcLive?.enable ?? true
     readonly property bool pcMediaEnabled: root.opts?.pcMedia?.enable ?? true
     readonly property bool filesEnabled: root.opts?.files?.enable ?? true
+    readonly property bool touchpadEnabled: root.opts?.touchpad?.enable ?? true
+    // Touch frames go straight to the helper's input thread; it only needs telling.
+    onTouchpadEnabledChanged: root.send({ op: "config", touchpad: root.touchpadEnabled })
     readonly property bool shotsAutoToPhone: root.opts?.screenshots?.autoToPhone ?? true
     readonly property int port: root.opts?.port ?? 47210
 
@@ -149,6 +152,7 @@ Singleton {
         .concat(root.mediaEnabled ? ["media"] : [])
         .concat(root.pcMediaEnabled ? ["pcMedia"] : [])
         .concat(root.filesEnabled ? ["files"] : [])
+        .concat(root.touchpadEnabled ? ["touchpad"] : [])
 
     // What is on right now, read from the same state the shell itself draws from.
     readonly property bool _aodUp: (GlobalStates.oledSaverMonitors ?? []).length > 0
@@ -1914,7 +1918,7 @@ Singleton {
             root.hostName = String(ev.name ?? "");
             root.addresses = ev.addrs ?? [];
             root.wakeTargets = ev.wake ?? [];
-            root.send({ op: "config", media: root.mediaEnabled });
+            root.send({ op: "config", media: root.mediaEnabled, touchpad: root.touchpadEnabled });
             root.discovery = ev.discovery === true;
             if (root.pairingRequested && !root.pairing)
                 root.send({ op: "pair" });

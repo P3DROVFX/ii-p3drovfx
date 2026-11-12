@@ -23,6 +23,11 @@ qrcodegen = "1.8"
 # MPRIS players for the phone's media, on the session bus (no process of their own).
 zbus = { version = "5", default-features = false, features = ["tokio"] }
 base64 = "0.22"
+# The phone as a touchpad (a multitouch uinput device libinput treats as real) and a
+# keyboard (Wayland's virtual keyboard, any character whatever the layout).
+evdev = "0.13"
+wayland-client = "0.31"
+wayland-protocols-misc = { version = "0.3", features = ["client"] }
 ttf-parser = { version = "0.25", default-features = false, features = ["std", "opentype-layout", "glyph-names"] }
 
 [profile.release]

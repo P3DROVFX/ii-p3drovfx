@@ -11,6 +11,7 @@
 
 mod files;
 mod icons;
+mod input;
 mod mpris;
 
 use std::collections::HashMap;
@@ -81,6 +82,9 @@ struct Shared {
     /// The phones' media as MPRIS players; the shell switches it (`config`).
     media: bool,
     media_tx: mpsc::UnboundedSender<mpris::Event>,
+    /// Whether a phone may be this PC's touchpad and keyboard (the shell's setting).
+    touchpad: bool,
+    input_tx: std::sync::mpsc::Sender<input::Cmd>,
 }
 
 type State = Arc<Mutex<Shared>>;
@@ -426,6 +430,17 @@ async fn serve(stream: TcpStream, addr: SocketAddr, acceptor: TlsAcceptor, state
                         let _ = s.media_tx.send(ev);
                     }
                 }
+                // Touchpad and keyboard: many a second, straight to the input thread.
+                Ok(m) if m["t"] == "pad" || m["t"] == "kbd" => {
+                    let s = state.lock().unwrap();
+                    if !s.touchpad {
+                        let _ = tx.send(Message::Text(json!({"t": "pad", "err": "disabled"}).to_string().into()));
+                        continue;
+                    }
+                    if let Some(cmd) = input_cmd(&dev, &m, &tx) {
+                        let _ = s.input_tx.send(cmd);
+                    }
+                }
                 Ok(m) if m.is_object() => emit(json!({"ev": "msg", "dev": dev, "m": m})),
                 _ => {}
             },
@@ -462,8 +477,46 @@ async fn serve(stream: TcpStream, addr: SocketAddr, acceptor: TlsAcceptor, state
     if s.conns.get(&dev).is_some_and(|c| c.serial == serial) {
         // A phone that reconnected keeps the players its new socket feeds.
         let _ = s.media_tx.send(mpris::Event::DevGone { dev: dev.clone() });
+        let _ = s.input_tx.send(input::Cmd::Stop { dev: dev.clone() });
         s.conns.remove(&dev);
         emit(json!({"ev": "disconnected", "dev": dev}));
+    }
+}
+
+/// A `pad` or `kbd` message as a command for the input thread.
+fn input_cmd(dev: &str, m: &Value, tx: &mpsc::UnboundedSender<Message>) -> Option<input::Cmd> {
+    let dev = dev.to_string();
+    if m["t"] == "kbd" {
+        if let Some(text) = m["text"].as_str() {
+            return Some(input::Cmd::Text { dev, text: text.chars().take(4096).collect() });
+        }
+        let key = m["key"].as_str()?.to_string();
+        let mods = m["mods"].as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_owned)).collect()).unwrap_or_default();
+        return Some(input::Cmd::Key { dev, key, mods });
+    }
+    match m["a"].as_str() {
+        Some("start") => {
+            let tx = tx.clone();
+            Some(input::Cmd::Start {
+                dev,
+                w: m["w"].as_f64().unwrap_or(70.0),
+                h: m["h"].as_f64().unwrap_or(120.0),
+                reply: Box::new(move |v| {
+                    let _ = tx.send(Message::Text(v.to_string().into()));
+                }),
+            })
+        }
+        Some("stop") => Some(input::Cmd::Stop { dev }),
+        _ => {
+            if let Some(button) = m["btn"].as_str() {
+                return Some(input::Cmd::Button { dev, button: button.to_string(), down: m["down"].as_bool().unwrap_or(false) });
+            }
+            let fingers = m["f"].as_array()?.iter().take(10).filter_map(|f| {
+                let f = f.as_array()?;
+                Some((f.first()?.as_i64()?, f.get(1)?.as_f64()?, f.get(2)?.as_f64()?))
+            }).collect();
+            Some(input::Cmd::Frame { dev, fingers })
+        }
     }
 }
 
@@ -542,6 +595,14 @@ fn handle_op(state: &State, line: &str) {
         // Settings the shell holds: for now, whether the phones' media become MPRIS players.
         "config" => {
             let mut s = state.lock().unwrap();
+            if let Some(on) = op["touchpad"].as_bool() {
+                s.touchpad = on;
+                if !on {
+                    for dev in s.conns.keys() {
+                        let _ = s.input_tx.send(input::Cmd::Stop { dev: dev.clone() });
+                    }
+                }
+            }
             if let Some(on) = op["media"].as_bool() {
                 s.media = on;
                 if !on {
@@ -658,6 +719,8 @@ async fn main() {
         open_sockets: 0,
         media: false,
         media_tx,
+        touchpad: false,
+        input_tx: input::spawn(),
     }));
 
     emit(json!({"ev": "ready", "port": port, "fp": fingerprint, "name": name, "addrs": addresses(), "wake": wake_targets(), "discovery": udp.is_some()}));

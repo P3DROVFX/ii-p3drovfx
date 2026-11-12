@@ -291,6 +291,14 @@ Item {
             }
 
             ConfigSwitch {
+                buttonIcon: "touch_app"
+                text: Translation.tr("Touchpad and keyboard")
+                description: Translation.tr("The phone as a touchpad with your gestures, and a keyboard that types any character. The touchpad needs /dev/uinput (the input group)")
+                checked: Config.options.iiTools.touchpad.enable
+                onCheckedChanged: Config.options.iiTools.touchpad.enable = checked
+            }
+
+            ConfigSwitch {
                 buttonIcon: "speed"
                 text: Translation.tr("Performance panel")
                 description: Translation.tr("CPU, GPU, RAM and the frame rate on the phone, sampled only while its panel is open")
