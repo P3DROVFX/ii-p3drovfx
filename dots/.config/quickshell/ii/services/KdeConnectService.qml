@@ -533,7 +533,14 @@ Singleton {
         && (Config.options.phone.kdeconnectEnabled === undefined || Config.options.phone.kdeconnectEnabled)
 
     // Public read-only view for toggle models and dialogs that mirror the service state.
-    readonly property bool serviceEnabled: root._enabled
+    /// The phone integration is on: the Phone tab is, and there is a phone to talk to
+    /// (KDE Connect switched on, or one paired in ii tools). `_enabled` stays KDE Connect's own.
+    readonly property bool serviceEnabled: Config.options.policies.phone !== 0
+        && (root._enabled || IiLinkService.phoneDevice !== null)
+    /// The picked phone is the ii tools one.
+    readonly property bool activeIsIi: root._isIi(root.activeDeviceId)
+    /// What carries things to the picked phone, for "Sending via …" texts.
+    readonly property string backendName: root.activeIsIi ? "ii tools" : "KDE Connect"
 
     // Stop all background activity when the Phone tab is toggled off at runtime.
     // Restart when toggled back on. This lets users enable/disable Phone
@@ -575,10 +582,8 @@ Singleton {
             if (root._kdeAvailable) {
                 root.startMonitor()
             } else {
-                // KDE Connect is the backbone of the entire Phone tab.
-                // If it's missing, warn the user immediately.
-                root.criticalDepMissing("kdeconnect-cli",
-                    Translation.tr("KDE Connect is not installed — phone integration requires it"))
+                // Optional now: the ii tools app is a phone backend of its own.
+                console.info("[KdeConnect] kdeconnect-cli not found; phones only through ii tools")
             }
         }
     }

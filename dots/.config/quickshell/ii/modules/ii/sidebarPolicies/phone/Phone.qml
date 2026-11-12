@@ -1097,7 +1097,7 @@ Item {
                     text: emptyState.serviceOff ? Translation.tr("Phone integration is off")
                           : KdeConnectService.available
                           ? Translation.tr("No device connected")
-                          : Translation.tr("KDE Connect not installed")
+                          : Translation.tr("No phone paired")
                     font.pixelSize: Appearance.font.pixelSize.huge
                     font.weight: Font.Bold
                     color: Appearance.colors.colOnLayer2
@@ -1113,10 +1113,8 @@ Item {
                     Layout.alignment: Qt.AlignHCenter
                     Layout.preferredWidth: root.width * 0.85
                     text: emptyState.serviceOff
-                          ? Translation.tr("KDE Connect is switched off, so notifications, clipboard and file sharing are paused. Turn it on to reconnect your phone.")
-                          : KdeConnectService.available
-                          ? Translation.tr("Pair a device through KDE Connect on your phone — once it shows up here, sync notifications, share clipboard, dump files and launch scrcpy mirror.")
-                          : Translation.tr("Install `kdeconnect-cli` and the KDE Connect Android app, then pair a device. After pairing it will mirror here automatically.")
+                          ? Translation.tr("KDE Connect is switched off and no phone is paired with ii tools. Pair one with the ii tools app, or turn KDE Connect back on.")
+                          : Translation.tr("Pair your phone with the ii tools app (or KDE Connect). Notifications, the clipboard, files and the screen mirror then show up here.")
                     font.pixelSize: Appearance.font.pixelSize.small
                     color: Appearance.colors.colSubtext
                     horizontalAlignment: Text.AlignHCenter
@@ -1137,32 +1135,25 @@ Item {
                     buttonRadius: Appearance.rounding.full
                     colBackground: Appearance.colors.colPrimaryContainer
                     colBackgroundHover: Appearance.colors.colPrimaryContainerHover
-                    visible: !KdeConnectService.available
+                    // ii tools first: pairing it needs nothing else installed.
+                    visible: IiLinkService.peers.length === 0
                     contentItem: RowLayout {
                         spacing: 6
                         MaterialSymbol {
                             Layout.alignment: Qt.AlignVCenter
-                            text: emptyState.serviceOff ? "power_settings_new" : "download"
+                            text: "qr_code_2"
                             iconSize: Appearance.font.pixelSize.normal
                             color: Appearance.colors.colOnPrimaryContainer
                         }
                         StyledText {
                             Layout.alignment: Qt.AlignVCenter
-                            text: emptyState.serviceOff ? Translation.tr("Turn on KDE Connect")
-                                : Translation.tr("Install KDE Connect")
+                            text: Translation.tr("Pair with ii tools")
                             color: Appearance.colors.colOnPrimaryContainer
                             font.pixelSize: Appearance.font.pixelSize.small
                             font.weight: Font.DemiBold
                         }
                     }
-                    onClicked: () => {
-                        if (emptyState.serviceOff) {
-                            Config.options.phone.kdeconnectEnabled = true
-                            return
-                        }
-                        Quickshell.execDetached(["xdg-open",
-                            "https://kdeconnect.kde.org/download.html"])
-                    }
+                    onClicked: () => GlobalStates.openSettingsPage("iiTools")
                 }
 
                 Item { Layout.fillHeight: true }
@@ -1242,7 +1233,7 @@ Item {
 
                 StyledText {
                     Layout.alignment: Qt.AlignHCenter
-                    text: Translation.tr("Ready to send via KDE Connect")
+                    text: Translation.tr("Ready to send via %1").arg(KdeConnectService.backendName)
                     font.pixelSize: Appearance.font.pixelSize.normal
                     color: Appearance.colors.colSubtext
                     opacity: 0.8

@@ -306,7 +306,7 @@ ExpressiveCardWidget {
             y: root.localSend && LocalSend.available ? 44 : 0
             text: root.localSend
                 ? (LocalSend.available ? Translation.tr("No devices found yet.") : Translation.tr("Install LocalSend in Settings → Devices & phone."))
-                : Translation.tr("No paired phones. Pair one in KDE Connect.")
+                : Translation.tr("No paired phones. Pair one in Settings → ii tools.")
             color: WidgetColorScheme.subtextColorOnBg
             font.pixelSize: Appearance.font.pixelSize.small
         }

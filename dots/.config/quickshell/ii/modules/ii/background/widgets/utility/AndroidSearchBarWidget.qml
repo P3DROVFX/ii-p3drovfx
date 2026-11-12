@@ -55,7 +55,7 @@ AbstractBackgroundWidget {
         if (key === "music_rec") return { defaultIcon: "music_note", label: Translation.tr("Music Recognition") };
         if (key === "translator") return { defaultIcon: "translate", label: Translation.tr("Translator") };
         if (key === "wallpapers") return { defaultIcon: "wallpaper", label: Translation.tr("Wallpapers") };
-        if (key === "phone") return { defaultIcon: "smartphone", label: Translation.tr("Phone / KDE Connect") };
+        if (key === "phone") return { defaultIcon: "smartphone", label: Translation.tr("Phone") };
         if (key === "cheatsheet") return { defaultIcon: "help", label: Translation.tr("Cheatsheet") };
         if (key === "clipboard") return { defaultIcon: "content_paste", label: Translation.tr("Clipboard") };
         if (key === "color_picker") return { defaultIcon: "colorize", label: Translation.tr("Color Picker") };

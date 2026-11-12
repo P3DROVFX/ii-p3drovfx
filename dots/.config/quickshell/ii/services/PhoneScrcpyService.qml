@@ -213,7 +213,7 @@ Singleton {
             root._waitingForManager = ({})
             for (const id in waiting) {
                 if (id === root.recordSessionId) root.recordingLaunching = false
-                root.reportFailure(id, Translation.tr("KDE Connect is not running"))
+                root.reportFailure(id, Translation.tr("No phone connected"))
             }
         }
     }

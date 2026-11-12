@@ -145,7 +145,7 @@ ContentPage {
                     : "phonelink_off"
         text: !KdeConnectService.scrcpyAvailable
             ? Translation.tr("scrcpy is not installed. Install scrcpy and android-tools to mirror your phone screen.")
-            : Translation.tr("No reachable KDE Connect device. Pair a device first.")
+            : Translation.tr("No reachable phone. Pair one first.")
 
         RippleButton {
             visible: !KdeConnectService.scrcpyAvailable
@@ -542,7 +542,7 @@ ContentPage {
         ConfigSwitch {
             visible: Config.options.phone.scrcpy.useWireless
             buttonIcon: "sync_alt"
-            text: Translation.tr("Auto-detect IP (KDE Connect)")
+            text: Translation.tr("Auto-detect IP")
             checked: Config.options.phone.scrcpy.autoWirelessIp
             onCheckedChanged: Config.options.phone.scrcpy.autoWirelessIp = checked
         }
@@ -578,7 +578,7 @@ ContentPage {
                     Layout.fillWidth: true
                     text: KdeConnectService.resolvedWirelessHost !== ""
                         ? Translation.tr("Will connect to %1").arg(KdeConnectService.resolvedWirelessHost)
-                        : Translation.tr("Waiting for KDE Connect to report the phone's IP…")
+                        : Translation.tr("Waiting for the phone's IP…")
                     font.pixelSize: Appearance.font.pixelSize.small
                     font.weight: Font.DemiBold
                     color: KdeConnectService.resolvedWirelessHost !== ""

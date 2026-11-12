@@ -715,7 +715,7 @@ Rectangle {
                     Layout.alignment: Qt.AlignHCenter
                     text: PhoneContactsService.ready
                           ? (searchInput.text.length > 0 ? Translation.tr("No contacts matching search") : Translation.tr("No contacts found"))
-                          : Translation.tr("Enable Contact Sync in KDE Connect on your phone")
+                          : (KdeConnectService.activeIsIi ? Translation.tr("Allow Contacts in ii tools → Phone data on your phone") : Translation.tr("Enable Contact Sync in KDE Connect on your phone"))
                     font.pixelSize: Appearance.font.pixelSize.normal
                     font.weight: Font.DemiBold
                     color: Appearance.colors.colSubtext

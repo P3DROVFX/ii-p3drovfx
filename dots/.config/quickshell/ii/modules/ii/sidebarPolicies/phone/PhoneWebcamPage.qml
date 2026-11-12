@@ -170,7 +170,7 @@ ContentPage {
         text: !PhoneCameraService.available
             ? Translation.tr("DroidCam is not installed. Install droidcam-cli and the DroidCam Android app to use your phone camera as a webcam.")
             : !KdeConnectService.activeReachable
-                ? Translation.tr("No reachable KDE Connect device. Pair a device to use its camera.")
+                ? Translation.tr("No reachable phone. Pair one to use its camera.")
                 : Translation.tr("Camera error: %1").arg(PhoneCameraService.lastError)
 
         // Inline install button (only when unavailable)
@@ -482,10 +482,10 @@ ContentPage {
         ConfigTextField {
             text: Translation.tr("Phone IP")
             icon: "ip"
-            placeholderText: Translation.tr("Auto-detect from KDE Connect")
+            placeholderText: Translation.tr("Auto-detect from the paired phone")
             inputText: Config.options.phone.webcam.wifiIp
             textField.onEditingFinished: Config.options.phone.webcam.wifiIp = textField.text.trim()
-            tooltip: Translation.tr("Leave empty to auto-detect from KDE Connect. Set explicitly if auto-detect fails.")
+            tooltip: Translation.tr("Leave empty to auto-detect from the paired phone. Set explicitly if auto-detect fails.")
         }
 
         ConfigSpinBox {

@@ -176,7 +176,7 @@ ContentPage {
         text: !PhoneMicService.available
             ? Translation.tr("DroidCam or pactl is not installed. Install droidcam-cli and pactl, plus the DroidCam Android app, to use your phone as a microphone.")
             : !KdeConnectService.activeReachable
-                ? Translation.tr("No reachable KDE Connect device. Pair a device to use its microphone.")
+                ? Translation.tr("No reachable phone. Pair one to use its microphone.")
                 : Translation.tr("Microphone error: %1").arg(PhoneMicService.lastError)
 
         RippleButton {
@@ -462,10 +462,10 @@ ContentPage {
             visible: Config.options.phone.microphone.connection === "wifi"
             text: Translation.tr("Phone IP")
             icon: "ip"
-            placeholderText: Translation.tr("Auto-detect from KDE Connect")
+            placeholderText: Translation.tr("Auto-detect from the paired phone")
             inputText: Config.options.phone.microphone.wifiIp
             textField.onEditingFinished: Config.options.phone.microphone.wifiIp = textField.text.trim()
-            tooltip: Translation.tr("Leave empty to auto-detect from KDE Connect")
+            tooltip: Translation.tr("Leave empty to auto-detect from the paired phone")
         }
 
         ConfigSpinBox {

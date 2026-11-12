@@ -32,7 +32,7 @@ QuickToggleButton {
             if (root.connected && root.hasBattery)
                 return Translation.tr("%1 · %2% battery | Right-click for options")
                     .arg(KdeConnectService.activeDeviceDisplayName).arg(String(Math.round(root.device.charge)));
-            return Translation.tr("KDE Connect: %1 | Right-click for options").arg(KdeConnectService.statusText);
+            return Translation.tr("%1: %2 | Right-click for options").arg(KdeConnectService.backendName).arg(KdeConnectService.statusText);
         }
     }
 }

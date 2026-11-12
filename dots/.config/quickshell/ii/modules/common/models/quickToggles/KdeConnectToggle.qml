@@ -32,7 +32,7 @@ QuickToggleModel {
         if (root.deviceConnected && root.hasBattery)
             return Translation.tr("%1 · %2% battery | Right-click for options")
                 .arg(root.deviceLabel).arg(String(Math.round(root.device.charge)));
-        return Translation.tr("KDE Connect: %1 | Right-click for options").arg(root.statusText);
+        return Translation.tr("%1: %2 | Right-click for options").arg(KdeConnectService.backendName).arg(root.statusText);
     }
     icon: !root.serviceEnabled ? "sync_disabled"
         : root.deviceConnected ? "phonelink"
