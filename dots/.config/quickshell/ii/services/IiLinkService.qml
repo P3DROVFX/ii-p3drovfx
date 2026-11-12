@@ -37,6 +37,8 @@ Singleton {
     readonly property bool clipEnabled: root.opts?.clipboard?.enable ?? true
     readonly property bool shotsEnabled: root.opts?.screenshots?.enable ?? true
     readonly property bool phoneDataEnabled: root.opts?.phoneData?.enable ?? true
+    readonly property bool dndEnabled: root.opts?.dnd?.enable ?? true
+    readonly property bool pcLiveEnabled: root.opts?.pcLive?.enable ?? true
     readonly property bool shotsAutoToPhone: root.opts?.screenshots?.autoToPhone ?? true
     readonly property int port: root.opts?.port ?? 47210
 
@@ -131,6 +133,8 @@ Singleton {
         .concat(root.clipEnabled ? ["clip"] : [])
         .concat(root.shotsEnabled ? ["shots"] : [])
         .concat(root.phoneDataEnabled ? ["phoneData"] : [])
+        .concat(root.dndEnabled ? ["dnd"] : [])
+        .concat(root.pcLiveEnabled ? ["pcLive"] : [])
 
     // What is on right now, read from the same state the shell itself draws from.
     readonly property bool _aodUp: (GlobalStates.oledSaverMonitors ?? []).length > 0
@@ -241,9 +245,9 @@ Singleton {
             t: "audio",
             out: Audio.sink?.id ?? -1,
             "in": Audio.source?.id ?? -1,
-            outputs: Array.from(Audio.outputDevices).map(root._node),
-            inputs: Array.from(Audio.inputDevices).map(root._node),
-            apps: Array.from(Audio.outputAppNodes).map(n => ({
+            outputs: Array.from(Audio.outputDevices).filter(Boolean).map(root._node),
+            inputs: Array.from(Audio.inputDevices).filter(Boolean).map(root._node),
+            apps: Array.from(Audio.outputAppNodes).filter(Boolean).map(n => ({
                 id: n.id, name: Audio.appNodeDisplayName(n), vol: root._vol(n.audio?.volume), mute: n.audio?.muted ?? false
             })),
             ee: ee
@@ -633,6 +637,164 @@ Singleton {
                     root.sendTo(photoCheck.dev, { t: "get", what: "photos", keys: missing });
             }
         }
+    }
+
+    // ── Do Not Disturb, both ways ───────────────────────────────────────
+    // The phone is told only when what it should be changes (a mode starting, the shell's
+    // DND toggled), never re-told: turning its DND off by hand during a mode sticks. The
+    // phone reports its own changes (not the ones asked from here).
+
+    function _capDev(cap): string {
+        for (const id of Object.keys(root.connections)) {
+            if ((root.phoneCaps[id] ?? []).includes(cap))
+                return id;
+        }
+        return "";
+    }
+    readonly property string dndDev: root.dndEnabled ? root._capDev("dnd") : ""
+    /// The phone's DND as last reported; null until it says.
+    property var phoneDnd: null
+    /// The mode this side turned on because of the phone, to turn it off with it.
+    property string _modeFromPhone: ""
+
+    readonly property bool wantPhoneDnd: {
+        if (!root.dndEnabled)
+            return false;
+        const o = root.opts?.dnd;
+        return ((o?.phoneFollowsShell ?? true) && Notifications.silent)
+            || Array.from(o?.modes ?? []).includes(Modes.activeModeId);
+    }
+    onWantPhoneDndChanged: root._tellPhoneDnd()
+    onDndDevChanged: {
+        // A phone that just connected: only if it disagrees with a state set while it was away.
+        if (root.dndDev !== "" && root._dndOwed)
+            root._tellPhoneDnd();
+    }
+    property bool _dndOwed: false
+
+    function _tellPhoneDnd(): void {
+        if (root.phoneDnd === root.wantPhoneDnd) {
+            root._dndOwed = false;
+            return;
+        }
+        if (root.dndDev === "") {
+            root._dndOwed = true;
+            return;
+        }
+        root._dndOwed = false;
+        root.sendTo(root.dndDev, { t: "dnd", on: root.wantPhoneDnd });
+    }
+
+    function _phoneDndChanged(on): void {
+        root.phoneDnd = on;
+        const o = root.opts?.dnd;
+        if (!root.dndEnabled || !(o?.shellFollowsPhone ?? true))
+            return;
+        const mode = String(o?.phoneTurnsOn ?? "");
+        if (mode === "") {
+            Notifications.silent = on;
+            return;
+        }
+        if (on && Modes.activeModeId !== mode && Modes.activate(mode, "phone"))
+            root._modeFromPhone = mode;
+        else if (!on && root._modeFromPhone !== "" && Modes.activeModeId === root._modeFromPhone) {
+            Modes.deactivate("phone");
+            root._modeFromPhone = "";
+        }
+    }
+
+    // ── The PC's live activity on the phone ─────────────────────────────
+    // Recording, the pomodoro, the stopwatch, countdowns, a ringing alarm and progress,
+    // pushed whole (`pcLive`) on change. Times are absolute (when it started or ends),
+    // so the phone counts on its own and the topic changes only when something does.
+
+    readonly property string liveDev: root.pcLiveEnabled ? root._capDev("pcLive") : ""
+
+    function _pcLive(): var {
+        const items = [];
+        const rec = Persistent.states?.screenRecord;
+        if (rec?.active)
+            items.push({ id: "rec", kind: "record", title: Translation.tr("Recording the screen"),
+                start: Date.now() - Number(rec.seconds ?? 0) * 1000, actions: [{ id: "stop", label: Translation.tr("Stop") }] });
+        const pomo = Persistent.states?.timer?.pomodoro;
+        if (pomo?.running || (TimerService.pomodoroSecondsLeft < TimerService.pomodoroLapDuration && TimerService.pomodoroSecondsLeft > 0)) {
+            const title = TimerService.pomodoroLongBreak ? Translation.tr("Long break") : TimerService.pomodoroBreak ? Translation.tr("Break") : Translation.tr("Focus");
+            items.push(pomo?.running
+                ? { id: "pomodoro", kind: "timer", title: title, end: (Number(pomo.start) + TimerService.pomodoroLapDuration) * 1000,
+                    total: TimerService.pomodoroLapDuration, actions: [{ id: "pause", label: Translation.tr("Pause") }] }
+                : { id: "pomodoro", kind: "timer", title: title, paused: true, remaining: TimerService.pomodoroSecondsLeft,
+                    total: TimerService.pomodoroLapDuration, actions: [{ id: "resume", label: Translation.tr("Resume") }] });
+        }
+        const sw = Persistent.states?.timer?.stopwatch;
+        if (sw?.running) {
+            // `start` is in 10 ms units in a 32-bit int, which overflows; the shell's own
+            // subtraction wraps back to the right elapsed time, and so does this.
+            const elapsed10 = (((Math.floor(Date.now() / 10) - Number(sw.start)) % 4294967296) + 4294967296) % 4294967296;
+            // Rounded to the second, so the topic does not change on every evaluation.
+            const start = Math.round((Date.now() - elapsed10 * 10) / 1000) * 1000;
+            items.push({ id: "stopwatch", kind: "stopwatch", title: Translation.tr("Stopwatch"), start: start });
+        }
+        for (const c of Array.from(TimerService.countdowns ?? [])) {
+            if (c.notified)
+                continue;
+            items.push(c.paused
+                ? { id: c.id, kind: "timer", title: c.label, paused: true, remaining: Math.round(Number(c.remaining ?? 0) / 1000),
+                    total: c.durationSeconds, actions: [{ id: "resume", label: Translation.tr("Resume") }] }
+                : { id: c.id, kind: "timer", title: c.label, end: Number(c.endsAt), total: c.durationSeconds,
+                    actions: [{ id: "pause", label: Translation.tr("Pause") }] });
+        }
+        const alarm = AlarmService.ringingAlarm;
+        if (alarm)
+            items.push({ id: "alarm", kind: "alarm", title: Translation.tr("Alarm"), text: [alarm.time, alarm.label].filter(Boolean).join(" · "),
+                actions: [{ id: "snooze", label: Translation.tr("Snooze") }, { id: "stop", label: Translation.tr("Stop") }] });
+        for (const j of Array.from(ProgressService.jobs ?? [])) {
+            if (j.state !== "running")
+                continue;
+            items.push({ id: `job:${j.source}:${j.id}`, kind: "progress", title: String(j.appName || Translation.tr("Working")),
+                text: String(j.message ?? ""), progress: Math.max(0, Math.min(100, Math.round(Number(j.percent ?? 0)))) });
+        }
+        return { t: "pcLive", items: items };
+    }
+
+    // "" while no phone wants it, so nothing is computed for nobody.
+    readonly property string _liveKey: root.liveDev !== "" ? JSON.stringify(root._pcLive()) : ""
+    // Progress can move many times a second: at most two pushes a second.
+    on_LiveKeyChanged: {
+        if (root._liveKey === "")
+            root._sentKeys["pcLive"] = "";
+        else if (!livePush.running)
+            livePush.start();
+    }
+    Timer {
+        id: livePush
+        interval: 500
+        onTriggered: root._publish("pcLive", root._liveKey)
+    }
+
+    /// A button on the phone's live update: {id, action}.
+    function _runLive(arg): string {
+        const id = String(arg?.id ?? "");
+        const action = String(arg?.action ?? "");
+        if (id === "rec" && action === "stop") {
+            Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "region", "record"]);
+            return "";
+        }
+        if (id === "pomodoro" && (action === "pause" || action === "resume")) {
+            TimerService.togglePomodoro();
+            return "";
+        }
+        if (id === "alarm") {
+            if (action === "snooze")
+                AlarmService.snooze();
+            else
+                AlarmService.stopRinging();
+            return "";
+        }
+        if (TimerService.findCountdown(id) && (action === "pause" || action === "resume")) {
+            TimerService.toggleCountdown(id);
+            return "";
+        }
+        return "not_found";
     }
 
     // ── Screenshots ─────────────────────────────────────────────────────
@@ -1211,7 +1373,9 @@ Singleton {
             const id = Number(m.id ?? 0);
             const action = String(m.a ?? "");
             let why;
-            if (action === "clip")
+            if (action === "live")
+                why = root.pcLiveEnabled ? root._runLive(m.arg) : "disabled";
+            else if (action === "clip")
                 why = root.clipEnabled ? root._clipFromPhone(dev, m.arg) : "disabled";
             else if (action === "share")
                 why = root.shareEnabled ? root._share(m.arg) : "disabled";
@@ -1230,6 +1394,10 @@ Singleton {
         }
         case "ping":
             root.sendTo(dev, { t: "pong", id: Number(m.id ?? 0) });
+            return;
+        case "dnd":
+            if (dev === root.dndDev)
+                root._phoneDndChanged(m.on === true);
             return;
         case "status":
             if (root.phoneDataEnabled)

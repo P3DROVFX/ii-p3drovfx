@@ -2849,6 +2849,21 @@ Singleton {
                 property JsonObject audio: JsonObject {
                     property bool enable: true
                 }
+                // Do Not Disturb both ways: the shell's own (and chosen modes) silence the
+                // phone; the phone's turns on the shell's, or a mode.
+                property JsonObject dnd: JsonObject {
+                    property bool enable: true
+                    property bool phoneFollowsShell: true
+                    // Modes that also silence the phone while active.
+                    property list<string> modes: []
+                    property bool shellFollowsPhone: true
+                    // What the phone's DND turns on here: "" for the shell's own DND, or a mode id.
+                    property string phoneTurnsOn: ""
+                }
+                // The PC's timers, recording, alarm and progress as Live Updates on the phone.
+                property JsonObject pcLive: JsonObject {
+                    property bool enable: true
+                }
                 // The phone's next alarm, contacts with photos, battery and network, from
                 // the app instead of ADB and KDE Connect.
                 property JsonObject phoneData: JsonObject {

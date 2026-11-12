@@ -238,6 +238,14 @@ Item {
             }
 
             ConfigSwitch {
+                buttonIcon: "timer"
+                text: Translation.tr("PC live updates on the phone")
+                description: Translation.tr("Recording, timers, a ringing alarm and progress on the phone's lock screen, with their buttons")
+                checked: Config.options.iiTools.pcLive.enable
+                onCheckedChanged: Config.options.iiTools.pcLive.enable = checked
+            }
+
+            ConfigSwitch {
                 buttonIcon: "contacts"
                 text: Translation.tr("Phone data")
                 description: Translation.tr("The phone's next alarm, contacts with photos, battery and network, without ADB or KDE Connect")
@@ -308,6 +316,74 @@ Item {
                 description: Translation.tr("The phone as a stream deck: shell actions, apps and your own commands, with live state")
                 checked: Config.options.iiTools.deck.enable
                 onCheckedChanged: Config.options.iiTools.deck.enable = checked
+            }
+        }
+
+        // ── Do Not Disturb ──────────────────────────────────────────────
+        ContentSection {
+            icon: "do_not_disturb_on"
+            title: Translation.tr("Do Not Disturb")
+
+            ConfigSwitch {
+                buttonIcon: "sync"
+                text: Translation.tr("Sync Do Not Disturb with the phone")
+                checked: Config.options.iiTools.dnd.enable
+                onCheckedChanged: Config.options.iiTools.dnd.enable = checked
+            }
+
+            ConfigSwitch {
+                visible: Config.options.iiTools.dnd.enable
+                buttonIcon: "phone_android"
+                text: Translation.tr("The phone follows this PC's Do Not Disturb")
+                checked: Config.options.iiTools.dnd.phoneFollowsShell
+                onCheckedChanged: Config.options.iiTools.dnd.phoneFollowsShell = checked
+            }
+
+            ContentSubsection {
+                visible: Config.options.iiTools.dnd.enable && Modes.modes.length > 0
+                title: Translation.tr("Modes that also silence the phone")
+
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: 6
+                    Repeater {
+                        model: Modes.modes
+                        delegate: SelectionGroupButton {
+                            required property var modelData
+                            buttonIcon: modelData.icon || "tune"
+                            buttonText: modelData.name
+                            toggled: Array.from(Config.options.iiTools.dnd.modes).includes(modelData.id)
+                            leftmost: true
+                            rightmost: true
+                            onClicked: {
+                                const list = Array.from(Config.options.iiTools.dnd.modes).filter(id => id !== modelData.id);
+                                if (!toggled)
+                                    list.push(modelData.id);
+                                Config.options.iiTools.dnd.modes = list;
+                            }
+                        }
+                    }
+                }
+            }
+
+            ConfigSwitch {
+                visible: Config.options.iiTools.dnd.enable
+                buttonIcon: "computer"
+                text: Translation.tr("This PC follows the phone's Do Not Disturb")
+                checked: Config.options.iiTools.dnd.shellFollowsPhone
+                onCheckedChanged: Config.options.iiTools.dnd.shellFollowsPhone = checked
+            }
+
+            ContentSubsection {
+                visible: Config.options.iiTools.dnd.enable && Config.options.iiTools.dnd.shellFollowsPhone
+                title: Translation.tr("The phone's Do Not Disturb turns on")
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.iiTools.dnd.phoneTurnsOn
+                    onSelected: newValue => Config.options.iiTools.dnd.phoneTurnsOn = newValue
+                    options: [{ displayName: Translation.tr("Do Not Disturb"), icon: "do_not_disturb_on", value: "" }]
+                        .concat(Modes.modes.map(m => ({ displayName: m.name, icon: m.icon || "tune", value: m.id })))
+                }
             }
         }
 

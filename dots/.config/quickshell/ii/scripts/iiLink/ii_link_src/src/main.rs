@@ -40,9 +40,9 @@ use tokio_tungstenite::tungstenite::Message;
 const WS_PATH: &str = "/iilink/1";
 const PAIR_WINDOW: Duration = Duration::from_secs(300);
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
-/// The app pings every 30 s; three missed pings is a phone that walked away
-/// without closing the socket.
-const IDLE_TIMEOUT: Duration = Duration::from_secs(95);
+/// The app pings every 60 s and now stays connected in the background; three missed
+/// pings is a phone that walked away without closing the socket.
+const IDLE_TIMEOUT: Duration = Duration::from_secs(200);
 const MAX_CONNECTIONS: usize = 8;
 
 #[derive(Serialize, Deserialize, Clone)]

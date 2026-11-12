@@ -27,8 +27,9 @@ happens (`~/Projects/ii-tools/tools/measure.sh` checks this).
 ## Network
 
 - **TCP `port`** (default 47210): TLS 1.3, then a WebSocket on path `/iilink/1`. Text
-  frames carry JSON objects; frames up to 1 MiB, messages up to 8 MiB. The phone pings
-  every 30 s; a socket silent for 95 s is dropped.
+  frames carry JSON objects; frames up to 1 MiB, messages up to 8 MiB. The phone stays
+  connected in the background (unless the user turns that off) and pings every 60 s; a
+  socket silent for 200 s is dropped.
 - **UDP `port`**: discovery. A datagram starting with `iilink?` gets
   `{"iilink":1,"port":N,"fp":"<sha256>","name":"<host>"}` back. mDNS is not used:
   Fedora's default firewall zone keeps 5353 closed, while high ports are open (as
@@ -129,6 +130,14 @@ announces `status` and, with the contacts permission, `contacts`.
 | shell → phone | `{"t":"get","what":"contacts","have":"<hash>"}` | On connect, with the version the PC keeps in `<state>/contacts.json`. |
 | phone → shell | `{"t":"contacts","hash","list":[contact]}` | Only when `hash` differs. `contact` is the shape the shell's vCard reader gives (`id, displayName, givenName, familyName, organization, phones[{value,normalized,type}], emails[{value,type}], birthday{year,month,day}`) plus `photo`, the photo's hash or `""`. |
 | shell → phone | `{"t":"get","what":"photos","keys":["<photo>",…]}` | The photos the PC lacks; each comes as a file, purpose `contactPhoto`, name `<photo>.jpg`, kept in `<state>/contacts/`. |
+
+## Do Not Disturb and the PC's live activity
+
+| Direction | Message | |
+| --- | --- | --- |
+| both | `{"t":"dnd","on":bool}` | caps `dnd`. The phone reports its own changes (not those the PC asked for) and its state on connect; the shell tells the phone only when what it should be changes (the shell's DND, or a mode chosen in Settings), never again, so turning the phone's off by hand sticks. |
+| shell → phone | `{"t":"pcLive","items":[item]}` | caps `pcLive`. Pushed whole on change, at most twice a second. `item` is `{id, kind: "record"\|"timer"\|"stopwatch"\|"alarm"\|"progress", title, text?, start?, end?, paused?, remaining?, total?, progress?, actions?: [{id, label}]}`; times are epoch ms, so the phone counts by itself. |
+| phone → shell | `cmd` `live` with `{id, action}` | A button: `rec` `stop`, `pomodoro` `pause`/`resume`, a countdown's id `pause`/`resume`, `alarm` `snooze`/`stop`. |
 
 ## Files
 
