@@ -6,6 +6,9 @@ import qs.modules.common
 
 Item {
     id: lockVignetteRoot
+    // The lock's look on this screen (GlobalStates.lockLookFor), handed in by
+    // the wallpaper that owns this treatment.
+    property bool lockLook: GlobalStates.lockLookActive
 
     required property var sourceItem
     required property real baseScale
@@ -16,14 +19,14 @@ Item {
 
     Loader {
         id: vignetteLoader
-        active: !lockVignetteRoot.suppressed && Config.options.lock.vignette.enable && (GlobalStates.lockLookActive || (typeof vignetteAnim !== "undefined" && vignetteAnim ? vignetteAnim.running : false))
+        active: !lockVignetteRoot.suppressed && Config.options.lock.vignette.enable && (lockVignetteRoot.lockLook || (typeof vignetteAnim !== "undefined" && vignetteAnim ? vignetteAnim.running : false))
         anchors.fill: parent
         sourceComponent: Item {
             anchors.fill: parent
             Canvas {
                 id: vignetteCanvas
                 anchors.fill: parent
-                opacity: GlobalStates.lockLookActive ? Config.options.lock.vignette.amount : 0.0
+                opacity: lockVignetteRoot.lockLook ? Config.options.lock.vignette.amount : 0.0
                 Behavior on opacity {
                     NumberAnimation {
                         id: vignetteAnim

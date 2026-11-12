@@ -384,6 +384,27 @@ Item {
                 property string page: ""
                 property string tooltip: ""
                 readonly property bool open: GlobalStates.editDrawerOpen && GlobalStates.editDrawerSection === chip.section
+                // Which tabs show this chip. Not `visible`: a chip flipped by
+                // `visible` changed the toolbar's width in one frame on every
+                // tab switch. It folds its own width instead, so the group,
+                // the pill and the centring all follow it. A Behavior is safe
+                // here: the target is 0 or 1, set once per switch.
+                property bool shown: true
+                property real reveal: chip.shown ? 1 : 0
+                Behavior on reveal {
+                    enabled: !Appearance.reducedMotion
+                    animation: Appearance.animation.elementMove.numberAnimation.createObject(chip)
+                }
+
+                visible: chip.reveal > 0.001
+                width: chip.implicitWidth * chip.reveal
+                opacity: chip.reveal
+                // RippleButton's own opacity Behavior would retarget on every
+                // frame of the reveal and hold the chip blank until the width
+                // had finished. The reveal already animates it.
+                opacityBehaviorEnabled: false
+                clip: chip.reveal < 1
+                enabled: chip.shown
 
                 Layout.fillHeight: false
                 implicitHeight: root.chipHeight
@@ -392,6 +413,12 @@ Item {
                 iconFill: chip.open
                 labelWeight: chip.open ? Font.DemiBold : Font.Medium
                 onClicked: {
+                    // The section already open on one of its pages: back to the
+                    // section itself. Only at its root does the chip close it.
+                    if (chip.open && GlobalStates.editDrawerPage !== chip.page) {
+                        root.drawerPageRequested(chip.section, chip.page);
+                        return;
+                    }
                     if (chip.open) {
                         root.drawerToggleRequested();
                         return;
@@ -411,32 +438,33 @@ Item {
                 spacing: 2
 
                 SectionChip {
-                    visible: PanelFamily.touchFirst && !GlobalStates.editLockLayout
+                    shown: PanelFamily.touchFirst && !GlobalStates.editLockLayout
                     section: "apps"
                     iconText: "apps"
                     text: Translation.tr("Apps")
                     tooltip: Translation.tr("Add apps to home screen")
                 }
+                // The AOD tab has one chip, its own: the lock's widgets are
+                // laid out on the Lock screen tab.
                 SectionChip {
+                    shown: !GlobalStates.editAodPreview
                     section: "widgets"
                     iconText: "widgets"
                     text: Translation.tr("Widgets")
-                    tooltip: GlobalStates.editLockLayout
+                    tooltip: GlobalStates.editLockPreview
                         ? Translation.tr("Widgets on the lock screen and the AOD")
                         : Translation.tr("Desktop widgets")
                 }
                 SectionChip {
-                    visible: !GlobalStates.editLockLayout
+                    shown: !GlobalStates.editLockLayout
                     section: "bar"
-                    page: "appearance"
                     iconText: "dock_to_bottom"
                     text: Translation.tr("Bar")
                     tooltip: Translation.tr("Bar appearance and widgets")
                 }
                 SectionChip {
-                    visible: !GlobalStates.editLockLayout
+                    shown: !GlobalStates.editLockLayout
                     section: "dock"
-                    page: "appearance"
                     iconText: PanelFamily.touchFirst ? "dock_to_bottom" : "dock"
                     text: PanelFamily.touchFirst ? Translation.tr("Taskbar") : Translation.tr("Dock")
                     tooltip: PanelFamily.touchFirst
@@ -444,14 +472,15 @@ Item {
                         : Translation.tr("Dock appearance and apps")
                 }
                 SectionChip {
-                    visible: GlobalStates.editLockPreview
+                    shown: GlobalStates.editLockPreview
                     section: "lock"
-                    iconText: "lock"
-                    text: Translation.tr("Lock screen")
+                    // Not "Lock screen": the tab beside it already says that.
+                    iconText: "tune"
+                    text: Translation.tr("Lock options")
                     tooltip: Translation.tr("What the lock screen shows")
                 }
                 SectionChip {
-                    visible: GlobalStates.editAodPreview
+                    shown: GlobalStates.editAodPreview
                     section: "aod"
                     iconText: "dark_mode"
                     text: Translation.tr("Always On")
@@ -461,8 +490,10 @@ Item {
                 // which one the colours come from, and - on the Desktop tab -
                 // the card itself turns into the picture, to move, zoom and
                 // turn by hand.
+                // Desktop tab only: the lock's own wallpaper is a row of the
+                // Desktop tab's wallpaper page.
                 SectionChip {
-                    visible: !GlobalStates.editAodPreview
+                    shown: !GlobalStates.editLockLayout
                     section: "wallpaper"
                     iconText: "wallpaper"
                     text: Translation.tr("Wallpaper")
@@ -471,7 +502,7 @@ Item {
                         : Translation.tr("Wallpaper, position and screens")
                 }
                 SectionChip {
-                    visible: !GlobalStates.editAodPreview
+                    shown: !GlobalStates.editLockLayout
                     section: "style"
                     iconText: "palette"
                     text: Translation.tr("Style")

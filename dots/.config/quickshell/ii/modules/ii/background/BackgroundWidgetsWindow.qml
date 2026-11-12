@@ -794,6 +794,7 @@ PanelWindow {
             visible: depthCutoutLoader.item?.copyActive ?? false
             sourceComponent: DepthWallpaperCopy {
                 plane: DepthEffect.planes[bgWidgetsWindow.editScreenName] ?? null
+                lockLook: GlobalStates.lockLookFor(bgWidgetsWindow.editScreenName)
                 overviewController: bgWidgetsWindow.overviewController
                 containerEditMatrix: bgWidgetsWindow.editMatrix
                 containerScale: transformContainer.scale

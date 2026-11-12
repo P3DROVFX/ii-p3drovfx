@@ -137,14 +137,6 @@ Item {
         GlobalStates.editDrawerPage = "";
     }
 
-    function setSection(section) {
-        if (GlobalStates.editDrawerSection === section)
-            return;
-        root.navDirection = 1;
-        GlobalStates.editDrawerPage = "";
-        GlobalStates.editDrawerSection = section;
-    }
-
     // ── The query ────────────────────────────────────────────────────────────
     // The dock's catalogue alone runs to two hundred rows. A query FLATTENS the
     // catalogue it filters, pages and all: someone typing is after one row, not
@@ -556,15 +548,17 @@ Item {
     readonly property bool lockTab: GlobalStates.editLockLayout
     readonly property bool aodTab: GlobalStates.editAodPreview
     function sectionFitsTab(section) {
+        // Only what the toolbar offers on each tab. A widget's own page
+        // (a right-click on one in the AOD preview) is still a widgets page.
         if (root.aodTab)
-            return section === "widgets" || section === "aod";
+            return section === "aod" || (section === "widgets" && root.page !== "");
         if (root.lockTab)
-            return section !== "bar" && section !== "dock" && section !== "apps" && section !== "aod";
+            return section === "widgets" || section === "lock";
         return section !== "lock" && section !== "aod";
     }
     function dropMisplacedSection() {
         if (!root.sectionFitsTab(root.section))
-            GlobalStates.editDrawerSection = root.aodTab ? "aod" : "widgets";
+            GlobalStates.editDrawerSection = root.aodTab ? "aod" : root.lockTab ? "lock" : "widgets";
     }
     onLockTabChanged: root.dropMisplacedSection()
     onAodTabChanged: root.dropMisplacedSection()
@@ -629,7 +623,7 @@ Item {
             if (root.section === "dock")
                 return PanelFamily.touchFirst ? Translation.tr("Taskbar") : Translation.tr("Dock");
             if (root.section === "lock")
-                return Translation.tr("Lock screen");
+                return Translation.tr("Lock options");
             if (root.section === "aod")
                 return Translation.tr("Always On Display");
             if (root.section === "style")
@@ -795,94 +789,6 @@ Item {
                     font.weight: Font.DemiBold
                     color: Appearance.colors.colOnSurface
                     elide: Text.ElideRight
-                }
-            }
-
-            // ── Catalogue picker ─────────────────────────────────────────────
-            // Up to seven catalogues in a 380px panel. While every label fits
-            // the group shows them all; when they do not, the current
-            // catalogue keeps its label and the others fold to their icon
-            // (named by a tooltip) - nothing is scaled, so text stays at its
-            // real size.
-            Item {
-                id: pickerHost
-                Layout.fillWidth: true
-                Layout.leftMargin: 4
-                Layout.rightMargin: 4
-                visible: root.atRoot
-                implicitHeight: catalogueGroup.implicitHeight
-
-                readonly property var tabs: [
-                    { "section": "apps", "label": Translation.tr("Apps"), "icon": "apps",
-                      "shown": PanelFamily.touchFirst && !root.lockTab },
-                    { "section": "widgets", "label": Translation.tr("Widgets"), "icon": "widgets", "shown": true },
-                    { "section": "bar", "label": Translation.tr("Bar"), "icon": "toolbar", "shown": !root.lockTab },
-                    { "section": "dock", "label": PanelFamily.touchFirst ? Translation.tr("Taskbar") : Translation.tr("Dock"),
-                      "icon": "dock_to_bottom", "shown": !root.lockTab },
-                    { "section": "lock", "label": Translation.tr("Lock screen"), "icon": "lock", "shown": root.lockTab && !root.aodTab },
-                    { "section": "wallpaper", "label": Translation.tr("Wallpaper"), "icon": "wallpaper", "shown": !root.aodTab },
-                    { "section": "style", "label": Translation.tr("Style"), "icon": "palette", "shown": !root.aodTab },
-                    { "section": "aod", "label": Translation.tr("Always On"), "icon": "dark_mode", "shown": root.aodTab }
-                ]
-                readonly property var shownTabs: pickerHost.tabs.filter(tab => tab.shown)
-                // The group with every label: the labels' own widths plus
-                // each button's padding (SelectionGroupButton, 12 a side) and
-                // the group's gaps.
-                readonly property real fullWidth: labelMeasure.implicitWidth
-                    + pickerHost.shownTabs.length * 24 + catalogueGroup.spacing * Math.max(0, pickerHost.shownTabs.length - 1)
-                readonly property bool compact: pickerHost.fullWidth > pickerHost.width
-
-                Row {
-                    id: labelMeasure
-                    visible: false
-                    Repeater {
-                        model: pickerHost.shownTabs
-                        delegate: StyledText {
-                            required property var modelData
-                            text: modelData.label
-                        }
-                    }
-                }
-
-                ButtonGroup {
-                    id: catalogueGroup
-
-                    CatalogueTab {
-                        tab: pickerHost.tabs[0]
-                        compact: pickerHost.compact
-                        leftmost: true
-                    }
-                    CatalogueTab {
-                        tab: pickerHost.tabs[1]
-                        compact: pickerHost.compact
-                        leftmost: !pickerHost.tabs[0].shown
-                    }
-                    CatalogueTab {
-                        tab: pickerHost.tabs[2]
-                        compact: pickerHost.compact
-                    }
-                    CatalogueTab {
-                        tab: pickerHost.tabs[3]
-                        compact: pickerHost.compact
-                    }
-                    CatalogueTab {
-                        tab: pickerHost.tabs[4]
-                        compact: pickerHost.compact
-                    }
-                    CatalogueTab {
-                        tab: pickerHost.tabs[5]
-                        compact: pickerHost.compact
-                    }
-                    CatalogueTab {
-                        tab: pickerHost.tabs[6]
-                        compact: pickerHost.compact
-                        rightmost: !pickerHost.tabs[7].shown
-                    }
-                    CatalogueTab {
-                        tab: pickerHost.tabs[7]
-                        compact: pickerHost.compact
-                        rightmost: true
-                    }
                 }
             }
 
@@ -2063,25 +1969,6 @@ Item {
                 font.pixelSize: Appearance.font.pixelSize.small
                 color: Appearance.colors.colOnSurface
             }
-        }
-    }
-
-    // One catalogue in the picker. Folded (`compact`), only the current one
-    // keeps its label; the rest show their icon and say their name on hover.
-    component CatalogueTab: SelectionGroupButton {
-        id: catalogueTab
-        required property var tab
-        property bool compact: false
-        visible: catalogueTab.tab.shown
-        toggled: root.section === catalogueTab.tab.section
-        buttonIcon: catalogueTab.compact ? catalogueTab.tab.icon : ""
-        buttonText: !catalogueTab.compact || catalogueTab.toggled ? catalogueTab.tab.label : ""
-        onClicked: root.setSection(catalogueTab.tab.section)
-
-        StyledToolTip {
-            requireOverlay: false
-            extraVisibleCondition: catalogueTab.compact && !catalogueTab.toggled
-            text: catalogueTab.tab.label
         }
     }
 }

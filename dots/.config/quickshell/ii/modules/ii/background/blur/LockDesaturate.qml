@@ -6,6 +6,9 @@ import qs.modules.common
 
 Item {
     id: lockDesatRoot
+    // The lock's look on this screen (GlobalStates.lockLookFor), handed in by
+    // the wallpaper that owns this treatment.
+    property bool lockLook: GlobalStates.lockLookActive
 
     required property var sourceItem
     // Same capture-once caveat as LockBlur, and its source is often LockBlur itself, so it must
@@ -26,12 +29,12 @@ Item {
     // Connections handler for the same signal and unload the effect before the hold is set.
     property bool holdLoaded: false
 
-    Component.onCompleted: holdLoaded = GlobalStates.lockLookActive
+    Component.onCompleted: holdLoaded = lockDesatRoot.lockLook
 
     Connections {
-        target: GlobalStates
-        function onLockLookActiveChanged() {
-            if (GlobalStates.lockLookActive) {
+        target: lockDesatRoot
+        function onLockLookChanged() {
+            if (lockDesatRoot.lockLook) {
                 unlockReleaseTimer.stop();
                 lockDesatRoot.holdLoaded = true;
                 return;
@@ -54,7 +57,7 @@ Item {
         anchors.fill: parent
         sourceComponent: MultiEffect {
             source: lockDesatRoot.sourceItem
-            saturation: GlobalStates.lockLookActive ? lockDesatRoot.targetSaturation : 0.0
+            saturation: lockDesatRoot.lockLook ? lockDesatRoot.targetSaturation : 0.0
             Behavior on saturation {
                 NumberAnimation {
                     id: desaturationAnim

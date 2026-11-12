@@ -129,7 +129,7 @@ Scope {
             required property var modelData
             screen: modelData
             
-            visible: !GlobalStates.lockLookActive && !positionChanging && !GlobalStates.oledSaverMonitors.includes(modelData.name) && !GlobalStates.isMediaModeActiveForScreen(modelData ? modelData.name : "")
+            visible: !GlobalStates.lockLookFor(modelData ? modelData.name : "") && !positionChanging && !GlobalStates.oledSaverMonitors.includes(modelData.name) && !GlobalStates.isMediaModeActiveForScreen(modelData ? modelData.name : "")
             // using a flag for positionChanging is not really necessary, but it prevents some graphical issues caused by qml when the dock is moving
 
             // The main axis is anchored at both ends, so its length is the

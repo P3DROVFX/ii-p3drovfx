@@ -25,7 +25,7 @@ Scope {
 
     readonly property bool isBottom: !root.forceTop && BarPlacement.bottom
     readonly property bool lockUsesFade: Config.options.appearance.fakeScreenRounding === 3
-    readonly property real lockTransitionProgress: GlobalStates.lockBarTransitionProgress
+    readonly property real lockTransitionProgress: GlobalStates.lockBarProgressFor(root.screen ? root.screen.name : "")
     readonly property bool lockTransitionActive: lockTransitionProgress > 0.01
     readonly property real lockSlideDistance: Appearance.sizes.barHeight + Appearance.rounding.screenRounding
     readonly property real lockSlideOffsetY: root.isBottom ? lockSlideDistance : -lockSlideDistance

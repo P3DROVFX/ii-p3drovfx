@@ -57,7 +57,12 @@ AbstractWidget {
     property bool visibleWhenLocked: lockBehavior === "keep" || lockBehavior === "custom" || lockBehavior === "center" || lockBehavior === "lockOnly"
     // The lock layout: the real lock once its wallpaper has centred, or Edit
     // Mode's Lockscreen tab, which previews it without a lock session.
-    readonly property bool lockLayoutActive: GlobalStates.lockScreenCentered || GlobalStates.editLockLayout
+    // Per screen: Edit Mode previews the lock on the screen being edited only.
+    // A widget with no screen (a catalogue preview) follows the tab itself.
+    readonly property bool editLockHere: GlobalStates.editLockLayout
+        && (monitorName === "" || GlobalStates.editModeMonitor === monitorName)
+    readonly property bool lockLookHere: GlobalStates.screenLocked || editLockHere
+    readonly property bool lockLayoutActive: GlobalStates.lockScreenCentered || editLockHere
     property bool forceCenter: (lockLayoutActive || GlobalStates.workspaceRestoreInProgress) && lockBehavior === "center"
 
     function getCenteredWidgetsList() {
@@ -726,7 +731,7 @@ AbstractWidget {
             if (isPreview || widgetInstance === null)
                 return;
             const rounded = Math.round(target * 100) / 100;
-            Config.updateWidgetScale(widgetInstance.id, rounded, monitorName, GlobalStates.lockLookActive);
+            Config.updateWidgetScale(widgetInstance.id, rounded, monitorName, lockLookHere);
             x = WidgetDragMath.clamp(x, dragMinimumX(), dragMaximumX());
             y = WidgetDragMath.clamp(y, dragMinimumY(), dragMaximumY());
         }
@@ -998,7 +1003,7 @@ AbstractWidget {
         const list = Config.options.background.activeWidgets || [];
         const result = {};
         for (let i = 0; i < list.length; i++)
-            result[list[i].id] = WidgetPlacement.resolve(list[i], monitorName, GlobalStates.lockLookActive);
+            result[list[i].id] = WidgetPlacement.resolve(list[i], monitorName, lockLookHere);
         return result;
     }
 
@@ -1429,7 +1434,7 @@ AbstractWidget {
         // Written to the surface being shown: the lock fork on the Lockscreen
         // tab, the desktop's placement otherwise.
         if (widgetInstance !== null)
-            Config.updateWidgetPosition(widgetInstance.id, newX, newY, monitorName, GlobalStates.lockLookActive);
+            Config.updateWidgetPosition(widgetInstance.id, newX, newY, monitorName, lockLookHere);
         else if (configEntry) {
             configEntry.x = newX;
             configEntry.y = newY;

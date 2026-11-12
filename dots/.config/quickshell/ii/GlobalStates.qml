@@ -851,6 +851,35 @@ Singleton {
     // it. The one derivation the theme sites are meant to read, so the preview
     // can never show the lock's wallpaper under the desktop's palette.
     readonly property bool lockLookActive: root.screenLocked || root.editLockLayout
+    // The lock's look on ONE screen. The real lock is every screen; Edit
+    // Mode's preview is only the screen being edited. Read globally, the
+    // other monitor ran the lock's blur, vignette, widget layout and bar
+    // transition for a tab it does not show - every window on both screens
+    // redrew on each tab switch. Theme sites stay on lockLookActive: there is
+    // one palette.
+    function lockLookFor(screenName) {
+        return root.screenLocked || (root.editLockLayout && root.editModeMonitor === screenName);
+    }
+    // The bars' lock transition per screen. The progress is one animated
+    // scalar, so the screen a preview belongs to is latched while it runs and
+    // kept until the bars are back: unlatched the moment the tab flips, the
+    // other screens would snap to the progress mid-fade.
+    property string _lockBarPreviewScreen: ""
+    function _latchLockBarPreviewScreen() {
+        if (root.editLockLayout && !root.screenLocked)
+            root._lockBarPreviewScreen = root.editModeMonitor;
+    }
+    onEditLockLayoutChanged: root._latchLockBarPreviewScreen()
+    onEditModeMonitorChanged: root._latchLockBarPreviewScreen()
+    onLockBarTransitionProgressChanged: {
+        if (root.lockBarTransitionProgress === 0 && !root.editLockLayout)
+            root._lockBarPreviewScreen = "";
+    }
+    function lockBarProgressFor(screenName) {
+        if (root._lockBarPreviewScreen !== "" && screenName !== root._lockBarPreviewScreen)
+            return 0;
+        return root.lockBarTransitionProgress;
+    }
 
     // The edge each dock occupies, published by the dock window itself
     // (screen name -> { side, thickness }). The dock is the one place that
@@ -1040,7 +1069,7 @@ Singleton {
             return;
         // The bar and the dock are no part of the lock's face: asking for one
         // of them from the lock preview means the desktop.
-        if (root.editLockPreview && section !== "widgets" && section !== "lock" && section !== "style" && section !== "wallpaper")
+        if (root.editLockPreview && section !== "widgets" && section !== "lock")
             root.editTab = EditModeLogic.desktopTab;
         if (root.editAodPreview && section !== "widgets" && section !== "aod")
             root.editTab = EditModeLogic.desktopTab;
@@ -1252,6 +1281,7 @@ Singleton {
             // never reaches the workspaceNumber shortcut and superDown latches.
             root.superDown = false;
             if (root.screenLocked) {
+                root._lockBarPreviewScreen = "";
                 root.editMode = false;
                 return;
             }

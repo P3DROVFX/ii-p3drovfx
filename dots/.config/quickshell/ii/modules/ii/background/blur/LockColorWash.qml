@@ -6,6 +6,9 @@ import qs.modules.common
 
 Item {
     id: lockColorWashRoot
+    // The lock's look on this screen (GlobalStates.lockLookFor), handed in by
+    // the wallpaper that owns this treatment.
+    property bool lockLook: GlobalStates.lockLookActive
 
     required property var sourceItem
     required property real baseScale
@@ -16,9 +19,9 @@ Item {
 
     Loader {
         id: colorWashLoader
-        active: !lockColorWashRoot.suppressed && Config.options.lock.colorWash.enable && (GlobalStates.lockLookActive || opacityAnim.running)
+        active: !lockColorWashRoot.suppressed && Config.options.lock.colorWash.enable && (lockColorWashRoot.lockLook || opacityAnim.running)
         anchors.fill: parent
-        opacity: GlobalStates.lockLookActive ? Config.options.lock.colorWash.amount : 0.0
+        opacity: lockColorWashRoot.lockLook ? Config.options.lock.colorWash.amount : 0.0
         Behavior on opacity {
             NumberAnimation {
                 id: opacityAnim

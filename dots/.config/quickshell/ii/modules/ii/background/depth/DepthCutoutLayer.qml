@@ -86,7 +86,7 @@ Item {
     }
     property var shownCutout: null
     readonly property bool transitioning: root.wallpaperItem ? root.wallpaperItem.transitioning : false
-    readonly property bool lockShowsOtherPicture: GlobalStates.lockLookActive && root.plane
+    readonly property bool lockShowsOtherPicture: GlobalStates.lockLookFor(root.screenName) && root.plane
         && root.plane.useSeparateLockscreenWallpaper && root.plane.lockscreenWallpaperPath !== ""
         && root.plane.lockscreenWallpaperPath !== root.plane.wallpaperPath
     readonly property bool present: root.shownCutout !== null && root.shownCutout === root.wantedCutout
@@ -114,7 +114,7 @@ Item {
     // The lock treats the wallpaper (blur, desaturation, colour wash) on the
     // LockBlur clock: a 150 ms hold, then 350 ms. The cutout leaves on the same
     // clock, so the subject is never sharp over a treated picture.
-    readonly property bool lockTreated: GlobalStates.lockLookActive
+    readonly property bool lockTreated: GlobalStates.lockLookFor(root.screenName)
         && ((Config.options.lock.blur.enable ?? false)
             || (Config.options.lock.desaturate?.enable ?? false)
             || (Config.options.lock.colorWash?.enable ?? false))
@@ -191,7 +191,7 @@ Item {
     // The copy reproduces the plane and the bar overlay above it, nothing more.
     readonly property bool copyAllowed: root.editProgress <= 0.001
         && root.overviewProgress <= 0.001
-        && !GlobalStates.lockLookActive
+        && !GlobalStates.lockLookFor(root.screenName)
         && root.lockFade <= 0.001
         && root.aodProgress <= 0.001
         && root.windowBlurProgress <= 0.001
@@ -324,7 +324,7 @@ Item {
         readonly property bool barBandShown: Config.options.bar.barBackgroundStyle === 0
             && Config.options.bar.transparentGlow
             && GlobalStates.barOpen
-            && !GlobalStates.lockLookActive
+            && !GlobalStates.lockLookFor(root.screenName)
         property real barBand: barBandShown ? 1 : 0
         Behavior on barBand {
             NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
