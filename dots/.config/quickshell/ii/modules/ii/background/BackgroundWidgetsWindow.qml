@@ -1058,6 +1058,13 @@ PanelWindow {
                 active: PanelFamily.isIi && !GlobalStates.screenLocked
                     && DesktopShortcuts.itemsFor(bgWidgetsWindow.editScreenName).length > 0
                 visible: !GlobalStates.isMediaModeActiveForScreen(bgWidgetsWindow.editScreenName)
+                // The lock screen never shows desktop icons, so Edit Mode's Lock
+                // screen and AOD tabs fade them out with the tab's own scalar
+                // (opacity, not `visible`: the canvas can be a layer source under
+                // the AOD) and take them out of the way of the widget drags.
+                opacity: bgWidgetsWindow.isEditMonitor
+                    ? 1 - Math.max(GlobalStates.editTabProgress, GlobalStates.editAodProgress) : 1
+                enabled: !(GlobalStates.editLockLayout && bgWidgetsWindow.isEditMonitor)
                 sourceComponent: DesktopShortcutsLayer {
                     screenName: bgWidgetsWindow.editScreenName
                     // The window's NET content scale (overview + edit
