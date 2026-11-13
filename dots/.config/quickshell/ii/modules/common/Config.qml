@@ -2896,6 +2896,10 @@ Singleton {
                 property JsonObject pcMedia: JsonObject {
                     property bool enable: true
                 }
+                // The desktop wallpaper behind the phone's PC card (a 1080 px JPEG, once per image).
+                property JsonObject look: JsonObject {
+                    property bool enable: true
+                }
                 // The phone's storage in the file manager (SFTP + sshfs, as KDE Connect).
                 property JsonObject files: JsonObject {
                     property bool enable: true

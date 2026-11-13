@@ -55,6 +55,7 @@ Singleton {
     onMediaEnabledChanged: root.send({ op: "config", media: root.mediaEnabled })
     readonly property bool pcLiveEnabled: root.opts?.pcLive?.enable ?? true
     readonly property bool pcMediaEnabled: root.opts?.pcMedia?.enable ?? true
+    readonly property bool lookEnabled: root.opts?.look?.enable ?? true
     readonly property bool filesEnabled: root.opts?.files?.enable ?? true
     readonly property bool touchpadEnabled: root.opts?.touchpad?.enable ?? true
     readonly property bool drawEnabled: root.opts?.draw?.enable ?? true
@@ -955,6 +956,56 @@ Singleton {
         root._pcArtSent = root._pcArt;
         root.send({ op: "sendFile", dev: root.pcMediaDev, id: 700000 + root._fileSerial++, path: root._pcArtPath,
             name: root._pcArt, purpose: "pcMediaArt" });
+    }
+
+    // ── The shell's look on the phone ───────────────────────────────────
+    // The desktop wallpaper behind the phone's PC card: a JPEG at most 1080 px wide
+    // (a video's first frame), made when the wallpaper changes or a phone that asks for
+    // it (`look`) connects, sent once per image per connection, then named in the topic.
+    // Nothing runs for a phone that does not ask.
+
+    readonly property string lookDev: root.lookEnabled ? root._capDev("look") : ""
+    readonly property string lookDir: `${root.stateDir}/look`
+    readonly property string _wallPath: Config.options?.background?.wallpaperPath ?? ""
+    readonly property string _lookName: root._wallPath !== "" ? Qt.md5(root._wallPath) : ""
+    property string _lookSent: ""
+    onLookDevChanged: {
+        root._lookSent = "";
+        root._makeLook();
+    }
+    on_LookNameChanged: root._makeLook()
+
+    function _makeLook(): void {
+        if (root.lookDev === "" || root._lookName === "" || root._lookName === root._lookSent || lookProc.running)
+            return;
+        const out = `${root.lookDir}/${root._lookName}.jpg`;
+        const video = /\.(mp4|mkv|webm|mov|avi|gif)$/i.test(root._wallPath);
+        // Made once per wallpaper and kept; older ones go.
+        const make = video
+            ? `ffmpeg -y -loglevel error -i "$2" -frames:v 1 -vf "scale='min(1080,iw)':-2" -q:v 4 "$3"`
+            : `magick "$2[0]" -resize '1080x1080>' -quality 82 "$3"`;
+        lookProc.out = out;
+        lookProc.name = root._lookName;
+        lookProc.command = ["sh", "-c",
+            `mkdir -p -m 700 -- "$1" && find "$1" -type f ! -name "$4.jpg" -delete && { [ -s "$3" ] || ${make}; }`,
+            "sh", root.lookDir, root._wallPath, out, root._lookName];
+        lookProc.running = true;
+    }
+    Process {
+        id: lookProc
+        property string out
+        property string name
+        onExited: code => {
+            if (code === 0 && root.lookDev !== "") {
+                root._lookSent = lookProc.name;
+                root.send({ op: "sendFile", dev: root.lookDev, id: 600000 + root._fileSerial++, path: lookProc.out,
+                    name: lookProc.name, purpose: "look" });
+                root.sendTo(root.lookDev, { t: "look", wall: lookProc.name });
+            }
+            // The wallpaper changed again while this one was being made.
+            if (root._lookName !== lookProc.name)
+                root._makeLook();
+        }
     }
 
     /// A button on the phone's player: {a: play|pause|toggle|next|previous|seek, value (ms)}.

@@ -187,6 +187,16 @@ phone; the app's own switch). The phone's own players (`iitools_` buses) are nev
 | shell → phone | `sendFile` purpose `pcMediaArt`, name `<md5>` | The cover, once per image per connection; `art` names it. |
 | phone → shell | `cmd` `pcMedia`, arg `{"a":"play"\|"pause"\|"toggle"\|"next"\|"previous"\|"seek","value"?:ms}` | The phone's buttons. `unsupported` for a seek the player cannot do. |
 
+## The shell's look
+
+The desktop wallpaper behind the phone's PC card. Needs `look` in the phone's caps and
+*Settings → ii tools → Wallpaper on phone* (`iiTools.look.enable`).
+
+| Direction | Message | |
+| --- | --- | --- |
+| shell → phone | `sendFile` purpose `look`, name `<md5>` | A JPEG of the wallpaper at most 1080 px wide (a video's first frame), made once per wallpaper (`<stateDir>/look`), sent once per image per connection, before the topic. |
+| shell → phone | `{"t":"look","wall":"<md5>"}` | After the file, and again when the wallpaper changes. The phone keeps the last image for when the PC is away. |
+
 ## Drawing pad
 
 The phone as a drawing pad for live draw (cap `draw` in the shell's hello, while live

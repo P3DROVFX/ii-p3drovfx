@@ -32,7 +32,7 @@ Item {
             o.remote.enable, o.audio.enable, o.liveUpdates.enable, o.pcLive.enable,
             o.media.enable, o.pcMedia.enable, o.files.enable, o.touchpad.enable, o.draw.enable, o.present.enable,
             o.perf.enable, o.phoneData.enable, o.screenshots.enable, o.clipboard.enable,
-            o.share.enable, o.notifications.enable, o.calls.enable, o.callAudio.enable, o.wallpaper.enable,
+            o.share.enable, o.notifications.enable, o.calls.enable, o.callAudio.enable, o.wallpaper.enable, o.look.enable,
             o.deck.enable, o.wol.enable
         ].filter(Boolean).length;
     }
@@ -663,6 +663,18 @@ Item {
                         summary: Translation.tr("Apply images shared via \"Set on PC\"")
                         checked: Config.options.iiTools.wallpaper.enable
                         onToggled: value => Config.options.iiTools.wallpaper.enable = value
+                    }
+
+                    ColorsFeatureTile {
+                        width: controlTilesBox.tileWidth
+                        height: 152
+                        symbol: "imagesmode"
+                        shapeOn: MaterialShape.Shape.Cookie9Sided
+                        shapeOff: MaterialShape.Shape.Circle
+                        title: Translation.tr("Wallpaper on phone")
+                        summary: Translation.tr("Show the desktop wallpaper behind the PC card in the app")
+                        checked: Config.options.iiTools.look.enable
+                        onToggled: value => Config.options.iiTools.look.enable = value
                     }
 
                     ColorsFeatureTile {
