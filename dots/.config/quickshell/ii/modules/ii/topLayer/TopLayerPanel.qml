@@ -210,9 +210,13 @@ PanelWindow {
     readonly property bool leftSidebarOpenOnMonitor: GlobalStates.sidebarLeftOpen && screen.name === GlobalStates.effectiveLeftMonitor
     readonly property bool rightSidebarOpenOnMonitor: GlobalStates.sidebarRightOpen && screen.name === GlobalStates.effectiveRightMonitor
     readonly property bool keepRightSidebarContentLoaded: Config.ready && Config.options.sidebar.keepRightSidebarLoaded
-    readonly property bool rightSidebarContentWanted: GlobalStates.sidebarRightOpen || topPanel.keepRightSidebarContentLoaded
+    // Every screen has a TopLayerPanel; only the one the sidebar opens on (the
+    // warm monitor, which follows the last open) builds and keeps its content.
+    // Without the monitor test each screen built both sidebars - on two
+    // monitors the kept-loaded dashboard and policies were paid twice.
+    readonly property bool rightSidebarContentWanted: (GlobalStates.sidebarRightOpen || topPanel.keepRightSidebarContentLoaded) && topPanel.rightSidebarWarmOnMonitor
     readonly property bool keepLeftSidebarContentLoaded: Config.ready && Config.options.sidebar.keepLeftSidebarLoaded
-    readonly property bool leftSidebarContentWanted: GlobalStates.sidebarLeftOpen || topPanel.keepLeftSidebarContentLoaded
+    readonly property bool leftSidebarContentWanted: (GlobalStates.sidebarLeftOpen || topPanel.keepLeftSidebarContentLoaded) && topPanel.leftSidebarWarmOnMonitor
     readonly property bool leftSidebarActiveOnMonitor: (GlobalStates.animatedLeftSidebarWidth > 0 || GlobalStates.sidebarLeftOpen) && screen.name === GlobalStates.effectiveLeftMonitor && !(GlobalStates.policiesDetached && topPanel.policiesRenderedOnLeft)
     readonly property bool rightSidebarActiveOnMonitor: (GlobalStates.animatedRightSidebarWidth > 0 || GlobalStates.sidebarRightOpen) && screen.name === GlobalStates.effectiveRightMonitor && !(GlobalStates.policiesDetached && topPanel.policiesRenderedOnRight)
 
@@ -254,7 +258,8 @@ PanelWindow {
         if (GlobalStates.effectiveLeftMonitor !== "") {
             return screen.name === GlobalStates.effectiveLeftMonitor;
         }
-        return false;
+        // No monitor known yet (or no Hyprland): the first screen hosts it.
+        return screen.name === (Quickshell.screens[0]?.name ?? "");
     }
     readonly property bool rightSidebarWarmOnMonitor: {
         if (GlobalStates.policiesDetached && topPanel.policiesRenderedOnRight)
@@ -262,7 +267,8 @@ PanelWindow {
         if (GlobalStates.effectiveRightMonitor !== "") {
             return screen.name === GlobalStates.effectiveRightMonitor;
         }
-        return false;
+        // No monitor known yet (or no Hyprland): the first screen hosts it.
+        return screen.name === (Quickshell.screens[0]?.name ?? "");
     }
 
     onLeftSidebarActiveOnMonitorChanged: {
