@@ -57,6 +57,7 @@ Singleton {
     readonly property bool pcMediaEnabled: root.opts?.pcMedia?.enable ?? true
     readonly property bool filesEnabled: root.opts?.files?.enable ?? true
     readonly property bool touchpadEnabled: root.opts?.touchpad?.enable ?? true
+    readonly property bool drawEnabled: root.opts?.draw?.enable ?? true
     // Touch frames go straight to the helper's input thread; it only needs telling.
     onTouchpadEnabledChanged: root.send({ op: "config", touchpad: root.touchpadEnabled })
     readonly property bool shotsAutoToPhone: root.opts?.screenshots?.autoToPhone ?? true
@@ -162,6 +163,7 @@ Singleton {
         .concat(root.pcMediaEnabled ? ["pcMedia"] : [])
         .concat(root.filesEnabled ? ["files"] : [])
         .concat(root.touchpadEnabled ? ["touchpad"] : [])
+        .concat(root.drawEnabled && LiveDraw.enabled ? ["draw"] : [])
 
     // What is on right now, read from the same state the shell itself draws from.
     readonly property bool _aodUp: (GlobalStates.oledSaverMonitors ?? []).length > 0
@@ -980,6 +982,86 @@ Singleton {
         }
         }
         return "bad_arg";
+    }
+
+    // ── The phone as a drawing pad for live draw ────────────────────────
+    // The phone's pad maps onto the focused screen (it is shaped like it, from `aspect`);
+    // strokes go into live draw's own surface (LiveDraw.remoteStroke). The pen's state
+    // is a topic while the pad is open, so the phone's toolbar shows what the PC uses.
+
+    property string _drawDev: ""
+
+    function _drawState(): var {
+        const mon = Hyprland.focusedMonitor;
+        const key = LiveDraw.keyFor(String(mon?.name ?? ""));
+        return {
+            t: "draw",
+            open: LiveDraw.trayOpen,
+            tool: LiveDraw.tool,
+            eraser: LiveDraw.eraser,
+            color: String(LiveDraw.color),
+            width: LiveDraw.width,
+            palette: LiveDraw.palette,
+            aspect: mon && mon.height > 0 ? mon.width / mon.height : 16 / 9,
+            canUndo: LiveDraw.canUndo(key),
+            canRedo: LiveDraw.canRedo(key)
+        };
+    }
+    readonly property string _drawKey: root._drawDev !== "" ? JSON.stringify(root._drawState()) : ""
+    on_DrawKeyChanged: {
+        if (root._drawKey === "")
+            root._sentKeys["draw"] = "";
+        else if (root._drawDev !== "" && root._drawKey !== (root._sentKeys["draw"] ?? "")) {
+            root._sentKeys["draw"] = root._drawKey;
+            root.sendTo(root._drawDev, JSON.parse(root._drawKey));
+        }
+    }
+
+    function _draw(dev, m): void {
+        if (!root.drawEnabled || !LiveDraw.enabled)
+            return root.sendTo(dev, { t: "draw", err: "disabled" });
+        if (m.s !== undefined) {
+            if (dev === root._drawDev && LiveDraw.trayOpen)
+                LiveDraw.remoteStroke(String(m.s), Array.isArray(m.p) ? m.p : []);
+            return;
+        }
+        switch (String(m.a ?? "")) {
+        case "start":
+            root._drawDev = dev;
+            LiveDraw.open();
+            root._sentKeys["draw"] = "";
+            root.sendTo(dev, root._drawState());
+            return;
+        case "stop":
+            // Leaving the pad puts live draw away too (the ink stays, as with the tray).
+            if (root._drawDev === dev) {
+                root._drawDev = "";
+                LiveDraw.close();
+            }
+            return;
+        case "tool":
+            if (String(m.tool) === "eraser")
+                LiveDraw.eraser = true;
+            else
+                LiveDraw.setTool(String(m.tool));
+            LiveDraw.drawing = true;
+            return;
+        case "color":
+            LiveDraw.color = String(m.color ?? LiveDraw.color);
+            LiveDraw.eraser = false;
+            return;
+        case "width":
+            LiveDraw.width = Math.max(1, Math.min(64, Number(m.width ?? LiveDraw.width)));
+            return;
+        case "undo":
+        case "redo":
+        case "clear":
+            LiveDraw.command(String(m.a), null);
+            return;
+        case "close":
+            LiveDraw.close();
+            return;
+        }
     }
 
     // ── The phone's files in the file manager ───────────────────────────
@@ -1866,6 +1948,9 @@ Singleton {
         case "files":
             root._filesReply(dev, m);
             return;
+        case "draw":
+            root._draw(dev, m);
+            return;
         case "caps": {
             const next = Object.assign({}, root.phoneCaps);
             next[dev] = Array.isArray(m.caps) ? m.caps.map(String) : [];
@@ -1972,6 +2057,10 @@ Singleton {
             if (root._perfDev === ev.dev)
                 root._perfDev = "";
             root._unmountFiles(ev.dev, false);
+            if (root._drawDev === ev.dev) {
+                root._drawDev = "";
+                LiveDraw.close();
+            }
             // Without the phone that sent them they go stale: KDE Connect's list takes over.
             if (!root.notifsLive) {
                 root.linkNotifications = [];

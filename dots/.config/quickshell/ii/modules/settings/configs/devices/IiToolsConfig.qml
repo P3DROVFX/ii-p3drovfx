@@ -30,7 +30,7 @@ Item {
         const o = Config.options.iiTools;
         return [
             o.remote.enable, o.audio.enable, o.liveUpdates.enable, o.pcLive.enable,
-            o.media.enable, o.pcMedia.enable, o.files.enable, o.touchpad.enable,
+            o.media.enable, o.pcMedia.enable, o.files.enable, o.touchpad.enable, o.draw.enable,
             o.perf.enable, o.phoneData.enable, o.screenshots.enable, o.clipboard.enable,
             o.share.enable, o.notifications.enable, o.calls.enable, o.callAudio.enable, o.wallpaper.enable,
             o.deck.enable, o.wol.enable
@@ -591,6 +591,18 @@ Item {
                         summary: Translation.tr("Phone pointer & text input via /dev/uinput")
                         checked: Config.options.iiTools.touchpad.enable
                         onToggled: value => Config.options.iiTools.touchpad.enable = value
+                    }
+
+                    ColorsFeatureTile {
+                        width: controlTilesBox.tileWidth
+                        height: 152
+                        symbol: "draw"
+                        shapeOn: MaterialShape.Shape.Puffy
+                        shapeOff: MaterialShape.Shape.Circle
+                        title: Translation.tr("Drawing pad")
+                        summary: Translation.tr("Draw on the phone, ink appears in live draw on the focused screen")
+                        checked: Config.options.iiTools.draw.enable
+                        onToggled: value => Config.options.iiTools.draw.enable = value
                     }
 
                     ColorsFeatureTile {

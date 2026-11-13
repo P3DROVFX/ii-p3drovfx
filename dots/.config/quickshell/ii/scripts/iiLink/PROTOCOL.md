@@ -187,6 +187,20 @@ phone; the app's own switch). The phone's own players (`iitools_` buses) are nev
 | shell → phone | `sendFile` purpose `pcMediaArt`, name `<md5>` | The cover, once per image per connection; `art` names it. |
 | phone → shell | `cmd` `pcMedia`, arg `{"a":"play"\|"pause"\|"toggle"\|"next"\|"previous"\|"seek","value"?:ms}` | The phone's buttons. `unsupported` for a seek the player cannot do. |
 
+## Drawing pad
+
+The phone as a drawing pad for live draw (cap `draw` in the shell's hello, while live
+draw is on; Settings → ii tools → Drawing pad). The pad stands for the focused screen and
+takes its shape (`aspect`). Strokes go through live draw's own surface
+(`LiveDraw.remoteStroke`), so smoothing, tools, the eraser and undo are the PC's.
+
+| Direction | Message | |
+| --- | --- | --- |
+| phone → shell | `{"t":"draw","a":"start"}` / `{"t":"draw","a":"stop"}` | The pad opened (live draw opens, pen down) / closed (live draw closes, the ink stays; also when the phone disconnects). |
+| shell → phone | `{"t":"draw","open","tool","eraser","color","width","palette":[…],"aspect","canUndo","canRedo"}` | The pen as the PC uses it, on start and on every change while the pad is open. `{"t":"draw","err":"disabled"}` when off. |
+| phone → shell | `{"t":"draw","s":"down"\|"move"\|"up","p":[[x,y,pressure],…]}` | A stroke, x and y in 0–1 of the focused screen; `move` carries every sample since the last (the touch history). Pressure is the stylus's, 1 for a finger. With the eraser on, the points rub out instead. |
+| phone → shell | `{"t":"draw","a":"tool","tool":"pen"\|"highlighter"\|"laser"\|"eraser"}`, `{"a":"color","color"}`, `{"a":"width","width"}`, `{"a":"undo"\|"redo"\|"clear"\|"close"}` | The pad's toolbar. |
+
 ## Touchpad and keyboard
 
 The phone as this PC's touchpad and keyboard (cap `touchpad` in the shell's hello;

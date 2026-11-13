@@ -2896,6 +2896,10 @@ Singleton {
                 }
                 // A call's audio on this PC: it becomes the phone's Bluetooth headset (HFP)
                 // for that call only. Needs the phone paired over Bluetooth.
+                // The phone as a drawing pad for live draw, mapped onto the focused screen.
+                property JsonObject draw: JsonObject {
+                    property bool enable: true
+                }
                 property JsonObject callAudio: JsonObject {
                     property bool enable: true
                     // Every call on the PC by itself (ringing or dialled); off, only on request.
