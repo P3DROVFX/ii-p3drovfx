@@ -172,6 +172,15 @@ Item {
             "submenu": true,
             "enabled": root.multiSelect ? root.targetWidgets.length > 0 : root.instance !== null
         },
+        // Which screens draw this copy, one toggle per connected screen. A screen
+        // builds only the widgets assigned to it (WidgetPlacement.showsOn), so a
+        // widget left off a monitor costs that monitor nothing. Only with more
+        // than one screen, and for a single widget: each copy has its own list.
+        {
+            "id": "monitors",
+            "shown": root.screenToggles.length > 1 && !root.multiSelect,
+            "items": root.screenToggles
+        },
         // On the Lockscreen tab a desktop widget is hidden from the lock, not
         // removed from the desktop; a lock-only one is removed outright.
         {
@@ -262,8 +271,35 @@ Item {
             }
             break;
         }
+        default:
+            if (String(entry.id).startsWith("monitor:") && entry.screen) {
+                // The last screen cannot be switched off: that is Remove.
+                if (entry.checked && root.shownScreens.length <= 1)
+                    break;
+                const instanceId = root.instanceId;
+                // Taking it off this screen removes the widget under the menu.
+                if (entry.checked && entry.screen === (root.instance?.monitorName ?? ""))
+                    root.dismissRequested();
+                Config.updateWidgetMonitorShown(instanceId, entry.screen, !entry.checked);
+            }
+            break;
         }
     }
+
+    readonly property var configEntry: WidgetPlacement.findEntry(Config.options.background.activeWidgets, root.instanceId)
+    readonly property var shownScreens: WidgetPlacement.connectedScreens.filter(name => WidgetPlacement.showsOn(root.configEntry, name))
+    readonly property var screenToggles: WidgetPlacement.connectedScreens.map(name => {
+        const on = root.shownScreens.includes(name);
+        return {
+            "id": "monitor:" + name,
+            "screen": name,
+            "symbol": name.startsWith("eDP") ? "laptop" : "desktop_windows",
+            "title": Translation.tr("Show on %1").arg(name),
+            "toggle": true,
+            "checked": on,
+            "enabled": root.instance !== null && !(on && root.shownScreens.length <= 1)
+        };
+    })
 
     implicitWidth: !root.dense ? 268
         : Math.max(ContextMenus.compactMinWidth, Math.min(ContextMenus.compactMaxWidth,

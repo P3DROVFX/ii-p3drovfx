@@ -49,6 +49,11 @@ Item {
     }
     // The entry itself, for the flags that are not placement (pinned).
     readonly property var configEntry: WidgetPlacement.findEntry(Config.options.background.activeWidgets, delegateRoot.instanceId)
+    // Every screen's Repeater walks the shared model; only the screens this copy
+    // is assigned to build its widget (WidgetPlacement.showsOn). The others keep
+    // an empty, invisible delegate.
+    readonly property bool onThisMonitor: WidgetPlacement.showsOn(delegateRoot.configEntry, delegateRoot.monitorName)
+    visible: delegateRoot.onThisMonitor
     required property real wallpaperScale
     required property bool wallpaperSafetyTriggered
     required property bool lockAnimationActive
@@ -2306,6 +2311,7 @@ Item {
         // lock-only widget added from it is written to the config and never
         // built, so the tab looks like it ignored the click.
         readonly property bool lockLayout: delegateRoot.lockAnimationActive || delegateRoot.editLockHere
+        active: delegateRoot.onThisMonitor && (widgetLoader.keepAlive || widgetLoader.shown)
         shown: !widgetLoader.lockLayout ? (delegateRoot.lockBehavior !== "lockOnly")
             : (delegateRoot.lockBehavior === "center" || delegateRoot.lockBehavior === "keep" || delegateRoot.lockBehavior === "custom"
                 || delegateRoot.lockBehavior === "lockOnly")

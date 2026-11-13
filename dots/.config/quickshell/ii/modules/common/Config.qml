@@ -908,6 +908,10 @@ Singleton {
             "placementStrategy": "free",
             "lockBehavior": lockBehavior
         };
+        // Added from a screen (Edit Mode): it lives on that screen only. Without
+        // one (Settings) it follows the primary monitor; see WidgetPlacement.showsOn.
+        if (monitorName)
+            entry.monitors = [monitorName];
         cloned.push(entry);
         root.options.background.activeWidgets = cloned;
         root._recordWidgetEdit(instanceId, null, root._widgetEntryClone(entry), cloned.length - 1);
@@ -1045,6 +1049,14 @@ Singleton {
 
     // A pinned widget ignores drags and the resize grip whatever the global
     // lock says. Stored only when set, so untouched entries stay as they were.
+    // Which screens build this copy (WidgetPlacement.showsOn). Per copy, like pinned.
+    function updateWidgetMonitorShown(instanceId, monitorName, shown) {
+        root._editWidgetEntry(instanceId, entry => WidgetPlacement.setShownOn(entry, monitorName, shown));
+    }
+    function updateWidgetShownOnAll(instanceId, all, monitorName) {
+        root._editWidgetEntry(instanceId, entry => WidgetPlacement.setShownOnAll(entry, all, monitorName));
+    }
+
     function updateWidgetPinned(instanceId, pinned) {
         root._editWidgetEntry(instanceId, entry => {
             if (pinned)
