@@ -32,7 +32,7 @@ Item {
             o.remote.enable, o.audio.enable, o.liveUpdates.enable, o.pcLive.enable,
             o.media.enable, o.pcMedia.enable, o.files.enable, o.touchpad.enable,
             o.perf.enable, o.phoneData.enable, o.screenshots.enable, o.clipboard.enable,
-            o.share.enable, o.notifications.enable, o.calls.enable, o.wallpaper.enable,
+            o.share.enable, o.notifications.enable, o.calls.enable, o.callAudio.enable, o.wallpaper.enable,
             o.deck.enable, o.wol.enable
         ].filter(Boolean).length;
     }
@@ -370,7 +370,7 @@ Item {
             Layout.topMargin: 6
             symbol: "sync"
             title: Translation.tr("Phone sync")
-            description: Translation.tr("Live updates, notifications, calls, battery status, and screenshots.")
+            description: Translation.tr("Live updates, notifications, calls and their audio, battery status, and screenshots.")
 
             Item {
                 id: syncTilesBox
@@ -436,6 +436,18 @@ Item {
                     ColorsFeatureTile {
                         width: syncTilesBox.tileWidth
                         height: 152
+                        symbol: "headset_mic"
+                        shapeOn: MaterialShape.Shape.Cookie9Sided
+                        shapeOff: MaterialShape.Shape.Circle
+                        title: Translation.tr("Call audio on PC")
+                        summary: Translation.tr("Talk through this PC: it becomes the phone's headset for the call")
+                        checked: Config.options.iiTools.callAudio.enable
+                        onToggled: value => Config.options.iiTools.callAudio.enable = value
+                    }
+
+                    ColorsFeatureTile {
+                        width: syncTilesBox.tileWidth
+                        height: 152
                         symbol: "contacts"
                         shapeOn: MaterialShape.Shape.SoftBurst
                         shapeOff: MaterialShape.Shape.Circle
@@ -457,6 +469,25 @@ Item {
                         onToggled: value => Config.options.iiTools.screenshots.enable = value
                     }
                 }
+            }
+
+            AppToggleRow {
+                Layout.topMargin: 4
+                visible: Config.options.iiTools.callAudio.enable
+                symbol: "phone_in_talk"
+                title: Translation.tr("Calls on this PC automatically")
+                description: Translation.tr("While the phone is connected, every call talks through this PC; move it back from the call card")
+                checked: Config.options.iiTools.callAudio.auto
+                onToggled: value => Config.options.iiTools.callAudio.auto = value
+            }
+
+            // Call audio needs the phone paired over Bluetooth, which ii tools cannot do.
+            AppSettingRow {
+                Layout.topMargin: 4
+                visible: Config.options.iiTools.callAudio.enable && IiLinkService.hasPeers && PhoneCallService.phoneBluetooth === null
+                symbol: "bluetooth_searching"
+                title: Translation.tr("Pair the phone over Bluetooth for call audio")
+                description: Translation.tr("Pair \"%1\" with this PC in Bluetooth settings; ii tools connects it only during calls.").arg(IiLinkService.peers[0]?.name ?? "")
             }
 
             AppToggleRow {

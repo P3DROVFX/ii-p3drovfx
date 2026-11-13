@@ -2894,6 +2894,13 @@ Singleton {
                 property JsonObject touchpad: JsonObject {
                     property bool enable: true
                 }
+                // A call's audio on this PC: it becomes the phone's Bluetooth headset (HFP)
+                // for that call only. Needs the phone paired over Bluetooth.
+                property JsonObject callAudio: JsonObject {
+                    property bool enable: true
+                    // Every call on the PC by itself (ringing or dialled); off, only on request.
+                    property bool auto: true
+                }
                 // The phone's next alarm, contacts with photos, battery and network, from
                 // the app instead of ADB and KDE Connect.
                 property JsonObject phoneData: JsonObject {

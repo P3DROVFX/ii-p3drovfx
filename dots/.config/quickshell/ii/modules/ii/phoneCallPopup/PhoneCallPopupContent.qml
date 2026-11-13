@@ -272,6 +272,42 @@ Item {
                     onClicked: PhoneCallService.answer()
                 }
             }
+
+            // The call's audio on this PC (the PC as the phone's Bluetooth headset).
+            CallButton {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 48
+                implicitHeight: 48
+                horizontal: true
+                // Automatic mode connects as the call rings: Answer already talks through the PC.
+                visible: PhoneCallService.canUsePc && (root.ringing ? root.canAct && !PhoneCallService.pcAudioAuto : true)
+                icon: PhoneCallService.pcAudioBusy ? "hourglass_top" : (PhoneCallService.pcAudio ? "smartphone" : "headset_mic")
+                label: PhoneCallService.pcAudioBusy ? Translation.tr("Connecting…")
+                    : root.ringing ? Translation.tr("Answer on this PC")
+                    : PhoneCallService.pcAudio ? Translation.tr("Move audio to the phone") : Translation.tr("Move audio to this PC")
+                colBackground: PhoneCallService.pcAudio ? Appearance.colors.colSecondaryContainer : Appearance.colors.colSurfaceContainerHighest
+                colBackgroundHover: PhoneCallService.pcAudio ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colSurfaceContainerHighestHover
+                colForeground: PhoneCallService.pcAudio ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurface
+                onClicked: {
+                    if (PhoneCallService.pcAudioBusy)
+                        return;
+                    if (root.ringing)
+                        PhoneCallService.answerOnPc();
+                    else if (PhoneCallService.pcAudio)
+                        PhoneCallService.moveToPhone();
+                    else
+                        PhoneCallService.moveToPc();
+                }
+            }
+            StyledText {
+                Layout.fillWidth: true
+                visible: PhoneCallService.pcAudioError !== ""
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap
+                text: PhoneCallService.pcAudioError
+                font.pixelSize: Appearance.font.pixelSize.small
+                color: Appearance.m3colors.m3error
+            }
         }
     }
 
@@ -283,6 +319,8 @@ Item {
         property color colBackground
         property color colBackgroundHover
         property color colForeground
+        /// Icon beside the label, for a wide button.
+        property bool horizontal: false
         signal clicked()
 
         Layout.fillWidth: true
@@ -302,9 +340,11 @@ Item {
             }
         }
 
-        ColumnLayout {
+        GridLayout {
             anchors.centerIn: parent
-            spacing: 2
+            columns: button.horizontal ? 2 : 1
+            rowSpacing: 2
+            columnSpacing: 8
             MaterialSymbol {
                 Layout.alignment: Qt.AlignHCenter
                 text: button.icon
@@ -312,7 +352,7 @@ Item {
                 color: button.colForeground
             }
             StyledText {
-                Layout.alignment: Qt.AlignHCenter
+                Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
                 text: button.label
                 font.pixelSize: Appearance.font.pixelSize.small
                 font.weight: Font.Medium

@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Quickshell
+import Quickshell.Bluetooth
 import Quickshell.Io
 import qs.modules.common
 
@@ -58,6 +59,96 @@ Singleton {
     readonly property string avatarPath: root.contact ? String(root.contact.avatarPath ?? "") : ""
 
     signal missed(string displayName, string number)
+
+    // ── The call's audio on the PC ──────────────────────────────────────
+    // Android lets no app capture a call, but it sends a call to a Bluetooth headset:
+    // the PC becomes one (HFP, hands-free role, which PipeWire's own backend does), and
+    // only for the call. WirePlumber routes the call like any app's audio: the phone's
+    // voice to the default output, the default microphone to the phone. Only the HFP
+    // profile is connected, so the phone's media never moves to the PC.
+
+    readonly property bool pcAudioEnabled: (Config.options?.iiTools?.callAudio?.enable ?? true) && root.linkLive
+    /// The phone among this PC's paired Bluetooth devices, by the name ii tools knows.
+    readonly property var phoneBluetooth: {
+        const name = String(IiLinkService.peers[0]?.name ?? "").trim();
+        if (name === "")
+            return null;
+        return Bluetooth.devices.values.find(d => d.paired && (d.name === name || d.deviceName === name)) ?? null;
+    }
+    readonly property bool canUsePc: root.pcAudioEnabled && root.phoneBluetooth !== null
+    /// Every call goes to the PC on its own (ringing, or dialled), not only on request.
+    readonly property bool pcAudioAuto: root.canUsePc && (Config.options?.iiTools?.callAudio?.auto ?? true)
+    /// Moved back to the phone by hand: not taken again for this call.
+    property bool _keptOnPhone: false
+    /// The call's audio is on the PC now.
+    readonly property bool pcAudio: root.canUsePc && root.active && (root.phoneBluetooth?.connected ?? false)
+    readonly property bool pcAudioBusy: hfpProc.running
+    property string pcAudioError: ""
+    /// Connected by us, so ours to undo when the call ends.
+    property bool _weConnected: false
+    property bool _answerAfterConnect: false
+
+    readonly property string _hfpUuid: "0000111f-0000-1000-8000-00805f9b34fb"
+
+    /** Answer with the PC as the headset. */
+    function answerOnPc() {
+        if (root.callState !== "ringing" || !root.canUsePc)
+            return;
+        root._answerAfterConnect = true;
+        root._hfp(true);
+    }
+
+    function moveToPc() {
+        if (root.active && root.canUsePc && !root.pcAudio)
+            root._hfp(true);
+    }
+
+    function moveToPhone() {
+        if (root.pcAudio) {
+            root._keptOnPhone = true;
+            root._hfp(false);
+        }
+    }
+
+    // A call starting (ringing, or one dialled on the phone) takes the PC as its headset
+    // at once, so answering anywhere talks through the PC.
+    onCallStateChanged: {
+        if (root.callState !== "idle" && root.pcAudioAuto && !root._keptOnPhone && !root._simulated
+                && !(root.phoneBluetooth?.connected ?? false))
+            root._hfp(true);
+    }
+
+    function _hfp(connect) {
+        if (hfpProc.running || !root.phoneBluetooth)
+            return;
+        root.pcAudioError = "";
+        hfpProc.connecting = connect;
+        hfpProc.command = connect
+            ? ["bluetoothctl", "--timeout", "15", "connect", root.phoneBluetooth.address, root._hfpUuid]
+            : ["bluetoothctl", "--timeout", "10", "disconnect", root.phoneBluetooth.address];
+        hfpProc.running = true;
+    }
+
+    Process {
+        id: hfpProc
+        property bool connecting: false
+        stdout: StdioCollector { id: hfpOut }
+        onExited: code => {
+            const ok = code === 0 && /successful/i.test(hfpOut.text);
+            if (hfpProc.connecting) {
+                root._weConnected = ok || root._weConnected;
+                if (!ok)
+                    root.pcAudioError = Translation.tr("The phone did not connect over Bluetooth");
+                // Answered either way: a failed connection must not leave the call ringing.
+                if (root._answerAfterConnect) {
+                    root._answerAfterConnect = false;
+                    root.answer();
+                }
+            } else if (ok) {
+                root._weConnected = false;
+            }
+        }
+    }
 
     // ── Actions ─────────────────────────────────────────────────────────────
     function answer() {
@@ -138,6 +229,11 @@ Singleton {
         root.callState = next;
         root.stateSince = Date.now();
         if (next === "idle") {
+            // The PC was the headset for this call only.
+            if (root._weConnected)
+                hfpRelease.restart();
+            root._answerAfterConnect = false;
+            root._keptOnPhone = false;
             root.adbLive = false;
             root.contactName = "";
             root._simulated = false;
@@ -206,6 +302,16 @@ Singleton {
         onTriggered: root._setState("idle")
     }
 
+    // A moment after the call, so the phone has closed the audio link first.
+    Timer {
+        id: hfpRelease
+        interval: 1500
+        onTriggered: {
+            if (root.callState === "idle" && root._weConnected)
+                root._hfp(false);
+        }
+    }
+
     IpcHandler {
         target: "phoneCall"
 
@@ -219,7 +325,8 @@ Singleton {
             KdeConnectService.callEvent("", state, number, contact);
         }
         function status(): string {
-            return JSON.stringify({ state: root.callState, name: root.displayName, linkLive: root.linkLive, adbLive: root.adbLive, simulated: root._simulated });
+            return JSON.stringify({ state: root.callState, name: root.displayName, linkLive: root.linkLive, adbLive: root.adbLive, simulated: root._simulated,
+                canUsePc: root.canUsePc, pcAudio: root.pcAudio, phoneBluetooth: root.phoneBluetooth?.address ?? "" });
         }
         function answer(): void { root.answer(); }
         function decline(): void { root.decline(); }
