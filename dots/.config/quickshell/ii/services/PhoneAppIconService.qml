@@ -174,7 +174,7 @@ Singleton {
         id: iconProc
         stdinEnabled: true
         command: ProcUtils.pdeath(["python3", Quickshell.shellPath("scripts/phone/android_icon_extractor.py")])
-        running: root.enabled && (Config.options?.phone?.kdeconnectEnabled ?? true) && KdeConnectService.available
+        running: root.enabled && KdeConnectService.serviceEnabled && KdeConnectService.available
 
         onRunningChanged: {
             if (running) Qt.callLater(() => root.loadCached());

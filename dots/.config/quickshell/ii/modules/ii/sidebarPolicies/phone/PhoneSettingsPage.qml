@@ -121,7 +121,7 @@ Item {
                     symbol: "notifications"
                     title: Translation.tr("Show phone notifications with desktop ones")
                     help: Translation.tr("On, phone notifications pop up and stay in the sidebar list like any other, and also show in the Phone tab. Off, they only show in the Phone tab while your phone is connected.")
-                    enabled: Config.options.phone.kdeconnectEnabled
+                    enabled: KdeConnectService.serviceEnabled
                     checked: Config.options.phone.mirrorNotificationsToDesktop
                     onToggled: value => Config.options.phone.mirrorNotificationsToDesktop = value
                 }

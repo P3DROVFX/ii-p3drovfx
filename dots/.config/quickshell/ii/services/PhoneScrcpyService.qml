@@ -91,7 +91,7 @@ Singleton {
     // once it has been idle with no live session — never while one is running, since it owns those
     // scrcpy child processes and reports their exit.
     property bool _managerWanted: false
-    readonly property bool _managerAllowed: (Config.options?.phone?.kdeconnectEnabled ?? true) && KdeConnectService.available
+    readonly property bool _managerAllowed: KdeConnectService.serviceEnabled && KdeConnectService.available
 
     function ensureManagerRunning(): void {
         if (!root._managerAllowed) return
@@ -171,7 +171,7 @@ Singleton {
         }
         // This used to leave the button spinning on "launching" forever:
         // nothing was ever sent, so nothing ever answered.
-        if (!(Config.options?.phone?.kdeconnectEnabled ?? true)) {
+        if (!KdeConnectService.serviceEnabled) {
             root.reportFailure("mirror", Translation.tr("The phone integration is turned off"))
             return
         }

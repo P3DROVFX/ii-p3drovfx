@@ -529,20 +529,73 @@ Singleton {
         checkPythonDbusProc.running = true
     }
 
-    // Reflects Config.options.policies.phone and Config.options.phone.kdeconnectEnabled.
-    // When false, the service stays dormant: no DBus monitor, no pgrep polling, no ADB probing.
-    readonly property bool _enabled: Config.options.policies.phone !== 0
-        && (Config.options.phone.kdeconnectEnabled === undefined || Config.options.phone.kdeconnectEnabled)
+    // Unified mutually-exclusive phone integration service: "iiTools" | "kdeconnect" | "off".
+    readonly property string activePhoneService: {
+        if (Config.options.policies.phone === 0)
+            return "off"
+        const svc = Config.options.phone.service ?? ""
+        const kdeCfg = Config.options.phone.kdeconnectEnabled === undefined || Config.options.phone.kdeconnectEnabled
+        const iiCfg = Config.options.iiTools?.enable ?? true
+        if (svc === "iiTools")
+            return iiCfg ? "iiTools" : "off"
+        if (svc === "kdeconnect")
+            return kdeCfg ? "kdeconnect" : "off"
+        if (svc === "off")
+            return "off"
+        if (IiLinkService.serviceSelected)
+            return "iiTools"
+        return kdeCfg ? "kdeconnect" : "off"
+    }
 
-    // Public read-only view for toggle models and dialogs that mirror the service state.
-    /// The phone integration is on: the Phone tab is, and there is a phone to talk to
-    /// (KDE Connect switched on, or one paired in ii tools). `_enabled` stays KDE Connect's own.
+    // Reflects whether the KDE Connect backend specifically should run background daemons.
+    readonly property bool _enabled: Config.options.policies.phone !== 0
+        && root.activePhoneService === "kdeconnect"
+
+    // Public read-only view for toggle models and dialogs that mirror the active service state.
     readonly property bool serviceEnabled: Config.options.policies.phone !== 0
-        && (root._enabled || IiLinkService.phoneDevice !== null)
+        && root.activePhoneService !== "off"
     /// The picked phone is the ii tools one.
-    readonly property bool activeIsIi: root._isIi(root.activeDeviceId)
-    /// What carries things to the picked phone, for "Sending via …" texts.
-    readonly property string backendName: root.activeIsIi ? "ii tools" : "KDE Connect"
+    readonly property bool activeIsIi: root.activePhoneService === "iiTools" || root._isIi(root.activeDeviceId)
+    /// Human-readable active backend name.
+    readonly property string backendName: root.activePhoneService === "iiTools"
+        ? "ii tools"
+        : (root.activePhoneService === "kdeconnect" ? "KDE Connect" : Translation.tr("Off"))
+
+    onActivePhoneServiceChanged: root._sanitiseActiveDevice()
+
+    /// Switch the single active phone integration backend ("iiTools", "kdeconnect", or "off").
+    function selectPhoneService(mode) {
+        if (mode === "iiTools") {
+            Config.options.phone.service = "iiTools"
+            Config.options.iiTools.enable = true
+            Config.options.iiTools.primary = true
+            Config.options.phone.kdeconnectEnabled = false
+        } else if (mode === "kdeconnect") {
+            Config.options.phone.service = "kdeconnect"
+            Config.options.phone.kdeconnectEnabled = true
+            Config.options.iiTools.enable = false
+            Config.options.iiTools.primary = false
+        } else {
+            Config.options.phone.service = "off"
+            Config.options.phone.kdeconnectEnabled = false
+            Config.options.iiTools.enable = false
+        }
+    }
+
+    /// Toggle between off and the preferred/last-used phone backend.
+    function togglePhoneService() {
+        if (root.serviceEnabled) {
+            root._lastPhoneService = root.activePhoneService
+            root.selectPhoneService("off")
+        } else {
+            const target = (root._lastPhoneService === "iiTools" || IiLinkService.hasPeers)
+                ? "iiTools"
+                : "kdeconnect"
+            root.selectPhoneService(target)
+        }
+    }
+
+    property string _lastPhoneService: ""
 
     // Stop all background activity when the Phone tab is toggled off at runtime.
     // Restart when toggled back on. This lets users enable/disable Phone

@@ -106,6 +106,7 @@ Singleton {
         "bluetoothDeviceImages",
         "soundcore.macAddress",
         // Phone & LocalSend services and toggles (Devices & Phone / Phone settings)
+        "phone.service",
         "phone.kdeconnectEnabled",
         "phone.remoteCommands",
         "phone.mirrorNotificationsToDesktop",

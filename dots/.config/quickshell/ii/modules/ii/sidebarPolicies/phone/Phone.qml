@@ -1159,7 +1159,7 @@ Item {
                             font.weight: Font.DemiBold
                         }
                     }
-                    onClicked: () => GlobalStates.openSettingsPage("iiTools")
+                    onClicked: () => GlobalStates.openSettingsPage("devicesPhone", "devices/IiToolsConfig.qml")
                 }
 
                 Item { Layout.fillHeight: true }

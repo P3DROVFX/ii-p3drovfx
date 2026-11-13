@@ -105,9 +105,12 @@ ContentPage {
 
         ConfigSwitch {
             buttonIcon: "sync"
-            text: Translation.tr("Enable KDE Connect Service")
-            checked: Config.options.phone.kdeconnectEnabled
-            onCheckedChanged: Config.options.phone.kdeconnectEnabled = checked
+            text: Translation.tr("Enable Phone Integration")
+            checked: KdeConnectService.serviceEnabled
+            onCheckedChanged: {
+                if (checked !== KdeConnectService.serviceEnabled)
+                    KdeConnectService.togglePhoneService();
+            }
         }
 
     }

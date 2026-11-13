@@ -28,7 +28,7 @@ WindowDialog {
 
         StyledText {
             Layout.fillWidth: true
-            text: Translation.tr("KDE Connect")
+            text: KdeConnectService.serviceEnabled ? KdeConnectService.backendName : Translation.tr("Phone")
             font.pixelSize: Appearance.font.pixelSize.larger
             font.weight: Font.Bold
             color: Appearance.colors.colOnLayer1
@@ -37,7 +37,7 @@ WindowDialog {
         StyledSwitch {
             checked: KdeConnectService.serviceEnabled
             onToggled: {
-                Config.options.phone.kdeconnectEnabled = !KdeConnectService.serviceEnabled;
+                KdeConnectService.togglePhoneService();
             }
         }
     }

@@ -2725,6 +2725,8 @@ Singleton {
             }
 
             property JsonObject phone: JsonObject {
+                // Active phone integration service: "" (auto/legacy), "iiTools", "kdeconnect", "off"
+                property string service: ""
                 property bool kdeconnectEnabled: true
                 // Shell actions offered to the phone through KDE Connect's Run Command plugin
                 // (mirror, recording, media, lock...). Written into kdeconnect's own config.

@@ -27,7 +27,16 @@ Singleton {
     id: root
 
     readonly property var opts: Config.options?.iiTools ?? null
-    readonly property bool enabled: Config.ready && (root.opts?.enable ?? true)
+    readonly property string _phoneService: Config.options?.phone?.service ?? ""
+    readonly property bool _kdeFlag: Config.options?.phone?.kdeconnectEnabled ?? true
+    readonly property bool _policyAllowed: (Config.options?.policies?.phone ?? 1) !== 0
+    // Mutually exclusive selection with KDE Connect:
+    // explicit "iiTools" runs ii tools; "kdeconnect" / "off" keep it dormant;
+    // "" (legacy/auto) activates when paired peers exist, pairing starts, or KDE Connect is off.
+    readonly property bool serviceSelected: Config.ready && root._policyAllowed && (root.opts?.enable ?? true)
+        && (root._phoneService === "iiTools"
+            || (root._phoneService === "" && (root.hasPeers || root.pairingRequested || !root._kdeFlag)))
+    readonly property bool enabled: root.serviceSelected
     readonly property bool remoteEnabled: root.opts?.remote?.enable ?? true
     readonly property bool audioEnabled: root.opts?.audio?.enable ?? true
     readonly property bool deckEnabled: root.opts?.deck?.enable ?? true
@@ -84,7 +93,7 @@ Singleton {
 
     FileView {
         id: peersFile
-        path: root.enabled ? `${root.stateDir}/peers.json` : ""
+        path: `${root.stateDir}/peers.json`
         watchChanges: true
         printErrors: false
         onFileChanged: peersFile.reload()
