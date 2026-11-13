@@ -58,8 +58,14 @@ Singleton {
     readonly property bool filesEnabled: root.opts?.files?.enable ?? true
     readonly property bool touchpadEnabled: root.opts?.touchpad?.enable ?? true
     readonly property bool drawEnabled: root.opts?.draw?.enable ?? true
+    readonly property bool presentEnabled: root.opts?.present?.enable ?? true
     // Touch frames go straight to the helper's input thread; it only needs telling.
     onTouchpadEnabledChanged: root.send({ op: "config", touchpad: root.touchpadEnabled })
+    onPresentEnabledChanged: {
+        root.send({ op: "config", present: root.presentEnabled });
+        if (!root.presentEnabled)
+            root._presentDev = "";
+    }
     readonly property bool shotsAutoToPhone: root.opts?.screenshots?.autoToPhone ?? true
     readonly property int port: root.opts?.port ?? 47210
 
@@ -164,6 +170,7 @@ Singleton {
         .concat(root.filesEnabled ? ["files"] : [])
         .concat(root.touchpadEnabled ? ["touchpad"] : [])
         .concat(root.drawEnabled && LiveDraw.enabled ? ["draw"] : [])
+        .concat(root.presentEnabled ? ["present"] : [])
 
     // What is on right now, read from the same state the shell itself draws from.
     readonly property bool _aodUp: (GlobalStates.oledSaverMonitors ?? []).length > 0
@@ -982,6 +989,50 @@ Singleton {
         }
         }
         return "bad_arg";
+    }
+
+    // ── The phone as a slide clicker ────────────────────────────────────
+    // The helper types its keys (arrows, F5, Esc, B) into whatever has focus; the
+    // laser is a dot the shell draws over the focused screen (PresenterLaser.qml).
+    // The phone's laser pad takes that screen's shape, from `aspect`.
+
+    property string _presentDev: ""
+    /// The laser's spot on `presentScreen`, x and y in 0–1, or null while no finger is down.
+    property var presentLaser: null
+    property string presentScreen: ""
+    on_PresentDevChanged: {
+        if (root._presentDev === "")
+            root.presentLaser = null;
+    }
+
+    function _present(dev, m): void {
+        if (m.err !== undefined)
+            return;
+        if (m.laser !== undefined) {
+            if (dev !== root._presentDev)
+                return;
+            const p = m.laser;
+            if (Array.isArray(p) && p.length >= 2) {
+                if (root.presentLaser === null)
+                    root.presentScreen = String(Hyprland.focusedMonitor?.name ?? "");
+                root.presentLaser = { x: Math.max(0, Math.min(1, Number(p[0]))), y: Math.max(0, Math.min(1, Number(p[1]))) };
+            } else {
+                root.presentLaser = null;
+            }
+            return;
+        }
+        switch (String(m.a ?? "")) {
+        case "start": {
+            root._presentDev = dev;
+            const mon = Hyprland.focusedMonitor;
+            root.sendTo(dev, { t: "present", aspect: mon && mon.height > 0 ? mon.width / mon.height : 16 / 9 });
+            return;
+        }
+        case "stop":
+            if (root._presentDev === dev)
+                root._presentDev = "";
+            return;
+        }
     }
 
     // ── The phone as a drawing pad for live draw ────────────────────────
@@ -1951,6 +2002,9 @@ Singleton {
         case "draw":
             root._draw(dev, m);
             return;
+        case "present":
+            root._present(dev, m);
+            return;
         case "caps": {
             const next = Object.assign({}, root.phoneCaps);
             next[dev] = Array.isArray(m.caps) ? m.caps.map(String) : [];
@@ -2012,7 +2066,7 @@ Singleton {
             root.hostName = String(ev.name ?? "");
             root.addresses = ev.addrs ?? [];
             root.wakeTargets = ev.wake ?? [];
-            root.send({ op: "config", media: root.mediaEnabled, touchpad: root.touchpadEnabled });
+            root.send({ op: "config", media: root.mediaEnabled, touchpad: root.touchpadEnabled, present: root.presentEnabled });
             root.discovery = ev.discovery === true;
             if (root.pairingRequested && !root.pairing)
                 root.send({ op: "pair" });
@@ -2061,6 +2115,8 @@ Singleton {
                 root._drawDev = "";
                 LiveDraw.close();
             }
+            if (root._presentDev === ev.dev)
+                root._presentDev = "";
             // Without the phone that sent them they go stale: KDE Connect's list takes over.
             if (!root.notifsLive) {
                 root.linkNotifications = [];

@@ -84,6 +84,8 @@ struct Shared {
     media_tx: mpsc::UnboundedSender<mpris::Event>,
     /// Whether a phone may be this PC's touchpad and keyboard (the shell's setting).
     touchpad: bool,
+    /// Whether a phone may be a slide clicker here (the shell's setting).
+    present: bool,
     input_tx: std::sync::mpsc::Sender<input::Cmd>,
 }
 
@@ -441,6 +443,39 @@ async fn serve(stream: TcpStream, addr: SocketAddr, acceptor: TlsAcceptor, state
                         let _ = s.input_tx.send(cmd);
                     }
                 }
+                // The slide clicker: its keys go to the input thread; start, stop and the
+                // laser go on to the shell, which draws the dot.
+                Ok(m) if m["t"] == "present" => {
+                    let s = state.lock().unwrap();
+                    if !s.present {
+                        let _ = tx.send(Message::Text(json!({"t": "present", "err": "disabled"}).to_string().into()));
+                        continue;
+                    }
+                    if let Some(key) = m["key"].as_str() {
+                        // Only the keys presentation apps listen for: the phone drives slides, not the PC.
+                        const KEYS: &[&str] = &["Left", "Right", "Page_Up", "Page_Down", "Home", "End", "F5", "Escape", "b", "w"];
+                        if KEYS.contains(&key) {
+                            let _ = s.input_tx.send(input::Cmd::Key { dev: dev.clone(), key: key.to_string(), mods: Vec::new() });
+                        }
+                        continue;
+                    }
+                    match m["a"].as_str() {
+                        Some("start") => {
+                            let tx = tx.clone();
+                            let _ = s.input_tx.send(input::Cmd::Keys {
+                                dev: dev.clone(),
+                                reply: Box::new(move |v| {
+                                    let _ = tx.send(Message::Text(v.to_string().into()));
+                                }),
+                            });
+                        }
+                        Some("stop") => {
+                            let _ = s.input_tx.send(input::Cmd::Stop { dev: dev.clone() });
+                        }
+                        _ => {}
+                    }
+                    emit(json!({"ev": "msg", "dev": dev, "m": m}));
+                }
                 Ok(m) if m.is_object() => emit(json!({"ev": "msg", "dev": dev, "m": m})),
                 _ => {}
             },
@@ -595,6 +630,9 @@ fn handle_op(state: &State, line: &str) {
         // Settings the shell holds: for now, whether the phones' media become MPRIS players.
         "config" => {
             let mut s = state.lock().unwrap();
+            if let Some(on) = op["present"].as_bool() {
+                s.present = on;
+            }
             if let Some(on) = op["touchpad"].as_bool() {
                 s.touchpad = on;
                 if !on {
@@ -720,6 +758,7 @@ async fn main() {
         media: false,
         media_tx,
         touchpad: false,
+        present: false,
         input_tx: input::spawn(),
     }));
 

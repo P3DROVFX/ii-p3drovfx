@@ -30,7 +30,7 @@ Item {
         const o = Config.options.iiTools;
         return [
             o.remote.enable, o.audio.enable, o.liveUpdates.enable, o.pcLive.enable,
-            o.media.enable, o.pcMedia.enable, o.files.enable, o.touchpad.enable, o.draw.enable,
+            o.media.enable, o.pcMedia.enable, o.files.enable, o.touchpad.enable, o.draw.enable, o.present.enable,
             o.perf.enable, o.phoneData.enable, o.screenshots.enable, o.clipboard.enable,
             o.share.enable, o.notifications.enable, o.calls.enable, o.callAudio.enable, o.wallpaper.enable,
             o.deck.enable, o.wol.enable
@@ -603,6 +603,18 @@ Item {
                         summary: Translation.tr("Draw on the phone, ink appears in live draw on the focused screen")
                         checked: Config.options.iiTools.draw.enable
                         onToggled: value => Config.options.iiTools.draw.enable = value
+                    }
+
+                    ColorsFeatureTile {
+                        width: controlTilesBox.tileWidth
+                        height: 152
+                        symbol: "co_present"
+                        shapeOn: MaterialShape.Shape.Clover4Leaf
+                        shapeOff: MaterialShape.Shape.Circle
+                        title: Translation.tr("Presenter")
+                        summary: Translation.tr("Change slides from the phone and point with an on-screen laser")
+                        checked: Config.options.iiTools.present.enable
+                        onToggled: value => Config.options.iiTools.present.enable = value
                     }
 
                     ColorsFeatureTile {

@@ -11,7 +11,7 @@
 //! layout, as wtype does.
 //!
 //! Both live on one thread of their own, fed by a channel, and exist only while a phone
-//! has its touchpad open.
+//! has its touchpad open (the keyboard alone while it is a slide clicker).
 
 use std::collections::HashMap;
 use std::io::{Seek, Write};
@@ -41,6 +41,8 @@ pub enum Cmd {
     Button { dev: String, button: String, down: bool },
     Text { dev: String, text: String },
     Key { dev: String, key: String, mods: Vec<String> },
+    /// A phone opened its slide clicker: the keyboard alone, no touchpad.
+    Keys { dev: String, reply: Box<dyn Fn(Value) + Send> },
     Stop { dev: String },
 }
 
@@ -70,6 +72,16 @@ fn run(rx: mpsc::Receiver<Cmd>) {
                     kbd = Keyboard::new().ok();
                     if kbd.is_none() {
                         reply(serde_json::json!({"t": "pad", "err": "keyboard"}));
+                    }
+                }
+            }
+            Cmd::Keys { dev, reply } => {
+                owner = dev;
+                pad = None;
+                if kbd.is_none() {
+                    kbd = Keyboard::new().ok();
+                    if kbd.is_none() {
+                        reply(serde_json::json!({"t": "present", "err": "keyboard"}));
                     }
                 }
             }

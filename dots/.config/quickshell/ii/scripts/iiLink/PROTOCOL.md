@@ -201,6 +201,22 @@ takes its shape (`aspect`). Strokes go through live draw's own surface
 | phone → shell | `{"t":"draw","s":"down"\|"move"\|"up","p":[[x,y,pressure],…]}` | A stroke, x and y in 0–1 of the focused screen; `move` carries every sample since the last (the touch history). Pressure is the stylus's, 1 for a finger. With the eraser on, the points rub out instead. |
 | phone → shell | `{"t":"draw","a":"tool","tool":"pen"\|"highlighter"\|"laser"\|"eraser"}`, `{"a":"color","color"}`, `{"a":"width","width"}`, `{"a":"undo"\|"redo"\|"clear"\|"close"}` | The pad's toolbar. |
 
+## Presenter
+
+The phone as a slide clicker (cap `present` in the shell's hello; Settings → ii tools →
+Presenter, told to the helper with `{"op":"config","present":bool}`). Its keys are typed
+by the helper's virtual keyboard into whatever has focus, so any presentation app follows;
+the laser is a dot the shell draws over the focused screen (`PresenterLaser.qml`, an
+Overlay surface with no input, mapped only while the dot shows).
+
+| Direction | Message | |
+| --- | --- | --- |
+| phone → helper, shell | `{"t":"present","a":"start"}` / `{"t":"present","a":"stop"}` | The screen opened (the helper makes the virtual keyboard, no touchpad) / closed (also when the phone disconnects). |
+| shell → phone | `{"t":"present","aspect":w/h}` | The focused screen's shape, for the laser pad. |
+| phone → helper | `{"t":"present","key":"Left"\|"Right"\|"Page_Up"\|"Page_Down"\|"Home"\|"End"\|"F5"\|"Escape"\|"b"\|"w"}` | One key; anything else is dropped. The volume keys send Left and Right. |
+| phone → shell | `{"t":"present","laser":[x,y]}` / `{"t":"present","laser":null}` | The laser at x, y (0–1 of the screen focused when it went down) on every touch event / off. |
+| helper → phone | `{"t":"present","err":"disabled"\|"keyboard"}` | Off in Settings / the compositor has no virtual keyboard. |
+
 ## Touchpad and keyboard
 
 The phone as this PC's touchpad and keyboard (cap `touchpad` in the shell's hello;

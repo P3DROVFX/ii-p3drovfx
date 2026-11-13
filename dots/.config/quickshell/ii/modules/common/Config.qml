@@ -2900,6 +2900,9 @@ Singleton {
                 property JsonObject draw: JsonObject {
                     property bool enable: true
                 }
+                property JsonObject present: JsonObject {
+                    property bool enable: true
+                }
                 property JsonObject callAudio: JsonObject {
                     property bool enable: true
                     // Every call on the PC by itself (ringing or dialled); off, only on request.
