@@ -9,6 +9,7 @@ import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.services
 import qs.modules.common.models.hyprland
+import "../../common/models/hyprland/MonitorLayoutUtils.js" as MonitorLayoutUtils
 
 ContentPage {
     id: page
@@ -30,50 +31,73 @@ ContentPage {
 
     component MonitorRect: Rectangle {
         id: rectRoot
+        objectName: "monitorRect_" + monitorIndex
         required property var monitor
         required property int monitorIndex
-        required property var monitorConfig
         required property real scaleFactor
         required property point canvasOffset
         required property var allMonitors
+        required property Item canvasItem
         property bool isSelected: false
-        property var previewPositions: ({})
-        property bool hasOverlap: false
 
+        signal dragStarted(int index)
+        signal dragMoved(int index, var snap)
         signal positionCommitted(int index, int x, int y)
+        signal dragCanceled()
         signal monitorClicked(int index)
-        signal positionDragging(int index, int x, int y)
 
+        property bool pressPending: false
         property bool isDragging: false
-        property real dragX: 0
-        property real dragY: 0
-        property int snappedX: 0
-        property int snappedY: 0
-        property real snapThreshold: 12
+        property real pressCanvasX: 0
+        property real pressCanvasY: 0
+        property real curCanvasX: 0
+        property real curCanvasY: 0
+        property real grabFracX: 0.5
+        property real grabFracY: 0.5
+        readonly property real dragThresholdPx: 5
 
-        property real startMouseX: 0
-        property real startMouseY: 0
-        property real startX: 0
-        property real startY: 0
+        readonly property int logW: MonitorLayoutUtils.logicalWidth(monitor)
+        readonly property int logH: MonitorLayoutUtils.logicalHeight(monitor)
 
-        property int logW: (monitor && typeof monitor.width === "number" && typeof monitor.height === "number") ? monitorConfig.logicalWidth(monitor) : 1920
-        property int logH: (monitor && typeof monitor.width === "number" && typeof monitor.height === "number") ? monitorConfig.logicalHeight(monitor) : 1080
+        readonly property real rawLogicalX: isDragging
+            ? ((curCanvasX - canvasOffset.x) / Math.max(0.005, scaleFactor) - grabFracX * logW)
+            : (monitor ? (monitor.x || 0) : 0)
+        readonly property real rawLogicalY: isDragging
+            ? ((curCanvasY - canvasOffset.y) / Math.max(0.005, scaleFactor) - grabFracY * logH)
+            : (monitor ? (monitor.y || 0) : 0)
 
-        x: isDragging ? dragX : (monitor ? ((previewPositions[monitor.name] !== undefined && previewPositions[monitor.name].x !== undefined) ? previewPositions[monitor.name].x : monitor.x) * scaleFactor + canvasOffset.x : 0)
-        y: isDragging ? dragY : (monitor ? ((previewPositions[monitor.name] !== undefined && previewPositions[monitor.name].y !== undefined) ? previewPositions[monitor.name].y : monitor.y) * scaleFactor + canvasOffset.y : 0)
+        readonly property var snapResult: isDragging
+            ? MonitorLayoutUtils.snapForDrag(allMonitors, monitorIndex, rawLogicalX, rawLogicalY, scaleFactor)
+            : null
+
+        onSnapResultChanged: {
+            if (isDragging && snapResult) {
+                dragMoved(monitorIndex, {
+                    x: snapResult.x,
+                    y: snapResult.y,
+                    w: logW,
+                    h: logH,
+                    valid: snapResult.valid
+                });
+            }
+        }
+
+        x: rawLogicalX * scaleFactor + canvasOffset.x
+        y: rawLogicalY * scaleFactor + canvasOffset.y
         width: logW * scaleFactor
         height: logH * scaleFactor
 
-        radius: Appearance.rounding.small
+        radius: isDragging ? Appearance.rounding.normal : Appearance.rounding.small
         z: isDragging ? 100 : isSelected ? 2 : 1
+        opacity: isDragging ? 0.85 : 1.0
 
         color: {
             if (monitor && monitor.disabled)
                 return Appearance.colors.colLayer2;
-            if (isDragging && hasOverlap)
-                return Qt.alpha(Appearance.m3colors.m3error, 0.5);
+            if (isDragging && snapResult && !snapResult.valid)
+                return Qt.alpha(Appearance.m3colors.m3error, 0.55);
             if (isDragging)
-                return Qt.alpha(Appearance.colors.colPrimaryContainer, 0.7);
+                return Qt.alpha(Appearance.colors.colPrimaryContainer, 0.8);
             if (isSelected)
                 return Appearance.colors.colPrimaryContainer;
             if (hoverArea.containsMouse)
@@ -82,7 +106,7 @@ ContentPage {
         }
 
         border.color: {
-            if (isDragging && hasOverlap)
+            if (isDragging && snapResult && !snapResult.valid)
                 return Appearance.m3colors.m3error;
             if (isDragging)
                 return Appearance.colors.colPrimary;
@@ -90,22 +114,8 @@ ContentPage {
                 return "transparent";
             return Appearance.colors.colLayer0Border;
         }
-        border.width: isSelected ? 0 : (isDragging ? 2 : 1)
+        border.width: isSelected && !isDragging ? 0 : (isDragging ? 2 : 1)
 
-        Behavior on x {
-            enabled: !isDragging && monitorCanvas.width > 40
-            NumberAnimation {
-                duration: 150
-                easing.type: Easing.OutCubic
-            }
-        }
-        Behavior on y {
-            enabled: !isDragging && monitorCanvas.width > 40
-            NumberAnimation {
-                duration: 150
-                easing.type: Easing.OutCubic
-            }
-        }
         Behavior on color {
             ColorAnimation {
                 duration: 150
@@ -122,29 +132,14 @@ ContentPage {
             visible: rectRoot.isSelected && !rectRoot.isDragging
         }
 
-        Rectangle {
-            parent: rectRoot.parent
-            visible: rectRoot.isDragging && !rectRoot.hasOverlap
-            x: rectRoot.snappedX * rectRoot.scaleFactor + rectRoot.canvasOffset.x
-            y: rectRoot.snappedY * rectRoot.scaleFactor + rectRoot.canvasOffset.y
-            width: rectRoot.width
-            height: rectRoot.height
-            radius: rectRoot.radius
-            color: "transparent"
-            border.color: Appearance.colors.colPrimary
-            border.width: 2
-            opacity: 0.6
-            z: 99
-        }
-
         Column {
             anchors.centerIn: parent
-            spacing: 4
+            spacing: rectRoot.height < 64 ? 1 : 3
 
             StyledText {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: (rectRoot.monitorIndex + 1).toString()
-                font.pixelSize: Math.max(20, Math.min(36, rectRoot.width * 0.25))
+                font.pixelSize: Math.max(12, Math.min(34, Math.min(rectRoot.width * 0.24, rectRoot.height * 0.38)))
                 font.weight: Font.Bold
                 font.family: Appearance.font.family.numbers
                 color: (monitor && monitor.disabled) ? Appearance.colors.colSubtext : isSelected ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSecondaryContainer
@@ -152,45 +147,24 @@ ContentPage {
 
             StyledText {
                 anchors.horizontalCenter: parent.horizontalCenter
+                visible: rectRoot.height >= 42 && rectRoot.width >= 44
                 text: monitor && monitor.name ? monitor.name : "Display"
-                font.pixelSize: Math.max(9, Math.min(13, rectRoot.width * 0.1))
+                font.pixelSize: Math.max(9, Math.min(13, Math.min(rectRoot.width * 0.1, rectRoot.height * 0.16)))
                 font.weight: Font.Medium
                 color: (monitor && monitor.disabled) ? Appearance.colors.colSubtext : isSelected ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSecondaryContainer
                 elide: Text.ElideMiddle
-                width: Math.min(implicitWidth, rectRoot.width - 8)
+                width: Math.min(implicitWidth, Math.max(0, rectRoot.width - 8))
                 horizontalAlignment: Text.AlignHCenter
             }
-        }
 
-        function snapPosition(px, py) {
-            let sx = px, sy = py;
-            const thresh = snapThreshold / scaleFactor;
-            for (let i = 0; i < allMonitors.length; i++) {
-                if (i === monitorIndex)
-                    continue;
-                const other = allMonitors[i];
-                if (!other || other.disabled || typeof other.x !== "number" || typeof other.y !== "number")
-                    continue;
-                const ow = monitorConfig.logicalWidth(other);
-                const oh = monitorConfig.logicalHeight(other);
-                if (Math.abs(px - other.x) < thresh)
-                    sx = other.x;
-                if (Math.abs(px - (other.x + ow)) < thresh)
-                    sx = other.x + ow;
-                if (Math.abs((px + logW) - other.x) < thresh)
-                    sx = other.x - logW;
-                if (Math.abs((px + logW) - (other.x + ow)) < thresh)
-                    sx = other.x + ow - logW;
-                if (Math.abs(py - other.y) < thresh)
-                    sy = other.y;
-                if (Math.abs(py - (other.y + oh)) < thresh)
-                    sy = other.y + oh;
-                if (Math.abs((py + logH) - other.y) < thresh)
-                    sy = other.y - logH;
-                if (Math.abs((py + logH) - (other.y + oh)) < thresh)
-                    sy = other.y + oh - logH;
+            StyledText {
+                anchors.horizontalCenter: parent.horizontalCenter
+                visible: rectRoot.height >= 76 && rectRoot.width >= 88
+                text: rectRoot.logW + "×" + rectRoot.logH
+                font.pixelSize: 10
+                opacity: 0.72
+                color: (monitor && monitor.disabled) ? Appearance.colors.colSubtext : isSelected ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSecondaryContainer
             }
-            return Qt.point(sx, sy);
         }
 
         MouseArea {
@@ -198,234 +172,213 @@ ContentPage {
             anchors.fill: parent
             hoverEnabled: true
             cursorShape: (monitor && monitor.disabled) ? Qt.ArrowCursor : (rectRoot.isDragging ? Qt.ClosedHandCursor : Qt.OpenHandCursor)
-            drag.threshold: 4
             preventStealing: true
 
             onPressed: event => {
-                let startPos = hoverArea.mapToItem(rectRoot.parent, event.x, event.y);
-                rectRoot.startMouseX = startPos.x;
-                rectRoot.startMouseY = startPos.y;
-                rectRoot.startX = rectRoot.x;
-                rectRoot.startY = rectRoot.y;
-                rectRoot.dragX = rectRoot.x;
-                rectRoot.dragY = rectRoot.y;
-                rectRoot.snappedX = monitor.x;
-                rectRoot.snappedY = monitor.y;
+                const startPos = hoverArea.mapToItem(rectRoot.canvasItem, event.x, event.y);
+                rectRoot.pressPending = true;
+                rectRoot.pressCanvasX = startPos.x;
+                rectRoot.pressCanvasY = startPos.y;
+                rectRoot.curCanvasX = startPos.x;
+                rectRoot.curCanvasY = startPos.y;
                 if (monitor && !monitor.disabled) {
-                    rectRoot.isDragging = true;
+                    rectRoot.grabFracX = rectRoot.width > 0 ? Math.max(0, Math.min(1, (startPos.x - rectRoot.x) / rectRoot.width)) : 0.5;
+                    rectRoot.grabFracY = rectRoot.height > 0 ? Math.max(0, Math.min(1, (startPos.y - rectRoot.y) / rectRoot.height)) : 0.5;
                 }
             }
 
             onPositionChanged: event => {
-                if (!rectRoot.isDragging)
+                if (!rectRoot.pressPending && !rectRoot.isDragging)
                     return;
-                let currentPos = hoverArea.mapToItem(rectRoot.parent, event.x, event.y);
-                let dx = currentPos.x - rectRoot.startMouseX;
-                let dy = currentPos.y - rectRoot.startMouseY;
-                rectRoot.dragX = rectRoot.startX + dx;
-                rectRoot.dragY = rectRoot.startY + dy;
-                const realX = Math.round((rectRoot.dragX - rectRoot.canvasOffset.x) / rectRoot.scaleFactor);
-                const realY = Math.round((rectRoot.dragY - rectRoot.canvasOffset.y) / rectRoot.scaleFactor);
-                const snapped = rectRoot.snapPosition(realX, realY);
-                rectRoot.snappedX = snapped.x;
-                rectRoot.snappedY = snapped.y;
-                rectRoot.positionDragging(rectRoot.monitorIndex, rectRoot.snappedX, rectRoot.snappedY);
+                if (!monitor || monitor.disabled)
+                    return;
+                const currentPos = hoverArea.mapToItem(rectRoot.canvasItem, event.x, event.y);
+                rectRoot.curCanvasX = currentPos.x;
+                rectRoot.curCanvasY = currentPos.y;
+                if (!rectRoot.isDragging) {
+                    if (Math.hypot(currentPos.x - rectRoot.pressCanvasX, currentPos.y - rectRoot.pressCanvasY) < rectRoot.dragThresholdPx)
+                        return;
+                    rectRoot.dragStarted(rectRoot.monitorIndex);
+                    rectRoot.isDragging = true;
+                }
             }
 
             onReleased: event => {
-                rectRoot.isDragging = false;
-                if (rectRoot.snappedX === monitor.x && rectRoot.snappedY === monitor.y) {
+                rectRoot.pressPending = false;
+                if (!rectRoot.isDragging) {
                     rectRoot.monitorClicked(rectRoot.monitorIndex);
                     return;
                 }
-                rectRoot.positionCommitted(rectRoot.monitorIndex, rectRoot.snappedX, rectRoot.snappedY);
+                const snap = rectRoot.snapResult;
+                rectRoot.isDragging = false;
+                if (snap && snap.valid) {
+                    rectRoot.positionCommitted(rectRoot.monitorIndex, snap.x, snap.y);
+                } else {
+                    rectRoot.dragCanceled();
+                }
+            }
+
+            onCanceled: {
+                rectRoot.pressPending = false;
+                if (rectRoot.isDragging) {
+                    rectRoot.isDragging = false;
+                    rectRoot.dragCanceled();
+                }
             }
         }
     }
 
     component MonitorCanvas: Item {
         id: canvasRoot
+        objectName: "monitorCanvas"
         property var monitorConfig
-        property real padding: 20
+        property real padding: 24
         property int selectedIndex: 0
         property var previewPositions: ({})
         property bool dragHasOverlap: false
+        property bool draggingActive: false
+        property int dragMonitorIndex: -1
+        property var dragBoundsSnapshot: null
+        property var activeSnap: null
+        property bool ghostArmed: false
+        property real userZoom: 1.0
+        property bool cameraReady: false
 
-        implicitHeight: 220
+        readonly property var monitors: monitorConfig ? (monitorConfig.monitors || []) : []
+        readonly property var idleBounds: MonitorLayoutUtils.computeBounds(monitors, null)
+        readonly property var viewBounds: (draggingActive && dragBoundsSnapshot) ? dragBoundsSnapshot : idleBounds
+        readonly property real effectiveZoom: draggingActive ? Math.min(1.0, userZoom) : userZoom
+        readonly property var targetCamera: MonitorLayoutUtils.computeFitCamera(viewBounds, width, height, padding, effectiveZoom)
 
-        property var bounds: {
-            let minX = Infinity, minY = Infinity;
-            let maxX = -Infinity, maxY = -Infinity;
-            const mons = monitorConfig.monitors || [];
-            for (let i = 0; i < mons.length; i++) {
-                const m = mons[i];
-                if (!m || typeof m.width !== "number" || typeof m.height !== "number")
-                    continue;
-                const w = monitorConfig.logicalWidth(m) || 1920;
-                const h = monitorConfig.logicalHeight(m) || 1080;
-                const px = (m.name && previewPositions[m.name] !== undefined && previewPositions[m.name].x !== undefined) ? previewPositions[m.name].x : (m.x || 0);
-                const py = (m.name && previewPositions[m.name] !== undefined && previewPositions[m.name].y !== undefined) ? previewPositions[m.name].y : (m.y || 0);
-                minX = Math.min(minX, px);
-                minY = Math.min(minY, py);
-                maxX = Math.max(maxX, px + w);
-                maxY = Math.max(maxY, py + h);
-            }
-            if (minX === Infinity)
-                return {
-                    minX: 0,
-                    minY: 0,
-                    width: 1920,
-                    height: 1080
-                };
-            return {
-                minX,
-                minY,
-                width: maxX - minX,
-                height: maxY - minY
-            };
+        property real scaleFactor: targetCamera.scale
+        property real offsetX: targetCamera.offsetX
+        property real offsetY: targetCamera.offsetY
+        readonly property point offset: Qt.point(offsetX, offsetY)
+
+        readonly property real targetCanvasHeight: {
+            if (!idleBounds || idleBounds.width <= 0)
+                return 260;
+            const ratio = idleBounds.height / idleBounds.width;
+            if (ratio >= 1.25)
+                return 340;
+            if (ratio >= 0.72)
+                return 300;
+            return 250;
+        }
+        property real latchedHeight: 260
+
+        onTargetCanvasHeightChanged: {
+            if (!draggingActive)
+                latchedHeight = targetCanvasHeight;
+        }
+        onDraggingActiveChanged: {
+            if (!draggingActive)
+                latchedHeight = targetCanvasHeight;
+        }
+        Component.onCompleted: {
+            latchedHeight = targetCanvasHeight;
+            maybeArmCamera();
         }
 
-        property real scaleFactor: {
-            if (bounds.width === 0 || bounds.height === 0 || isNaN(bounds.width) || isNaN(bounds.height))
-                return 0.1;
-            if (canvasRoot.width <= padding * 2 || canvasRoot.height <= padding * 2)
-                return 0.1;
-            const scaleX = (canvasRoot.width - padding * 2) / bounds.width;
-            const scaleY = (canvasRoot.height - padding * 2) / bounds.height;
-            return Math.max(0.01, Math.min(scaleX, scaleY));
+        Behavior on latchedHeight {
+            enabled: canvasRoot.cameraReady && !canvasRoot.draggingActive && !Appearance.reducedMotion
+            NumberAnimation {
+                duration: 180
+                easing.type: Easing.OutCubic
+            }
         }
 
-        property point offset: Qt.point((canvasRoot.width - bounds.width * scaleFactor) / 2 - bounds.minX * scaleFactor, (canvasRoot.height - bounds.height * scaleFactor) / 2 - bounds.minY * scaleFactor)
-
-        property var snapPoints: {
-            let list = [];
-            const mons = monitorConfig.monitors || [];
-            for (let i = 0; i < mons.length; i++) {
-                const a = mons[i];
-                if (!a || a.disabled)
-                    continue;
-                const aw = monitorConfig.logicalWidth(a);
-                const ah = monitorConfig.logicalHeight(a);
-                const ax = (a.name && previewPositions[a.name] !== undefined && previewPositions[a.name].x !== undefined) ? previewPositions[a.name].x : (a.x || 0);
-                const ay = (a.name && previewPositions[a.name] !== undefined && previewPositions[a.name].y !== undefined) ? previewPositions[a.name].y : (a.y || 0);
-
-                for (let j = i + 1; j < mons.length; j++) {
-                    const b = mons[j];
-                    if (!b || b.disabled)
-                        continue;
-                    const bw = monitorConfig.logicalWidth(b);
-                    const bh = monitorConfig.logicalHeight(b);
-                    const bx = (b.name && previewPositions[b.name] !== undefined && previewPositions[b.name].x !== undefined) ? previewPositions[b.name].x : (b.x || 0);
-                    const by = (b.name && previewPositions[b.name] !== undefined && previewPositions[b.name].y !== undefined) ? previewPositions[b.name].y : (b.y || 0);
-
-                    const aR = ax + aw;
-                    const bR = bx + bw;
-                    const aB = ay + ah;
-                    const bB = by + bh;
-                    const THRESH = 6; // px tolerance in logical units
-
-                    const hAdjLeft = Math.abs(aR - bx) < THRESH;
-                    const hAdjRight = Math.abs(bR - ax) < THRESH;
-                    const vAdjTop = Math.abs(aB - by) < THRESH;
-                    const vAdjBottom = Math.abs(bB - ay) < THRESH;
-
-                    const hOverlap = Math.min(aR, bR) > Math.max(ax, bx);
-                    const vOverlap = Math.min(aB, bB) > Math.max(ay, by);
-
-                    if (hAdjLeft && vOverlap) {
-                        let cx = aR;
-                        let cy = (Math.max(ay, by) + Math.min(aB, bB)) / 2;
-                        list.push({
-                            x: cx,
-                            y: cy
-                        });
-                    } else if (hAdjRight && vOverlap) {
-                        let cx = bR;
-                        let cy = (Math.max(ay, by) + Math.min(aB, bB)) / 2;
-                        list.push({
-                            x: cx,
-                            y: cy
-                        });
-                    } else if (vAdjTop && hOverlap) {
-                        let cx = (Math.max(ax, bx) + Math.min(aR, bR)) / 2;
-                        let cy = aB;
-                        list.push({
-                            x: cx,
-                            y: cy
-                        });
-                    } else if (vAdjBottom && hOverlap) {
-                        let cx = (Math.max(ax, bx) + Math.min(aR, bR)) / 2;
-                        let cy = bB;
-                        list.push({
-                            x: cx,
-                            y: cy
-                        });
-                    }
-                }
+        Behavior on scaleFactor {
+            enabled: canvasRoot.cameraReady && !Appearance.reducedMotion
+            NumberAnimation {
+                duration: 160
+                easing.type: Easing.OutCubic
             }
-            return list;
+        }
+        Behavior on offsetX {
+            enabled: canvasRoot.cameraReady && !Appearance.reducedMotion
+            NumberAnimation {
+                duration: 160
+                easing.type: Easing.OutCubic
+            }
+        }
+        Behavior on offsetY {
+            enabled: canvasRoot.cameraReady && !Appearance.reducedMotion
+            NumberAnimation {
+                duration: 160
+                easing.type: Easing.OutCubic
+            }
         }
 
-        function checkOverlap(monitors, idx) {
-            const a = monitors[idx];
-            if (!a || a.disabled)
-                return false;
-            const aw = monitorConfig.logicalWidth(a) || 1920;
-            const ah = monitorConfig.logicalHeight(a) || 1080;
-            for (let i = 0; i < monitors.length; i++) {
-                if (i === idx)
-                    continue;
-                const b = monitors[i];
-                if (!b || b.disabled)
-                    continue;
-                const bw = monitorConfig.logicalWidth(b) || 1920;
-                const bh = monitorConfig.logicalHeight(b) || 1080;
-                if (a.x < b.x + bw && a.x + aw > b.x && a.y < b.y + bh && a.y + ah > b.y) {
-                    return true;
-                }
+        implicitHeight: latchedHeight
+
+        function maybeArmCamera() {
+            if (!cameraReady && width > 40 && height > 40 && monitors.length > 0) {
+                Qt.callLater(() => {
+                    if (canvasRoot)
+                        canvasRoot.cameraReady = true;
+                });
             }
-            return false;
         }
 
-        function computeNormalized(monitors, changedIdx, newX, newY) {
-            let m = monitors.slice().map(mon => Object.assign({}, mon));
-            if (m[changedIdx]) {
-                m[changedIdx].x = newX;
-                m[changedIdx].y = newY;
-            }
-            let minX = Infinity, minY = Infinity;
-            for (let i = 0; i < m.length; i++) {
-                if (!m[i] || m[i].disabled)
-                    continue;
-                minX = Math.min(minX, m[i].x);
-                minY = Math.min(minY, m[i].y);
-            }
-            const offX = minX < 0 ? -minX : 0;
-            const offY = minY < 0 ? -minY : 0;
-            if (offX > 0 || offY > 0) {
-                for (let i = 0; i < m.length; i++) {
-                    if (m[i]) {
-                        m[i].x += offX;
-                        m[i].y += offY;
-                    }
-                }
-            }
-            return m;
+        onWidthChanged: maybeArmCamera()
+        onHeightChanged: maybeArmCamera()
+        onMonitorsChanged: {
+            maybeArmCamera();
+            if (selectedIndex >= monitors.length)
+                selectedIndex = Math.max(0, monitors.length - 1);
         }
 
-        function updatePreview(idx, newX, newY) {
-            const normalized = computeNormalized(monitorConfig.monitors || [], idx, newX, newY);
-            canvasRoot.dragHasOverlap = checkOverlap(normalized, idx);
-            let preview = {};
-            for (let i = 0; i < normalized.length; i++) {
-                if (normalized[i] && normalized[i].name) {
-                    preview[normalized[i].name] = {
-                        x: normalized[i].x,
-                        y: normalized[i].y
-                    };
-                }
+        readonly property var snapPoints: MonitorLayoutUtils.computeSnapPoints(monitors, previewPositions)
+
+        function checkOverlap(monitorsList, idx) {
+            return MonitorLayoutUtils.checkOverlap(monitorsList, idx);
+        }
+
+        function computeNormalized(monitorsList, changedIdx, newX, newY) {
+            return MonitorLayoutUtils.computeNormalized(monitorsList, changedIdx, newX, newY);
+        }
+
+        function beginDrag(idx) {
+            canvasRoot.selectedIndex = idx;
+            canvasRoot.dragBoundsSnapshot = MonitorLayoutUtils.computeDragBounds(monitors, idx, 1.15);
+            canvasRoot.dragMonitorIndex = idx;
+            canvasRoot.draggingActive = true;
+            canvasRoot.ghostArmed = false;
+        }
+
+        function updateDragSnap(idx, snap) {
+            if (!canvasRoot.draggingActive || idx !== canvasRoot.dragMonitorIndex)
+                return;
+            const hadSnap = canvasRoot.activeSnap !== null;
+            canvasRoot.activeSnap = snap;
+            canvasRoot.dragHasOverlap = snap ? !snap.valid : false;
+            if (!hadSnap && snap && snap.valid) {
+                Qt.callLater(() => {
+                    if (canvasRoot && canvasRoot.draggingActive)
+                        canvasRoot.ghostArmed = true;
+                });
             }
-            canvasRoot.previewPositions = preview;
+            const mon = monitors[idx];
+            if (mon && mon.name && snap && snap.valid) {
+                const preview = {};
+                preview[mon.name] = { x: snap.x, y: snap.y };
+                canvasRoot.previewPositions = preview;
+            } else {
+                canvasRoot.previewPositions = {};
+            }
+        }
+
+        function finishDrag(idx, newX, newY, commit) {
+            canvasRoot.draggingActive = false;
+            canvasRoot.dragMonitorIndex = -1;
+            canvasRoot.dragBoundsSnapshot = null;
+            canvasRoot.activeSnap = null;
+            canvasRoot.ghostArmed = false;
+            canvasRoot.previewPositions = {};
+            canvasRoot.dragHasOverlap = false;
+            if (commit && idx >= 0)
+                commitPosition(idx, newX, newY);
         }
 
         function commitPosition(idx, newX, newY) {
@@ -435,16 +388,52 @@ ContentPage {
             monitorConfig.save();
         }
 
+        function adjustZoom(delta) {
+            const next = Math.round((canvasRoot.userZoom + delta) * 10) / 10;
+            canvasRoot.userZoom = Math.max(0.4, Math.min(1.6, next));
+        }
+
         Rectangle {
             anchors.fill: parent
             radius: Appearance.rounding.normal
             color: Appearance.colors.colLayer2Base
             border.width: 1
             border.color: Appearance.colors.colLayer0Border
+            clip: true
 
             Item {
                 id: canvasInner
                 anchors.fill: parent
+
+                Rectangle {
+                    id: snapGhost
+                    objectName: "snapGhost"
+                    visible: canvasRoot.activeSnap !== null && canvasRoot.activeSnap.valid
+                    x: canvasRoot.activeSnap ? canvasRoot.activeSnap.x * canvasRoot.scaleFactor + canvasRoot.offsetX : 0
+                    y: canvasRoot.activeSnap ? canvasRoot.activeSnap.y * canvasRoot.scaleFactor + canvasRoot.offsetY : 0
+                    width: canvasRoot.activeSnap ? canvasRoot.activeSnap.w * canvasRoot.scaleFactor : 0
+                    height: canvasRoot.activeSnap ? canvasRoot.activeSnap.h * canvasRoot.scaleFactor : 0
+                    radius: Appearance.rounding.small
+                    color: Qt.alpha(Appearance.colors.colPrimary, 0.16)
+                    border.color: Appearance.colors.colPrimary
+                    border.width: 2
+                    z: 90
+
+                    Behavior on x {
+                        enabled: canvasRoot.ghostArmed && !Appearance.reducedMotion
+                        NumberAnimation {
+                            duration: 90
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+                    Behavior on y {
+                        enabled: canvasRoot.ghostArmed && !Appearance.reducedMotion
+                        NumberAnimation {
+                            duration: 90
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+                }
 
                 Repeater {
                     model: (canvasRoot.monitorConfig.monitors || []).length
@@ -452,23 +441,17 @@ ContentPage {
                         required property int index
                         monitor: canvasRoot.monitorConfig.monitors ? canvasRoot.monitorConfig.monitors[index] : null
                         monitorIndex: index
-                        monitorConfig: canvasRoot.monitorConfig
                         scaleFactor: canvasRoot.scaleFactor
                         canvasOffset: canvasRoot.offset
                         allMonitors: canvasRoot.monitorConfig.monitors || []
+                        canvasItem: canvasInner
                         isSelected: index === canvasRoot.selectedIndex
-                        previewPositions: canvasRoot.previewPositions
-                        hasOverlap: canvasRoot.dragHasOverlap && isDragging
 
                         onMonitorClicked: idx => canvasRoot.selectedIndex = idx
-                        onPositionDragging: (idx, x, y) => canvasRoot.updatePreview(idx, x, y)
-                        onPositionCommitted: (idx, x, y) => {
-                            const hadOverlap = canvasRoot.dragHasOverlap;
-                            canvasRoot.previewPositions = {};
-                            canvasRoot.dragHasOverlap = false;
-                            if (!hadOverlap)
-                                canvasRoot.commitPosition(idx, x, y);
-                        }
+                        onDragStarted: idx => canvasRoot.beginDrag(idx)
+                        onDragMoved: (idx, snap) => canvasRoot.updateDragSnap(idx, snap)
+                        onPositionCommitted: (idx, x, y) => canvasRoot.finishDrag(idx, x, y, true)
+                        onDragCanceled: () => canvasRoot.finishDrag(-1, 0, 0, false)
                     }
                 }
 
@@ -476,21 +459,119 @@ ContentPage {
                     model: canvasRoot.snapPoints
                     delegate: Rectangle {
                         required property var modelData
-                        x: modelData.x * canvasRoot.scaleFactor + canvasRoot.offset.x - width / 2
-                        y: modelData.y * canvasRoot.scaleFactor + canvasRoot.offset.y - height / 2
+                        x: modelData.x * canvasRoot.scaleFactor + canvasRoot.offsetX - width / 2
+                        y: modelData.y * canvasRoot.scaleFactor + canvasRoot.offsetY - height / 2
                         width: 14
                         height: 14
                         radius: 7
                         color: Appearance.colors.colPrimary
                         border.width: 1.5
                         border.color: Appearance.colors.colOnPrimary
-                        z: 10
+                        z: 110
 
                         MaterialSymbol {
                             anchors.centerIn: parent
                             text: "link"
                             iconSize: 9
                             color: Appearance.colors.colOnPrimary
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                id: zoomToolbar
+                anchors.top: parent.top
+                anchors.right: parent.right
+                anchors.margins: 8
+                z: 200
+                implicitWidth: zoomRow.implicitWidth + 6
+                implicitHeight: 30
+                radius: Appearance.rounding.full
+                color: Qt.alpha(Appearance.colors.colLayer1, 0.92)
+                border.width: 1
+                border.color: Appearance.colors.colLayer0Border
+                opacity: canvasRoot.draggingActive ? 0.35 : 1.0
+                enabled: !canvasRoot.draggingActive
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: 120
+                    }
+                }
+
+                RowLayout {
+                    id: zoomRow
+                    anchors.centerIn: parent
+                    spacing: 2
+
+                    RippleButton {
+                        objectName: "zoomOutBtn"
+                        implicitWidth: 24
+                        implicitHeight: 24
+                        buttonRadius: Appearance.rounding.full
+                        colBackground: "transparent"
+                        enabled: canvasRoot.userZoom > 0.45
+                        opacity: enabled ? 1.0 : 0.4
+                        contentItem: MaterialSymbol {
+                            anchors.centerIn: parent
+                            text: "zoom_out"
+                            iconSize: 15
+                            color: Appearance.colors.colOnLayer1
+                        }
+                        onClicked: canvasRoot.adjustZoom(-0.2)
+                        StyledToolTip {
+                            text: Translation.tr("Zoom out")
+                        }
+                    }
+
+                    RippleButton {
+                        objectName: "zoomResetBtn"
+                        implicitWidth: fitLabel.visible ? Math.max(36, fitLabel.implicitWidth + 10) : 24
+                        implicitHeight: 24
+                        buttonRadius: Appearance.rounding.full
+                        colBackground: Math.abs(canvasRoot.userZoom - 1.0) > 0.05 ? Appearance.colors.colSecondaryContainer : "transparent"
+                        contentItem: Item {
+                            StyledText {
+                                id: fitLabel
+                                anchors.centerIn: parent
+                                visible: Math.abs(canvasRoot.userZoom - 1.0) > 0.05
+                                text: Math.round(canvasRoot.userZoom * 100) + "%"
+                                font.pixelSize: 10
+                                font.weight: Font.Medium
+                                color: Appearance.colors.colOnSecondaryContainer
+                            }
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                visible: !fitLabel.visible
+                                text: "fit_screen"
+                                iconSize: 15
+                                color: Appearance.colors.colOnLayer1
+                            }
+                        }
+                        onClicked: canvasRoot.userZoom = 1.0
+                        StyledToolTip {
+                            text: Translation.tr("Fit monitors to canvas")
+                        }
+                    }
+
+                    RippleButton {
+                        objectName: "zoomInBtn"
+                        implicitWidth: 24
+                        implicitHeight: 24
+                        buttonRadius: Appearance.rounding.full
+                        colBackground: "transparent"
+                        enabled: canvasRoot.userZoom < 1.55
+                        opacity: enabled ? 1.0 : 0.4
+                        contentItem: MaterialSymbol {
+                            anchors.centerIn: parent
+                            text: "zoom_in"
+                            iconSize: 15
+                            color: Appearance.colors.colOnLayer1
+                        }
+                        onClicked: canvasRoot.adjustZoom(0.2)
+                        StyledToolTip {
+                            text: Translation.tr("Zoom in")
                         }
                     }
                 }
@@ -552,13 +633,13 @@ ContentPage {
 
             ColumnLayout {
                 Layout.fillWidth: true
-                Layout.preferredWidth: 7
+                Layout.minimumWidth: 280
                 spacing: 8
 
                 MonitorCanvas {
                     id: monitorCanvas
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 220
+                    Layout.preferredHeight: implicitHeight
                     monitorConfig: monitorConfig
                 }
             }
@@ -566,8 +647,10 @@ ContentPage {
             // Right panel
             ColumnLayout {
                 id: rightPanelLayout
-                Layout.fillWidth: true
-                Layout.preferredWidth: 3
+                Layout.fillWidth: false
+                Layout.preferredWidth: 230
+                Layout.minimumWidth: 200
+                Layout.maximumWidth: 260
                 Layout.alignment: Qt.AlignTop
                 spacing: 4
 
@@ -936,7 +1019,7 @@ ContentPage {
                 text: Translation.tr("Position X")
                 value: (monitorConfig.monitors && monitorConfig.monitors[monitorCanvas.selectedIndex]) ? (monitorConfig.monitors[monitorCanvas.selectedIndex].x || 0) : 0
                 from: 0
-                to: 7680
+                to: 15360
                 stepSize: 1
                 onValueChanged: {
                     if (monitorConfig.monitors && monitorConfig.monitors[monitorCanvas.selectedIndex]) {
@@ -957,7 +1040,7 @@ ContentPage {
                 text: Translation.tr("Position Y")
                 value: (monitorConfig.monitors && monitorConfig.monitors[monitorCanvas.selectedIndex]) ? (monitorConfig.monitors[monitorCanvas.selectedIndex].y || 0) : 0
                 from: 0
-                to: 4320
+                to: 8640
                 stepSize: 1
                 onValueChanged: {
                     if (monitorConfig.monitors && monitorConfig.monitors[monitorCanvas.selectedIndex]) {
