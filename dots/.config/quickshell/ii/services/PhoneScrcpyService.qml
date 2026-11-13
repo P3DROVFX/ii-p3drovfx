@@ -213,6 +213,7 @@ Singleton {
             root._waitingForManager = ({})
             for (const id in waiting) {
                 if (id === root.recordSessionId) root.recordingLaunching = false
+                else if (id === root.embedSessionId) root.embedLaunching = false
                 root.reportFailure(id, Translation.tr("No phone connected"))
             }
         }
@@ -347,9 +348,12 @@ Singleton {
         if (opts.showTouches) args.push("--show-touches")
         if (opts.fullscreen) args.push("--fullscreen")
         if (opts.alwaysOnTop) args.push("--always-on-top")
-        if (opts.maxFps > 0) args.push("--max-fps=" + opts.maxFps)
-        if (opts.bitRate) args.push("--video-bit-rate=" + opts.bitRate)
-        if (opts.maxSize > 0) args.push("--max-size=" + opts.maxSize)
+        // Called once the ADB target is resolved, so the caps know whether
+        // this session runs over Wi-Fi.
+        const caps = KdeConnectService.scrcpyStreamCaps()
+        if (caps.maxFps > 0) args.push("--max-fps=" + caps.maxFps)
+        if (caps.bitRate !== "") args.push("--video-bit-rate=" + caps.bitRate)
+        if (caps.maxSize > 0) args.push("--max-size=" + caps.maxSize)
         // scrcpy 3.0 renamed --display-buffer to --video-buffer; the old
         // spelling makes scrcpy exit on a usage error instead of starting.
         if (opts.videoBuffer > 0) args.push("--video-buffer=" + opts.videoBuffer)
@@ -423,7 +427,7 @@ Singleton {
         if (root.embedRunning || root.embedLaunching) return
         root.embedLaunching = true
         root.embedError = ""
-        KdeConnectService.withAdbTarget(args => root._launchEmbed(args, streamSize))
+        root._whenManagerAllowed(root.embedSessionId, () => KdeConnectService.withAdbTarget(args => root._launchEmbed(args, streamSize)))
     }
 
     function _launchEmbed(targetArgs, streamSize): void {
@@ -514,7 +518,8 @@ Singleton {
      *  --power-off-on-close that a "lock" session end would add. */
     function _embedScrcpyArgs(streamSize) {
         const args = ["--window-borderless"]
-        if (streamSize > 0) args.push("--max-size=" + streamSize)
+        const caps = KdeConnectService.scrcpyStreamCaps(streamSize > 0 ? streamSize : 0)
+        if (caps.maxSize > 0) args.push("--max-size=" + caps.maxSize)
 
         const opts = Config.options?.phone?.scrcpy
         if (opts) {
@@ -523,8 +528,8 @@ Singleton {
             if (opts.noPowerOn) args.push("--no-power-on")
             if (opts.noAudio) args.push("--no-audio")
             if (opts.showTouches) args.push("--show-touches")
-            if (opts.maxFps > 0) args.push("--max-fps=" + opts.maxFps)
-            if (opts.bitRate) args.push("--video-bit-rate=" + opts.bitRate)
+            if (caps.maxFps > 0) args.push("--max-fps=" + caps.maxFps)
+            if (caps.bitRate !== "") args.push("--video-bit-rate=" + caps.bitRate)
             if (opts.videoBuffer > 0) args.push("--video-buffer=" + opts.videoBuffer)
         }
         args.push(...root._inputArgs())

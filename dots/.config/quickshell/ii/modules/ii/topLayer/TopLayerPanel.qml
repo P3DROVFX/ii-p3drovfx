@@ -84,6 +84,25 @@ PanelWindow {
         return pos === "inverted" || (pos === "right" && GlobalStates.policiesPanelOpen && !GlobalStates.dashboardPanelOpen);
     }
     readonly property bool policiesActiveOnMonitor: policiesOnLeft ? topPanel.leftSidebarActiveOnMonitor : topPanel.rightSidebarActiveOnMonitor
+    readonly property bool policiesSurfaceHosted: GlobalStates.connectModeActive
+        && !GlobalStates.connectSidebarsSeparate
+        && !GlobalStates.policiesDetached
+        && topPanel.policiesOpenOnMonitor
+
+    function publishPoliciesSurface(): void {
+        const myNs = topPanel.WlrLayershell.namespace;
+        const myScreen = topPanel.screen?.name ?? "";
+        if (topPanel.policiesSurfaceHosted) {
+            GlobalStates.policiesSurfaceNamespace = myNs;
+            GlobalStates.policiesSurfaceScreen = myScreen;
+        } else if (GlobalStates.policiesSurfaceNamespace === myNs && GlobalStates.policiesSurfaceScreen === myScreen) {
+            GlobalStates.policiesSurfaceNamespace = "";
+            GlobalStates.policiesSurfaceScreen = "";
+        }
+    }
+
+    onPoliciesSurfaceHostedChanged: topPanel.publishPoliciesSurface()
+    onScreenChanged: topPanel.publishPoliciesSurface()
 
     function togglePoliciesExtended() {
         GlobalStates.policiesExtended = !GlobalStates.policiesExtended;
@@ -204,6 +223,7 @@ PanelWindow {
             topPanel.rightSidebarMaskWidth = GlobalStates.rightSidebarTargetWidth;
         }
         topPanel.updateFocusGrab();
+        topPanel.publishPoliciesSurface();
         GlobalStates.setDockBand(topPanel.screen.name, topPanel.dockOnFrameBand);
     }
 
@@ -1627,6 +1647,14 @@ PanelWindow {
             // OSD drop
             item: osdDropMaskItem
         }
+        Region {
+            // Embedded phone mirror cut-out
+            intersection: Intersection.Subtract
+            x: (topPanel.policiesSurfaceHosted && GlobalStates.policiesPointerHoleActive) ? GlobalStates.policiesPointerHole.x : 0
+            y: (topPanel.policiesSurfaceHosted && GlobalStates.policiesPointerHoleActive) ? GlobalStates.policiesPointerHole.y : 0
+            width: (topPanel.policiesSurfaceHosted && GlobalStates.policiesPointerHoleActive) ? GlobalStates.policiesPointerHole.width : 0
+            height: (topPanel.policiesSurfaceHosted && GlobalStates.policiesPointerHoleActive) ? GlobalStates.policiesPointerHole.height : 0
+        }
     }
 
     function updateFocusGrab() {
@@ -1659,7 +1687,7 @@ PanelWindow {
             }
         }
 
-        if (shouldGrab) {
+        if (shouldGrab && !(topPanel.policiesSurfaceHosted && GlobalStates.policiesPointerHoleActive)) {
             GlobalFocusGrab.addDismissable(topPanel);
         } else {
             GlobalFocusGrab.removeDismissable(topPanel);
@@ -1667,6 +1695,11 @@ PanelWindow {
     }
 
     Component.onDestruction: {
+        if (GlobalStates.policiesSurfaceNamespace === topPanel.WlrLayershell.namespace
+            && GlobalStates.policiesSurfaceScreen === (topPanel.screen?.name ?? "")) {
+            GlobalStates.policiesSurfaceNamespace = "";
+            GlobalStates.policiesSurfaceScreen = "";
+        }
         GlobalFocusGrab.removeDismissable(topPanel);
         GlobalStates.setDockBand(topPanel.screen.name, false);
         GlobalStates.setDockBandCover(topPanel.screen.name, null);
@@ -1687,6 +1720,9 @@ PanelWindow {
             topPanel.updateFocusGrab();
         }
         function onConnectSidebarsSeparateChanged() {
+            topPanel.updateFocusGrab();
+        }
+        function onPoliciesPointerHoleActiveChanged() {
             topPanel.updateFocusGrab();
         }
     }

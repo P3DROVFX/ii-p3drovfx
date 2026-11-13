@@ -370,8 +370,11 @@ Singleton {
      *  coordinates are relative to, and a surface that is not mapped has no
      *  cut-out to sit under. */
     function _luaFindPanel(): string {
-        return `local ns="${root.layerNamespace}" local lx,ly,mon `
-            + `for _,l in ipairs(hl.get_layers()) do if l.namespace==ns then lx=l.x ly=l.y mon=l.monitor end end `
+        return `local ns="${root.layerNamespace}" local sn="${root.screenName}" local lx,ly,mon `
+            + `for _,l in ipairs(hl.get_layers()) do `
+            + `if l.namespace==ns and (sn=="" or not l.monitor or l.monitor.name==sn) then `
+            + `lx=l.x ly=l.y mon=l.monitor `
+            + `if sn=="" or (l.monitor and l.monitor.name==sn) then break end end end `
             + `if not lx then return hl.dsp.no_op() end `;
     }
 

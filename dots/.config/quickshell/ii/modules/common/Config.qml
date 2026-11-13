@@ -2765,6 +2765,16 @@ Singleton {
                     // adbd comes back a few seconds after each restart, but whatever was
                     // mirroring died with it — reopen the same window once the phone answers.
                     property bool autoResume: true
+                    // Caps for a session that runs over the network. Wi-Fi latency is
+                    // jitter (power save, roaming scans, two hops through the AP), not
+                    // bandwidth: fewer frames and bits mean shorter queues on the air.
+                    // Only ever tightens the settings above; USB keeps them as they are.
+                    property JsonObject wireless: JsonObject {
+                        property bool limit: true
+                        property int maxFps: 60
+                        property string bitRate: "4M"
+                        property int maxSize: 1600
+                    }
                     property string wirelessIp: ""
                     property string wirelessPort: "5555"
                     property bool showTerminal: false

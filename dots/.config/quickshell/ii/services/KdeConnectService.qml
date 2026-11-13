@@ -521,12 +521,15 @@ Singleton {
         // tab in SidebarsConfig, we don't start the DBus monitor or any
         // polling process — keeps memory/CPU at zero for users who don't
         // use phone integration.
-        if (!root._enabled) return
-        detectDistroProc.running = true
-        checkAvailabilityProc.running = true
-        checkScrcpyProc.running = true
-        checkAdbProc.running = true
-        checkPythonDbusProc.running = true
+        if (root.serviceEnabled) {
+            detectDistroProc.running = true
+            checkScrcpyProc.running = true
+            checkAdbProc.running = true
+        }
+        if (root._enabled) {
+            checkAvailabilityProc.running = true
+            checkPythonDbusProc.running = true
+        }
     }
 
     // Unified mutually-exclusive phone integration service: "iiTools" | "kdeconnect" | "off".
@@ -600,27 +603,33 @@ Singleton {
     // Stop all background activity when the Phone tab is toggled off at runtime.
     // Restart when toggled back on. This lets users enable/disable Phone
     // integration without reloading the shell.
-    on_EnabledChanged: {
-        if (root._enabled) {
-            // Re-enabled: spin the background workers back up.
+    onServiceEnabledChanged: {
+        if (root.serviceEnabled) {
             detectDistroProc.running = true
-            checkAvailabilityProc.running = true
             checkScrcpyProc.running = true
             checkAdbProc.running = true
-            checkPythonDbusProc.running = true
         } else {
-            // Disabled: stop everything that consumes CPU/IPC.
-            monitorProc.running = false
-            checkScrcpyRunningProc.running = false
             checkScrcpyProc.running = false
             adbProbeProc.running = false
             adbProber.running = false
             scrcpyStatusTimer.running = false
             scrcpyLaunchFallbackTimer.running = false
             scrcpyElapsedTicker.running = false
-            // Reset user-facing state so UI doesn't show stale data.
             root.scrcpyRunning = false
             root.scrcpyLaunching = false
+            root.adbReachable = false
+        }
+    }
+
+    on_EnabledChanged: {
+        if (root._enabled) {
+            // Re-enabled: spin the KDE Connect workers back up.
+            checkAvailabilityProc.running = true
+            checkPythonDbusProc.running = true
+        } else {
+            // Disabled: stop everything that consumes CPU/IPC.
+            monitorProc.running = false
+            // Reset user-facing state so UI doesn't show stale data.
             root._kdeDevices = []
             root.notifications = []
             root._liveRelays = []
@@ -725,6 +734,7 @@ Singleton {
         command: ["bash", "-c", "command -v adb >/dev/null 2>&1"]
         onExited: (code, status) => {
             root.adbPresent = (code === 0)
+            if (root.adbPresent && root.serviceEnabled) root._probeAdb()
         }
     }
 
@@ -1530,7 +1540,7 @@ Singleton {
         id: adbProber
         interval: 30000
         repeat: true
-        running: root.ready && root._enabled
+        running: root.serviceEnabled && root.adbPresent
         onTriggered: root._probeAdb()
     }
 
@@ -1646,7 +1656,7 @@ Singleton {
     on_ActiveKdeConnectIpChanged: root._checkWirelessAdbLink()
 
     function _checkWirelessAdbLink() {
-        if (!root.ready || !root._enabled || !root.adbPresent) return
+        if (!root.serviceEnabled || !root.adbPresent) return
         if (root._adbTargetResolving) return
         root._probeAdb()
     }
@@ -1725,7 +1735,7 @@ Singleton {
     // announce and goodbye as it happens, so a new port shows up within a
     // second instead of on the next poll. Only runs while wireless auto
     // mode is on.
-    readonly property bool _mdnsBrowseWanted: root.ready && root._enabled
+    readonly property bool _mdnsBrowseWanted: root.serviceEnabled
         && !!Config.options.phone && !!Config.options.phone.scrcpy
         && Config.options.phone.scrcpy.useWireless
         && Config.options.phone.scrcpy.autoWirelessIp
@@ -2442,6 +2452,48 @@ Singleton {
         return host ? ["-s", host] : []
     }
 
+    /** True when the device adb will use is reached over the network: an
+     *  `ip:port` serial, or the name adb gives a phone it joined by mDNS. */
+    readonly property bool adbOverNetwork: root.resolvedAdbSerial.indexOf(":") > 0
+        || root.resolvedAdbSerial.indexOf("._adb-tls-connect") > 0
+
+    /** Frame rate, bit rate and size for a scrcpy session. Over the network
+     *  `phone.scrcpy.wireless` caps them; it never loosens what the user set.
+     *  `baseMaxSize` overrides `maxSize` (the sidebar sizes its own stream). */
+    function scrcpyStreamCaps(baseMaxSize, overNetwork) {
+        const opts = Config.options?.phone?.scrcpy
+        const caps = {
+            "maxFps": opts?.maxFps ?? 0,
+            "bitRate": String(opts?.bitRate ?? "").trim(),
+            "maxSize": baseMaxSize !== undefined ? baseMaxSize : (opts?.maxSize ?? 0)
+        }
+        const wl = opts?.wireless
+        const network = overNetwork !== undefined ? overNetwork : root.adbOverNetwork
+        if (!network || !(wl?.limit ?? true)) return caps
+        caps.maxFps = root._tighterCap(caps.maxFps, wl?.maxFps ?? 60)
+        caps.maxSize = root._tighterCap(caps.maxSize, wl?.maxSize ?? 1600)
+        const wlRate = String(wl?.bitRate ?? "4M").trim()
+        const userBps = root._bitRateBps(caps.bitRate)
+        const wlBps = root._bitRateBps(wlRate)
+        if (wlBps > 0 && (userBps <= 0 || wlBps < userBps)) caps.bitRate = wlRate
+        return caps
+    }
+
+    // 0 means "no cap", so the tighter of two caps is the smaller nonzero one.
+    function _tighterCap(a, b) {
+        if (!(a > 0)) return b > 0 ? b : 0
+        if (!(b > 0)) return a
+        return Math.min(a, b)
+    }
+
+    // scrcpy's bit-rate syntax: a number with an optional K/M suffix.
+    function _bitRateBps(text) {
+        const m = /^(\d+(?:\.\d+)?)\s*([kKmMgG]?)$/.exec(String(text ?? "").trim())
+        if (!m) return 0
+        const mult = { "": 1, "k": 1e3, "m": 1e6, "g": 1e9 }[m[2].toLowerCase()]
+        return parseFloat(m[1]) * mult
+    }
+
     function launchScrcpy(devId, mode, deepLink) {
         if (!devId) return
 
@@ -2544,9 +2596,12 @@ Singleton {
         if (fullscreen) scrcpyArgs.push("--fullscreen")
         if (alwaysOnTop) scrcpyArgs.push("--always-on-top")
 
-        if (maxFps > 0) scrcpyArgs.push("--max-fps=" + maxFps)
-        if (bitRate && bitRate !== "") scrcpyArgs.push("--video-bit-rate=" + bitRate)
-        if (maxSize > 0) scrcpyArgs.push("--max-size=" + maxSize)
+        // Network sessions get the wireless caps: the resolved serial says how
+        // adb will reach the phone; without one, the mode picked above does.
+        const caps = root.scrcpyStreamCaps(maxSize, root.resolvedAdbSerial ? root.adbOverNetwork : useWireless)
+        if (caps.maxFps > 0) scrcpyArgs.push("--max-fps=" + caps.maxFps)
+        if (caps.bitRate !== "") scrcpyArgs.push("--video-bit-rate=" + caps.bitRate)
+        if (caps.maxSize > 0) scrcpyArgs.push("--max-size=" + caps.maxSize)
         if (videoBuffer > 0) scrcpyArgs.push("--video-buffer=" + videoBuffer)
 
         let baseCmd = ""
@@ -2817,7 +2872,7 @@ Singleton {
     Timer {
         id: scrcpyStatusTimer
         interval: 10000
-        running: root.ready && root._enabled
+        running: root.serviceEnabled
         repeat: true
         triggeredOnStart: true
         onTriggered: {

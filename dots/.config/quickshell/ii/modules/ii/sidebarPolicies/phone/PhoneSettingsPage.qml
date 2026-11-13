@@ -199,6 +199,39 @@ Item {
                     onToggled: value => root.scrcpy.pinAdbPort = value
                 }
                 ToggleRow {
+                    symbol: "network_check"
+                    title: Translation.tr("Lighter stream over Wi-Fi")
+                    help: Translation.tr("Over Wi-Fi, lag comes from the radio, not the bandwidth. Fewer frames and a lower bit rate keep the stream short on the air, so touches answer sooner. Only applies when the phone is reached over the network, and never raises what scrcpy Options set.")
+                    checked: root.scrcpy.wireless.limit
+                    onToggled: value => root.scrcpy.wireless.limit = value
+                }
+                StepperRow {
+                    symbol: "speed"
+                    title: Translation.tr("Wi-Fi max FPS")
+                    visible: root.scrcpy.wireless.limit
+                    value: root.scrcpy.wireless.maxFps
+                    from: 0; to: 120; stepSize: 10
+                    format: v => v === 0 ? Translation.tr("Native") : String(v)
+                    onMoved: v => root.scrcpy.wireless.maxFps = v
+                }
+                FieldRow {
+                    symbol: "wifi_tethering"
+                    title: Translation.tr("Wi-Fi bitrate")
+                    placeholder: Translation.tr("e.g. 4M")
+                    visible: root.scrcpy.wireless.limit
+                    value: root.scrcpy.wireless.bitRate
+                    onEdited: text => root.scrcpy.wireless.bitRate = text
+                }
+                StepperRow {
+                    symbol: "aspect_ratio"
+                    title: Translation.tr("Wi-Fi max size")
+                    visible: root.scrcpy.wireless.limit
+                    value: root.scrcpy.wireless.maxSize
+                    from: 0; to: 3840; stepSize: 160
+                    format: v => v === 0 ? Translation.tr("Any") : String(v)
+                    onMoved: v => root.scrcpy.wireless.maxSize = v
+                }
+                ToggleRow {
                     symbol: "restart_alt"
                     title: Translation.tr("Reopen windows after a drop")
                     help: Translation.tr("Reopens the same mirror or app window here once the phone answers again. Only affects windows on this machine, not what the phone is doing.")
