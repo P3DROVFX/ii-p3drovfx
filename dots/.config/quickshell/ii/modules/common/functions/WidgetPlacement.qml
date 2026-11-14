@@ -133,8 +133,12 @@ Singleton {
     }
 
     function monitorsOf(entry) {
+        // Read back from Config's list<var>, the nested array is a QML sequence
+        // wrapper, not a JS Array: Array.isArray rejects it, so take any array-like.
         const m = entry?.monitors;
-        return Array.isArray(m) ? m.filter(n => typeof n === "string" && n !== "") : [];
+        if (!m || typeof m === "string" || typeof m.length !== "number")
+            return [];
+        return Array.from(m).filter(n => typeof n === "string" && n !== "");
     }
 
     function showsOn(entry, monitorName) {
