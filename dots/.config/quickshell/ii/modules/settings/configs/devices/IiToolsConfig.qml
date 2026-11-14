@@ -509,6 +509,16 @@ Item {
 
             AppToggleRow {
                 Layout.topMargin: 4
+                symbol: "wallpaper"
+                title: Translation.tr("Share the wallpaper with the phone")
+                description: Translation.tr("A phone that turns \"Use the PC's wallpaper\" on gets this wallpaper as its home and lock screen, and each new one after it")
+                help: Translation.tr("Off, the PC never sends it. Material You on the phone draws its colours from the same picture, so both end up close, though Android and the shell pick their accents separately.")
+                checked: Config.options.iiTools.wallSync.enable
+                onToggled: value => Config.options.iiTools.wallSync.enable = value
+            }
+
+            AppToggleRow {
+                Layout.topMargin: 4
                 visible: Config.options.iiTools.pcMedia.enable
                 symbol: "smartphone"
                 title: Translation.tr("Continue on the phone when locking")

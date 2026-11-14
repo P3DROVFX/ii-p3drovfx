@@ -1724,7 +1724,10 @@ Singleton {
         root._lookSent = "";
         root._makeLook();
     }
-    on_LookNameChanged: root._makeLook()
+    on_LookNameChanged: {
+        root._makeLook();
+        root._makeWallSync();
+    }
 
     function _makeLook(): void {
         if (root.lookDev === "" || root._lookName === "" || root._lookName === root._lookSent || lookProc.running)
@@ -1756,6 +1759,51 @@ Singleton {
             // The wallpaper changed again while this one was being made.
             if (root._lookName !== lookProc.name)
                 root._makeLook();
+        }
+    }
+
+    // ── The PC's wallpaper as the phone's ────────────────────────────────
+    // For a phone that opted in (`wallSync`): the desktop wallpaper as a JPEG of at most
+    // 3840 px (the phone cuts its portrait crop from it), made once per image, sent when
+    // the wallpaper changes or the phone connects. Nothing runs for a phone that does not ask.
+
+    readonly property bool wallSyncEnabled: root.opts?.wallSync?.enable ?? true
+    readonly property string wallSyncDev: root.wallSyncEnabled ? root._capDev("wallSync") : ""
+    readonly property string wallSyncDir: `${root.stateDir}/wallsync`
+    property string _wallSyncSent: ""
+    onWallSyncDevChanged: {
+        root._wallSyncSent = "";
+        root._makeWallSync();
+    }
+
+    function _makeWallSync(): void {
+        if (root.wallSyncDev === "" || root._lookName === "" || root._lookName === root._wallSyncSent || wallSyncProc.running)
+            return;
+        const out = `${root.wallSyncDir}/${root._lookName}.jpg`;
+        const video = /\.(mp4|mkv|webm|mov|avi|gif)$/i.test(root._wallPath);
+        const make = video
+            ? `ffmpeg -y -loglevel error -i "$2" -frames:v 1 -vf "scale='min(3840,iw)':-2" -q:v 3 "$3"`
+            : `magick "$2[0]" -resize '3840x3840>' -quality 88 "$3"`;
+        wallSyncProc.out = out;
+        wallSyncProc.name = root._lookName;
+        wallSyncProc.command = ["sh", "-c",
+            `mkdir -p -m 700 -- "$1" && find "$1" -type f ! -name "$4.jpg" -delete && { [ -s "$3" ] || ${make}; }`,
+            "sh", root.wallSyncDir, root._wallPath, out, root._lookName];
+        wallSyncProc.running = true;
+    }
+    Process {
+        id: wallSyncProc
+        property string out
+        property string name
+        onExited: code => {
+            if (code === 0 && root.wallSyncDev !== "") {
+                root._wallSyncSent = wallSyncProc.name;
+                root.send({ op: "sendFile", dev: root.wallSyncDev, id: 650000 + root._fileSerial++, path: wallSyncProc.out,
+                    name: wallSyncProc.name, purpose: "wallSync" });
+            }
+            // The wallpaper changed again while this one was being made.
+            if (root._lookName !== wallSyncProc.name)
+                root._makeWallSync();
         }
     }
 

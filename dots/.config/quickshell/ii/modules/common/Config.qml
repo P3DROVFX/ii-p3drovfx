@@ -2923,6 +2923,11 @@ Singleton {
                 property JsonObject handoff: JsonObject {
                     property bool onLock: true
                 }
+                // The PC's wallpaper as the phone's home and lock wallpaper, for a phone that
+                // turned "Use the PC's wallpaper" on (a 3840 px JPEG, once per image).
+                property JsonObject wallSync: JsonObject {
+                    property bool enable: true
+                }
                 // The desktop wallpaper behind the phone's PC card (a 1080 px JPEG, once per image).
                 property JsonObject look: JsonObject {
                     property bool enable: true
