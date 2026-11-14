@@ -368,6 +368,25 @@ QtObject {
         return { kind: obj.kind === "ring" ? "ring" : "ping", message: root.nonEmpty(obj.message) ? obj.message : "" };
     }
 
+    // The kinds of phoneControl and the fields each one sends to the phone.
+    readonly property var phoneControlKinds: ({
+        dnd: ["on"], ringer: ["mode"], volume: ["stream", "level"], torch: ["on"],
+        brightness: ["level", "auto"], rotate: ["auto"], vibrate: ["ms"], notify: ["title", "text"],
+        media: ["cmd"], ring: [], speak: ["text"]
+    })
+
+    function phoneControlRequest(v) {
+        const obj = root.asObject(v);
+        const fields = root.phoneControlKinds[obj.kind];
+        if (!fields)
+            return null;
+        const req = { kind: obj.kind };
+        for (const f of fields)
+            if (obj[f] !== undefined && obj[f] !== null)
+                req[f] = obj[f];
+        return req;
+    }
+
     // ---------------------------------------------------------------- registry
 
     readonly property var registry: ({
@@ -1293,6 +1312,21 @@ QtObject {
                     KdeConnectService.findMyPhone(id);
                 else
                     KdeConnectService.sendPing(id, req.message);
+            }
+        },
+
+        // What the phone itself does, over ii tools (the app has to be told what it may touch).
+        phoneControl: {
+            id: "phoneControl", category: "radios", label: "Phone control", icon: "phonelink_setup",
+            editor: "phoneControl", volatile: false,
+            // value: { kind, ...fields }, see phoneControlRequest()
+            available: () => IiLinkService.phoneControlDev !== "",
+            apply: v => {
+                const req = root.phoneControlRequest(v);
+                if (!req)
+                    throw new Error("nothing to do");
+                if (!IiLinkService.phoneControl(req))
+                    throw new Error("phone not reachable");
             }
         },
 

@@ -167,7 +167,7 @@ Singleton {
     ]
     readonly property var allowedActions: root.remoteEnabled ? root.actions : []
     readonly property var capabilities: (root.remoteEnabled ? ["remote", "workspaces", "modes", "presets"] : [])
-        .concat(root.remoteEnabled ? ["display"] : [])
+        .concat(root.remoteEnabled ? ["display", "modeActions"] : [])
         .concat(root.audioEnabled ? ["audio"] : [])
         .concat(root.deckEnabled ? ["deck", "appIcons", "deckFocus"] : [])
         .concat(root.wallpaperEnabled ? ["wallpaper"] : [])
@@ -1208,7 +1208,7 @@ Singleton {
     // the list only when it changed, then each missing photo as a file. Both are kept
     // in the state folder (PhoneContactsService reads contacts.json itself).
 
-    /// { battery: { level, charging, plug, temp, health }, net: { type, signal }, at } or null.
+    /// { battery: { level, charging, plug, temp, health }, net: { type, signal }, ringer, at } or null.
     property var phoneStatus: null
     readonly property string contactsDir: `${root.stateDir}/contacts`
 
@@ -1241,7 +1241,7 @@ Singleton {
     }
 
     function _status(m): void {
-        root.phoneStatus = { battery: m.battery ?? null, net: m.net ?? null, at: Date.now() };
+        root.phoneStatus = { battery: m.battery ?? null, net: m.net ?? null, ringer: String(m.ringer ?? ""), at: Date.now() };
         if ("alarm" in m)
             PhoneAlarmService.fromLink(m.alarm);
     }
@@ -2319,6 +2319,17 @@ Singleton {
         return String(deviceId ?? "").replace(/^iitools:/, "");
     }
 
+    /// The phone that announced it can be controlled from routines (Modes' phoneControl).
+    readonly property string phoneControlDev: root._capDev("ctl")
+
+    /// Something the phone does by itself: `{ kind, ...fields }` (see ModeActions.phoneControlRequest).
+    function phoneControl(req): bool {
+        if (root.phoneControlDev === "")
+            return false;
+        root.sendTo(root.phoneControlDev, Object.assign({ t: "act", a: "ctl" }, req));
+        return true;
+    }
+
     /// An action for the phone (`act`): ring, ping, url, text. False when it is away.
     function phoneAct(deviceId, action, fields): bool {
         const dev = root._peerOf(deviceId);
@@ -2931,6 +2942,8 @@ Singleton {
         case "night":
             Hyprsunset.toggleTemperature(arg === true);
             return "";
+        case "modeAction":
+            return root._runModeAction(arg);
         case "nightTemp": {
             const k = Math.round(Number(arg));
             if (!isFinite(k))
@@ -2973,7 +2986,76 @@ Singleton {
         return "unknown_action";
     }
 
-    readonly property var _remoteArgActions: ["workspace", "mode", "preset", "brightness", "night", "nightTemp"]
+    // ── The Modes & Routines actions, for the phone ─────────────────────
+    // The phone's routines can do what a mode can: the catalog below is the Modes
+    // registry itself (so a new action there shows up on the phone with no change
+    // here), minus what would hand the phone a shell: running commands, launching
+    // or closing apps, raw Hyprland dispatches, files. Values have the shape the
+    // Modes editor stores, so `{ type, value }` is a mode's action verbatim.
+    readonly property var _modeActionDeny: ["shell", "launch", "closeApps", "hyprland", "file", "wallpaper",
+        "wait", "pingPhone", "playSound", "appVolume", "audioOutput", "audioInput", "easyEffects", "earbudsAnc",
+        "barDock", "keyboardBacklight", "notify", "suspend", "dnsOverTls", "phoneControl"]
+    readonly property var _modeActionForms: ({
+        "switch": "switch", segmented: "choice", dropdown: "choice", none: "none", brightness: "percent",
+        level: "percent", temperature: "kelvin", volume: "volume", workspace: "workspace", text: "text",
+        mode: "choice", routine: "choice"
+    })
+
+    function _modeActionChoices(e): var {
+        if (e.editor === "mode")
+            return [{ v: "", l: Translation.tr("Turn off the active mode") }]
+                .concat(Array.from(Modes.modes ?? []).map(m => ({ v: String(m.id), l: String(m.name ?? m.id) })));
+        if (e.editor === "routine")
+            return Array.from(Modes.routines ?? []).map(r => ({ v: String(r.id), l: String(r.name ?? r.id) }));
+        return Array.from(e.choices ? e.choices() : []).map(c => ({
+            v: String(c),
+            l: e.choiceLabel ? Translation.tr(String(e.choiceLabel(c))) : String(c)
+        }));
+    }
+
+    function _modeCatalog(): var {
+        const cats = Modes.actions.categories;
+        const list = [];
+        for (const type of Modes.actions.types()) {
+            const e = Modes.actions.get(type);
+            const form = root._modeActionForms[e.editor];
+            if (!form || root._modeActionDeny.includes(type))
+                continue;
+            if (!Modes.actions.isAvailable(type) && e.editor !== "mode" && e.editor !== "routine")
+                continue;
+            const entry = {
+                id: type, label: Translation.tr(String(e.label)), icon: String(e.icon ?? ""),
+                category: String(e.category ?? ""), categoryLabel: Translation.tr(String(cats[e.category]?.label ?? "")),
+                form: form
+            };
+            if (form === "choice")
+                entry.choices = root._modeActionChoices(e);
+            list.push(entry);
+        }
+        return { t: "modeActions", list: list };
+    }
+
+    /// Runs one Modes action for the phone; "" when done, or why not.
+    function _runModeAction(arg): string {
+        const type = String(arg?.type ?? "");
+        const e = Modes.actions.get(type);
+        if (!e || root._modeActionDeny.includes(type) || !root._modeActionForms[e.editor])
+            return "unknown_action";
+        let value = arg?.value;
+        // A mode or a routine travels as a bare id; the registry wants it wrapped.
+        if (type === "mode")
+            value = { action: value === "" || value === undefined ? "stop" : "start", id: String(value ?? "") };
+        else if (type === "routine")
+            value = { action: "run", id: String(value ?? "") };
+        const result = Modes.applyActions("phone", [{ type: type, value: value }], null);
+        if (result.failed.length > 0) {
+            console.warn(`[IiLink] phone action ${type}: ${result.failed[0]}`);
+            return /not available/.test(result.failed[0]) ? "unavailable" : "failed";
+        }
+        return "";
+    }
+
+    readonly property var _remoteArgActions: ["workspace", "mode", "preset", "brightness", "night", "nightTemp", "modeAction"]
     readonly property var _audioArgActions: ["volume", "mute", "default", "eePreset", "eeBypass"]
 
     Timer {
@@ -3207,6 +3289,8 @@ Singleton {
                 root._requestClipThumbs(dev, m.ids);
             else if (m.what === "wallpaper")
                 root._sendWallSave(dev);
+            else if (m.what === "modeActions" && root.remoteEnabled)
+                root.sendTo(dev, root._modeCatalog());
             return;
         }
     }

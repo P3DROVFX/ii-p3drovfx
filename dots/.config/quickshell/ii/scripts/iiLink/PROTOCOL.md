@@ -153,7 +153,7 @@ announces `status` and, with the contacts permission, `contacts`.
 
 | Direction | Message | |
 | --- | --- | --- |
-| phone → shell | `{"t":"status","battery":{level,charging,plug,temp,health}\|null,"net":{type,signal},"alarm":{at,pkg}\|null}` | On connect, when the next alarm changes (it brings the link up for that) and on battery news while connected (at most every 30 s unless plugging changed). `alarm` goes to PhoneAlarmService, which then stops polling ADB. |
+| phone → shell | `{"t":"status","battery":{level,charging,plug,temp,health}\|null,"net":{type,signal},"ringer":"normal"\|"vibrate"\|"silent","alarm":{at,pkg}\|null}` | On connect, when the next alarm changes (it brings the link up for that), on battery news while connected (at most every 30 s unless plugging changed), and when the ringer mode or the network type changes while connected. The Modes `phone` trigger reads `battery`, `net` and `ringer` from it. `alarm` goes to PhoneAlarmService, which then stops polling ADB. |
 | shell → phone | `{"t":"get","what":"contacts","have":"<hash>"}` | On connect, with the version the PC keeps in `<state>/contacts.json`. |
 | phone → shell | `{"t":"contacts","hash","list":[contact]}` | Only when `hash` differs. `contact` is the shape the shell's vCard reader gives (`id, displayName, givenName, familyName, organization, phones[{value,normalized,type}], emails[{value,type}], birthday{year,month,day}`) plus `photo`, the photo's hash or `""`. |
 | shell → phone | `{"t":"get","what":"photos","keys":["<photo>",…]}` | The photos the PC lacks; each comes as a file, purpose `contactPhoto`, name `<photo>.jpg`, kept in `<state>/contacts/`. |
@@ -466,3 +466,15 @@ sides. Changing the meaning of an existing one does: that is `iilink/2`, on a ne
 phone is paired or a pairing is open, and must never see neither.
 
 The shell also exposes `qs -c ii ipc call iiLink pair|cancelPairing|unpair <id>|status`.
+
+## Routines: the shell's actions for the phone, and the phone's for the shell
+
+Needs `remote` in the shell's caps; the shell announces `modeActions`, the phone `ctl`.
+
+| Direction | Message | Meaning |
+|---|---|---|
+| phone → shell | `{"t":"get","what":"modeActions"}` | Asks for the catalog of Modes & Routines actions (the app asks on every `hello`, and keeps the last answer so rules can be edited with the PC off). |
+| shell → phone | `{"t":"modeActions","list":[{id,label,icon,category,categoryLabel,form,choices?}]}` | The registry of the shell's own Modes actions, minus those that would hand the phone a shell (`shell`, `launch`, `closeApps`, `hyprland`, `file`, `wallpaper`, `suspend`, EasyEffects…) and those not available on this machine. `form` says how the value is entered: `none`, `switch` (bool), `choice` (`choices: [{v,l}]`), `percent` (0–100), `kelvin`, `volume` (`{level,muted}`), `workspace` (`{action:"go",target,back}`), `text`. `mode` and `routine` are `choice` with the ids (a bare id; `""` stops the active mode). |
+| phone → shell | `{"t":"cmd","id":n,"a":"modeAction","arg":{"type":"brightness","value":40}}` | Runs one action exactly as a mode would (`Modes.applyActions`); `{type, value}` is a mode's action verbatim. Replies `ok`, or `err` with `unavailable` / `failed` / `unknown_action`. |
+| shell → phone | `{"t":"act","a":"ctl","kind":"dnd"\|"ringer"\|"volume"\|"torch"\|"brightness"\|"rotate"\|"media"\|"notify"\|"speak"\|"vibrate"\|"ring",…}` | What the PC's routines do on the phone (the Modes "Phone control" action). Fields by kind: `dnd{on}`, `ringer{mode}`, `volume{stream:"media"\|"ring"\|"alarm"\|"call",level}`, `torch{on}`, `brightness{level}`/`{auto:true}`, `rotate{auto}`, `media{cmd}`, `notify{title,text}`, `speak{text}`, `vibrate{ms}`. Skipped when the phone lacks the permission (brightness and rotation need "change system settings", silent needs Do Not Disturb access) or the user turned the feature off (cap `ctl` is then not announced). |
+
