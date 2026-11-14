@@ -21,6 +21,11 @@ Singleton {
     property string translationKeepSuffix: "/*keep*/"
     property string translationsDir: Quickshell.shellPath("translations")
     property string generatedTranslationsDir: Directories.shellConfig + "/translations"
+    // Source language (en_US) is an identity map except for one key; keeping it inline
+    // avoids reading and retaining the 1.26 MB en_US.json dictionary in V4/FileView.
+    readonly property var sourceOverrides: ({
+        "A pass from a wallet app: the device's name set huge and cropped behind a scalloped seal and the battery.": "A pass from a wallet app: the device's name set huge and cropped behind a flower badge and the battery."
+    })
 
     property string languageCode: {
         var configLang = Config?.options.language.ui ?? "auto";
@@ -139,6 +144,11 @@ Singleton {
 
         function reread() { // Proper reload in case the file was incorrect before
             translationReader.path = "";
+            if (translationReader === translationFileView
+                    && (translationReader.languageCode === "en_US" || translationReader.languageCode === "en")) {
+                translationReader.contentLoaded(Object.assign({}, root.sourceOverrides));
+                return;
+            }
             const availableLanguages = translationReader === generatedTranslationFileView
                 ? root.availableGeneratedLanguages
                 : root.availableLanguages;
@@ -160,9 +170,14 @@ Singleton {
             } catch (e) {
                 console.log("[Translation] Failed to load translations:", e);
                 translationReader.contentLoaded({});
+            } finally {
+                textContent = "";
+                // Clear path so FileView releases its QByteArray/QString file buffers immediately.
+                translationReader.path = "";
             }
         }
         onLoadFailed: error => {
+            translationReader.path = "";
             translationReader.contentLoaded({});
         }
     }

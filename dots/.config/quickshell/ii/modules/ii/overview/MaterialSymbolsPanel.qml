@@ -32,6 +32,7 @@ Item {
     property var filteredIcons: []
     property var iconMap: ({})
     property bool dataLoaded: false
+    property bool _loading: false
 
     /// The icon the inspector describes: the focused one, else the best match.
     readonly property var inspectedIcon: root.focusedControlIndex >= 0 && root.focusedControlIndex < root.filteredIcons.length
@@ -44,6 +45,10 @@ Item {
     readonly property int gridSpacing: 6
 
     function loadData() {
+        if (root.dataLoaded || root._loading)
+            return;
+        root._loading = true;
+        symbolsFileView.path = Directories.assetsPath + "/data/material_symbols.json";
         symbolsFileView.reload();
     }
 
@@ -362,8 +367,15 @@ Item {
     signal requestSetSearchQuery(string query)
 
     onSearchQueryChanged: {
+        if (searchQuery.length > 0 && !dataLoaded)
+            root.loadData();
         root.filterIcons();
         focusedControlIndex = -1;
+    }
+
+    onVisibleChanged: {
+        if (visible && !dataLoaded)
+            root.loadData();
     }
 
     Timer {
@@ -374,23 +386,32 @@ Item {
 
     FileView {
         id: symbolsFileView
-        path: Directories.assetsPath + "/data/material_symbols.json"
-        onLoadedChanged: {
-            if (loaded) {
-                try {
-                    const content = text();
-                    allIcons = JSON.parse(content);
-                    dataLoaded = true;
-                    root.filterIcons();
-                } catch (e) {
-                    console.warn("[MaterialSymbolsPanel] Failed to parse data:", e);
-                }
+        path: ""
+        onLoaded: {
+            var content = "";
+            try {
+                content = text();
+                allIcons = JSON.parse(content);
+                dataLoaded = true;
+                root.filterIcons();
+            } catch (e) {
+                console.warn("[MaterialSymbolsPanel] Failed to parse data:", e);
+            } finally {
+                content = "";
+                root._loading = false;
+                // Clear path so FileView drops the 1.79 MB UTF-8/UTF-16 buffers after parsing.
+                symbolsFileView.path = "";
             }
+        }
+        onLoadFailed: error => {
+            root._loading = false;
+            symbolsFileView.path = "";
         }
     }
 
     Component.onCompleted: {
-        root.loadData();
+        if (root.visible)
+            root.loadData();
     }
 
     SearchPanelScaffold {
