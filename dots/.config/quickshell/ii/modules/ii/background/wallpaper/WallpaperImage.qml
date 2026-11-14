@@ -560,10 +560,14 @@ Item {
         imageSource: wallpaperImageRoot.overviewController.useBackingImage && !wallpaperSafetyTriggered ? wallpaperPath : ""
         animated: Config.options.background.animateWallpaperChanges
         fillMode: Image.PreserveAspectCrop
+        // Only once the plane has shown its picture: this backing is decoded at 1/8 of the
+        // screen and decodes first, so at login it was the whole wallpaper, pixelated,
+        // until the full-size decode landed on top of it.
         visible: (wallpaperImageRoot.overviewController.isGnomeLike
             ? !wallpaperSafetyTriggered
             : wallpaperImageRoot.overviewController.useBackingImage && wallpaperImageRoot.overviewAnimationVisible && !wallpaperSafetyTriggered)
             && !wallpaperIsVideo && !Config.options.background.useWallpaperEngine
+            && wallpaperImageRoot.wallpaperEverReady
         opacity: 1.0
         mipmap: false
         antialiasing: false

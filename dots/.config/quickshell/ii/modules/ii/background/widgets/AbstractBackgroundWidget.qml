@@ -300,10 +300,21 @@ AbstractWidget {
     readonly property real lifecycleScale: (0.92 + 0.08 * root.entryProgress)
         * (0.82 + 0.18 * root.exitProgress)
 
+    // The delegate hands the instance (the saved position) over only once its
+    // Loader is ready - at login ~1-2 s after the widget exists. Entering before
+    // that showed every widget stacked on the default spot, then sliding to its
+    // own. Wait for it (bounded, in case a host never sets one).
+    property bool _instanceWaitExpired: false
+    Timer {
+        interval: 3000
+        running: !root.isPreview && root.widgetInstance === null && !root._instanceWaitExpired
+        onTriggered: root._instanceWaitExpired = true
+    }
     Timer {
         id: entryTimer
         interval: Math.max(1, root.staggerDelay)
         running: !root.isPreview && !root.entryDone && !GlobalStates.presetHoldMotion
+            && (root.widgetInstance !== null || root._instanceWaitExpired)
         repeat: false
         onTriggered: {
             root.entryDone = true;
@@ -884,6 +895,9 @@ AbstractWidget {
         if (!isDragging && !root.isDraggingOrSettling && !root.isPreview) {
             if (GlobalStates.presetHoldMotion && root.entryDone) {
                 root._pendingPosition = true;
+            } else if (!root.entryDone) {
+                // Not shown yet: land on the spot, nothing to animate.
+                root.x = targetX;
             } else if (root.staggerDelay > 0) {
                 root._pendingPosition = true;
                 staggerTimer.interval = root.staggerDelay;
@@ -897,6 +911,8 @@ AbstractWidget {
         if (!isDragging && !root.isDraggingOrSettling && !root.isPreview) {
             if (GlobalStates.presetHoldMotion && root.entryDone) {
                 root._pendingPosition = true;
+            } else if (!root.entryDone) {
+                root.y = targetY;
             } else if (root.staggerDelay > 0) {
                 root._pendingPosition = true;
                 staggerTimer.interval = root.staggerDelay;
