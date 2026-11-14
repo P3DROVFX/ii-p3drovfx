@@ -336,7 +336,7 @@ Singleton {
      *  windows used to build their command from the App Mode block alone, so
      *  "Turn screen off", "Stay awake" and every quality setting silently
      *  applied to the mirror only. */
-    function _commonScrcpyArgs() {
+    function _commonScrcpyArgs(netCfg) {
         const opts = Config.options?.phone?.scrcpy
         if (!opts) return []
 
@@ -349,11 +349,13 @@ Singleton {
         if (opts.fullscreen) args.push("--fullscreen")
         if (opts.alwaysOnTop) args.push("--always-on-top")
         // Called once the ADB target is resolved, so the caps know whether
-        // this session runs over Wi-Fi.
-        const caps = KdeConnectService.scrcpyStreamCaps()
+        // this session runs over Wi-Fi (and whether the PC link is weak).
+        const overNetwork = netCfg ? !!netCfg.overNetwork : undefined
+        const caps = KdeConnectService.scrcpyStreamCaps(undefined, overNetwork, !!netCfg?.weakLink)
         if (caps.maxFps > 0) args.push("--max-fps=" + caps.maxFps)
         if (caps.bitRate !== "") args.push("--video-bit-rate=" + caps.bitRate)
         if (caps.maxSize > 0) args.push("--max-size=" + caps.maxSize)
+        if (netCfg?.overNetwork && netCfg?.codec) args.push("--video-codec=" + netCfg.codec)
         // scrcpy 3.0 renamed --display-buffer to --video-buffer; the old
         // spelling makes scrcpy exit on a usage error instead of starting.
         if (opts.videoBuffer > 0) args.push("--video-buffer=" + opts.videoBuffer)
@@ -366,28 +368,32 @@ Singleton {
     }
 
     function _launchMirror(targetArgs): void {
-        const extraArgs = root._commonScrcpyArgs()
+        root._prepareNetworkLaunch(targetArgs, netCfg => {
+            const extraArgs = root._commonScrcpyArgs(netCfg)
 
-        const opts = Config.options?.phone?.scrcpy
-        if (opts) {
-            const appOpts = opts.appMode || {}
-            if (appOpts.flexDisplay) {
-                const w = appOpts.displayWidth || 1280
-                const h = appOpts.displayHeight || 960
-                const density = appOpts.density || 160
-                extraArgs.push("--new-display=" + w + "x" + h + "/" + density)
-                extraArgs.push("--flex-display")
-                if (appOpts.keepActive) {
-                    extraArgs.push("--keep-active")
-                }
-                if (root._sessionEndMode() === "continue") {
-                    extraArgs.push("--no-vd-destroy-content")
+            const opts = Config.options?.phone?.scrcpy
+            if (opts) {
+                const appOpts = opts.appMode || {}
+                if (appOpts.flexDisplay) {
+                    const w = appOpts.displayWidth || 1280
+                    const h = appOpts.displayHeight || 960
+                    const density = appOpts.density || 160
+                    extraArgs.push("--new-display=" + w + "x" + h + "/" + density)
+                    extraArgs.push("--flex-display")
+                    if (appOpts.keepActive) {
+                        extraArgs.push("--keep-active")
+                    }
+                    if (root._sessionEndMode() === "continue") {
+                        extraArgs.push("--no-vd-destroy-content")
+                    }
                 }
             }
-        }
 
-        root._rememberSession("mirror", "mirror", extraArgs)
-        root._send(root._launchPayload("mirror", "mirror", targetArgs, extraArgs))
+            root._recordNetworkSession("mirror", !!netCfg.overNetwork)
+            root._sessionMeta["mirror"] = { "type": "mirror", "targetArgs": targetArgs, "args": extraArgs, "overNetwork": !!netCfg.overNetwork, "codec": netCfg.codec || "", "devKey": netCfg.devKey || "", "hevcFallbackTried": false }
+            root._rememberSession("mirror", "mirror", extraArgs)
+            root._send(root._launchPayload("mirror", "mirror", targetArgs, extraArgs))
+        })
     }
 
     function stopMirror(): void {
@@ -431,17 +437,21 @@ Singleton {
     }
 
     function _launchEmbed(targetArgs, streamSize): void {
-        const extraArgs = root._embedScrcpyArgs(streamSize)
-        root._rememberSession(root.embedSessionId, "embed", extraArgs)
-        root._send({
-            "cmd": "launch",
-            "id": root.embedSessionId,
-            "type": "embed",
-            "target_args": targetArgs,
-            "extra_args": extraArgs,
-            // Never "lock": leaving the page must not put the phone to sleep.
-            "end_action": "",
-            "auto_unlock": Config.options?.phone?.scrcpy?.appMode?.autoUnlock ?? true
+        root._prepareNetworkLaunch(targetArgs, netCfg => {
+            const extraArgs = root._embedScrcpyArgs(streamSize, netCfg)
+            root._recordNetworkSession(root.embedSessionId, !!netCfg.overNetwork)
+            root._sessionMeta[root.embedSessionId] = { "type": "embed", "targetArgs": targetArgs, "args": extraArgs, "overNetwork": !!netCfg.overNetwork, "codec": netCfg.codec || "", "devKey": netCfg.devKey || "", "hevcFallbackTried": false }
+            root._rememberSession(root.embedSessionId, "embed", extraArgs)
+            root._send({
+                "cmd": "launch",
+                "id": root.embedSessionId,
+                "type": "embed",
+                "target_args": targetArgs,
+                "extra_args": extraArgs,
+                // Never "lock": leaving the page must not put the phone to sleep.
+                "end_action": "",
+                "auto_unlock": Config.options?.phone?.scrcpy?.appMode?.autoUnlock ?? true
+            })
         })
     }
 
@@ -477,20 +487,31 @@ Singleton {
         root.recordingLaunching = true
         root.recordingElapsedMs = 0
 
-        // No control on purpose: nothing reads input from a session with no
-        // window, and --turn-screen-off / --stay-awake would be refused
-        // without it.
-        const args = ["--no-playback", "--no-control", "--record=" + root.recordingPath]
-        if (opts?.noAudio || !(opts?.recording?.withAudio ?? true)) args.push("--no-audio")
-        if (opts?.maxFps > 0) args.push("--max-fps=" + opts.maxFps)
-        if (opts?.bitRate) args.push("--video-bit-rate=" + opts.bitRate)
-        if (opts?.maxSize > 0) args.push("--max-size=" + opts.maxSize)
-
         Quickshell.execDetached(["mkdir", "-p", folder])
         // Not remembered for auto-resume: reopening would write over the
         // file that was just cut short.
         root._whenManagerAllowed(root.recordSessionId,
-            () => KdeConnectService.withAdbTarget(target => root._send(root._launchPayload(root.recordSessionId, "record", target, args))))
+            () => KdeConnectService.withAdbTarget(target => root._launchRecord(target)))
+    }
+
+    function _launchRecord(targetArgs): void {
+        root._prepareNetworkLaunch(targetArgs, netCfg => {
+            const opts = Config.options?.phone?.scrcpy
+            // No control on purpose: nothing reads input from a session with no
+            // window, and --turn-screen-off / --stay-awake would be refused
+            // without it.
+            const args = ["--no-playback", "--no-control", "--record=" + root.recordingPath]
+            if (opts?.noAudio || !(opts?.recording?.withAudio ?? true)) args.push("--no-audio")
+            const caps = KdeConnectService.scrcpyStreamCaps(undefined, !!netCfg.overNetwork, !!netCfg.weakLink)
+            if (caps.maxFps > 0) args.push("--max-fps=" + caps.maxFps)
+            if (caps.bitRate !== "") args.push("--video-bit-rate=" + caps.bitRate)
+            if (caps.maxSize > 0) args.push("--max-size=" + caps.maxSize)
+            if (netCfg.overNetwork && netCfg.codec) args.push("--video-codec=" + netCfg.codec)
+
+            root._recordNetworkSession(root.recordSessionId, !!netCfg.overNetwork)
+            root._sessionMeta[root.recordSessionId] = { "type": "record", "targetArgs": targetArgs, "args": args, "overNetwork": !!netCfg.overNetwork, "codec": netCfg.codec || "", "devKey": netCfg.devKey || "", "hevcFallbackTried": false }
+            root._send(root._launchPayload(root.recordSessionId, "record", targetArgs, args))
+        })
     }
 
     function stopRecording(): void {
@@ -516,9 +537,10 @@ Singleton {
      *  everything that would move or raise it is left out on purpose:
      *  --fullscreen, --always-on-top, the configured --max-size, and the
      *  --power-off-on-close that a "lock" session end would add. */
-    function _embedScrcpyArgs(streamSize) {
+    function _embedScrcpyArgs(streamSize, netCfg) {
         const args = ["--window-borderless"]
-        const caps = KdeConnectService.scrcpyStreamCaps(streamSize > 0 ? streamSize : 0)
+        const overNetwork = netCfg ? !!netCfg.overNetwork : undefined
+        const caps = KdeConnectService.scrcpyStreamCaps(streamSize > 0 ? streamSize : 0, overNetwork, !!netCfg?.weakLink)
         if (caps.maxSize > 0) args.push("--max-size=" + caps.maxSize)
 
         const opts = Config.options?.phone?.scrcpy
@@ -530,6 +552,7 @@ Singleton {
             if (opts.showTouches) args.push("--show-touches")
             if (caps.maxFps > 0) args.push("--max-fps=" + caps.maxFps)
             if (caps.bitRate !== "") args.push("--video-bit-rate=" + caps.bitRate)
+            if (netCfg?.overNetwork && netCfg?.codec) args.push("--video-codec=" + netCfg.codec)
             if (opts.videoBuffer > 0) args.push("--video-buffer=" + opts.videoBuffer)
         }
         args.push(...root._inputArgs())
@@ -570,48 +593,52 @@ Singleton {
     }
 
     function _launchApp(packageName: string, targetArgs): void {
-        const sessionId = "app:" + packageName
-        const appOpts = Config.options?.phone?.scrcpy?.appMode || {}
-        const useFlex = appOpts.flexDisplay ?? false
-        const w = appOpts.displayWidth || 1280
-        const h = appOpts.displayHeight || 960
-        const density = appOpts.density || 160
+        root._prepareNetworkLaunch(targetArgs, netCfg => {
+            const sessionId = "app:" + packageName
+            const appOpts = Config.options?.phone?.scrcpy?.appMode || {}
+            const useFlex = appOpts.flexDisplay ?? false
+            const w = appOpts.displayWidth || 1280
+            const h = appOpts.displayHeight || 960
+            const density = appOpts.density || 160
 
-        // A '+' force-stops the app before starting it. On a virtual display
-        // that is mandatory: Android resumes an app that is already running in
-        // its existing task, i.e. back on the phone's own screen, leaving the
-        // new display showing nothing but Samsung DeX's launcher.
-        const extraArgs = root._commonScrcpyArgs().concat([
-            "--start-app=" + (useFlex ? "+" : "") + packageName
-        ])
+            // A '+' force-stops the app before starting it. On a virtual display
+            // that is mandatory: Android resumes an app that is already running in
+            // its existing task, i.e. back on the phone's own screen, leaving the
+            // new display showing nothing but Samsung DeX's launcher.
+            const extraArgs = root._commonScrcpyArgs(netCfg).concat([
+                "--start-app=" + (useFlex ? "+" : "") + packageName
+            ])
 
-        if (useFlex) {
-            extraArgs.push("--new-display=" + w + "x" + h + "/" + density)
-            extraArgs.push("--flex-display")
-            if (appOpts.keepActive) {
-                extraArgs.push("--keep-active")
+            if (useFlex) {
+                extraArgs.push("--new-display=" + w + "x" + h + "/" + density)
+                extraArgs.push("--flex-display")
+                if (appOpts.keepActive) {
+                    extraArgs.push("--keep-active")
+                }
+                if (appOpts.systemDecorations === false) {
+                    extraArgs.push("--no-vd-system-decorations")
+                }
+                // Without this the virtual display takes the app down with it.
+                if (root._sessionEndMode() === "continue") {
+                    extraArgs.push("--no-vd-destroy-content")
+                }
             }
-            if (appOpts.systemDecorations === false) {
-                extraArgs.push("--no-vd-system-decorations")
-            }
-            // Without this the virtual display takes the app down with it.
-            if (root._sessionEndMode() === "continue") {
-                extraArgs.push("--no-vd-destroy-content")
-            }
-        }
 
-        root._rememberSession(sessionId, "app", extraArgs)
-        root._send(root._launchPayload(sessionId, "app", targetArgs, extraArgs))
+            root._recordNetworkSession(sessionId, !!netCfg.overNetwork)
+            root._sessionMeta[sessionId] = { "type": "app", "targetArgs": targetArgs, "args": extraArgs, "overNetwork": !!netCfg.overNetwork, "codec": netCfg.codec || "", "devKey": netCfg.devKey || "", "hevcFallbackTried": false }
+            root._rememberSession(sessionId, "app", extraArgs)
+            root._send(root._launchPayload(sessionId, "app", targetArgs, extraArgs))
 
-        // Record in recents
-        let recents = (Persistent.states?.phone?.scrcpy?.recentPackages || []).slice()
-        const idx = recents.indexOf(packageName)
-        if (idx >= 0) recents.splice(idx, 1)
-        recents.unshift(packageName)
-        if (recents.length > 20) recents = recents.slice(0, 20)
-        Persistent.states.phone.scrcpy.recentPackages = recents
+            // Record in recents
+            let recents = (Persistent.states?.phone?.scrcpy?.recentPackages || []).slice()
+            const idx = recents.indexOf(packageName)
+            if (idx >= 0) recents.splice(idx, 1)
+            recents.unshift(packageName)
+            if (recents.length > 20) recents = recents.slice(0, 20)
+            Persistent.states.phone.scrcpy.recentPackages = recents
 
-        KdeConnectService.dispatchActionFeedback(Translation.tr("Launching %1…").arg(packageName.split(".").pop()), true)
+            KdeConnectService.dispatchActionFeedback(Translation.tr("Launching %1…").arg(packageName.split(".").pop()), true)
+        })
     }
 
     function stopApp(packageName: string): void {
@@ -715,6 +742,10 @@ Singleton {
 
     // id -> {type, args} for every session that could be resumed.
     property var _sessionArgs: ({})
+    // id -> {type, targetArgs, args, overNetwork, codec, devKey, hevcFallbackTried}
+    property var _sessionMeta: ({})
+    // id -> true for active/launching sessions running over the network.
+    property var _wirelessSessionIds: ({})
     // ids whose exit was asked for, so a deliberate stop is never undone.
     property var _intentionalStops: ({})
     // id -> {count, first}: a phone that refuses to come back must not be
@@ -724,6 +755,227 @@ Singleton {
 
     readonly property int _maxResumeAttempts: 5
 
+    function _updateMirrorRadio(): void {
+        IiLinkService.setMirrorActive(Object.keys(root._wirelessSessionIds).length > 0)
+    }
+
+    function _recordNetworkSession(sessionId: string, overNetwork: bool): void {
+        const next = Object.assign({}, root._wirelessSessionIds)
+        if (overNetwork) next[sessionId] = true
+        else delete next[sessionId]
+        root._wirelessSessionIds = next
+        root._updateMirrorRadio()
+    }
+
+    function _isNetworkTarget(targetArgs): bool {
+        if (KdeConnectService.adbOverNetwork) return true
+        const sIdx = targetArgs ? targetArgs.indexOf("-s") : -1
+        if (sIdx >= 0 && sIdx + 1 < targetArgs.length) {
+            const s = String(targetArgs[sIdx + 1])
+            return s.indexOf(":") >= 0 || s.indexOf("._tcp") >= 0
+        }
+        return false
+    }
+
+    function _deviceCacheKey(targetArgs): string {
+        const activeId = String(KdeConnectService.activeDeviceId ?? "").trim()
+        if (activeId.length > 0) return activeId
+        const sIdx = targetArgs ? targetArgs.indexOf("-s") : -1
+        if (sIdx >= 0 && sIdx + 1 < targetArgs.length) {
+            const serial = String(targetArgs[sIdx + 1])
+            const colon = serial.indexOf(":")
+            return colon > 0 ? serial.substring(0, colon) : serial
+        }
+        return String(KdeConnectService.resolvedAdbSerial || "default")
+    }
+
+    function _phoneIpForTarget(targetArgs): string {
+        const sIdx = targetArgs ? targetArgs.indexOf("-s") : -1
+        if (sIdx >= 0 && sIdx + 1 < targetArgs.length) {
+            const s = String(targetArgs[sIdx + 1]).trim()
+            const m = s.match(/^(\d{1,3}(?:\.\d{1,3}){3})(?::\d+)?$/)
+            if (m) return m[1]
+        }
+        const devId = String(KdeConnectService.activeDeviceId ?? "").trim()
+        const connAddr = String(IiLinkService.connections?.[devId]?.addr ?? "").trim()
+        if (connAddr) {
+            const m2 = connAddr.match(/^(\d{1,3}(?:\.\d{1,3}){3})(?::\d+)?$/)
+            if (m2) return m2[1]
+        }
+        return KdeConnectService._kdeConnectIp ? String(KdeConnectService._kdeConnectIp(devId) ?? "") : ""
+    }
+
+    function _readHevcCache() {
+        try {
+            const raw = Persistent.states?.sidebar?.policies?.phone?.scrcpy?.hevcEncodersJson
+            const parsed = raw ? JSON.parse(raw) : {}
+            return (parsed && typeof parsed === "object" && !Array.isArray(parsed)) ? parsed : {}
+        } catch (e) {
+            return {}
+        }
+    }
+
+    function _writeHevcCache(devKey: string, supported: bool): void {
+        if (!devKey) return
+        const map = Object.assign({}, root._readHevcCache())
+        map[devKey] = !!supported
+        const scrcpyState = Persistent.states?.sidebar?.policies?.phone?.scrcpy
+        if (scrcpyState) scrcpyState.hevcEncodersJson = JSON.stringify(map)
+    }
+
+    function _isEncoderError(raw: string): bool {
+        const lower = String(raw || "").toLowerCase()
+        return lower.includes("encoder") || lower.includes("mediacodec")
+            || lower.includes("h265") || lower.includes("hevc")
+            || lower.includes("configureexception")
+    }
+
+    Component {
+        id: networkProbeProcComponent
+        Process {
+            property var doneCallback: null
+            property string collectedText: ""
+            property bool settled: false
+
+            function finish(): void {
+                if (settled) return
+                settled = true
+                const cb = doneCallback
+                const txt = collectedText
+                doneCallback = null
+                if (cb) cb(txt)
+                Qt.callLater(() => destroy())
+            }
+
+            stdout: StdioCollector {
+                onStreamFinished: {
+                    collectedText = String(this.text || "")
+                    finish()
+                }
+            }
+
+            onExited: (code, status) => {
+                finish()
+            }
+        }
+    }
+
+    /** Resolves weak-link guard and codec in at most one subprocess per network
+     *  session start; USB launches return immediately without spawning anything. */
+    function _prepareNetworkLaunch(targetArgs, callback, forceEncoderProbe): void {
+        const overNetwork = root._isNetworkTarget(targetArgs)
+        if (!overNetwork) {
+            callback({ "overNetwork": false, "weakLink": false, "codec": "", "devKey": "" })
+            return
+        }
+
+        const wl = Config.options?.phone?.scrcpy?.wireless
+        const limitEnabled = wl?.limit ?? true
+        const codecPref = String(wl?.codec ?? "auto")
+        const devKey = root._deviceCacheKey(targetArgs)
+        const cache = root._readHevcCache()
+        const cachedHevc = cache[devKey]
+
+        const needEncProbe = !!forceEncoderProbe || (codecPref === "auto" && typeof cachedHevc !== "boolean")
+        const needLinkCheck = limitEnabled && !forceEncoderProbe
+
+        let knownCodec = ""
+        if (codecPref === "h265" || codecPref === "h264") {
+            knownCodec = codecPref
+        } else if (!needEncProbe) {
+            knownCodec = cachedHevc ? "h265" : "h264"
+        }
+
+        if (!needLinkCheck && !needEncProbe) {
+            callback({ "overNetwork": true, "weakLink": false, "codec": knownCodec, "devKey": devKey })
+            return
+        }
+
+        const script =
+            "PHONE_IP=\"$1\"; NEED_LINK=\"$2\"; NEED_ENC=\"$3\"; shift 3\n" +
+            "WEAK=0\n" +
+            "if [ \"$NEED_LINK\" = \"1\" ]; then\n" +
+            "    IFACE=\"\"\n" +
+            "    if [ -n \"$PHONE_IP\" ]; then\n" +
+            "        IFACE=$(ip -o route get \"$PHONE_IP\" 2>/dev/null | sed -n 's/.* dev \\([^ ]*\\).*/\\1/p' | head -n1)\n" +
+            "    fi\n" +
+            "    if [ -z \"$IFACE\" ]; then\n" +
+            "        IFACE=$(ip -o route show default 2>/dev/null | sed -n 's/.* dev \\([^ ]*\\).*/\\1/p' | head -n1)\n" +
+            "    fi\n" +
+            "    if [ -z \"$IFACE\" ] || [ ! -d \"/sys/class/net/$IFACE/wireless\" ]; then\n" +
+            "        WEAK=1\n" +
+            "    else\n" +
+            "        RATE=$(nmcli -t -f ACTIVE,RATE dev wifi list --rescan no 2>/dev/null | awk -F: '$1==\"yes\"{print $2; exit}' | grep -oE '[0-9]+' | head -n1)\n" +
+            "        if [ -z \"$RATE\" ]; then\n" +
+            "            RATE=$(iw dev \"$IFACE\" link 2>/dev/null | sed -n 's/.*tx bitrate: \\([0-9]*\\).*/\\1/p' | head -n1)\n" +
+            "        fi\n" +
+            "        if [ -z \"$RATE\" ] || [ \"$RATE\" -lt 300 ] 2>/dev/null; then\n" +
+            "            WEAK=1\n" +
+            "        fi\n" +
+            "    fi\n" +
+            "fi\n" +
+            "echo \"WEAK=$WEAK\"\n" +
+            "if [ \"$NEED_ENC\" = \"1\" ]; then\n" +
+            "    ENC_OUT=$(scrcpy --list-encoders \"$@\" 2>&1)\n" +
+            "    if printf '%s\\n' \"$ENC_OUT\" | grep -q -- '--video-codec='; then\n" +
+            "        if printf '%s\\n' \"$ENC_OUT\" | grep -qE -- '--video-codec=h265\\\\b'; then\n" +
+            "            echo 'HEVC=1'\n" +
+            "        else\n" +
+            "            echo 'HEVC=0'\n" +
+            "        fi\n" +
+            "    else\n" +
+            "        echo 'HEVC=ERR'\n" +
+            "    fi\n" +
+            "fi\n"
+
+        const phoneIp = root._phoneIpForTarget(targetArgs)
+        const cmd = ["bash", "-c", script, "_", phoneIp, needLinkCheck ? "1" : "0", needEncProbe ? "1" : "0"].concat(targetArgs || [])
+        const proc = networkProbeProcComponent.createObject(root, {
+            command: cmd,
+            doneCallback: output => {
+                let weak = false
+                let codec = knownCodec
+                const lines = String(output || "").split("\n")
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i].trim()
+                    if (line === "WEAK=1") weak = true
+                    else if (line === "HEVC=1") {
+                        root._writeHevcCache(devKey, true)
+                        if (!codec) codec = "h265"
+                    } else if (line === "HEVC=0") {
+                        root._writeHevcCache(devKey, false)
+                        if (!codec) codec = "h264"
+                    } else if (line === "HEVC=ERR") {
+                        if (!codec) codec = "h264"
+                    }
+                }
+                if (codecPref === "auto" && !codec) codec = "h264"
+                callback({ "overNetwork": true, "weakLink": weak, "codec": codec, "devKey": devKey })
+            }
+        })
+        proc.running = true
+    }
+
+    function _reprobeAndFallbackH264(sid, meta): void {
+        root._prepareNetworkLaunch(meta.targetArgs, _ => {
+            // Runtime launch with h265 already failed with an encoder error; pin
+            // this device to h264 even if --list-encoders still lists h265.
+            root._writeHevcCache(meta.devKey, false)
+            const fallbackArgs = (meta.args || []).map(a => a === "--video-codec=h265" ? "--video-codec=h264" : a)
+            meta.codec = "h264"
+            meta.hevcFallbackTried = true
+            meta.args = fallbackArgs
+            if (sid !== root.recordSessionId) {
+                root._rememberSession(sid, meta.type, fallbackArgs)
+            }
+            if (sid === "mirror") root.mirrorLaunching = true
+            else if (sid === root.embedSessionId) root.embedLaunching = true
+            else if (sid === root.recordSessionId) root.recordingLaunching = true
+            root._recordNetworkSession(sid, true)
+            root._send(root._launchPayload(sid, meta.type, meta.targetArgs, fallbackArgs))
+        }, true)
+    }
+
     function _launchPayload(sessionId, typeStr, targetArgs, extraArgs) {
         return {
             "cmd": "launch",
@@ -732,8 +984,9 @@ Singleton {
             "target_args": targetArgs,
             "extra_args": extraArgs,
             // "continue" is already carried by --no-vd-destroy-content; only
-            // "lock" needs the manager to act after the window is gone.
-            "end_action": root._sessionEndMode() === "lock" ? "lock" : "",
+            // "lock" needs the manager to act after the window is gone. Embed
+            // never locks the phone when closing.
+            "end_action": typeStr === "embed" ? "" : (root._sessionEndMode() === "lock" ? "lock" : ""),
             "auto_unlock": Config.options?.phone?.scrcpy?.appMode?.autoUnlock ?? true
         }
     }
@@ -750,8 +1003,10 @@ Singleton {
 
     function _forgetSession(sessionId): void {
         delete root._sessionArgs[sessionId]
+        delete root._sessionMeta[sessionId]
         delete root._intentionalStops[sessionId]
         delete root._resumeAttempts[sessionId]
+        root._recordNetworkSession(sessionId, false)
     }
 
     /** Queues `sessionId` for a relaunch if its exit looks like a dropped
@@ -860,6 +1115,9 @@ Singleton {
         // never let go of it, so it was never started again either.
         onExited: {
             root.sessions = []
+            root._wirelessSessionIds = ({})
+            root._sessionMeta = ({})
+            root._updateMirrorRadio()
             root.mirrorRunning = false
             root.mirrorLaunching = false
             root.embedRunning = false
@@ -941,7 +1199,22 @@ Singleton {
                     } else if (ev === "exited") {
                         const sid = msg.id
                         const asked = !!root._intentionalStops[sid]
+                        const meta = root._sessionMeta[sid]
+                        const codecPref = String(Config.options?.phone?.scrcpy?.wireless?.codec ?? "auto")
+                        if (!asked && msg.code !== 0 && msg.code !== 2 && meta && meta.overNetwork && meta.codec === "h265" && !meta.hevcFallbackTried && codecPref === "auto" && root._isEncoderError(msg.error || "")) {
+                            let curSessions = (root.sessions || []).filter(s => s.id !== sid)
+                            root.sessions = curSessions
+                            if (sid === "mirror") root.mirrorRunning = false
+                            else if (sid === root.embedSessionId) root.embedRunning = false
+                            else if (sid === root.recordSessionId) root.recordingRunning = false
+                            root._reprobeAndFallbackH264(sid, meta)
+                            return
+                        }
                         const resuming = root._maybeResume(sid, msg.code)
+                        if (!resuming) {
+                            delete root._sessionMeta[sid]
+                            root._recordNetworkSession(sid, false)
+                        }
                         // A drop that is about to be reopened is not worth a
                         // toast — the window comes back on its own — and
                         // neither is a stop the user asked for.
@@ -973,13 +1246,15 @@ Singleton {
                         root.sessions = curSessions
 
                     } else if (ev === "error") {
+                        const errSid = msg.id || "mirror"
+                        root._forgetSession(errSid)
                         if (msg.id === root.embedSessionId) {
                             root.embedLaunching = false
                             root.embedError = root.friendlyError(msg.message || "")
                             return
                         }
                         if (msg.id === root.recordSessionId) root.recordingLaunching = false
-                        root.reportFailure(msg.id || "mirror", msg.message || "")
+                        root.reportFailure(errSid, msg.message || "")
                     }
                 } catch (e) {
                     console.warn("[PhoneScrcpyService] JSON error:", e, "Data:", data)

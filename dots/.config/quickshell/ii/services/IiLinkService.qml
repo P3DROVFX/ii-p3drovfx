@@ -189,6 +189,21 @@ Singleton {
         .concat(PhoneScreenService.enabled ? ["screen"] : [])
         .concat(root.cameraEnabled ? ["camera"] : [])
         .concat(root.usageEnabled ? ["usage"] : [])
+        .concat(["mirrorRadio"])
+
+    /// True while at least one wireless scrcpy session is active on the shell.
+    property bool mirrorActive: false
+
+    function setMirrorActive(on: bool): void {
+        const next = !!on
+        if (root.mirrorActive === next) return
+        root.mirrorActive = next
+        for (const id of Object.keys(root.connections)) {
+            if ((root.phoneCaps[id] ?? []).includes("mirrorRadio")) {
+                root.sendTo(id, { t: "mirror", on: next })
+            }
+        }
+    }
 
     // What is on right now, read from the same state the shell itself draws from.
     readonly property bool _aodUp: (GlobalStates.oledSaverMonitors ?? []).length > 0
@@ -2760,6 +2775,10 @@ Singleton {
                 const shots = Object.assign({}, root._shotsReceivers);
                 shots[dev] = takes;
                 root._shotsReceivers = shots;
+            }
+            if (next[dev].includes("mirrorRadio")) {
+                if (root.mirrorActive)
+                    root.sendTo(dev, { t: "mirror", on: true });
             }
             return;
         }

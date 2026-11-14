@@ -2460,7 +2460,7 @@ Singleton {
     /** Frame rate, bit rate and size for a scrcpy session. Over the network
      *  `phone.scrcpy.wireless` caps them; it never loosens what the user set.
      *  `baseMaxSize` overrides `maxSize` (the sidebar sizes its own stream). */
-    function scrcpyStreamCaps(baseMaxSize, overNetwork) {
+    function scrcpyStreamCaps(baseMaxSize, overNetwork, weakLink) {
         const opts = Config.options?.phone?.scrcpy
         const caps = {
             "maxFps": opts?.maxFps ?? 0,
@@ -2470,12 +2470,20 @@ Singleton {
         const wl = opts?.wireless
         const network = overNetwork !== undefined ? overNetwork : root.adbOverNetwork
         if (!network || !(wl?.limit ?? true)) return caps
-        caps.maxFps = root._tighterCap(caps.maxFps, wl?.maxFps ?? 60)
-        caps.maxSize = root._tighterCap(caps.maxSize, wl?.maxSize ?? 1600)
-        const wlRate = String(wl?.bitRate ?? "4M").trim()
+
+        const effFps = weakLink ? 60 : (wl?.maxFps ?? 60)
+        const effSize = weakLink ? 1600 : (wl?.maxSize ?? 0)
+        const effRate = weakLink ? "4M" : String(wl?.bitRate ?? "14M").trim()
+
+        caps.maxFps = root._tighterCap(caps.maxFps, effFps)
+        caps.maxSize = root._tighterCap(caps.maxSize, effSize)
         const userBps = root._bitRateBps(caps.bitRate)
-        const wlBps = root._bitRateBps(wlRate)
-        if (wlBps > 0 && (userBps <= 0 || wlBps < userBps)) caps.bitRate = wlRate
+        const wlBps = root._bitRateBps(effRate)
+        const rawBitRate = String(opts?.bitRate ?? "").trim()
+        const userLoweredBase = rawBitRate !== "" && rawBitRate !== "8M"
+        if (wlBps > 0 && (userBps <= 0 || wlBps < userBps || (!weakLink && !userLoweredBase))) {
+            caps.bitRate = effRate
+        }
         return caps
     }
 

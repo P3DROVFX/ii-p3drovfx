@@ -370,6 +370,16 @@ The phone's camera as a PC webcam: a v4l2loopback device (`/dev/videoN`, every a
 
 The H.264 stream travels over a second WebSocket to `/iilink/1/camera` on the helper port (same pinned TLS certificate): the phone authenticates with `{"t":"hello","token":"<token>"}`, sends metadata `{"t":"meta","w":1440,"h":1080,"rot":0\|90\|180\|270,"fps":30,"mirror":bool}` (`mirror`: the phone's own switch; with ii tools the PC adds none, its sidebar switch sets the phone's), and streams binary frames `[u8 kind][u64 pts µs BE][Annex-B bytes]` (`kind` 0 = codec config, 1 = frame, 2 = key frame; helper requests key frames with `{"t":"key"}`), which the helper pipes into `ffmpeg` toward `/dev/videoN`.
 
+## Wireless mirroring radio keep-awake
+
+Needs `mirrorRadio` in both caps (always announced by the shell; enabled by default on the phone, controllable in Settings → Connection and PC link).
+
+| Direction | Message | |
+| --- | --- | --- |
+| shell → phone | `{"t":"mirror","on":bool}` | `true` when any wireless scrcpy session starts (mirror, embed, record, or app window), `false` when the last one ends. Resent if `on` when the link reconnects and `caps` arrive. |
+
+While `on` is `true`, the phone holds `WIFI_MODE_FULL_LOW_LATENCY` (plus a `WIFI_MODE_FULL_HIGH_PERF` fallback lock) and sends a tiny UDP keep-awake datagram (`iim\n`, 4 bytes) every 50 ms to the PC link host on its UDP discovery port (`helper.port`) until `on:false`, link loss, or a 3 h safety timeout. Because the datagram does not start with `iilink?`, the helper's discovery listener silently ignores it without logging or replying.
+
 ## Files
 
 A file is a header, then its bytes as binary frames (the app sends 256 KiB each):

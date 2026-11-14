@@ -1122,7 +1122,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 31
+    readonly property int currentConfigVersion: 32
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -1878,6 +1878,14 @@ Singleton {
             }
             console.log("[Config] Migrated desktop icon menu: zed -> editor");
         }
+        if (from < 32) {
+            const wl = raw.phone?.scrcpy?.wireless;
+            if (wl) {
+                if (wl.bitRate === "4M") wl.bitRate = "14M";
+                if (wl.maxSize === 1600) wl.maxSize = 0;
+                console.log("[Config] Migrated phone.scrcpy.wireless defaults (4M/1600 -> 14M/0)");
+            }
+        }
 
         raw.configVersion = root.currentConfigVersion;
         console.log(`[Config] Migrated config schema ${from} -> ${root.currentConfigVersion}`);
@@ -1994,6 +2002,7 @@ Singleton {
             "phone.webcam.resolution": ["640x480", "1280x720", "1920x1080"],
             "phone.webcam.rotateDegrees": [0, 90, 180, 270],
             "phone.webcam.connection": ["wifi", "usb"],
+            "phone.scrcpy.wireless.codec": ["auto", "h265", "h264"],
             "appearance.fakeScreenRounding": [0, 1, 2, 3, 4],
             "background.zoomOutStyle": [0, 1, 2],
             "background.overviewBackgroundStyle": ["", "gnome", "real-gnome", "soft-focus", "camera-push", "depth", "card-lift", "desaturate", "directional", "material-shape"],
@@ -2784,8 +2793,9 @@ Singleton {
                     property JsonObject wireless: JsonObject {
                         property bool limit: true
                         property int maxFps: 60
-                        property string bitRate: "4M"
-                        property int maxSize: 1600
+                        property string bitRate: "14M"
+                        property int maxSize: 0
+                        property string codec: "auto"
                     }
                     property string wirelessIp: ""
                     property string wirelessPort: "5555"

@@ -217,7 +217,7 @@ Item {
                 FieldRow {
                     symbol: "wifi_tethering"
                     title: Translation.tr("Wi-Fi bitrate")
-                    placeholder: Translation.tr("e.g. 4M")
+                    placeholder: Translation.tr("e.g. 14M")
                     visible: root.scrcpy.wireless.limit
                     value: root.scrcpy.wireless.bitRate
                     onEdited: text => root.scrcpy.wireless.bitRate = text
@@ -230,6 +230,18 @@ Item {
                     from: 0; to: 3840; stepSize: 160
                     format: v => v === 0 ? Translation.tr("Any") : String(v)
                     onMoved: v => root.scrcpy.wireless.maxSize = v
+                }
+                ChoiceRow {
+                    symbol: "movie"
+                    title: Translation.tr("Wi-Fi video codec")
+                    help: Translation.tr("H.265 needs roughly half the bit rate of H.264 for the same sharpness over Wi-Fi. Auto uses H.265 when the phone has an HEVC encoder and falls back to H.264 if not.")
+                    currentValue: root.scrcpy.wireless.codec
+                    onSelected: value => root.scrcpy.wireless.codec = value
+                    options: [
+                        { label: Translation.tr("Auto"), value: "auto" },
+                        { label: "H.265", value: "h265" },
+                        { label: "H.264", value: "h264" }
+                    ]
                 }
                 ToggleRow {
                     symbol: "restart_alt"
