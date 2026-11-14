@@ -461,16 +461,15 @@ PopupWindow {
         property real margins: 5
         property real padding: 6
 
-        onImplicitWidthChanged: {
-            dockRoot.popupIsResizing = true
-            resizeTimer.restart()
+        function holdOpenWhileResizing() {
+            if (previewPopup.active) {
+                dockRoot.popupIsResizing = true
+                resizeTimer.restart()
+            }
             previewPopup.requestCompactAnchor()
         }
-        onImplicitHeightChanged: {
-            dockRoot.popupIsResizing = true
-            resizeTimer.restart()
-            previewPopup.requestCompactAnchor()
-        }
+        onImplicitWidthChanged: holdOpenWhileResizing()
+        onImplicitHeightChanged: holdOpenWhileResizing()
 
         Timer {
             id: resizeTimer

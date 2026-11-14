@@ -218,6 +218,17 @@ Item {
                           tooltip: Translation.tr("Every window fully opaque, over any opacity rule. Nothing behind them is drawn or blurred") }
                     ]
                 }
+
+                ConfigSwitch {
+                    buttonIcon: "blur_on"
+                    text: Translation.tr("Blur behind app windows")
+                    enabled: (windowsRoot.appearance.blur.mode ?? "live") !== "off" && !(windowsRoot.appearance.blur.opaqueWindows ?? false)
+                    checked: windowsRoot.appearance.blur.appWindows ?? true
+                    onCheckedChanged: windowsRoot.appearance.blur.appWindows = checked
+                    StyledToolTip {
+                        text: Translation.tr("Translucent apps and the scratchpad backdrop blur what is behind them. Off keeps their transparency without the blur, which is redone every time something behind them moves")
+                    }
+                }
             }
 
             ConfigSlider {

@@ -37,8 +37,8 @@ WindowDialog {
     readonly property string code: {
         if (root.asking)
             return root.request?.type === "confirm" ? BluetoothAgent.formatPasskey(root.request?.passkey) : "";
-        if (root.passkeyDisplay?.type === "pincode")
-            return root.passkeyDisplay?.pin ?? "";
+        if (root.passkeyDisplay?.type === "pincode" || root.passkeyDisplay?.event === "display_pin")
+            return root.passkeyDisplay?.pin ?? root.passkeyDisplay?.pincode ?? "";
         return BluetoothAgent.formatPasskey(root.passkeyDisplay?.passkey);
     }
 

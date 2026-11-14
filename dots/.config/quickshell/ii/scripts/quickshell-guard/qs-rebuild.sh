@@ -79,6 +79,31 @@ if check; then
 fi
 say "$compat"
 
+# quickshell-ii-git (ii's patched build, scripts/quickshell-build) is rebuilt
+# by its own builder, on Arch and Fedora alike: no repository carries it.
+patched_owner() {
+    if have pacman; then
+        pacman -Qqo /usr/bin/quickshell 2>/dev/null
+    elif have rpm; then
+        rpm -qf --qf '%{NAME}\n' /usr/bin/quickshell 2>/dev/null
+    fi
+}
+builder="$dir/../quickshell-build/qs-build.sh"
+if [[ "$(patched_owner)" == quickshell-ii-git && -f "$builder" ]]; then
+    head_line "quickshell-ii-git is built on this computer"
+    say "It is rebuilt from source against your Qt, in a few minutes."
+    run bash "$builder" rebuild
+    if check; then
+        head_line "Quickshell matches the installed Qt again."
+        have hyprctl && hyprctl dismissnotify >/dev/null 2>&1
+        start_shell
+        finish 0
+    fi
+    head_line "Quickshell still does not match the installed Qt."
+    say "$compat"
+    finish 1
+fi
+
 if ! have pacman; then
     say ""
     say "Rebuild the quickshell package with your package manager, then run this again."

@@ -8,7 +8,7 @@ scripts cover the three moments that matters, without needing the shell:
 |---|---|---|
 | During the update | A pacman hook runs `quickshell --private-check-compat` after a Qt or Quickshell upgrade. On a mismatch it warns in pacman's output and on every running Hyprland session: rebuild before you log out or reboot. | `ii-quickshell-qt.hook`, `quickshell-qt-check.sh` |
 | At login and on Ctrl+Super+R | Hyprland starts the shell through the guard. A shell that crashes twice in its first 30 s, or whose config never answers over IPC, has not started: the guard says so, and when Qt is the reason it opens a terminal on the rebuild script. A later crash restarts it, at most 3 times in 10 minutes. | `qs-guard.sh` |
-| To fix it | Rebuilds the package after asking: `yay -S --rebuild` for an AUR build, a full update (then `quickshell-git`) for a repository package. Then starts the shell again. | `qs-rebuild.sh` |
+| To fix it | Rebuilds the package after asking: `../quickshell-build/qs-build.sh rebuild` for ii's patched `quickshell-ii-git` (Arch and Fedora), `yay -S --rebuild` for an AUR build, a full update (then `quickshell-git`) for a repository package. Then starts the shell again. | `qs-rebuild.sh` |
 
 Messages use `hyprctl notify`, which Hyprland draws itself.
 

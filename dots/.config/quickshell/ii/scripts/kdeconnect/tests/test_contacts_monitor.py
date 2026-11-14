@@ -30,6 +30,23 @@ class ContactBirthdayParsingTests(unittest.TestCase):
         self.assertEqual(self.parse("2001-11-03T00:00:00")["birthday"], {"year": 2001, "month": 11, "day": 3})
         self.assertIsNone(self.parse("not-a-date")["birthday"])
 
+    def test_prefers_populated_device_directory_over_empty_repaired_directory(self):
+        import os
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "kpeoplevcard"
+            populated = root / "kdeconnect-olddevice"
+            empty_new = root / "kdeconnect-newdevice"
+            populated.mkdir(parents=True)
+            empty_new.mkdir(parents=True)
+            (populated / "c1.vcf").write_text("BEGIN:VCARD\nFN:Alice\nEND:VCARD\n", encoding="utf-8")
+            with mock.patch.dict(os.environ, {"XDG_DATA_HOME": temporary}):
+                chosen = contacts_monitor.find_device_directory("newdevice")
+                self.assertEqual(chosen, populated)
+                (empty_new / "c2.vcf").write_text("BEGIN:VCARD\nFN:Bob\nEND:VCARD\n", encoding="utf-8")
+                chosen_after_sync = contacts_monitor.find_device_directory("newdevice")
+                self.assertEqual(chosen_after_sync, empty_new)
+
 
 if __name__ == "__main__":
     unittest.main()

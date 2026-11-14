@@ -292,6 +292,7 @@ Singleton {
                 { "id": "options", "symbol": "tune", "title": "Widget options", "submenu": true },
                 { "id": "duplicate", "symbol": "content_copy", "title": "Duplicate", "bar": true },
                 { "id": "lock", "symbol": "lock", "title": "On lock screen", "submenu": true },
+                { "id": "monitors", "symbol": "desktop_windows", "title": "Show on monitors" },
                 { "id": "separator", "separator": true },
                 { "id": "remove", "symbol": "delete", "title": "Remove from desktop", "bar": true }
             ]

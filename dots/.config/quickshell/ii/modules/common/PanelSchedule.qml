@@ -38,6 +38,20 @@ Singleton {
     /// Nothing queued and nothing held: every wanted panel exists.
     readonly property bool idle: !root.hold && root.waiting.length === 0
 
+    /// Latched once Config.ready and idle have both held for 1500 ms so
+    /// deferred startup work (e.g. multi-megabyte lyrics caches) waits until
+    /// startup panels have finished building and painting their first frames.
+    property bool bootSettled: false
+
+    Timer {
+        id: bootSettleTimer
+        interval: 1500
+        repeat: false
+        // Stops automatically if panels queue or hold engages before the window elapses.
+        running: !root.bootSettled && Config.ready && root.idle
+        onTriggered: root.bootSettled = true
+    }
+
     function request(loader) {
         if (root.waiting.indexOf(loader) !== -1)
             return;

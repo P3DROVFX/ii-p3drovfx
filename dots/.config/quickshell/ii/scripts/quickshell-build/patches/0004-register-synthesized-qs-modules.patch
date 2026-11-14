@@ -1,0 +1,66 @@
+diff --git a/src/core/generation.cpp b/src/core/generation.cpp
+index 7ec3004..b6fe262 100644
+--- a/src/core/generation.cpp
++++ b/src/core/generation.cpp
+@@ -29,8 +29,11 @@
+ #include "reload.hpp"
+ #include "scan.hpp"
+ #include "paths.hpp"
++#include <qbytearray.h>
+ #include <qfile.h>
++#include <qqml.h>
+ #include <qset.h>
++#include <qstringview.h>
+ #include <qtenvironmentvariables.h>
+ #include <qstringbuilder.h>
+ 
+@@ -108,6 +111,40 @@ QString buildFileVfs(const QDir& rootPath, const QmlScanner& scanner) {
+ 	return out;
+ }
+ 
++// Register synthesized qs* modules with Qt before loading the root component.
++// Without a registered QQmlTypeModule, Qt's finalizeLibraryImport runs
++// matchingQmldirVersion (an O(n^2) duplicate check over qmldir components on
++// every import). The synthesized qmldirs list types as version 1.0 and the
++// imports are unversioned, so registering 1.0 lets Qt skip that check.
++void registerSynthesizedModules(const QHash<QString, QString>& fileIntercepts) {
++	static QSet<QByteArray> registeredUris;
++	int registeredCount = 0;
++
++	for (auto it = fileIntercepts.cbegin(); it != fileIntercepts.cend(); ++it) {
++		if (!it.key().endsWith(QLatin1StringView("/qmldir"))) continue;
++
++		const auto& text = it.value();
++		if (!text.startsWith(QLatin1StringView("module "))) continue;
++
++		const auto lineEnd = text.indexOf('\n');
++		const auto firstLine = lineEnd == -1 ? QStringView(text) : QStringView(text).first(lineEnd);
++		const auto uriView = firstLine.sliced(7).trimmed();
++		if (uriView.isEmpty()) continue;
++
++		const auto uri = uriView.toUtf8();
++		if (registeredUris.contains(uri)) continue;
++
++		// Keep the QByteArray alive in registeredUris since qmlRegisterModule takes const char*.
++		const auto inserted = registeredUris.insert(uri);
++		qmlRegisterModule(inserted->constData(), 1, 0);
++		++registeredCount;
++	}
++
++	if (registeredCount > 0) {
++		qCInfo(logScene) << "Registered" << registeredCount << "synthesized QML modules";
++	}
++}
++
+ } // namespace
+ 
+ static QHash<const QQmlEngine*, EngineGeneration*> g_generations; // NOLINT
+@@ -132,6 +169,8 @@ EngineGeneration::EngineGeneration(const QDir& rootPath, QmlScanner scanner)
+ 	if (this->urlInterceptor.fileVfsRoot.isEmpty()) this->engine->addImportPath("qs:@/");
+ 	else this->engine->addImportPath(this->urlInterceptor.fileVfsRoot);
+ 
++	registerSynthesizedModules(this->scanner.fileIntercepts);
++
+ 	this->engine->setNetworkAccessManagerFactory(&this->interceptNetFactory);
+ 	this->incubationController.initLoop();
+ 	this->engine->setIncubationController(&this->incubationController);

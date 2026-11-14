@@ -33,6 +33,12 @@ def get_kpeoplevcard_root():
         root = Path.home() / ".local" / "share" / "kpeoplevcard"
     return root
 
+def has_vcf_files(dir_path):
+    try:
+        return any(p.is_file() for p in dir_path.glob("*.vcf"))
+    except Exception:
+        return False
+
 def find_device_directory(target_device_id=None):
     root = get_kpeoplevcard_root()
     if not root.exists() or not root.is_dir():
@@ -42,11 +48,23 @@ def find_device_directory(target_device_id=None):
     if not dirs:
         return None
 
+    matched_target_dir = None
     if target_device_id:
         target_name = f"kdeconnect-{target_device_id}"
         for d in dirs:
             if d.name == target_name or target_device_id in d.name:
-                return d
+                if has_vcf_files(d):
+                    return d
+                if matched_target_dir is None:
+                    matched_target_dir = d
+
+    populated_dirs = [d for d in dirs if has_vcf_files(d)]
+    if populated_dirs:
+        populated_dirs.sort(key=lambda d: d.stat().st_mtime, reverse=True)
+        return populated_dirs[0]
+
+    if matched_target_dir is not None:
+        return matched_target_dir
 
     # Pick the most recently modified directory if no exact match
     dirs.sort(key=lambda d: d.stat().st_mtime, reverse=True)

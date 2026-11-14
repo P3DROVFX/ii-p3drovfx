@@ -1,5 +1,6 @@
 pragma Singleton
 import Quickshell
+import qs.modules.common
 
 /**
  * Per-monitor placement of desktop widgets.
@@ -107,6 +108,73 @@ Singleton {
             "scale": rawScale,
             "forked": hasLocalFork
         };
+    }
+
+    // ── Which monitors build a widget ──────────────────────────────────────
+    // An entry may carry `monitors`: the screen names it is drawn on, or "*"
+    // for every screen. Without it the widget lives on the primary monitor
+    // only. Every screen used to build every widget, which on two monitors
+    // paid each widget twice in RAM; a widget is now built only where it is
+    // shown, so a second screen costs nothing until something is added there.
+    // An entry whose monitors are all disconnected falls back to the primary
+    // one rather than disappearing with the cable.
+
+    readonly property var connectedScreens: Quickshell.screens.map(s => s.name)
+
+    // targetMonitor when set and connected, else the first external screen
+    // (a laptop on a desk shows its widgets on the big one), else the first.
+    readonly property string primaryMonitor: {
+        const names = root.connectedScreens;
+        const target = Config.options?.background?.widgets?.targetMonitor ?? "";
+        if (target !== "" && names.includes(target))
+            return target;
+        const external = names.find(n => !/^(eDP|LVDS|DSI)/.test(n));
+        return external ?? names[0] ?? "";
+    }
+
+    function monitorsOf(entry) {
+        // Read back from Config's list<var>, the nested array is a QML sequence
+        // wrapper, not a JS Array: Array.isArray rejects it, so take any array-like.
+        const m = entry?.monitors;
+        if (!m || typeof m === "string" || typeof m.length !== "number")
+            return [];
+        return Array.from(m).filter(n => typeof n === "string" && n !== "");
+    }
+
+    function showsOn(entry, monitorName) {
+        if (!entry)
+            return false;
+        if (!monitorName)
+            return true;
+        const own = root.monitorsOf(entry);
+        if (own.includes("*") || own.includes(monitorName))
+            return true;
+        if (own.some(n => root.connectedScreens.includes(n)))
+            return false;
+        return monitorName === root.primaryMonitor;
+    }
+
+    function showsOnAll(entry) {
+        return root.monitorsOf(entry).includes("*");
+    }
+
+    // Writers mutate `entry` in place (callers pass a clone).
+    function setShownOn(entry, monitorName, shown) {
+        if (!entry || !monitorName)
+            return;
+        let own = root.monitorsOf(entry).filter(n => n !== "*");
+        if (own.length === 0 || root.showsOnAll(entry))
+            own = root.showsOnAll(entry) ? root.connectedScreens.slice() : [root.primaryMonitor];
+        own = own.filter(n => n !== monitorName);
+        if (shown)
+            own.push(monitorName);
+        entry.monitors = own;
+    }
+
+    function setShownOnAll(entry, all, monitorName) {
+        if (!entry)
+            return;
+        entry.monitors = all ? ["*"] : [monitorName || root.primaryMonitor];
     }
 
     function findEntry(list, instanceId) {

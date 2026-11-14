@@ -46,7 +46,11 @@ Singleton {
     Process {
         id: monitorProc
         running: Config.ready && !Config.options.bar.floatingNotch.disableProgress
-        command: ProcUtils.pdeath(["python3", Quickshell.shellPath("services/jobview_monitor.py")])
+        command: ProcUtils.pdeath(ProcUtils.nativeHelper(Quickshell.shellPath("services/jobview_monitor")))
+        onExited: (code, status) => {
+            if (Config.ready && !Config.options.bar.floatingNotch.disableProgress)
+                monitorRestartTimer.restart();
+        }
         
         stdout: SplitParser {
             onRead: line => {
@@ -58,6 +62,16 @@ Singleton {
                     console.warn("[ProgressService] Bad JSON:", e.message);
                 }
             }
+        }
+    }
+
+    Timer {
+        id: monitorRestartTimer
+        interval: 3000
+        repeat: false
+        onTriggered: {
+            if (Config.ready && !Config.options.bar.floatingNotch.disableProgress && !monitorProc.running)
+                monitorProc.running = true;
         }
     }
 

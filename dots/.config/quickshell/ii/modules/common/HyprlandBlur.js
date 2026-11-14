@@ -36,6 +36,10 @@ function configValues(size, options) {
     // X-ray requires the optimized blur path. Preserve the preference while the
     // optimization is off, and restore it when that path is enabled again.
     values.xray = values.new_optimizations && values.xray;
+    // App window blur off takes the blurred backdrop behind the scratchpad with it:
+    // a full-screen blur under app windows, redone whenever anything behind moves.
+    if (blur.appWindows === false)
+        values.special = false;
     // "xray": everything blurs the cached, already blurred wallpaper instead of
     // re-blurring whatever moves behind it - far cheaper during animations.
     if (blur.mode === "xray") {

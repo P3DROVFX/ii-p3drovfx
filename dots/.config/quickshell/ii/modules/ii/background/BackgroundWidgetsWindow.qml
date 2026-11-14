@@ -299,14 +299,16 @@ PanelWindow {
         if (!hasWidgets)
             return false;
         void widgetStateManager.syncVersion; // re-evaluate when the model's roles are rewritten
+        // Only this screen's widgets count: a screen nothing is assigned to
+        // unmaps its surface (swapchain + render thread) entirely.
+        const list = Config.options.background.activeWidgets || [];
+        const screenName = bgWidgetsWindow.editScreenName;
+        const here = list.filter(entry => CF.WidgetPlacement.showsOn(entry, screenName));
+        if (here.length === 0)
+            return false;
         if (GlobalStates.screenLocked || lockAnim.lockAnimationActive)
             return true;
-        const model = widgetStateManager.model;
-        for (let i = 0; i < model.count; i++) {
-            if (model.get(i).lockBehavior !== "lockOnly")
-                return true;
-        }
-        return false;
+        return here.some(entry => (entry.lockBehavior || "hide") !== "lockOnly");
     }
     property bool widgetsNeedSurface: false
     Timer {

@@ -24,6 +24,8 @@
 #   restart                 Restart Quickshell (alias: run)
 #   doctor                  Report resolved paths, active state and tooling
 #   deps [add|remove|list]  Show, install or remove optional feature packages
+#   quickshell [action]     Install only the patched, fast-starting Quickshell
+#                           (install, the default | rebuild | restore | status)
 #   hyprset <args>          Write a Hyprland key or animation
 #   hyprmerge <args>        Merge a Hyprland config into the local one
 #   remove-cli              Remove the ii-p3drovfx symlink
@@ -48,7 +50,7 @@
 #       --no-restart          Leave Quickshell alone when finished
 #       --hypr                Install the fork's ~/.config/hypr files (recommended)
 #       --no-hypr             Never install them, never ask
-#       --rebuild-quickshell  Rebuild Quickshell from source first
+#       --rebuild-quickshell  Rebuild the patched Quickshell first
 #       --skip-base-check     Do not require illogical-impulse to be present
 #       --ii-subdir <name>    Override ii* auto-detection in the clone
 #       --add <ids>           deps: install these features ("core": the required set)
@@ -73,9 +75,13 @@
 # feature, are only ever installed through `deps`; `deps --remove` uninstalls
 # only what `deps` itself installed, recorded in ~/.local/state/ii-p3drovfx.
 #
-# On Arch, `install` ends by putting the AUR quickshell-git back: the base
-# installer builds its own pinned quickshell and this fork is written against
-# master. That happens before any config lands, and asks first unless -y.
+# `install` ends by replacing the base's Quickshell with quickshell-ii-git:
+# upstream Quickshell at a pinned commit with the config's two startup patches
+# (scripts/quickshell-build), built as a native package on Arch and Fedora. The
+# stock build takes ~5 s to show the bar; the patched one under 2 s. Where it
+# cannot be built, Arch falls back to the AUR's quickshell-git (the base pins an
+# older one) and other distributions keep the base's. That happens before any
+# config lands, and asks first unless -y. `quickshell` does only this step.
 #
 # Given neither --keep-config nor --reset-config, config.json is kept on
 # updates and branch hops and reset on fork switches, where the schema changes.
@@ -235,6 +241,7 @@ PASSTHRU_ARGS=()
 DEPS_ACTION=""       # deps: "" (table, then pick) | list | add | remove
 DEPS_IDS=""          # deps: comma-separated feature ids
 DEPS_PRECONFIRMED=false
+QS_ACTION=""         # quickshell: install | rebuild | restore | status
 
 # ── Run state (used by the exit trap) ────────────────────────────────────────
 STAGE_DIR=""
@@ -2090,6 +2097,99 @@ ensure_quickshell_git() {
     ui_ok "Quickshell" "$(pacman -Qq quickshell-git 2>/dev/null || printf 'quickshell-git')"
 }
 
+# ── Patched Quickshell (quickshell-ii-git) ───────────────────────────────────
+#
+# The stock Quickshell spends ~5-7 s scanning this config before any QML runs
+# and recompiles every QML file on every start. The config ships two patches
+# and a builder (scripts/quickshell-build/qs-build.sh) that turn upstream
+# Quickshell at a pinned commit into a native package, quickshell-ii-git, which
+# replaces quickshell / quickshell-git on Arch (and derivatives) and Fedora.
+
+# The builder from the checkout this script runs from, else from the deployed
+# config (the CLI link runs the mirrored copy of this script, without dots/).
+qs_builder() {
+    local c
+    for c in "$SCRIPT_DIR"/dots/.config/quickshell/ii*/scripts/quickshell-build/qs-build.sh \
+        "${LOCAL_SRC:-/nonexistent}"/scripts/quickshell-build/qs-build.sh \
+        "${LOCAL_SRC:-/nonexistent}"/dots/.config/quickshell/ii*/scripts/quickshell-build/qs-build.sh \
+        "$TARGET_DIR/scripts/quickshell-build/qs-build.sh"; do
+        [[ -f "$c" ]] && {
+            printf '%s' "$c"
+            return 0
+        }
+    done
+    return 1
+}
+
+# run_qs_builder <install|rebuild|restore|status> — 0 done, 1 failed or
+# declined, 3 distribution not supported (or no builder in this version).
+run_qs_builder() {
+    local builder action="$1"
+    builder="$(qs_builder)" || {
+        ui_warn "This version of the config ships no Quickshell builder."
+        return 3
+    }
+    local -a args=("$action")
+    [[ "$OPT_ASSUME_YES" == true ]] && args+=(--yes)
+    [[ "$OPT_FORCE" == true && "$action" == install ]] && args+=(--force)
+    ui_info "Running $(tilde "$builder") ${args[*]} — its own output follows."
+    local rc=0
+    bash "$builder" "${args[@]}" || rc=$?
+    printf '\n'
+    return "$rc"
+}
+
+# ensure_quickshell — after a base install, put the patched Quickshell in place
+# of whatever the base installer left. Where it cannot be built (an unsupported
+# distribution, a failed build, or declined), Arch falls back to the AUR's
+# quickshell-git as before; other distributions keep what the base installed.
+ensure_quickshell() {
+    local rc=0
+    run_qs_builder install || rc=$?
+    case "$rc" in
+        0)
+            ui_ok "Quickshell" "quickshell-ii-git (patched for a fast start)"
+            return 0
+            ;;
+        3) ui_note "No patched Quickshell for this distribution; using the packaged one." ;;
+        *) ui_warn "The patched Quickshell was not installed; falling back to the packaged one." ;;
+    esac
+    ensure_quickshell_git
+}
+
+# The `quickshell` command: install only the patched Quickshell (or put the
+# distribution's back), without touching the config.
+cmd_quickshell() {
+    local action="${QS_ACTION:-install}"
+    ui_banner "ii-p3drovfx" "quickshell" "$action"
+    case "$action" in
+        install | rebuild)
+            ui_note "Builds Quickshell with this fork's startup patches as the native"
+            ui_note "package quickshell-ii-git, replacing quickshell / quickshell-git."
+            ui_note "Takes a few minutes. '$CLI_NAME quickshell restore' undoes it."
+            printf '\n'
+            ;;
+    esac
+    local rc=0
+    run_qs_builder "$action" || rc=$?
+    if ((rc == 3)); then
+        ui_fail "Unsupported" "patched Quickshell packages are built for Arch and Fedora"
+        exit 1
+    fi
+    ((rc == 0)) || exit 1
+    case "$action" in
+        install | rebuild | restore)
+            if [[ -n "$(quickshell_pids)" ]]; then
+                if ui_confirm "Restart Quickshell now so it runs the new build?" yes; then
+                    restart_quickshell
+                else
+                    ui_note "It runs on the next restart or login."
+                fi
+            fi
+            ;;
+    esac
+}
+
 qt_mismatch() {
     have quickshell || return 1
     local msg
@@ -2098,6 +2198,15 @@ qt_mismatch() {
     ui_warn "Quickshell reports a Qt ABI/symbol mismatch:"
     ui_note "$msg"
     return 0
+}
+
+# rebuild_quickshell — the patched package where it can be built, else the
+# generic cmake build into ~/.local below.
+rebuild_quickshell() {
+    local rc=0
+    run_qs_builder rebuild || rc=$?
+    ((rc == 3)) || return "$rc"
+    build_quickshell
 }
 
 build_quickshell() {
@@ -2929,7 +3038,7 @@ cmd_install() {
 
     # Before any config files land, so the shell the user ends up looking at
     # is running the Quickshell this fork was written against.
-    ensure_quickshell_git
+    ensure_quickshell
 
     OPT_SKIP_BASE_CHECK=true
     apply_config "$url" "$branch" "$fork" "install"
@@ -3422,6 +3531,7 @@ show_help() {
     printf '  %s%-16s%s %s\n' "$C_OK" "restart" "$C_RST" "Restart Quickshell (alias: run)"
     printf '  %s%-16s%s %s\n' "$C_OK" "doctor" "$C_RST" "Report resolved paths, state and tooling"
     printf '  %s%-16s%s %s\n' "$C_OK" "deps" "$C_RST" "Show and install optional feature packages"
+    printf '  %s%-16s%s %s\n' "$C_OK" "quickshell [x]" "$C_RST" "Install only the fast patched Quickshell (install|rebuild|restore|status)"
     printf '  %s%-16s%s %s\n' "$C_OK" "hyprset" "$C_RST" "Write a Hyprland key/animation"
     printf '  %s%-16s%s %s\n' "$C_OK" "hyprmerge" "$C_RST" "Merge a Hyprland config into the local one"
     printf '  %s%-16s%s Remove the %s symlink\n' "$C_OK" "remove-cli" "$C_RST" "$CLI_NAME"
@@ -3444,7 +3554,7 @@ show_help() {
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --no-restart" "$C_RST" "Leave Quickshell alone when finished"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --hypr" "$C_RST" "Install the fork's ~/.config/hypr files (recommended)"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --no-hypr" "$C_RST" "Never install them, never ask"
-    printf '  %s%-24s%s %s\n' "$C_STEP" "    --rebuild-quickshell" "$C_RST" "Rebuild Quickshell from source first"
+    printf '  %s%-24s%s %s\n' "$C_STEP" "    --rebuild-quickshell" "$C_RST" "Rebuild the patched Quickshell first"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --skip-base-check" "$C_RST" "Do not require illogical-impulse to be present"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --ii-subdir <name>" "$C_RST" "Override ii* auto-detection in the clone"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --log-file <path>" "$C_RST" "Write the run log elsewhere"
@@ -3685,7 +3795,7 @@ parse_args() {
         local first="${positional[0]}"
         case "$first" in
             apply | install | update | switch | fork | branch | list-forks | list-branches | \
-                restart | run | doctor | deps | remove-cli | hyprset | hyprmerge | help | version | demo)
+                restart | run | doctor | deps | quickshell | remove-cli | hyprset | hyprmerge | help | version | demo)
                 COMMAND="$first"
                 positional=("${positional[@]:1}")
                 ;;
@@ -3710,6 +3820,15 @@ parse_args() {
             ;;
         hyprset | hyprmerge)
             PASSTHRU_ARGS=("${positional[@]}" "${PASSTHRU_ARGS[@]+"${PASSTHRU_ARGS[@]}"}")
+            ;;
+        quickshell)
+            if ((${#positional[@]} > 0)); then
+                case "${positional[0]}" in
+                    install | rebuild | restore | status) QS_ACTION="${positional[0]}" ;;
+                    *) arg_error "quickshell takes install, rebuild, restore or status, not \"${positional[0]}\"" ;;
+                esac
+                ((${#positional[@]} == 1)) || arg_error "Unexpected argument \"${positional[1]}\""
+            fi
             ;;
         deps)
             # `deps add phone calendar` reads as well as `deps --add phone,calendar`.
@@ -3810,14 +3929,15 @@ main() {
             ;;
         doctor) cmd_doctor ;;
         deps) cmd_deps ;;
+        quickshell) cmd_quickshell ;;
         list-forks) cmd_list_forks ;;
         list-branches) cmd_list_branches ;;
         apply | install | update | switch)
             if [[ "$OPT_REBUILD_QS" == true ]]; then
-                build_quickshell || exit 1
+                rebuild_quickshell || exit 1
             elif [[ "$COMMAND" != "install" ]] && qt_mismatch; then
                 if ui_confirm "Rebuild Quickshell from source to match your Qt?"; then
-                    build_quickshell || exit 1
+                    rebuild_quickshell || exit 1
                 else
                     ui_note "Skipped. Crashes may persist until the ABI matches."
                 fi

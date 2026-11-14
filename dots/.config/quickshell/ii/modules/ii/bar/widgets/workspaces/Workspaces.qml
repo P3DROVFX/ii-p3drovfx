@@ -651,21 +651,6 @@ Item {
             height: 4
             radius: 2
             color: widgetPalette.colOnAccent
-
-            SequentialAnimation on opacity {
-                loops: Animation.Infinite
-                running: root.scratchpadOpen
-                NumberAnimation {
-                    to: 0.3
-                    duration: 1500
-                    easing.type: Easing.InOutQuad
-                }
-                NumberAnimation {
-                    to: 1.0
-                    duration: 1500
-                    easing.type: Easing.InOutQuad
-                }
-            }
         }
     }
 

@@ -1,0 +1,176 @@
+diff --git a/src/core/generation.cpp b/src/core/generation.cpp
+index 9f2c860..de5ac60 100644
+--- a/src/core/generation.cpp
++++ b/src/core/generation.cpp
+@@ -27,11 +27,88 @@
+ #include "qsintercept.hpp"
+ #include "reload.hpp"
+ #include "scan.hpp"
++#include "paths.hpp"
++#include <qfile.h>
++#include <qset.h>
++#include <qtenvironmentvariables.h>
++#include <qstringbuilder.h>
+ 
+ namespace {
+ QS_LOGGING_CATEGORY(logScene, "scene");
+ }
+ 
++
++namespace {
++
++void mirrorConfigDir(
++    const QString& src,
++    const QString& dst,
++    const QString& rel,
++    const QSet<QString>& qmlDirs,
++    const QHash<QString, QString>& intercepts
++) {
++	QDir().mkpath(dst);
++	constexpr auto filter = QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System;
++
++	for (const auto& e: QDir(dst).entryInfoList(filter)) {
++		if (e.isSymLink() || !e.isDir()) QFile::remove(e.filePath());
++		else if (!qmlDirs.contains(rel.isEmpty() ? e.fileName() : rel % '/' % e.fileName())) {
++			QDir(e.filePath()).removeRecursively();
++		}
++	}
++
++	for (const auto& e: QDir(src).entryInfoList(filter)) {
++		const auto name = e.fileName();
++		const auto childRel = rel.isEmpty() ? name : rel % '/' % name;
++		const auto s = src % '/' % name;
++		const auto t = dst % '/' % name;
++
++		if (e.isDir() && qmlDirs.contains(childRel)) {
++			mirrorConfigDir(s, t, childRel, qmlDirs, intercepts);
++		} else if (auto it = intercepts.constFind(s); it != intercepts.cend()) {
++			QFile f(t);
++			if (f.open(QFile::WriteOnly)) f.write(it->toUtf8());
++		} else {
++			QFile::link(s, t);
++		}
++	}
++
++	const auto qmldir = src % "/qmldir";
++	if (auto it = intercepts.constFind(qmldir); it != intercepts.cend() && !QFileInfo::exists(qmldir)) {
++		QFile f(dst % "/qmldir");
++		if (f.open(QFile::WriteOnly)) f.write(it->toUtf8());
++	}
++}
++
++QString buildFileVfs(const QDir& rootPath, const QmlScanner& scanner) {
++	auto* vfs = QsPaths::instance()->shellVfsDir();
++	if (!vfs) return QString();
++
++	const auto root = rootPath.path();
++	QSet<QString> qmlDirs;
++	auto addDirOf = [&](const QString& path) {
++		if (!path.startsWith(root % '/')) return;
++		auto rel = path.sliced(root.length() + 1);
++		while (true) {
++			auto i = rel.lastIndexOf('/');
++			if (i == -1) break;
++			rel = rel.first(i);
++			if (qmlDirs.contains(rel)) break;
++			qmlDirs.insert(rel);
++		}
++	};
++	for (const auto& f: scanner.scannedFiles) addDirOf(f);
++	for (auto it = scanner.fileIntercepts.cbegin(); it != scanner.fileIntercepts.cend(); ++it) {
++		addDirOf(it.key());
++	}
++
++	const auto out = vfs->filePath("filevfs");
++	mirrorConfigDir(root, out % "/qs", QString(), qmlDirs, scanner.fileIntercepts);
++	return out;
++}
++
++} // namespace
++
+ static QHash<const QQmlEngine*, EngineGeneration*> g_generations; // NOLINT
+ 
+ EngineGeneration::EngineGeneration(const QDir& rootPath, QmlScanner scanner)
+@@ -46,7 +123,13 @@ EngineGeneration::EngineGeneration(const QDir& rootPath, QmlScanner scanner)
+ 	QObject::connect(this->engine, &QQmlEngine::warnings, this, &EngineGeneration::onEngineWarnings);
+ 
+ 	this->engine->addUrlInterceptor(&this->urlInterceptor);
+-	this->engine->addImportPath("qs:@/");
++
++	if (!qEnvironmentVariableIsSet("QS_NO_FILE_VFS") && !this->scanner.scannedFiles.isEmpty()) {
++		this->urlInterceptor.fileVfsRoot = buildFileVfs(this->rootPath, this->scanner);
++	}
++
++	if (this->urlInterceptor.fileVfsRoot.isEmpty()) this->engine->addImportPath("qs:@/");
++	else this->engine->addImportPath(this->urlInterceptor.fileVfsRoot);
+ 
+ 	this->engine->setNetworkAccessManagerFactory(&this->interceptNetFactory);
+ 	this->incubationController.initLoop();
+diff --git a/src/core/qsintercept.cpp b/src/core/qsintercept.cpp
+index 6687681..5ac288a 100644
+--- a/src/core/qsintercept.cpp
++++ b/src/core/qsintercept.cpp
+@@ -35,6 +35,22 @@ QUrl QsUrlInterceptor::intercept(
+ 		qCDebug(logQsIntercept) << "Rewrote root intercept" << originalUrl << "to" << url;
+ 	}
+ 
++	// Files under the config root loaded by plain path (Quickshell.shellPath) must come from
++	// the same mirror, or their directory's synthesized qmldir (and singletons) is missing.
++	if (!this->fileVfsRoot.isEmpty() && url.isLocalFile()
++	    && type != QQmlAbstractUrlInterceptor::DataType::UrlString)
++	{
++		auto path = url.toLocalFile();
++		for (const auto& root: {this->configRoot.path(), this->configRoot.canonicalPath()}) {
++			if (!root.isEmpty() && path.startsWith(root % '/')) {
++				auto fileUrl =
++				    QUrl::fromLocalFile(this->fileVfsRoot % "/qs/" % path.sliced(root.length() + 1));
++				qCDebug(logQsIntercept) << "Rewrote local vfs intercept" << url << "to" << fileUrl;
++				return fileUrl;
++			}
++		}
++	}
++
+ 	if (url.scheme() == "qs") {
+ 		auto path = url.path();
+ 
+@@ -42,6 +58,11 @@ QUrl QsUrlInterceptor::intercept(
+ 		// We want to blackhole any import resolution outside of the config folder as it breaks Qt
+ 		// but NOT file lookups that might be on "qs:/" due to a missing "file:/" prefix.
+ 		if (path.startsWith("@/qs/")) {
++			if (!this->fileVfsRoot.isEmpty()) {
++				auto fileUrl = QUrl::fromLocalFile(this->fileVfsRoot % "/qs/" % path.sliced(5));
++				qCDebug(logQsIntercept) << "Rewrote vfs intercept" << url << "to" << fileUrl;
++				return fileUrl;
++			}
+ 			path = this->configRoot.filePath(path.sliced(5));
+ 		} else if (!path.startsWith("/")) {
+ 			qCDebug(logQsIntercept) << "Blackholed import URL" << url;
+diff --git a/src/core/qsintercept.hpp b/src/core/qsintercept.hpp
+index c3d8b55..b677501 100644
+--- a/src/core/qsintercept.hpp
++++ b/src/core/qsintercept.hpp
+@@ -20,6 +20,10 @@ public:
+ 
+ 	QUrl intercept(const QUrl& originalUrl, QQmlAbstractUrlInterceptor::DataType type) override;
+ 
++	// When set, QML/JS/qmldir loads are served as file:// URLs from this mirror of the
++	// config (the directory holding "qs"), so Qt's QML disk cache can be used.
++	QString fileVfsRoot;
++
+ private:
+ 	QDir configRoot;
+ };
+diff --git a/src/core/rootwrapper.cpp b/src/core/rootwrapper.cpp
+index 1e75819..256e3c9 100644
+--- a/src/core/rootwrapper.cpp
++++ b/src/core/rootwrapper.cpp
+@@ -101,6 +101,9 @@ void RootWrapper::reloadGraph(bool hard) {
+ 	QUrl url;
+ 	url.setScheme("qs");
+ 	url.setPath("@/qs/" % rootFile.fileName());
++	if (!generation->urlInterceptor.fileVfsRoot.isEmpty()) {
++		url = QUrl::fromLocalFile(generation->urlInterceptor.fileVfsRoot % "/qs/" % rootFile.fileName());
++	}
+ 	auto component = QQmlComponent(generation->engine, url);
+ 
+ 	if (!component.isReady()) {

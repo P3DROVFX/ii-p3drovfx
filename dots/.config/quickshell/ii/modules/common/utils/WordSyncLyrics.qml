@@ -273,15 +273,18 @@ Item {
     }
 
     function saveCache() {
+        if (!root._cacheLoaded || !PanelSchedule.bootSettled)
+            return;
         cacheFile.setText(JSON.stringify(root._cache));
     }
 
     FileView {
         id: cacheFile
-        path: `${Directories.lyricsCacheDir}/${root.source}.json`
+        // Defer opening/parsing the cache file until startup panels settle.
+        path: PanelSchedule.bootSettled ? `${Directories.lyricsCacheDir}/${root.source}.json` : ""
         printErrors: false // missing until the first word-synced hit
         onLoaded: {
-            if (root._cacheLoaded)
+            if (!PanelSchedule.bootSettled || root._cacheLoaded)
                 return;
             try {
                 root._cache = JSON.parse(cacheFile.text() || "{}");
@@ -293,6 +296,8 @@ Item {
                 root.ensureFetched();
         }
         onLoadFailed: {
+            if (!PanelSchedule.bootSettled)
+                return;
             root._cacheLoaded = true;
             if (root.enabled)
                 root.ensureFetched();

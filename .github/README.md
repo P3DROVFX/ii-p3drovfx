@@ -56,7 +56,7 @@ A heavily customized fork of **[ii-vynx](https://github.com/vaguesyntax/ii-vynx)
 
 - **Hyprland 0.56.1 or newer**
 - **Matugen 4.1.0 or newer**
-- **quickshell-git 0.3.0 or newer**
+- **quickshell-git 0.3.0 or newer** — the installer replaces it with a patched build ([Patched Quickshell](#patched-quickshell))
 
 ## Installation
 
@@ -135,7 +135,13 @@ For example, this can happen after updates such as:
 Qt 6.11.1 -> Qt 6.11.2
 ```
 
-Rebuild `quickshell-git` against the newly installed Qt libraries:
+Rebuild it against the newly installed Qt libraries. With the patched package (the default):
+
+```bash
+./setup-ii-p3drovfx.sh quickshell rebuild
+```
+
+With the AUR package:
 
 ```bash
 yay -S --rebuild aur/quickshell-git
@@ -223,6 +229,19 @@ The left sidebar holds an **AI chat** for cloud and local models, a **Translator
 - **[hyprland-scroll-overview](https://github.com/yayuuu/hyprland-scroll-overview):** zscroll overview plugin by [yayuuu](https://github.com/yayuuu).
 - **[Quickshell](https://quickshell.org/):** Widget system.
 - **[Hyprland](https://hypr.land/):** Compositor.
+
+## Patched Quickshell
+
+The installer builds **`quickshell-ii-git`**: upstream Quickshell with two startup patches
+(a faster QML scanner and Qt's QML disk cache). The bar shows in under 2 seconds instead of
+about 5. It is a native package on Arch and Fedora; elsewhere the stock `quickshell-git` is kept.
+
+```bash
+./setup-ii-p3drovfx.sh quickshell           # install only the patched Quickshell
+./setup-ii-p3drovfx.sh quickshell restore   # back to quickshell-git
+```
+
+Details: [`scripts/quickshell-build`](../dots/.config/quickshell/ii/scripts/quickshell-build/README.md).
 
 <br>
 

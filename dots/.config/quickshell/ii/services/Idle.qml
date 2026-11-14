@@ -245,43 +245,62 @@ Singleton {
     // anyway, until some unrelated window happened to map. Holding the inhibitor back and then
     // re-asserting it makes that check run again once the surface is really there.
     property bool _surfaceReady: false
-    property int _reassertsLeft: 4
+    property int _reassertsLeft: 0
+    property int _reassertGen: 0
+
+    onInhibitChanged: {
+        root._reassertGen++
+        root._surfaceReady = false
+        // Each false -> true transition creates a fresh lazy PanelWindow, so the
+        // buffer-commit re-assertion pass must run every time inhibition turns on.
+        root._reassertsLeft = root.inhibit ? 4 : 0
+    }
 
     Timer {
         id: reassertTimer
         interval: 2000
         repeat: true
-        running: root._reassertsLeft > 0
+        running: root.inhibit && root._reassertsLeft > 0
         onTriggered: {
+            if (!root.inhibit) return;
             root._reassertsLeft--
+            const gen = root._reassertGen
             // Recreating the object is what makes Hyprland look again; Wayland keeps request
             // order, so it processes the destroy and then the create.
             root._surfaceReady = false
-            Qt.callLater(() => root._surfaceReady = true)
+            Qt.callLater(() => {
+                if (root.inhibit && root._reassertGen === gen)
+                    root._surfaceReady = true
+            })
         }
     }
 
-    IdleInhibitor {
-        id: idleInhibitor
-        enabled: root.inhibit && root._surfaceReady
-        window: PanelWindow {
-            implicitWidth: 0
-            implicitHeight: 0
-            color: "transparent"
-            // Hyprland only counts a layer surface's inhibitor while its alpha is non-zero, and
-            // re-evaluates that only on window map/unmap and fullscreen changes. A fullscreen
-            // window fades the Top layer to 0, so leaving fullscreen re-checked a still-faded
-            // surface and dropped Keep awake until the next window event. Overlay isn't faded.
-            WlrLayershell.layer: WlrLayer.Overlay
-            WlrLayershell.namespace: "quickshell:idleInhibitor"
-            // Just in case...
-            anchors {
-                right: true
-                bottom: true
-            }
-            // Make it not interactable
-            mask: Region {
-                item: null
+    LazyLoader {
+        id: inhibitorLoader
+        active: root.inhibit
+
+        component: IdleInhibitor {
+            id: idleInhibitor
+            enabled: root.inhibit && root._surfaceReady
+            window: PanelWindow {
+                implicitWidth: 0
+                implicitHeight: 0
+                color: "transparent"
+                // Hyprland only counts a layer surface's inhibitor while its alpha is non-zero, and
+                // re-evaluates that only on window map/unmap and fullscreen changes. A fullscreen
+                // window fades the Top layer to 0, so leaving fullscreen re-checked a still-faded
+                // surface and dropped Keep awake until the next window event. Overlay isn't faded.
+                WlrLayershell.layer: WlrLayer.Overlay
+                WlrLayershell.namespace: "quickshell:idleInhibitor"
+                // Just in case...
+                anchors {
+                    right: true
+                    bottom: true
+                }
+                // Make it not interactable
+                mask: Region {
+                    item: null
+                }
             }
         }
     }

@@ -1,0 +1,132 @@
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 39985fd..a39a118 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -1,4 +1,5 @@
+ qt_add_executable(quickshell main.cpp)
++target_link_options(quickshell PRIVATE "LINKER:--export-dynamic-symbol=_ZNK11QQmlImports27resolvedCompositeSingletonsEv")
+ 
+ install(TARGETS quickshell RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+ 
+diff --git a/src/core/generation.cpp b/src/core/generation.cpp
+index b6fe262..1569011 100644
+--- a/src/core/generation.cpp
++++ b/src/core/generation.cpp
+@@ -1,6 +1,9 @@
+ #include "generation.hpp"
++#include <atomic>
+ #include <utility>
+ 
++#include <dlfcn.h>
++#include <private/qqmlimport_p.h>
+ #include <qcontainerfwd.h>
+ #include <qcoreapplication.h>
+ #include <qdebug.h>
+@@ -145,8 +148,107 @@ void registerSynthesizedModules(const QHash<QString, QString>& fileIntercepts) {
+ 	}
+ }
+ 
++QSet<QString> upperIdentifiersOf(const QByteArray& src) {
++	QSet<QString> ids;
++	const char* p = src.constData();
++	const char* end = p + src.size();
++	while (p < end) {
++		const unsigned char c = *p;
++		if (c == '_' || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
++			const char* s = p;
++			while (p < end) {
++				const unsigned char d = *p;
++				if (d == '_' || (d >= 'A' && d <= 'Z') || (d >= 'a' && d <= 'z') || (d >= '0' && d <= '9')) {
++					++p;
++				} else {
++					break;
++				}
++			}
++			// Singleton type names start upper-case; keep the set small.
++			if (*s >= 'A' && *s <= 'Z') {
++				ids.insert(QString::fromLatin1(s, p - s));
++			}
++		} else {
++			++p;
++		}
++	}
++	return ids;
++}
++
+ } // namespace
+ 
++// Interpose QQmlImports::resolvedCompositeSingletons() so each QML document
++// only receives the composite singletons it actually names.
++//
++// Why: Qt's QQmlTypeData::resolveTypes() iterates over
++// QQmlImports::resolvedCompositeSingletons() and, for every composite singleton
++// of every imported module, resolves it, adding a dependency and a
++// type-name-cache entry to the document. With ~200 singletons across ~2000
++// documents that fans out to ~400k entries (~42 MB RAM) and forces every
++// singleton to load at boot. libQt6Qml calls this symbol through the PLT, so
++// defining it here (always linked into the quickshell executable) and exporting
++// it with --export-dynamic-symbol lets us interpose it and delegate via dlsym.
++//
++// Filtering & fail-open: Scans the document source for ASCII identifiers
++// [A-Za-z_][A-Za-z0-9_]* starting with an upper-case letter (including comments
++// and string literals; over-keeping is safe) and drops entries whose typeName is
++// absent. Fails open (returns the unfiltered list) when QS_NO_SINGLETON_FILTER
++// is set, the list is empty, baseUrl() is not a local file, or the file cannot
++// be read.
++//
++// Known limit: A singleton used only from a non-library .js file imported by
++// the document, or only through a string built at runtime, would be dropped
++// (none exist in this config).
++QList<QQmlImports::CompositeSingletonReference> QQmlImports::resolvedCompositeSingletons() const {
++	using OrigFn = QList<CompositeSingletonReference> (*)(const QQmlImports*);
++	static const auto orig = []() {
++		auto* fn = reinterpret_cast<OrigFn>(
++		    dlsym(RTLD_NEXT, "_ZNK11QQmlImports27resolvedCompositeSingletonsEv")
++		);
++		if (!fn) {
++			qFatal(
++			    "QQmlImports::resolvedCompositeSingletons: dlsym(RTLD_NEXT, "
++			    "\"_ZNK11QQmlImports27resolvedCompositeSingletonsEv\") returned null"
++			);
++		}
++		return fn;
++	}();
++
++	static const bool disabled = qEnvironmentVariableIsSet("QS_NO_SINGLETON_FILTER");
++
++	auto list = orig(this);
++	if (disabled || list.isEmpty()) return list;
++
++	const auto url = this->baseUrl();
++	if (!url.isLocalFile()) return list;
++
++	QFile f(url.toLocalFile());
++	if (!f.open(QIODevice::ReadOnly)) return list;
++
++	const auto ids = upperIdentifiersOf(f.readAll());
++	const auto before = list.size();
++	list.removeIf([&](const CompositeSingletonReference& r) { return !ids.contains(r.typeName); });
++
++	static std::atomic<bool> loggedActive{false};
++	if (!loggedActive.exchange(true, std::memory_order_relaxed)) {
++		qCInfo(logScene) << "singleton filter active";
++	}
++
++	static std::atomic<long> docs{0};
++	static std::atomic<long> total{0};
++	static std::atomic<long> kept{0};
++	total.fetch_add(before, std::memory_order_relaxed);
++	kept.fetch_add(list.size(), std::memory_order_relaxed);
++	const auto n = docs.fetch_add(1, std::memory_order_relaxed) + 1;
++	if (n % 250 == 0) {
++		qCDebug(logScene).nospace()
++		    << "singleton filter: docs=" << n << " total=" << total.load(std::memory_order_relaxed)
++		    << " kept=" << kept.load(std::memory_order_relaxed);
++	}
++
++	return list;
++}
++
+ static QHash<const QQmlEngine*, EngineGeneration*> g_generations; // NOLINT
+ 
+ EngineGeneration::EngineGeneration(const QDir& rootPath, QmlScanner scanner)

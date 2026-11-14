@@ -42,7 +42,7 @@ Singleton {
     signal requestReceived(var request)
 
     // Types that need a value typed in rather than a yes/no.
-    readonly property var typedRequestKinds: ["pincode", "passkey"]
+    readonly property var typedRequestKinds: ["pincode", "passkey", "pin"]
     readonly property bool needsValue: root.hasRequest
         && root.typedRequestKinds.indexOf(root.request.type) !== -1
 
@@ -65,11 +65,11 @@ Singleton {
             return "";
         if (request.type === "confirm")
             return Translation.tr("Does %1 show this code?").arg(root.requestName(request));
-        if (request.type === "pincode")
+        if (request.type === "pincode" || request.type === "pin")
             return Translation.tr("Type the PIN shown on %1").arg(root.requestName(request));
         if (request.type === "passkey")
             return Translation.tr("Type the passkey shown on %1").arg(root.requestName(request));
-        if (request.type === "authorize-service")
+        if (request.type === "authorize-service" || request.type === "service")
             return Translation.tr("%1 wants to use a service").arg(root.requestName(request));
         return Translation.tr("%1 wants to pair").arg(root.requestName(request));
     }
@@ -121,12 +121,12 @@ Singleton {
             root.requestReceived(event);
             return;
         }
-        if (event.event === "display") {
+        if (event.event === "display" || event.event === "display_pin" || event.event === "display_passkey") {
             root.display = event;
             displayTimeout.restart();
             return;
         }
-        if (event.event === "cancel") {
+        if (event.event === "cancel" || event.event === "canceled") {
             root.queue = [];
             root.dismissDisplay();
         }
@@ -145,8 +145,8 @@ Singleton {
         stdinEnabled: true
         // DisplayYesNo covers every pairing method a laptop can actually
         // perform: it can show a passkey, ask for one, and confirm a match.
-        command: ProcUtils.pdeath(["python3", Quickshell.shellPath("scripts/bluetooth/agent.py"),
-            "DisplayYesNo"])
+        command: ProcUtils.pdeath(ProcUtils.nativeHelper(Quickshell.shellPath("scripts/bluetooth/agent"),
+            ["DisplayYesNo"]))
         // Only run while the adapter is actually powered on. The agent must stay
         // registered whenever pairing is possible (incoming, bluetoothctl, or the
         // UI all rely on it), so it can't be gated tighter than that without

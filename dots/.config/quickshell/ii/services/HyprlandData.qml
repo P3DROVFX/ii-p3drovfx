@@ -497,8 +497,20 @@ Singleton {
         syncWorkspaceMapProcess.running = true;
     }
 
+    // Runs on every Config.ready, i.e. every login. Rewriting the file unconditionally made
+    // Hyprland reload its whole config twice (file watcher + `hyprctl reload`) while the
+    // shell was still building its first panels, and `sed -i` swapped the inode under
+    // Hyprland's watcher. Now: nothing happens when the line is already there, and a real
+    // change rewrites the file in place.
     function syncWorkspaceGroupSize(shown) {
-        let script = `touch "$HOME/.config/hypr/custom/variables.lua" && sed -i '/workspaceGroupSize =/d' "$HOME/.config/hypr/custom/variables.lua" && echo "workspaceGroupSize = ${shown}" >> "$HOME/.config/hypr/custom/variables.lua" && hyprctl reload`;
+        const n = parseInt(shown) || 10;
+        const script = `f="$HOME/.config/hypr/custom/variables.lua"; line="workspaceGroupSize = ${n}"; `
+            // Create only when missing: `touch` opens the file for writing, and the close
+            // makes Hyprland's watcher reload the whole config on every shell start.
+            + `{ [ -e "$f" ] || : > "$f"; } || exit 1; `
+            + `[ "$(grep -c 'workspaceGroupSize =' "$f")" = 1 ] && grep -qxF "$line" "$f" && exit 0; `
+            + `rest="$(grep -v 'workspaceGroupSize =' "$f")"; `
+            + `printf '%s\\n%s\\n' "$rest" "$line" > "$f" && hyprctl reload`;
         Quickshell.execDetached(["bash", "-c", script]);
     }
 
