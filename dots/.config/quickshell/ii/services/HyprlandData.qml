@@ -505,7 +505,9 @@ Singleton {
     function syncWorkspaceGroupSize(shown) {
         const n = parseInt(shown) || 10;
         const script = `f="$HOME/.config/hypr/custom/variables.lua"; line="workspaceGroupSize = ${n}"; `
-            + `touch "$f" || exit 1; `
+            // Create only when missing: `touch` opens the file for writing, and the close
+            // makes Hyprland's watcher reload the whole config on every shell start.
+            + `{ [ -e "$f" ] || : > "$f"; } || exit 1; `
             + `[ "$(grep -c 'workspaceGroupSize =' "$f")" = 1 ] && grep -qxF "$line" "$f" && exit 0; `
             + `rest="$(grep -v 'workspaceGroupSize =' "$f")"; `
             + `printf '%s\\n%s\\n' "$rest" "$line" > "$f" && hyprctl reload`;
