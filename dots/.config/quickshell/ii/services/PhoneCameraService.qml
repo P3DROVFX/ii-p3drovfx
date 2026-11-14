@@ -42,25 +42,75 @@ Singleton {
     id: root
 
     // ─── Public state ───────────────────────────────────────
-    // `available` is a readonly composite defined later (droidcamCliPresent
-    // && v4l2loopbackLoaded). The granular flags are below in the dependency
-    // section.
-    property bool running: false
+    // "ii" whenever ii tools is the active phone service (connected or not: an
+    // offline phone says so instead of offering DroidCam), unless Settings → ii tools
+    // turned the webcam off or asks for DroidCam; otherwise "droidcam".
+    readonly property string backend: (KdeConnectService.activeIsIi
+        && IiCameraService.enabled
+        && !IiCameraService.useDroidcam) ? "ii" : "droidcam"
+
+    readonly property bool running: root.backend === "ii"
+        ? IiCameraService.state === "live"
+        : root._droidcamRunning
     onRunningChanged: GlobalStates.phoneCameraRunning = running
-    property bool connecting: false
-    property string videoDevice: ""
+    readonly property bool connecting: root.backend === "ii"
+        ? (IiCameraService.state === "asking" || IiCameraService.state === "starting")
+        : root._droidcamConnecting
+    readonly property string videoDevice: root.backend === "ii"
+        ? IiCameraService.videoDevice
+        : root._droidcamVideoDevice
     property string activeIp: ""
     property int activePort: 4747
-    property string lastError: ""
+    readonly property string lastError: root.backend === "ii"
+        ? IiCameraService.lastError
+        : root._droidcamLastError
 
     /** Milliseconds since startCamera() successfully detected /dev/videoN.
      *  Updates every 1 second while running — used by the card to render
      *  "active for Xm Ys" inline. Zero when not running. */
-    property int elapsedMs: 0
+    readonly property int elapsedMs: root.backend === "ii"
+        ? IiCameraService.elapsedMs
+        : root._droidcamElapsedMs
+
+    // DroidCam backing state (kept separate so public properties stay bound).
+    property bool _droidcamRunning: false
+    property bool _droidcamConnecting: false
+    property string _droidcamVideoDevice: ""
+    property string _droidcamLastError: ""
+    property int _droidcamElapsedMs: 0
+    property string _droidcamDistro: "unknown"
 
     signal stateChanged()
     signal errorOccurred(string message)
     signal criticalDepMissing(string depName, string message)
+
+    onBackendChanged: {
+        if (root.backend === "ii") {
+            checkAvailProc.running = false
+            detectDistroProc.running = false
+            ipFetcher.running = false
+            if (root._droidcamRunning || root._droidcamConnecting)
+                root._stopDroidcam()
+        } else if (root._enabled) {
+            if (root._droidcamDistro === "unknown")
+                detectDistroProc.running = true
+            checkAvailProc.running = true
+            root._fetchDeviceIp()
+        }
+        root.stateChanged()
+    }
+
+    Connections {
+        target: IiCameraService
+        function onStateChanged() {
+            if (root.backend === "ii")
+                root.stateChanged()
+        }
+        function onErrorOccurred(message) {
+            if (root.backend === "ii")
+                root.errorOccurred(message)
+        }
+    }
 
     // Internal — port to use when startCamera falls through to the USB
     // probe path. The probe's onExited reads this value.
@@ -85,15 +135,14 @@ Singleton {
         id: elapsedTicker
         interval: 1000
         repeat: true
-        running: root.running
-        onTriggered: root.elapsedMs += 1000
+        running: root.backend === "droidcam" && root._droidcamRunning
+        onTriggered: root._droidcamElapsedMs += 1000
     }
 
     Component.onCompleted: {
-        // Respect the Phone tab toggle. If Phone integration is disabled in
-        // config, we don't run `command -v droidcam-cli` checks and don't
-        // run the 10s periodic re-check timer.
-        if (!root._enabled) return
+        GlobalStates.phoneCameraRunning = root.running
+        // Respect the Phone tab toggle and ii backend.
+        if (!root._enabled || root.backend === "ii") return
         detectDistroProc.running = true
         checkAvailProc.running = true
     }
@@ -103,24 +152,25 @@ Singleton {
 
     on_EnabledChanged: {
         if (root._enabled) {
-            detectDistroProc.running = true
-            checkAvailProc.running = true
+            if (root.backend === "droidcam") {
+                detectDistroProc.running = true
+                checkAvailProc.running = true
+            }
         } else {
             // Stop all background work and reset state.
             checkAvailProc.running = false
-            droidcamProc.running = false
-            detectDeviceProc.running = false
-            successTimer.stop()
-            failTimer.stop()
-            detectRetryTimer.stop()
-            // Shutdown any active session — user disabling the tab mid-use
-            // is expected to kill the webcam stream.
-            if (root.running) root.stopCamera()
+            root._stopDroidcam()
+            if (IiCameraService.state !== "idle")
+                IiCameraService.stop()
         }
     }
 
-    /** Re-checks if droidcam-cli is installed. Call after user runs the installer. */
+    /** Re-checks if camera dependencies are installed. Call after user runs the installer. */
     function refresh(): void {
+        if (root.backend === "ii") {
+            IiCameraService.refresh()
+            return
+        }
         checkAvailProc.running = true
     }
 
@@ -128,7 +178,8 @@ Singleton {
     Timer {
         interval: 30000
         repeat: true
-        running: root._enabled && (GlobalStates.policiesPanelOpen || GlobalStates.dashboardPanelOpen || root.running)
+        running: root._enabled && root.backend === "droidcam"
+            && (GlobalStates.policiesPanelOpen || GlobalStates.dashboardPanelOpen || root._droidcamRunning)
         onTriggered: checkAvailProc.running = true
     }
 
@@ -141,11 +192,17 @@ Singleton {
 
     // Composite: droidcam-cli + v4l2loopback module (loaded or installed on system) are the hard requirements.
     // v4l-utils and mpv are recommended (device detection + preview window).
-    readonly property bool available: root.droidcamCliPresent && (root.v4l2loopbackLoaded || root.v4l2loopbackInstalled)
+    readonly property bool available: root.backend === "ii"
+        ? IiCameraService.available
+        : (root.droidcamCliPresent && (root.v4l2loopbackLoaded || root.v4l2loopbackInstalled))
 
     /** Array of missing dependency descriptors for the install guide popup.
      *  Each entry: { key, name, description, present, installCommands: {distro: cmd} } */
-    readonly property var missingDeps: {
+    readonly property var missingDeps: root.backend === "ii"
+        ? IiCameraService.missingDeps
+        : root._droidcamMissingDeps
+
+    readonly property var _droidcamMissingDeps: {
         const deps = []
         if (!root.droidcamCliPresent)
             deps.push({
@@ -186,40 +243,55 @@ Singleton {
         arch: "yay -S droidcam",
         fedora: "# Enable RPM Fusion first, then:\nsudo dnf install android-tools\n# Download from https://www.dev47apps.com/droidcam/linux/",
         debian: "# Download from https://www.dev47apps.com/droidcam/linux/\n# Or: sudo apt install droidcam",
+        opensuse: "# Download from https://www.dev47apps.com/droidcam/linux/\nsudo zypper install android-tools"
     })
     readonly property var _v4l2loopbackInstallCommands: ({
         arch: "yay -S v4l2loopback-dkms\nsudo modprobe v4l2loopback\necho v4l2loopback | sudo tee /etc/modules-load.d/v4l2loopback.conf",
         fedora: "sudo dnf install akmod-v4l2loopback\nsudo modprobe v4l2loopback\necho v4l2loopback | sudo tee /etc/modules-load.d/v4l2loopback.conf",
         debian: "sudo apt install v4l2loopback-dkms\nsudo modprobe v4l2loopback\necho v4l2loopback | sudo tee /etc/modules-load.d/v4l2loopback.conf",
+        opensuse: "sudo zypper install v4l2loopback-kmp-default\nsudo modprobe v4l2loopback\necho v4l2loopback | sudo tee /etc/modules-load.d/v4l2loopback.conf"
     })
     readonly property var _v4lUtilsInstallCommands: ({
         arch: "sudo pacman -S v4l-utils",
         fedora: "sudo dnf install v4l-utils",
         debian: "sudo apt install v4l-utils",
+        opensuse: "sudo zypper install v4l-utils"
     })
     readonly property var _mpvInstallCommands: ({
         arch: "sudo pacman -S mpv",
         fedora: "sudo dnf install mpv",
         debian: "sudo apt install mpv",
+        opensuse: "sudo zypper install mpv"
     })
 
-    /** Auto-detected distro id: "arch" | "fedora" | "debian" | "unknown".
+    /** Auto-detected distro id: "arch" | "fedora" | "debian" | "opensuse" | "unknown".
      *  Used by the install guide to show the right commands. */
-    property string detectedDistro: "unknown"
+    readonly property string detectedDistro: root.backend === "ii"
+        ? IiCameraService.detectedDistro
+        : root._droidcamDistro
 
     // ─── Distro detection (runs once on startup) ──────────
     Process {
         id: detectDistroProc
         running: false
         command: ["bash", "-c",
-            "if [ -f /etc/arch-release ]; then echo arch; " +
-            "elif [ -f /etc/fedora-release ]; then echo fedora; " +
-            "elif [ -f /etc/debian_version ]; then echo debian; " +
-            "else echo unknown; fi"]
+            "distro=unknown; " +
+            "if [ -r /etc/os-release ]; then " +
+            "  os_info=$(ID=\"\"; ID_LIKE=\"\"; . /etc/os-release 2>/dev/null; printf '%s %s' \"$ID\" \"$ID_LIKE\" | tr '[:upper:]' '[:lower:]'); " +
+            "  for tok in $os_info; do " +
+            "    case \"$tok\" in " +
+            "      arch|manjaro|endeavouros|cachyos|garuda|artix|arcolinux) distro=arch; break;; " +
+            "      fedora|nobara|bazzite|ultramarine) distro=fedora; break;; " +
+            "      debian|ubuntu|linuxmint|pop|neon|elementary|zorin) distro=debian; break;; " +
+            "      opensuse*|suse|sles|sled) distro=opensuse; break;; " +
+            "    esac; " +
+            "  done; " +
+            "fi; " +
+            "echo \"$distro\""]
         stdout: StdioCollector {
             onStreamFinished: {
                 const d = String(this.text).trim()
-                if (d.length > 0) root.detectedDistro = d
+                if (d.length > 0) root._droidcamDistro = d
             }
         }
     }
@@ -257,7 +329,7 @@ Singleton {
         command: ["bash", "-c", "sudo -n modprobe v4l2loopback 2>/dev/null || pkexec modprobe v4l2loopback 2>/dev/null || modprobe v4l2loopback 2>/dev/null"]
         onExited: (code, status) => {
             checkAvailProc.running = true
-            if (root.connecting && !root.running) {
+            if (root._droidcamConnecting && !root._droidcamRunning) {
                 root._doStartCamera()
             }
         }
@@ -293,7 +365,7 @@ Singleton {
                 if (out.length > 0 && out.startsWith("/dev/video")) {
                     // Only update the device path for display — we don't
                     // set running=true here (that's done by successTimer).
-                    root.videoDevice = out
+                    root._droidcamVideoDevice = out
                 }
                 // If no device found, retry up to 4 times for display only.
                 if (out.length === 0 && detectDeviceProc.attempt < 4) {
@@ -309,7 +381,7 @@ Singleton {
         interval: 500
         repeat: false
         onTriggered: {
-            if (root.connecting && !root.running) {
+            if (root._droidcamConnecting && !root._droidcamRunning) {
                 detectDeviceProc.running = false
                 detectDeviceProc.running = true
             }
@@ -338,13 +410,13 @@ Singleton {
                 // the DroidCam app is not running on the phone.
                 // "recv error" and "Connection reset" may be transient.
                 if (s.indexOf("Is the app running") >= 0) {
-                    if (root.connecting || root.running) {
-                        root.connecting = false
-                        root.running = false
-                        root.videoDevice = ""
-                        root.elapsedMs = 0
-                        root.lastError = "DroidCam app is not running on your phone — open it and press Start"
-                        root.errorOccurred(root.lastError)
+                    if (root._droidcamConnecting || root._droidcamRunning) {
+                        root._droidcamConnecting = false
+                        root._droidcamRunning = false
+                        root._droidcamVideoDevice = ""
+                        root._droidcamElapsedMs = 0
+                        root._droidcamLastError = "DroidCam app is not running on your phone — open it and press Start"
+                        root.errorOccurred(root._droidcamLastError)
                         root.stateChanged()
                         successTimer.stop()
                         droidcamProc.running = false
@@ -355,26 +427,26 @@ Singleton {
         onExited: (code, status) => {
             successTimer.stop()
             failTimer.stop()
-            if (root._deviceBusy && root.connecting && !root._userStopped) {
+            if (root._deviceBusy && root._droidcamConnecting && !root._userStopped) {
                 root._deviceBusy = false
                 if (!root._deviceCreateTried) {
                     root._deviceCreateTried = true
                     createDeviceProc.running = true
                     return
                 }
-                root.lastError = "The DroidCam loopback device is in use by another app"
+                root._droidcamLastError = "The DroidCam loopback device is in use by another app"
             }
             // If the user intentionally stopped (or we're restarting for
             // flip/mirror), suppress the error — SIGTERM = non-zero exit.
-            if (code !== 0 && !root.running && !root._userStopped) {
-                root.lastError = root.lastError || "Connection failed — check that the DroidCam app is open on your phone and listening on port " + root.activePort
-                root.errorOccurred(root.lastError)
+            if (code !== 0 && !root._droidcamRunning && !root._userStopped) {
+                root._droidcamLastError = root._droidcamLastError || "Connection failed — check that the DroidCam app is open on your phone and listening on port " + root.activePort
+                root.errorOccurred(root._droidcamLastError)
             }
             root._userStopped = false
-            root.running = false
-            root.connecting = false
-            root.videoDevice = ""
-            root.elapsedMs = 0
+            root._droidcamRunning = false
+            root._droidcamConnecting = false
+            root._droidcamVideoDevice = ""
+            root._droidcamElapsedMs = 0
             root.stateChanged()
         }
     }
@@ -395,16 +467,16 @@ Singleton {
             "dev=${out%%$'\\n'*}; " +
             "for i in $(seq 30); do [ -w \"$dev\" ] && exit 0; sleep 0.1; done; exit 0"]
         onExited: (code, status) => {
-            if (!root.connecting) return
+            if (!root._droidcamConnecting) return
             if (code === 0 && root._lastLaunch) {
                 root._launchCameraProcess(root._lastLaunch.mode, root._lastLaunch.port, root._lastLaunch.ip)
                 return
             }
-            root.connecting = false
-            root.lastError = "The v4l2loopback device is in use by another app, and " + (code === 3
+            root._droidcamConnecting = false
+            root._droidcamLastError = "The v4l2loopback device is in use by another app, and " + (code === 3
                 ? "v4l2loopback-utils is needed to create a dedicated one for DroidCam"
                 : "a dedicated one for DroidCam could not be created")
-            root.errorOccurred(root.lastError)
+            root.errorOccurred(root._droidcamLastError)
             root.stateChanged()
         }
     }
@@ -420,22 +492,22 @@ Singleton {
         interval: 6000
         repeat: false
         onTriggered: {
-            if (root.connecting && droidcamProc.running) {
+            if (root._droidcamConnecting && droidcamProc.running) {
                 // Process is still alive after 6s with no fatal stderr
                 // errors — the connection likely succeeded (or is close
                 // enough that the device node exists).
                 failTimer.stop()
-                root.running = true
-                root.connecting = false
-                root.elapsedMs = 0
+                root._droidcamRunning = true
+                root._droidcamConnecting = false
+                root._droidcamElapsedMs = 0
                 root.stateChanged()
                 // Look up the device path for display purposes only.
                 detectDeviceProc.attempt = 0
                 detectDeviceProc.running = true
-            } else if (root.connecting) {
+            } else if (root._droidcamConnecting) {
                 // Process exited before the timer fired — connection failed.
                 // onExited should have already handled the error.
-                root.connecting = false
+                root._droidcamConnecting = false
                 root.stateChanged()
             }
         }
@@ -459,10 +531,10 @@ Singleton {
         interval: 9000
         repeat: false
         onTriggered: {
-            if (root.connecting && !root.running) {
-                root.connecting = false
-                root.lastError = "Could not connect within 9s — verify the DroidCam app is open on your phone and in Start mode"
-                root.errorOccurred(root.lastError)
+            if (root._droidcamConnecting && !root._droidcamRunning) {
+                root._droidcamConnecting = false
+                root._droidcamLastError = "Could not connect within 9s — verify the DroidCam app is open on your phone and in Start mode"
+                root.errorOccurred(root._droidcamLastError)
                 root.stateChanged()
                 successTimer.stop()
                 droidcamProc.running = false
@@ -475,6 +547,7 @@ Singleton {
         target: "phoneCamera"
         function status(): string {
             return JSON.stringify({
+                backend: root.backend,
                 available: root.available,
                 running: root.running,
                 connecting: root.connecting,
@@ -506,15 +579,19 @@ Singleton {
      *      `reachableAddresses` lookup if USB is not available.
      */
     function startCamera(): void {
-        if (!root.available || root.running || root.connecting) return
+        if (root.backend === "ii") {
+            IiCameraService.start()
+            return
+        }
+        if (!root.available || root._droidcamRunning || root._droidcamConnecting) return
         if (!KdeConnectService.activeReachable) {
-            root.lastError = "No reachable KDE Connect device — pair a device first"
-            root.errorOccurred(root.lastError)
+            root._droidcamLastError = "No reachable KDE Connect device — pair a device first"
+            root.errorOccurred(root._droidcamLastError)
             return
         }
 
-        root.connecting = true
-        root.lastError = ""
+        root._droidcamConnecting = true
+        root._droidcamLastError = ""
         root._userStopped = false
         root._deviceBusy = false
         root._deviceCreateTried = false
@@ -587,9 +664,9 @@ Singleton {
         } else {
             // Wi-Fi mode. Without a real IP we can't proceed.
             if (!ip) {
-                root.connecting = false
-                root.lastError = "Could not detect USB or Wi-Fi IP.\n\nEither:\n• Plug your phone via USB with ADB debugging enabled (Settings → Developer options), or\n• Open the DroidCam app on your phone — it shows the Wi-Fi IP at the bottom. Set it in Connection → Phone IP below."
-                root.errorOccurred(root.lastError)
+                root._droidcamConnecting = false
+                root._droidcamLastError = "Could not detect USB or Wi-Fi IP.\n\nEither:\n• Plug your phone via USB with ADB debugging enabled (Settings → Developer options), or\n• Open the DroidCam app on your phone — it shows the Wi-Fi IP at the bottom. Set it in Connection → Phone IP below."
+                root.errorOccurred(root._droidcamLastError)
                 root.stateChanged()
                 return
             }
@@ -621,23 +698,33 @@ Singleton {
         failTimer.restart()
     }
 
-    /** Stops the camera process gracefully (SIGTERM via Quickshell.Io.Process). */
+    /** Stops the camera process gracefully. */
     function stopCamera(): void {
-        if (!root.running && !root.connecting) return
+        if (root.backend === "ii") {
+            IiCameraService.stop()
+            return
+        }
+        root._stopDroidcam()
+    }
+
+    function _stopDroidcam(): void {
         detectTimer.stop()
+        detectRetryTimer.stop()
         failTimer.stop()
         successTimer.stop()
         // Cancel any pending USB probe from startCamera case 3.
         usbProbeForStartup._oneShot = false
         usbProbeForStartup.running = false
+        detectDeviceProc.running = false
         createDeviceProc.running = false
+        if (!root._droidcamRunning && !root._droidcamConnecting) return
         // Mark as intentionally stopped so onExited doesn't show an error.
         root._userStopped = true
         droidcamProc.running = false  // SIGTERM
-        root.running = false
-        root.connecting = false
-        root.videoDevice = ""
-        root.elapsedMs = 0
+        root._droidcamRunning = false
+        root._droidcamConnecting = false
+        root._droidcamVideoDevice = ""
+        root._droidcamElapsedMs = 0
         root.stateChanged()
     }
 
@@ -647,33 +734,41 @@ Singleton {
     }
 
     /**
-     * Toggles horizontal mirror. If running, applies via v4l2-ctl live.
-     * v4l2loopback devices may not support horizontal_flip via v4l2-ctl, so
-     * if the control is not available we restart the process with -hflip.
+     * Toggles horizontal mirror. If running, applies via v4l2-ctl live on
+     * DroidCam (the ii backend watches Config.options.phone.webcam.mirrorHorizontally
+     * directly).
      */
+    /** The picture flipped left to right: the phone's own switch with ii tools (so the
+     *  app and the PC show one setting), the config with DroidCam. */
+    readonly property bool mirrored: root.backend === "ii"
+        ? (IiCameraService.phoneStatus?.mirror ?? false)
+        : Config.options.phone.webcam.mirrorHorizontally
+
     function toggleMirror(): void {
+        if (root.backend === "ii") {
+            IiCameraService.set({ mirror: !root.mirrored })
+            return
+        }
         const conf = Config.options.phone.webcam
         conf.mirrorHorizontally = !conf.mirrorHorizontally
-        if (root.running && root.videoDevice.length > 0) {
+        if (root.backend === "droidcam" && root._droidcamRunning && root._droidcamVideoDevice.length > 0) {
             // Try v4l2-ctl first — works on some v4l2loopback configs.
             mirrorProc.command = ["bash", "-c",
-                "v4l2-ctl -d " + root.videoDevice +
+                "v4l2-ctl -d " + root._droidcamVideoDevice +
                 " --set-ctrl=horizontal_flip=" + (conf.mirrorHorizontally ? "1" : "0") +
                 " 2>/dev/null || true"]
             mirrorProc.running = true
         }
-        // If not running, the setting persists and applies on next start.
-        // No restart needed — v4l2-ctl should handle it live.
     }
 
     /**
-     * Sets rotation (0/90/180/270). Persists to config; restarts camera if
-     * running (since 180° = -vflip -hflip and 90/270 need app-side rotation).
+     * Sets rotation (0/90/180/270). Persists to config; restarts DroidCam if
+     * running (the ii backend updates ffmpeg rotation live via Config binding).
      */
     function setRotation(degrees: int): void {
         const conf = Config.options.phone.webcam
         conf.rotateDegrees = degrees
-        if (root.running || root.connecting) {
+        if (root.backend === "droidcam" && (root._droidcamRunning || root._droidcamConnecting)) {
             root.stopCamera()
             Qt.callLater(root.startCamera)
         }
@@ -681,12 +776,28 @@ Singleton {
 
     /**
      * Flips between front and back cameras.
-     * NOTE: droidcam-cli has NO flag for front/back camera selection — it
-     * must be toggled in the DroidCam Android app's settings UI. We persist
-     * the preference for documentation purposes only. The user should open
-     * the DroidCam app on their phone and tap the camera flip button there.
      */
     function flipCamera(): void {
+        if (root.backend === "ii") {
+            const st = IiCameraService.phoneStatus
+            const lenses = (st && Array.isArray(st.lenses) && st.lenses.length > 0)
+                ? st.lenses.map(l => String(l))
+                : ["main", "front"]
+            const cur = st && st.lens ? String(st.lens) : ""
+            let next = cur === "front"
+                ? (lenses.indexOf("main") >= 0 ? "main" : lenses[0])
+                : (lenses.indexOf("front") >= 0 ? "front" : "")
+            if (!next || next === cur) {
+                for (let i = 0; i < lenses.length; i++) {
+                    if (lenses[i] !== cur) {
+                        next = lenses[i]
+                        break
+                    }
+                }
+            }
+            if (next) IiCameraService.set({ lens: next })
+            return
+        }
         const conf = Config.options.phone.webcam
         conf.cameraFacing = (conf.cameraFacing === "front") ? "back" : "front"
         // Do NOT restart the connection — droidcam-cli can't toggle the
@@ -777,9 +888,9 @@ Singleton {
                 const conf = Config.options.phone.webcam
                 const ip = root._resolveIp(conf)
                 if (!ip) {
-                    root.connecting = false
-                    root.lastError = "Could not detect USB (no device plugged / ADB debugging off) and no Wi-Fi IP configured.\n\nEither:\n• Plug your phone via USB with ADB debugging enabled, or\n• Open the DroidCam app on your phone and set its Wi-Fi IP in Connection → Phone IP below."
-                    root.errorOccurred(root.lastError)
+                    root._droidcamConnecting = false
+                    root._droidcamLastError = "Could not detect USB (no device plugged / ADB debugging off) and no Wi-Fi IP configured.\n\nEither:\n• Plug your phone via USB with ADB debugging enabled, or\n• Open the DroidCam app on your phone and set its Wi-Fi IP in Connection → Phone IP below."
+                    root.errorOccurred(root._droidcamLastError)
                     root.stateChanged()
                     return
                 }
@@ -837,6 +948,7 @@ Singleton {
 
     /** Triggers async DBus fetch of the active device's IPs. */
     function _fetchDeviceIp(): void {
+        if (!root._enabled || root.backend === "ii") return
         const devId = KdeConnectService.activeDeviceId
         if (!devId) {
             root._lastKnownIp = ""
@@ -855,14 +967,15 @@ Singleton {
         target: KdeConnectService
         ignoreUnknownSignals: true
         function onActiveDeviceIdChanged() {
-            if (root.running || root.connecting) {
-                root.stopCamera()
+            if (root._droidcamRunning || root._droidcamConnecting) {
+                root._stopDroidcam()
             }
             root._lastKnownIp = ""
-            root._fetchDeviceIp()
+            if (root.backend === "droidcam")
+                root._fetchDeviceIp()
         }
         function onActiveReachableChanged() {
-            if (KdeConnectService.activeReachable) {
+            if (KdeConnectService.activeReachable && root.backend === "droidcam") {
                 root._fetchDeviceIp()
             }
         }
@@ -873,7 +986,7 @@ Singleton {
     Timer {
         interval: 3000
         repeat: false
-        running: true
+        running: root._enabled && root.backend === "droidcam"
         onTriggered: root._fetchDeviceIp()
     }
 }

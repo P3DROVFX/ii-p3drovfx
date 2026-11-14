@@ -58,6 +58,7 @@ Singleton {
     readonly property bool lookEnabled: root.opts?.look?.enable ?? true
     readonly property bool filesEnabled: root.opts?.files?.enable ?? true
     readonly property bool galleryEnabled: root.opts?.gallery?.enable ?? true
+    readonly property bool cameraEnabled: root.opts?.camera?.enable ?? true
     readonly property bool touchpadEnabled: root.opts?.touchpad?.enable ?? true
     readonly property bool drawEnabled: root.opts?.draw?.enable ?? true
     readonly property bool presentEnabled: root.opts?.present?.enable ?? true
@@ -175,6 +176,7 @@ Singleton {
         .concat(root.drawEnabled && LiveDraw.enabled ? ["draw"] : [])
         .concat(root.presentEnabled ? ["present"] : [])
         .concat(PhoneScreenService.enabled ? ["screen"] : [])
+        .concat(root.cameraEnabled ? ["camera"] : [])
 
     // What is on right now, read from the same state the shell itself draws from.
     readonly property bool _aodUp: (GlobalStates.oledSaverMonitors ?? []).length > 0
@@ -1484,9 +1486,17 @@ Singleton {
     readonly property int outboxMax: 5
     property double _lastShotAt: 0
 
-    readonly property bool _watchShots: root.enabled && root.shotsEnabled && root.shotsAutoToPhone && root.hasPeers
+    /// dev → whether the phone takes the PC's screenshots (its `shots` cap, off by
+    /// default in the app). Kept across disconnects, unlike `phoneCaps`, so a shot
+    /// still waits in the outbox for a phone that wants it, and nothing is converted
+    /// or queued for one that does not.
+    property var _shotsReceivers: ({})
+    readonly property bool phoneTakesShots: Object.keys(root._shotsReceivers)
+        .some(id => root._shotsReceivers[id] && root.peers.some(p => p.id === id))
+
+    readonly property bool _watchShots: root.enabled && root.shotsEnabled && root.shotsAutoToPhone && root.hasPeers && root.phoneTakesShots
     /// The screenshot preview's "Save to phone gallery": shown when sending is by hand.
-    readonly property bool canSaveShotToPhone: root.enabled && root.shotsEnabled && !root.shotsAutoToPhone && root.hasPeers
+    readonly property bool canSaveShotToPhone: root.enabled && root.shotsEnabled && !root.shotsAutoToPhone && root.hasPeers && root.phoneTakesShots
     /// The phone it goes to, by name, for the button and the message.
     readonly property string shotPhoneName: root.connections[root.shotDev]?.name || (root.peers[0]?.name ?? "")
 
@@ -2105,10 +2115,19 @@ Singleton {
         case "gallery":
             PhoneGalleryService.handleMessage(dev, m);
             return;
+        case "camera":
+            IiCameraService.handleMessage(dev, m);
+            return;
         case "caps": {
             const next = Object.assign({}, root.phoneCaps);
             next[dev] = Array.isArray(m.caps) ? m.caps.map(String) : [];
             root.phoneCaps = next;
+            const takes = next[dev].includes("shots");
+            if (Boolean(root._shotsReceivers[dev]) !== takes) {
+                const shots = Object.assign({}, root._shotsReceivers);
+                shots[dev] = takes;
+                root._shotsReceivers = shots;
+            }
             return;
         }
         case "notifs":
@@ -2217,6 +2236,7 @@ Singleton {
             }
             if (root._presentDev === ev.dev)
                 root._presentDev = "";
+            IiCameraService.handleDisconnect(String(ev.dev));
             // Without the phone that sent them they go stale: KDE Connect's list takes over.
             if (!root.notifsLive) {
                 root.linkNotifications = [];
@@ -2242,6 +2262,11 @@ Singleton {
         case "screenLive":
         case "screenEnd":
             PhoneScreenService.handleEvent(ev);
+            break;
+        case "camera":
+        case "cameraLive":
+        case "cameraEnd":
+            IiCameraService.handleEvent(ev);
             break;
         case "galleryThumbs":
         case "galleryProgress":

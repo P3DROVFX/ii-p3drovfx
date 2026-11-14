@@ -9,6 +9,7 @@
 //! It is started only while a phone is paired (or being paired), and sleeps on its
 //! sockets and stdin: no timers run while nothing happens.
 
+mod camera;
 mod files;
 mod gallery;
 mod icons;
@@ -91,6 +92,8 @@ struct Shared {
     input_tx: std::sync::mpsc::Sender<input::Cmd>,
     /// The phone being a screen here (one at a time), and its device.
     screen: Option<(String, tokio::task::AbortHandle, tokio::sync::watch::Sender<String>)>,
+    /// The phone being a webcam here (one at a time): armed, then streaming.
+    camera: Option<camera::Slot>,
 }
 
 type State = Arc<Mutex<Shared>>;
@@ -327,9 +330,16 @@ async fn serve(stream: TcpStream, addr: SocketAddr, acceptor: TlsAcceptor, state
         Ok(Ok(tls)) => tls,
         _ => return,
     };
-    let config = WebSocketConfig::default().max_message_size(Some(8 << 20)).max_frame_size(Some(1 << 20));
-    let check_path = |req: &Request, resp: Response| -> Result<Response, ErrorResponse> {
+    // Frames up to 4 MiB: a webcam key frame is one message.
+    let config = WebSocketConfig::default().max_message_size(Some(8 << 20)).max_frame_size(Some(4 << 20));
+    let side = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let side_cb = side.clone();
+    let check_path = move |req: &Request, resp: Response| -> Result<Response, ErrorResponse> {
         if req.uri().path() == WS_PATH {
+            Ok(resp)
+        } else if req.uri().path() == camera::WS_PATH {
+            // The webcam's video: its own socket, authenticated by the session's token.
+            side_cb.store(true, std::sync::atomic::Ordering::Relaxed);
             Ok(resp)
         } else {
             let mut err = ErrorResponse::new(None);
@@ -341,6 +351,10 @@ async fn serve(stream: TcpStream, addr: SocketAddr, acceptor: TlsAcceptor, state
         Ok(Ok(ws)) => ws,
         _ => return,
     };
+    if side.load(std::sync::atomic::Ordering::Relaxed) {
+        camera::serve(ws, state).await;
+        return;
+    }
     let (mut sink, mut stream) = ws.split();
 
     let hello: Option<Hello> = match timeout(HANDSHAKE_TIMEOUT, stream.next()).await {
@@ -737,6 +751,8 @@ fn handle_op(state: &State, line: &str) {
                 Err(_) => emit(json!({"ev": "screenEnd", "dev": dev, "sid": sid, "reason": "bind"})),
             }
         }
+        // The phone as a webcam (camera.rs): the shell found the device to write to.
+        "camera" => camera::op(state, &op),
         "kick" => {
             let dev = op["dev"].as_str().unwrap_or("");
             let s = state.lock().unwrap();
@@ -851,6 +867,7 @@ async fn main() {
         present: false,
         input_tx: input::spawn(),
         screen: None,
+        camera: None,
     }));
 
     emit(json!({"ev": "ready", "port": port, "fp": fingerprint, "name": name, "addrs": addresses(), "wake": wake_targets(), "discovery": udp.is_some()}));

@@ -321,6 +321,26 @@ is on and it holds `READ_MEDIA_IMAGES` or `READ_MEDIA_VISUAL_USER_SELECTED`; wit
 dimensions (swapped when `ORIENTATION` is 90 or 270); `album` is `<bucket id>`; `path` is
 the phone's absolute path (`DATA`), used to open videos through the SFTP mount.
 
+## Webcam
+
+The phone's camera as a PC webcam: a v4l2loopback device (`/dev/videoN`, every app lists it) or, with no loopback module, a PipeWire camera node (`iiTools.camera.output`: `auto`, `v4l2`, `pipewire`; cap `camera` on both sides: the shell puts it in `hello.caps` while `iiTools.camera.enable` is on, and the phone puts it in `caps` while it has a camera). Live camera controls reuse `lens`, `aspect`, `quality`, `torch`, `zoom`, and `stabilize` as reported by the phone.
+
+| Direction | Message | |
+| --- | --- | --- |
+| shell → phone | `{"t":"camera","a":"request"}` | Ask the phone to start the webcam stream (starts immediately if foregrounded/running, else posts a notification). |
+| shell → phone | `{"t":"camera","a":"stop"}` | Stop asking or stop the active stream. |
+| shell → phone | `{"t":"camera","a":"set",…}` | Change any subset of `lens` (`"front"`\|`"wide"`\|`"main"`\|`"tele"`), `aspect` (`"4:3"`\|`"16:9"`), `quality` (`"720p"`\|`"1080p"`), `torch` (bool), `zoom` (float), `stabilize` (bool), `mirror` (bool). Phone applies it and pushes `status`. |
+| shell → phone | `{"t":"camera","state":"ready","token":"<hex 32>","sid":N,"usb":bool}` | Answer to `start`: helper is armed and waiting for the camera socket. `usb`: the phone is on a USB cable and the shell ran `adb reverse` of the link's port, so the phone connects to 127.0.0.1 first (Wi-Fi jitters by tens of ms), then the link's own host. |
+| shell → phone | `{"t":"camera","state":"live","device":"/dev/videoN","sid":N}` | `ffmpeg` is writing decoded frames into `/dev/videoN`. |
+| shell → phone | `{"t":"camera","state":"stopped","reason":"…","sid":N}` | PC side ended (`stopped`, `closed`, `timeout`, `decoder`, `device`). |
+| shell → phone | `{"t":"camera","err":"disabled"\|"deps"\|"device"\|"busy"}` | `start` refused on the PC side. |
+| phone → shell | `{"t":"camera","a":"start","w":1440,"h":1080,"fps":30}` | Phone is about to stream (`w`×`h` encoded landscape size). |
+| phone → shell | `{"t":"camera","a":"stop"}` | Phone stopped streaming. |
+| phone → shell | `{"t":"camera","status":{…}}` | Phone camera capabilities and state (`state`, `error`, `lens`, `lenses`, `aspect`, `quality`, `w`, `h`, `fps`, `zoom`, `zoomMin`, `zoomMax`, `torch`, `hasTorch`, `stabilize`, `mirror`, `rotation`), pushed after `hello` and on every change. |
+| phone → shell | `{"t":"camera","asking":bool,"reason"?}` | Whether the phone is waiting for the user to confirm the PC's `request` (a notification; it expires after a minute). `asking:false` with `reason:"notifications"`: the app's notifications are off, so the user has to open the webcam on the phone. |
+
+The H.264 stream travels over a second WebSocket to `/iilink/1/camera` on the helper port (same pinned TLS certificate): the phone authenticates with `{"t":"hello","token":"<token>"}`, sends metadata `{"t":"meta","w":1440,"h":1080,"rot":0\|90\|180\|270,"fps":30,"mirror":bool}` (`mirror`: the phone's own switch; with ii tools the PC adds none, its sidebar switch sets the phone's), and streams binary frames `[u8 kind][u64 pts µs BE][Annex-B bytes]` (`kind` 0 = codec config, 1 = frame, 2 = key frame; helper requests key frames with `{"t":"key"}`), which the helper pipes into `ffmpeg` toward `/dev/videoN`.
+
 ## Files
 
 A file is a header, then its bytes as binary frames (the app sends 256 KiB each):
@@ -381,6 +401,9 @@ sides. Changing the meaning of an existing one does: that is `iilink/2`, on a ne
 | `{"ev":"galleryProgress","dev","id","received","size"}` | `galleryFull` progress (`id` is the item id), at most every 1 % and 150 ms. |
 | `{"ev":"galleryFile","dev","id","path"}` | A `galleryFull` file landed in the gallery cache (`id` is the item id). |
 | `{"ev":"galleryAbort","dev","id"}` | A `galleryFull` transfer dropped before its end (`id` is the item id). |
+| `{"ev":"camera","dev","sid","token"}` | Helper armed a camera session and generated a one-time socket token. |
+| `{"ev":"cameraLive","dev","sid","w","h","sink"}` | The camera is up: the writer started on the first key frame (`w`×`h` the session's size after rotation; `sink` `v4l2` or `pipewire`). Once per session. |
+| `{"ev":"cameraEnd","dev","sid","reason"}` | Camera helper session ended once per armed session (`stopped`\|`closed`\|`timeout`\|`decoder`\|`device`). |
 | `{"ev":"error","code"?,"msg"}` | E.g. `code: "port"` when the port is taken. |
 
 | Shell → helper | |
@@ -390,6 +413,9 @@ sides. Changing the meaning of an existing one does: that is `iilink/2`, on a ne
 | `{"op":"send","dev":"<id>"\|"*","m":{…}}` | |
 | `{"op":"kick","dev"}` | Close a connection. |
 | `{"op":"sendFile","dev","id","path","name"?,"purpose","delete"?}` | A file to a phone: the same `file` header and binary frames, the other way. `fileSent` / `fileSendFailed` with the id once queued; `delete` removes the file then. |
+| `{"op":"camera","a":"arm","dev","sid","device":"/dev/videoN","mirror":bool,"rotate":0\|90\|180\|270}` or `{…,"sink":"pipewire"}` | Arm a session (one at a time; a new one ends the old with `stopped`). v4l2: `ffmpeg -f h264 -i pipe:0 … -f v4l2 <device>`; a size the device refuses (an app holds it) is scaled and padded into the old one. PipeWire: `gst-launch-1.0 fdsrc ! rawvideoparse ! videoconvert ! pipewiresink mode=provide` with `media.class=Video/Source`, `media.role=Camera`, node `ii-tools-camera`. `rotate` adds to the phone's `rot`. Two stages: the decoder (`ffmpeg`, H.264 → raw I420 at the session's size, turned, mirrored, fitted) restarts on any picture change; the writer (the device or the node) stays open the whole session and repeats the last picture every 200 ms while none comes, so the camera never vanishes. The first picture fixes the size; a later aspect or turn is fitted into it. A dropped socket has 20 s to reconnect with the same token (the phone retries by itself); `{"t":"bye"}` on the socket ends at once. |
+| `{"op":"camera","a":"config","mirror":bool,"rotate":0\|90\|180\|270}` | Update `ffmpeg` mirror/rotation live (restarts `ffmpeg`). |
+| `{"op":"camera","a":"stop"}` | Stop the armed/running camera helper session. |
 
 `peers` always comes before `pairingEnd`: the shell keeps the helper alive only while a
 phone is paired or a pairing is open, and must never see neither.

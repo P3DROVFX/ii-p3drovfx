@@ -30,7 +30,7 @@ Item {
         const o = Config.options.iiTools;
         return [
             o.remote.enable, o.audio.enable, o.liveUpdates.enable, o.pcLive.enable,
-            o.media.enable, o.pcMedia.enable, o.files.enable, o.gallery.enable, o.touchpad.enable, o.draw.enable, o.present.enable, o.screen.enable,
+            o.media.enable, o.pcMedia.enable, o.files.enable, o.gallery.enable, o.camera.enable, o.touchpad.enable, o.draw.enable, o.present.enable, o.screen.enable,
             o.perf.enable, o.phoneData.enable, o.screenshots.enable, o.clipboard.enable,
             o.share.enable, o.notifications.enable, o.calls.enable, o.callAudio.enable, o.wallpaper.enable, o.look.enable,
             o.deck.enable, o.wol.enable
@@ -40,6 +40,8 @@ Item {
     Component.onCompleted: {
         if (!IiLinkService.probed)
             IiLinkService.checkBinary();
+        if (Config.options.iiTools.camera.enable && !Config.options.iiTools.camera.useDroidcam && !IiCameraService._depsChecked)
+            IiCameraService.refresh();
     }
 
     ContentPage {
@@ -495,7 +497,9 @@ Item {
                 visible: Config.options.iiTools.screenshots.enable
                 symbol: "send_to_mobile"
                 title: Translation.tr("Send PC screenshots automatically")
-                description: Translation.tr("Off: keep manual \"Save to phone\" button in the screenshot preview")
+                description: IiLinkService.phoneTakesShots
+                    ? Translation.tr("Off: keep manual \"Save to phone\" button in the screenshot preview")
+                    : Translation.tr("The phone takes them only with \"Receive the PC's screenshots\" on in ii tools (off by default)")
                 checked: Config.options.iiTools.screenshots.autoToPhone
                 onToggled: value => Config.options.iiTools.screenshots.autoToPhone = value
             }
@@ -591,6 +595,18 @@ Item {
                         summary: Translation.tr("Browse the phone's photos and videos in the Phone tab")
                         checked: Config.options.iiTools.gallery.enable
                         onToggled: value => Config.options.iiTools.gallery.enable = value
+                    }
+
+                    ColorsFeatureTile {
+                        width: controlTilesBox.tileWidth
+                        height: 152
+                        symbol: "videocam"
+                        shapeOn: MaterialShape.Shape.Cookie7Sided
+                        shapeOff: MaterialShape.Shape.Circle
+                        title: Translation.tr("Phone as webcam")
+                        summary: Translation.tr("Use the phone's camera as a PC webcam")
+                        checked: Config.options.iiTools.camera.enable
+                        onToggled: value => Config.options.iiTools.camera.enable = value
                     }
 
                     ColorsFeatureTile {
@@ -736,6 +752,53 @@ Item {
                 symbol: "usb"
                 title: Translation.tr("Install adb for the phone as a monitor")
                 description: Translation.tr("The screen goes over USB through adb (android-tools); turn on USB debugging on the phone.")
+            }
+
+            AppToggleRow {
+                Layout.topMargin: 4
+                visible: Config.options.iiTools.camera.enable
+                symbol: "swap_horiz"
+                title: Translation.tr("Use DroidCam instead")
+                description: Translation.tr("Fall back to droidcam-cli instead of streaming over ii tools")
+                checked: Config.options.iiTools.camera.useDroidcam
+                onToggled: value => Config.options.iiTools.camera.useDroidcam = value
+            }
+
+            // Where the phone's picture shows up: a loopback device every app lists, or a
+            // PipeWire camera that needs no kernel module.
+            AppSettingRow {
+                Layout.topMargin: 4
+                visible: Config.options.iiTools.camera.enable && !Config.options.iiTools.camera.useDroidcam
+                symbol: "switch_video"
+                title: Translation.tr("Webcam output")
+                description: IiCameraService.output === "pipewire"
+                    ? Translation.tr("PipeWire camera: no kernel module; OBS and apps that read cameras through PipeWire see it")
+                    : Translation.tr("Virtual camera device (v4l2loopback): every app sees it; the kernel module must be installed")
+            }
+
+            ConfigSelectionArray {
+                visible: Config.options.iiTools.camera.enable && !Config.options.iiTools.camera.useDroidcam
+                currentValue: Config.options.iiTools.camera.output
+                options: [
+                    { displayName: Translation.tr("Automatic"), value: "auto", icon: "auto_mode" },
+                    { displayName: Translation.tr("Device"), value: "v4l2", icon: "videocam" },
+                    { displayName: Translation.tr("PipeWire"), value: "pipewire", icon: "graphic_eq" }
+                ]
+                onSelected: value => Config.options.iiTools.camera.output = value
+            }
+
+            AppSettingRow {
+                Layout.topMargin: 4
+                visible: Config.options.iiTools.camera.enable
+                    && !Config.options.iiTools.camera.useDroidcam
+                    && IiCameraService._depsChecked
+                    && !IiCameraService.available
+                symbol: "download"
+                title: Translation.tr("Install %1 for the phone webcam")
+                    .arg(IiCameraService.missingPackageSummary || Translation.tr("missing packages"))
+                description: IiCameraService.output === "pipewire"
+                    ? Translation.tr("PipeWire webcam output needs FFmpeg with H.264 decoding and GStreamer's PipeWire plugins. See the Phone sidebar's Webcam card for copyable commands.")
+                    : Translation.tr("Virtual camera output needs FFmpeg with H.264 decoding and the v4l2loopback kernel module. See the Phone sidebar's Webcam card for copyable commands.")
             }
         }
 

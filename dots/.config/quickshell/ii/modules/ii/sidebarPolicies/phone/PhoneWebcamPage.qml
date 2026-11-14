@@ -10,37 +10,53 @@ import qs.services
 
 /**
  * Phone Webcam sub-page — controls for using the phone's camera as a webcam
- * via DroidCam.
- *
- * Layout:
- *   ┌── Header (back button + title) ──────┐
- *   │ Status hero (toggle / state)          │
- *   ├── Camera Settings ──────────────────────┤
- *   │  • Camera facing (front/back)         │
- *   │  • Connection (wifi/usb)              │
- *   │  • Resolution                         │
- *   │  • FPS                                │
- *   │  • Mirror toggle                      │
- *   │  • Rotation                           │
- *   ├── Quick Actions ──────────────────────┤
- *   │  • Flip camera                        │
- *   │  • Toggle mirror                      │
- *   │  • Open in app                        │
- *   └───────────────────────────────────────┘
- *
- * Empty/error states:
- *   • DroidCam not installed → banner + install button.
- *   • No reachable KDE Connect device → offline banner.
- *   • Connecting → spinner.
- *   • Last error → red banner with the message.
+ * via ii tools or DroidCam.
  */
 ContentPage {
     id: root
     forceWidth: false
     signal goBack()
 
+    readonly property bool _iiBackend: PhoneCameraService.backend === "ii"
+    readonly property var _iiStatus: IiCameraService.phoneStatus || ({})
+    readonly property bool _noCameraCap: root._iiBackend && IiCameraService.connected && !IiCameraService.hasCameraCap
     readonly property bool _ready: PhoneCameraService.available
         && KdeConnectService.activeReachable
+        && !root._noCameraCap
+    property string _selectedDistro: PhoneCameraService.detectedDistro !== "unknown"
+        ? PhoneCameraService.detectedDistro : "arch"
+
+    Connections {
+        target: PhoneCameraService
+        function onDetectedDistroChanged() {
+            if (PhoneCameraService.detectedDistro && PhoneCameraService.detectedDistro !== "unknown")
+                root._selectedDistro = PhoneCameraService.detectedDistro
+        }
+    }
+
+    function _lensLabel(lens: string): string {
+        switch (lens) {
+        case "front": return Translation.tr("Front");
+        case "main": return Translation.tr("Main");
+        case "wide": return Translation.tr("Wide");
+        case "tele": return Translation.tr("Tele");
+        default: return lens;
+        }
+    }
+
+    function _lensIcon(lens: string): string {
+        return lens === "front" ? "camera_front" : "camera_rear";
+    }
+
+    readonly property var _lensOptions: {
+        const raw = (root._iiStatus && Array.isArray(root._iiStatus.lenses) && root._iiStatus.lenses.length > 0)
+            ? root._iiStatus.lenses
+            : ["front", "main"];
+        return raw.map(l => {
+            const name = String(l);
+            return { displayName: root._lensLabel(name), icon: root._lensIcon(name), value: name };
+        });
+    }
 
     // Slide-up entrance when the sub-page overlay loads.
     opacity: 0
@@ -141,13 +157,19 @@ ContentPage {
 
                 StyledText {
                     Layout.alignment: Qt.AlignVCenter
-                    text: PhoneCameraService.connecting
-                        ? Translation.tr("Connecting…")
-                        : (PhoneCameraService.running
-                            ? Translation.tr("Active")
-                            : (PhoneCameraService.available
-                                ? Translation.tr("Ready")
-                                : Translation.tr("Unavailable")))
+                    text: (root._iiBackend && IiCameraService.state === "asking")
+                        ? Translation.tr("Confirm on phone…")
+                        : PhoneCameraService.connecting
+                            ? Translation.tr("Connecting…")
+                            : (PhoneCameraService.running
+                                ? Translation.tr("Active")
+                                : (!PhoneCameraService.available
+                                    ? Translation.tr("Unavailable")
+                                    : (!KdeConnectService.activeReachable
+                                        ? Translation.tr("Offline")
+                                        : (root._noCameraCap
+                                            ? Translation.tr("Update app")
+                                            : Translation.tr("Ready")))))
                     font.pixelSize: Appearance.font.pixelSize.smaller
                     font.weight: Font.DemiBold
                     color: PhoneCameraService.running
@@ -163,19 +185,37 @@ ContentPage {
     WarningBox {
         Layout.fillWidth: true
         visible: !PhoneCameraService.available || !KdeConnectService.activeReachable
-                || PhoneCameraService.lastError.length > 0
+                || root._noCameraCap || PhoneCameraService.lastError.length > 0
         materialIcon: !PhoneCameraService.available ? "download"
                     : !KdeConnectService.activeReachable ? "phonelink_off"
+                    : root._noCameraCap ? "system_update"
                     : "error"
         text: !PhoneCameraService.available
-            ? Translation.tr("DroidCam is not installed. Install droidcam-cli and the DroidCam Android app to use your phone camera as a webcam.")
+            ? (root._iiBackend
+                ? (!IiCameraService.ffmpegPresent
+                    ? Translation.tr("Install FFmpeg and %1 using the commands below, then click Re-check.")
+                        .arg(IiCameraService.output === "pipewire" ? Translation.tr("GStreamer's PipeWire plugin") : "v4l2loopback")
+                    : !IiCameraService.ffmpegHasH264
+                        ? Translation.tr("Your FFmpeg build cannot decode H.264. Replace it using the command below, then click Re-check.")
+                        : IiCameraService.output === "pipewire"
+                            ? Translation.tr("Install GStreamer's PipeWire and bad plugins using the command below, then click Re-check.")
+                            : Translation.tr("Install the v4l2loopback kernel module using the command below, then click Re-check."))
+                : Translation.tr("DroidCam is not installed. Install droidcam-cli and the DroidCam Android app to use your phone camera as a webcam."))
             : !KdeConnectService.activeReachable
-                ? Translation.tr("No reachable phone. Pair one to use its camera.")
-                : Translation.tr("Camera error: %1").arg(PhoneCameraService.lastError)
+                ? (root._iiBackend
+                    ? (!IiLinkService.hasPeers
+                        ? Translation.tr("No phone paired. Pair one in Settings → ii tools to use its camera.")
+                        : Translation.tr("Phone is offline. Open ii tools on your phone or connect both devices to the same network."))
+                    : Translation.tr("No reachable phone. Pair one to use its camera."))
+                : root._noCameraCap
+                    ? Translation.tr("Update ii tools on your phone to use its camera.")
+                    : (root._iiBackend
+                        ? PhoneCameraService.lastError
+                        : Translation.tr("Camera error: %1").arg(PhoneCameraService.lastError))
 
-        // Inline install button (only when unavailable)
+        // Inline action button (only when unavailable)
         RippleButton {
-            visible: !PhoneCameraService.available
+            visible: !PhoneCameraService.available && !root._iiBackend
             Layout.alignment: Qt.AlignRight
             Layout.preferredHeight: 32
             buttonRadius: Appearance.rounding.full
@@ -202,6 +242,140 @@ ContentPage {
                 const scriptPath = Directories.scriptPath + "/phone/install_droidcam.sh"
                 Quickshell.execDetached(["bash", "-c",
                     terminal + " -e bash " + scriptPath + " &"])
+            }
+        }
+
+        RippleButton {
+            visible: root._iiBackend && (!PhoneCameraService.available || (PhoneCameraService.lastError.length > 0 && PhoneCameraService.missingDeps.length > 0))
+            Layout.alignment: Qt.AlignRight
+            Layout.preferredHeight: 32
+            buttonRadius: Appearance.rounding.full
+            colBackground: Appearance.colors.colPrimaryContainer
+            colBackgroundHover: Appearance.colors.colPrimaryContainerHover
+            contentItem: RowLayout {
+                spacing: 6
+                MaterialSymbol {
+                    Layout.alignment: Qt.AlignVCenter
+                    text: "refresh"
+                    iconSize: 16
+                    color: Appearance.colors.colOnPrimaryContainer
+                }
+                StyledText {
+                    Layout.alignment: Qt.AlignVCenter
+                    text: Translation.tr("Re-check")
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    font.weight: Font.DemiBold
+                    color: Appearance.colors.colOnPrimaryContainer
+                }
+            }
+            onClicked: PhoneCameraService.refresh()
+        }
+    }
+
+    // ─── ii tools missing dependency commands ──────────────
+    ContentSection {
+        visible: root._iiBackend && (!PhoneCameraService.available || PhoneCameraService.lastError.length > 0) && PhoneCameraService.missingDeps.length > 0
+        icon: "terminal"
+        title: Translation.tr("Required Packages")
+
+        Flow {
+            Layout.fillWidth: true
+            spacing: 6
+
+            Repeater {
+                model: [
+                    { key: "arch", label: "Arch" },
+                    { key: "fedora", label: "Fedora" },
+                    { key: "debian", label: "Debian" },
+                    { key: "opensuse", label: "openSUSE" }
+                ]
+                delegate: RippleButton {
+                    required property var modelData
+                    height: 28
+                    leftPadding: 12
+                    rightPadding: 12
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: root._selectedDistro === modelData.key
+                        ? Appearance.colors.colPrimaryContainer
+                        : Appearance.colors.colLayer2
+                    colBackgroundHover: root._selectedDistro === modelData.key
+                        ? Appearance.colors.colPrimaryContainerHover
+                        : Appearance.colors.colLayer2Hover
+                    contentItem: StyledText {
+                        anchors.centerIn: parent
+                        text: modelData.label
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        font.weight: root._selectedDistro === modelData.key ? Font.DemiBold : Font.Normal
+                        color: root._selectedDistro === modelData.key
+                            ? Appearance.colors.colOnPrimaryContainer
+                            : Appearance.colors.colOnLayer2
+                    }
+                    onClicked: root._selectedDistro = modelData.key
+                }
+            }
+        }
+
+        Repeater {
+            model: PhoneCameraService.missingDeps
+            delegate: ColumnLayout {
+                id: depCard
+                required property var modelData
+                readonly property string installCmd: {
+                    const cmds = depCard.modelData.installCommands;
+                    if (!cmds) return "";
+                    return cmds[root._selectedDistro] || "";
+                }
+                Layout.fillWidth: true
+                spacing: 6
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: depCard.modelData.name || depCard.modelData.key || ""
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    font.weight: Font.DemiBold
+                    color: Appearance.colors.colOnLayer1
+                    wrapMode: Text.Wrap
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    visible: (depCard.modelData.description || "").length > 0
+                    text: depCard.modelData.description || ""
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: Appearance.colors.colSubtext
+                    wrapMode: Text.Wrap
+                }
+
+                RippleButton {
+                    Layout.fillWidth: true
+                    visible: depCard.installCmd.length > 0
+                    implicitHeight: cmdText.implicitHeight + 16
+                    buttonRadius: Appearance.rounding.small
+                    colBackground: Appearance.colors.colLayer2
+                    colBackgroundHover: Appearance.colors.colLayer2Hover
+                    onClicked: Quickshell.clipboardText = depCard.installCmd
+                    contentItem: RowLayout {
+                        spacing: 8
+                        StyledText {
+                            id: cmdText
+                            Layout.fillWidth: true
+                            text: depCard.installCmd
+                            font.family: Appearance.font.family.monospace
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            color: Appearance.colors.colOnLayer2
+                            wrapMode: Text.Wrap
+                        }
+                        MaterialSymbol {
+                            Layout.alignment: Qt.AlignVCenter
+                            text: "content_copy"
+                            iconSize: 16
+                            color: Appearance.colors.colOnLayer2
+                        }
+                    }
+                    StyledToolTip {
+                        text: Translation.tr("Copy install command")
+                    }
+                }
             }
         }
     }
@@ -249,11 +423,13 @@ ContentPage {
                 }
                 StyledText {
                     Layout.fillWidth: true
-                    text: PhoneCameraService.connecting
-                        ? Translation.tr("Connecting…")
-                        : (PhoneCameraService.running
-                            ? Translation.tr("Stop camera")
-                            : Translation.tr("Start camera"))
+                    text: (root._iiBackend && IiCameraService.state === "asking")
+                        ? Translation.tr("Confirm on your phone…")
+                        : PhoneCameraService.connecting
+                            ? (root._iiBackend ? Translation.tr("Starting…") : Translation.tr("Connecting…"))
+                            : (PhoneCameraService.running
+                                ? Translation.tr("Stop camera")
+                                : Translation.tr("Start camera"))
                     font.pixelSize: Appearance.font.pixelSize.normal
                     font.weight: Font.DemiBold
                     color: PhoneCameraService.running
@@ -333,7 +509,7 @@ ContentPage {
                     }
                     StyledText {
                         Layout.alignment: Qt.AlignVCenter
-                        text: Config.options.phone.webcam.mirrorHorizontally
+                        text: PhoneCameraService.mirrored
                             ? Translation.tr("Unmirror")
                             : Translation.tr("Mirror")
                         font.pixelSize: Appearance.font.pixelSize.small
@@ -392,8 +568,98 @@ ContentPage {
         icon: "video_settings"
         title: Translation.tr("Camera Settings")
 
-        // Camera facing: front / back
+        // ii tools: Lens selector
         ContentSubsection {
+            visible: root._iiBackend
+            title: Translation.tr("Lens")
+            icon: "camera_front"
+
+            ConfigSelectionArray {
+                options: root._lensOptions
+                currentValue: String(root._iiStatus.lens || "front")
+                onSelected: (v) => IiCameraService.set({ lens: v })
+            }
+        }
+
+        // ii tools: Aspect ratio
+        ContentSubsection {
+            visible: root._iiBackend
+            title: Translation.tr("Aspect ratio")
+            icon: "aspect_ratio"
+
+            ConfigSelectionArray {
+                options: [
+                    { displayName: "4:3", value: "4:3" },
+                    { displayName: "16:9", value: "16:9" }
+                ]
+                currentValue: String(root._iiStatus.aspect || "16:9")
+                onSelected: (v) => IiCameraService.set({ aspect: v })
+            }
+        }
+
+        // ii tools: Quality
+        ContentSubsection {
+            visible: root._iiBackend
+            title: Translation.tr("Quality")
+            icon: "hd"
+
+            ConfigSelectionArray {
+                options: [
+                    { displayName: "720p", value: "720p" },
+                    { displayName: "1080p", value: "1080p" }
+                ]
+                currentValue: String(root._iiStatus.quality || "720p")
+                onSelected: (v) => IiCameraService.set({ quality: v })
+            }
+        }
+
+        // ii tools: Torch (shown only when current lens has a torch)
+        ConfigSwitch {
+            visible: root._iiBackend && Boolean(root._iiStatus.hasTorch)
+            buttonIcon: "flashlight_on"
+            text: Translation.tr("Torch")
+            property bool _syncing: false
+            readonly property bool remoteChecked: Boolean(root._iiStatus.torch)
+            Component.onCompleted: {
+                _syncing = true
+                checked = remoteChecked
+                _syncing = false
+            }
+            onRemoteCheckedChanged: {
+                _syncing = true
+                checked = remoteChecked
+                _syncing = false
+            }
+            onCheckedChanged: {
+                if (!_syncing) IiCameraService.set({ torch: checked })
+            }
+        }
+
+        // ii tools: Stabilization
+        ConfigSwitch {
+            visible: root._iiBackend
+            buttonIcon: "video_stable"
+            text: Translation.tr("Stabilize")
+            property bool _syncing: false
+            readonly property bool remoteChecked: Boolean(root._iiStatus.stabilize)
+            Component.onCompleted: {
+                _syncing = true
+                checked = remoteChecked
+                _syncing = false
+            }
+            onRemoteCheckedChanged: {
+                _syncing = true
+                checked = remoteChecked
+                _syncing = false
+            }
+            onCheckedChanged: {
+                if (!_syncing) IiCameraService.set({ stabilize: checked })
+            }
+        }
+
+        // DroidCam: Camera facing: front / back
+        ContentSubsection {
+            visible: !root._iiBackend
             title: Translation.tr("Camera")
             icon: "camera_front"
 
@@ -414,8 +680,9 @@ ContentPage {
             }
         }
 
-        // Connection
+        // DroidCam: Connection
         ContentSubsection {
+            visible: !root._iiBackend
             title: Translation.tr("Connection")
             icon: "cable"
 
@@ -429,8 +696,9 @@ ContentPage {
             }
         }
 
-        // Resolution
+        // DroidCam: Resolution
         ContentSubsection {
+            visible: !root._iiBackend
             title: Translation.tr("Resolution")
             icon: "aspect_ratio"
 
@@ -449,9 +717,10 @@ ContentPage {
         ConfigSwitch {
             buttonIcon: "flip"
             text: Translation.tr("Mirror horizontally")
-            checked: Config.options.phone.webcam.mirrorHorizontally
+            checked: PhoneCameraService.mirrored
             onCheckedChanged: {
-                Config.options.phone.webcam.mirrorHorizontally = checked
+                if (checked !== PhoneCameraService.mirrored)
+                    PhoneCameraService.toggleMirror()
             }
         }
 
@@ -473,11 +742,11 @@ ContentPage {
         }
     }
 
-    // ─── Wi-Fi settings (only visible in WiFi mode) ────────
+    // ─── Wi-Fi settings (only visible in DroidCam WiFi mode)
     ContentSection {
         icon: "wifi"
         title: Translation.tr("Connection")
-        visible: Config.options.phone.webcam.connection === "wifi"
+        visible: !root._iiBackend && Config.options.phone.webcam.connection === "wifi"
 
         ConfigTextField {
             text: Translation.tr("Phone IP")
@@ -498,10 +767,11 @@ ContentPage {
         }
     }
 
-    // ─── Quality ───────────────────────────────────────────
+    // ─── Quality (DroidCam only) ───────────────────────────
     ContentSection {
         icon: "tune"
         title: Translation.tr("Quality")
+        visible: !root._iiBackend
 
         ConfigSlider {
             text: Translation.tr("Frame rate (fps)")

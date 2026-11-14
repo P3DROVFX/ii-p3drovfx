@@ -2925,6 +2925,14 @@ Singleton {
                     // Resolution, refresh, scale, side and bitrate are the phone's to choose.
                     property bool enable: true
                 }
+                // The phone's camera as this PC's webcam over ii link, instead of DroidCam.
+                property JsonObject camera: JsonObject {
+                    property bool enable: true
+                    property bool useDroidcam: false
+                    // "auto": a v4l2loopback device when the module is there (every app
+                    // sees it), else a PipeWire camera (no kernel module, fewer apps).
+                    property string output: "auto" // "auto" | "v4l2" | "pipewire"
+                }
                 property JsonObject callAudio: JsonObject {
                     property bool enable: true
                     // Every call on the PC by itself (ringing or dialled); off, only on request.
