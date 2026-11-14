@@ -170,6 +170,7 @@ Singleton {
         .concat(root.audioEnabled ? ["audio"] : [])
         .concat(root.deckEnabled ? ["deck", "appIcons", "deckFocus"] : [])
         .concat(root.wallpaperEnabled ? ["wallpaper"] : [])
+        .concat(root.wallSyncEnabled ? ["wallSave"] : [])
         .concat(root.callsEnabled ? ["calls"] : [])
         .concat(root.notifsEnabled ? ["notifs", "notifFilter"] : [])
         .concat(root.shareEnabled ? ["share"] : [])
@@ -1814,20 +1815,54 @@ Singleton {
         root._makeWallSync();
     }
 
-    function _makeWallSync(): void {
-        if (root.wallSyncDev === "" || root._lookName === "" || root._lookName === root._wallSyncSent || wallSyncProc.running)
-            return;
-        const out = `${root.wallSyncDir}/${root._lookName}.jpg`;
+    /// The shell command that makes (once) the wallpaper's 3840 px JPEG at `out`.
+    function _wallJpegCommand(out): var {
         const video = /\.(mp4|mkv|webm|mov|avi|gif)$/i.test(root._wallPath);
         const make = video
             ? `ffmpeg -y -loglevel error -i "$2" -frames:v 1 -vf "scale='min(3840,iw)':-2" -q:v 3 "$3"`
             : `magick "$2[0]" -resize '3840x3840>' -quality 88 "$3"`;
-        wallSyncProc.out = out;
-        wallSyncProc.name = root._lookName;
-        wallSyncProc.command = ["sh", "-c",
+        return ["sh", "-c",
             `mkdir -p -m 700 -- "$1" && find "$1" -type f ! -name "$4.jpg" -delete && { [ -s "$3" ] || ${make}; }`,
             "sh", root.wallSyncDir, root._wallPath, out, root._lookName];
+    }
+
+    function _makeWallSync(): void {
+        if (root.wallSyncDev === "" || root._lookName === "" || root._lookName === root._wallSyncSent || wallSyncProc.running)
+            return;
+        const out = `${root.wallSyncDir}/${root._lookName}.jpg`;
+        wallSyncProc.out = out;
+        wallSyncProc.name = root._lookName;
+        wallSyncProc.command = root._wallJpegCommand(out);
         wallSyncProc.running = true;
+    }
+
+    /// The phone's "Save the PC's wallpaper" button: the same JPEG, uncropped, as a file the
+    /// phone files in its gallery (`purpose: "wallSave"`). Any phone may ask while sharing is on.
+    function _sendWallSave(dev): void {
+        if (!root.wallSyncEnabled || root._wallPath === "" || wallSaveProc.running) {
+            root.sendTo(dev, { t: "err", id: 0, code: "unavailable" });
+            return;
+        }
+        const out = `${root.wallSyncDir}/${root._lookName}.jpg`;
+        wallSaveProc.dev = dev;
+        wallSaveProc.out = out;
+        wallSaveProc.name = root._lookName;
+        wallSaveProc.command = root._wallJpegCommand(out);
+        wallSaveProc.running = true;
+    }
+    Process {
+        id: wallSaveProc
+        property string dev
+        property string out
+        property string name
+        onExited: code => {
+            if (code === 0 && root.connections[wallSaveProc.dev] !== undefined) {
+                root.send({ op: "sendFile", dev: wallSaveProc.dev, id: 660000 + root._fileSerial++, path: wallSaveProc.out,
+                    name: wallSaveProc.name, purpose: "wallSave" });
+            } else {
+                root.sendTo(wallSaveProc.dev, { t: "err", id: 0, code: "unavailable" });
+            }
+        }
     }
     Process {
         id: wallSyncProc
@@ -3108,6 +3143,8 @@ Singleton {
                 root._sendClipHistory(dev, m.offset, m.limit);
             else if (m.what === "clipThumbs")
                 root._requestClipThumbs(dev, m.ids);
+            else if (m.what === "wallpaper")
+                root._sendWallSave(dev);
             return;
         }
     }
