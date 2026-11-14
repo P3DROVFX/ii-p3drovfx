@@ -39,33 +39,45 @@ Item {
         angle: root.tilt
     }
 
-    readonly property var _animations: ({
-        "bounce": bounceAnim,
-        "hop": hopAnim,
-        "pulse": pulseAnim,
-        "wiggle": wiggleAnim,
-        "ripple": rippleAnim
+    property string _activeStyle: ""
+    property int _activeRepeats: 1
+
+    readonly property var _styleComponents: ({
+        "bounce": bounceAnimComponent,
+        "hop": hopAnimComponent,
+        "pulse": pulseAnimComponent,
+        "wiggle": wiggleAnimComponent,
+        "ripple": rippleAnimComponent
     })
 
     anchors.fill: parent
     z: -1
 
-    function stop() {
-        for (const key in _animations)
-            _animations[key].stop();
+    function _resetValues() {
         lift = 0;
         pop = 1;
         tilt = 0;
         ringProgress = 0;
     }
 
+    function _onAnimFinished() {
+        root._activeStyle = "";
+        root._resetValues();
+    }
+
+    function stop() {
+        if (animLoader.item)
+            animLoader.item.stop();
+        root._activeStyle = "";
+        root._resetValues();
+    }
+
     function play(style, repeats) {
-        const anim = _animations[style];
         stop();
-        if (!anim)
+        if (!root._styleComponents[style])
             return;
-        anim.loops = Math.max(1, repeats ?? 1);
-        anim.start();
+        root._activeRepeats = Math.max(1, repeats ?? 1);
+        root._activeStyle = style;
     }
 
     function playLaunch(style) {
@@ -79,9 +91,19 @@ Item {
 
     // The app is up: let the running cycle land instead of looping on.
     function settle() {
-        for (const key in _animations) {
-            if (_animations[key].running)
-                _animations[key].loops = 1;
+        if (animLoader.item && animLoader.item.running)
+            animLoader.item.loops = 1;
+    }
+
+    Loader {
+        id: animLoader
+        active: root._activeStyle !== ""
+        sourceComponent: root._styleComponents[root._activeStyle] ?? null
+        onLoaded: {
+            if (item && root._activeStyle !== "") {
+                item.loops = root._activeRepeats;
+                item.restart();
+            }
         }
     }
 
@@ -98,142 +120,157 @@ Item {
     }
 
     // macOS: three hops that land hard.
-    SequentialAnimation {
-        id: bounceAnim
-        NumberAnimation {
-            target: root
-            property: "lift"
-            from: 0
-            to: 18
-            duration: 126
-            easing.type: Easing.OutQuad
-        }
-        NumberAnimation {
-            target: root
-            property: "lift"
-            from: 18
-            to: 0
-            duration: 154
-            easing.type: Easing.InQuad
+    Component {
+        id: bounceAnimComponent
+        SequentialAnimation {
+            onFinished: root._onAnimFinished()
+            NumberAnimation {
+                target: root
+                property: "lift"
+                from: 0
+                to: 18
+                duration: 126
+                easing.type: Easing.OutQuad
+            }
+            NumberAnimation {
+                target: root
+                property: "lift"
+                from: 18
+                to: 0
+                duration: 154
+                easing.type: Easing.InQuad
+            }
         }
     }
 
     // One soft hop with a small rebound on landing.
-    SequentialAnimation {
-        id: hopAnim
-        NumberAnimation {
-            target: root
-            property: "lift"
-            from: 0
-            to: 12
-            duration: 170
-            easing.type: Easing.OutCubic
-        }
-        NumberAnimation {
-            target: root
-            property: "lift"
-            to: 0
-            duration: 170
-            easing.type: Easing.InCubic
-        }
-        NumberAnimation {
-            target: root
-            property: "lift"
-            to: 3
-            duration: 90
-            easing.type: Easing.OutQuad
-        }
-        NumberAnimation {
-            target: root
-            property: "lift"
-            to: 0
-            duration: 110
-            easing.type: Easing.InQuad
+    Component {
+        id: hopAnimComponent
+        SequentialAnimation {
+            onFinished: root._onAnimFinished()
+            NumberAnimation {
+                target: root
+                property: "lift"
+                from: 0
+                to: 12
+                duration: 170
+                easing.type: Easing.OutCubic
+            }
+            NumberAnimation {
+                target: root
+                property: "lift"
+                to: 0
+                duration: 170
+                easing.type: Easing.InCubic
+            }
+            NumberAnimation {
+                target: root
+                property: "lift"
+                to: 3
+                duration: 90
+                easing.type: Easing.OutQuad
+            }
+            NumberAnimation {
+                target: root
+                property: "lift"
+                to: 0
+                duration: 110
+                easing.type: Easing.InQuad
+            }
         }
     }
 
     // Swell, then spring back past rest.
-    SequentialAnimation {
-        id: pulseAnim
-        NumberAnimation {
-            target: root
-            property: "pop"
-            from: 1
-            to: 1.18
-            duration: 140
-            easing.type: Easing.OutCubic
-        }
-        NumberAnimation {
-            target: root
-            property: "pop"
-            to: 1
-            duration: 320
-            easing.type: Easing.OutBack
-            easing.overshoot: 3
+    Component {
+        id: pulseAnimComponent
+        SequentialAnimation {
+            onFinished: root._onAnimFinished()
+            NumberAnimation {
+                target: root
+                property: "pop"
+                from: 1
+                to: 1.18
+                duration: 140
+                easing.type: Easing.OutCubic
+            }
+            NumberAnimation {
+                target: root
+                property: "pop"
+                to: 1
+                duration: 320
+                easing.type: Easing.OutBack
+                easing.overshoot: 3
+            }
         }
     }
 
     // A decaying shake.
-    SequentialAnimation {
-        id: wiggleAnim
-        NumberAnimation {
-            target: root
-            property: "tilt"
-            to: -10
-            duration: 60
-            easing.type: Easing.InOutSine
-        }
-        NumberAnimation {
-            target: root
-            property: "tilt"
-            to: 10
-            duration: 60
-            easing.type: Easing.InOutSine
-        }
-        NumberAnimation {
-            target: root
-            property: "tilt"
-            to: -8
-            duration: 60
-            easing.type: Easing.InOutSine
-        }
-        NumberAnimation {
-            target: root
-            property: "tilt"
-            to: 8
-            duration: 60
-            easing.type: Easing.InOutSine
-        }
-        NumberAnimation {
-            target: root
-            property: "tilt"
-            to: -4
-            duration: 60
-            easing.type: Easing.InOutSine
-        }
-        NumberAnimation {
-            target: root
-            property: "tilt"
-            to: 0
-            duration: 60
-            easing.type: Easing.InOutSine
+    Component {
+        id: wiggleAnimComponent
+        SequentialAnimation {
+            onFinished: root._onAnimFinished()
+            NumberAnimation {
+                target: root
+                property: "tilt"
+                to: -10
+                duration: 60
+                easing.type: Easing.InOutSine
+            }
+            NumberAnimation {
+                target: root
+                property: "tilt"
+                to: 10
+                duration: 60
+                easing.type: Easing.InOutSine
+            }
+            NumberAnimation {
+                target: root
+                property: "tilt"
+                to: -8
+                duration: 60
+                easing.type: Easing.InOutSine
+            }
+            NumberAnimation {
+                target: root
+                property: "tilt"
+                to: 8
+                duration: 60
+                easing.type: Easing.InOutSine
+            }
+            NumberAnimation {
+                target: root
+                property: "tilt"
+                to: -4
+                duration: 60
+                easing.type: Easing.InOutSine
+            }
+            NumberAnimation {
+                target: root
+                property: "tilt"
+                to: 0
+                duration: 60
+                easing.type: Easing.InOutSine
+            }
         }
     }
 
-    SequentialAnimation {
-        id: rippleAnim
-        NumberAnimation {
-            target: root
-            property: "ringProgress"
-            from: 0.001
-            to: 1
-            duration: 600
-            easing.type: Easing.OutCubic
-        }
-        PropertyAction {
-            target: root
-            property: "ringProgress"
-            value: 0
+    Component {
+        id: rippleAnimComponent
+        SequentialAnimation {
+            onFinished: root._onAnimFinished()
+            NumberAnimation {
+                target: root
+                property: "ringProgress"
+                from: 0.001
+                to: 1
+                duration: 600
+                easing.type: Easing.OutCubic
+            }
+            PropertyAction {
+                target: root
+                property: "ringProgress"
+                value: 0
+            }
         }
     }
 }

@@ -31,25 +31,31 @@ Item {
     }
 
     function _sync() {
-        if (!root.host)
-            root.host = root._findHost();
-        if (!root.host)
+        const host = root._findHost();
+        root.host = host;
+        if (!host)
             return;
         if (root.showTooltip && root.text.length > 0)
-            root.host.requestShow(root);
+            host.requestShow(root);
         else
-            root.host.release(root);
+            host.release(root);
     }
 
     onShowTooltipChanged: root._sync()
     onTextChanged: {
-        if (root.showTooltip && root.host)
-            root.host.updateText(root);
+        const host = root._findHost();
+        root.host = host;
+        if (root.showTooltip && host)
+            host.updateText(root);
         else
             root._sync();
     }
     Component.onDestruction: {
-        if (root.host)
+        const host = root._findHost();
+        if (host)
+            host.release(root);
+        else if (root.host && typeof root.host.release === "function")
             root.host.release(root);
+        root.host = null;
     }
 }

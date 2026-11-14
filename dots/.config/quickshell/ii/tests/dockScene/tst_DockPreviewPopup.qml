@@ -16,9 +16,12 @@ TestCase {
         id: fakeDock
         property string dockPos: "bottom"
         property bool isVertical: false
+        property bool dockRevealed: true
+        property bool dockWindowVisible: true
         property bool buttonHovered: false
         property bool anyContextMenuOpen: false
         property bool dragging: false
+        property bool islandDragging: false
         property bool popupIsResizing: false
         property var lastHoveredButton: null
         property point hoveredButtonCenter: Qt.point(450, 660)
@@ -59,9 +62,12 @@ TestCase {
 
     function init() {
         clearToplevels()
+        fakeDock.dockRevealed = true
+        fakeDock.dockWindowVisible = true
         fakeDock.buttonHovered = false
         fakeDock.anyContextMenuOpen = false
         fakeDock.dragging = false
+        fakeDock.islandDragging = false
     }
 
     function cleanup() {
@@ -275,5 +281,73 @@ TestCase {
         verify(background.followX < startX && background.followX > 250)
         tryCompare(background, "followX", 250, 500)
         fakeDock.hoveredButtonCenter = Qt.point(450, 660)
+    }
+
+    // After closing, the surface stays mapped during the grace window for
+    // fast reopen, then unmaps after idleReleaseMs; reopening still works.
+    function test_idleReleaseUnmapsAfterTimeoutAndReopens() {
+        const popup = createTemporaryObject(popupComponent, testCase, { idleReleaseMs: 80 })
+        verify(popup)
+        const browser = makeApp("browser")
+        popup.appTopLevel = browser
+        fakeDock.buttonHovered = true
+        tryCompare(popup, "show", true, 1000)
+        tryCompare(popup, "visible", true, 1000)
+
+        fakeDock.buttonHovered = false
+        tryCompare(popup, "active", false, 1000)
+        // Briefly resident right after closing.
+        compare(popup.everShown, true)
+        compare(popup.visible, true)
+
+        // Released after staying hidden for idleReleaseMs.
+        tryCompare(popup, "everShown", false, 1000)
+        compare(popup.visible, false)
+        compare(popup.displayedApp, null)
+
+        // Reopening after release works normally.
+        fakeDock.buttonHovered = true
+        tryCompare(popup, "show", true, 1000)
+        compare(popup.visible, true)
+        compare(popup.displayedApp, browser)
+    }
+
+    // Auto-hiding or hiding the dock releases the surface immediately when
+    // the preview is closed, and never releases while open, hovered, or dragged.
+    function test_dockHideReleasesAndGuardsActiveHoverDrag() {
+        const popup = createTemporaryObject(popupComponent, testCase, { idleReleaseMs: 5000 })
+        verify(popup)
+        const browser = makeApp("browser")
+        popup.appTopLevel = browser
+        fakeDock.buttonHovered = true
+        tryCompare(popup, "show", true, 1000)
+        tryCompare(popup, "visible", true, 1000)
+
+        // Never release while visible/hovered.
+        fakeDock.dockRevealed = false
+        wait(50)
+        compare(popup.everShown, true)
+        compare(popup.visible, true)
+
+        // Dragging also blocks release after closing until the drag ends.
+        fakeDock.buttonHovered = false
+        fakeDock.dragging = true
+        tryCompare(popup, "active", false, 1000)
+        // Wait past popupIsResizing's 500 ms timer so dragging is the sole guard.
+        tryCompare(fakeDock, "popupIsResizing", false, 1000)
+        compare(popup.everShown, true)
+        compare(popup.visible, true)
+
+        // Once drag ends while dock is auto-hidden, surface releases immediately.
+        fakeDock.dragging = false
+        compare(popup.everShown, false)
+        compare(popup.visible, false)
+
+        // Reopening once dock reveals again still works.
+        fakeDock.dockRevealed = true
+        fakeDock.buttonHovered = true
+        tryCompare(popup, "show", true, 1000)
+        compare(popup.visible, true)
+        compare(popup.displayedApp, browser)
     }
 }

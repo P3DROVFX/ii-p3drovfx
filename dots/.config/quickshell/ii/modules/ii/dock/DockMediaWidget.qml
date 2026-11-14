@@ -75,7 +75,8 @@ Item {
     property bool mediaHovered: false
     property bool _initialized: false
 
-    readonly property bool anyMouseContained: dragOverlay.containsMouse || playBtnMouseArea.containsMouse || nextBtnMouseArea.containsMouse || albumArtMouseArea.containsMouse
+    readonly property real _dpr: Math.max(1, Screen.devicePixelRatio || 1)
+    readonly property bool anyMouseContained: dragOverlay.containsMouse || (horizontalViewLoader.item?.anyButtonHovered ?? false)
 
     onAnyMouseContainedChanged: {
         if (anyMouseContained) {
@@ -106,68 +107,80 @@ Item {
     readonly property string effectiveArtSource: root.cachedArtSource || root.artUrl
 
     // ── Dynamic Color Scheme & M3 Tokens ──────────────────────────────────
-    readonly property bool useDynamicColors: (Config.options?.media?.dynamicAlbumColors ?? false) && root.cachedArtSource !== ""
+    readonly property bool dynamicColorsEnabled: Config.options?.media?.dynamicAlbumColors ?? false
+    readonly property bool useDynamicColors: root.dynamicColorsEnabled && root.cachedArtSource !== ""
 
-    ColorQuantizer {
-        id: colorQuantizer
-        source: root.cachedArtSource
-        depth: 0
-        rescaleSize: 1
+    Loader {
+        id: dynamicColorLoader
+        active: root.useDynamicColors
+        sourceComponent: QtObject {
+            readonly property ColorQuantizer quantizer: ColorQuantizer {
+                source: root.cachedArtSource
+                depth: 0
+                rescaleSize: 1
+            }
+            readonly property color dominantColor: ColorUtils.mix(
+                (quantizer.colors[0] ?? Appearance.colors.colPrimary),
+                Appearance.colors.colPrimaryContainer, 0.8
+            ) || Appearance.m3colors.m3secondaryContainer
+            readonly property AdaptedMaterialScheme scheme: AdaptedMaterialScheme {
+                color: dominantColor
+            }
+        }
     }
 
-    property color artDominantColor: ColorUtils.mix(
-        (colorQuantizer?.colors[0] ?? Appearance.colors.colPrimary),
+    readonly property var colorQuantizer: dynamicColorLoader.item?.quantizer ?? null
+    readonly property color artDominantColor: dynamicColorLoader.item?.dominantColor ?? (ColorUtils.mix(
+        Appearance.colors.colPrimary,
         Appearance.colors.colPrimaryContainer, 0.8
-    ) || Appearance.m3colors.m3secondaryContainer
-
-    property QtObject blendedColors: AdaptedMaterialScheme {
-        color: root.artDominantColor
-    }
+    ) || Appearance.m3colors.m3secondaryContainer)
+    readonly property QtObject blendedColors: dynamicColorLoader.item?.scheme ?? null
 
     // ── Semantic Material 3 Expressive Tokens with Guaranteed Contrast ────
     // Surface
     readonly property color cardBgColor: {
-        if (root.useDynamicColors) {
+        const scheme = root.useDynamicColors ? root.blendedColors : null;
+        if (scheme) {
             return root.mediaHovered
-                ? ColorUtils.mix(blendedColors.colLayer1, blendedColors.colOnLayer1, 0.92)
-                : blendedColors.colLayer1;
+                ? ColorUtils.mix(scheme.colLayer1, scheme.colOnLayer1, 0.92)
+                : scheme.colLayer1;
         }
         return root.mediaHovered ? Appearance.colors.colLayer1Hover : Appearance.colors.colLayer1Base;
     }
 
     // Typography
-    readonly property color cardTextColor: root.useDynamicColors
-        ? blendedColors.colOnLayer0
+    readonly property color cardTextColor: (root.useDynamicColors && root.blendedColors)
+        ? root.blendedColors.colOnLayer0
         : Appearance.colors.colOnSurface
 
-    readonly property color cardSubtextColor: root.useDynamicColors
-        ? blendedColors.colSubtext
+    readonly property color cardSubtextColor: (root.useDynamicColors && root.blendedColors)
+        ? root.blendedColors.colSubtext
         : Appearance.colors.colOnSurfaceVariant
 
     // Play / Pause Button
     readonly property color btnPlayBg: root.isPlaying
-        ? (root.useDynamicColors ? blendedColors.colPrimary : Appearance.colors.colPrimary)
-        : (root.useDynamicColors ? blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer)
+        ? ((root.useDynamicColors && root.blendedColors) ? root.blendedColors.colPrimary : Appearance.colors.colPrimary)
+        : ((root.useDynamicColors && root.blendedColors) ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer)
 
     readonly property color btnPlayBgHover: root.isPlaying
-        ? (root.useDynamicColors ? blendedColors.colPrimaryHover : Appearance.colors.colPrimaryHover)
-        : (root.useDynamicColors ? blendedColors.colPrimaryContainerHover : Appearance.colors.colPrimaryContainerHover)
+        ? ((root.useDynamicColors && root.blendedColors) ? root.blendedColors.colPrimaryHover : Appearance.colors.colPrimaryHover)
+        : ((root.useDynamicColors && root.blendedColors) ? root.blendedColors.colPrimaryContainerHover : Appearance.colors.colPrimaryContainerHover)
 
     readonly property color btnPlayIconColor: root.isPlaying
-        ? (root.useDynamicColors ? blendedColors.colOnPrimary : Appearance.colors.colOnPrimary)
-        : (root.useDynamicColors ? blendedColors.colOnPrimaryContainer : Appearance.colors.colOnPrimaryContainer)
+        ? ((root.useDynamicColors && root.blendedColors) ? root.blendedColors.colOnPrimary : Appearance.colors.colOnPrimary)
+        : ((root.useDynamicColors && root.blendedColors) ? root.blendedColors.colOnPrimaryContainer : Appearance.colors.colOnPrimaryContainer)
 
     // Next Button
-    readonly property color btnNextBg: root.useDynamicColors
-        ? blendedColors.colSecondaryContainer
+    readonly property color btnNextBg: (root.useDynamicColors && root.blendedColors)
+        ? root.blendedColors.colSecondaryContainer
         : Appearance.colors.colSecondaryContainer
 
-    readonly property color btnNextBgHover: root.useDynamicColors
-        ? blendedColors.colSecondaryContainerHover
+    readonly property color btnNextBgHover: (root.useDynamicColors && root.blendedColors)
+        ? root.blendedColors.colSecondaryContainerHover
         : Appearance.colors.colSecondaryContainerHover
 
-    readonly property color btnNextIconColor: root.useDynamicColors
-        ? blendedColors.colOnSecondaryContainer
+    readonly property color btnNextIconColor: (root.useDynamicColors && root.blendedColors)
+        ? root.blendedColors.colOnSecondaryContainer
         : Appearance.colors.colOnSecondaryContainer
 
     // ── Track Text Transition Animation ────────────────────────────────────
@@ -245,21 +258,38 @@ Item {
         root.applyArtTransition(root.effectiveArtSource);
     }
 
+    function _adoptHorizontalArt(newSrc) {
+        const imgA = horizontalViewLoader.item?.artImgA ?? null;
+        const imgB = horizontalViewLoader.item?.artImgB ?? null;
+        if (!imgA || !imgB) {
+            root.activeArtSource = newSrc;
+            return;
+        }
+        imgA.source = newSrc;
+        imgA.opacity = newSrc !== "" ? 1.0 : 0.0;
+        imgB.source = "";
+        imgB.opacity = 0.0;
+        root.imgAActive = true;
+        root.artScaleA = 1.0;
+        root.artScaleB = 1.0;
+        root.activeArtSource = newSrc;
+    }
+
     function applyArtTransition(newSrc) {
-        if (!root._initialized) {
-            artImgA.source = newSrc;
-            artImgA.opacity = newSrc !== "" ? 1.0 : 0.0;
-            artImgB.source = "";
-            artImgB.opacity = 0.0;
-            root.imgAActive = true;
-            root.artScaleA = 1.0;
-            root.artScaleB = 1.0;
+        const imgA = horizontalViewLoader.item?.artImgA ?? null;
+        const imgB = horizontalViewLoader.item?.artImgB ?? null;
+        if (!imgA || !imgB) {
             root.activeArtSource = newSrc;
             return;
         }
 
-        const currentActive = root.imgAActive ? artImgA : artImgB;
-        const currentIncoming = root.imgAActive ? artImgB : artImgA;
+        if (!root._initialized) {
+            root._adoptHorizontalArt(newSrc);
+            return;
+        }
+
+        const currentActive = root.imgAActive ? imgA : imgB;
+        const currentIncoming = root.imgAActive ? imgB : imgA;
 
         if (newSrc === root.activeArtSource && currentActive.source !== "") {
             return;
@@ -304,8 +334,13 @@ Item {
         artPreloadTimer.stop();
         if (artCrossfadeAnim.running) artCrossfadeAnim.stop();
 
-        const active = root.imgAActive ? artImgA : artImgB;
-        const incoming = root.imgAActive ? artImgB : artImgA;
+        const imgA = horizontalViewLoader.item?.artImgA ?? null;
+        const imgB = horizontalViewLoader.item?.artImgB ?? null;
+        if (!imgA || !imgB)
+            return;
+
+        const active = root.imgAActive ? imgA : imgB;
+        const incoming = root.imgAActive ? imgB : imgA;
 
         artIncomingFade.target = incoming;
         artIncomingScale.target = root;
@@ -328,7 +363,11 @@ Item {
     ParallelAnimation {
         id: artCrossfadeAnim
         onFinished: {
-            const oldActive = root.imgAActive ? artImgA : artImgB;
+            const imgA = horizontalViewLoader.item?.artImgA ?? null;
+            const imgB = horizontalViewLoader.item?.artImgB ?? null;
+            if (!imgA || !imgB)
+                return;
+            const oldActive = root.imgAActive ? imgA : imgB;
             oldActive.source = "";
             oldActive.opacity = 0;
             root.imgAActive = !root.imgAActive;
@@ -473,104 +512,124 @@ Item {
             }
 
             // ── Horizontal Layout (3 slots: Artwork squircle, Track info, Transport buttons) ──
-            Item {
-                id: horizontalView
+            Loader {
+                id: horizontalViewLoader
                 anchors.fill: parent
-                visible: !root.square
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 8
-                    anchors.rightMargin: 8
-                    anchors.topMargin: 4
-                    anchors.bottomMargin: 4
-                    spacing: 8
-
-                    // 1. Album Art with Android Transition & Squircle Shape
-                    Rectangle {
-                        id: albumArtWrapper
-                        Layout.alignment: Qt.AlignVCenter
-                        Layout.preferredWidth: Math.max(28, Math.min(38, cardBg.height - 10))
-                        Layout.preferredHeight: Layout.preferredWidth
-                        radius: root.innerRadius(Layout.preferredWidth, (cardBg.height - Layout.preferredWidth) / 2)
-                        color: root.btnNextBg
-
-                        scale: albumArtMouseArea.pressed ? 0.94 : (albumArtMouseArea.containsMouse ? 1.04 : (root.isPlaying ? 1.0 : 0.96))
-                        Behavior on scale {
-                            enabled: !Appearance.reducedMotion
-                            NumberAnimation {
-                                duration: Appearance.animation.elementMoveFast.duration
-                                easing.type: Easing.OutCubic
-                            }
-                        }
-
-                        // Antialiased clipping mask
-                        Rectangle {
-                            id: artMask
-                            anchors.fill: parent
-                            radius: albumArtWrapper.radius
-                            visible: false
-                        }
-
-                        layer.enabled: true
-                        layer.effect: OpacityMask {
-                            maskSource: artMask
-                        }
-
-                        // Fallback placeholder icon
-                        MaterialSymbol {
-                            renderType: Text.CurveRendering
-                            anchors.centerIn: parent
-                            text: "music_note"
-                            iconSize: Math.round(albumArtWrapper.Layout.preferredWidth * 0.52)
-                            fill: 1
-                            color: root.btnNextIconColor
-                            visible: (!artImgA.visible || artImgA.opacity < 0.05) && (!artImgB.visible || artImgB.opacity < 0.05)
-                        }
-
-                        // Dual-image crossfade & scale morph
-                        Image {
-                            id: artImgA
-                            anchors.fill: parent
-                            fillMode: Image.PreserveAspectCrop
-                            asynchronous: true
-                            cache: true
-                            antialiasing: true
-                            scale: root.artScaleA
-                            visible: opacity > 0.001
-                            onStatusChanged: {
-                                if (!root.imgAActive && status === Image.Ready && artPreloadTimer.running) {
-                                    root.startCrossfade();
-                                }
-                            }
-                        }
-
-                        Image {
-                            id: artImgB
-                            anchors.fill: parent
-                            fillMode: Image.PreserveAspectCrop
-                            asynchronous: true
-                            cache: true
-                            antialiasing: true
-                            scale: root.artScaleB
-                            opacity: 0.0
-                            visible: opacity > 0.001
-                            onStatusChanged: {
-                                if (root.imgAActive && status === Image.Ready && artPreloadTimer.running) {
-                                    root.startCrossfade();
-                                }
-                            }
-                        }
-
-                        MouseArea {
-                            id: albumArtMouseArea
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            preventStealing: true
-                            onClicked: MprisController.togglePlaying()
-                        }
+                active: !root.square
+                onActiveChanged: {
+                    if (!active) {
+                        artPreloadTimer.stop();
+                        if (artCrossfadeAnim.running) artCrossfadeAnim.stop();
+                        if (artFadeOutAnim.running) artFadeOutAnim.stop();
+                        artIncomingFade.target = null;
+                        artOutgoingFade.target = null;
+                        artFadeOutAnim.target = null;
                     }
+                }
+                onLoaded: root._adoptHorizontalArt(root.effectiveArtSource)
+                sourceComponent: Item {
+                    id: horizontalView
+                    property alias artImgA: artImgA
+                    property alias artImgB: artImgB
+                    readonly property bool anyButtonHovered: playBtnMouseArea.containsMouse || nextBtnMouseArea.containsMouse || albumArtMouseArea.containsMouse
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 8
+                        anchors.topMargin: 4
+                        anchors.bottomMargin: 4
+                        spacing: 8
+
+                        // 1. Album Art with Android Transition & Squircle Shape
+                        Rectangle {
+                            id: albumArtWrapper
+                            readonly property int artSourcePx: Math.max(1, Math.ceil((width > 0 ? width : Layout.preferredWidth) * root._dpr * 2))
+                            Layout.alignment: Qt.AlignVCenter
+                            Layout.preferredWidth: Math.max(28, Math.min(38, cardBg.height - 10))
+                            Layout.preferredHeight: Layout.preferredWidth
+                            radius: root.innerRadius(Layout.preferredWidth, (cardBg.height - Layout.preferredWidth) / 2)
+                            color: root.btnNextBg
+
+                            scale: albumArtMouseArea.pressed ? 0.94 : (albumArtMouseArea.containsMouse ? 1.04 : (root.isPlaying ? 1.0 : 0.96))
+                            Behavior on scale {
+                                enabled: !Appearance.reducedMotion
+                                NumberAnimation {
+                                    duration: Appearance.animation.elementMoveFast.duration
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
+
+                            // Antialiased clipping mask
+                            Rectangle {
+                                id: artMask
+                                anchors.fill: parent
+                                radius: albumArtWrapper.radius
+                                visible: false
+                            }
+
+                            layer.enabled: true
+                            layer.effect: OpacityMask {
+                                maskSource: artMask
+                            }
+
+                            // Fallback placeholder icon
+                            MaterialSymbol {
+                                renderType: Text.CurveRendering
+                                anchors.centerIn: parent
+                                text: "music_note"
+                                iconSize: Math.round(albumArtWrapper.Layout.preferredWidth * 0.52)
+                                fill: 1
+                                color: root.btnNextIconColor
+                                visible: (!artImgA.visible || artImgA.opacity < 0.05) && (!artImgB.visible || artImgB.opacity < 0.05)
+                            }
+
+                            // Dual-image crossfade & scale morph
+                            Image {
+                                id: artImgA
+                                anchors.fill: parent
+                                fillMode: Image.PreserveAspectCrop
+                                asynchronous: true
+                                cache: true
+                                antialiasing: true
+                                sourceSize: Qt.size(albumArtWrapper.artSourcePx, albumArtWrapper.artSourcePx)
+                                scale: root.artScaleA
+                                opacity: 0.0
+                                visible: opacity > 0.001
+                                onStatusChanged: {
+                                    if (!root.imgAActive && status === Image.Ready && artPreloadTimer.running) {
+                                        root.startCrossfade();
+                                    }
+                                }
+                            }
+
+                            Image {
+                                id: artImgB
+                                anchors.fill: parent
+                                fillMode: Image.PreserveAspectCrop
+                                asynchronous: true
+                                cache: true
+                                antialiasing: true
+                                sourceSize: Qt.size(albumArtWrapper.artSourcePx, albumArtWrapper.artSourcePx)
+                                scale: root.artScaleB
+                                opacity: 0.0
+                                visible: opacity > 0.001
+                                onStatusChanged: {
+                                    if (root.imgAActive && status === Image.Ready && artPreloadTimer.running) {
+                                        root.startCrossfade();
+                                    }
+                                }
+                            }
+
+                            MouseArea {
+                                id: albumArtMouseArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                preventStealing: true
+                                onClicked: MprisController.togglePlaying()
+                            }
+                        }
 
                     // 2. Track Title & Artist Info (Flexibly shrinks and elides as Next button expands)
                     ColumnLayout {
@@ -794,83 +853,89 @@ Item {
                             }
                         }
                     }
+                    }
                 }
             }
 
             // ── Vertical Compact Layout ────────────────────────────────────
-            Item {
-                id: verticalView
+            Loader {
+                id: verticalViewLoader
                 anchors.fill: parent
-                visible: root.square
-
-                Rectangle {
-                    id: vertArtWrapper
-                    anchors.fill: parent
-                    anchors.margins: 3
-                    radius: root.innerRadius(width, 3)
-                    color: root.btnNextBg
+                active: root.square
+                sourceComponent: Item {
+                    id: verticalView
 
                     Rectangle {
-                        id: vertArtMask
+                        id: vertArtWrapper
+                        readonly property int artSourcePx: Math.max(1, Math.ceil((width > 0 ? width : root.slotSize) * root._dpr * 2))
                         anchors.fill: parent
-                        radius: vertArtWrapper.radius
-                        visible: false
+                        anchors.margins: 3
+                        radius: root.innerRadius(width, 3)
+                        color: root.btnNextBg
+
+                        Rectangle {
+                            id: vertArtMask
+                            anchors.fill: parent
+                            radius: vertArtWrapper.radius
+                            visible: false
+                        }
+
+                        layer.enabled: true
+                        layer.effect: OpacityMask {
+                            maskSource: vertArtMask
+                        }
+
+                        MaterialSymbol {
+                            renderType: Text.CurveRendering
+                            anchors.centerIn: parent
+                            text: "music_note"
+                            iconSize: Math.round(parent.width * 0.55)
+                            fill: 1
+                            color: root.btnNextIconColor
+                            visible: !vertArtImg.visible || vertArtImg.opacity < 0.05
+                        }
+
+                        Image {
+                            id: vertArtImg
+                            anchors.fill: parent
+                            fillMode: Image.PreserveAspectCrop
+                            asynchronous: true
+                            cache: true
+                            antialiasing: true
+                            sourceSize: Qt.size(vertArtWrapper.artSourcePx, vertArtWrapper.artSourcePx)
+                            source: root.effectiveArtSource
+                            visible: status === Image.Ready && source !== ""
+                        }
                     }
 
-                    layer.enabled: true
-                    layer.effect: OpacityMask {
-                        maskSource: vertArtMask
-                    }
-
-                    MaterialSymbol {
-                        renderType: Text.CurveRendering
+                    // Morphing Play/Pause Badge Overlay in Vertical Mode
+                    Rectangle {
                         anchors.centerIn: parent
-                        text: "music_note"
-                        iconSize: Math.round(parent.width * 0.55)
-                        fill: 1
-                        color: root.btnNextIconColor
-                        visible: !vertArtImg.visible || vertArtImg.opacity < 0.05
-                    }
+                        width: parent.width * 0.60
+                        height: width
+                        readonly property real circleRadius: root.innerRadius(width, (cardBg.width - width) / 2)
+                        radius: root.isPlaying ? Math.min(Appearance.rounding.small, circleRadius) : circleRadius
+                        color: ColorUtils.transparentize(root.btnPlayBg, root.mediaHovered ? 0.05 : 0.25)
+                        scale: root.mediaHovered ? 1.08 : 0.95
 
-                    Image {
-                        id: vertArtImg
-                        anchors.fill: parent
-                        fillMode: Image.PreserveAspectCrop
-                        asynchronous: true
-                        cache: true
-                        antialiasing: true
-                        source: root.effectiveArtSource
-                        visible: status === Image.Ready && source !== ""
-                    }
-                }
+                        Behavior on radius {
+                            NumberAnimation { duration: 250; easing.type: Easing.OutQuint }
+                        }
+                        Behavior on scale {
+                            NumberAnimation { duration: 150; easing.type: Easing.OutQuad }
+                        }
+                        Behavior on color {
+                            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                        }
 
-                // Morphing Play/Pause Badge Overlay in Vertical Mode
-                Rectangle {
-                    anchors.centerIn: parent
-                    width: parent.width * 0.60
-                    height: width
-                    readonly property real circleRadius: root.innerRadius(width, (cardBg.width - width) / 2)
-                    radius: root.isPlaying ? Math.min(Appearance.rounding.small, circleRadius) : circleRadius
-                    color: ColorUtils.transparentize(root.btnPlayBg, root.mediaHovered ? 0.05 : 0.25)
-                    scale: root.mediaHovered ? 1.08 : 0.95
-
-                    Behavior on radius {
-                        NumberAnimation { duration: 250; easing.type: Easing.OutQuint }
-                    }
-                    Behavior on scale {
-                        NumberAnimation { duration: 150; easing.type: Easing.OutQuad }
-                    }
-                    Behavior on color {
-                        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-                    }
-
-                    MaterialSymbol {
-                        renderType: Text.CurveRendering
-                        anchors.centerIn: parent
-                        text: root.isPlaying ? "pause" : "play_arrow"
-                        iconSize: Math.round(parent.height * 0.60)
-                        fill: 1
-                        color: root.btnPlayIconColor
+                        MaterialSymbol {
+                            renderType: Text.CurveRendering
+                            anchors.centerIn: parent
+                            text: root.isPlaying ? "pause" : "play_arrow"
+                            iconSize: Math.round(parent.height * 0.60)
+                            fill: 1
+                            color: root.btnPlayIconColor
+                        }
                     }
                 }
             }

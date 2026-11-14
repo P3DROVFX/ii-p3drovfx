@@ -4073,10 +4073,13 @@ Item {
 
     // The dock's one tooltip: every item's DockTooltip asks this host, which
     // slides a single bubble between items inside one resident surface.
-    readonly property var dockTooltipHost: tooltipHost
-    DockTooltipHost {
-        id: tooltipHost
-        dockContent: root
+    readonly property var dockTooltipHost: tooltipHostLoader.item
+    Loader {
+        id: tooltipHostLoader
+        active: Config.options?.dock?.enableAppTooltip ?? false
+        sourceComponent: DockTooltipHost {
+            dockContent: root
+        }
     }
 
 }

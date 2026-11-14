@@ -279,17 +279,48 @@ PopupWindow {
     // open was the hitch at the start of each preview. Closed, the surface is
     // transparent and takes no input (empty mask).
     readonly property bool active: show || showProgress > 0 || revealProgress > 0
-    // Mapped soon after the dock (its first map is the expensive frame) and
-    // kept; never together with the dock window itself, whose surface has to
-    // exist first (see DockTooltipHost). Group popups build theirs on demand.
+    // Keep the surface resident for up to 30 s after closing so rapid icon
+    // re-hovering skips the 40-100 ms map cost, then unmap when idle or when
+    // the dock hides. Group popups build theirs on demand.
     property bool everShown: false
-    readonly property bool _parentShown: (dockWindow?.visible ?? false)
-    on_ParentShownChanged: if (!_parentShown && !compactMode) everShown = false
-    Timer {
-        interval: 1500
-        running: !previewPopup.compactMode && previewPopup._parentShown && !previewPopup.everShown
-        onTriggered: previewPopup.everShown = true
+    property int idleReleaseMs: 30000
+    readonly property bool _parentShown: (dockWindow?.visible ?? false) && (compactMode || (dockRoot?.dockWindowVisible ?? true))
+    readonly property bool _dockRevealed: compactMode ? true : (dockRoot?.dockRevealed ?? true)
+    readonly property bool _previewHovered: backgroundHover.hovered || (dockRoot?.buttonHovered ?? false) || (dockRoot?.popupIsResizing ?? false)
+    readonly property bool _dragging: (dockRoot?.dragging ?? false) || (dockRoot?.islandDragging ?? false)
+    readonly property bool _canReleaseSurface: !active && !show && !_previewHovered && !_dragging
+
+    function _releaseSurface() {
+        if (!everShown || !_canReleaseSurface)
+            return
+        everShown = false
+        targetSettleTimer.stop()
+        frameWaitTimer.stop()
+        backPage.app = null
+        frontPage.app = null
     }
+
+    on_ParentShownChanged: {
+        if (!_parentShown && !compactMode)
+            _releaseSurface()
+    }
+    on_DockRevealedChanged: {
+        if (!_dockRevealed && !compactMode)
+            _releaseSurface()
+    }
+    on_CanReleaseSurfaceChanged: {
+        if (_canReleaseSurface && (!_parentShown || !_dockRevealed) && !compactMode)
+            _releaseSurface()
+    }
+
+    Timer {
+        id: idleReleaseTimer
+        interval: previewPopup.idleReleaseMs
+        repeat: false
+        running: previewPopup.everShown && previewPopup._canReleaseSurface && previewPopup._parentShown && previewPopup._dockRevealed
+        onTriggered: previewPopup._releaseSurface()
+    }
+
     visible: (everShown || active) && (compactMode || _parentShown)
     color: "transparent"
     readonly property Region cardRegion: Region { item: popupBackground }
