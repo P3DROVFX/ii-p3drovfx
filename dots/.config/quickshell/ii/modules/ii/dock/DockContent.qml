@@ -4073,10 +4073,23 @@ Item {
 
     // The dock's one tooltip: every item's DockTooltip asks this host, which
     // slides a single bubble between items inside one resident surface.
+    // In window-preview mode only items with no window to preview (pinned apps
+    // not running, widgets) want it. It comes up on the first such hover and
+    // stays, so a preview-only dock maps no surface until then.
     readonly property var dockTooltipHost: tooltipHostLoader.item
+    property bool _tooltipHostWanted: false
+    // Deferred, so the host's surface is never created inside the item's own
+    // binding or hover update.
+    function requestTooltipHost() {
+        Qt.callLater(root._wantTooltipHost);
+    }
+    function _wantTooltipHost() {
+        root._tooltipHostWanted = true;
+    }
     Loader {
         id: tooltipHostLoader
-        active: Config.options?.dock?.enableAppTooltip ?? false
+        active: (Config.options?.dock?.enableAppTooltip ?? false)
+            || ((Config.options?.dock?.enablePreview ?? true) && root._tooltipHostWanted)
         sourceComponent: DockTooltipHost {
             dockContent: root
         }

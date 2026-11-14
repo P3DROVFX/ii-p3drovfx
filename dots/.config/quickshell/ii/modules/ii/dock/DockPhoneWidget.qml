@@ -259,8 +259,10 @@ Item {
         // when calculating the gap between the icon and the tooltip.
         parentItem: phoneIcon
         text: root.tooltipText
-        // Follow the dock's "Hover content" setting like app buttons do.
-        showTooltip: ((Config.options?.dock?.enableAppTooltip ?? false) || GlobalStates.editMode)
+        // Follow the dock's "Hover content" setting like app buttons do. A phone
+        // has no window to preview, so window-preview mode gives it the name too.
+        showTooltip: ((Config.options?.dock?.enableAppTooltip ?? false) || GlobalStates.editMode
+            || (Config.options?.dock?.enablePreview ?? true))
             && root.phoneHovered && !phoneContextMenu.active
         tooltipOffset: -root.dotMargin
     }

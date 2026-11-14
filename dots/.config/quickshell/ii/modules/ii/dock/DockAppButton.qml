@@ -383,7 +383,10 @@ DockButton {
         // hover and keep it afterwards: destroying it on every hover would
         // churn a window under a fast cursor instead.
         property bool used: false
+        // In window-preview mode a running app shows its preview and no name
+        // tooltip; only an app with no window to preview gets the name.
         readonly property bool tooltipsEnabled: (Config.options?.dock?.enableAppTooltip ?? false) || GlobalStates.editMode
+            || ((Config.options?.dock?.enablePreview ?? true) && !root.appIsRunning)
         readonly property bool hovered: hoverAreaLoader.item?.containsMouse ?? false
         // Latched on hover, not onLoaded: writing `used` from onLoaded
         // re-evaluated `active` while it was being applied (a binding loop).

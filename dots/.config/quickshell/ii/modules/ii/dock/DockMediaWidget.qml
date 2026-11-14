@@ -488,7 +488,7 @@ Item {
                         return;
                     }
                     if (event.button === Qt.LeftButton) {
-                        GlobalStates.mediaControlsOpen = !GlobalStates.mediaControlsOpen;
+                        MprisController.togglePlaying();
                     } else if (event.button === Qt.MiddleButton) {
                         MprisController.togglePlaying();
                     } else if (event.button === Qt.RightButton) {
@@ -680,8 +680,7 @@ Item {
                             Layout.alignment: Qt.AlignVCenter
 
                             // Material 3 Shape as State: Circle when paused ↔ Squircle when playing
-                            property real circleRadius: root.innerRadius(height, (cardBg.height - height) / 2)
-                            property real buttonRadius: root.isPlaying ? Math.min(Appearance.rounding.small, circleRadius) : circleRadius
+                            property real buttonRadius: root.isPlaying ? Math.min(Appearance.rounding.small, height / 2) : height / 2
                             radius: buttonRadius
                             Behavior on buttonRadius {
                                 enabled: !Appearance.reducedMotion
@@ -913,8 +912,7 @@ Item {
                         anchors.centerIn: parent
                         width: parent.width * 0.60
                         height: width
-                        readonly property real circleRadius: root.innerRadius(width, (cardBg.width - width) / 2)
-                        radius: root.isPlaying ? Math.min(Appearance.rounding.small, circleRadius) : circleRadius
+                        radius: root.isPlaying ? Math.min(Appearance.rounding.small, width / 2) : width / 2
                         color: ColorUtils.transparentize(root.btnPlayBg, root.mediaHovered ? 0.05 : 0.25)
                         scale: root.mediaHovered ? 1.08 : 0.95
 
