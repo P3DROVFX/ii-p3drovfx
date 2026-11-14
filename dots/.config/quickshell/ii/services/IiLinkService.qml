@@ -167,6 +167,7 @@ Singleton {
     ]
     readonly property var allowedActions: root.remoteEnabled ? root.actions : []
     readonly property var capabilities: (root.remoteEnabled ? ["remote", "workspaces", "modes", "presets"] : [])
+        .concat(root.remoteEnabled ? ["display"] : [])
         .concat(root.audioEnabled ? ["audio"] : [])
         .concat(root.deckEnabled ? ["deck", "appIcons", "deckFocus"] : [])
         .concat(root.wallpaperEnabled ? ["wallpaper"] : [])
@@ -2807,6 +2808,45 @@ Singleton {
             root._focusRead();
     }
 
+    // ── Display: brightness and night light ─────────────────────────────
+    // For the remote screen (`sub display`): the focused monitor's brightness and the
+    // night light, pushed whole on change (a slider dragged on the PC coalesces to ~16/s).
+    // Computed only while a phone has the screen open.
+
+    property string _displayDev: ""
+    readonly property bool _displayLive: root.remoteEnabled && root._displayDev !== "" && root.connections[root._displayDev] !== undefined
+
+    function _display(): var {
+        const monitor = Brightness.getTargetMonitor();
+        return {
+            t: "display",
+            monitor: monitor?.screen?.name ?? "",
+            brightness: monitor?.ready ? monitor.brightness : -1,
+            floor: monitor?.floorBrightness ?? 0.01,
+            night: Hyprsunset.temperatureActive,
+            temp: Hyprsunset.colorTemperature,
+            auto: Hyprsunset.automatic
+        };
+    }
+    readonly property string _displayKey: root._displayLive ? JSON.stringify(root._display()) : ""
+    on_DisplayKeyChanged: {
+        if (root._displayKey === "")
+            root._sentKeys["display"] = "";
+        else if (!displayPush.running)
+            displayPush.start();
+    }
+    Timer {
+        id: displayPush
+        interval: 60
+        onTriggered: {
+            const key = root._displayKey;
+            if (key === "" || key === (root._sentKeys["display"] ?? ""))
+                return;
+            root._sentKeys["display"] = key;
+            root.sendTo(root._displayDev, JSON.parse(key));
+        }
+    }
+
     /// The topics, for a phone that connects while another is already live.
     function _topics(dev): void {
         if (root.remoteEnabled) {
@@ -2880,6 +2920,24 @@ Singleton {
                 PresetStore.applyPreset(name);
             return "";
         }
+        case "brightness": {
+            const monitor = Brightness.getTargetMonitor();
+            const v = Number(arg);
+            if (!monitor?.ready || !isFinite(v))
+                return "unavailable";
+            monitor.setBrightness(Math.max(monitor.floorBrightness, Math.min(1, v)));
+            return "";
+        }
+        case "night":
+            Hyprsunset.toggleTemperature(arg === true);
+            return "";
+        case "nightTemp": {
+            const k = Math.round(Number(arg));
+            if (!isFinite(k))
+                return "bad_arg";
+            Config.options.light.night.colorTemperature = Math.max(1200, Math.min(6500, k));
+            return "";
+        }
         case "volume":
         case "mute": {
             const node = root._nodeById(arg?.id);
@@ -2915,7 +2973,7 @@ Singleton {
         return "unknown_action";
     }
 
-    readonly property var _remoteArgActions: ["workspace", "mode", "preset"]
+    readonly property var _remoteArgActions: ["workspace", "mode", "preset", "brightness", "night", "nightTemp"]
     readonly property var _audioArgActions: ["volume", "mute", "default", "eePreset", "eeBypass"]
 
     Timer {
@@ -3026,6 +3084,8 @@ Singleton {
         case "sub":
             if (m.what === "perf")
                 root._perfDev = m.on === true ? dev : (root._perfDev === dev ? "" : root._perfDev);
+            else if (m.what === "display")
+                root._displayDev = m.on === true ? dev : (root._displayDev === dev ? "" : root._displayDev);
             else if (m.what === "focus")
                 root._focusDev = m.on === true ? dev : (root._focusDev === dev ? "" : root._focusDev);
             else if (m.what === "clipHistory") {
@@ -3039,6 +3099,8 @@ Singleton {
         case "unsub":
             if (m.what === "perf" && root._perfDev === dev)
                 root._perfDev = "";
+            else if (m.what === "display" && root._displayDev === dev)
+                root._displayDev = "";
             else if (m.what === "focus" && root._focusDev === dev)
                 root._focusDev = "";
             else if (m.what === "clipHistory" && root._clipHistoryDev === dev) {
