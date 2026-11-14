@@ -444,7 +444,7 @@ Singleton {
     property int _previousBattery: -1
     property bool _lowBatteryNotified: false
 
-    readonly property string _scriptPath: FileUtils.trimFileProtocol(Directories.scriptPath + "/kdeconnect/monitor.py")
+    readonly property string _scriptPath: FileUtils.trimFileProtocol(Directories.scriptPath + "/kdeconnect/monitor")
     readonly property string _fetchNotifsScriptPath: FileUtils.trimFileProtocol(Directories.scriptPath + "/kdeconnect/fetch_notifications.py")
 
     IpcHandler {
@@ -562,7 +562,7 @@ Singleton {
 
     // ─── Granular dependency flags (for the install guide UI) ───
     property bool adbPresent: false
-    property bool pythonDbusPresent: false
+    property bool pythonDbusPresent: true
     property string detectedDistro: "unknown"
 
     /** Array of missing dependency descriptors for the scrcpy card install
@@ -635,11 +635,11 @@ Singleton {
         }
     }
 
-    // ─── Python dbus presence check ───────────────────────────
+    // ─── Python dbus / Native monitor presence check ─────────
     Process {
         id: checkPythonDbusProc
         running: false
-        command: ["bash", "-c", "python3 -c 'import dbus' 2>/dev/null && echo 'ok'"]
+        command: ["bash", "-c", "test -x '" + root._scriptPath + "' && echo 'ok' || (python3 -c 'import dbus' 2>/dev/null && echo 'ok')"]
         stdout: SplitParser {
             onRead: line => {
                 root.pythonDbusPresent = (String(line).trim() === "ok")
@@ -654,9 +654,9 @@ Singleton {
     Process {
         id: cleanupProc
         running: false
-        command: ["pkill", "-f", "kdeconnect/monitor.py"]
+        command: ["pkill", "-f", "kdeconnect/monitor"]
         onExited: (code, status) => {
-            monitorProc.command = ProcUtils.pdeath(["python3", root._scriptPath])
+            monitorProc.command = ProcUtils.pdeath([root._scriptPath])
             monitorProc.running = true
         }
     }

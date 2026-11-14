@@ -35,13 +35,22 @@ Singleton {
 
     // ── Gating: run probe in background only when needed ─────────────────────
     // Run only when:
-    // 1. privacy pill widget is in bar layouts (and visible), OR
+    // 1. privacy pill widget is in bar layouts, OR
     // 2. Dynamic Island is enabled AND privacy toggle in Dynamic Island is enabled.
     readonly property bool barWidgetPresent: {
         const layouts = Config.options?.bar?.layouts;
         if (!layouts)
             return false;
-        const inBucket = list => Array.isArray(list) && list.some(item => item && item.id === "privacy_pill" && item.visible !== false);
+        const inBucket = list => {
+            if (!list || typeof list.length !== "number")
+                return false;
+            for (let i = 0; i < list.length; ++i) {
+                const item = list[i];
+                if (item && item.id === "privacy_pill")
+                    return true;
+            }
+            return false;
+        };
         return inBucket(layouts.left) || inBucket(layouts.center) || inBucket(layouts.right);
     }
 
@@ -190,8 +199,7 @@ Singleton {
         // reparented to init, and the next instance spawned a second one
         // (the duplicate privacy_probe processes seen after a manual restart).
         command: ProcUtils.pdeath([
-            "python3",
-            Directories.scriptPath + "/privacy_probe.py",
+            Directories.scriptPath + "/privacy_probe",
             "--interval",
             String(root.pollInterval),
             "--kinds",

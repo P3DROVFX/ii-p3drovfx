@@ -90,6 +90,16 @@ MouseArea {
     implicitWidth: !root.shown ? 0 : (root.vertical ? Appearance.sizes.verticalBarWidth : root.pillLength + 8)
     implicitHeight: !root.shown ? 0 : (root.vertical ? root.pillLength + 8 : Appearance.sizes.baseBarHeight)
 
+    function reportVisibility() {
+        if (typeof rootItem === "undefined")
+            return;
+        if (typeof rootItem.toggleVisible === "function")
+            rootItem.toggleVisible(root.shown);
+    }
+
+    Component.onCompleted: root.reportVisibility()
+    onShownChanged: root.reportVisibility()
+
     Rectangle {
         id: pill
 

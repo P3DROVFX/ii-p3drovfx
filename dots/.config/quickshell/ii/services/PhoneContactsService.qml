@@ -35,12 +35,23 @@ Singleton {
     readonly property bool hideUnnamed: Config.options?.phone?.contacts?.hideUnnamed ?? true
     onHideUnnamedChanged: root._updateFilteredContacts()
 
+    function _syncRemoteContacts(): void {
+        const devId = KdeConnectService.activeDeviceId || ""
+        if (!devId) return
+        Quickshell.execDetached([
+            "busctl", "--user", "call",
+            "org.kde.kdeconnect",
+            "/modules/kdeconnect/devices/" + devId + "/contacts",
+            "org.kde.kdeconnect.device.contacts",
+            "synchronizeRemoteWithLocal"
+        ])
+        syncRecheckTimer.restart()
+    }
+
     function refresh(): void {
-        // Mirrors the old daemon-restart semantics: a restart reset its dedup hash, so an explicit
-        // refresh always re-published the list, and a refresh while no contact source existed did
-        // nothing at all.
-        if (!root._watching) return
+        if (!root._enabled) return
         root._forceEmit = true
+        root._syncRemoteContacts()
         root._readOnce()
     }
 
@@ -225,8 +236,20 @@ Singleton {
     }
 
     Component.onCompleted: {
-        if (root._enabled)
+        if (root._enabled) {
+            root._syncRemoteContacts()
             root._readOnce()
+        }
+    }
+
+    Timer {
+        id: syncRecheckTimer
+        interval: 2000
+        repeat: false
+        onTriggered: {
+            if (root._enabled)
+                root._readOnce()
+        }
     }
 
     Timer {
@@ -279,8 +302,7 @@ Singleton {
     Process {
         id: readProcess
         command: [
-            "python3",
-            Quickshell.shellPath("scripts/kdeconnect/contacts_monitor.py"),
+            Quickshell.shellPath("scripts/kdeconnect/contacts_monitor"),
             "--device", KdeConnectService.activeDeviceId || "",
             "--once"
         ]

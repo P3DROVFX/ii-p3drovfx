@@ -965,6 +965,9 @@ Item {
 
     function toggleVisible(visibility) {
         rootItem.widgetSelfVisible = visibility;
+        if (visibility)
+            rootItem.unlatchLayout();
+        Qt.callLater(rootItem.syncLoadedItemVisible);
         // Widgets call this from Component.onCompleted, i.e. while the style's
         // Repeater is still building from the layout list. Re-assigning that list
         // right away re-runs the list binding mid-build (a binding loop), so the

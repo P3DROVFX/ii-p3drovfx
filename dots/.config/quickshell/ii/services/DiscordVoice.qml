@@ -404,7 +404,7 @@ Singleton {
 
     Process {
         id: bridge
-        command: ["python3", `${Directories.scriptPath}/discordVoice/discord_voice_bridge.py`]
+        command: [`${Directories.scriptPath}/discordVoice/discord_voice_bridge`]
         stdinEnabled: true
         onStarted: root.flushPendingMessages()
         // process-lifecycle: restart-safe -- capped exponential backoff; no running binding.

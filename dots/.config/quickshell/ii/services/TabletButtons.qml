@@ -119,7 +119,7 @@ Singleton {
 
     // ── Scrolling ───────────────────────────────────────────────────────────
 
-    /// Done by scripts/tablet/tablet_scroll.py, which reads OTD's virtual keyboard and
+    /// Done by scripts/tablet/tablet_scroll, which reads OTD's virtual keyboard and
     /// writes a wheel of its own, so these never pass through trigger(). The Hyprland
     /// bind still exists, only to keep the combination away from the focused app.
     /// `dir` is [dx, dy] in notches, dy > 0 scrolling up.
@@ -174,7 +174,7 @@ Singleton {
 
     Process {
         id: scrollProc
-        command: ["python3", "-I", Quickshell.shellPath("scripts/tablet/tablet_scroll.py")]
+        command: [Quickshell.shellPath("scripts/tablet/tablet_scroll")]
         stdinEnabled: true
         running: root.wantsScrollHelper
         onStarted: root.sendScrollConfig()
@@ -183,7 +183,7 @@ Singleton {
         // behind it died. Restart after a pause, or a helper that cannot start would spin.
         onExited: code => {
             if (code !== 0 && code !== 15) {
-                root.scrollError = scrollErr.text.trim() || `tablet_scroll.py exited with ${code}`;
+                root.scrollError = scrollErr.text.trim() || `tablet_scroll exited with ${code}`;
                 console.warn(`[TabletButtons] ${root.scrollError}`);
             }
             if (root.wantsScrollHelper)

@@ -67,7 +67,7 @@ Singleton {
     /** False when python-xkbcommon is missing and labels assume a US layout. */
     property bool layoutAware: true
 
-    readonly property string monitorScript: FileUtils.trimFileProtocol(`${Directories.scriptPath}/videos/keypress_monitor.py`)
+    readonly property string monitorScript: FileUtils.trimFileProtocol(`${Directories.scriptPath}/videos/keypress_monitor`)
 
     // Hyprland reports the layouts as one comma-joined option, so the active
     // variant is whatever sits at the active layout's index. QML list properties
@@ -286,7 +286,7 @@ Singleton {
     Process {
         id: monitorProcess
         command: {
-            const args = ["python3", root.monitorScript, "--layout", root.layoutCode || "us", "--repeats"];
+            const args = [root.monitorScript, "--layout", root.layoutCode || "us", "--repeats"];
             if (root.layoutVariant.length > 0) args.push("--variant", root.layoutVariant);
             if (root.showMouseButtons) args.push("--mouse");
             return args;
