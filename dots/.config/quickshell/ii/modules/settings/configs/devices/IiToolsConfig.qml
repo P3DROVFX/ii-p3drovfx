@@ -528,6 +528,27 @@ Item {
                 onToggled: value => Config.options.iiTools.screenshots.autoToPhone = value
             }
 
+            AppToggleRow {
+                Layout.topMargin: 4
+                visible: Config.options.iiTools.notifications.enable
+                symbol: "password"
+                title: Translation.tr("Verification codes")
+                description: Translation.tr("A code in a phone notification (SMS or app) is copied here and shown in a popup with Copy")
+                help: Translation.tr("The copy stays out of the clipboard history and is cleared after a minute if it is still there. Works under Do Not Disturb; only the popup is held back.")
+                checked: Config.options.iiTools.otp.enable
+                onToggled: value => Config.options.iiTools.otp.enable = value
+            }
+
+            AppToggleRow {
+                Layout.topMargin: 4
+                visible: Config.options.iiTools.notifications.enable && Config.options.iiTools.otp.enable
+                symbol: "content_copy"
+                title: Translation.tr("Copy codes automatically")
+                description: Translation.tr("Off: the popup only offers Copy")
+                checked: Config.options.iiTools.otp.autoCopy
+                onToggled: value => Config.options.iiTools.otp.autoCopy = value
+            }
+
             AppSettingRow {
                 Layout.topMargin: 4
                 visible: Config.options.iiTools.notifications.enable

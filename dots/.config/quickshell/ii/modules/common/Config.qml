@@ -2991,6 +2991,14 @@ Singleton {
                 property JsonObject notifications: JsonObject {
                     property bool enable: true
                 }
+                // Verification codes in the phone's notifications (SMS or app) become a popup
+                // here with Copy; copied codes stay out of the clipboard history and are
+                // cleared after a while.
+                property JsonObject otp: JsonObject {
+                    property bool enable: true
+                    property bool autoCopy: true
+                    property int clearAfter: 60 // seconds, 0 keeps it
+                }
                 // Calls reported by the app: the call card follows the phone and its buttons
                 // work without ADB. Off, or app not reporting: the ADB path as before.
                 property JsonObject calls: JsonObject {

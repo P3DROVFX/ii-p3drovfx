@@ -624,7 +624,17 @@ Singleton {
     function _popupNotif(n, previous): void {
         if (previous && previous.title === n.title && previous.text === n.text)
             return;
-        if (!(Config.options?.phone?.mirrorNotificationsToDesktop ?? true) || Notifications.popupInhibited)
+        if (!(Config.options?.phone?.mirrorNotificationsToDesktop ?? true))
+            return;
+        // A code is copied even under Do Not Disturb (only its popup is held back).
+        if (root.otpEnabled) {
+            const code = root.otpCode(`${n.title} ${n.text}`);
+            if (code !== "") {
+                root._popupOtp(n, code);
+                return;
+            }
+        }
+        if (Notifications.popupInhibited)
             return;
         if (KdeConnectService.isRepeatedPhoneNotification(n.title, n.text))
             return;
@@ -638,6 +648,101 @@ Singleton {
             sound: true,
             actions: [{ identifier: "__qs_phonelive_open", text: Translation.tr("Open") }],
             actionPayload: { publicId: `ii:${n.key}` }
+        });
+    }
+
+    // ── Verification codes ──────────────────────────────────────────────
+    // A code in a mirrored notification (SMS or app) is copied and offered in a popup
+    // of its own. The copy is marked sensitive: wl-clipboard flags it, cliphist skips
+    // it, and it is wiped after `otp.clearAfter` seconds if still there.
+
+    readonly property bool otpEnabled: root.notifsEnabled && (root.opts?.otp?.enable ?? true)
+    property string _otpCopied: ""
+
+    /// The code in a notification's text, or "" when it carries none.
+    function otpCode(text): string {
+        const t = String(text ?? "");
+        const key = /(c[óo]digo|code|verifica|verify|token|senha|password|pin\b|otp|one[- ]time|autentica|authenticat|2fa)/i.exec(t);
+        if (!key)
+            return "";
+        const re = /(\d{3}[- ]\d{3}|\d{4,8})(?!\d)/g;
+        let best = "";
+        let bestDist = 1e9;
+        let m;
+        while ((m = re.exec(t)) !== null) {
+            const before = m.index > 0 ? t[m.index - 1] : "";
+            const after = t.slice(m.index + m[0].length, m.index + m[0].length + 3);
+            // A longer number's tail, money, a time, a date, a percentage, a decimal.
+            if (/[\d.,$€£]/.test(before) || /[$€£]\s*$/.test(t.slice(0, m.index)))
+                continue;
+            if (/^([.,]\d|[:\/%h]|\s?(reais|usd|min|hora|dias|km))/i.test(after))
+                continue;
+            const dist = Math.abs(m.index - key.index);
+            // After the keyword beats before it ("seu código é 123456" over "123456 é o código" ties).
+            const score = m.index >= key.index ? dist : dist + 40;
+            if (score < bestDist) {
+                bestDist = score;
+                best = m[0];
+            }
+        }
+        return best.replace(/[- ]/g, "");
+    }
+
+    /// Copies `code` for pasting, marked sensitive, and arms its wipe.
+    function copyOtp(code): void {
+        const c = String(code ?? "");
+        if (!/^\d{3,10}$/.test(c))
+            return;
+        Quickshell.execDetached(["wl-copy", "--sensitive", c]);
+        root._otpCopied = c;
+        const after = Number(root.opts?.otp?.clearAfter ?? 60);
+        if (after > 0) {
+            otpClear.interval = after * 1000;
+            otpClear.restart();
+        } else {
+            otpClear.stop();
+        }
+    }
+
+    Timer {
+        id: otpClear
+        repeat: false
+        onTriggered: {
+            const c = root._otpCopied;
+            root._otpCopied = "";
+            if (c === "")
+                return;
+            // Only when the clipboard still holds the code: never wipe something newer.
+            Quickshell.execDetached(["sh", "-c", 'cur=$(wl-paste --no-newline 2>/dev/null); [ "$cur" = "$1" ] && wl-copy --clear', "sh", c]);
+        }
+    }
+
+    Connections {
+        target: Notifications
+        function onInternalActionInvoked(identifier, notificationId, payload) {
+            if (identifier !== "__qs_otp_copy")
+                return;
+            root.copyOtp(payload?.code);
+            Notifications.discardNotification(notificationId);
+        }
+    }
+
+    /// Shows the code: popup with Copy, and the copy itself unless auto-copy is off.
+    function _popupOtp(n, code): void {
+        const auto = root.opts?.otp?.autoCopy ?? true;
+        if (auto)
+            root.copyOtp(code);
+        if (Notifications.popupInhibited)
+            return;
+        Notifications.publishInternalNotification({
+            appName: n.app,
+            appIcon: root.iconFor(n.pkg),
+            summary: Translation.tr("Code %1").arg(code.replace(/^(\d{3})(\d{3})$/, "$1 $2")),
+            body: auto ? Translation.tr("Copied · %1").arg(n.title || n.app) : (n.title || n.app),
+            phone: true,
+            sound: true,
+            actions: [{ identifier: "__qs_otp_copy", text: auto ? Translation.tr("Copy again") : Translation.tr("Copy") }],
+            actionPayload: { code: code }
         });
     }
 
