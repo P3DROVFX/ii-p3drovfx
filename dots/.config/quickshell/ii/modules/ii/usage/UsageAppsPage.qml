@@ -870,6 +870,15 @@ Item {
             }
         }
 
+        StyledText {
+            Layout.fillWidth: true
+            visible: root.phoneEnabled && root.sourceFilter !== "pc" && IiLinkService.usageDev === ""
+            text: Translation.tr("The phone is not sharing screen time. Allow usage access in the ii tools app (Phone data) and connect it.")
+            wrapMode: Text.WordWrap
+            font.pixelSize: ClockStyle.textSmall
+            color: ClockStyle.colOnSurfaceVariant
+        }
+
         Flow {
             Layout.fillWidth: true
             spacing: ClockStyle.gapSmall

@@ -3012,8 +3012,10 @@ Singleton {
                 property JsonObject liveUpdates: JsonObject {
                     property bool enable: true
                 }
+                // The phone's screen time in the usage app (PC / Phone / All) and the bedtime
+                // record. Costs nothing until the app shares it (its own toggle and usage access).
                 property JsonObject usage: JsonObject {
-                    property bool enable: false
+                    property bool enable: true
                 }
             }
 

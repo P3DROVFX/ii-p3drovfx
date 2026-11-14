@@ -116,7 +116,7 @@ Singleton {
     property var loadBatch: []
     property bool restarting: false
 
-    readonly property bool phoneUsageEnabled: IiLinkService.usageEnabled
+    readonly property bool phoneUsageEnabled: IiLinkService.usageEnabled && IiLinkService.hasPeers
     readonly property string phonePrefix: "phone:"
     property var phoneHistory: ({})
     property var phoneLoadBatch: []

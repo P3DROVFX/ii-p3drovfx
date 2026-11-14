@@ -69,7 +69,7 @@ Singleton {
     readonly property bool touchpadEnabled: root.opts?.touchpad?.enable ?? true
     readonly property bool drawEnabled: root.opts?.draw?.enable ?? true
     readonly property bool presentEnabled: root.opts?.present?.enable ?? true
-    readonly property bool usageEnabled: root.opts?.usage?.enable ?? false
+    readonly property bool usageEnabled: root.opts?.usage?.enable ?? true
     // Touch frames go straight to the helper's input thread; it only needs telling.
     onTouchpadEnabledChanged: root.send({ op: "config", touchpad: root.touchpadEnabled })
     onPresentEnabledChanged: {
