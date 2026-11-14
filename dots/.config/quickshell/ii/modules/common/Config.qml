@@ -3000,6 +3000,9 @@ Singleton {
                 property JsonObject liveUpdates: JsonObject {
                     property bool enable: true
                 }
+                property JsonObject usage: JsonObject {
+                    property bool enable: false
+                }
             }
 
             property JsonObject localsend: JsonObject {
@@ -3459,6 +3462,8 @@ Singleton {
                 // Apps under this many seconds for the chosen metric are left out of
                 // the list. Duration metrics only; energy is never thresholded.
                 property int minDurationSec: 0
+                // Source filter when iiTools.usage.enable is on: "all" | "pc" | "phone"
+                property string sourceFilter: "all"
             }
 
             // Daily limits (services/ScreenTimeLimits.qml), the Limits tab of the

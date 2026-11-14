@@ -472,6 +472,18 @@ Item {
                         checked: Config.options.iiTools.screenshots.enable
                         onToggled: value => Config.options.iiTools.screenshots.enable = value
                     }
+
+                    ColorsFeatureTile {
+                        width: syncTilesBox.tileWidth
+                        height: 152
+                        symbol: "smartphone"
+                        shapeOn: MaterialShape.Shape.Cookie7Sided
+                        shapeOff: MaterialShape.Shape.Circle
+                        title: Translation.tr("Phone screen time")
+                        summary: Translation.tr("Include phone app usage and last-used bedtime in App usage")
+                        checked: Config.options.iiTools.usage.enable
+                        onToggled: value => Config.options.iiTools.usage.enable = value
+                    }
                 }
             }
 

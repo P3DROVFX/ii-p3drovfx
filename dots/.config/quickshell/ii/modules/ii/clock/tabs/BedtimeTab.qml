@@ -34,8 +34,24 @@ Item {
         root.now;
         BedtimeService.nights;
         AppStats.history;
+        if (IiLinkService.usageEnabled)
+            AppStats.phoneHistory;
         root.opts?.time;
         return BedtimeService.history(root.nightCount);
+    }
+
+    function stopSummary(night): string {
+        const hasPc = night.lastActive > 0;
+        const hasPhone = IiLinkService.usageEnabled && night.phoneLastActive > 0;
+        const pcTime = hasPc ? Qt.formatTime(new Date(night.lastActive), "HH:mm") : "";
+        const phoneTime = hasPhone ? Qt.formatTime(new Date(night.phoneLastActive), "HH:mm") : "";
+        if (hasPc && hasPhone)
+            return Translation.tr("PC %1 · Phone %2").arg(pcTime).arg(phoneTime);
+        if (hasPhone)
+            return Translation.tr("Phone %1").arg(phoneTime);
+        if (hasPc)
+            return Translation.tr("stopped at %1").arg(pcTime);
+        return "";
     }
     readonly property var recorded: root.nights.filter(n => n.applies && n.lastActive > 0)
     readonly property int streak: BedtimeService.streak(root.nights)
@@ -346,6 +362,14 @@ Item {
                 }
 
                 StyledText {
+                    readonly property var lastNight: root.nights.length > 0 ? root.nights[root.nights.length - 1] : null
+                    visible: IiLinkService.usageEnabled && lastNight !== null && lastNight.phoneLastActive > 0
+                    text: visible ? root.stopSummary(lastNight) : ""
+                    font.pixelSize: ClockStyle.textSmall
+                    color: ClockStyle.colSubtext
+                }
+
+                StyledText {
                     visible: root.nights.some(n => n.estimated)
                     text: Translation.tr("Faded bars are estimated from Usage")
                     font.pixelSize: ClockStyle.textSmall
@@ -424,6 +448,7 @@ Item {
                         required property var modelData
                         required property int index
                         readonly property bool known: nightColumn.modelData.lastActive > 0 && nightColumn.modelData.applies
+                        readonly property bool hasPhone: IiLinkService.usageEnabled && nightColumn.modelData.phoneLastActive > 0
                         readonly property real barY: chart.yFor(nightColumn.modelData.lateMinutes)
 
                         x: nightColumn.index * chart.column
@@ -488,17 +513,19 @@ Item {
 
                             StyledText {
                                 Layout.alignment: Qt.AlignHCenter
-                                text: nightColumn.known ? Qt.formatTime(new Date(nightColumn.modelData.lastActive), "HH:mm") : "—"
+                                text: nightColumn.known ? Qt.formatTime(new Date(nightColumn.modelData.lastActive), "HH:mm")
+                                    : nightColumn.hasPhone ? Qt.formatTime(new Date(nightColumn.modelData.phoneLastActive), "HH:mm")
+                                    : "—"
                                 font.pixelSize: ClockStyle.textSmall - 1
                                 color: ClockStyle.colSubtext
                             }
                         }
 
                         StyledToolTip {
-                            extraVisibleCondition: nightHover.hovered && nightColumn.known
+                            extraVisibleCondition: nightHover.hovered && (nightColumn.known || nightColumn.hasPhone)
                             text: Qt.locale().toString(BedtimeService.parseKey(nightColumn.modelData.night), "dddd, d MMM") + " · "
-                                + Translation.tr("stopped at %1").arg(Qt.formatTime(new Date(nightColumn.modelData.lastActive), "HH:mm"))
-                                + " · " + root.lateLabel(nightColumn.modelData.lateMinutes)
+                                + root.stopSummary(nightColumn.modelData)
+                                + (nightColumn.known ? " · " + root.lateLabel(nightColumn.modelData.lateMinutes) : "")
                                 + (nightColumn.modelData.estimated ? " · " + Translation.tr("estimated") : "")
                         }
                     }

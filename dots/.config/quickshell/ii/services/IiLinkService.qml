@@ -62,6 +62,7 @@ Singleton {
     readonly property bool touchpadEnabled: root.opts?.touchpad?.enable ?? true
     readonly property bool drawEnabled: root.opts?.draw?.enable ?? true
     readonly property bool presentEnabled: root.opts?.present?.enable ?? true
+    readonly property bool usageEnabled: root.opts?.usage?.enable ?? false
     // Touch frames go straight to the helper's input thread; it only needs telling.
     onTouchpadEnabledChanged: root.send({ op: "config", touchpad: root.touchpadEnabled })
     onPresentEnabledChanged: {
@@ -178,6 +179,7 @@ Singleton {
         .concat(root.presentEnabled ? ["present"] : [])
         .concat(PhoneScreenService.enabled ? ["screen"] : [])
         .concat(root.cameraEnabled ? ["camera"] : [])
+        .concat(root.usageEnabled ? ["usage"] : [])
 
     // What is on right now, read from the same state the shell itself draws from.
     readonly property bool _aodUp: (GlobalStates.oledSaverMonitors ?? []).length > 0
@@ -801,6 +803,145 @@ Singleton {
                 if (missing.length > 0)
                     root.sendTo(photoCheck.dev, { t: "get", what: "photos", keys: missing });
             }
+        }
+    }
+
+    // ── Phone usage (screen time) ───────────────────────────────────────
+    // Kept in `${stateDir}/phone_usage/<YYYY-MM-DD>.json`, 60 days retained, read lazily
+    // by AppStats and BedtimeService only while `iiTools.usage.enable` is on.
+
+    readonly property string phoneUsageDir: `${root.stateDir}/phone_usage`
+    property string _newestPhoneUsageDate: "" // "" = unchecked, "none" = empty/missing
+    property bool _pendingPhoneUsageReq: false
+    property var _phoneUsageQueue: []
+    signal phoneUsageUpdated(var dates, var sessionsByDate)
+
+    readonly property string usageDev: {
+        if (!root.usageEnabled)
+            return "";
+        for (const id of Object.keys(root.connections)) {
+            if ((root.phoneCaps[id] ?? []).includes("usage"))
+                return id;
+        }
+        return "";
+    }
+    onUsageDevChanged: {
+        if (root.usageDev !== "")
+            root.requestPhoneUsage();
+    }
+
+    function requestPhoneUsage(): bool {
+        const dev = root.usageDev;
+        if (dev === "")
+            return false;
+        if (root._newestPhoneUsageDate === "") {
+            root._pendingPhoneUsageReq = true;
+            if (!phoneUsageScan.running) {
+                phoneUsageScan.command = ["sh", "-c", 'ls -1 -- "$1" 2>/dev/null | grep -E "^[0-9]{4}-[0-9]{2}-[0-9]{2}\\.json$" | sort | tail -n 1 || true', "sh", root.phoneUsageDir];
+                phoneUsageScan.running = true;
+            }
+            return true;
+        }
+        const msg = { t: "get", what: "phoneUsage" };
+        if (/^\d{4}-\d{2}-\d{2}$/.test(root._newestPhoneUsageDate))
+            msg.since = root._newestPhoneUsageDate;
+        root.sendTo(dev, msg);
+        return true;
+    }
+
+    Process {
+        id: phoneUsageScan
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const name = String(this.text ?? "").trim().replace(/\.json$/, "");
+                root._newestPhoneUsageDate = /^\d{4}-\d{2}-\d{2}$/.test(name) ? name : "none";
+                if (root._pendingPhoneUsageReq) {
+                    root._pendingPhoneUsageReq = false;
+                    root.requestPhoneUsage();
+                }
+            }
+        }
+    }
+
+    function _savePhoneUsage(dev, m): void {
+        if (!root.usageEnabled || (root.usageDev !== "" && dev !== root.usageDev))
+            return;
+        const rawDays = Array.isArray(m?.days) ? m.days : [];
+        const days = [];
+        const sessionsByDate = {};
+        for (const d of rawDays) {
+            const date = String(d?.date ?? "");
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(date))
+                continue;
+            const apps = [];
+            for (const a of Array.isArray(d.apps) ? d.apps : []) {
+                const pkg = String(a?.pkg ?? "");
+                if (!/^[A-Za-z0-9._-]+$/.test(pkg))
+                    continue;
+                const h = [];
+                const rawH = Array.isArray(a.h) ? a.h : [];
+                for (let hr = 0; hr < 24; hr++)
+                    h.push(Math.max(0, Math.min(3600, Math.round(Number(rawH[hr] ?? 0)))));
+                apps.push({ pkg: pkg, name: String(a.name ?? pkg), h: h });
+            }
+            const sessions = [];
+            for (const s of Array.isArray(d.sessions) ? d.sessions : []) {
+                if (!Array.isArray(s) || s.length < 2)
+                    continue;
+                const startMs = Number(s[0] ?? 0);
+                const endMs = Number(s[1] ?? 0);
+                if (Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs)
+                    sessions.push([Math.round(startMs), Math.round(endMs)]);
+            }
+            days.push({ date: date, apps: apps, sessions: sessions });
+            sessionsByDate[date] = sessions;
+            if (root._newestPhoneUsageDate === "" || root._newestPhoneUsageDate === "none" || date > root._newestPhoneUsageDate)
+                root._newestPhoneUsageDate = date;
+        }
+        if (days.length === 0)
+            return;
+        root._phoneUsageQueue.push({
+            dates: days.map(d => d.date),
+            sessionsByDate: sessionsByDate,
+            payload: JSON.stringify({ dir: root.phoneUsageDir, days: days })
+        });
+        root._flushPhoneUsageQueue();
+    }
+
+    function _flushPhoneUsageQueue(): void {
+        if (phoneUsageWriter.running || root._phoneUsageQueue.length === 0)
+            return;
+        const next = root._phoneUsageQueue.shift();
+        phoneUsageWriter.pendingDates = next.dates;
+        phoneUsageWriter.pendingSessions = next.sessionsByDate;
+        phoneUsageWriter.pendingPayload = next.payload;
+        phoneUsageWriter.running = true;
+    }
+
+    Process {
+        id: phoneUsageWriter
+        property var pendingDates: []
+        property var pendingSessions: ({})
+        property string pendingPayload: ""
+        stdinEnabled: true
+        command: [
+            "python3",
+            "-c",
+            "import json, os, sys\nreq = json.loads(sys.stdin.readline())\ndir_path = req['dir']\nos.makedirs(dir_path, mode=0o700, exist_ok=True)\nfor day in req['days']:\n    d = day.get('date', '')\n    if len(d) != 10 or d[4] != '-' or d[7] != '-':\n        continue\n    tmp = os.path.join(dir_path, '.' + d + '.tmp')\n    dst = os.path.join(dir_path, d + '.json')\n    with open(tmp, 'w', encoding='utf-8') as f:\n        json.dump(day, f, separators=(',', ':'))\n    os.chmod(tmp, 0o600)\n    os.replace(tmp, dst)\nfiles = sorted(f for f in os.listdir(dir_path) if len(f) == 15 and f.endswith('.json') and f[4] == '-' and f[7] == '-')\nfor old in files[:-60]:\n    try:\n        os.unlink(os.path.join(dir_path, old))\n    except OSError:\n        pass\n"
+        ]
+        onStarted: {
+            if (phoneUsageWriter.pendingPayload !== "")
+                phoneUsageWriter.write(phoneUsageWriter.pendingPayload + "\n");
+        }
+        onExited: code => {
+            const dates = phoneUsageWriter.pendingDates;
+            const sessions = phoneUsageWriter.pendingSessions;
+            phoneUsageWriter.pendingPayload = "";
+            phoneUsageWriter.pendingDates = [];
+            phoneUsageWriter.pendingSessions = ({});
+            if (code === 0 && dates.length > 0)
+                root.phoneUsageUpdated(dates, sessions);
+            Qt.callLater(root._flushPhoneUsageQueue);
         }
     }
 
@@ -1451,6 +1592,11 @@ Singleton {
     function launcherIconDir(dev): string {
         const id = `iitools:${dev}`.replace(/[^A-Za-z0-9._-]/g, "_");
         return `${FileUtils.trimFileProtocol(Directories.cache)}/phone_app_icons/${id}`;
+    }
+
+    function activeLauncherIconDir(): string {
+        const dev = root.usageDev || root.launcherIconDev || String(root.peers[0]?.id ?? "");
+        return dev !== "" ? root.launcherIconDir(dev) : "";
     }
 
     function requestLauncherIcons(pkgs): bool {
@@ -2239,6 +2385,10 @@ Singleton {
             return;
         case "camera":
             IiCameraService.handleMessage(dev, m);
+            return;
+        case "phoneUsage":
+            if (root.usageEnabled)
+                root._savePhoneUsage(dev, m);
             return;
         case "caps": {
             const next = Object.assign({}, root.phoneCaps);

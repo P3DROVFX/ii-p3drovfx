@@ -138,6 +138,17 @@ announces `status` and, with the contacts permission, `contacts`.
 | phone → shell | `{"t":"contacts","hash","list":[contact]}` | Only when `hash` differs. `contact` is the shape the shell's vCard reader gives (`id, displayName, givenName, familyName, organization, phones[{value,normalized,type}], emails[{value,type}], birthday{year,month,day}`) plus `photo`, the photo's hash or `""`. |
 | shell → phone | `{"t":"get","what":"photos","keys":["<photo>",…]}` | The photos the PC lacks; each comes as a file, purpose `contactPhoto`, name `<photo>.jpg`, kept in `<state>/contacts/`. |
 
+## Phone usage (screen time)
+
+Needs `usage` in the shell's `caps` (`iiTools.usage.enable`, off by default) and `usage` in the phone's `caps` (enabled in the app with `PACKAGE_USAGE_STATS` granted).
+
+| Direction | Message | |
+| --- | --- | --- |
+| shell → phone | `{"t":"get","what":"phoneUsage","since":"YYYY-MM-DD"}` | Sent on connect (once `caps` include `usage`), when the usage app opens, and when the clock app's Bedtime tab opens. `since` is the newest day the PC already has (re-sends that day), or empty/oldest if none. |
+| phone → shell | `{"t":"phoneUsage","days":[{"date":"YYYY-MM-DD","apps":[{"pkg":"…","name":"…","h":[24 ints]}],"sessions":[[startMs,endMs],…]}]}` | Daily foreground seconds per hour (`h` = 24 ints, 0–3600 per hour) per package (launchers, SystemUI, and ii tools itself omitted) and screen-interactive `[startMs, endMs]` intervals of that day. Max 30 days back. Sent on connect when the shell's `hello.caps` includes `usage`, on `get phoneUsage`, and for today on `ACTION_SCREEN_OFF` (runtime receiver while enabled, debounced at most once per 10 minutes). |
+
+The shell stores each day in `<state>/phone_usage/<date>.json`, keeps 60 days, and reads days on demand. Launcher icons for phone apps use the existing `launcherIcons` capability (`get` `launcherIcons`).
+
 ## Do Not Disturb and the PC's live activity
 
 | Direction | Message | |
