@@ -98,8 +98,22 @@ Commands with an argument, answered with `ok` or `err` (`bad_arg`, `not_found`, 
 | `eePreset` | EasyEffects output preset name | audio |
 | `eeBypass` | `true` / `false` | audio |
 | `clip` | `{text}`: onto the PC's clipboard (an image comes as a file, purpose `clip`) | clipboard |
+| `clipPull` | `"<cliphist id>"`: decodes that entry and sends it in `clip` to the phone, without copying to the PC (`locked`, `too_large`, `not_found`) | clipHistory |
+| `clipCopyPc` | `"<cliphist id>"`: copies that entry to the PC's current clipboard (`locked`, `not_found`) | clipHistory |
 | `share` | `{to: "browser"\|"ai"\|"note"\|"reminder"\|"task", text}`. `browser` takes only an `http(s)` link. | share |
 | `deck` | a deck id: `g:<gesture action>`, `c:<command id>`, `app:<desktop id>`, `discordMute`, `discordDeafen` (`locked`, `unavailable`, `not_found`) | deck |
+
+## Clipboard history
+
+Needs `clipHistory` in the shell's `caps` (`iiTools.clipboard.enable` and `iiTools.clipboard.history` both on). Refuses any entry or action with `err` (`locked`) while the lock screen is active.
+
+| Direction | Message | |
+| --- | --- | --- |
+| phone → shell | `{"t":"get","what":"clipHistory","offset":0,"limit":50}` | Answer: `{"t":"clipHistory","offset":0,"total":N,"list":[{"id":"<cliphist id>","text":"<preview, max 200 chars>","image":bool,"pinned":bool}]}` — pinned first in the shell's pinned order, then newest first. |
+| phone → shell | `{"t":"get","what":"clipThumbs","ids":[…]}` | Up to 24 ids per request. Answer: one `{"t":"clipThumb","id","png":"<base64 ≤160px>"}` per image entry, rendered in one batch and cached in `~/.cache/quickshell/iilink/clipthumbs/<id>.png` (pruned when the id leaves history). |
+| phone → shell | `{"t":"sub","what":"clipHistory","on":bool}` | Subscribe (`on: true`) while the history screen is visible; unsubscribe (`on: false` or `unsub`) when leaving. |
+| shell → phone | `{"t":"clipHistoryChanged"}` | Pushed (debounced 1 s) when entries or pins change, only while subscribed and unlocked. |
+| phone → shell | `cmd` `clipPull` / `clipCopyPc` | `clipPull` decodes the entry and sends `{"t":"clip",…}` to the phone with no echo back to the PC; `clipCopyPc` makes it the PC's current clipboard (`Cliphist.copy`). |
 
 ## Notifications
 

@@ -2968,6 +2968,8 @@ Singleton {
                 // the phone while the link is up; the phone sends its own on request.
                 property JsonObject clipboard: JsonObject {
                     property bool enable: true
+                    // Let the phone browse cliphist entries and pull older copies.
+                    property bool history: true
                 }
                 // "Send to PC" in the phone's share sheet: links to the browser or the AI
                 // chat, text to notes, reminders or tasks, files to the shelf or the AI.

@@ -956,6 +956,16 @@ Item {
                 }
             }
 
+            AppToggleRow {
+                Layout.topMargin: 4
+                visible: Config.options.iiTools.clipboard.enable
+                symbol: "history"
+                title: Translation.tr("Clipboard history on phone")
+                description: Translation.tr("Browse cliphist entries from the phone and pull older text or images (blocked while locked)")
+                checked: Config.options.iiTools.clipboard.history
+                onToggled: value => Config.options.iiTools.clipboard.history = value
+            }
+
             // The screen goes over USB: adb carries it.
             AppSettingRow {
                 Layout.topMargin: 4

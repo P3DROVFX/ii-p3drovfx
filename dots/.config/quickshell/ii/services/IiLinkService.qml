@@ -45,6 +45,13 @@ Singleton {
     readonly property bool notifsEnabled: root.opts?.notifications?.enable ?? true
     readonly property bool shareEnabled: root.opts?.share?.enable ?? true
     readonly property bool clipEnabled: root.opts?.clipboard?.enable ?? true
+    readonly property bool clipHistoryEnabled: root.clipEnabled && (root.opts?.clipboard?.history ?? true)
+    onClipHistoryEnabledChanged: {
+        if (!root.clipHistoryEnabled) {
+            root._clipHistoryDev = "";
+            root._clipThumbQueue = [];
+        }
+    }
     readonly property bool shotsEnabled: root.opts?.screenshots?.enable ?? true
     readonly property bool phoneDataEnabled: root.opts?.phoneData?.enable ?? true
     readonly property bool dndEnabled: root.opts?.dnd?.enable ?? true
@@ -77,6 +84,7 @@ Singleton {
     readonly property string binaryPath: `${root.helperDir}/ii_link`
     readonly property string stateDir: FileUtils.trimFileProtocol(`${Directories.state}/user/iilink`)
     readonly property string appIconCacheDir: `${FileUtils.trimFileProtocol(Directories.cache)}/iilink/appicons`
+    readonly property string clipThumbCacheDir: `${FileUtils.trimFileProtocol(Directories.cache)}/iilink/clipthumbs`
 
     // ── Helper lifecycle ────────────────────────────────────────────────
     property bool binaryPresent: false
@@ -165,6 +173,7 @@ Singleton {
         .concat(root.notifsEnabled ? ["notifs", "notifFilter"] : [])
         .concat(root.shareEnabled ? ["share"] : [])
         .concat(root.clipEnabled ? ["clip"] : [])
+        .concat(root.clipHistoryEnabled ? ["clipHistory"] : [])
         .concat(root.shotsEnabled ? ["shots"] : [])
         .concat(root.phoneDataEnabled ? ["phoneData"] : [])
         .concat(root.dndEnabled ? ["dnd"] : [])
@@ -668,6 +677,7 @@ Singleton {
     readonly property int clipImageMax: 5 * 1024 * 1024
     /// The cliphist id last sent, so a reconnecting phone only gets what is new.
     property string _clipSent: ""
+    property var _clipDecodeQueue: []
 
     Connections {
         target: root.clipDev !== "" ? Cliphist : null
@@ -686,33 +696,364 @@ Singleton {
         if (root.clipDev === "" || key === "" || key === root._clipSent)
             return;
         root._clipSent = key;
+        root._enqueueClipDecode(root.clipDev, key, Cliphist.entryIsImage(entry), 0);
+    }
+
+    function _enqueueClipDecode(dev, key, isImage, cmdId): void {
+        root._clipDecodeQueue.push({ dev: dev, key: key, image: Boolean(isImage), cmdId: Number(cmdId ?? 0) });
+        root._nextClipDecode();
+    }
+
+    function _nextClipDecode(): void {
+        if (clipDecode.running || root._clipDecodeQueue.length === 0)
+            return;
+        const next = root._clipDecodeQueue.shift();
+        if (!root.connections[next.dev]) {
+            Qt.callLater(root._nextClipDecode);
+            return;
+        }
         // From cliphist itself: its list shows only a preview, and Quickshell's own
         // clipboard text does not follow copies made in other apps. One process per copy.
-        clipDecode.dev = root.clipDev;
-        clipDecode.image = Cliphist.entryIsImage(entry);
+        clipDecode.dev = next.dev;
+        clipDecode.image = next.image;
+        clipDecode.cmdId = next.cmdId;
+        clipDecode._streamDone = false;
+        clipDecode._exited = false;
         // Text as it is (Qt reads it as UTF-8); an image as base64 for the JSON message.
-        clipDecode.command = ["sh", "-c", `${Cliphist.cliphistBinary} decode "$1" | head -c ${root.clipImageMax + 1}${clipDecode.image ? " | base64 -w0" : ""}`, "sh", key];
+        clipDecode.command = ["sh", "-c", `${Cliphist.cliphistBinary} decode "$1" | head -c ${root.clipImageMax + 1}${next.image ? " | base64 -w0" : ""}`, "sh", next.key];
         clipDecode.running = true;
+    }
+
+    function _finishClipDecode(data): void {
+        if (data.length === 0) {
+            if (clipDecode.cmdId > 0)
+                root.sendTo(clipDecode.dev, { t: "err", id: clipDecode.cmdId, code: "not_found" });
+            return;
+        }
+        if (!clipDecode.image) {
+            root.sendTo(clipDecode.dev, { t: "clip", text: data });
+            if (clipDecode.cmdId > 0)
+                root.sendTo(clipDecode.dev, { t: "ok", id: clipDecode.cmdId });
+            return;
+        }
+        // Past the limit (the base64 of max + 1 bytes): the image stays on the PC.
+        const trimmed = data.trim();
+        if (trimmed.length <= Math.ceil(root.clipImageMax / 3) * 4) {
+            root.sendTo(clipDecode.dev, { t: "clip", mime: "image/png", data: trimmed });
+            if (clipDecode.cmdId > 0)
+                root.sendTo(clipDecode.dev, { t: "ok", id: clipDecode.cmdId });
+        } else if (clipDecode.cmdId > 0) {
+            root.sendTo(clipDecode.dev, { t: "err", id: clipDecode.cmdId, code: "too_large" });
+        }
     }
 
     Process {
         id: clipDecode
         property string dev: ""
         property bool image: false
+        property int cmdId: 0
+        property bool _streamDone: false
+        property bool _exited: false
         stdout: StdioCollector {
             onStreamFinished: {
-                const data = this.text;
-                if (data.length === 0)
-                    return;
-                if (!clipDecode.image) {
-                    root.sendTo(clipDecode.dev, { t: "clip", text: data });
-                    return;
-                }
-                // Past the limit (the base64 of max + 1 bytes): the image stays on the PC.
-                if (data.trim().length <= Math.ceil(root.clipImageMax / 3) * 4)
-                    root.sendTo(clipDecode.dev, { t: "clip", mime: "image/png", data: data.trim() });
+                clipDecode._streamDone = true;
+                root._finishClipDecode(this.text);
+                if (clipDecode._exited)
+                    Qt.callLater(root._nextClipDecode);
             }
         }
+        onExited: {
+            clipDecode._exited = true;
+            if (clipDecode._streamDone)
+                Qt.callLater(root._nextClipDecode);
+        }
+    }
+
+    // ── Clipboard history ───────────────────────────────────────────────
+    // Paged cliphist browsing (`get clipHistory`), on-demand thumbnails (`get clipThumbs`),
+    // pulling an entry to the phone without echoing back to the PC (`clipPull`), and
+    // copying an entry onto the PC's clipboard (`clipCopyPc`). Blocked while locked.
+
+    property string _clipHistoryDev: ""
+    readonly property bool _clipHistorySubActive: root.clipHistoryEnabled && root._clipHistoryDev !== "" && root.connections[root._clipHistoryDev] !== undefined
+    property bool _clipHistoryDirtyWhileLocked: false
+    property var _clipThumbQueue: []
+    property bool _clipThumbCacheMayExist: false
+    property bool _clipThumbPrunedOnce: false
+
+    function _scheduleClipHistoryChanged(): void {
+        if (!root._clipHistorySubActive)
+            return;
+        if (GlobalStates.screenLocked) {
+            root._clipHistoryDirtyWhileLocked = true;
+            return;
+        }
+        clipHistoryChangeTimer.restart();
+    }
+
+    Timer {
+        id: clipHistoryChangeTimer
+        interval: 1000
+        onTriggered: {
+            if (root._clipHistorySubActive && !GlobalStates.screenLocked)
+                root.sendTo(root._clipHistoryDev, { t: "clipHistoryChanged" });
+        }
+    }
+
+    Connections {
+        target: root._clipHistorySubActive ? Cliphist : null
+        function onClipboardUpdated() {
+            root._scheduleClipHistoryChanged();
+        }
+        function onPinnedEntriesChanged() {
+            root._scheduleClipHistoryChanged();
+        }
+    }
+
+    Connections {
+        target: root._clipHistorySubActive ? GlobalStates : null
+        function onScreenLockedChanged() {
+            if (!GlobalStates.screenLocked && root._clipHistoryDirtyWhileLocked) {
+                root._clipHistoryDirtyWhileLocked = false;
+                clipHistoryChangeTimer.restart();
+            }
+        }
+    }
+
+    Connections {
+        target: root.enabled && root.clipHistoryEnabled && root.hasPeers ? Cliphist : null
+        function onClipboardUpdated() {
+            if (root._clipThumbCacheMayExist || !root._clipThumbPrunedOnce)
+                clipThumbPruneTimer.restart();
+        }
+    }
+
+    Timer {
+        id: clipThumbPruneTimer
+        interval: 1000
+        onTriggered: root._pruneClipThumbs()
+    }
+
+    function _pruneClipThumbs(): void {
+        if (clipThumbPruneProc.running)
+            return;
+        root._clipThumbPrunedOnce = true;
+        const ids = [];
+        for (const entry of Cliphist.entries) {
+            if (!Cliphist.entryIsImage(entry))
+                continue;
+            const id = Cliphist.entryKey(entry);
+            if (/^\d+$/.test(id))
+                ids.push(id);
+        }
+        clipThumbPruneProc.command = [
+            "sh", "-c",
+            'printf "%s\\n" "$1" | python3 "$2" prune "$3"',
+            "sh", ids.join("\n"), `${root.helperDir}/render_clip_thumbs.py`, root.clipThumbCacheDir
+        ];
+        clipThumbPruneProc.running = true;
+    }
+
+    Process {
+        id: clipThumbPruneProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root._clipThumbCacheMayExist = this.text.trim() === "nonempty";
+            }
+        }
+    }
+
+    function _clipHistoryEntries(): var {
+        const liveEntries = Array.from(Cliphist.entries ?? []);
+        const liveByClean = ({});
+        for (let i = 0; i < liveEntries.length; i++) {
+            const e = liveEntries[i];
+            const clean = StringUtils.cleanCliphistEntry(e);
+            if (liveByClean[clean] === undefined)
+                liveByClean[clean] = e;
+        }
+        const out = [];
+        const seenIds = ({});
+        const pinned = Array.from(Cliphist.pinnedEntries ?? []);
+        for (let i = 0; i < pinned.length; i++) {
+            const p = pinned[i];
+            const clean = StringUtils.cleanCliphistEntry(p);
+            const live = liveEntries.indexOf(p) !== -1 ? p : (liveByClean[clean] ?? null);
+            const actual = live ?? p;
+            const isImg = Cliphist.entryIsImage(actual);
+            if (live === null && isImg)
+                continue;
+            const id = Cliphist.entryKey(actual);
+            if (id === "" || seenIds[id])
+                continue;
+            seenIds[id] = true;
+            out.push({ entry: actual, id: id, text: clean.slice(0, 200), image: isImg, pinned: true });
+        }
+        for (let i = 0; i < liveEntries.length; i++) {
+            const e = liveEntries[i];
+            if (Cliphist.isPinned(e))
+                continue;
+            const id = Cliphist.entryKey(e);
+            if (id === "" || seenIds[id])
+                continue;
+            seenIds[id] = true;
+            out.push({ entry: e, id: id, text: StringUtils.cleanCliphistEntry(e).slice(0, 200), image: Cliphist.entryIsImage(e), pinned: false });
+        }
+        return out;
+    }
+
+    function _findClipEntryById(key): string {
+        for (const e of Array.from(Cliphist.entries ?? [])) {
+            if (Cliphist.entryKey(e) === key)
+                return e;
+        }
+        for (const e of Array.from(Cliphist.pinnedEntries ?? [])) {
+            if (Cliphist.entryKey(e) === key)
+                return e;
+        }
+        return "";
+    }
+
+    function _sendClipHistory(dev, offset, limit): void {
+        if (!root.clipHistoryEnabled) {
+            root.sendTo(dev, { t: "err", code: "disabled", what: "clipHistory" });
+            return;
+        }
+        if (GlobalStates.screenLocked) {
+            if (root._clipHistoryDev === dev)
+                root._clipHistoryDirtyWhileLocked = true;
+            root.sendTo(dev, { t: "err", code: "locked", what: "clipHistory" });
+            return;
+        }
+        const all = root._clipHistoryEntries();
+        const off = Math.max(0, Math.floor(Number(offset ?? 0)) || 0);
+        const lim = Math.max(1, Math.min(200, Math.floor(Number(limit ?? 50)) || 50));
+        const page = all.slice(off, off + lim).map(x => ({
+            id: x.id,
+            text: x.text,
+            image: x.image,
+            pinned: x.pinned
+        }));
+        root.sendTo(dev, { t: "clipHistory", offset: off, total: all.length, list: page });
+    }
+
+    function _requestClipThumbs(dev, ids): void {
+        if (!root.clipHistoryEnabled) {
+            root.sendTo(dev, { t: "err", code: "disabled", what: "clipThumbs" });
+            return;
+        }
+        if (GlobalStates.screenLocked) {
+            if (root._clipHistoryDev === dev)
+                root._clipHistoryDirtyWhileLocked = true;
+            root.sendTo(dev, { t: "err", code: "locked", what: "clipThumbs" });
+            return;
+        }
+        if (!Array.isArray(ids))
+            return;
+        const imageIds = ({});
+        for (const e of Array.from(Cliphist.entries ?? [])) {
+            if (!Cliphist.entryIsImage(e))
+                continue;
+            const k = Cliphist.entryKey(e);
+            if (k !== "")
+                imageIds[k] = true;
+        }
+        const batch = [];
+        const seen = ({});
+        for (let i = 0; i < ids.length && batch.length < 24; i++) {
+            const id = String(ids[i] ?? "").trim();
+            if (!/^\d+$/.test(id) || seen[id] || !imageIds[id])
+                continue;
+            seen[id] = true;
+            batch.push(id);
+        }
+        if (batch.length === 0)
+            return;
+        root._clipThumbQueue.push({ dev: dev, ids: batch });
+        root._nextClipThumbBatch();
+    }
+
+    function _nextClipThumbBatch(): void {
+        if (clipThumbProc.running || root._clipThumbQueue.length === 0)
+            return;
+        const next = root._clipThumbQueue.shift();
+        if (!root.clipHistoryEnabled || GlobalStates.screenLocked || !root.connections[next.dev]) {
+            Qt.callLater(root._nextClipThumbBatch);
+            return;
+        }
+        root._clipThumbCacheMayExist = true;
+        clipThumbProc.dev = next.dev;
+        clipThumbProc.command = ["python3", `${root.helperDir}/render_clip_thumbs.py`, "render", root.clipThumbCacheDir, Cliphist.cliphistBinary].concat(next.ids);
+        clipThumbProc.running = true;
+    }
+
+    Process {
+        id: clipThumbProc
+        property string dev: ""
+        stdout: SplitParser {
+            onRead: line => {
+                if (!root.clipHistoryEnabled || GlobalStates.screenLocked || !root.connections[clipThumbProc.dev])
+                    return;
+                let obj;
+                try {
+                    obj = JSON.parse(line);
+                } catch (e) {
+                    return;
+                }
+                if (obj?.id && obj?.png)
+                    root.sendTo(clipThumbProc.dev, { t: "clipThumb", id: String(obj.id), png: String(obj.png) });
+            }
+        }
+        onExited: Qt.callLater(root._nextClipThumbBatch)
+    }
+
+    function _clipPull(dev, cmdId, arg): void {
+        if (!root.clipHistoryEnabled) {
+            root.sendTo(dev, { t: "err", id: cmdId, code: "disabled" });
+            return;
+        }
+        if (GlobalStates.screenLocked) {
+            root.sendTo(dev, { t: "err", id: cmdId, code: "locked" });
+            return;
+        }
+        const key = String(typeof arg === "object" && arg !== null ? (arg.id ?? "") : (arg ?? "")).trim();
+        if (!/^\d+$/.test(key)) {
+            root.sendTo(dev, { t: "err", id: cmdId, code: "bad_arg" });
+            return;
+        }
+        for (const e of Array.from(Cliphist.entries ?? [])) {
+            if (Cliphist.entryKey(e) === key) {
+                root._enqueueClipDecode(dev, key, Cliphist.entryIsImage(e), cmdId);
+                return;
+            }
+        }
+        for (const e of Array.from(Cliphist.pinnedEntries ?? [])) {
+            if (Cliphist.entryKey(e) === key) {
+                if (Cliphist.entryIsImage(e)) {
+                    root.sendTo(dev, { t: "err", id: cmdId, code: "not_found" });
+                    return;
+                }
+                root.sendTo(dev, { t: "clip", text: StringUtils.cleanCliphistEntry(e) });
+                root.sendTo(dev, { t: "ok", id: cmdId });
+                return;
+            }
+        }
+        root.sendTo(dev, { t: "err", id: cmdId, code: "not_found" });
+    }
+
+    function _clipCopyPc(arg): string {
+        if (!root.clipHistoryEnabled)
+            return "disabled";
+        if (GlobalStates.screenLocked)
+            return "locked";
+        const key = String(typeof arg === "object" && arg !== null ? (arg.id ?? "") : (arg ?? "")).trim();
+        if (!/^\d+$/.test(key))
+            return "bad_arg";
+        const entry = root._findClipEntryById(key);
+        if (entry === "")
+            return "not_found";
+        Cliphist.copy(entry);
+        return "";
     }
 
     /// Text from the phone (`clip` command).
@@ -2334,6 +2675,11 @@ Singleton {
                 why = root.pcMediaEnabled ? root._runPcMedia(m.arg) : "disabled";
             else if (action === "clip")
                 why = root.clipEnabled ? root._clipFromPhone(dev, m.arg) : "disabled";
+            else if (action === "clipPull") {
+                root._clipPull(dev, id, m.arg);
+                return;
+            } else if (action === "clipCopyPc")
+                why = root._clipCopyPc(m.arg);
             else if (action === "share")
                 why = root.shareEnabled ? root._share(m.arg) : "disabled";
             else if (action === "deck")
@@ -2355,6 +2701,21 @@ Singleton {
         case "sub":
             if (m.what === "perf")
                 root._perfDev = m.on === true ? dev : (root._perfDev === dev ? "" : root._perfDev);
+            else if (m.what === "clipHistory") {
+                root._clipHistoryDev = (m.on === true && root.clipHistoryEnabled)
+                    ? dev
+                    : (root._clipHistoryDev === dev ? "" : root._clipHistoryDev);
+                if (root._clipHistoryDev !== dev)
+                    root._clipHistoryDirtyWhileLocked = false;
+            }
+            return;
+        case "unsub":
+            if (m.what === "perf" && root._perfDev === dev)
+                root._perfDev = "";
+            else if (m.what === "clipHistory" && root._clipHistoryDev === dev) {
+                root._clipHistoryDev = "";
+                root._clipHistoryDirtyWhileLocked = false;
+            }
             return;
         case "dnd":
             if (dev === root.dndDev)
@@ -2445,6 +2806,10 @@ Singleton {
                 root.sendTo(dev, root._apps());
             else if (m.what === "appIcons" && root.deckEnabled)
                 root._requestAppIcons(dev, m.icons);
+            else if (m.what === "clipHistory")
+                root._sendClipHistory(dev, m.offset, m.limit);
+            else if (m.what === "clipThumbs")
+                root._requestClipThumbs(dev, m.ids);
             return;
         }
     }
@@ -2509,6 +2874,10 @@ Singleton {
             root.phoneCaps = caps;
             if (root._perfDev === ev.dev)
                 root._perfDev = "";
+            if (root._clipHistoryDev === ev.dev) {
+                root._clipHistoryDev = "";
+                root._clipHistoryDirtyWhileLocked = false;
+            }
             root._unmountFiles(ev.dev, false);
             if (root._drawDev === ev.dev) {
                 root._drawDev = "";
