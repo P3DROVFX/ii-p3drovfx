@@ -78,15 +78,10 @@ Item {
         easing.type: Easing.OutCubic
     }
 
-    Connections {
-        target: GlobalStates
-        function onLockLookActiveChanged() {
-            lockBlurRoot.syncBlurWanted();
-        }
-        function onScratchpadEmptyOverlayActiveChanged() {
-            lockBlurRoot.syncBlurWanted();
-        }
-    }
+    // React to blurWanted itself, not to GlobalStates.lockLookActive: lockLook is a per-screen
+    // binding updated after that signal, so a handler on it read the old value and ran the
+    // exit animation on lock - the blur loaded at radius 0 and the wallpaper stayed sharp.
+    onBlurWantedChanged: lockBlurRoot.syncBlurWanted()
 
     Component.onCompleted: {
         if (lockBlurRoot.blurWanted && sourceReady)
