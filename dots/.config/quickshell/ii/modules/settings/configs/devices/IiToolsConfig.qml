@@ -24,6 +24,8 @@ Item {
     property bool showBackButton: false
     signal goBack()
     property alias contentY: page.contentY
+    property bool notifAppsExpanded: false
+    property string notifAppsQuery: ""
 
     readonly property bool isSelected: KdeConnectService.activePhoneService === "iiTools"
     readonly property int enabledModuleCount: {
@@ -512,6 +514,193 @@ Item {
                     : Translation.tr("The phone takes them only with \"Receive the PC's screenshots\" on in ii tools (off by default)")
                 checked: Config.options.iiTools.screenshots.autoToPhone
                 onToggled: value => Config.options.iiTools.screenshots.autoToPhone = value
+            }
+
+            AppSettingRow {
+                Layout.topMargin: 4
+                visible: Config.options.iiTools.notifications.enable
+                symbol: "apps"
+                title: Translation.tr("Notification apps")
+                description: {
+                    const apps = IiLinkService.notifApps ?? [];
+                    const blocked = apps.filter(a => a.blocked).length;
+                    if (!IiLinkService.phoneConnected)
+                        return Translation.tr("Connect the phone to change which apps mirror");
+                    if (apps.length === 0)
+                        return Translation.tr("No apps seen yet — new notifications will show up here");
+                    if (blocked > 0)
+                        return Translation.tr("%1 of %2 apps blocked on this PC").arg(blocked).arg(apps.length);
+                    return Translation.tr("%1 apps allowed — choose which ones mirror to this PC").arg(apps.length);
+                }
+                clickable: true
+                onClicked: root.notifAppsExpanded = !root.notifAppsExpanded
+                control: MaterialSymbol {
+                    text: root.notifAppsExpanded ? "expand_less" : "expand_more"
+                    iconSize: 22
+                    color: Appearance.colors.colSubtext
+                }
+            }
+
+            AppSettingRow {
+                visible: Config.options.iiTools.notifications.enable && root.notifAppsExpanded
+                below: Loader {
+                    Layout.fillWidth: true
+                    active: Config.options.iiTools.notifications.enable && root.notifAppsExpanded
+                    sourceComponent: Component {
+                        ColumnLayout {
+                            id: appsPanel
+                            width: parent ? parent.width : 0
+                            spacing: 8
+
+                            readonly property var allApps: IiLinkService.notifApps ?? []
+                            readonly property string trimmedQuery: root.notifAppsQuery.trim().toLowerCase()
+                            readonly property var filteredApps: {
+                                if (appsPanel.allApps.length <= 12 || appsPanel.trimmedQuery === "")
+                                    return appsPanel.allApps;
+                                return appsPanel.allApps.filter(a =>
+                                    String(a.name ?? "").toLowerCase().includes(appsPanel.trimmedQuery)
+                                    || String(a.pkg ?? "").toLowerCase().includes(appsPanel.trimmedQuery)
+                                );
+                            }
+
+                            StyledText {
+                                visible: !IiLinkService.phoneConnected
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                color: Appearance.colors.colSubtext
+                                text: Translation.tr("Phone is not connected. Showing the last synced list — switches are disabled.")
+                            }
+
+                            MaterialTextField {
+                                visible: appsPanel.allApps.length > 12
+                                Layout.fillWidth: true
+                                placeholderText: Translation.tr("Search apps")
+                                text: root.notifAppsQuery
+                                onTextChanged: root.notifAppsQuery = text
+                            }
+
+                            StyledText {
+                                visible: appsPanel.allApps.length === 0
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                color: Appearance.colors.colSubtext
+                                text: Translation.tr("No apps seen yet — new notifications from the phone will appear here.")
+                            }
+
+                            StyledText {
+                                visible: appsPanel.allApps.length > 0 && appsPanel.filteredApps.length === 0
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                color: Appearance.colors.colSubtext
+                                text: Translation.tr("No matching apps")
+                            }
+
+                            ColumnLayout {
+                                visible: appsPanel.filteredApps.length > 0
+                                Layout.fillWidth: true
+                                spacing: 2
+
+                                Repeater {
+                                    model: appsPanel.filteredApps
+                                    delegate: RippleButton {
+                                        id: appRow
+                                        required property var modelData
+
+                                        readonly property string pkg: String(modelData.pkg ?? "")
+                                        readonly property string appName: String(modelData.name ?? appRow.pkg)
+                                        readonly property bool allowed: !Boolean(modelData.blocked)
+                                        readonly property string iconPath: IiLinkService.iconFor(appRow.pkg)
+                                        property bool _reloadingIcon: false
+
+                                        Layout.fillWidth: true
+                                        implicitHeight: Math.max(54, rowLayout.implicitHeight + 16)
+                                        enabled: IiLinkService.phoneConnected
+                                        opacity: enabled ? 1 : 0.6
+                                        colBackground: Appearance.colors.colLayer2
+                                        colBackgroundHover: Appearance.colors.colLayer2Hover
+                                        colRipple: Appearance.colors.colLayer2Active
+                                        useDynamicRadius: true
+
+                                        onClicked: IiLinkService.setNotifBlocked(appRow.pkg, appRow.allowed)
+
+                                        Connections {
+                                            target: IiLinkService
+                                            function onAppIconReady(readyPkg, path) {
+                                                if (readyPkg === appRow.pkg) {
+                                                    appRow._reloadingIcon = true;
+                                                    Qt.callLater(() => { appRow._reloadingIcon = false; });
+                                                }
+                                            }
+                                        }
+
+                                        contentItem: Item {
+                                            anchors.fill: parent
+
+                                            RowLayout {
+                                                id: rowLayout
+                                                anchors.fill: parent
+                                                anchors.leftMargin: 14
+                                                anchors.rightMargin: 14
+                                                anchors.topMargin: 8
+                                                anchors.bottomMargin: 8
+                                                spacing: 12
+
+                                                Item {
+                                                    Layout.preferredWidth: 32
+                                                    Layout.preferredHeight: 32
+                                                    Layout.alignment: Qt.AlignVCenter
+
+                                                    Image {
+                                                        id: appIconImg
+                                                        anchors.fill: parent
+                                                        fillMode: Image.PreserveAspectFit
+                                                        smooth: true
+                                                        mipmap: true
+                                                        cache: false
+                                                        asynchronous: true
+                                                        source: (!appRow._reloadingIcon && appRow.iconPath !== "") ? `file://${appRow.iconPath}` : ""
+                                                        visible: status === Image.Ready
+                                                    }
+
+                                                    MaterialShapeWrappedMaterialSymbol {
+                                                        anchors.fill: parent
+                                                        visible: !appIconImg.visible
+                                                        shape: MaterialShape.Shape.Circle
+                                                        iconSize: 18
+                                                        padding: 0
+                                                        text: "notifications"
+                                                        color: Appearance.colors.colLayer3
+                                                        colSymbol: Appearance.colors.colOnLayer2
+                                                    }
+                                                }
+
+                                                StyledText {
+                                                    Layout.fillWidth: true
+                                                    text: appRow.appName
+                                                    elide: Text.ElideRight
+                                                    font.pixelSize: Appearance.font.pixelSize.normal
+                                                    color: Appearance.colors.colOnLayer2
+                                                }
+
+                                                StyledSwitch {
+                                                    Layout.alignment: Qt.AlignVCenter
+                                                    checked: appRow.allowed
+                                                    enabled: false
+                                                    down: appRow.isPressed
+                                                    isPressed: appRow.isPressed
+                                                    opacity: appRow.enabled ? 1 : 0.45
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 

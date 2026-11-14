@@ -160,7 +160,7 @@ Singleton {
         .concat(root.deckEnabled ? ["deck"] : [])
         .concat(root.wallpaperEnabled ? ["wallpaper"] : [])
         .concat(root.callsEnabled ? ["calls"] : [])
-        .concat(root.notifsEnabled ? ["notifs"] : [])
+        .concat(root.notifsEnabled ? ["notifs", "notifFilter"] : [])
         .concat(root.shareEnabled ? ["share"] : [])
         .concat(root.clipEnabled ? ["clip"] : [])
         .concat(root.shotsEnabled ? ["shots"] : [])
@@ -448,6 +448,42 @@ Singleton {
     property var linkNotifications: []
     /// Live updates sent over the link: the same payload as an `iilive1:` relay.
     property var linkLives: []
+    /// Apps seen by the phone's notification listener: [{ pkg, name, blocked }]
+    property var notifApps: []
+    signal appIconReady(string pkg, string path)
+
+    FileView {
+        id: notifAppsFile
+        path: root.enabled && root.hasPeers && root.notifsEnabled ? `${root.stateDir}/notif_apps.json` : ""
+        printErrors: false
+        onLoaded: root._loadNotifApps(notifAppsFile.text())
+        onLoadFailed: root.notifApps = []
+    }
+    function _normalizeNotifApps(list): var {
+        if (!Array.isArray(list))
+            return [];
+        const out = [];
+        for (const item of list) {
+            if (!item || typeof item !== "object")
+                continue;
+            const pkg = String(item.pkg ?? "");
+            if (pkg === "")
+                continue;
+            out.push({
+                pkg: pkg,
+                name: String(item.name ?? pkg) || pkg,
+                blocked: Boolean(item.blocked),
+            });
+        }
+        return out;
+    }
+    function _loadNotifApps(raw): void {
+        try {
+            root.notifApps = root._normalizeNotifApps(JSON.parse(raw));
+        } catch (e) {
+            root.notifApps = [];
+        }
+    }
     readonly property string notifDev: {
         if (!root.notifsEnabled)
             return "";
@@ -533,6 +569,24 @@ Singleton {
     }
     function notifReply(key, index, text): void {
         root._send({ t: "notifAct", key: String(key), a: "reply", i: Number(index), text: String(text) });
+    }
+    function setNotifBlocked(pkg, blocked): void {
+        const cleanPkg = String(pkg ?? "");
+        if (cleanPkg === "")
+            return;
+        const dev = root.notifDev !== ""
+            ? root.notifDev
+            : (root.connectedList.length > 0 ? String(root.connectedList[0].id ?? "") : "");
+        if (dev === "")
+            return;
+        const nextBlocked = Boolean(blocked);
+        root.sendTo(dev, { t: "notifFilter", pkg: cleanPkg, blocked: nextBlocked });
+        root.notifApps = root.notifApps.map(app => app.pkg === cleanPkg
+            ? ({ pkg: app.pkg, name: app.name, blocked: nextBlocked })
+            : app);
+        notifAppsFile.setText(JSON.stringify(root.notifApps));
+        if (nextBlocked)
+            root.linkNotifications = root.linkNotifications.filter(x => x.pkg !== cleanPkg);
     }
 
     // ── Clipboard ───────────────────────────────────────────────────────
@@ -1357,17 +1411,25 @@ Singleton {
             return;
         const next = root._iconMoves.shift();
         iconMover.pkg = next.pkg;
+        iconMover.appIcon = Boolean(next.appIcon);
         iconMover.dest = `${next.dir}/${next.pkg}.png`;
-        iconMover.command = ["sh", "-c", 'mkdir -p -- "$1" && mv -f -- "$2" "$3"', "sh", next.dir, next.from, iconMover.dest];
+        iconMover.command = next.appIcon
+            ? ["sh", "-c", 'mkdir -p -m 700 -- "$1" && mv -f -- "$2" "$3"', "sh", next.dir, next.from, iconMover.dest]
+            : ["sh", "-c", 'mkdir -p -- "$1" && mv -f -- "$2" "$3"', "sh", next.dir, next.from, iconMover.dest];
         iconMover.running = true;
     }
     Process {
         id: iconMover
         property string pkg: ""
+        property bool appIcon: false
         property string dest: ""
         onExited: exitCode => {
-            if (exitCode === 0)
-                root.launcherIconReady(iconMover.pkg, iconMover.dest);
+            if (exitCode === 0) {
+                if (iconMover.appIcon)
+                    root.appIconReady(iconMover.pkg, iconMover.dest);
+                else
+                    root.launcherIconReady(iconMover.pkg, iconMover.dest);
+            }
             Qt.callLater(root._moveIcons);
         }
     }
@@ -1702,7 +1764,8 @@ Singleton {
             const dest = root.iconFor(pkg);
             if (dest === "")
                 return refuse("bad_arg");
-            Quickshell.execDetached(["sh", "-c", 'mkdir -p -m 700 -- "$1" && mv -f -- "$2" "$3"', "sh", root.iconDir, path, dest]);
+            root._iconMoves.push({ pkg: pkg, dir: root.iconDir, from: path, appIcon: true });
+            root._moveIcons();
             root.sendTo(dev, { t: "ok", id: id });
             return;
         }
@@ -2133,6 +2196,12 @@ Singleton {
         case "notifs":
             if (dev === root.notifDev)
                 root.linkNotifications = Array.isArray(m.list) ? m.list.map(root._notif).filter(n => n.key !== "") : [];
+            return;
+        case "notifApps":
+            if (root.notifsEnabled && (root.notifDev === "" || dev === root.notifDev)) {
+                root.notifApps = root._normalizeNotifApps(m.list);
+                notifAppsFile.setText(JSON.stringify(root.notifApps));
+            }
             return;
         case "notif": {
             if (dev !== root.notifDev)

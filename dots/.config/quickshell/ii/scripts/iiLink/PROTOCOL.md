@@ -103,7 +103,8 @@ Commands with an argument, answered with `ok` or `err` (`bad_arg`, `not_found`, 
 ## Notifications
 
 Needs `notifs` in the shell's `caps` (Settings → ii tools → Notifications) and in the
-phone's. The app opens the link for a burst of notifications and keeps it until 2 min
+phone's. Announcing `notifFilter` alongside `notifs` opts into the per-app filter list.
+The app opens the link for a burst of notifications and keeps it until 2 min
 after the last one; a PC it cannot reach is not retried for 5 min.
 
 | Direction | Message | |
@@ -111,8 +112,10 @@ after the last one; a PC it cannot reach is not retried for 5 min.
 | phone → shell | `{"t":"notifs","list":[n]}` | The whole current list, on every connect (once `hello` shows `notifs`), when the phone's notification access comes up after the link, and when asked. |
 | shell → phone | `{"t":"get","what":"notifs"}` | Whenever a phone starts mirroring (its `caps` gain `notifs`, or the shell reloaded). |
 | phone → shell | `{"t":"notif","n":n}` | Posted or updated. A new text pops up on the desktop. |
-| phone → shell | `{"t":"notifGone","key"}` | Removed on the phone. |
+| phone → shell | `{"t":"notifGone","key"}` | Removed on the phone, or dropped when its app is blocked. |
 | shell → phone | `{"t":"notifAct","key","a":"dismiss"\|"action"\|"reply","i":N,"text":"…"}` | `i` indexes `n.actions`; `reply` fills the action's free-form RemoteInput. |
+| phone → shell | `{"t":"notifApps","list":[{"pkg":"…","name":"…","blocked":false}]}` | Seen apps (newest first) plus anything blocked, on connect when `hello` includes `notifFilter` and debounced (≤1/s) on changes. Any unsent `appIcon` is queued too. |
+| shell → phone | `{"t":"notifFilter","pkg":"…","blocked":true}` | Block or unblock one package on the phone (persisted on the phone; blocking drops its mirrored notifications via `notifGone`). |
 | phone → shell | `{"t":"live","p":{…}}` / `{"t":"liveGone","id"}` | A live update while the link is up: the same payload as an `iilive1:` relay, which the app then does not post. |
 
 `n` is `{key, pkg, app, title, text, time, image?, avatar?, actions?: [{i, label, reply, hint}]}`;
