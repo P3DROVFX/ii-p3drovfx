@@ -10,6 +10,7 @@
 //! sockets and stdin: no timers run while nothing happens.
 
 mod files;
+mod gallery;
 mod icons;
 mod input;
 mod mpris;
@@ -386,132 +387,174 @@ async fn serve(stream: TcpStream, addr: SocketAddr, acceptor: TlsAcceptor, state
 
     let dir = state.lock().unwrap().dir.clone();
     let mut incoming: Option<files::Incoming> = None;
+    let mut thumb_batch = gallery::ThumbBatch::new();
+    let mut idle_deadline = tokio::time::Instant::now() + IDLE_TIMEOUT;
     loop {
-        match timeout(IDLE_TIMEOUT, stream.next()).await {
-            Ok(Some(Ok(Message::Text(text)))) => match serde_json::from_str::<Value>(text.as_str()) {
-                // "Forget this PC" on the phone: the pairing ends on both sides.
-                Ok(m) if m["t"] == "unpair" => {
-                    handle_op(&state, &json!({"op": "unpair", "id": dev}).to_string());
-                    break;
+        let thumb_deadline = thumb_batch.deadline();
+        tokio::select! {
+            _ = tokio::time::sleep_until(idle_deadline) => break,
+            _ = async {
+                match thumb_deadline {
+                    Some(d) => tokio::time::sleep_until(d).await,
+                    None => std::future::pending().await,
                 }
-                // Icons are drawn here, from the font, without bothering the shell; on a
-                // blocking thread, since the font is read from disk for each request.
-                Ok(m) if m["t"] == "icons" => {
-                    let names: Vec<String> = m["names"].as_array().map(|a| {
-                        a.iter().filter_map(|v| v.as_str().map(str::to_owned)).take(icons::MAX_NAMES).collect()
-                    }).unwrap_or_default();
-                    let tx = tx.clone();
-                    tokio::task::spawn_blocking(move || {
-                        let reply = json!({"t": "icons", "paths": icons::paths(&names)});
-                        let _ = tx.send(Message::Text(reply.to_string().into()));
-                    });
-                }
-                // A file follows as binary frames; a new header drops an unfinished one.
-                Ok(m) if m["t"] == "file" => {
-                    if let Some(old) = incoming.take() {
-                        old.discard();
-                        emit(old.aborted(&dev));
-                    }
-                    match files::start(&dir, &dev, &m) {
-                        Ok(inc) => {
-                            emit(inc.started(&dev));
-                            incoming = Some(inc);
-                        }
-                        Err(reply) => {
-                            let _ = tx.send(Message::Text(reply.to_string().into()));
-                        }
-                    }
-                }
-                // The phone's players: MPRIS here, the shell need not hear about them.
-                Ok(m) if m["t"] == "media" || m["t"] == "mediaGone" => {
-                    let s = state.lock().unwrap();
-                    if s.media {
-                        let ev = if m["t"] == "media" {
-                            let phone = s.peers.iter().find(|p| p.id == dev).map(|p| p.name.clone()).unwrap_or_default();
-                            mpris::Event::Update { dev: dev.clone(), phone, tx: tx.clone(), m }
-                        } else {
-                            mpris::Event::Gone { dev: dev.clone(), source: m["source"].as_str().unwrap_or("").to_string() }
-                        };
-                        let _ = s.media_tx.send(ev);
-                    }
-                }
-                // Touchpad and keyboard: many a second, straight to the input thread.
-                Ok(m) if m["t"] == "pad" || m["t"] == "kbd" => {
-                    let s = state.lock().unwrap();
-                    if !s.touchpad {
-                        let _ = tx.send(Message::Text(json!({"t": "pad", "err": "disabled"}).to_string().into()));
-                        continue;
-                    }
-                    if let Some(cmd) = input_cmd(&dev, &m, &tx) {
-                        let _ = s.input_tx.send(cmd);
-                    }
-                }
-                // The slide clicker: its keys go to the input thread; start, stop and the
-                // laser go on to the shell, which draws the dot.
-                Ok(m) if m["t"] == "present" => {
-                    let s = state.lock().unwrap();
-                    if !s.present {
-                        let _ = tx.send(Message::Text(json!({"t": "present", "err": "disabled"}).to_string().into()));
-                        continue;
-                    }
-                    if let Some(key) = m["key"].as_str() {
-                        // Only the keys presentation apps listen for: the phone drives slides, not the PC.
-                        const KEYS: &[&str] = &["Left", "Right", "Page_Up", "Page_Down", "Home", "End", "F5", "Escape", "b", "w"];
-                        if KEYS.contains(&key) {
-                            let _ = s.input_tx.send(input::Cmd::Key { dev: dev.clone(), key: key.to_string(), mods: Vec::new() });
-                        }
-                        continue;
-                    }
-                    match m["a"].as_str() {
-                        Some("start") => {
-                            let tx = tx.clone();
-                            let _ = s.input_tx.send(input::Cmd::Keys {
-                                dev: dev.clone(),
-                                reply: Box::new(move |v| {
-                                    let _ = tx.send(Message::Text(v.to_string().into()));
-                                }),
-                            });
-                        }
-                        Some("stop") => {
-                            let _ = s.input_tx.send(input::Cmd::Stop { dev: dev.clone() });
-                        }
-                        _ => {}
-                    }
-                    emit(json!({"ev": "msg", "dev": dev, "m": m}));
-                }
-                Ok(m) if m.is_object() => emit(json!({"ev": "msg", "dev": dev, "m": m})),
-                _ => {}
-            },
-            Ok(Some(Ok(Message::Binary(data)))) => {
-                if let Some(inc) = incoming.as_mut() {
-                    match inc.write(&data, &dev) {
-                        files::Step::More => {}
-                        files::Step::Progress(event) => emit(event),
-                        files::Step::Done(event) => {
-                            incoming = None;
-                            emit(event);
-                        }
-                        files::Step::Failed(reply) => {
-                            if let Some(inc) = incoming.take() {
-                                emit(inc.aborted(&dev));
-                            }
-                            let _ = tx.send(Message::Text(reply.to_string().into()));
-                        }
-                    }
+            } => {
+                if let Some(ev) = thumb_batch.flush(&dev) {
+                    emit(ev);
                 }
             }
-            // Pings are answered by tungstenite itself.
-            Ok(Some(Ok(Message::Close(_)))) | Ok(Some(Err(_))) | Ok(None) | Err(_) => break,
-            Ok(Some(Ok(_))) => {}
+            msg = stream.next() => {
+                idle_deadline = tokio::time::Instant::now() + IDLE_TIMEOUT;
+                match msg {
+                    Some(Ok(Message::Text(text))) => match serde_json::from_str::<Value>(text.as_str()) {
+                        // "Forget this PC" on the phone: the pairing ends on both sides.
+                        Ok(m) if m["t"] == "unpair" => {
+                            handle_op(&state, &json!({"op": "unpair", "id": dev}).to_string());
+                            break;
+                        }
+                        // Icons are drawn here, from the font, without bothering the shell; on a
+                        // blocking thread, since the font is read from disk for each request.
+                        Ok(m) if m["t"] == "icons" => {
+                            let names: Vec<String> = m["names"].as_array().map(|a| {
+                                a.iter().filter_map(|v| v.as_str().map(str::to_owned)).take(icons::MAX_NAMES).collect()
+                            }).unwrap_or_default();
+                            let tx = tx.clone();
+                            tokio::task::spawn_blocking(move || {
+                                let reply = json!({"t": "icons", "paths": icons::paths(&names)});
+                                let _ = tx.send(Message::Text(reply.to_string().into()));
+                            });
+                        }
+                        // A file follows as binary frames; a new header drops an unfinished one.
+                        Ok(m) if m["t"] == "file" => {
+                            if let Some(old) = incoming.take() {
+                                old.discard();
+                                if let Some(ev) = old.aborted(&dev) {
+                                    emit(ev);
+                                }
+                            }
+                            match files::start(&dir, &dev, &m) {
+                                Ok(inc) => {
+                                    if let Some(ev) = inc.started(&dev) {
+                                        emit(ev);
+                                    }
+                                    incoming = Some(inc);
+                                }
+                                Err(reply) => {
+                                    let _ = tx.send(Message::Text(reply.to_string().into()));
+                                }
+                            }
+                        }
+                        // The phone's players: MPRIS here, the shell need not hear about them.
+                        Ok(m) if m["t"] == "media" || m["t"] == "mediaGone" => {
+                            let s = state.lock().unwrap();
+                            if s.media {
+                                let ev = if m["t"] == "media" {
+                                    let phone = s.peers.iter().find(|p| p.id == dev).map(|p| p.name.clone()).unwrap_or_default();
+                                    mpris::Event::Update { dev: dev.clone(), phone, tx: tx.clone(), m }
+                                } else {
+                                    mpris::Event::Gone { dev: dev.clone(), source: m["source"].as_str().unwrap_or("").to_string() }
+                                };
+                                let _ = s.media_tx.send(ev);
+                            }
+                        }
+                        // Touchpad and keyboard: many a second, straight to the input thread.
+                        Ok(m) if m["t"] == "pad" || m["t"] == "kbd" => {
+                            let s = state.lock().unwrap();
+                            if !s.touchpad {
+                                let _ = tx.send(Message::Text(json!({"t": "pad", "err": "disabled"}).to_string().into()));
+                                continue;
+                            }
+                            if let Some(cmd) = input_cmd(&dev, &m, &tx) {
+                                let _ = s.input_tx.send(cmd);
+                            }
+                        }
+                        // The slide clicker: its keys go to the input thread; start, stop and the
+                        // laser go on to the shell, which draws the dot.
+                        Ok(m) if m["t"] == "present" => {
+                            let s = state.lock().unwrap();
+                            if !s.present {
+                                let _ = tx.send(Message::Text(json!({"t": "present", "err": "disabled"}).to_string().into()));
+                                continue;
+                            }
+                            if let Some(key) = m["key"].as_str() {
+                                // Only the keys presentation apps listen for: the phone drives slides, not the PC.
+                                const KEYS: &[&str] = &["Left", "Right", "Page_Up", "Page_Down", "Home", "End", "F5", "Escape", "b", "w"];
+                                if KEYS.contains(&key) {
+                                    let _ = s.input_tx.send(input::Cmd::Key { dev: dev.clone(), key: key.to_string(), mods: Vec::new() });
+                                }
+                                continue;
+                            }
+                            match m["a"].as_str() {
+                                Some("start") => {
+                                    let tx = tx.clone();
+                                    let _ = s.input_tx.send(input::Cmd::Keys {
+                                        dev: dev.clone(),
+                                        reply: Box::new(move |v| {
+                                            let _ = tx.send(Message::Text(v.to_string().into()));
+                                        }),
+                                    });
+                                }
+                                Some("stop") => {
+                                    let _ = s.input_tx.send(input::Cmd::Stop { dev: dev.clone() });
+                                }
+                                _ => {}
+                            }
+                            emit(json!({"ev": "msg", "dev": dev, "m": m}));
+                        }
+                        Ok(m) if m.is_object() => emit(json!({"ev": "msg", "dev": dev, "m": m})),
+                        _ => {}
+                    },
+                    Some(Ok(Message::Binary(data))) => {
+                        if let Some(inc) = incoming.as_mut() {
+                            match inc.write(&data, &dev) {
+                                files::Step::More => {}
+                                files::Step::Progress(event) => emit(event),
+                                files::Step::Done(done) => {
+                                    incoming = None;
+                                    match done {
+                                        files::Done::Shell(event) => emit(event),
+                                        files::Done::GalleryThumb { file_id, item_id } => {
+                                            let _ = tx.send(Message::text(json!({"t": "ok", "id": file_id}).to_string()));
+                                            thumb_batch.push(item_id);
+                                        }
+                                        files::Done::GalleryFull { file_id, event } => {
+                                            let _ = tx.send(Message::text(json!({"t": "ok", "id": file_id}).to_string()));
+                                            emit(event);
+                                        }
+                                    }
+                                }
+                                files::Step::Failed(reply) => {
+                                    if let Some(inc) = incoming.take() {
+                                        if let Some(ev) = inc.aborted(&dev) {
+                                            emit(ev);
+                                        }
+                                    }
+                                    let _ = tx.send(Message::Text(reply.to_string().into()));
+                                }
+                            }
+                        }
+                    }
+                    // Pings are answered by tungstenite itself.
+                    Some(Ok(Message::Close(_))) | Some(Err(_)) | None => break,
+                    Some(Ok(_)) => {}
+                }
+            }
         }
     }
 
     writer.abort();
     if let Some(inc) = incoming.take() {
         inc.discard();
-        emit(inc.aborted(&dev));
+        if let Some(ev) = inc.aborted(&dev) {
+            emit(ev);
+        }
     }
     let mut s = state.lock().unwrap();
+    if s.peers.iter().any(|p| p.id == dev) {
+        if let Some(ev) = thumb_batch.flush(&dev) {
+            emit(ev);
+        }
+    }
     if s.conns.get(&dev).is_some_and(|c| c.serial == serial) {
         // A phone that reconnected keeps the players its new socket feeds.
         let _ = s.media_tx.send(mpris::Event::DevGone { dev: dev.clone() });
@@ -582,6 +625,8 @@ fn handle_op(state: &State, line: &str) {
                 let _ = conn.tx.send(Message::Close(None));
                 emit(json!({"ev": "disconnected", "dev": id}));
             }
+            drop(s);
+            gallery::remove_cache(id);
             emit(peers_event(&peers));
         }
         "send" => {
@@ -752,6 +797,7 @@ async fn main() {
         let mut peers = load_peers(&dir);
         peers.retain(|p| p.id != id);
         save_peers(&dir, &peers);
+        gallery::remove_cache(&id);
         return;
     }
 

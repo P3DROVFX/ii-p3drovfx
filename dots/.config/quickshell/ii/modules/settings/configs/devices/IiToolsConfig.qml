@@ -30,7 +30,7 @@ Item {
         const o = Config.options.iiTools;
         return [
             o.remote.enable, o.audio.enable, o.liveUpdates.enable, o.pcLive.enable,
-            o.media.enable, o.pcMedia.enable, o.files.enable, o.touchpad.enable, o.draw.enable, o.present.enable, o.screen.enable,
+            o.media.enable, o.pcMedia.enable, o.files.enable, o.gallery.enable, o.touchpad.enable, o.draw.enable, o.present.enable, o.screen.enable,
             o.perf.enable, o.phoneData.enable, o.screenshots.enable, o.clipboard.enable,
             o.share.enable, o.notifications.enable, o.calls.enable, o.callAudio.enable, o.wallpaper.enable, o.look.enable,
             o.deck.enable, o.wol.enable
@@ -579,6 +579,18 @@ Item {
                         summary: Translation.tr("Browse storage over sshfs while connected")
                         checked: Config.options.iiTools.files.enable
                         onToggled: value => Config.options.iiTools.files.enable = value
+                    }
+
+                    ColorsFeatureTile {
+                        width: controlTilesBox.tileWidth
+                        height: 152
+                        symbol: "photo_library"
+                        shapeOn: MaterialShape.Shape.Cookie7Sided
+                        shapeOff: MaterialShape.Shape.Circle
+                        title: Translation.tr("Gallery")
+                        summary: Translation.tr("Browse the phone's photos and videos in the Phone tab")
+                        checked: Config.options.iiTools.gallery.enable
+                        onToggled: value => Config.options.iiTools.gallery.enable = value
                     }
 
                     ColorsFeatureTile {

@@ -2904,6 +2904,10 @@ Singleton {
                 property JsonObject files: JsonObject {
                     property bool enable: true
                 }
+                // Browse the phone's photos and videos in the Phone tab (read-only).
+                property JsonObject gallery: JsonObject {
+                    property bool enable: true
+                }
                 // The phone as this PC's touchpad (uinput: the input group) and keyboard.
                 property JsonObject touchpad: JsonObject {
                     property bool enable: true

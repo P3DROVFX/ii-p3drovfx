@@ -57,6 +57,7 @@ Singleton {
     readonly property bool pcMediaEnabled: root.opts?.pcMedia?.enable ?? true
     readonly property bool lookEnabled: root.opts?.look?.enable ?? true
     readonly property bool filesEnabled: root.opts?.files?.enable ?? true
+    readonly property bool galleryEnabled: root.opts?.gallery?.enable ?? true
     readonly property bool touchpadEnabled: root.opts?.touchpad?.enable ?? true
     readonly property bool drawEnabled: root.opts?.draw?.enable ?? true
     readonly property bool presentEnabled: root.opts?.present?.enable ?? true
@@ -169,6 +170,7 @@ Singleton {
         .concat(root.mediaEnabled ? ["media"] : [])
         .concat(root.pcMediaEnabled ? ["pcMedia"] : [])
         .concat(root.filesEnabled ? ["files"] : [])
+        .concat(root.galleryEnabled ? ["gallery"] : [])
         .concat(root.touchpadEnabled ? ["touchpad"] : [])
         .concat(root.drawEnabled && LiveDraw.enabled ? ["draw"] : [])
         .concat(root.presentEnabled ? ["present"] : [])
@@ -1176,7 +1178,8 @@ Singleton {
     readonly property string filesRoot: `${Quickshell.env("XDG_RUNTIME_DIR") || "/tmp"}/ii-tools`
     /// dev → mount point, while mounted.
     property var filesMounts: ({})
-    property string _filesOpenDev: ""
+    property var _filesMountCallbacks: ({})
+    property var _filesMounting: ({})
 
     function _filesDir(dev): string {
         const peer = root.peers.find(p => p.id === dev);
@@ -1184,17 +1187,52 @@ Singleton {
         return `${root.filesRoot}/${name}`;
     }
 
-    /// Opens the phone's storage in the file manager, mounting it first.
-    function browsePhoneFiles(dev): bool {
+    function _resolveFilesMount(dev, dir, openPath, err): void {
+        const mounting = Object.assign({}, root._filesMounting);
+        delete mounting[dev];
+        root._filesMounting = mounting;
+        const cbs = root._filesMountCallbacks[dev] ?? [];
+        const nextCbs = Object.assign({}, root._filesMountCallbacks);
+        delete nextCbs[dev];
+        root._filesMountCallbacks = nextCbs;
+        for (const cb of cbs) {
+            try {
+                cb(dir, openPath, err);
+            } catch (e) {}
+        }
+    }
+
+    /// Mounts the phone's storage over SFTP without opening a file manager;
+    /// calls `callback(mountDir, openPath, err)` once ready (or on failure).
+    function mountPhoneFiles(dev, callback): bool {
         if (!root.filesEnabled || root.connections[dev] === undefined || !(root.phoneCaps[dev] ?? []).includes("files"))
             return false;
-        root._filesOpenDev = dev;
-        if (root.filesMounts[dev]) {
-            root._openFiles(dev, root.filesMounts[dev].open);
+        const existing = root.filesMounts[dev];
+        if (existing) {
+            if (callback)
+                callback(existing.dir, existing.open, "");
             return true;
         }
-        root.sendTo(dev, { t: "files", a: "start" });
+        if (callback) {
+            const nextCbs = Object.assign({}, root._filesMountCallbacks);
+            nextCbs[dev] = (nextCbs[dev] ?? []).concat([callback]);
+            root._filesMountCallbacks = nextCbs;
+        }
+        if (!root._filesMounting[dev]) {
+            const mounting = Object.assign({}, root._filesMounting);
+            mounting[dev] = true;
+            root._filesMounting = mounting;
+            root.sendTo(dev, { t: "files", a: "start" });
+        }
         return true;
+    }
+
+    /// Opens the phone's storage in the file manager, mounting it first.
+    function browsePhoneFiles(dev): bool {
+        return root.mountPhoneFiles(dev, (dir, openPath) => {
+            if (dir !== "")
+                root._openFiles(dev, openPath || dir);
+        });
     }
 
     /// Shown where the button was pressed (the Phone tab's feedback, which Do Not
@@ -1215,13 +1253,16 @@ Singleton {
                 ? Translation.tr("Allow \"All files access\" for ii tools on the phone (tap its notification), then try again")
                 : Translation.tr("The phone could not share its files (%1)").arg(String(m.err));
             root._filesProblem(why);
+            root._resolveFilesMount(dev, "", "", why);
             return;
         }
         const addr = root.connections[dev]?.addr ?? "";
         const port = Number(m.port ?? 0);
         const key = String(m.hostKey ?? "");
-        if (addr === "" || !(port > 0) || !/^[a-z0-9-]+ [A-Za-z0-9+\/=]+$/.test(key))
+        if (addr === "" || !(port > 0) || !/^[a-z0-9-]+ [A-Za-z0-9+\/=]+$/.test(key)) {
+            root._resolveFilesMount(dev, "", "", "bad_reply");
             return;
+        }
         const dir = root._filesDir(dev);
         const paths = Array.isArray(m.paths) ? m.paths.map(String) : [];
         // Internal storage first; the folder above it shows every volume.
@@ -1251,20 +1292,22 @@ Singleton {
         onExited: exitCode => {
             if (exitCode !== 0) {
                 console.warn("[IiLinkService] sshfs failed:", filesMountErr.text);
-                root._filesProblem(Translation.tr("Could not mount the phone's storage: %1").arg(filesMountErr.text.trim() || exitCode));
+                const msg = Translation.tr("Could not mount the phone's storage: %1").arg(filesMountErr.text.trim() || exitCode);
+                root._filesProblem(msg);
+                root._resolveFilesMount(filesMount.dev, "", "", msg);
                 return;
             }
             const next = Object.assign({}, root.filesMounts);
             next[filesMount.dev] = { dir: filesMount.dir, open: filesMount.open };
             root.filesMounts = next;
-            if (root._filesOpenDev === filesMount.dev)
-                root._openFiles(filesMount.dev, filesMount.open);
+            root._resolveFilesMount(filesMount.dev, filesMount.dir, filesMount.open, "");
         }
     }
 
     /// The phone went away (or stops sharing): let the mount go, lazily, so an open
     /// file manager window does not keep it busy.
     function _unmountFiles(dev, tellPhone): void {
+        root._resolveFilesMount(dev, "", "", "unmounted");
         const m = root.filesMounts[dev];
         if (!m)
             return;
@@ -2060,6 +2103,9 @@ Singleton {
         case "screen":
             PhoneScreenService.handleMessage(dev, m);
             return;
+        case "gallery":
+            PhoneGalleryService.handleMessage(dev, m);
+            return;
         case "caps": {
             const next = Object.assign({}, root.phoneCaps);
             next[dev] = Array.isArray(m.caps) ? m.caps.map(String) : [];
@@ -2197,6 +2243,12 @@ Singleton {
         case "screenLive":
         case "screenEnd":
             PhoneScreenService.handleEvent(ev);
+            break;
+        case "galleryThumbs":
+        case "galleryProgress":
+        case "galleryFile":
+        case "galleryAbort":
+            PhoneGalleryService.handleEvent(ev);
             break;
         case "fileAbort":
             if (root._transferMatches(String(ev.dev), ev.id) && root.transfer.state === "receiving")

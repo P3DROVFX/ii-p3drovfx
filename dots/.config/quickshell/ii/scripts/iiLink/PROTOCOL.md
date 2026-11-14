@@ -298,6 +298,29 @@ password is 168 random bits, new on every start, checked by hash in constant tim
 server listens on the first free port of 1739–1764 and serves `/` with only the storage
 volumes reachable (KDE Connect's `NativeStorageFileSystemFactory`).
 
+## Gallery
+
+The phone's photos and videos on the PC, read only (nothing is ever deleted or changed
+from the PC; cap `gallery` on both sides: the shell puts it in `hello.caps` while
+`iiTools.gallery.enable` is on, and the phone puts it in `caps` while its Gallery switch
+is on and it holds `READ_MEDIA_IMAGES` or `READ_MEDIA_VISUAL_USER_SELECTED`; without
+`READ_MEDIA_VIDEO` it lists no videos).
+
+| Direction | Message | |
+| --- | --- | --- |
+| shell → phone | `{"t":"gallery","a":"albums"}` | Answer: `{"t":"gallery","a":"albums","list":[{"id":"<bucket id>","name","count","cover":<item id>}]}` — one per `BUCKET_ID` with images and videos, newest first (by its newest item). |
+| shell → phone | `{"t":"gallery","a":"list","req":N,"album":""\|"<bucket id>","before":{"taken":ms,"id":id}\|null,"n":200}` | Answer: `{"t":"gallery","a":"list","req":N,"album","items":[item],"more":bool}`. Newest first (`ORDER BY taken DESC, id DESC`); `before` is an exclusive keyset cursor. `n` at most 500 (default 200); `req` is echoed so stale answers are dropped. |
+| shell → phone | `{"t":"gallery","a":"thumbs","ids":[…]}` | Up to 128 ids. Replaces the phone's pending thumbnail queue (any upload in flight finishes). Each thumbnail arrives as a file (`purpose: "galleryThumb"`, `<id>.jpg`, 256×256 JPEG quality 80). Missing ids answer `{"t":"gallery","a":"gone","ids":[…]}`. |
+| shell → phone | `{"t":"gallery","a":"get","id":N}` | Full image as a file (`purpose: "galleryFull"`, `<id>.<ext>`): JPEG/PNG/WebP/GIF as stored; anything else (HEIC/HEIF/AVIF/DNG…) decoded honoring orientation to JPEG quality 92 (`<id>.jpg`). Queued ahead of thumbnails. Refusals: `{"t":"gallery","a":"get","id":N,"err":"video"\|"too_large"\|"not_found"\|"read"}` (`video`: opened over SFTP instead; `too_large`: over 64 MiB). |
+| phone → shell | `{"t":"gallery","a":"new","items":[item]}` / `{"t":"gallery","a":"gone","ids":[…]}` / `{"t":"gallery","a":"changed"}` | Live `ContentObserver` updates on images and videos, debounced 1.5 s. `changed` covers bulk changes without URIs (the shell re-reads the first page). |
+| phone → shell | `{"t":"gallery","err":"disabled"\|"permission"}` | Reply to any gallery request when the phone's switch is off or media permission is missing. |
+
+`item` is `{id, kind: "image"|"video", name, mime, w, h, size, taken, dur, album, path}`:
+`id` is MediaStore `_ID` (unique across images and videos); `taken` is ms (`DATE_TAKEN` if
+`> 0`, else `DATE_MODIFIED * 1000`); `dur` is ms (`0` for images); `w`/`h` are display
+dimensions (swapped when `ORIENTATION` is 90 or 270); `album` is `<bucket id>`; `path` is
+the phone's absolute path (`DATA`), used to open videos through the SFTP mount.
+
 ## Files
 
 A file is a header, then its bytes as binary frames (the app sends 256 KiB each):
@@ -309,9 +332,10 @@ A file is a header, then its bytes as binary frames (the app sends 256 KiB each)
 The helper writes the bytes to `<state>/incoming/<dev>-<id>.part` (0600) and, once `size`
 bytes arrived, renames it and emits `{"ev":"file","dev","id","path","name","purpose","target"}`.
 The shell moves or deletes it and answers `ok` / `err` with the same `id`. The helper
-itself refuses with `err`: `bad_arg` (no size), `too_large` (over 64 MiB), `write` (more
-bytes than announced, disk error). A new header drops an unfinished file, and so does
-the connection closing. One file at a time per phone.
+itself refuses with `err`: `bad_arg` (no size, or an invalid gallery name), `too_large`
+(over 64 MiB), `write` (more bytes than announced, disk error). A new header drops an
+unfinished file, and so does the connection closing. One file at a time per phone (the
+phone serializes uploads).
 
 | `purpose` | Needs | The shell |
 | --- | --- | --- |
@@ -322,6 +346,8 @@ the connection closing. One file at a time per phone.
 | `launcherIcon` | — | moves `<package>.png` (192 px, full bleed: an adaptive icon's safe zone fills it, unmasked) to `~/.cache/quickshell/phone_app_icons/iitools_<dev>/`, the Android Apps page's cache, which masks it to the chosen shape. Asked with `{"t":"get","what":"launcherIcons","pkgs":[…]}` (up to 64 per message; cap `launcherIcons`) for the listed apps that have none. |
 | `screenshot` | `iiTools.screenshots.enable` | a phone screenshot: to `~/Pictures/Screenshots/Phone/<name>`, onto the clipboard, and into the screenshot preview. The other way the phone (cap `shots`) saves it to its gallery (Pictures/ii tools) with a notification. |
 | `wallpaper` | `iiTools.wallpaper.enable` | moves it to the wallpapers folder as `phone-<date>-<name>`, then `Wallpapers.select` / `selectLockscreen`. `bad_arg` unless the name is an image, `busy` while one is being filed. |
+| `galleryThumb` | `iiTools.gallery.enable` | handled by the helper itself (never emitted as `fileStart`/`file`): validates `^[0-9]{1,19}\.jpg$`, writes to `$XDG_CACHE_HOME/quickshell/phone_gallery/<dev>/thumbs/<name>` (default `~/.cache`, dirs 0700, files 0600, via `.part` + rename), replies `{"t":"ok","id"}`, and coalesces ids into `galleryThumbs` (at most every 100 ms per phone, flushed on disconnect). |
+| `galleryFull` | `iiTools.gallery.enable` | handled by the helper itself (never emitted as `fileStart`/`file`): validates `^[0-9]{1,19}\.(jpg\|jpeg\|png\|webp\|gif)$`, writes to `$XDG_CACHE_HOME/quickshell/phone_gallery/<dev>/full/<name>` (dirs 0700, files 0600, via `.part` + rename), replies `{"t":"ok","id"}`, and emits `galleryProgress`, `galleryFile`, or `galleryAbort`. |
 
 Actions in `iilink/1`, all toggles:
 
@@ -351,12 +377,16 @@ sides. Changing the meaning of an existing one does: that is `iilink/2`, on a ne
 | `{"ev":"fileProgress","dev","id","received"}` | At most every 1 % and 150 ms. |
 | `{"ev":"fileAbort","dev","id"}` | A file dropped before its end (bad chunk, new header, socket closed). |
 | `{"ev":"file","dev","id","path","name","purpose","target"}` | A file arrived whole (see *Files*). |
+| `{"ev":"galleryThumbs","dev","ids":[…]}` | Coalesced `galleryThumb` item ids (numbers), at most every 100 ms per phone and flushed on disconnect. |
+| `{"ev":"galleryProgress","dev","id","received","size"}` | `galleryFull` progress (`id` is the item id), at most every 1 % and 150 ms. |
+| `{"ev":"galleryFile","dev","id","path"}` | A `galleryFull` file landed in the gallery cache (`id` is the item id). |
+| `{"ev":"galleryAbort","dev","id"}` | A `galleryFull` transfer dropped before its end (`id` is the item id). |
 | `{"ev":"error","code"?,"msg"}` | E.g. `code: "port"` when the port is taken. |
 
 | Shell → helper | |
 | --- | --- |
 | `{"op":"pair"}`, `{"op":"pairCancel"}` | |
-| `{"op":"unpair","id"}` | Also tells the phone `unpaired` and closes it. |
+| `{"op":"unpair","id"}` | Also tells the phone `unpaired`, closes it, and removes `<cache>/quickshell/phone_gallery/<id>/`. |
 | `{"op":"send","dev":"<id>"\|"*","m":{…}}` | |
 | `{"op":"kick","dev"}` | Close a connection. |
 | `{"op":"sendFile","dev","id","path","name"?,"purpose","delete"?}` | A file to a phone: the same `file` header and binary frames, the other way. `fileSent` / `fileSendFailed` with the id once queued; `delete` removes the file then. |
