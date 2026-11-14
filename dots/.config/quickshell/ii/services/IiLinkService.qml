@@ -6,6 +6,7 @@ import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Services.Pipewire
+import Quickshell.Wayland
 import qs
 import qs.modules.common
 import qs.modules.common.functions
@@ -167,7 +168,7 @@ Singleton {
     readonly property var allowedActions: root.remoteEnabled ? root.actions : []
     readonly property var capabilities: (root.remoteEnabled ? ["remote", "workspaces", "modes", "presets"] : [])
         .concat(root.audioEnabled ? ["audio"] : [])
-        .concat(root.deckEnabled ? ["deck", "appIcons"] : [])
+        .concat(root.deckEnabled ? ["deck", "appIcons", "deckFocus"] : [])
         .concat(root.wallpaperEnabled ? ["wallpaper"] : [])
         .concat(root.callsEnabled ? ["calls"] : [])
         .concat(root.notifsEnabled ? ["notifs", "notifFilter"] : [])
@@ -2602,6 +2603,59 @@ Singleton {
         onTriggered: root._publish("audio", root._audioKey)
     }
 
+    // ── Deck profiles: the focused window's class ───────────────────────
+    // The deck switches to the folder bound to the focused app. The phone subscribes
+    // (`sub focus`) only while its deck is on screen and has such a folder (or is
+    // editing one: `open` lists the windows' classes to pick from), so nothing is
+    // computed or sent otherwise. A window change is held 120 ms: moving focus passes
+    // through "no window" and the deck must not bounce to its default page and back.
+
+    property string _focusDev: ""
+    readonly property bool _focusLive: root.deckEnabled && root._focusDev !== "" && root.connections[root._focusDev] !== undefined
+    property string _focusClass: ""
+    property var _focusOpen: []
+
+    function _focusRead(): void {
+        const open = [];
+        for (const t of ToplevelManager.toplevels.values) {
+            const c = String(t.appId ?? "");
+            if (c !== "" && !open.includes(c))
+                open.push(c);
+        }
+        open.sort();
+        root._focusClass = String(ToplevelManager.activeToplevel?.appId ?? "");
+        root._focusOpen = open;
+    }
+    function _focusMsg(): var {
+        return { t: "focus", class: root._focusClass, open: root._focusOpen };
+    }
+    readonly property string _focusKey: root._focusLive ? JSON.stringify(root._focusMsg()) : ""
+    on_FocusKeyChanged: {
+        if (root._focusKey !== "")
+            root.sendTo(root._focusDev, JSON.parse(root._focusKey));
+    }
+    Timer {
+        id: focusDebounce
+        interval: 120
+        onTriggered: root._focusRead()
+    }
+    Connections {
+        target: root._focusLive ? ToplevelManager : null
+        function onActiveToplevelChanged() {
+            focusDebounce.restart();
+        }
+    }
+    Connections {
+        target: root._focusLive ? ToplevelManager.toplevels : null
+        function onValuesChanged() {
+            focusDebounce.restart();
+        }
+    }
+    on_FocusLiveChanged: {
+        if (root._focusLive)
+            root._focusRead();
+    }
+
     /// The topics, for a phone that connects while another is already live.
     function _topics(dev): void {
         if (root.remoteEnabled) {
@@ -2821,6 +2875,8 @@ Singleton {
         case "sub":
             if (m.what === "perf")
                 root._perfDev = m.on === true ? dev : (root._perfDev === dev ? "" : root._perfDev);
+            else if (m.what === "focus")
+                root._focusDev = m.on === true ? dev : (root._focusDev === dev ? "" : root._focusDev);
             else if (m.what === "clipHistory") {
                 root._clipHistoryDev = (m.on === true && root.clipHistoryEnabled)
                     ? dev
@@ -2832,6 +2888,8 @@ Singleton {
         case "unsub":
             if (m.what === "perf" && root._perfDev === dev)
                 root._perfDev = "";
+            else if (m.what === "focus" && root._focusDev === dev)
+                root._focusDev = "";
             else if (m.what === "clipHistory" && root._clipHistoryDev === dev) {
                 root._clipHistoryDev = "";
                 root._clipHistoryDirtyWhileLocked = false;
