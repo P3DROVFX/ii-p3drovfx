@@ -337,6 +337,9 @@ Singleton {
     onCompositorBlurModeChanged: root.pushHyprlandLayerRules()
     readonly property bool opaqueWindows: Config.options.appearance.blur?.opaqueWindows ?? false
     onOpaqueWindowsChanged: root.pushHyprlandLayerRules()
+    readonly property bool appWindowBlur: Config.options.appearance.blur?.appWindows ?? true
+    onAppWindowBlurChanged: root.pushHyprlandLayerRules()
+    onShellTransparentChanged: root.pushHyprlandLayerRules()
     property bool _blurUpdatePending: false
     property bool _blurLayerRulesPending: false
 
@@ -496,6 +499,13 @@ Singleton {
         // xray is explicit: rules.lua turns it off for every shell layer.
         const xray = root.compositorBlurMode === "xray" ? "true" : "false";
         script += "hl.layer_rule({ name = 'ii:appearance:layers', match = { namespace = 'quickshell.*' }, blur = true, blur_popups = true, xray = " + xray + ", ignore_alpha = " + a + " }) ";
+        // The always-mapped panels (bar, dock, island, sidebars, the fullscreen topLayer that
+        // hosts them) paint opaque pixels under a solid shell, so blur there is invisible -
+        // and a commit on topLayer damages the whole monitor, so every bar update re-blurred
+        // the screen. Surfaces that blur on purpose (session, task view, workspace overlay,
+        // media mode, desktop widgets) keep their own rules.
+        const panelBlur = root.shellTransparent ? "true" : "false";
+        script += "hl.layer_rule({ name = 'ii:appearance:panels', match = { namespace = '^quickshell:(topLayer|verticalBar)$' }, blur = " + panelBlur + " }) ";
         if (root.popupBlurEnabled) {
             var popupA = root.popupIgnoreAlpha;
             script += "hl.layer_rule({ name = 'ii:appearance:popup-family', match = { namespace = 'quickshell:.*[pP]opup' }, blur = true, blur_popups = true, ignore_alpha = " + popupA + " }) ";
@@ -504,12 +514,12 @@ Singleton {
             script += "hl.layer_rule({ name = 'ii:appearance:popup-family', match = { namespace = 'quickshell:.*[pP]opup' }, blur = false, blur_popups = false, ignore_alpha = 0.5 }) ";
             script += "hl.layer_rule({ name = 'ii:appearance:popup', match = { namespace = 'quickshell:popup' }, blur = false, blur_popups = false, ignore_alpha = 0.5 }) ";
         }
-        script += "hl.layer_rule({ name = 'ii:appearance:bar', match = { namespace = 'quickshell:bar' }, blur = true, xray = " + xray + ", ignore_alpha = " + barA + " }) ";
-        script += "hl.layer_rule({ name = 'ii:appearance:dock', match = { namespace = 'quickshell:dock' }, blur = true, xray = " + xray + ", ignore_alpha = " + root.dockIgnoreAlpha + " }) ";
-        script += "hl.layer_rule({ name = 'ii:appearance:island', match = { namespace = 'quickshell:floatingNotch' }, blur = true, xray = " + xray + ", ignore_alpha = " + root.islandIgnoreAlpha + " }) ";
+        script += "hl.layer_rule({ name = 'ii:appearance:bar', match = { namespace = 'quickshell:bar' }, blur = " + panelBlur + ", xray = " + xray + ", ignore_alpha = " + barA + " }) ";
+        script += "hl.layer_rule({ name = 'ii:appearance:dock', match = { namespace = 'quickshell:dock' }, blur = " + panelBlur + ", xray = " + xray + ", ignore_alpha = " + root.dockIgnoreAlpha + " }) ";
+        script += "hl.layer_rule({ name = 'ii:appearance:island', match = { namespace = 'quickshell:floatingNotch' }, blur = " + panelBlur + ", xray = " + xray + ", ignore_alpha = " + root.islandIgnoreAlpha + " }) ";
         // The sidebars' body is colLayer0 too: the island's threshold keeps their
         // antialiased edges from blurring into a 1px ring.
-        script += "hl.layer_rule({ name = 'ii:appearance:sidebars', match = { namespace = '^quickshell:sidebar(Left|Right)$' }, blur = true, xray = " + xray + ", ignore_alpha = " + root.islandIgnoreAlpha + " }) ";
+        script += "hl.layer_rule({ name = 'ii:appearance:sidebars', match = { namespace = '^quickshell:sidebar(Left|Right)$' }, blur = " + panelBlur + ", xray = " + xray + ", ignore_alpha = " + root.islandIgnoreAlpha + " }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:background', match = { namespace = 'quickshell:background' }, blur = false }) ";
         // The idle dim scrim's 50% black sits above every ignore_alpha, so the
         // quickshell.* rule above would blur the screen behind it (with xray: down
@@ -542,6 +552,11 @@ Singleton {
             : "hl.window_rule({ name = 'ii:appearance:opaque-windows', match = { class = '^ii-no-window-has-this-class$' } }) ";
         // ignore_alpha is a layer effect, not a supported window-rule field.
         script += "hl.window_rule({ name = 'ii:appearance:settings', match = { title = '^(illogical-impulse Settings)$' }, no_blur = false }) ";
+        // Blur behind app windows (Settings > Windows). Declared after the Settings rule so
+        // turning it off reaches every window; re-declared with a dead match to turn it on.
+        script += root.appWindowBlur
+            ? "hl.window_rule({ name = 'ii:appearance:no-window-blur', match = { class = '^ii-no-window-has-this-class$' } }) "
+            : "hl.window_rule({ name = 'ii:appearance:no-window-blur', match = { class = '.*' }, no_blur = true }) ";
         return script;
     }
 

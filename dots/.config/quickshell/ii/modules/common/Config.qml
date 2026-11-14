@@ -3135,6 +3135,8 @@ Singleton {
                     property string mode: "live"
                     // Every app window opaque, over the per-app opacity rules.
                     property bool opaqueWindows: false
+                    // Blur behind translucent app windows and the scratchpad backdrop.
+                    property bool appWindows: true
                     property bool advancedOptions: false
                     property int passes: 3
                     property real noise: 0.05
