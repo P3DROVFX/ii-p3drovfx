@@ -340,7 +340,7 @@ phone serializes uploads).
 | `purpose` | Needs | The shell |
 | --- | --- | --- |
 | `share` | `iiTools.share.enable` | moves it to `~/Downloads` under its own name (`name (1).ext` when taken, mode 0644), then `target` `downloads` says so in a notification (Open / Show in folder), `shelf` adds it to the FileShelf, `ai` (images only) attaches it to the AI chat and opens it. |
-| `clip` | `iiTools.clipboard.enable` | `wl-copy --type <image mime>` from the file, then deletes it. |
+| `clip` | `iiTools.clipboard.enable` | converts to `image/png` if needed, runs `wl-copy --type image/png`, then deletes it. |
 | `contactPhoto` | `iiTools.phoneData.enable` | moves `<photo>.jpg` to `<state>/contacts/`. |
 | `appIcon` | — | moves `<package>.png` to `<state>/icons/`, for the notifications. |
 | `launcherIcon` | — | moves `<package>.png` (192 px, full bleed: an adaptive icon's safe zone fills it, unmasked) to `~/.cache/quickshell/phone_app_icons/iitools_<dev>/`, the Android Apps page's cache, which masks it to the chosen shape. Asked with `{"t":"get","what":"launcherIcons","pkgs":[…]}` (up to 64 per message; cap `launcherIcons`) for the listed apps that have none. |

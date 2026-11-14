@@ -1706,20 +1706,19 @@ Singleton {
             const dest = `${root.phoneShotDir}/${name}`;
             Cliphist.markInternalCopy();
             phoneShot.dest = dest;
-            phoneShot.command = ["sh", "-c", 'mkdir -p -- "$1" && mv -f -- "$2" "$3" && chmod 644 -- "$3" && wl-copy --type image/png < "$3"', "sh", root.phoneShotDir, path, dest];
+            phoneShot.command = ["sh", "-c", 'mkdir -p -- "$1" && mv -f -- "$2" "$3" && chmod 644 -- "$3" && "$4" "$3"', "sh", root.phoneShotDir, path, dest, `${Directories.scriptPath}/clipboard/copy_image_to_clipboard.py`];
             phoneShot.running = true;
             root.sendTo(dev, { t: "ok", id: id });
             return;
         }
-        // An image copied on the phone: onto this clipboard, then gone from disk.
+        // An image copied on the phone: onto this clipboard as PNG, then gone from disk.
         if (ev.purpose === "clip") {
             if (!root.clipEnabled)
                 return refuse("disabled");
             if (!root._imageName.test(name))
                 return refuse("bad_arg");
-            const mime = /\.png$/i.test(name) ? "image/png" : /\.webp$/i.test(name) ? "image/webp" : "image/jpeg";
             Cliphist.markInternalCopy();
-            Quickshell.execDetached(["sh", "-c", 'wl-copy --type "$1" < "$2"; rm -f -- "$2"', "sh", mime, path]);
+            Quickshell.execDetached([`${Directories.scriptPath}/clipboard/copy_image_to_clipboard.py`, "--delete", path]);
             root._announceClip(dev, Translation.tr("An image"));
             root.sendTo(dev, { t: "ok", id: id });
             return;

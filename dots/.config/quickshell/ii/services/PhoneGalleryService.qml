@@ -448,23 +448,6 @@ Singleton {
         return m + ":" + ss;
     }
 
-    function _mimeForFile(path: string, fallbackMime: string): string {
-        const lower = path.toLowerCase();
-        if (lower.endsWith(".png"))
-            return "image/png";
-        if (lower.endsWith(".webp"))
-            return "image/webp";
-        if (lower.endsWith(".gif"))
-            return "image/gif";
-        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg"))
-            return "image/jpeg";
-        return fallbackMime || "image/jpeg";
-    }
-
-    function _uriForPath(path: string): string {
-        return "file://" + encodeURI(String(path || "")).replace(/#/g, "%23").replace(/\?/g, "%3F");
-    }
-
     // Resolve an item's SFTP-mounted path on the phone, mounting if needed.
     function _withPhonePath(item, callback): void {
         if (!item || !item.path || !root.hasFilesCap)
@@ -497,7 +480,7 @@ Singleton {
         if (item.kind === "video") {
             root._withPhonePath(item, mountedPath => {
                 Cliphist.markInternalCopy();
-                Quickshell.execDetached(["wl-copy", "--type", "text/uri-list", `${root._uriForPath(mountedPath)}\r\n`]);
+                Quickshell.execDetached([`${Directories.scriptPath}/clipboard/copy_file_to_clipboard.py`, mountedPath]);
                 KdeConnectService.dispatchActionFeedback(Translation.tr("Copied to clipboard"), true);
             });
             return;
@@ -505,9 +488,8 @@ Singleton {
         const path = root.fullPathFor(item.id);
         if (path === "")
             return;
-        const mime = root._mimeForFile(path, String(item.mime ?? ""));
         Cliphist.markInternalCopy();
-        Quickshell.execDetached(["sh", "-c", 'wl-copy --type "$1" < "$2"', "sh", mime, path]);
+        Quickshell.execDetached([`${Directories.scriptPath}/clipboard/copy_image_to_clipboard.py`, path]);
         KdeConnectService.dispatchActionFeedback(Translation.tr("Copied to clipboard"), true);
     }
 
