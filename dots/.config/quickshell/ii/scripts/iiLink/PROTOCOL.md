@@ -72,6 +72,7 @@ After `authOk` every frame is a JSON object with a `t` field:
 | phone → shell | `{"t":"ping","id":N}` → `{"t":"pong","id":N}` | Round-trip check. |
 | shell → phone | `{"t":"deck","list":[{id,name,icon,group,toggle}]}` | cap `deck`. The deck catalog; toggle keys are on while their id is in `state.on`. |
 | phone → shell | `{"t":"get","what":"apps"}` → `{"t":"apps","list":[{id,name,icon}]}` | Installed apps, only while the deck picker asks. |
+| phone → shell | `{"t":"get","what":"appIcons","icons":["…"]}` → `{"t":"appIcon","name":"…","png":"<base64>"}` | cap `appIcons` (with `deck`). Up to 32 icon theme names or file paths per request; rendered to 96×96 PNG in the active icon theme, cached in `~/.cache/quickshell/iilink/appicons/` and sent one message per resolved icon (unknown names are skipped). |
 | phone → helper | `{"t":"icons","names":["…"]}` → `{"t":"icons","paths":{name:"<svg path>"}}` | Answered by the helper itself, from the Material Symbols Rounded font (fontconfig). Path data in the 0–960 box, y down, like the official SVGs. Up to 64 names; unknown names are left out. |
 | phone → shell | `{"t":"caps","caps":["calls"]}` | What this phone does for the PC. Sent on connect and when it changes. |
 | phone → shell | `{"t":"call","state":"idle"\|"ringing"\|"talking","name":"…"}` | The phone's call state; `name` is the caller as the dialer's notification shows it. The app opens the link itself when a call rings, even in the background, and keeps it until 10 s after the call. |

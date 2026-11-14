@@ -75,6 +75,7 @@ Singleton {
     readonly property string helperDir: `${Directories.scriptPath}/iiLink`
     readonly property string binaryPath: `${root.helperDir}/ii_link`
     readonly property string stateDir: FileUtils.trimFileProtocol(`${Directories.state}/user/iilink`)
+    readonly property string appIconCacheDir: `${FileUtils.trimFileProtocol(Directories.cache)}/iilink/appicons`
 
     // ── Helper lifecycle ────────────────────────────────────────────────
     property bool binaryPresent: false
@@ -157,7 +158,7 @@ Singleton {
     readonly property var allowedActions: root.remoteEnabled ? root.actions : []
     readonly property var capabilities: (root.remoteEnabled ? ["remote", "workspaces", "modes", "presets"] : [])
         .concat(root.audioEnabled ? ["audio"] : [])
-        .concat(root.deckEnabled ? ["deck"] : [])
+        .concat(root.deckEnabled ? ["deck", "appIcons"] : [])
         .concat(root.wallpaperEnabled ? ["wallpaper"] : [])
         .concat(root.callsEnabled ? ["calls"] : [])
         .concat(root.notifsEnabled ? ["notifs", "notifFilter"] : [])
@@ -397,9 +398,67 @@ Singleton {
     function _apps(): var {
         const list = Array.from(DesktopEntries.applications.values)
             .filter(e => !e.noDisplay)
-            .map(e => ({ id: e.id, name: e.name, icon: e.icon }))
+            .map(e => ({ id: e.id, name: e.name, icon: AppSearch.entryIcon(e) || e.icon }))
             .sort((a, b) => a.name.localeCompare(b.name));
         return { t: "apps", list: list };
+    }
+
+    // ── App icons for the deck ──────────────────────────────────────────
+    // Resolved in the active icon theme, rendered to 96x96 PNG once per name into
+    // appIconCacheDir and sent back as {"t":"appIcon","name","png"} in one Process per batch.
+    property var _appIconQueue: []
+
+    function _requestAppIcons(dev, icons): void {
+        if (!Array.isArray(icons))
+            return;
+        const batch = [];
+        const seen = {};
+        for (let i = 0; i < icons.length && batch.length < 32; i++) {
+            const name = String(icons[i] ?? "");
+            if (name === "" || seen[name])
+                continue;
+            seen[name] = true;
+            batch.push(name);
+        }
+        if (batch.length === 0)
+            return;
+        root._appIconQueue.push({ dev: dev, icons: batch });
+        root._nextAppIconBatch();
+    }
+
+    function _nextAppIconBatch(): void {
+        if (appIconProc.running || root._appIconQueue.length === 0)
+            return;
+        const next = root._appIconQueue.shift();
+        if (!root.connections[next.dev]) {
+            Qt.callLater(root._nextAppIconBatch);
+            return;
+        }
+        const theme = (Config.options?.appearance?.icons?.enableThemed ?? false)
+            ? "DynamicTheme"
+            : String(Config.options?.appearance?.iconTheme ?? "");
+        appIconProc.dev = next.dev;
+        appIconProc.command = ["python3", `${root.helperDir}/render_app_icons.py`, root.appIconCacheDir, theme].concat(next.icons);
+        appIconProc.running = true;
+    }
+
+    Process {
+        id: appIconProc
+        property string dev: ""
+        stdout: SplitParser {
+            onRead: line => {
+                let obj;
+                try {
+                    obj = JSON.parse(line);
+                } catch (e) {
+                    return;
+                }
+                if (obj?.name && obj?.png && root.connections[appIconProc.dev]) {
+                    root.sendTo(appIconProc.dev, { t: "appIcon", name: String(obj.name), png: String(obj.png) });
+                }
+            }
+        }
+        onExited: Qt.callLater(root._nextAppIconBatch)
     }
 
     // ── Calls ───────────────────────────────────────────────────────────
@@ -2234,6 +2293,8 @@ Singleton {
         case "get":
             if (m.what === "apps" && root.deckEnabled)
                 root.sendTo(dev, root._apps());
+            else if (m.what === "appIcons" && root.deckEnabled)
+                root._requestAppIcons(dev, m.icons);
             return;
         }
     }
