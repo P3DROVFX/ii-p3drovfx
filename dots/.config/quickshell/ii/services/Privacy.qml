@@ -198,13 +198,12 @@ Singleton {
         // the shell. Without it, a SIGKILL'd/crashed Quickshell left the probe
         // reparented to init, and the next instance spawned a second one
         // (the duplicate privacy_probe processes seen after a manual restart).
-        command: ProcUtils.pdeath([
-            Directories.scriptPath + "/privacy_probe",
+        command: ProcUtils.pdeath(ProcUtils.nativeHelper(Directories.scriptPath + "/privacy_probe", [
             "--interval",
             String(root.pollInterval),
             "--kinds",
             root.watchedKinds.join(",")
-        ])
+        ]))
 
         // process-lifecycle: restart-safe -- capped backoff; no running binding,
         // so a settings change restarts it deliberately instead of thrashing.

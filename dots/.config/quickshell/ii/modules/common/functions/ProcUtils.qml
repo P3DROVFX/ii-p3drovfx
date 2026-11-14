@@ -24,4 +24,23 @@ Singleton {
     function pdeath(argv) {
         return ["bash", "-c", root.pdeathWrapper, "--", ...argv];
     }
+
+    readonly property string nativeLauncher: Quickshell.shellPath("scripts/native_or_python.sh")
+
+    /**
+     * Runs a prebuilt native helper, falling back to its Python twin
+     * (<helper>.py) when the binary cannot load here (old glibc, musl, NixOS).
+     * `pyFlags` are interpreter flags for the fallback only, e.g. ["-I"].
+     */
+    function nativeHelper(helperPath, args, pyFlags) {
+        const flags = [];
+        for (const f of (pyFlags || []))
+            flags.push("--py-flag", f);
+        return ["sh", root.nativeLauncher, ...flags, helperPath, ...(args || [])];
+    }
+
+    /** Shell snippet exiting 0 when the native helper at `helperPath` can load. */
+    function nativeProbeCommand(helperPath) {
+        return `sh '${root.nativeLauncher}' --probe '${helperPath}'`;
+    }
 }

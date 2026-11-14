@@ -997,7 +997,7 @@ Singleton {
         id: detector
         running: root.enabled
         stdinEnabled: true
-        command: ProcUtils.pdeath([Quickshell.shellPath("scripts/hyprland/drag_monitor")])
+        command: ProcUtils.pdeath(ProcUtils.nativeHelper(Quickshell.shellPath("scripts/hyprland/drag_monitor")))
 
         stdout: SplitParser {
             onRead: line => {

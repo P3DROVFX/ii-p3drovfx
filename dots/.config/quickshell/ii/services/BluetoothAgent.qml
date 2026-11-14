@@ -145,8 +145,8 @@ Singleton {
         stdinEnabled: true
         // DisplayYesNo covers every pairing method a laptop can actually
         // perform: it can show a passkey, ask for one, and confirm a match.
-        command: ProcUtils.pdeath([Quickshell.shellPath("scripts/bluetooth/agent"),
-            "DisplayYesNo"])
+        command: ProcUtils.pdeath(ProcUtils.nativeHelper(Quickshell.shellPath("scripts/bluetooth/agent"),
+            ["DisplayYesNo"]))
         // Only run while the adapter is actually powered on. The agent must stay
         // registered whenever pairing is possible (incoming, bluetoothctl, or the
         // UI all rely on it), so it can't be gated tighter than that without

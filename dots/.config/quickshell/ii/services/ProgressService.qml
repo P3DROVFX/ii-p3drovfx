@@ -46,7 +46,7 @@ Singleton {
     Process {
         id: monitorProc
         running: Config.ready && !Config.options.bar.floatingNotch.disableProgress
-        command: ProcUtils.pdeath([Quickshell.shellPath("services/jobview_monitor")])
+        command: ProcUtils.pdeath(ProcUtils.nativeHelper(Quickshell.shellPath("services/jobview_monitor")))
         onExited: (code, status) => {
             if (Config.ready && !Config.options.bar.floatingNotch.disableProgress)
                 monitorRestartTimer.restart();

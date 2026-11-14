@@ -9,6 +9,7 @@ import Quickshell.Hyprland
 import qs
 import qs.services
 import qs.modules.common
+import qs.modules.common.functions
 
 /**
  * Graphics tablet buttons (OpenTabletDriver express keys and pen buttons) doing shell things.
@@ -174,7 +175,7 @@ Singleton {
 
     Process {
         id: scrollProc
-        command: [Quickshell.shellPath("scripts/tablet/tablet_scroll")]
+        command: ProcUtils.nativeHelper(Quickshell.shellPath("scripts/tablet/tablet_scroll"), [], ["-I"])
         stdinEnabled: true
         running: root.wantsScrollHelper
         onStarted: root.sendScrollConfig()

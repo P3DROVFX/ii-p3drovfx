@@ -301,11 +301,10 @@ Singleton {
 
     Process {
         id: readProcess
-        command: [
-            Quickshell.shellPath("scripts/kdeconnect/contacts_monitor"),
+        command: ProcUtils.nativeHelper(Quickshell.shellPath("scripts/kdeconnect/contacts_monitor"), [
             "--device", KdeConnectService.activeDeviceId || "",
             "--once"
-        ]
+        ])
         running: false
 
         onExited: root._forceEmit = false

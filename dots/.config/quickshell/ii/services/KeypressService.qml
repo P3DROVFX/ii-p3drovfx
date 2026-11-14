@@ -286,7 +286,7 @@ Singleton {
     Process {
         id: monitorProcess
         command: {
-            const args = [root.monitorScript, "--layout", root.layoutCode || "us", "--repeats"];
+            const args = ProcUtils.nativeHelper(root.monitorScript, ["--layout", root.layoutCode || "us", "--repeats"]);
             if (root.layoutVariant.length > 0) args.push("--variant", root.layoutVariant);
             if (root.showMouseButtons) args.push("--mouse");
             return args;

@@ -6,6 +6,7 @@ import Quickshell
 import Quickshell.Io
 import qs
 import qs.modules.common
+import qs.modules.common.functions
 
 Singleton {
     id: root
@@ -404,7 +405,7 @@ Singleton {
 
     Process {
         id: bridge
-        command: [`${Directories.scriptPath}/discordVoice/discord_voice_bridge`]
+        command: ProcUtils.nativeHelper(`${Directories.scriptPath}/discordVoice/discord_voice_bridge`)
         stdinEnabled: true
         onStarted: root.flushPendingMessages()
         // process-lifecycle: restart-safe -- capped exponential backoff; no running binding.

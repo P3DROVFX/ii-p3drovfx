@@ -639,7 +639,7 @@ Singleton {
     Process {
         id: checkPythonDbusProc
         running: false
-        command: ["bash", "-c", "test -x '" + root._scriptPath + "' && echo 'ok' || (python3 -c 'import dbus' 2>/dev/null && echo 'ok')"]
+        command: ["bash", "-c", "{ " + ProcUtils.nativeProbeCommand(root._scriptPath) + " || python3 -c 'import dbus'; } >/dev/null 2>&1 && echo 'ok'"]
         stdout: SplitParser {
             onRead: line => {
                 root.pythonDbusPresent = (String(line).trim() === "ok")
@@ -656,7 +656,7 @@ Singleton {
         running: false
         command: ["pkill", "-f", "kdeconnect/monitor"]
         onExited: (code, status) => {
-            monitorProc.command = ProcUtils.pdeath([root._scriptPath])
+            monitorProc.command = ProcUtils.pdeath(ProcUtils.nativeHelper(root._scriptPath))
             monitorProc.running = true
         }
     }
