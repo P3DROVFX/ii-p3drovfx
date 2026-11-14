@@ -89,3 +89,5 @@ __pycache__/
 /dots/.config/quickshell/ii/.vscode
 /dots/.config/quickshell/ii/DOC.md
 /dots/.config/quickshell/ii/RAM_ARCHITECTURE_PLAN.md
+/dots/.config/quickshell/ii/RAM_OPTIMIZATION_PLAN.md
+/dots/.config/quickshell/ii/build
