@@ -109,7 +109,7 @@ Item {
             // CPU — Cookie12Sided, primary color family
             Loader {
                 id: cpuShapeH
-                active: Config.options.bar.resources.alwaysShowCpu
+                active: !root.vertical && Config.options.bar.resources.alwaysShowCpu
                 visible: active
                 sourceComponent: ResourceShape {
                     iconName: "memory"
@@ -125,7 +125,7 @@ Item {
             // RAM — Clover shape, secondary color
             Loader {
                 id: ramShapeH
-                active: Config.options.bar.resources.alwaysShowRam
+                active: !root.vertical && Config.options.bar.resources.alwaysShowRam
                 visible: active
                 sourceComponent: ResourceShape {
                     iconName: "memory_alt"
@@ -141,7 +141,7 @@ Item {
             // CPU Temp — sunny shape, tertiary
             Loader {
                 id: tempShapeH
-                active: Config.options.bar.resources.alwaysShowCpuTemp
+                active: !root.vertical && Config.options.bar.resources.alwaysShowCpuTemp
                 visible: active
                 sourceComponent: ResourceShape {
                     iconName: "thermostat"
@@ -157,7 +157,7 @@ Item {
             // Disk — Cookie7Sided, secondary container tinted
             Loader {
                 id: diskShapeH
-                active: Config.options.bar.resources.alwaysShowDisk
+                active: !root.vertical && Config.options.bar.resources.alwaysShowDisk
                 visible: active
                 sourceComponent: ResourceShape {
                     iconName: "hard_drive"
@@ -173,7 +173,7 @@ Item {
             // Swap — Cookie9Sided, tertiary container
             Loader {
                 id: swapShapeH
-                active: Config.options.bar.resources.alwaysShowSwap
+                active: !root.vertical && Config.options.bar.resources.alwaysShowSwap
                 visible: active
                 sourceComponent: ResourceShape {
                     iconName: "swap_horiz"
@@ -190,7 +190,7 @@ Item {
         // ── Docker capsule (horizontal) ───────────────────────────────────────
         Loader {
             id: dockerHLoader
-            active: Config.options.bar.resources.showDocker && DockerService.dockerRunning
+            active: !root.vertical && Config.options.bar.resources.showDocker && DockerService.dockerRunning
             visible: active
             sourceComponent: DockerCapsule { vertical: false; barHeight: root._shapeSize }
         }
@@ -208,7 +208,7 @@ Item {
             Layout.alignment: Qt.AlignHCenter
 
             Loader {
-                active: Config.options.bar.resources.alwaysShowCpu
+                active: root.vertical && Config.options.bar.resources.alwaysShowCpu
                 visible: active
                 Layout.alignment: Qt.AlignHCenter
                 sourceComponent: ResourceShape {
@@ -223,7 +223,7 @@ Item {
             }
 
             Loader {
-                active: Config.options.bar.resources.alwaysShowRam
+                active: root.vertical && Config.options.bar.resources.alwaysShowRam
                 visible: active
                 Layout.alignment: Qt.AlignHCenter
                 sourceComponent: ResourceShape {
@@ -238,7 +238,7 @@ Item {
             }
 
             Loader {
-                active: Config.options.bar.resources.alwaysShowCpuTemp
+                active: root.vertical && Config.options.bar.resources.alwaysShowCpuTemp
                 visible: active
                 Layout.alignment: Qt.AlignHCenter
                 sourceComponent: ResourceShape {
@@ -253,7 +253,7 @@ Item {
             }
 
             Loader {
-                active: Config.options.bar.resources.alwaysShowDisk
+                active: root.vertical && Config.options.bar.resources.alwaysShowDisk
                 visible: active
                 Layout.alignment: Qt.AlignHCenter
                 sourceComponent: ResourceShape {
@@ -268,7 +268,7 @@ Item {
             }
 
             Loader {
-                active: Config.options.bar.resources.alwaysShowSwap
+                active: root.vertical && Config.options.bar.resources.alwaysShowSwap
                 visible: active
                 Layout.alignment: Qt.AlignHCenter
                 sourceComponent: ResourceShape {
@@ -285,7 +285,7 @@ Item {
 
         // ── Docker capsule (vertical) ─────────────────────────────────────────
         Loader {
-            active: Config.options.bar.resources.showDocker && DockerService.dockerRunning
+            active: root.vertical && Config.options.bar.resources.showDocker && DockerService.dockerRunning
             visible: active
             Layout.alignment: Qt.AlignHCenter
             sourceComponent: DockerCapsule { vertical: true; barHeight: root._shapeVSize }

@@ -123,12 +123,19 @@ Item {
         ? contentLoader.implicitHeight
         : contentLoader.implicitWidth
     property real animatedLength: root.targetLength
+    // Only animate length changes *after* the lazy content has settled its initial size,
+    // so BarComponent's own show animation doesn't chase a 0 -> targetLength ramp.
+    property bool _lengthReady: false
+    onShownChanged: {
+        if (!root.shown)
+            root._lengthReady = false;
+    }
 
     // One driver for the slot and the surface both — see AGENTS.md §6.1. The
     // widget changes length whenever the minutes reach two digits, when minimal
     // mode is toggled and when the design is switched; all of them ride this.
     Behavior on animatedLength {
-        enabled: !Appearance.reducedMotion
+        enabled: !Appearance.reducedMotion && root._lengthReady
         animation: Appearance.animation.barResize.numberAnimation.createObject(root)
     }
 
@@ -171,6 +178,14 @@ Item {
     Loader {
         id: contentLoader
         anchors.centerIn: parent
+        active: root.shown
+        onLoaded: {
+            root.animatedLength = root.targetLength;
+            Qt.callLater(() => {
+                if (root.shown)
+                    root._lengthReady = true;
+            });
+        }
         sourceComponent: {
             if (root.style === "neural")
                 return neuralDesign;
