@@ -1,0 +1,40 @@
+diff --git a/src/core/qsintercept.cpp b/src/core/qsintercept.cpp
+index 5ac288a..a95600b 100644
+--- a/src/core/qsintercept.cpp
++++ b/src/core/qsintercept.cpp
+@@ -41,7 +41,9 @@ QUrl QsUrlInterceptor::intercept(
+ 	    && type != QQmlAbstractUrlInterceptor::DataType::UrlString)
+ 	{
+ 		auto path = url.toLocalFile();
+-		for (const auto& root: {this->configRoot.path(), this->configRoot.canonicalPath()}) {
++		if (path.startsWith(this->fileVfsRoot % '/')) return url;
++
++		for (const auto& root: {this->configRootPath, this->configRootCanonical}) {
+ 			if (!root.isEmpty() && path.startsWith(root % '/')) {
+ 				auto fileUrl =
+ 				    QUrl::fromLocalFile(this->fileVfsRoot % "/qs/" % path.sliced(root.length() + 1));
+diff --git a/src/core/qsintercept.hpp b/src/core/qsintercept.hpp
+index b677501..6f1047c 100644
+--- a/src/core/qsintercept.hpp
++++ b/src/core/qsintercept.hpp
+@@ -16,7 +16,10 @@ QS_DECLARE_LOGGING_CATEGORY(logQsIntercept);
+ 
+ class QsUrlInterceptor: public QQmlAbstractUrlInterceptor {
+ public:
+-	explicit QsUrlInterceptor(const QDir& configRoot): configRoot(configRoot) {}
++	explicit QsUrlInterceptor(const QDir& configRoot)
++	    : configRoot(configRoot)
++	    , configRootPath(configRoot.path())
++	    , configRootCanonical(configRoot.canonicalPath()) {}
+ 
+ 	QUrl intercept(const QUrl& originalUrl, QQmlAbstractUrlInterceptor::DataType type) override;
+ 
+@@ -26,6 +29,8 @@ public:
+ 
+ private:
+ 	QDir configRoot;
++	QString configRootPath;
++	QString configRootCanonical;
+ };
+ 
+ class QsInterceptDataReply: public QNetworkReply {

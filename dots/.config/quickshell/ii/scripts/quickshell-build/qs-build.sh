@@ -44,7 +44,10 @@ have() { command -v "$1" >/dev/null 2>&1; }
 ask() {
     [[ "$YES" == true ]] && return 0
     local a
-    if ! read -r -p "  $1 [Y/n] " a </dev/tty 2>/dev/null; then
+    # read -p writes the question to stderr: send it to the terminal too (it used to
+    # go to /dev/null with the errors, so the script sat waiting on a question
+    # nobody could see). Without a terminal the redirection fails and we say no.
+    if ! { read -r -p "  $1 [Y/n] " a </dev/tty 2>/dev/tty; } 2>/dev/null; then
         return 1
     fi
     [[ -z "$a" || "$a" == [Yy]* ]]
@@ -347,9 +350,13 @@ Conflicts:          quickshell
 Conflicts:          quickshell-git
 
 %description
-Quickshell built from upstream commit %{commit} with two startup patches:
+Quickshell built from upstream commit %{commit} with five startup patches:
 the QML scanner resolves each directory once instead of once per import,
-and the config is served from a file:// mirror so Qt's QML disk cache works.
+the config is served from a file:// mirror so Qt's QML disk cache works,
+the URL interceptor resolves the config root once, the synthesized
+qs.* modules are registered so Qt skips a quadratic qmldir check per import,
+and each QML document only gets the composite singletons it names.
+Set QS_NO_SINGLETON_FILTER=1 to turn that last one off.
 Set QS_NO_FILE_VFS=1 to turn the mirror off.
 
 %prep
@@ -388,6 +395,19 @@ rpm_missing() {
     done
 }
 
+# Whether the installed cpptrace can unwind from a signal handler: the same check
+# Quickshell's CMake makes before enabling the crash handler, which aborts the
+# whole build when it fails. Fedora's own cpptrace (rawhide, 2026-11) is built
+# without libunwind and fails it; the Quickshell COPR builds pass.
+cpptrace_unwinds() {
+    local d ok=1
+    d="$(mktemp -d)" || return 1
+    printf '#include <cpptrace/cpptrace.hpp>\nint main() { return cpptrace::can_signal_safe_unwind() ? 0 : 1; }\n' >"$d/t.cpp"
+    if g++ -std=c++20 "$d/t.cpp" -o "$d/t" -lcpptrace >/dev/null 2>&1 && "$d/t"; then ok=0; fi
+    rm -rf "$d"
+    return "$ok"
+}
+
 build_fedora() {
     step "Build dependencies"
     local -a deps=(rpm-build cmake gcc-c++ ninja-build curl
@@ -409,7 +429,11 @@ build_fedora() {
     local -a crashdeps=(cpptrace-devel libdwarf-devel 'pkgconfig(libzstd)')
     mapfile -t missing < <(rpm_missing "${crashdeps[@]}")
     if ((${#missing[@]} == 0)) || sudo dnf install -y "${missing[@]}" >/dev/null 2>&1; then
-        crash=ON
+        if cpptrace_unwinds; then
+            crash=ON
+        else
+            say "cpptrace has no signal-safe unwinding (built without libunwind): building without the crash handler."
+        fi
     else
         say "cpptrace-devel is not available: building without the crash handler."
     fi
@@ -441,9 +465,17 @@ build_fedora() {
         sudo dnf versionlock delete quickshell-git >/dev/null 2>&1 || true
     fi
     step "Installing $(basename "$rpm")"
+    # `rebuild` (after a Qt update, or new patches under the same release) makes an
+    # rpm with the NEVRA that is already installed, and `dnf install` then says
+    # "Nothing to do" and keeps the old binary. Reinstall in that case.
     local -a flags=(install --allowerasing)
+    local nevra
+    nevra="$(rpm -qp --qf '%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}' "$rpm" 2>/dev/null)"
+    if [[ -n "$nevra" ]] && rpm -q "$nevra" >/dev/null 2>&1; then
+        flags=(reinstall)
+    fi
     [[ "$YES" == true ]] && flags+=(-y)
-    sudo dnf "${flags[@]}" "$rpm" || die "dnf install failed."
+    sudo dnf "${flags[@]}" "$rpm" || die "dnf ${flags[0]} failed."
 }
 
 restore_fedora() {
