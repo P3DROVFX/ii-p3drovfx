@@ -10,6 +10,7 @@ Target = qt6-wayland
 Target = qt6-svg
 Target = quickshell
 Target = quickshell-git
+Target = quickshell-ii-git
 
 [Action]
 Description = Checking that Quickshell matches the installed Qt...

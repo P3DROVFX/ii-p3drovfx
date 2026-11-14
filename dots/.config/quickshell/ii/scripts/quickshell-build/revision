@@ -1,0 +1,8 @@
+# Upstream Quickshell commit the patches in ./patches are applied to.
+# Bump both together: a new commit must be checked with `git apply --check`
+# against every patch, then built and started once (see README.md).
+QS_COMMIT=9b0f339b19057f4731bf3b48293307d7ef241671
+# pkgver/rpm version of that commit: <tag>.r<commits since tag>.g<short>
+QS_VERSION=0.3.2.r11.g9b0f339
+# Bump when the patches or the packaging change without a new commit.
+QS_RELEASE=1

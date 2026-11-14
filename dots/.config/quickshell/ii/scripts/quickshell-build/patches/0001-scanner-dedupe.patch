@@ -1,0 +1,49 @@
+diff --git a/src/core/scan.cpp b/src/core/scan.cpp
+index 9f33302..3c8f75e 100644
+--- a/src/core/scan.cpp
++++ b/src/core/scan.cpp
+@@ -42,7 +42,12 @@ bool QmlScanner::hasFileContentChanged(const QString& path) const {
+ }
+ 
+ void QmlScanner::scanDir(const QDir& dir) {
+-	if (this->scannedDirs.contains(dir)) return;
++	// QDir::operator== resolves both canonical paths on every comparison, which made
++	// this check O(dirs) filesystem walks per import. Resolve once and use a set.
++	auto key = dir.canonicalPath();
++	if (key.isEmpty()) key = dir.absolutePath();
++	if (this->scannedDirKeys.contains(key)) return;
++	this->scannedDirKeys.insert(key);
+ 	this->scannedDirs.push_back(dir);
+ 
+ 	const auto& path = dir.path();
+@@ -124,7 +129,8 @@ void QmlScanner::scanDir(const QDir& dir) {
+ }
+ 
+ bool QmlScanner::scanQmlFile(const QString& path, bool& singleton, bool& internal) {
+-	if (this->scannedFiles.contains(path)) return false;
++	if (this->scannedFileSet.contains(path)) return false;
++	this->scannedFileSet.insert(path);
+ 	this->scannedFiles.push_back(path);
+ 
+ 	qCDebug(logQmlScanner) << "Scanning qml file" << path;
+diff --git a/src/core/scan.hpp b/src/core/scan.hpp
+index 7d807e1..ae1a8bf 100644
+--- a/src/core/scan.hpp
++++ b/src/core/scan.hpp
+@@ -3,6 +3,7 @@
+ #include <qbytearray.h>
+ #include <qcontainerfwd.h>
+ #include <qdir.h>
++#include <qset.h>
+ #include <qhash.h>
+ #include <qjsengine.h>
+ #include <qloggingcategory.h>
+@@ -22,6 +23,8 @@ public:
+ 	void scanQmlRoot(const QString& path);
+ 
+ 	QVector<QDir> scannedDirs;
++	QSet<QString> scannedDirKeys;
++	QSet<QString> scannedFileSet;
+ 	QVector<QString> scannedFiles;
+ 	QHash<QString, QByteArray> fileHashes;
+ 	QHash<QString, QString> fileIntercepts;
