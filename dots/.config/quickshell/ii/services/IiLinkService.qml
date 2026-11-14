@@ -1611,8 +1611,38 @@ Singleton {
             canNext: p.canGoNext ?? false,
             canPrevious: p.canGoPrevious ?? false,
             canSeek: (p.canSeek ?? false) && MprisController.hasTrackLength(p),
-            art: root._pcArt
+            art: root._pcArt,
+            // The page being played (browsers, YouTube…): lets the phone continue it.
+            url: root._pcUrl(p)
         };
+    }
+
+    function _pcUrl(player): string {
+        const u = String(player?.metadata?.["xesam:url"] ?? "");
+        return /^https?:\/\//i.test(u) ? u : "";
+    }
+
+    // Locking the PC while a web page plays offers the phone to continue it at the same
+    // point (a notification there: a background app cannot open a page by itself).
+    readonly property string handoffDev: (root.pcMediaEnabled && (root.opts?.handoff?.onLock ?? true)) ? root._capDev("handoff") : ""
+    Connections {
+        target: root.handoffDev !== "" ? GlobalStates : null
+        function onScreenLockedChanged() {
+            if (!GlobalStates.screenLocked)
+                return;
+            const p = root.pcMediaPlayer;
+            const url = root._pcUrl(p);
+            if (!p || !p.isPlaying || url === "")
+                return;
+            root.sendTo(root.handoffDev, {
+                t: "handoff",
+                url: url,
+                title: p.trackTitle ?? "",
+                artist: p.trackArtist ?? "",
+                app: p.identity ?? "",
+                position: Math.round(MprisController.trackPositionOf(p) * 1000)
+            });
+        }
     }
 
     readonly property string _pcMediaKey: root.pcMediaDev !== "" ? JSON.stringify(root._pcMedia()) : ""

@@ -2918,6 +2918,11 @@ Singleton {
                 property JsonObject pcMedia: JsonObject {
                     property bool enable: true
                 }
+                // Media handoff: a web page playing here (xesam:url) continues on the phone
+                // at the same point, from the phone's card or, on lock, a notification.
+                property JsonObject handoff: JsonObject {
+                    property bool onLock: true
+                }
                 // The desktop wallpaper behind the phone's PC card (a 1080 px JPEG, once per image).
                 property JsonObject look: JsonObject {
                     property bool enable: true

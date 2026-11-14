@@ -507,6 +507,17 @@ Item {
                 onToggled: value => Config.options.iiTools.calls.pauseMedia = value
             }
 
+            AppToggleRow {
+                Layout.topMargin: 4
+                visible: Config.options.iiTools.pcMedia.enable
+                symbol: "smartphone"
+                title: Translation.tr("Continue on the phone when locking")
+                description: Translation.tr("Locking the PC while a web page plays (YouTube, Twitch…) offers to continue it on the phone at the same point")
+                help: Translation.tr("A notification on the phone opens the page and pauses the PC's player. The phone's media card also has a Continue on phone button whenever the player has a web page.")
+                checked: Config.options.iiTools.handoff.onLock
+                onToggled: value => Config.options.iiTools.handoff.onLock = value
+            }
+
             // Call audio needs the phone paired over Bluetooth, which ii tools cannot do.
             AppSettingRow {
                 Layout.topMargin: 4
