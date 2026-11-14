@@ -787,6 +787,17 @@ Item {
                 onSelected: value => Config.options.iiTools.camera.output = value
             }
 
+            // What each output gives up, so the choice is an informed one.
+            NoticeBox {
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+                visible: Config.options.iiTools.camera.enable && !Config.options.iiTools.camera.useDroidcam
+                materialIcon: "info"
+                text: Translation.tr("Device: a /dev/video camera that every app lists (browsers, Discord, Zoom, Teams, OBS). Needs the v4l2loopback kernel module, which on some systems must be signed for Secure Boot.\n\n"
+                    + "PipeWire: no kernel module and no admin password, but only apps that read cameras through PipeWire see it: GNOME Snapshot, OBS (\"Video Capture Device (PipeWire)\"), and browsers with their PipeWire camera option turned on. Most video call apps do not.\n\n"
+                    + "Automatic uses the device when the module is installed, PipeWire otherwise. With either, stopping the stream removes the camera: an app showing it may stay on the last picture until it is reopened.")
+            }
+
             AppSettingRow {
                 Layout.topMargin: 4
                 visible: Config.options.iiTools.camera.enable
