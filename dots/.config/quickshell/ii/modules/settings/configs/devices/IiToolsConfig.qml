@@ -483,6 +483,16 @@ Item {
                 onToggled: value => Config.options.iiTools.callAudio.auto = value
             }
 
+            AppToggleRow {
+                Layout.topMargin: 4
+                symbol: "pause_circle"
+                title: Translation.tr("Pause media during calls")
+                description: Translation.tr("Pause playing PC media while a call rings or is active, and resume it when the call ends")
+                help: Translation.tr("Only players paused by this feature are resumed, and only if they are still paused when the call ends. Works with both ii tools and the ADB fallback.")
+                checked: Config.options.iiTools.calls.pauseMedia
+                onToggled: value => Config.options.iiTools.calls.pauseMedia = value
+            }
+
             // Call audio needs the phone paired over Bluetooth, which ii tools cannot do.
             AppSettingRow {
                 Layout.topMargin: 4

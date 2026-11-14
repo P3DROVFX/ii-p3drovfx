@@ -2983,6 +2983,9 @@ Singleton {
                 // work without ADB. Off, or app not reporting: the ADB path as before.
                 property JsonObject calls: JsonObject {
                     property bool enable: true
+                    // Pause playing PC MPRIS players while a call rings or is active, and
+                    // resume only those still paused when it ends (both ii link and ADB).
+                    property bool pauseMedia: true
                 }
                 // Images shared from the phone become the wallpaper (desktop, lock or both).
                 property JsonObject wallpaper: JsonObject {

@@ -5,6 +5,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Bluetooth
 import Quickshell.Io
+import Quickshell.Services.Mpris
 import qs.modules.common
 
 /**
@@ -150,6 +151,50 @@ Singleton {
         }
     }
 
+    // ── Pause PC media during calls ─────────────────────────────────────────
+    readonly property bool pauseMediaEnabled: Config.options?.iiTools?.calls?.pauseMedia ?? true
+    property var _pausedMediaPlayers: []
+
+    function _isPhoneMediaPlayer(player): bool {
+        const bus = player?.dbusName ?? "";
+        return bus.startsWith("org.mpris.MediaPlayer2.iitools_")
+            || bus.startsWith("org.mpris.MediaPlayer2.kdeconnect");
+    }
+
+    function _pauseMediaForCall(): void {
+        if (!root.pauseMediaEnabled)
+            return;
+        const paused = [];
+        for (const player of MprisController.players) {
+            if (!player || root._isPhoneMediaPlayer(player))
+                continue;
+            if (player.playbackState === MprisPlaybackState.Playing && player.canPause) {
+                const bus = player.dbusName ?? "";
+                const identity = player.identity ?? "";
+                if (bus === "" && identity === "")
+                    continue;
+                player.pause();
+                paused.push({ bus: bus, identity: identity });
+            }
+        }
+        root._pausedMediaPlayers = paused;
+    }
+
+    function _resumeMediaAfterCall(): void {
+        if (root._pausedMediaPlayers.length === 0)
+            return;
+        const toResume = root._pausedMediaPlayers;
+        root._pausedMediaPlayers = [];
+        const livePlayers = Array.from(Mpris.players.values);
+        for (const entry of toResume) {
+            const player = livePlayers.find(p => p && (entry.bus !== ""
+                ? p.dbusName === entry.bus
+                : (entry.identity !== "" && p.identity === entry.identity)));
+            if (player && player.playbackState === MprisPlaybackState.Paused && player.canPlay)
+                player.play();
+        }
+    }
+
     // ── Actions ─────────────────────────────────────────────────────────────
     function answer() {
         if (root.callState !== "ringing")
@@ -224,10 +269,16 @@ Singleton {
     }
 
     function _setState(next) {
-        if (root.callState === next)
+        const prev = root.callState;
+        if (prev === next)
             return;
         root.callState = next;
         root.stateSince = Date.now();
+        if (prev === "idle") {
+            root._pauseMediaForCall();
+        } else if (next === "idle") {
+            root._resumeMediaAfterCall();
+        }
         if (next === "idle") {
             // The PC was the headset for this call only.
             if (root._weConnected)
