@@ -349,7 +349,9 @@ Item {
     }
 
     function ensureFetched() {
-        if (!root.enabled)
+        // Defer fetching until the initial cache load finishes so we neither
+        // miss cache hits over the network nor write before _cache is loaded.
+        if (!root.enabled || lyricFileView.isInitialLoad)
             return;
 
         if (!root.queryTitle || !root.queryArtist) {
@@ -440,20 +442,27 @@ Item {
     }
 
     function setCache(key, data) {
+        if (lyricFileView.isInitialLoad || !PanelSchedule.bootSettled)
+            return;
         root._cache[key] = data;
         saveCache();
     }
 
     function saveCache() {
+        if (lyricFileView.isInitialLoad || !PanelSchedule.bootSettled)
+            return;
         lyricFileView.setText(JSON.stringify(root._cache, null, 2));
     }
 
     FileView {
         id: lyricFileView
-        path: Directories.betterlyricsCachePath
+        // Defer opening/parsing the multi-MB cache until startup panels settle.
+        path: PanelSchedule.bootSettled ? Directories.betterlyricsCachePath : ""
         property bool isInitialLoad: true
 
         onLoaded: {
+            if (!PanelSchedule.bootSettled)
+                return;
             if (isInitialLoad) {
                 try {
                     const loaded = JSON.parse(lyricFileView.text() || "{}");
@@ -471,8 +480,20 @@ Item {
                         root.loading = false;
                         root.error = "";
                         root.loadedKey = root.fetchKey;
+                        return;
                     }
                 }
+                if (root.enabled)
+                    root.ensureFetched();
+            }
+        }
+        onLoadFailed: {
+            if (!PanelSchedule.bootSettled)
+                return;
+            if (isInitialLoad) {
+                isInitialLoad = false;
+                if (root.enabled)
+                    root.ensureFetched();
             }
         }
     }

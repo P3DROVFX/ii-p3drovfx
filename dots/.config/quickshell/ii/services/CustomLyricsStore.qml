@@ -20,7 +20,8 @@ Singleton {
     /** { "<title>||<artist>": "<raw lrc text>" } */
     property var entries: ({})
     property bool ready: false
-    readonly property real initTimestamp: Date.now()
+    // Count the missing-file grace period from when loading is actually allowed.
+    readonly property real initTimestamp: PanelSchedule.bootSettled ? Date.now() : 0
 
     function keyFor(title, artist) {
         const t = String(title ?? "").trim().toLowerCase();
@@ -82,12 +83,15 @@ Singleton {
 
     FileView {
         id: fileView
-        path: Qt.resolvedUrl(Directories.customLyricsPath)
+        // Defer reading/parsing user custom lyrics until startup panels settle.
+        path: PanelSchedule.bootSettled ? Qt.resolvedUrl(Directories.customLyricsPath) : ""
         watchChanges: true
         atomicWrites: true
         printErrors: false
 
         onLoaded: {
+            if (!PanelSchedule.bootSettled)
+                return;
             try {
                 const parsed = JSON.parse(fileView.text());
                 root.entries = (parsed && typeof parsed.entries === "object" && parsed.entries)
@@ -98,11 +102,13 @@ Singleton {
             root.ready = true;
         }
         onLoadFailed: error => {
+            if (!PanelSchedule.bootSettled)
+                return;
             if (error !== FileViewError.FileNotFound)
                 return;
             // Hot reloads can race the watcher with an inode swap; only trust
             // "really missing" after the grace period, otherwise retry once.
-            if (Date.now() - root.initTimestamp > 2000)
+            if (root.initTimestamp > 0 && Date.now() - root.initTimestamp > 2000)
                 root.ready = true;
             else
                 retryTimer.restart();
