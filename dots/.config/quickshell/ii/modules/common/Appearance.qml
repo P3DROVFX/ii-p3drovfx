@@ -963,12 +963,12 @@ Singleton {
         // duration and one curve. A widget that animates its own implicitWidth
         // faster than the island around it makes the island look like it is
         // chasing the content (and vice versa).
-        // 280ms is the duration the Dynamic Island already used; the fast
-        // spatial curve keeps its slight overshoot without the OutBack tail.
+        // 280ms is the duration the Dynamic Island already used. The curve must not
+        // overshoot: a resize that pushes its neighbours would otherwise wobble them.
         property QtObject barResize: QtObject {
             property int duration: Math.round(280 * root.animMultiplier)
             property int type: Easing.BezierSpline
-            property list<real> bezierCurve: animationCurves.expressiveFastSpatial
+            property list<real> bezierCurve: animationCurves.emphasizedDecel
             property Component numberAnimation: Component {
                 NumberAnimation {
                     duration: root.animation.barResize.duration
