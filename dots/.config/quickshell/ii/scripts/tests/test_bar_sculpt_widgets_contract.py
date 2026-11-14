@@ -54,7 +54,7 @@ class BarSculptWidgetsContractTest(unittest.TestCase):
             entry = registry.split(f'id: "{widget_id}"', 1)[1].split('            id: "', 1)[0]
             self.assertIn('value: "sculpt"', entry, widget_id)
             for component in components:
-                self.assertIn(f"{component} {{", router)
+                self.assertIn(f"/{component}.qml", router)
             settings = self.read(f"modules/settings/configs/widgets/{page}")
             self.assertIn('value: "sculpt"', settings, page)
             self.assertIn(f'styles.{key} === "sculpt"', settings, page)

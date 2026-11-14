@@ -726,7 +726,10 @@ Item {
         Loader {
             id: itemLoader
             active: true
-            sourceComponent: resolveComponent(modelData.id, rootItem.vertical, rootItem.widgetStyle)
+            Component.onCompleted: {
+                rootItem._itemLoaderReady = true;
+                rootItem.syncItemLoader();
+            }
             onItemChanged: Qt.callLater(rootItem.syncLoadedItemVisible)
             onLoaded: {
                 if (item) {
@@ -786,178 +789,214 @@ Item {
             active: rootItem.editPlaceholderShown
             visible: rootItem.editPlaceholderShown
             Layout.alignment: rootItem.vertical ? Qt.AlignHCenter : Qt.AlignVCenter
-            sourceComponent: BarEditPlaceholder {
-                vertical: rootItem.vertical
-                widgetId: modelData.id
+            function syncSource() {
+                if (active && source.toString() === "") {
+                    setSource(Qt.resolvedUrl("BarEditPlaceholder.qml"), {
+                        vertical: Qt.binding(() => rootItem.vertical),
+                        widgetId: Qt.binding(() => modelData.id)
+                    });
+                }
             }
+            Component.onCompleted: syncSource()
+            onActiveChanged: syncSource()
         }
     }
 
     // ── Component resolution ──────────────────────────────────────────────────
-    // Replaces compMap JS object. Adding a new widget: add one case here +
-    // add the Component definition below + add getStyle() entry in registry.
-    function resolveComponent(id, isVert, style) {
+    // Resolves each widget slot to its QML URL + prop mode so Loader.setSource
+    // only compiles and instantiates the active widget for this slot.
+    readonly property var resolvedSpec: rootItem.resolveWidgetSpec(modelData?.id ?? "", rootItem.vertical, rootItem.widgetStyle)
+    property string _loadedWidgetUrl: ""
+    property bool _itemLoaderReady: false
+
+    onResolvedSpecChanged: rootItem.syncItemLoader()
+
+    function syncItemLoader() {
+        if (!rootItem._itemLoaderReady)
+            return;
+        const spec = rootItem.resolvedSpec;
+        if (!spec || !spec.url) {
+            if (rootItem._loadedWidgetUrl !== "") {
+                rootItem._loadedWidgetUrl = "";
+                itemLoader.source = "";
+            }
+            return;
+        }
+        if (spec.url === rootItem._loadedWidgetUrl)
+            return;
+        rootItem._loadedWidgetUrl = spec.url;
+        const props = {};
+        if (spec.props === "vertical" || spec.props === "verticalAndRadii")
+            props.vertical = Qt.binding(() => rootItem.vertical);
+        if (spec.props === "radii" || spec.props === "verticalAndRadii") {
+            props.startRadius = Qt.binding(() => rootItem.startRadius);
+            props.endRadius = Qt.binding(() => rootItem.endRadius);
+        }
+        itemLoader.setSource(Qt.resolvedUrl(spec.url), props);
+    }
+
+    function resolveWidgetSpec(id, isVert, style) {
         const isExp = style === "expressive";
         const isMin = style === "minimal";
         switch (id) {
         case "workspaces":
             if (isMin)
-                return workspaceCompMinimal;
+                return ({ url: "widgets/workspaces/MinimalWorkspaces.qml", props: "vertical" });
             if (isExp)
-                return workspaceCompExpressive;
+                return ({ url: "widgets/workspaces/ExpressiveWorkspaces.qml", props: "vertical" });
             if (style === "dock")
-                return workspaceCompDock;
+                return ({ url: "widgets/workspaces/DockWorkspaces.qml", props: "vertical" });
             if (style === "index")
-                return workspaceCompIndex;
+                return ({ url: "widgets/workspaces/IndexWorkspaces.qml", props: "vertical" });
             if (style === "pills")
-                return workspaceCompPills;
-            return workspaceComp;
+                return ({ url: "widgets/workspaces/PillsWorkspaces.qml", props: "vertical" });
+            return ({ url: "widgets/workspaces/Workspaces.qml", props: "vertical" });
         case "music_player":
             if (isExp)
-                return musicPlayerCompExpressive;
+                return ({ url: "widgets/media/ExpressiveMedia.qml", props: "vertical" });
             if (style === "neural")
-                return isVert ? neuralMediaCompVert : neuralMediaComp;
+                return isVert ? ({ url: "../verticalBar/VerticalNeuralMedia.qml", props: "none" }) : ({ url: "widgets/media/NeuralMedia.qml", props: "vertical" });
             if (style === "ring")
-                return ringMediaComp;
+                return ({ url: "widgets/media/RingMedia.qml", props: "vertical" });
             if (style === "tonal")
-                return tonalMediaComp;
-            return isVert ? musicPlayerCompVert : musicPlayerComp;
+                return ({ url: "widgets/media/TonalMedia.qml", props: "vertical" });
+            return isVert ? ({ url: "../verticalBar/VerticalMedia.qml", props: "none" }) : ({ url: "widgets/media/Media.qml", props: "none" });
         case "system_monitor":
             if (isExp)
-                return systemMonitorCompExpressive;
+                return ({ url: "widgets/resources/ExpressiveResources.qml", props: "vertical" });
             if (style === "sculpt")
-                return systemMonitorCompSculpt;
-            return isVert ? systemMonitorCompVert : systemMonitorComp;
+                return ({ url: "widgets/resources/SculptResources.qml", props: "vertical" });
+            return isVert ? ({ url: "../verticalBar/Resources.qml", props: "none" }) : ({ url: "widgets/resources/Resources.qml", props: "none" });
         case "clock":
             if (isExp)
-                return clockCompExpressive;
+                return ({ url: "widgets/clock/ExpressiveClockWidget.qml", props: "vertical" });
             if (style === "neural")
-                return clockCompNeural;
+                return ({ url: "widgets/clock/NeuralClockWidget.qml", props: "vertical" });
             if (style === "relief")
-                return clockCompRelief;
-            return isVert ? clockCompVert : clockComp;
+                return ({ url: "widgets/clock/ReliefClockWidget.qml", props: "vertical" });
+            return isVert ? ({ url: "../verticalBar/VerticalClockWidget.qml", props: "none" }) : ({ url: "widgets/clock/ClockWidget.qml", props: "none" });
         case "battery":
             if (isExp)
-                return batteryCompExpressive;
-            return isVert ? batteryCompVert : batteryComp;
+                return ({ url: "widgets/battery/ExpressiveBattery.qml", props: "vertical" });
+            return isVert ? ({ url: "../verticalBar/BatteryIndicator.qml", props: "none" }) : ({ url: "widgets/battery/BatteryIndicator.qml", props: "none" });
         case "keyboard_layout":
             if (isExp)
-                return keyboardCompExpressive;
+                return ({ url: "widgets/keyboard/ExpressiveKeyboardLayout.qml", props: "vertical" });
             if (style === "sculpt")
-                return keyboardCompSculpt;
-            return isVert ? keyboardCompVert : keyboardComp;
+                return ({ url: "widgets/keyboard/SculptKeyboardLayout.qml", props: "vertical" });
+            return isVert ? ({ url: "../verticalBar/VerticalKeyboardLayoutWidget.qml", props: "none" }) : ({ url: "widgets/keyboard/KeyboardLayoutWidget.qml", props: "vertical" });
         case "utility_buttons":
             if (style === "segments")
-                return utilityButtonsCompSegments;
+                return ({ url: "widgets/utilButtons/SegmentedUtilButtons.qml", props: "vertical" });
             if (style === "sculpt")
-                return utilityButtonsCompSculpt;
+                return ({ url: "widgets/utilButtons/SculptUtilButtons.qml", props: "vertical" });
             if (isExp)
-                return utilityButtonsCompExpressive;
-            return utilityButtonsComp;
+                return ({ url: "widgets/utilButtons/ExpressiveUtilButtons.qml", props: "vertical" });
+            return ({ url: "widgets/utilButtons/UtilButtons.qml", props: "vertical" });
         case "system_tray":
             if (isExp)
-                return systemTrayCompExpressive;
-            return systemTrayComp;
+                return ({ url: "widgets/tray/ExpressiveSystemTray.qml", props: "vertical" });
+            return ({ url: "widgets/tray/SysTray.qml", props: "vertical" });
         case "active_window":
             if (isExp)
-                return activeWindowCompExpressive;
-            return activeWindowComp;
+                return ({ url: "widgets/activeWindow/ExpressiveActiveWindow.qml", props: "vertical" });
+            return ({ url: "widgets/activeWindow/ActiveWindow.qml", props: "vertical" });
         case "weather":
             if (isExp)
-                return weatherCompExpressive;
+                return ({ url: "widgets/weather/ExpressiveWeatherBar.qml", props: "vertical" });
             if (style === "horizon")
-                return weatherCompHorizon;
+                return ({ url: "widgets/weather/HorizonWeatherWidget.qml", props: "vertical" });
             if (style === "tessera")
-                return weatherCompTessera;
+                return ({ url: "widgets/weather/TesseraWeatherWidget.qml", props: "vertical" });
             if (style === "sculpt")
-                return weatherCompSculpt;
-            return weatherComp;
+                return ({ url: "widgets/weather/SculptWeatherWidget.qml", props: "vertical" });
+            return ({ url: "widgets/weather/WeatherBar.qml", props: "vertical" });
         case "policies_panel_button":
             if (style === "outline")
-                return policiesPanelButtonOutline;
+                return ({ url: "widgets/policies/OutlinePoliciesPanelButton.qml", props: "vertical" });
             if (isExp)
-                return policiesPanelButtonExpressive;
-            return policiesPanelButton;
+                return ({ url: "widgets/policies/ExpressivePoliciesPanelButton.qml", props: "vertical" });
+            return ({ url: "widgets/policies/PoliciesPanelButton.qml", props: "radii" });
         case "dashboard_panel_button":
             if (style === "orbs")
-                return isVert ? dashboardPanelButtonOrbsVert : dashboardPanelButtonOrbs;
+                return ({ url: "widgets/dashboard/OrbsDashboardPanelButton.qml", props: "vertical" });
             if (style === "sculpt")
-                return isVert ? dashboardPanelButtonSculptVert : dashboardPanelButtonSculpt;
+                return ({ url: "widgets/dashboard/SculptDashboardPanelButton.qml", props: "vertical" });
             if (isExp)
-                return isVert ? dashboardPanelButtonExpressiveVert : dashboardPanelButtonExpressive;
-            return isVert ? dashboardPanelButtonVert : dashboardPanelButton;
+                return ({ url: "widgets/dashboard/ExpressiveDashboardPanelButton.qml", props: "vertical" });
+            return isVert ? ({ url: "widgets/dashboard/VerticalDashboardPanelButton.qml", props: "radii" }) : ({ url: "widgets/dashboard/DashboardPanelButton.qml", props: "radii" });
         case "bluetooth_devices":
             if (isExp)
-                return bluetoothCompExpressive;
+                return ({ url: "widgets/bluetooth/ExpressiveBluetoothDevices.qml", props: "vertical" });
             if (style === "sculpt")
-                return bluetoothCompSculpt;
-            return isVert ? bluetoothCompVert : bluetoothComp;
+                return ({ url: "widgets/bluetooth/SculptBluetoothDevices.qml", props: "vertical" });
+            return isVert ? ({ url: "../verticalBar/VerticalBluetoothDevicesWidget.qml", props: "none" }) : ({ url: "widgets/bluetooth/BluetoothDevicesWidget.qml", props: "vertical" });
         case "sports":
             if (isExp)
-                return sportsCompExpressive;
-            return sportsComp;
+                return ({ url: "widgets/sports/ExpressiveSports.qml", props: "vertical" });
+            return ({ url: "widgets/sports/Sports.qml", props: "vertical" });
         case "power":
             if (style === "solid")
-                return powerCompSolid;
+                return ({ url: "widgets/power/SolidPowerButton.qml", props: "vertical" });
             if (style === "dot")
-                return powerCompDot;
+                return ({ url: "widgets/power/DotPowerButton.qml", props: "vertical" });
             if (isExp)
-                return powerCompExpressive;
-            return powerComp;
+                return ({ url: "widgets/power/ExpressivePowerButton.qml", props: "vertical" });
+            return ({ url: "widgets/power/PowerButton.qml", props: "verticalAndRadii" });
         case "network_speed":
             if (isExp)
-                return networkSpeedCompExpressive;
-            return networkSpeedComp;
+                return ({ url: "widgets/networkSpeed/ExpressiveNetworkSpeed.qml", props: "vertical" });
+            return ({ url: "widgets/networkSpeed/NetworkSpeedWidget.qml", props: "vertical" });
         case "date":
             if (isExp)
-                return dateCompExpressive;
+                return ({ url: "widgets/date/ExpressiveDateWidget.qml", props: "vertical" });
             if (style === "neural")
-                return dateCompNeural;
-            return dateComp;
+                return ({ url: "widgets/date/NeuralDateWidget.qml", props: "vertical" });
+            return ({ url: "widgets/date/DateWidget.qml", props: "vertical" });
         case "timer":
             if (isExp)
-                return timerCompExpressive;
+                return ({ url: "widgets/timer/ExpressiveTimerWidget.qml", props: "vertical" });
             if (style === "sculpt")
-                return timerCompSculpt;
-            return isVert ? timerCompVert : timerComp;
+                return ({ url: "widgets/timer/SculptTimerWidget.qml", props: "vertical" });
+            return isVert ? ({ url: "../verticalBar/VerticalTimerWidget.qml", props: "none" }) : ({ url: "widgets/timer/TimerWidget.qml", props: "none" });
         case "record_indicator":
-            return recordIndicatorComp;
+            return ({ url: "widgets/indicators/RecordIndicator.qml", props: "vertical" });
         case "dictation_indicator":
-            return dictationIndicatorComp;
+            return ({ url: "widgets/indicators/DictationIndicator.qml", props: "vertical" });
         case "phone_scrcpy_indicator":
-            return phoneScrcpyIndicatorComp;
+            return ({ url: "widgets/indicators/PhoneScrcpyIndicator.qml", props: "vertical" });
         case "shell_update_indicator":
-            return shellUpdateIndicatorComp;
+            return ({ url: "widgets/indicators/ShellUpdateIndicator.qml", props: "vertical" });
         case "mode_indicator":
-            return modeIndicatorComp;
+            return ({ url: "widgets/indicators/ModeIndicator.qml", props: "vertical" });
         case "easyeffects_indicator":
-            return easyEffectsIndicatorComp;
+            return ({ url: "widgets/indicators/EasyEffectsIndicator.qml", props: "vertical" });
         case "screen_share_indicator":
-            return screenshareIndicatorComp;
+            return ({ url: "widgets/indicators/ScreenShareIndicator.qml", props: "none" });
         case "dock_to_panel":
-            return dockToPanelComp;
+            return ({ url: "widgets/dockToPanel/DockToPanel.qml", props: "vertical" });
         case "port_watcher":
             if (isExp)
-                return portWatcherCompExpressive;
-            return portWatcherComp;
+                return ({ url: "widgets/portWatcher/ExpressivePortWatcher.qml", props: "vertical" });
+            return ({ url: "widgets/portWatcher/PortWatcherWidget.qml", props: "vertical" });
         case "password_manager":
             if (isExp)
-                return passwordManagerCompExpressive;
-            return passwordManagerComp;
+                return ({ url: "widgets/passwordManager/ExpressivePasswordManager.qml", props: "vertical" });
+            return ({ url: "widgets/passwordManager/PasswordManagerWidget.qml", props: "vertical" });
         case "ai_plan_usage":
             if (isExp)
-                return aiPlanUsageCompExpressive;
-            return aiPlanUsageComp;
+                return ({ url: "widgets/aiPlanUsage/ExpressiveAiPlanUsage.qml", props: "vertical" });
+            return ({ url: "widgets/aiPlanUsage/AiPlanUsageWidget.qml", props: "vertical" });
         case "privacy_pill":
-            return privacyPillComp;
+            return ({ url: "widgets/privacy/PrivacyPill.qml", props: "vertical" });
         case "search":
             if (isExp)
-                return searchCompExpressive;
+                return ({ url: "widgets/search/ExpressiveSearchBarWidget.qml", props: "vertical" });
             if (style === "neural")
-                return searchCompNeural;
+                return ({ url: "widgets/search/NeuralSearchBarWidget.qml", props: "vertical" });
             if (style === "sculpt")
-                return searchCompSculpt;
-            return searchComp;
+                return ({ url: "widgets/search/SculptSearchBarWidget.qml", props: "vertical" });
+            return ({ url: "widgets/search/SearchBarWidget.qml", props: "vertical" });
         default:
             return null;
         }
@@ -1065,18 +1104,24 @@ Item {
         anchors.fill: parent
         z: 5
         active: GlobalStates.editMode && (GlobalStates.editProgress > 0.85 || Appearance.reducedMotion) && rootItem.hasLayoutContent && rootItem.editController !== null
-        sourceComponent: BarEditSlot {
-            controller: rootItem.editController
-            bucket: rootItem.barSection
-            storedIndex: rootItem.originalIndex
-            widgetId: modelData.id
-            barComponent: rootItem
-            // The hole beside this widget AS IT IS RIGHT NOW. The controller
-            // draws the drop indicator in it and cannot see the animated
-            // margin from where it sits, so the widget hands it over.
-            gapBefore: rootItem.editGapBefore
-            gapAfter: rootItem.editGapAfter
+        function syncSource() {
+            if (active && source.toString() === "") {
+                setSource(Qt.resolvedUrl("BarEditSlot.qml"), {
+                    controller: Qt.binding(() => rootItem.editController),
+                    bucket: Qt.binding(() => rootItem.barSection),
+                    storedIndex: Qt.binding(() => rootItem.originalIndex),
+                    widgetId: Qt.binding(() => modelData.id),
+                    barComponent: rootItem,
+                    // The hole beside this widget AS IT IS RIGHT NOW. The controller
+                    // draws the drop indicator in it and cannot see the animated
+                    // margin from where it sits, so the widget hands it over.
+                    gapBefore: Qt.binding(() => rootItem.editGapBefore),
+                    gapAfter: Qt.binding(() => rootItem.editGapAfter)
+                });
+            }
         }
+        Component.onCompleted: syncSource()
+        onActiveChanged: syncSource()
     }
 
     function toggleHighlight(highlight) {
@@ -1098,533 +1143,5 @@ Item {
         hasActiveLeftNeighbor: rootItem.hasActiveLeftNeighbor
         hasActiveRightNeighbor: rootItem.hasActiveRightNeighbor
         isDefault: rootItem.isDefault
-    }
-
-    // ── Widget Components ─────────────────────────────────────────────────────
-    // Default variants
-    Component {
-        id: weatherComp
-        WeatherBar {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: timerComp
-        TimerWidget {}
-    }
-    Component {
-        id: timerCompExpressive
-        ExpressiveTimerWidget {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: timerCompVert
-        Vertical.VerticalTimerWidget {}
-    }
-    Component {
-        id: screenshareIndicatorComp
-        ScreenShareIndicator {}
-    }
-    Component {
-        id: recordIndicatorComp
-        RecordIndicator {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: dictationIndicatorComp
-        DictationIndicator {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: phoneScrcpyIndicatorComp
-        PhoneScrcpyIndicator {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: shellUpdateIndicatorComp
-        ShellUpdateIndicator {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: modeIndicatorComp
-        ModeIndicator {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: easyEffectsIndicatorComp
-        EasyEffectsIndicator {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: activeWindowComp
-        ActiveWindow {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: systemMonitorComp
-        Resources {}
-    }
-    Component {
-        id: systemMonitorCompVert
-        Vertical.Resources {}
-    }
-    Component {
-        id: musicPlayerCompVert
-        Vertical.VerticalMedia {}
-    }
-    Component {
-        id: musicPlayerComp
-        Media {}
-    }
-    Component {
-        id: neuralMediaComp
-        NeuralMedia {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: neuralMediaCompVert
-        Vertical.VerticalNeuralMedia {}
-    }
-    Component {
-        id: ringMediaComp
-        RingMedia {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: tonalMediaComp
-        TonalMedia {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: utilityButtonsComp
-        UtilButtons {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: batteryComp
-        BatteryIndicator {}
-    }
-    Component {
-        id: batteryCompVert
-        Vertical.BatteryIndicator {}
-    }
-    Component {
-        id: clockCompVert
-        Vertical.VerticalClockWidget {}
-    }
-    Component {
-        id: clockComp
-        ClockWidget {}
-    }
-    Component {
-        id: systemTrayComp
-        SysTray {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: dateComp
-        DateWidget {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: dateCompExpressive
-        ExpressiveDateWidget {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: dateCompNeural
-        NeuralDateWidget {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: workspaceComp
-        Workspaces {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: policiesPanelButton
-        PoliciesPanelButton {
-            startRadius: rootItem.startRadius
-            endRadius: rootItem.endRadius
-        }
-    }
-    Component {
-        id: dashboardPanelButton
-        DashboardPanelButton {
-            startRadius: rootItem.startRadius
-            endRadius: rootItem.endRadius
-        }
-    }
-    Component {
-        id: dashboardPanelButtonVert
-        VerticalDashboardPanelButton {
-            startRadius: rootItem.startRadius
-            endRadius: rootItem.endRadius
-        }
-    }
-    Component {
-        id: bluetoothComp
-        BluetoothDevicesWidget {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: bluetoothCompVert
-        Vertical.VerticalBluetoothDevicesWidget {}
-    }
-    Component {
-        id: keyboardComp
-        KeyboardLayoutWidget {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: keyboardCompVert
-        Vertical.VerticalKeyboardLayoutWidget {}
-    }
-    Component {
-        id: sportsComp
-        Sports {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: powerComp
-        PowerButton {
-            vertical: rootItem.vertical
-            startRadius: rootItem.startRadius
-            endRadius: rootItem.endRadius
-        }
-    }
-    Component {
-        id: dockToPanelComp
-        DockToPanel {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: portWatcherComp
-        PortWatcherWidget {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: portWatcherCompExpressive
-        ExpressivePortWatcher {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: passwordManagerComp
-        PasswordManagerWidget {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: passwordManagerCompExpressive
-        ExpressivePasswordManager {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: networkSpeedComp
-        NetworkSpeedWidget {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: networkSpeedCompExpressive
-        ExpressiveNetworkSpeed {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: aiPlanUsageComp
-        AiPlanUsageWidget {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: aiPlanUsageCompExpressive
-        ExpressiveAiPlanUsage {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: privacyPillComp
-        PrivacyPill {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: searchComp
-        SearchBarWidget {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: searchCompExpressive
-        ExpressiveSearchBarWidget {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: searchCompNeural
-        NeuralSearchBarWidget {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: searchCompSculpt
-        SculptSearchBarWidget {
-            vertical: rootItem.vertical
-        }
-    }
-
-    // Expressive variants
-    Component {
-        id: weatherCompExpressive
-        ExpressiveWeatherBar {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: weatherCompHorizon
-        HorizonWeatherWidget {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: weatherCompTessera
-        TesseraWeatherWidget {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: weatherCompSculpt
-        SculptWeatherWidget {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: timerCompSculpt
-        SculptTimerWidget {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: systemMonitorCompSculpt
-        SculptResources {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: musicPlayerCompExpressive
-        ExpressiveMedia {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: utilityButtonsCompExpressive
-        ExpressiveUtilButtons {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: clockCompExpressive
-        ExpressiveClockWidget {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: clockCompNeural
-        NeuralClockWidget {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: clockCompRelief
-        ReliefClockWidget {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: workspaceCompMinimal
-        MinimalWorkspaces {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: workspaceCompExpressive
-        ExpressiveWorkspaces {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: workspaceCompDock
-        DockWorkspaces {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: workspaceCompIndex
-        IndexWorkspaces {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: workspaceCompPills
-        PillsWorkspaces {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: systemMonitorCompExpressive
-        ExpressiveResources {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: policiesPanelButtonExpressive
-        ExpressivePoliciesPanelButton {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: dashboardPanelButtonExpressive
-        ExpressiveDashboardPanelButton {
-            vertical: false
-        }
-    }
-    Component {
-        id: dashboardPanelButtonExpressiveVert
-        ExpressiveDashboardPanelButton {
-            vertical: true
-        }
-    }
-    Component {
-        id: dashboardPanelButtonOrbs
-        OrbsDashboardPanelButton {
-            vertical: false
-        }
-    }
-    Component {
-        id: dashboardPanelButtonOrbsVert
-        OrbsDashboardPanelButton {
-            vertical: true
-        }
-    }
-    Component {
-        id: dashboardPanelButtonSculpt
-        SculptDashboardPanelButton {
-            vertical: false
-        }
-    }
-    Component {
-        id: dashboardPanelButtonSculptVert
-        SculptDashboardPanelButton {
-            vertical: true
-        }
-    }
-    Component {
-        id: policiesPanelButtonOutline
-        OutlinePoliciesPanelButton {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: utilityButtonsCompSegments
-        SegmentedUtilButtons {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: utilityButtonsCompSculpt
-        SculptUtilButtons {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: powerCompSolid
-        SolidPowerButton {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: powerCompDot
-        DotPowerButton {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: powerCompExpressive
-        ExpressivePowerButton {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: batteryCompExpressive
-        ExpressiveBattery {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: systemTrayCompExpressive
-        ExpressiveSystemTray {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: bluetoothCompExpressive
-        ExpressiveBluetoothDevices {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: keyboardCompExpressive
-        ExpressiveKeyboardLayout {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: keyboardCompSculpt
-        SculptKeyboardLayout {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: bluetoothCompSculpt
-        SculptBluetoothDevices {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: sportsCompExpressive
-        ExpressiveSports {
-            vertical: rootItem.vertical
-        }
-    }
-    Component {
-        id: activeWindowCompExpressive
-        ExpressiveActiveWindow {
-            vertical: rootItem.vertical
-        }
     }
 }

@@ -51,9 +51,9 @@ class BarPanelButtonDesignsContractTest(unittest.TestCase):
         self.assertIn('if (style === "outline")', router)
         self.assertIn('if (style === "orbs")', router)
         self.assertIn('if (style === "segments")', router)
-        self.assertIn("OutlinePoliciesPanelButton {", router)
-        self.assertIn("OrbsDashboardPanelButton {", router)
-        self.assertIn("SegmentedUtilButtons {", router)
+        self.assertIn("/OutlinePoliciesPanelButton.qml", router)
+        self.assertIn("/OrbsDashboardPanelButton.qml", router)
+        self.assertIn("/SegmentedUtilButtons.qml", router)
         # Both draw their own surface, so no style but `default` may get a chip
         # painted behind it.
         self.assertIn('Config.options.bar.styles.policies !== "default"', router)
