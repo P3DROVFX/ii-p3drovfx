@@ -353,6 +353,7 @@ Scope {
     PanelUrlLoader {
         extraCondition: GlobalStates.connectModeActive
         panelUrl: Qt.resolvedUrl("../modules/ii/topLayer/TopLayer.qml")
+        priority: 4 // Carries the bar in connect mode: first paint
     }
     PanelUrlLoader {
         extraCondition: IslandPolicy.enabled

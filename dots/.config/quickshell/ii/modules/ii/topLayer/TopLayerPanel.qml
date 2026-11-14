@@ -197,6 +197,8 @@ PanelWindow {
     }
 
     Component.onCompleted: {
+        if (PanelSchedule.idle)
+            topPanel.sidebarPreloadAllowed = true;
         if (GlobalStates.leftSidebarTargetWidth > 0 && topPanel.leftSidebarWarmOnMonitor) {
             topPanel.leftSidebarMaskWidth = GlobalStates.leftSidebarTargetWidth;
         }
@@ -209,13 +211,25 @@ PanelWindow {
 
     readonly property bool leftSidebarOpenOnMonitor: GlobalStates.sidebarLeftOpen && screen.name === GlobalStates.effectiveLeftMonitor
     readonly property bool rightSidebarOpenOnMonitor: GlobalStates.sidebarRightOpen && screen.name === GlobalStates.effectiveRightMonitor
-    readonly property bool keepRightSidebarContentLoaded: Config.ready && Config.options.sidebar.keepRightSidebarLoaded
+    /// The "keep loaded" sidebars are built only once the panel queue has drained. In
+    /// connect mode this window also carries the bar, and building both sidebars with it
+    /// delayed the first paint after login. Latched: a later preset hold must not unload them.
+    property bool sidebarPreloadAllowed: false
+    Connections {
+        target: PanelSchedule
+        enabled: !topPanel.sidebarPreloadAllowed
+        function onIdleChanged() {
+            if (PanelSchedule.idle)
+                topPanel.sidebarPreloadAllowed = true;
+        }
+    }
+    readonly property bool keepRightSidebarContentLoaded: topPanel.sidebarPreloadAllowed && Config.ready && Config.options.sidebar.keepRightSidebarLoaded
     // Every screen has a TopLayerPanel; only the one the sidebar opens on (the
     // warm monitor, which follows the last open) builds and keeps its content.
     // Without the monitor test each screen built both sidebars - on two
     // monitors the kept-loaded dashboard and policies were paid twice.
     readonly property bool rightSidebarContentWanted: (GlobalStates.sidebarRightOpen || topPanel.keepRightSidebarContentLoaded) && topPanel.rightSidebarWarmOnMonitor
-    readonly property bool keepLeftSidebarContentLoaded: Config.ready && Config.options.sidebar.keepLeftSidebarLoaded
+    readonly property bool keepLeftSidebarContentLoaded: topPanel.sidebarPreloadAllowed && Config.ready && Config.options.sidebar.keepLeftSidebarLoaded
     readonly property bool leftSidebarContentWanted: (GlobalStates.sidebarLeftOpen || topPanel.keepLeftSidebarContentLoaded) && topPanel.leftSidebarWarmOnMonitor
     readonly property bool leftSidebarActiveOnMonitor: (GlobalStates.animatedLeftSidebarWidth > 0 || GlobalStates.sidebarLeftOpen) && screen.name === GlobalStates.effectiveLeftMonitor && !(GlobalStates.policiesDetached && topPanel.policiesRenderedOnLeft)
     readonly property bool rightSidebarActiveOnMonitor: (GlobalStates.animatedRightSidebarWidth > 0 || GlobalStates.sidebarRightOpen) && screen.name === GlobalStates.effectiveRightMonitor && !(GlobalStates.policiesDetached && topPanel.policiesRenderedOnRight)
