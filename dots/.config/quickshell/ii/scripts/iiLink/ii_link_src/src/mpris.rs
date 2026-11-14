@@ -38,6 +38,8 @@ struct Track {
     artist: String,
     album: String,
     art: String,
+    /// The track's web page, when the phone's app gives one.
+    url: String,
     playing: bool,
     /// ms, at `at`.
     position: i64,
@@ -191,6 +193,9 @@ impl Player {
         if !t.album.is_empty() {
             m.insert("xesam:album".into(), owned(ZValue::from(t.album.clone())));
         }
+        if t.url.starts_with("http") {
+            m.insert("xesam:url".into(), owned(ZValue::from(t.url.clone())));
+        }
         m
     }
     #[zbus(property)]
@@ -260,6 +265,7 @@ pub async fn run(mut rx: mpsc::UnboundedReceiver<Event>, art_dir: PathBuf) {
                     title: m["title"].as_str().unwrap_or("").to_string(),
                     artist: m["artist"].as_str().unwrap_or("").to_string(),
                     album: m["album"].as_str().unwrap_or("").to_string(),
+                    url: m["url"].as_str().unwrap_or("").to_string(),
                     playing: m["playing"].as_bool().unwrap_or(false),
                     position: m["position"].as_i64().unwrap_or(0),
                     at: Some(Instant::now()),
@@ -286,7 +292,7 @@ pub async fn run(mut rx: mpsc::UnboundedReceiver<Event>, art_dir: PathBuf) {
                 if let Some(live) = players.get(&key) {
                     let Ok(iface) = live.conn.object_server().interface::<_, Player>(PATH).await else { continue };
                     let mut p = iface.get_mut().await;
-                    let new_track = p.track.title != track.title || p.track.artist != track.artist || p.track.album != track.album;
+                    let new_track = p.track.title != track.title || p.track.artist != track.artist || p.track.album != track.album || p.track.url != track.url;
                     if track.art.is_empty() && !new_track {
                         track.art = p.track.art.clone();
                     }

@@ -1613,13 +1613,51 @@ Singleton {
             canSeek: (p.canSeek ?? false) && MprisController.hasTrackLength(p),
             art: root._pcArt,
             // The page being played (browsers, YouTube…): lets the phone continue it.
-            url: root._pcUrl(p)
+            url: root.playerUrl(p)
         };
     }
 
-    function _pcUrl(player): string {
+    function playerUrl(player): string {
         const u = String(player?.metadata?.["xesam:url"] ?? "");
         return /^https?:\/\//i.test(u) ? u : "";
+    }
+
+    /// [url] at [seconds] where the site takes one: YouTube and Twitch videos `t=`, Vimeo `#t=`;
+    /// anything else opens from the start.
+    function urlAt(url, seconds): string {
+        const s = Math.floor(Number(seconds) || 0);
+        const m = /^https?:\/\/(?:www\.|m\.)?([^\/?#]+)(\/[^?#]*)?/i.exec(url);
+        if (!m || s < 3)
+            return url;
+        const host = m[1].toLowerCase();
+        const path = m[2] ?? "";
+        const hash = url.indexOf("#");
+        const frag = hash >= 0 ? url.slice(hash) : "";
+        const base = hash >= 0 ? url.slice(0, hash) : url;
+        const withParam = value => {
+            const clean = base.replace(/([?&])(t|start)=[^&]*&?/g, "$1").replace(/[?&]$/, "");
+            return `${clean}${clean.includes("?") ? "&" : "?"}t=${value}${frag}`;
+        };
+        if (host === "youtube.com" || host === "music.youtube.com" || host === "youtu.be")
+            return withParam(`${s}s`);
+        if (host.endsWith("twitch.tv") && path.startsWith("/videos/"))
+            return withParam(`${Math.floor(s / 3600)}h${Math.floor(s % 3600 / 60)}m${s % 60}s`);
+        if (host === "vimeo.com" || host === "player.vimeo.com")
+            return `${base}#t=${s}s`;
+        return url;
+    }
+
+    /// Media handoff, phone to PC: the page the phone plays (its app gave a web URL) opens
+    /// in the browser at the same point, and the phone's player is paused. False when the
+    /// player has no page.
+    function continueOnPc(player): bool {
+        const url = root.playerUrl(player);
+        if (url === "")
+            return false;
+        Quickshell.execDetached(["xdg-open", root.urlAt(url, MprisController.trackPositionOf(player))]);
+        if (player.isPlaying)
+            player.pause();
+        return true;
     }
 
     // Locking the PC while a web page plays offers the phone to continue it at the same
@@ -1631,7 +1669,7 @@ Singleton {
             if (!GlobalStates.screenLocked)
                 return;
             const p = root.pcMediaPlayer;
-            const url = root._pcUrl(p);
+            const url = root.playerUrl(p);
             if (!p || !p.isPlaying || url === "")
                 return;
             root.sendTo(root.handoffDev, {

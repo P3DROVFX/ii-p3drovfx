@@ -68,4 +68,28 @@ Item {
         tile: mediaTile
         playerOverride: root.player
     }
+
+    // Media handoff: a phone app that gives the track's web page can continue it here.
+    readonly property string pageUrl: IiLinkService.playerUrl(root.player)
+    RippleButton {
+        visible: root.pageUrl !== ""
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.margins: 8
+        implicitWidth: 34
+        implicitHeight: 34
+        buttonRadius: Appearance.rounding.full
+        colBackground: Appearance.colors.colSecondaryContainer
+        colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+        colRipple: Appearance.colors.colSecondaryContainerActive
+        onClicked: IiLinkService.continueOnPc(root.player)
+        contentItem: MaterialSymbol {
+            text: "computer"
+            iconSize: 18
+            color: Appearance.colors.colOnSecondaryContainer
+        }
+        StyledToolTip {
+            text: Translation.tr("Continue on PC")
+        }
+    }
 }
