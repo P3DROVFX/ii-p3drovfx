@@ -44,6 +44,15 @@ pub enum Cmd {
     /// A phone opened its slide clicker: the keyboard alone, no touchpad.
     Keys { dev: String, reply: Box<dyn Fn(Value) + Send> },
     Stop { dev: String },
+    /// The phone became a screen here (screen.rs): a touchscreen of that many pixels,
+    /// which the shell maps onto the output it shows.
+    ScreenStart { w: i32, h: i32 },
+    /// Every finger on the phone's screen, x and y in 0–1 of the picture.
+    ScreenFrame { fingers: Vec<(i64, f64, f64)> },
+    /// Typed on the phone's keyboard over its screen: text as is, or one named key.
+    ScreenText { text: String },
+    ScreenKey { key: String, mods: Vec<String> },
+    ScreenStop,
 }
 
 pub fn spawn() -> mpsc::Sender<Cmd> {
@@ -59,8 +68,38 @@ fn run(rx: mpsc::Receiver<Cmd>) {
     let mut owner = String::new();
     let mut pad: Option<Pad> = None;
     let mut kbd: Option<Keyboard> = None;
+    // Apart from the touchpad: one phone can be a screen while another is a touchpad.
+    let mut screen: Option<Pad> = None;
+    // Its own keyboard, made on the first key: most screens never type.
+    let mut screen_kbd: Option<Keyboard> = None;
     for cmd in rx {
         match cmd {
+            Cmd::ScreenStart { w, h } => screen = Pad::screen(w, h).ok(),
+            Cmd::ScreenFrame { fingers } => {
+                if let Some(p) = screen.as_mut() {
+                    let _ = p.frame(&fingers);
+                }
+            }
+            Cmd::ScreenText { text } if screen.is_some() => {
+                if screen_kbd.is_none() {
+                    screen_kbd = Keyboard::new().ok();
+                }
+                if let Some(k) = screen_kbd.as_mut() {
+                    let _ = k.text(&text);
+                }
+            }
+            Cmd::ScreenKey { key, mods } if screen.is_some() => {
+                if screen_kbd.is_none() {
+                    screen_kbd = Keyboard::new().ok();
+                }
+                if let Some(k) = screen_kbd.as_mut() {
+                    let _ = k.key(&key, &mods);
+                }
+            }
+            Cmd::ScreenStop => {
+                screen = None;
+                screen_kbd = None;
+            }
             Cmd::Start { dev, w, h, reply } => {
                 owner = dev;
                 pad = None;
@@ -124,6 +163,8 @@ struct Pad {
     /// finger id → slot.
     slots: HashMap<i64, i32>,
     tracking: i32,
+    /// A touchscreen (the phone as a screen) rather than a touchpad: no finger-count tools.
+    direct: bool,
 }
 
 impl Pad {
@@ -158,7 +199,30 @@ impl Pad {
             .with_absolute_axis(&axis(AbsoluteAxisCode::ABS_MT_POSITION_X, max_x))?
             .with_absolute_axis(&axis(AbsoluteAxisCode::ABS_MT_POSITION_Y, max_y))?
             .build()?;
-        Ok(Pad { dev, max_x, max_y, slots: HashMap::new(), tracking: 0 })
+        Ok(Pad { dev, max_x, max_y, slots: HashMap::new(), tracking: 0, direct: false })
+    }
+
+    /// A touchscreen as large as the output it stands for, in pixels; Hyprland maps it
+    /// there (`hl.device({ name = "ii-tools-screen", output = … })`).
+    fn screen(w: i32, h: i32) -> std::io::Result<Pad> {
+        let (max_x, max_y) = (w.clamp(16, 16384) - 1, h.clamp(16, 16384) - 1);
+        let mut keys = AttributeSet::<KeyCode>::new();
+        keys.insert(KeyCode::BTN_TOUCH);
+        let mut props = AttributeSet::<PropType>::new();
+        props.insert(PropType::DIRECT);
+        let axis = |code, max| UinputAbsSetup::new(code, AbsInfo::new(0, 0, max, 0, 0, 0));
+        let dev = VirtualDevice::builder()?
+            .name("ii tools screen")
+            .with_keys(&keys)?
+            .with_properties(&props)?
+            .with_absolute_axis(&axis(AbsoluteAxisCode::ABS_X, max_x))?
+            .with_absolute_axis(&axis(AbsoluteAxisCode::ABS_Y, max_y))?
+            .with_absolute_axis(&UinputAbsSetup::new(AbsoluteAxisCode::ABS_MT_SLOT, AbsInfo::new(0, 0, SLOTS - 1, 0, 0, 0)))?
+            .with_absolute_axis(&UinputAbsSetup::new(AbsoluteAxisCode::ABS_MT_TRACKING_ID, AbsInfo::new(0, 0, 65535, 0, 0, 0)))?
+            .with_absolute_axis(&axis(AbsoluteAxisCode::ABS_MT_POSITION_X, max_x))?
+            .with_absolute_axis(&axis(AbsoluteAxisCode::ABS_MT_POSITION_Y, max_y))?
+            .build()?;
+        Ok(Pad { dev, max_x, max_y, slots: HashMap::new(), tracking: 0, direct: true })
     }
 
     fn frame(&mut self, fingers: &[(i64, f64, f64)]) -> std::io::Result<()> {
@@ -202,6 +266,8 @@ impl Pad {
         let now = self.slots.len();
         if now != was {
             ev.push(key(KeyCode::BTN_TOUCH, now > 0));
+        }
+        if now != was && !self.direct {
             for (n, k) in [
                 (1, KeyCode::BTN_TOOL_FINGER),
                 (2, KeyCode::BTN_TOOL_DOUBLETAP),

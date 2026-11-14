@@ -30,7 +30,7 @@ Item {
         const o = Config.options.iiTools;
         return [
             o.remote.enable, o.audio.enable, o.liveUpdates.enable, o.pcLive.enable,
-            o.media.enable, o.pcMedia.enable, o.files.enable, o.touchpad.enable, o.draw.enable, o.present.enable,
+            o.media.enable, o.pcMedia.enable, o.files.enable, o.touchpad.enable, o.draw.enable, o.present.enable, o.screen.enable,
             o.perf.enable, o.phoneData.enable, o.screenshots.enable, o.clipboard.enable,
             o.share.enable, o.notifications.enable, o.calls.enable, o.callAudio.enable, o.wallpaper.enable, o.look.enable,
             o.deck.enable, o.wol.enable
@@ -620,6 +620,18 @@ Item {
                     ColorsFeatureTile {
                         width: controlTilesBox.tileWidth
                         height: 152
+                        symbol: "screen_share"
+                        shapeOn: MaterialShape.Shape.Sunny
+                        shapeOff: MaterialShape.Shape.Circle
+                        title: Translation.tr("Phone as a monitor")
+                        summary: Translation.tr("Extend or mirror this PC on the phone over USB, touch included")
+                        checked: Config.options.iiTools.screen.enable
+                        onToggled: value => Config.options.iiTools.screen.enable = value
+                    }
+
+                    ColorsFeatureTile {
+                        width: controlTilesBox.tileWidth
+                        height: 152
                         symbol: "speed"
                         shapeOn: MaterialShape.Shape.Cookie7Sided
                         shapeOff: MaterialShape.Shape.Circle
@@ -703,6 +715,15 @@ Item {
                         onToggled: value => Config.options.iiTools.wol.enable = value
                     }
                 }
+            }
+
+            // The screen goes over USB: adb carries it.
+            AppSettingRow {
+                Layout.topMargin: 4
+                visible: Config.options.iiTools.screen.enable && !PhoneScreenService.adbPresent
+                symbol: "usb"
+                title: Translation.tr("Install adb for the phone as a monitor")
+                description: Translation.tr("The screen goes over USB through adb (android-tools); turn on USB debugging on the phone.")
             }
         }
 

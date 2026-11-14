@@ -172,6 +172,7 @@ Singleton {
         .concat(root.touchpadEnabled ? ["touchpad"] : [])
         .concat(root.drawEnabled && LiveDraw.enabled ? ["draw"] : [])
         .concat(root.presentEnabled ? ["present"] : [])
+        .concat(PhoneScreenService.enabled ? ["screen"] : [])
 
     // What is on right now, read from the same state the shell itself draws from.
     readonly property bool _aodUp: (GlobalStates.oledSaverMonitors ?? []).length > 0
@@ -2056,6 +2057,9 @@ Singleton {
         case "present":
             root._present(dev, m);
             return;
+        case "screen":
+            PhoneScreenService.handleMessage(dev, m);
+            return;
         case "caps": {
             const next = Object.assign({}, root.phoneCaps);
             next[dev] = Array.isArray(m.caps) ? m.caps.map(String) : [];
@@ -2188,6 +2192,11 @@ Singleton {
         case "fileProgress":
             if (root._transferMatches(String(ev.dev), ev.id))
                 root._setTransfer({ received: Number(ev.received ?? 0) });
+            break;
+        case "screen":
+        case "screenLive":
+        case "screenEnd":
+            PhoneScreenService.handleEvent(ev);
             break;
         case "fileAbort":
             if (root._transferMatches(String(ev.dev), ev.id) && root.transfer.state === "receiving")

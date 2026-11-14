@@ -6,7 +6,7 @@ description = "ii link helper for the Quickshell ii shell: the TLS WebSocket the
 
 [dependencies]
 # One thread, woken only by a socket or stdin: the helper idles at zero wakeups.
-tokio = { version = "1", default-features = false, features = ["rt", "net", "io-util", "io-std", "macros", "sync", "time"] }
+tokio = { version = "1", default-features = false, features = ["rt", "net", "io-util", "io-std", "macros", "sync", "time", "process"] }
 # ring rather than aws-lc: no C toolchain or cmake in the build.
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring"] }

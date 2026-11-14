@@ -227,6 +227,41 @@ Overlay surface with no input, mapped only while the dot shows).
 | phone → shell | `{"t":"present","laser":[x,y]}` / `{"t":"present","laser":null}` | The laser at x, y (0–1 of the screen focused when it went down) on every touch event / off. |
 | helper → phone | `{"t":"present","err":"disabled"\|"keyboard"}` | Off in Settings / the compositor has no virtual keyboard. |
 
+## Second screen
+
+The phone as a monitor (cap `screen` in the shell's hello; Settings → ii tools → Phone as a
+monitor, `iiTools.screen`). **USB only for now:** the video does not ride the link but a
+plain socket the helper binds on 127.0.0.1, which `adb reverse` brings to the phone. The
+shell (`PhoneScreenService`) finds the phone in `adb devices -l` (a USB entry, by model),
+makes the output (extend: `hyprctl output create headless II-PHONE` at the phone's size
+times `res`, `fps` and `scale`, placed against the screen that had focus on the chosen
+`side`, centred, or the next free side; mirror: the focused screen) and maps the
+helper's touchscreen (`ii-tools-screen`) onto it with `hl.device`, again after a config
+reload. Whatever it made goes when the session ends.
+
+| Direction | Message | |
+| --- | --- | --- |
+| phone → shell | `{"t":"screen","a":"start","mode":"extend"\|"mirror","w":px,"h":px,"res":1\|0.75\|0.5,"fps":30\|60\|90\|120,"scale":1\|1.25\|1.5\|2,"side":"left"\|"right"\|"above"\|"below","bitrate":Mbps}` | `w`×`h`: the phone's whole display, held sideways. The phone's settings; mirror uses only the bitrate. |
+| phone → shell | `{"t":"screen","a":"monitors"}` → `{"t":"screen","monitors":[{"name","label","w","h","focused"}]}` | The PC's screens, for mirror's choice (`"output"` in `start`, `""` for the focused one). |
+| phone → shell | `{"t":"screen","a":"switch","output":name\|"next"}` | Mirror another screen without stopping: the capture starts again there (`{"op":"screen","a":"output","output"}` to the helper) and the phone gets `state: "size"` with `w`, `h`, `output`. |
+| phone → shell | `{"t":"screen","a":"draw"}` | The floating toolbar: focus the phone's output and toggle live draw there. |
+| shell → phone | `{"t":"screen","state":"starting"\|"ready"\|"live"\|"stopped","port"?,"token"?,"w"?,"h"?,"mode"?,"encoder"?,"reason"?}` | `ready` carries the port to connect to on 127.0.0.1 and the one-time token; `w`×`h` is the picture. |
+| shell → phone | `{"t":"screen","err":"disabled"\|"adb"\|"usb"\|"unauthorized"\|"busy"\|"encoder"\|"timeout"\|"output"\|"bind"\|"encoder_exit"}` | `adb`: no adb on the PC; `usb`: the phone is not on USB with debugging; `unauthorized`: debugging not allowed for this PC. |
+| phone → shell | `{"t":"screen","a":"stop"}` | Leaving the picture ends it. |
+
+Helper ops: `{"op":"screen","a":"start","dev","sid","output","token","w","h","bitrate"}` /
+`{"op":"screen","a":"stop"}`; events `{"ev":"screen","dev","sid","port"}`,
+`{"ev":"screenLive","dev","sid","encoder"}` (`nvenc`, `vaapi` or `x264`) and
+`{"ev":"screenEnd","dev","sid","reason"}`.
+
+On the socket (screen.rs): the phone sends the token and `\n`, then touch frames `[1][n]`
+and n × `[u8 id][u16 x][u16 y]` (every finger down, 0–65535 of the picture), typed text
+`[2][u16 n][utf-8]` and named keys `[3][u8 n][name][u8 mods]` (1 shift, 2 ctrl, 4 alt,
+8 super) for a keyboard of its own the helper makes on the first key. The PC sends
+`[u32 length][u8 kind][u64 pts µs][Annex-B H.264]`, kind 0 the SPS/PPS, 1 a frame, 2 a key
+frame. wf-recorder captures and encodes (FLV out, one tag per frame); a still screen
+sends nothing. The phone has 60 s to connect; the session ends when the socket closes.
+
 ## Touchpad and keyboard
 
 The phone as this PC's touchpad and keyboard (cap `touchpad` in the shell's hello;

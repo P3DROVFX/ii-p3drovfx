@@ -13,6 +13,7 @@ mod files;
 mod icons;
 mod input;
 mod mpris;
+mod screen;
 
 use std::collections::HashMap;
 use std::fs;
@@ -87,6 +88,8 @@ struct Shared {
     /// Whether a phone may be a slide clicker here (the shell's setting).
     present: bool,
     input_tx: std::sync::mpsc::Sender<input::Cmd>,
+    /// The phone being a screen here (one at a time), and its device.
+    screen: Option<(String, tokio::task::AbortHandle, tokio::sync::watch::Sender<String>)>,
 }
 
 type State = Arc<Mutex<Shared>>;
@@ -648,6 +651,47 @@ fn handle_op(state: &State, line: &str) {
                 }
             }
         }
+        // The phone as a screen (screen.rs): the shell made the output and runs adb.
+        "screen" => {
+            let mut s = state.lock().unwrap();
+            // Another screen for the running session (mirror's switch).
+            if op["a"] == "output" {
+                if let (Some((_, _, out)), Some(name)) = (s.screen.as_ref(), op["output"].as_str()) {
+                    let _ = out.send(name.to_string());
+                }
+                return;
+            }
+            if let Some((_, task, _)) = s.screen.take() {
+                task.abort();
+            }
+            if op["a"] != "start" {
+                return;
+            }
+            let dev = op["dev"].as_str().unwrap_or("").to_string();
+            let sid = op["sid"].as_u64().unwrap_or(0);
+            let (out_tx, out_rx) = tokio::sync::watch::channel(op["output"].as_str().unwrap_or("").to_string());
+            let params = screen::Params {
+                dev: dev.clone(),
+                sid,
+                output: out_rx,
+                token: op["token"].as_str().unwrap_or("").to_string(),
+                w: op["w"].as_i64().unwrap_or(1920) as i32,
+                h: op["h"].as_i64().unwrap_or(1080) as i32,
+                bitrate: op["bitrate"].as_u64().unwrap_or(16_000_000).clamp(1_000_000, 80_000_000),
+                input_tx: s.input_tx.clone(),
+            };
+            if params.output.borrow().is_empty() || params.token.len() < 16 {
+                emit(json!({"ev": "screenEnd", "dev": dev, "sid": sid, "reason": "bad_arg"}));
+                return;
+            }
+            match screen::start(params) {
+                Ok((port, task)) => {
+                    s.screen = Some((dev.clone(), task, out_tx));
+                    emit(json!({"ev": "screen", "dev": dev, "sid": sid, "port": port}));
+                }
+                Err(_) => emit(json!({"ev": "screenEnd", "dev": dev, "sid": sid, "reason": "bind"})),
+            }
+        }
         "kick" => {
             let dev = op["dev"].as_str().unwrap_or("");
             let s = state.lock().unwrap();
@@ -760,6 +804,7 @@ async fn main() {
         touchpad: false,
         present: false,
         input_tx: input::spawn(),
+        screen: None,
     }));
 
     emit(json!({"ev": "ready", "port": port, "fp": fingerprint, "name": name, "addrs": addresses(), "wake": wake_targets(), "discovery": udp.is_some()}));
