@@ -15,6 +15,10 @@ Item {
     // URL of the open sub-page; empty = closed. Resolve relative paths at the
     // call site (Qt.resolvedUrl) so they stay relative to the caller's file.
     property url activeSubPage: ""
+    // Build the sub-page in one go. Async incubation only gets ~2 ms per frame
+    // while the slide (or anything else) animates, so a big page sat empty for
+    // seconds; built synchronously the same page costs one ~60 ms frame.
+    property bool asynchronous: true
     readonly property bool isOpen: activeSubPage.toString() !== ""
     readonly property alias subPageItem: subPageLoader.item
     signal subPageLoaded(var item)
@@ -177,7 +181,7 @@ Item {
             anchors.fill: parent
             source: host.activeSubPage
             active: slider.overlayActive
-            asynchronous: true
+            asynchronous: host.asynchronous
             onLoaded: {
                 if (item.hasOwnProperty("showBackButton"))
                     item.showBackButton = true;

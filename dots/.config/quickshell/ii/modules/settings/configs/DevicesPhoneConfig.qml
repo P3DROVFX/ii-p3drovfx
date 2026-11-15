@@ -24,6 +24,13 @@ Item {
     property alias activeSubPage: subPageOverlay.activeSubPage
 
     property int loadStage: 0
+    // Compile the ii tools page off the main thread once this page shows, so
+    // the first Configure only pays for building it (~140 ms, not ~490 ms).
+    property var iiToolsPageComponent: null
+    onLoadStageChanged: {
+        if (loadStage >= 1 && !iiToolsPageComponent)
+            iiToolsPageComponent = Qt.createComponent(Qt.resolvedUrl("devices/IiToolsConfig.qml"), Component.Asynchronous);
+    }
     onVisibleChanged: {
         if (!visible)
             return;
@@ -43,16 +50,6 @@ Item {
     readonly property string activeService: KdeConnectService.activePhoneService
     readonly property bool iiActive: activeService === "iiTools"
     readonly property bool kdeActive: activeService === "kdeconnect"
-    readonly property int iiModuleCount: {
-        const o = Config.options.iiTools;
-        return [
-            o.remote.enable, o.audio.enable, o.liveUpdates.enable, o.pcLive.enable,
-            o.media.enable, o.pcMedia.enable, o.files.enable, o.touchpad.enable,
-            o.perf.enable, o.phoneData.enable, o.screenshots.enable, o.clipboard.enable,
-            o.share.enable, o.notifications.enable, o.calls.enable, o.wallpaper.enable,
-            o.deck.enable, o.wol.enable
-        ].filter(Boolean).length;
-    }
     readonly property int kdePairedCount: KdeConnectService._kdeDevices
         ? KdeConnectService._kdeDevices.filter(d => d.paired).length
         : 0
@@ -136,7 +133,7 @@ Item {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
                     lineHeight: 1.25
-                    text: Translation.tr("Pick one phone bridge, share files over LAN with LocalSend, or customize Bluetooth artwork.")
+                    text: Translation.tr("Bring your Android phone in with ii tools, share files over LAN with LocalSend, or customize Bluetooth artwork.")
                     font.pixelSize: Appearance.font.pixelSize.small
                     color: Appearance.colors.colSubtext
                 }
@@ -193,7 +190,7 @@ Item {
             visible: Config.options.policies.phone !== 0
             symbol: "smartphone"
             title: Translation.tr("Phone integration")
-            description: Translation.tr("Choose one phone service for notifications, media, scrcpy, and toggles. ii tools and KDE Connect never run together.")
+            description: Translation.tr("One phone bridge at a time. ii tools is the companion built for this shell; KDE Connect stays available as the alternative.")
 
             PhoneServiceSelector {
                 Layout.fillWidth: true
@@ -203,97 +200,77 @@ Item {
                 onSelected: service => KdeConnectService.selectPhoneService(service)
             }
 
-            GridLayout {
+            // One card at a time, following the selector: ii tools (also while
+            // Off, as the recommended bridge) or KDE Connect, full width.
+            IiToolsPromoCard {
                 Layout.fillWidth: true
-                columns: root.width >= 680 ? 2 : 1
-                columnSpacing: 14
-                rowSpacing: 14
-
-                PhoneServiceCard {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    Layout.preferredWidth: 1
-
-                    overline: Translation.tr("COMPANION APP")
-                    title: Translation.tr("ii tools")
-                    description: Translation.tr("Encrypted LAN & Tailscale bridge for live updates, remote deck, calls, clipboard, and media.")
-                    symbol: "phonelink"
-                    shapeActive: MaterialShape.Shape.Cookie7Sided
-                    shapeIdle: MaterialShape.Shape.Circle
-                    active: root.iiActive
-                    connected: root.iiActive && IiLinkService.phoneConnected
-                    switchEnabled: Config.options.policies.phone !== 0
-
-                    primaryStatLabel: Translation.tr("Paired phone")
-                    primaryStatValue: {
-                        if (IiLinkService.phoneConnected && IiLinkService.connectedList.length > 0) {
-                            const c = IiLinkService.connectedList[0];
-                            const lvl = IiLinkService.phoneStatus?.battery?.level ?? -1;
-                            const name = c.name || c.model || Translation.tr("Phone");
-                            return lvl >= 0 ? `${name} · ${lvl}%` : name;
-                        }
-                        if (IiLinkService.hasPeers)
-                            return IiLinkService.peers[0].name || IiLinkService.peers[0].model || Translation.tr("1 paired");
-                        return Translation.tr("None paired");
+                visible: !root.kdeActive
+                active: root.iiActive
+                connected: root.iiActive && IiLinkService.phoneConnected
+                switchEnabled: Config.options.policies.phone !== 0
+                statusText: {
+                    if (!root.iiActive)
+                        return Translation.tr("Not in use");
+                    if (IiLinkService.phoneConnected && IiLinkService.connectedList.length > 0) {
+                        const c = IiLinkService.connectedList[0];
+                        const lvl = IiLinkService.phoneStatus?.battery?.level ?? -1;
+                        const name = c.name || c.model || Translation.tr("Phone");
+                        return lvl >= 0 ? `${name} · ${lvl}%` : name;
                     }
-                    secondaryStatLabel: Translation.tr("Modules")
-                    secondaryStatValue: Translation.tr("%1 / 18 on").arg(root.iiModuleCount)
-
-                    statusText: !root.iiActive
-                        ? Translation.tr("Standby")
-                        : (IiLinkService.phoneConnected ? Translation.tr("Connected") : Translation.tr("Active"))
-                    actionLabel: Translation.tr("Configure")
-                    actionIcon: "tune"
-                    onToggled: wantActive => KdeConnectService.selectPhoneService(wantActive ? "iiTools" : "off")
-                    onActionRequested: subPageOverlay.open(Qt.resolvedUrl("devices/IiToolsConfig.qml"))
+                    if (IiLinkService.pairingRequested || IiLinkService.pairing !== null)
+                        return Translation.tr("Pairing…");
+                    if (IiLinkService.hasPeers)
+                        return Translation.tr("Paired · waiting for phone");
+                    return Translation.tr("No phone paired");
                 }
+                onToggled: wantActive => KdeConnectService.selectPhoneService(wantActive ? "iiTools" : "off")
+                onConfigureRequested: subPageOverlay.open(Qt.resolvedUrl("devices/IiToolsConfig.qml"))
+            }
 
-                PhoneServiceCard {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    Layout.preferredWidth: 1
+            PhoneServiceCard {
+                Layout.fillWidth: true
+                visible: root.kdeActive
 
-                    overline: Translation.tr("SYSTEM SERVICE")
-                    title: Translation.tr("KDE Connect")
-                    description: Translation.tr("System daemon for device discovery, clipboard, file share, remote commands, and scrcpy.")
-                    symbol: "smartphone"
-                    shapeActive: MaterialShape.Shape.Sunny
-                    shapeIdle: MaterialShape.Shape.Circle
-                    active: root.kdeActive
-                    connected: root.kdeActive && KdeConnectService.activeReachable
-                    switchEnabled: Config.options.policies.phone !== 0
+                overline: Translation.tr("SYSTEM SERVICE")
+                title: Translation.tr("KDE Connect")
+                description: Translation.tr("System daemon for device discovery, clipboard, file share, remote commands, and scrcpy.")
+                symbol: "smartphone"
+                shapeActive: MaterialShape.Shape.Sunny
+                shapeIdle: MaterialShape.Shape.Circle
+                active: root.kdeActive
+                connected: root.kdeActive && KdeConnectService.activeReachable
+                switchEnabled: Config.options.policies.phone !== 0
 
-                    primaryStatLabel: Translation.tr("Paired devices")
-                    primaryStatValue: {
-                        if (root.kdeActive && KdeConnectService.activeReachable && !KdeConnectService.activeIsIi) {
-                            const name = KdeConnectService.activeDeviceDisplayName || Translation.tr("Phone");
-                            const ch = KdeConnectService.activeDevice?.charge ?? -1;
-                            return ch >= 0 ? `${name} · ${Math.round(ch)}%` : name;
-                        }
-                        return root.kdePairedCount > 0
-                            ? Translation.tr("%1 paired").arg(root.kdePairedCount)
-                            : Translation.tr("None paired");
+                primaryStatLabel: Translation.tr("Paired devices")
+                primaryStatValue: {
+                    if (root.kdeActive && KdeConnectService.activeReachable && !KdeConnectService.activeIsIi) {
+                        const name = KdeConnectService.activeDeviceDisplayName || Translation.tr("Phone");
+                        const ch = KdeConnectService.activeDevice?.charge ?? -1;
+                        return ch >= 0 ? `${name} · ${Math.round(ch)}%` : name;
                     }
-                    secondaryStatLabel: Translation.tr("Daemon")
-                    secondaryStatValue: !root.kdeActive
-                        ? Translation.tr("Dormant")
-                        : (KdeConnectService.available ? Translation.tr("Running") : Translation.tr("Missing"))
+                    return root.kdePairedCount > 0
+                        ? Translation.tr("%1 paired").arg(root.kdePairedCount)
+                        : Translation.tr("None paired");
+                }
+                secondaryStatLabel: Translation.tr("Daemon")
+                secondaryStatValue: !root.kdeActive
+                    ? Translation.tr("Dormant")
+                    : (KdeConnectService.available ? Translation.tr("Running") : Translation.tr("Missing"))
 
-                    statusText: !root.kdeActive
-                        ? Translation.tr("Standby")
-                        : (KdeConnectService.activeReachable ? Translation.tr("Connected") : Translation.tr("Active"))
-                    actionLabel: root.kdeActive
-                        ? Translation.tr("Open app")
-                        : Translation.tr("Use KDE Connect")
-                    actionIcon: root.kdeActive ? "open_in_new" : "check"
-                    showAction: !root.kdeActive || KdeConnectService.available
-                    onToggled: wantActive => KdeConnectService.selectPhoneService(wantActive ? "kdeconnect" : "off")
-                    onActionRequested: {
-                        if (!root.kdeActive) {
-                            KdeConnectService.selectPhoneService("kdeconnect");
-                        } else {
-                            Quickshell.execDetached(["kdeconnect-app"]);
-                        }
+                statusText: !root.kdeActive
+                    ? Translation.tr("Standby")
+                    : (KdeConnectService.activeReachable ? Translation.tr("Connected") : Translation.tr("Active"))
+                actionLabel: root.kdeActive
+                    ? Translation.tr("Open app")
+                    : Translation.tr("Use KDE Connect")
+                actionIcon: root.kdeActive ? "open_in_new" : "check"
+                showAction: !root.kdeActive || KdeConnectService.available
+                onToggled: wantActive => KdeConnectService.selectPhoneService(wantActive ? "kdeconnect" : "off")
+                onActionRequested: {
+                    if (!root.kdeActive) {
+                        KdeConnectService.selectPhoneService("kdeconnect");
+                    } else {
+                        Quickshell.execDetached(["kdeconnect-app"]);
                     }
                 }
             }
@@ -322,6 +299,7 @@ Item {
         id: subPageOverlay
         anchors.fill: parent
         z: 10
+        asynchronous: false
     }
 
     component HeroStatusPill: Rectangle {

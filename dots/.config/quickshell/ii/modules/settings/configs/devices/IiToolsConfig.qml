@@ -28,7 +28,7 @@ Item {
     property string notifAppsQuery: ""
 
     readonly property bool isSelected: KdeConnectService.activePhoneService === "iiTools"
-    readonly property int enabledModuleCount: {
+    readonly property var moduleFlags: {
         const o = Config.options.iiTools;
         return [
             o.remote.enable, o.audio.enable, o.liveUpdates.enable, o.pcLive.enable,
@@ -36,8 +36,9 @@ Item {
             o.perf.enable, o.phoneData.enable, o.screenshots.enable, o.clipboard.enable,
             o.share.enable, o.notifications.enable, o.calls.enable, o.callAudio.enable, o.wallpaper.enable, o.look.enable,
             o.deck.enable, o.wol.enable
-        ].filter(Boolean).length;
+        ];
     }
+    readonly property int enabledModuleCount: moduleFlags.filter(Boolean).length
 
     Component.onCompleted: {
         if (!IiLinkService.probed)
@@ -161,10 +162,16 @@ Item {
                                 StyledText {
                                     id: appBadgeText
                                     anchors.centerIn: parent
-                                    text: Translation.tr("Android app · Coming soon")
+                                    text: Translation.tr("Android app · v1.0 out now")
                                     font.pixelSize: Appearance.font.pixelSize.smaller - 1
                                     font.weight: Font.DemiBold
                                     color: Appearance.colors.colOnSecondaryContainer
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: Qt.openUrlExternally("https://github.com/P3DROVFX/ii-tools/releases/latest")
                                 }
                             }
                         }
@@ -220,7 +227,7 @@ Item {
 
                     HeroPill {
                         symbol: "widgets"
-                        label: Translation.tr("%1 / 18 modules").arg(root.enabledModuleCount)
+                        label: Translation.tr("%1 / %2 modules").arg(root.enabledModuleCount).arg(root.moduleFlags.length)
                     }
 
                     HeroPill {
@@ -265,14 +272,8 @@ Item {
                 onBuildRequested: IiLinkService.helperBuild.build()
             }
 
-            Repeater {
-                model: IiLinkService.peers
-
-                delegate: DeviceRow {
-                    required property var modelData
-                    Layout.fillWidth: true
-                    device: modelData
-                }
+            PairBanner {
+                Layout.fillWidth: true
             }
 
             PairingPanel {
@@ -337,30 +338,6 @@ Item {
                 }
             }
 
-            RowLayout {
-                Layout.fillWidth: true
-                Layout.topMargin: 4
-                visible: !IiLinkService.pairingRequested && IiLinkService.pairing === null
-
-                RippleButtonWithIcon {
-                    enabled: Config.options.policies.phone !== 0 && (IiLinkService.binaryPresent || !IiLinkService.probed)
-                    materialIcon: "qr_code_2"
-                    mainText: IiLinkService.hasPeers ? Translation.tr("Pair another phone") : Translation.tr("Pair a phone")
-                    buttonRadius: Appearance.rounding.full
-                    colBackground: Appearance.colors.colPrimary
-                    colBackgroundHover: Appearance.colors.colPrimaryHover
-                    colText: Appearance.colors.colOnPrimary
-                    onClicked: {
-                        if (KdeConnectService.activePhoneService !== "iiTools")
-                            KdeConnectService.selectPhoneService("iiTools");
-                        if (!IiLinkService.probed)
-                            IiLinkService.checkBinary();
-                        IiLinkService.startPairing();
-                    }
-                }
-
-                Item { Layout.fillWidth: true }
-            }
         }
 
         // ── Featured Stream Deck & Commands workspace ───────────────────
@@ -1331,6 +1308,176 @@ Item {
         }
     }
 
+    // Pairing hub: a tonal banner with the phone count, the Pair action and
+    // the paired phones inside it.
+    component PairBanner: Item {
+        id: pairBanner
+        readonly property int peerCount: IiLinkService.peers?.length ?? 0
+        readonly property bool online: IiLinkService.phoneConnected
+        readonly property bool pairingOpen: IiLinkService.pairingRequested || IiLinkService.pairing !== null
+        readonly property bool wide: width >= 600
+        readonly property color colOn: Appearance.colors.colOnSecondaryContainer
+
+        implicitHeight: pairCol.implicitHeight + 48
+
+        Rectangle {
+            id: pairMask
+            width: pairSurface.width
+            height: pairSurface.height
+            radius: Appearance.rounding.verylarge
+            visible: false
+            layer.enabled: true
+        }
+
+        Item {
+            id: pairSurface
+            anchors.fill: parent
+            layer.enabled: true
+            layer.effect: MultiEffect {
+                maskEnabled: true
+                maskSource: pairMask
+                maskThresholdMin: 0.5
+                maskSpreadAtMin: 1
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                color: Appearance.colors.colSecondaryContainer
+            }
+
+            MaterialShape {
+                implicitSize: 260
+                x: pairBanner.width - implicitSize * 0.55
+                y: -implicitSize * 0.4
+                shape: pairBanner.online
+                    ? MaterialShape.Shape.Sunny
+                    : (pairBanner.peerCount > 0 ? MaterialShape.Shape.Cookie9Sided : MaterialShape.Shape.Clover4Leaf)
+                color: Appearance.colors.colPrimary
+                opacity: 0.12
+            }
+        }
+
+        ColumnLayout {
+            id: pairCol
+            anchors.fill: parent
+            anchors.margins: 24
+            spacing: 18
+
+            GridLayout {
+                Layout.fillWidth: true
+                columns: pairBanner.wide ? 3 : 2
+                columnSpacing: 18
+                rowSpacing: 16
+
+                MaterialShapeWrappedMaterialSymbol {
+                    Layout.alignment: Qt.AlignVCenter
+                    shape: pairBanner.online
+                        ? MaterialShape.Shape.Cookie7Sided
+                        : (pairBanner.peerCount > 0 ? MaterialShape.Shape.Pentagon : MaterialShape.Shape.Gem)
+                    implicitSize: 68
+                    padding: 12
+                    iconSize: 30
+                    text: pairBanner.online ? "mobile_friendly" : (pairBanner.peerCount > 0 ? "phonelink" : "qr_code_scanner")
+                    fill: 1
+                    color: Appearance.colors.colPrimary
+                    colSymbol: Appearance.colors.colOnPrimary
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 3
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: Translation.tr("PAIRED PHONES")
+                        font.pixelSize: Appearance.font.pixelSize.smaller - 1
+                        font.variableAxes: ({ "wght": 800, "wdth": 115, "ROND": 0 })
+                        font.letterSpacing: 1.5
+                        color: pairBanner.colOn
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: {
+                            if (pairBanner.online && IiLinkService.connectedList.length > 0) {
+                                const c = IiLinkService.connectedList[0];
+                                return Translation.tr("%1 is here").arg(c.name || c.model || Translation.tr("Your phone"));
+                            }
+                            if (pairBanner.peerCount === 1)
+                                return Translation.tr("1 phone paired");
+                            if (pairBanner.peerCount > 1)
+                                return Translation.tr("%1 phones paired").arg(pairBanner.peerCount);
+                            return Translation.tr("Bring your phone in");
+                        }
+                        font.pixelSize: 26
+                        font.variableAxes: ({ "wght": 800, "wdth": 110, "ROND": 20 })
+                        color: pairBanner.colOn
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        lineHeight: 1.2
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        color: ColorUtils.applyAlpha(pairBanner.colOn, 0.78)
+                        text: {
+                            if (pairBanner.pairingOpen)
+                                return Translation.tr("Scan the code below with ii tools on the phone.");
+                            if (pairBanner.online)
+                                return Translation.tr("Connected over the encrypted ii link. Pair another phone any time.");
+                            if (pairBanner.peerCount > 0)
+                                return Translation.tr("Waiting for a paired phone on your network or Tailscale.");
+                            return Translation.tr("Install ii tools on an Android 12+ phone, then pair it with a QR code. Its certificate is pinned on the first connection.");
+                        }
+                    }
+                }
+
+                RippleButtonWithIcon {
+                    Layout.columnSpan: pairBanner.wide ? 1 : 2
+                    Layout.fillWidth: !pairBanner.wide
+                    Layout.alignment: Qt.AlignVCenter
+                    visible: !pairBanner.pairingOpen
+                    implicitHeight: 56
+                    horizontalPadding: 26
+                    centerContent: true
+                    enabled: Config.options.policies.phone !== 0 && (IiLinkService.binaryPresent || !IiLinkService.probed)
+                    materialIcon: "qr_code_2"
+                    iconPixelSize: 22
+                    textPixelSize: Appearance.font.pixelSize.normal
+                    mainText: pairBanner.peerCount > 0 ? Translation.tr("Pair another phone") : Translation.tr("Pair a phone")
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: Appearance.colors.colPrimary
+                    colBackgroundHover: Appearance.colors.colPrimaryHover
+                    colText: Appearance.colors.colOnPrimary
+                    onClicked: {
+                        if (KdeConnectService.activePhoneService !== "iiTools")
+                            KdeConnectService.selectPhoneService("iiTools");
+                        if (!IiLinkService.probed)
+                            IiLinkService.checkBinary();
+                        IiLinkService.startPairing();
+                    }
+                }
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                visible: pairBanner.peerCount > 0
+                spacing: 6
+
+                Repeater {
+                    model: IiLinkService.peers
+
+                    delegate: DeviceRow {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        device: modelData
+                    }
+                }
+            }
+        }
+    }
+
     component DeviceRow: Rectangle {
         id: devRow
         property var device
@@ -1498,7 +1645,7 @@ Item {
                     wrapMode: Text.WordWrap
                     color: Appearance.colors.colSubtext
                     font.pixelSize: Appearance.font.pixelSize.small
-                    text: Translation.tr("Open ii tools on your phone → Connect to PC → Scan QR code on the same LAN.")
+                    text: Translation.tr("Open ii tools on your phone and press Scan QR code on the home, on the same network or Tailscale. No app yet? Get it from github.com/P3DROVFX/ii-tools.")
                 }
                 StyledText {
                     visible: panel.pairing !== null
