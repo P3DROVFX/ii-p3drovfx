@@ -1049,6 +1049,33 @@ Item {
                 onToggled: value => Config.options.iiTools.mic.useDroidcam = value
             }
 
+            AppToggleRow {
+                visible: Config.options.iiTools.mic.enable && !Config.options.iiTools.mic.useDroidcam
+                symbol: "noise_aware"
+                title: Translation.tr("Microphone noise suppression")
+                description: Translation.tr("The phone reduces background noise before sending the microphone")
+                checked: Config.options.phone.microphone.noiseSuppression
+                onToggled: value => Config.options.phone.microphone.noiseSuppression = value
+            }
+
+            AppToggleRow {
+                visible: Config.options.iiTools.mic.enable && !Config.options.iiTools.mic.useDroidcam
+                symbol: "record_voice_over"
+                title: Translation.tr("Microphone echo cancellation")
+                description: Translation.tr("The phone cancels echo, for calls on the speakers")
+                checked: Config.options.phone.microphone.echoCancellation
+                onToggled: value => Config.options.phone.microphone.echoCancellation = value
+            }
+
+            AppToggleRow {
+                visible: Config.options.iiTools.mic.enable && !Config.options.iiTools.mic.useDroidcam
+                symbol: "trending_up"
+                title: Translation.tr("Microphone auto gain")
+                description: Translation.tr("The phone evens out the microphone's level")
+                checked: Config.options.phone.microphone.autoGainControl
+                onToggled: value => Config.options.phone.microphone.autoGainControl = value
+            }
+
             // Where the phone's picture shows up: a loopback device every app lists, or a
             // PipeWire camera that needs no kernel module.
             AppSettingRow {

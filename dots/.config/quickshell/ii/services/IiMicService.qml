@@ -50,6 +50,20 @@ Singleton {
 
     signal errorOccurred(string message)
 
+    // The phone's own sound processing (AudioRecord effects), set from the Phone tab's toggles.
+    readonly property bool noiseSuppression: Config.options?.phone?.microphone?.noiseSuppression ?? false
+    readonly property bool echoCancellation: Config.options?.phone?.microphone?.echoCancellation ?? false
+    readonly property bool autoGainControl: Config.options?.phone?.microphone?.autoGainControl ?? false
+    onNoiseSuppressionChanged: root._pushEffects()
+    onEchoCancellationChanged: root._pushEffects()
+    onAutoGainControlChanged: root._pushEffects()
+
+    function _pushEffects(): void {
+        if (root.dev !== "" && root.state !== "idle" && root.state !== "asking")
+            IiLinkService.sendTo(root.dev, { t: "mic", a: "set", ns: root.noiseSuppression,
+                aec: root.echoCancellation, agc: root.autoGainControl });
+    }
+
     readonly property var missingDeps: root.pwCatPresent ? [] : [{
         key: "pw-cat",
         name: Translation.tr("pw-cat (PipeWire tools)"),
@@ -217,6 +231,7 @@ Singleton {
             if (root.state !== "starting" || String(ev.dev ?? "") !== root.dev)
                 return;
             IiLinkService.sendTo(root.dev, { t: "mic", state: "ready", token: String(ev.token ?? ""), sid: root.sid });
+            root._pushEffects();
             return;
         case "micLive":
             if (String(ev.dev ?? "") !== root.dev)

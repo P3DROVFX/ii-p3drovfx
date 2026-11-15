@@ -271,7 +271,8 @@ ContentPage {
                     visible: active
                     sourceComponent: Component {
                         StyledText {
-                            text: PhoneMicService.pulseSource.split(".").slice(-2).join(".")
+                            text: PhoneMicService.iiBackend ? Translation.tr("ii tools")
+                                : PhoneMicService.pulseSource.split(".").slice(-2).join(".")
                             font.pixelSize: Appearance.font.pixelSize.smaller
                             color: Appearance.colors.colOnErrorContainer
                             opacity: 0.7
@@ -370,6 +371,7 @@ ContentPage {
     ContentSection {
         icon: "graphic_eq"
         title: Translation.tr("Audio Effects")
+        visible: PhoneMicService.iiBackend
 
         ConfigSwitch {
             buttonIcon: "noise_aware"
@@ -443,6 +445,8 @@ ContentPage {
     ContentSection {
         icon: "cable"
         title: Translation.tr("Connection")
+        // Only scrcpy and DroidCam need an address; ii tools rides the link, over Wi-Fi or USB.
+        visible: !PhoneMicService.iiBackend
 
         ContentSubsection {
             title: Translation.tr("Connection type")
