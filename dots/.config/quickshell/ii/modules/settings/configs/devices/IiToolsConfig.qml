@@ -32,7 +32,7 @@ Item {
         const o = Config.options.iiTools;
         return [
             o.remote.enable, o.audio.enable, o.liveUpdates.enable, o.pcLive.enable,
-            o.media.enable, o.pcMedia.enable, o.files.enable, o.gallery.enable, o.camera.enable, o.touchpad.enable, o.draw.enable, o.present.enable, o.screen.enable,
+            o.media.enable, o.pcMedia.enable, o.files.enable, o.gallery.enable, o.camera.enable, o.mic.enable, o.touchpad.enable, o.draw.enable, o.present.enable, o.screen.enable,
             o.perf.enable, o.phoneData.enable, o.screenshots.enable, o.clipboard.enable,
             o.share.enable, o.notifications.enable, o.calls.enable, o.callAudio.enable, o.wallpaper.enable, o.look.enable,
             o.deck.enable, o.wol.enable
@@ -865,6 +865,18 @@ Item {
                     ColorsFeatureTile {
                         width: controlTilesBox.tileWidth
                         height: 152
+                        symbol: "mic"
+                        shapeOn: MaterialShape.Shape.Clover4Leaf
+                        shapeOff: MaterialShape.Shape.Circle
+                        title: Translation.tr("Phone as microphone")
+                        summary: Translation.tr("Use the phone's microphone as a PC microphone")
+                        checked: Config.options.iiTools.mic.enable
+                        onToggled: value => Config.options.iiTools.mic.enable = value
+                    }
+
+                    ColorsFeatureTile {
+                        width: controlTilesBox.tileWidth
+                        height: 152
                         symbol: "touch_app"
                         shapeOn: MaterialShape.Shape.Pill
                         shapeOff: MaterialShape.Shape.Circle
@@ -1025,6 +1037,16 @@ Item {
                 description: Translation.tr("Fall back to droidcam-cli instead of streaming over ii tools")
                 checked: Config.options.iiTools.camera.useDroidcam
                 onToggled: value => Config.options.iiTools.camera.useDroidcam = value
+            }
+
+            AppToggleRow {
+                Layout.topMargin: 4
+                visible: Config.options.iiTools.mic.enable
+                symbol: "swap_horiz"
+                title: Translation.tr("Use scrcpy or DroidCam for the microphone")
+                description: Translation.tr("Fall back to the old microphone backends instead of streaming over ii tools")
+                checked: Config.options.iiTools.mic.useDroidcam
+                onToggled: value => Config.options.iiTools.mic.useDroidcam = value
             }
 
             // Where the phone's picture shows up: a loopback device every app lists, or a

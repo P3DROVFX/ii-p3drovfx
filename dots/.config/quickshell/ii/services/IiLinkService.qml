@@ -67,6 +67,7 @@ Singleton {
     readonly property bool filesEnabled: root.opts?.files?.enable ?? true
     readonly property bool galleryEnabled: root.opts?.gallery?.enable ?? true
     readonly property bool cameraEnabled: root.opts?.camera?.enable ?? true
+    readonly property bool micEnabled: root.opts?.mic?.enable ?? true
     readonly property bool touchpadEnabled: root.opts?.touchpad?.enable ?? true
     readonly property bool drawEnabled: root.opts?.draw?.enable ?? true
     readonly property bool presentEnabled: root.opts?.present?.enable ?? true
@@ -191,6 +192,7 @@ Singleton {
         .concat(root.presentEnabled ? ["present"] : [])
         .concat(PhoneScreenService.enabled ? ["screen"] : [])
         .concat(root.cameraEnabled ? ["camera"] : [])
+        .concat(root.micEnabled ? ["mic"] : [])
         .concat(root.usageEnabled ? ["usage"] : [])
         .concat(["mirrorRadio"])
 
@@ -3220,6 +3222,9 @@ Singleton {
         case "camera":
             IiCameraService.handleMessage(dev, m);
             return;
+        case "mic":
+            IiMicService.handleMessage(dev, m);
+            return;
         case "phoneUsage":
             if (root.usageEnabled)
                 root._savePhoneUsage(dev, m);
@@ -3367,6 +3372,7 @@ Singleton {
             if (root._presentDev === ev.dev)
                 root._presentDev = "";
             IiCameraService.handleDisconnect(String(ev.dev));
+            IiMicService.handleDisconnect(String(ev.dev));
             // Without the phone that sent them they go stale: KDE Connect's list takes over.
             if (!root.notifsLive) {
                 root.linkNotifications = [];
@@ -3397,6 +3403,11 @@ Singleton {
         case "cameraLive":
         case "cameraEnd":
             IiCameraService.handleEvent(ev);
+            break;
+        case "mic":
+        case "micLive":
+        case "micEnd":
+            IiMicService.handleEvent(ev);
             break;
         case "galleryThumbs":
         case "galleryProgress":

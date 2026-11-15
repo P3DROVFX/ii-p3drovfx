@@ -10,6 +10,7 @@
 //! sockets and stdin: no timers run while nothing happens.
 
 mod camera;
+mod mic;
 mod files;
 mod gallery;
 mod icons;
@@ -94,6 +95,7 @@ struct Shared {
     screen: Option<(String, tokio::task::AbortHandle, tokio::sync::watch::Sender<String>)>,
     /// The phone being a webcam here (one at a time): armed, then streaming.
     camera: Option<camera::Slot>,
+    mic: Option<mic::Slot>,
 }
 
 type State = Arc<Mutex<Shared>>;
@@ -334,12 +336,15 @@ async fn serve(stream: TcpStream, addr: SocketAddr, acceptor: TlsAcceptor, state
     let config = WebSocketConfig::default().max_message_size(Some(8 << 20)).max_frame_size(Some(4 << 20));
     let side = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let side_cb = side.clone();
+    let mic_side = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let mic_cb = mic_side.clone();
     let check_path = move |req: &Request, resp: Response| -> Result<Response, ErrorResponse> {
         if req.uri().path() == WS_PATH {
             Ok(resp)
-        } else if req.uri().path() == camera::WS_PATH {
-            // The webcam's video: its own socket, authenticated by the session's token.
+        } else if req.uri().path() == camera::WS_PATH || req.uri().path() == mic::WS_PATH {
+            // The webcam's video or the microphone's audio: its own socket, authenticated by the session's token.
             side_cb.store(true, std::sync::atomic::Ordering::Relaxed);
+            mic_cb.store(req.uri().path() == mic::WS_PATH, std::sync::atomic::Ordering::Relaxed);
             Ok(resp)
         } else {
             let mut err = ErrorResponse::new(None);
@@ -352,7 +357,11 @@ async fn serve(stream: TcpStream, addr: SocketAddr, acceptor: TlsAcceptor, state
         _ => return,
     };
     if side.load(std::sync::atomic::Ordering::Relaxed) {
-        camera::serve(ws, state).await;
+        if mic_side.load(std::sync::atomic::Ordering::Relaxed) {
+            mic::serve(ws, state).await;
+        } else {
+            camera::serve(ws, state).await;
+        }
         return;
     }
     let (mut sink, mut stream) = ws.split();
@@ -753,6 +762,8 @@ fn handle_op(state: &State, line: &str) {
         }
         // The phone as a webcam (camera.rs): the shell found the device to write to.
         "camera" => camera::op(state, &op),
+        // The phone as a microphone (mic.rs).
+        "mic" => mic::op(state, &op),
         "kick" => {
             let dev = op["dev"].as_str().unwrap_or("");
             let s = state.lock().unwrap();
@@ -868,6 +879,7 @@ async fn main() {
         input_tx: input::spawn(),
         screen: None,
         camera: None,
+        mic: None,
     }));
 
     emit(json!({"ev": "ready", "port": port, "fp": fingerprint, "name": name, "addrs": addresses(), "wake": wake_targets(), "discovery": udp.is_some()}));

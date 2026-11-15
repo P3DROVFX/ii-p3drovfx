@@ -2965,6 +2965,12 @@ Singleton {
                     // sees it), else a PipeWire camera (no kernel module, fewer apps).
                     property string output: "auto" // "auto" | "v4l2" | "pipewire"
                 }
+                // The phone's microphone as this PC's mic over ii link (PipeWire source
+                // `ii-tools-mic`), instead of scrcpy or DroidCam.
+                property JsonObject mic: JsonObject {
+                    property bool enable: true
+                    property bool useDroidcam: false
+                }
                 property JsonObject callAudio: JsonObject {
                     property bool enable: true
                     // Every call on the PC by itself (ringing or dialled); off, only on request.

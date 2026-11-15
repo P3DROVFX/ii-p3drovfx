@@ -461,11 +461,34 @@ sides. Changing the meaning of an existing one does: that is `iilink/2`, on a ne
 | `{"op":"camera","a":"arm","dev","sid","device":"/dev/videoN","mirror":bool,"rotate":0\|90\|180\|270}` or `{…,"sink":"pipewire"}` | Arm a session (one at a time; a new one ends the old with `stopped`). v4l2: `ffmpeg -f h264 -i pipe:0 … -f v4l2 <device>`; a size the device refuses (an app holds it) is scaled and padded into the old one. PipeWire: `gst-launch-1.0 fdsrc ! rawvideoparse ! videoconvert ! pipewiresink mode=provide` with `media.class=Video/Source`, `media.role=Camera`, node `ii-tools-camera`. `rotate` adds to the phone's `rot`. Two stages: the decoder (`ffmpeg`, H.264 → raw I420 at the session's size, turned, mirrored, fitted) restarts on any picture change; the writer (the device or the node) stays open the whole session and repeats the last picture every 200 ms while none comes, so the camera never vanishes. The first picture fixes the size; a later aspect or turn is fitted into it. A dropped socket has 20 s to reconnect with the same token (the phone retries by itself); `{"t":"bye"}` on the socket ends at once. |
 | `{"op":"camera","a":"config","mirror":bool,"rotate":0\|90\|180\|270}` | Update `ffmpeg` mirror/rotation live (restarts `ffmpeg`). |
 | `{"op":"camera","a":"stop"}` | Stop the armed/running camera helper session. |
+| `{"op":"mic","a":"arm","dev","sid"}` / `{"op":"mic","a":"stop"}` | The phone's microphone session (see Microphone). |
 
 `peers` always comes before `pairingEnd`: the shell keeps the helper alive only while a
 phone is paired or a pairing is open, and must never see neither.
 
 The shell also exposes `qs -c ii ipc call iiLink pair|cancelPairing|unpair <id>|status`.
+
+## Microphone
+
+The phone as a PC microphone: a PipeWire source `ii-tools-mic` ("ii tools microphone", `media.class=Audio/Source`) that every app lists and `PhoneMicService` / EasyEffects take as an input. Cap `mic` on both sides: the shell puts it in `hello.caps` while `iiTools.mic.enable` is on, the phone puts it in `caps` while it has a microphone. `iiTools.mic.useDroidcam` keeps the old scrcpy / DroidCam backends instead.
+
+The audio is raw PCM, not a codec: 48 kHz mono `s16le` is 768 kbit/s, nothing for Wi-Fi or a cable, and no encoder or decoder adds a frame of delay. It travels like the webcam's video: a second WebSocket on the link's port at `/iilink/1/mic`, authenticated by a one-time token from a shell `arm`. The first text message is `{"t":"hello","token":"…"}`, then `{"t":"meta","rate":48000}` (8000–48000), then binary messages of whole 16-bit samples (the phone sends 20 ms each). `{"t":"bye"}` ends the session at once. A dropped socket has 20 s to reconnect with the same token; the source stays up, silent, meanwhile. The helper queues about 240 ms for `pw-cat` and drops the rest, so a stalled reader costs a click and never a growing delay. The source appears with the first chunk and goes away with the session.
+
+| Direction | Message | |
+| --- | --- | --- |
+| shell → phone | `{"t":"mic","a":"request"}` | Ask the phone to start (starts at once with its Mic screen open, else posts a notification). |
+| shell → phone | `{"t":"mic","a":"stop"}` | Stop asking or stop the stream. |
+| shell → phone | `{"t":"mic","state":"ready","token":"<hex 32>","sid":N}` | Answer to `start`: the helper is armed and waits for the socket. |
+| shell → phone | `{"t":"mic","state":"live","sid":N}` | The source exists and audio is flowing into it. |
+| shell → phone | `{"t":"mic","state":"stopped","reason":"…","sid":N}` | PC side ended (`stopped`, `closed`, `timeout`, `device`). |
+| shell → phone | `{"t":"mic","err":"disabled"\|"busy"}` | `start` refused on the PC side. |
+| phone → shell | `{"t":"mic","a":"start"}` | The phone is about to stream. |
+| phone → shell | `{"t":"mic","a":"stop"}` | The phone stopped. |
+| phone → shell | `{"t":"mic","err":"permission"\|"mic"\|"network"\|"offline"\|"timeout"}` | The phone could not start or lost the stream; the shell shows it and ends the session. |
+| phone → shell | `{"t":"mic","status":{"state","error","muted","rate"}}` | Pushed after `hello` and on every change. |
+| phone → shell | `{"t":"mic","asking":bool,"reason"?}` | As the webcam's: the phone waits for the user to confirm the PC's `request`; `reason:"notifications"` when it cannot ask. |
+
+Helper op: `{"op":"mic","a":"arm","dev","sid"}` arms a session (one at a time; a new one ends the old with `stopped`) and answers `{"ev":"mic","dev","sid","token"}`; `{"op":"mic","a":"stop"}` ends it. Events: `micLive` (`rate`) at the first chunk, `micEnd` (`reason`) exactly once. The source is `pw-cat --playback --raw` into a node, so there is no kernel module, no null sink and nothing for the shell to route.
 
 ## Routines: the shell's actions for the phone, and the phone's for the shell
 
