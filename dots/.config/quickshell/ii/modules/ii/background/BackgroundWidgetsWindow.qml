@@ -1140,15 +1140,23 @@ PanelWindow {
                 readonly property bool settled: bgWidgetsWindow.windowBlurProgress >= 1
                 readonly property real radius: bgWidgetsWindow.windowBlurRadius / 2
                 readonly property int samples: Math.max(3, Math.round(widgetBlurRoot.radius * 2 + 1))
+                readonly property size captureSize: Qt.size(
+                    Math.max(1, Math.round(widgetBlurRoot.width / 2 * bgWidgetsWindow.devicePixelRatio)),
+                    Math.max(1, Math.round(widgetBlurRoot.height / 2 * bgWidgetsWindow.devicePixelRatio)))
                 Item {
                     width: widgetBlurRoot.width / 2
                     height: widgetBlurRoot.height / 2
                     scale: 2
                     transformOrigin: Item.TopLeft
+                    // At this half-size plane's own pixels, the grid the blur passes run on.
+                    // Without a textureSize the capture follows its source, the whole screen
+                    // at native device pixels (19.8 MB at 2880x1800), four times what the
+                    // blur reads from it.
                     ShaderEffectSource {
                         id: widgetBlurSource
                         anchors.fill: parent
                         sourceItem: desktopStack
+                        textureSize: widgetBlurRoot.captureSize
                         live: widgetBlurRoot.settled
                         smooth: true
                         visible: false
@@ -1170,6 +1178,7 @@ PanelWindow {
                                 id: subjectSource
                                 anchors.fill: parent
                                 sourceItem: widgetBlurRoot.subject
+                                textureSize: widgetBlurRoot.captureSize
                                 live: widgetBlurRoot.settled
                                 smooth: true
                                 visible: false
