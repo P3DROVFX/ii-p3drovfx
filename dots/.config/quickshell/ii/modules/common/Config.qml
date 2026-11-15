@@ -2974,6 +2974,8 @@ Singleton {
                 property JsonObject screen: JsonObject {
                     // Resolution, refresh, scale, side and bitrate are the phone's to choose.
                     property bool enable: true
+                    // The screen may go over Wi-Fi through the link when no USB is plugged.
+                    property bool wireless: true
                 }
                 // The phone's camera as this PC's webcam over ii link, instead of DroidCam.
                 property JsonObject camera: JsonObject {

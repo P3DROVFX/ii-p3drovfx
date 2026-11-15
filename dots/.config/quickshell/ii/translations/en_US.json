@@ -16655,5 +16655,8 @@
     "Untitled key": "Untitled key",
     "Needs command": "Needs command",
     "Enter a bash command below to publish this key": "Enter a bash command below to publish this key",
-    "Remove command": "Remove command"
+    "Remove command": "Remove command",
+    "Extend or mirror this PC on the phone over USB or Wi-Fi, touch included": "Extend or mirror this PC on the phone over USB or Wi-Fi, touch included",
+    "Phone as a monitor over Wi-Fi": "Phone as a monitor over Wi-Fi",
+    "Without a USB cable, the screen goes over ii link on the local network. USB is still used when plugged in, for the lowest latency": "Without a USB cable, the screen goes over ii link on the local network. USB is still used when plugged in, for the lowest latency"
 }

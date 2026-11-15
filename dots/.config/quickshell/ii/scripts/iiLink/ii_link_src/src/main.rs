@@ -91,8 +91,8 @@ struct Shared {
     /// Whether a phone may be a slide clicker here (the shell's setting).
     present: bool,
     input_tx: std::sync::mpsc::Sender<input::Cmd>,
-    /// The phone being a screen here (one at a time), and its device.
-    screen: Option<(String, tokio::task::AbortHandle, tokio::sync::watch::Sender<String>)>,
+    /// The phone being a screen here (one at a time): USB or `/iilink/1/screen`.
+    screen: Option<screen::Slot>,
     /// The phone being a webcam here (one at a time): armed, then streaming.
     camera: Option<camera::Slot>,
     mic: Option<mic::Slot>,
@@ -334,35 +334,42 @@ async fn serve(stream: TcpStream, addr: SocketAddr, acceptor: TlsAcceptor, state
     };
     // Frames up to 4 MiB: a webcam key frame is one message.
     let config = WebSocketConfig::default().max_message_size(Some(8 << 20)).max_frame_size(Some(4 << 20));
-    let side = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let side = Arc::new(std::sync::atomic::AtomicU8::new(0));
     let side_cb = side.clone();
-    let mic_side = Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let mic_cb = mic_side.clone();
     let check_path = move |req: &Request, resp: Response| -> Result<Response, ErrorResponse> {
-        if req.uri().path() == WS_PATH {
-            Ok(resp)
-        } else if req.uri().path() == camera::WS_PATH || req.uri().path() == mic::WS_PATH {
-            // The webcam's video or the microphone's audio: its own socket, authenticated by the session's token.
-            side_cb.store(true, std::sync::atomic::Ordering::Relaxed);
-            mic_cb.store(req.uri().path() == mic::WS_PATH, std::sync::atomic::Ordering::Relaxed);
-            Ok(resp)
-        } else {
-            let mut err = ErrorResponse::new(None);
-            *err.status_mut() = StatusCode::NOT_FOUND;
-            Err(err)
-        }
+        let kind = match req.uri().path() {
+            WS_PATH => 0,
+            camera::WS_PATH => 1,
+            mic::WS_PATH => 2,
+            screen::WS_PATH => 3,
+            _ => {
+                let mut err = ErrorResponse::new(None);
+                *err.status_mut() = StatusCode::NOT_FOUND;
+                return Err(err);
+            }
+        };
+        // Side sockets carry media/screen streams, authenticated by their session token.
+        side_cb.store(kind, std::sync::atomic::Ordering::Relaxed);
+        Ok(resp)
     };
     let ws = match timeout(HANDSHAKE_TIMEOUT, tokio_tungstenite::accept_hdr_async_with_config(tls, check_path, Some(config))).await {
         Ok(Ok(ws)) => ws,
         _ => return,
     };
-    if side.load(std::sync::atomic::Ordering::Relaxed) {
-        if mic_side.load(std::sync::atomic::Ordering::Relaxed) {
-            mic::serve(ws, state).await;
-        } else {
+    match side.load(std::sync::atomic::Ordering::Relaxed) {
+        1 => {
             camera::serve(ws, state).await;
+            return;
         }
-        return;
+        2 => {
+            mic::serve(ws, state).await;
+            return;
+        }
+        3 => {
+            screen::serve(ws, state).await;
+            return;
+        }
+        _ => {}
     }
     let (mut sink, mut stream) = ws.split();
 
@@ -719,47 +726,8 @@ fn handle_op(state: &State, line: &str) {
                 }
             }
         }
-        // The phone as a screen (screen.rs): the shell made the output and runs adb.
-        "screen" => {
-            let mut s = state.lock().unwrap();
-            // Another screen for the running session (mirror's switch).
-            if op["a"] == "output" {
-                if let (Some((_, _, out)), Some(name)) = (s.screen.as_ref(), op["output"].as_str()) {
-                    let _ = out.send(name.to_string());
-                }
-                return;
-            }
-            if let Some((_, task, _)) = s.screen.take() {
-                task.abort();
-            }
-            if op["a"] != "start" {
-                return;
-            }
-            let dev = op["dev"].as_str().unwrap_or("").to_string();
-            let sid = op["sid"].as_u64().unwrap_or(0);
-            let (out_tx, out_rx) = tokio::sync::watch::channel(op["output"].as_str().unwrap_or("").to_string());
-            let params = screen::Params {
-                dev: dev.clone(),
-                sid,
-                output: out_rx,
-                token: op["token"].as_str().unwrap_or("").to_string(),
-                w: op["w"].as_i64().unwrap_or(1920) as i32,
-                h: op["h"].as_i64().unwrap_or(1080) as i32,
-                bitrate: op["bitrate"].as_u64().unwrap_or(16_000_000).clamp(1_000_000, 80_000_000),
-                input_tx: s.input_tx.clone(),
-            };
-            if params.output.borrow().is_empty() || params.token.len() < 16 {
-                emit(json!({"ev": "screenEnd", "dev": dev, "sid": sid, "reason": "bad_arg"}));
-                return;
-            }
-            match screen::start(params) {
-                Ok((port, task)) => {
-                    s.screen = Some((dev.clone(), task, out_tx));
-                    emit(json!({"ev": "screen", "dev": dev, "sid": sid, "port": port}));
-                }
-                Err(_) => emit(json!({"ev": "screenEnd", "dev": dev, "sid": sid, "reason": "bind"})),
-            }
-        }
+        // The phone as a screen (screen.rs): the shell made the output and runs adb or uses ws.
+        "screen" => screen::op(state, &op),
         // The phone as a webcam (camera.rs): the shell found the device to write to.
         "camera" => camera::op(state, &op),
         // The phone as a microphone (mic.rs).

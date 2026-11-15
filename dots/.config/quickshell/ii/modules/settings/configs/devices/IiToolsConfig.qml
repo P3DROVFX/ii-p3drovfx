@@ -893,7 +893,7 @@ Item {
                         shapeOn: MaterialShape.Shape.Sunny
                         shapeOff: MaterialShape.Shape.Circle
                         title: Translation.tr("Phone as a monitor")
-                        summary: Translation.tr("Extend or mirror this PC on the phone over USB, touch included")
+                        summary: Translation.tr("Extend or mirror this PC on the phone over USB or Wi-Fi, touch included")
                         checked: Config.options.iiTools.screen.enable
                         onToggled: value => Config.options.iiTools.screen.enable = value
                     }
@@ -1006,10 +1006,20 @@ Item {
                 onToggled: value => Config.options.iiTools.clipboard.history = value
             }
 
-            // The screen goes over USB: adb carries it.
+            AppToggleRow {
+                Layout.topMargin: 4
+                visible: Config.options.iiTools.screen.enable
+                symbol: "wifi"
+                title: Translation.tr("Phone as a monitor over Wi-Fi")
+                description: Translation.tr("Without a USB cable, the screen goes over ii link on the local network. USB is still used when plugged in, for the lowest latency")
+                checked: Config.options.iiTools.screen.wireless
+                onToggled: value => Config.options.iiTools.screen.wireless = value
+            }
+
+            // The screen goes over USB when Wi-Fi is off: adb carries it.
             AppSettingRow {
                 Layout.topMargin: 4
-                visible: Config.options.iiTools.screen.enable && !PhoneScreenService.adbPresent
+                visible: Config.options.iiTools.screen.enable && !Config.options.iiTools.screen.wireless && !PhoneScreenService.adbPresent
                 symbol: "usb"
                 title: Translation.tr("Install adb for the phone as a monitor")
                 description: Translation.tr("The screen goes over USB through adb (android-tools); turn on USB debugging on the phone.")

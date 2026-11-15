@@ -2,32 +2,111 @@
 //! picked (a headless one to extend, a real one to mirror) goes to the phone as H.264,
 //! and the phone's touches come back as a touchscreen mapped onto that output.
 //!
-//! Over USB only, for now: the shell runs `adb reverse` so the phone reaches the port
-//! bound here on 127.0.0.1, and the first line it sends is the one-time token the shell
-//! gave it over the authenticated link. The video is not on the link: a plain socket
-//! carries frames as they are encoded, with no TLS or WebSocket framing in the way.
+//! Two transports:
+//! - **USB** (raw TCP on `127.0.0.1` via `adb reverse`): the first line is the one-time
+//!   token; video is `[u32 length][u8 kind][u64 pts µs][Annex-B bytes]`.
+//! - **Wi-Fi / link WebSocket** ([`WS_PATH`], `transport: "ws"`): a side WebSocket on
+//!   the link's TLS port, authenticated by `{"t":"hello","token":"…"}`, with a 10 s
+//!   reconnect grace, non-blocking writer queue, congestion dropping, adaptive bitrate,
+//!   ordered `ping`/`pong`, `stats`, `quality`, and `idr`.
 //!
 //! Capture and encoding are wf-recorder's (wlr-screencopy, the GPU's encoder: NVENC,
 //! then VA-API, then x264). It writes FLV, whose tags carry their own length and leave
 //! it one per frame, so a frame goes out the moment it is encoded rather than when the
 //! next one starts. The stream is damage-driven: a still screen sends nothing.
-//!
-//! To the phone: `[u32 length][u8 kind][u64 pts µs][Annex-B bytes]`, kind 0 the SPS and
-//! PPS (codec config), 1 a frame, 2 a key frame. From the phone: `[1][n]` then n ×
-//! `[u8 id][u16 x][u16 y]`, every finger down with x and y over 0–65535 of the picture;
-//! `[2][u16 n][utf-8]` typed text; `[3][u8 n][key name][u8 mods]` one named key (mods:
-//! 1 shift, 2 ctrl, 4 alt, 8 super).
 
+use std::collections::VecDeque;
 use std::process::Stdio;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
+use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
-use serde_json::json;
+use futures_util::{SinkExt, StreamExt};
+use serde_json::{json, Value};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::process::{Child, ChildStdout, Command};
+use tokio::sync::{mpsc, oneshot, watch, Notify};
 use tokio::time::{timeout, Duration};
+use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::WebSocketStream;
 
 use crate::input::Cmd;
+use crate::State;
+
+pub const WS_PATH: &str = "/iilink/1/screen";
+pub type Ws = WebSocketStream<tokio_rustls::server::TlsStream<TcpStream>>;
+
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(60);
+const HELLO_TIMEOUT: Duration = Duration::from_secs(5);
+const RECONNECT_GRACE: Duration = Duration::from_secs(10);
+const MIN_BITRATE: u64 = 1_000_000;
+const MAX_BITRATE: u64 = 80_000_000;
+const FLOOR_BITRATE: u64 = 2_000_000;
+const MAX_QUEUE_ITEMS: usize = 256;
+const MAX_QUEUE_BYTES: usize = 16 << 20;
+/// A backlog this old is dropped rather than shown late. Shorter spikes drain on their own:
+/// a drop costs a frozen picture until the next key frame (an encoder restart, ~300 ms).
+const CONGESTION_AGE: Duration = Duration::from_millis(200);
+const CONGESTION_WINDOW: Duration = Duration::from_secs(3);
+const STEP_UP_QUIET: Duration = Duration::from_secs(10);
+const RATE_COOLDOWN: Duration = Duration::from_secs(2);
+const IDR_COOLDOWN: Duration = Duration::from_secs(2);
+/// Dropping this long without a key frame: restart the encoder for one (the GOP is 2 s).
+const DROP_IDR_AFTER: Duration = Duration::from_millis(250);
+
+/// The active or pending screen session (one at a time).
+pub struct Slot {
+    sid: u64,
+    token: Option<String>,
+    conns: Option<mpsc::UnboundedSender<Ws>>,
+    task: tokio::task::AbortHandle,
+    end: Arc<End>,
+    output: watch::Sender<String>,
+}
+
+struct End {
+    dev: String,
+    sid: u64,
+    input_tx: Sender<Cmd>,
+    done: AtomicBool,
+}
+
+impl End {
+    fn emit(&self, reason: &str) {
+        if !self.done.swap(true, Ordering::SeqCst) {
+            let _ = self.input_tx.send(Cmd::ScreenStop);
+            crate::emit(json!({"ev": "screenEnd", "dev": self.dev, "sid": self.sid, "reason": reason}));
+        }
+    }
+}
+
+struct Guard {
+    state: State,
+    sid: u64,
+    end: Arc<End>,
+    reason: &'static str,
+}
+
+impl Drop for Guard {
+    fn drop(&mut self) {
+        if let Ok(mut s) = self.state.try_lock() {
+            if s.screen.as_ref().is_some_and(|c| c.sid == self.sid) {
+                s.screen = None;
+            }
+        }
+        self.end.emit(self.reason);
+    }
+}
+
+struct AbortOnDrop(tokio::task::AbortHandle);
+
+impl Drop for AbortOnDrop {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
 
 pub struct Params {
     pub dev: String,
@@ -36,52 +115,134 @@ pub struct Params {
     pub sid: u64,
     /// The output to capture; the shell can point a session at another one (mirror's
     /// screen switch) and the capture starts again there.
-    pub output: tokio::sync::watch::Receiver<String>,
+    pub output: watch::Receiver<String>,
     pub token: String,
     /// The output's size in pixels: the touchscreen's.
     pub w: i32,
     pub h: i32,
     pub bitrate: u64,
+    pub fps: u32,
+    pub adaptive: bool,
+    /// Frames per second to cap the capture at (mirror of a fast screen), 0 for the output's own rate.
+    pub rate: u32,
     pub input_tx: Sender<Cmd>,
 }
 
-/// Binds the port for the phone and serves it in the background; the shell is told
-/// `screenEnd` when it is over, whatever ended it (aborting the task included).
-pub fn start(mut p: Params) -> std::io::Result<(u16, tokio::task::AbortHandle)> {
-    p.output.mark_unchanged();
-    let std_listener = std::net::TcpListener::bind(("127.0.0.1", 0))?;
-    std_listener.set_nonblocking(true)?;
-    let port = std_listener.local_addr()?.port();
-    let listener = TcpListener::from_std(std_listener)?;
+/// The shell's `screen` ops: `start`, `output`, `stop`.
+pub fn op(state: &State, op: &Value) {
+    let mut s = state.lock().unwrap();
+    if op["a"] == "output" {
+        if let (Some(slot), Some(name)) = (s.screen.as_ref(), op["output"].as_str()) {
+            let _ = slot.output.send(name.to_string());
+        }
+        return;
+    }
+    if let Some(old) = s.screen.take() {
+        old.task.abort();
+        old.end.emit("stopped");
+    }
+    if op["a"] != "start" {
+        return;
+    }
+    let dev = op["dev"].as_str().unwrap_or("").to_string();
+    let sid = op["sid"].as_u64().unwrap_or(0);
+    let (out_tx, mut out_rx) = watch::channel(op["output"].as_str().unwrap_or("").to_string());
+    out_rx.mark_unchanged();
+    let params = Params {
+        dev: dev.clone(),
+        sid,
+        output: out_rx,
+        token: op["token"].as_str().unwrap_or("").to_string(),
+        w: op["w"].as_i64().unwrap_or(1920) as i32,
+        h: op["h"].as_i64().unwrap_or(1080) as i32,
+        bitrate: op["bitrate"].as_u64().unwrap_or(16_000_000).clamp(MIN_BITRATE, MAX_BITRATE),
+        fps: op["fps"].as_u64().unwrap_or(60).clamp(15, 240) as u32,
+        adaptive: op["adaptive"].as_bool().unwrap_or(true),
+        rate: op["rate"].as_u64().unwrap_or(0).min(240) as u32,
+        input_tx: s.input_tx.clone(),
+    };
+    if params.output.borrow().is_empty() || params.token.len() < 16 {
+        crate::emit(json!({"ev": "screenEnd", "dev": dev, "sid": sid, "reason": "bad_arg"}));
+        return;
+    }
+    let end = Arc::new(End { dev: dev.clone(), sid, input_tx: s.input_tx.clone(), done: AtomicBool::new(false) });
+    let guard = Guard { state: state.clone(), sid, end: end.clone(), reason: "stopped" };
+
+    if op["transport"].as_str() == Some("ws") {
+        let token = params.token.clone();
+        let (conn_tx, conn_rx) = mpsc::unbounded_channel();
+        let task = tokio::spawn(async move {
+            let mut guard = guard;
+            guard.reason = run_ws(conn_rx, &params).await;
+        })
+        .abort_handle();
+        s.screen = Some(Slot { sid, token: Some(token), conns: Some(conn_tx), task, end, output: out_tx });
+        crate::emit(json!({"ev": "screen", "dev": dev, "sid": sid, "port": 0, "transport": "ws"}));
+        return;
+    }
+
+    let listener = match std::net::TcpListener::bind(("127.0.0.1", 0))
+        .and_then(|l| {
+            l.set_nonblocking(true)?;
+            let port = l.local_addr()?.port();
+            Ok((port, TcpListener::from_std(l)?))
+        }) {
+        Ok(ok) => ok,
+        Err(_) => {
+            // Avoid Guard::drop sending ScreenStop/stopped when bind never created a session.
+            std::mem::forget(guard);
+            crate::emit(json!({"ev": "screenEnd", "dev": dev, "sid": sid, "reason": "bind"}));
+            return;
+        }
+    };
+    let (port, listener) = listener;
     let task = tokio::spawn(async move {
-        let mut guard = Guard { dev: p.dev.clone(), sid: p.sid, input_tx: p.input_tx.clone(), reason: "stopped" };
-        guard.reason = run(listener, &p).await;
-    });
-    Ok((port, task.abort_handle()))
+        let mut guard = guard;
+        guard.reason = run_usb(listener, &params).await;
+    })
+    .abort_handle();
+    s.screen = Some(Slot { sid, token: None, conns: None, task, end, output: out_tx });
+    crate::emit(json!({"ev": "screen", "dev": dev, "sid": sid, "port": port}));
 }
 
-struct Guard {
-    dev: String,
-    sid: u64,
-    input_tx: Sender<Cmd>,
-    reason: &'static str,
-}
-
-impl Drop for Guard {
-    fn drop(&mut self) {
-        let _ = self.input_tx.send(Cmd::ScreenStop);
-        crate::emit(json!({"ev": "screenEnd", "dev": self.dev, "sid": self.sid, "reason": self.reason}));
+/// The phone's `/iilink/1/screen` socket: validate the hello token within 5 s, then hand
+/// it to the pending or reconnecting session.
+pub async fn serve(mut ws: Ws, state: State) {
+    let token = match timeout(HELLO_TIMEOUT, ws.next()).await {
+        Ok(Some(Ok(Message::Text(t)))) => serde_json::from_str::<Value>(t.as_str())
+            .ok()
+            .filter(|v| v["t"] == "hello")
+            .and_then(|v| v["token"].as_str().map(str::to_owned)),
+        _ => None,
+    };
+    let Some(token) = token else {
+        let _ = ws.close(None).await;
+        return;
+    };
+    let tx = {
+        let s = state.lock().unwrap();
+        s.screen
+            .as_ref()
+            .filter(|slot| slot.token.as_deref().is_some_and(|t| crate::same(&token, t)))
+            .and_then(|slot| slot.conns.clone())
+    };
+    if let Some(tx) = tx {
+        let _ = tx.send(ws);
+    } else {
+        let _ = ws.close(None).await;
     }
 }
 
-async fn run(listener: TcpListener, p: &Params) -> &'static str {
+// ── USB path (raw TCP + adb reverse, unchanged behaviour) ────────────────
+
+async fn run_usb(listener: TcpListener, p: &Params) -> &'static str {
     // The phone connects once the shell's `adb reverse` is up and it was told the port.
     let sock = loop {
-        let Ok(Ok((mut s, _))) = timeout(Duration::from_secs(60), listener.accept()).await else {
+        let Ok(Ok((mut s, _))) = timeout(CONNECT_TIMEOUT, listener.accept()).await else {
             return "timeout";
         };
         let _ = s.set_nodelay(true);
-        if let Ok(Ok(line)) = timeout(Duration::from_secs(5), read_line(&mut s)).await {
+        if let Ok(Ok(line)) = timeout(HELLO_TIMEOUT, read_line(&mut s)).await {
             if crate::same(&line, &p.token) {
                 break s;
             }
@@ -89,7 +250,8 @@ async fn run(listener: TcpListener, p: &Params) -> &'static str {
     };
     drop(listener);
 
-    let Some(mut rec) = Recorder::start(p).await else { return "encoder" };
+    let out_name = p.output.borrow().clone();
+    let Some(mut rec) = Recorder::start(&out_name, p.bitrate, 240, p.rate, false).await else { return "encoder" };
     crate::emit(json!({"ev": "screenLive", "dev": p.dev, "sid": p.sid, "encoder": rec.encoder}));
     let _ = p.input_tx.send(Cmd::ScreenStart { w: p.w, h: p.h });
 
@@ -102,7 +264,7 @@ async fn run(listener: TcpListener, p: &Params) -> &'static str {
     // wf-recorder gives up when the output changes under it (a new scale or mode from
     // the Displays page, a config reload): it starts again on the same socket, and the
     // phone takes the new codec config. Five times in 30 s is a broken output instead.
-    let mut restarts: Vec<std::time::Instant> = Vec::new();
+    let mut restarts: Vec<Instant> = Vec::new();
     let mut output = p.output.clone();
     loop {
         tokio::select! {
@@ -114,7 +276,7 @@ async fn run(listener: TcpListener, p: &Params) -> &'static str {
                     if restarts.len() >= 5 {
                         return "encoder_exit";
                     }
-                    restarts.push(std::time::Instant::now());
+                    restarts.push(Instant::now());
                 }
             },
             // Another screen to show: the same restart, asked for.
@@ -125,7 +287,8 @@ async fn run(listener: TcpListener, p: &Params) -> &'static str {
             _ = &mut touches => return "closed",
             _ = tokio::time::sleep(Duration::from_millis(300)) => {}
         }
-        rec = match Recorder::start(p).await {
+        let out_name = output.borrow().clone();
+        rec = match Recorder::start(&out_name, p.bitrate, 240, p.rate, false).await {
             Some(r) => r,
             None => return "encoder_exit",
         };
@@ -153,49 +316,714 @@ async fn read_line(s: &mut TcpStream) -> std::io::Result<String> {
     }
 }
 
+// ── Shared input decoding ────────────────────────────────────────────────
+
+fn parse_input_msg(data: &[u8], input_tx: &Sender<Cmd>) -> std::io::Result<()> {
+    let Some(&tag) = data.first() else {
+        return Err(std::io::ErrorKind::InvalidData.into());
+    };
+    let rest = &data[1..];
+    match tag {
+        1 => {
+            let Some(&n) = rest.first() else {
+                return Err(std::io::ErrorKind::InvalidData.into());
+            };
+            let n = n as usize;
+            let body = rest.get(1..1 + n * 5).ok_or(std::io::ErrorKind::InvalidData)?;
+            let mut fingers = Vec::with_capacity(n);
+            for chunk in body.chunks_exact(5) {
+                let id = chunk[0] as i64;
+                let x = u16::from_be_bytes([chunk[1], chunk[2]]) as f64 / 65535.0;
+                let y = u16::from_be_bytes([chunk[3], chunk[4]]) as f64 / 65535.0;
+                fingers.push((id, x, y));
+            }
+            let _ = input_tx.send(Cmd::ScreenFrame { fingers });
+            Ok(())
+        }
+        2 => {
+            if rest.len() < 2 {
+                return Err(std::io::ErrorKind::InvalidData.into());
+            }
+            let n = u16::from_be_bytes([rest[0], rest[1]]) as usize;
+            let text = rest.get(2..2 + n).ok_or(std::io::ErrorKind::InvalidData)?;
+            let _ = input_tx.send(Cmd::ScreenText { text: String::from_utf8_lossy(text).into_owned() });
+            Ok(())
+        }
+        3 => {
+            let Some(&n) = rest.first() else {
+                return Err(std::io::ErrorKind::InvalidData.into());
+            };
+            let n = n as usize;
+            let key = rest.get(1..1 + n).ok_or(std::io::ErrorKind::InvalidData)?;
+            let Some(&mask) = rest.get(1 + n) else {
+                return Err(std::io::ErrorKind::InvalidData.into());
+            };
+            let mods = [(1, "shift"), (2, "ctrl"), (4, "alt"), (8, "super")]
+                .iter()
+                .filter(|(bit, _)| mask & bit != 0)
+                .map(|(_, m)| m.to_string())
+                .collect();
+            let _ = input_tx.send(Cmd::ScreenKey { key: String::from_utf8_lossy(key).into_owned(), mods });
+            Ok(())
+        }
+        _ => Err(std::io::ErrorKind::InvalidData.into()),
+    }
+}
+
 async fn touch_loop<R: AsyncRead + Unpin>(rd: &mut R, input_tx: &Sender<Cmd>) -> std::io::Result<()> {
     loop {
-        match rd.read_u8().await? {
+        let msg = match rd.read_u8().await? {
             1 => {
                 let n = rd.read_u8().await? as usize;
-                let mut fingers = Vec::with_capacity(n);
-                for _ in 0..n {
-                    let id = rd.read_u8().await? as i64;
-                    let x = rd.read_u16().await? as f64 / 65535.0;
-                    let y = rd.read_u16().await? as f64 / 65535.0;
-                    fingers.push((id, x, y));
-                }
-                let _ = input_tx.send(Cmd::ScreenFrame { fingers });
+                let mut buf = vec![0u8; 2 + n * 5];
+                buf[0] = 1;
+                buf[1] = n as u8;
+                rd.read_exact(&mut buf[2..]).await?;
+                buf
             }
             2 => {
                 let n = rd.read_u16().await? as usize;
-                let mut text = vec![0u8; n];
-                rd.read_exact(&mut text).await?;
-                let _ = input_tx.send(Cmd::ScreenText { text: String::from_utf8_lossy(&text).into_owned() });
+                let mut buf = vec![0u8; 3 + n];
+                buf[0] = 2;
+                buf[1..3].copy_from_slice(&(n as u16).to_be_bytes());
+                rd.read_exact(&mut buf[3..]).await?;
+                buf
             }
             3 => {
                 let n = rd.read_u8().await? as usize;
-                let mut key = vec![0u8; n];
-                rd.read_exact(&mut key).await?;
-                let mask = rd.read_u8().await?;
-                let mods = [(1, "shift"), (2, "ctrl"), (4, "alt"), (8, "super")]
-                    .iter()
-                    .filter(|(bit, _)| mask & bit != 0)
-                    .map(|(_, m)| m.to_string())
-                    .collect();
-                let _ = input_tx.send(Cmd::ScreenKey { key: String::from_utf8_lossy(&key).into_owned(), mods });
+                let mut buf = vec![0u8; 3 + n];
+                buf[0] = 3;
+                buf[1] = n as u8;
+                rd.read_exact(&mut buf[2..]).await?;
+                buf
             }
             _ => return Err(std::io::ErrorKind::InvalidData.into()),
+        };
+        parse_input_msg(&msg, input_tx)?;
+    }
+}
+
+// ── Wi-Fi / link WebSocket path ──────────────────────────────────────────
+
+struct WriterItem {
+    enqueued_at: Instant,
+    video_bytes: usize,
+    is_frame: bool,
+    msg: Message,
+}
+
+struct QueueInner {
+    items: VecDeque<WriterItem>,
+    queued_bytes: usize,
+    in_flight_since: Option<Instant>,
+    closed: bool,
+    bytes_sent: u64,
+    frames_sent: u64,
+}
+
+struct WriterQueue {
+    inner: Mutex<QueueInner>,
+    notify: Notify,
+}
+
+impl WriterQueue {
+    fn new() -> Arc<Self> {
+        Arc::new(Self {
+            inner: Mutex::new(QueueInner {
+                items: VecDeque::new(),
+                queued_bytes: 0,
+                in_flight_since: None,
+                closed: false,
+                bytes_sent: 0,
+                frames_sent: 0,
+            }),
+            notify: Notify::new(),
+        })
+    }
+
+    fn is_congested(&self, bitrate: u64) -> bool {
+        let g = self.inner.lock().unwrap();
+        // As much as CONGESTION_AGE carries at the target rate: one key frame is not a backlog.
+        let byte_limit = ((bitrate as f64 / 8.0) * CONGESTION_AGE.as_secs_f64()) as usize;
+        let oldest_item = g.items.front().map(|i| i.enqueued_at.elapsed());
+        let oldest_flight = g.in_flight_since.map(|t| t.elapsed());
+        let oldest = match (oldest_item, oldest_flight) {
+            (Some(a), Some(b)) => a.max(b),
+            (Some(a), None) => a,
+            (None, Some(b)) => b,
+            (None, None) => Duration::ZERO,
+        };
+        oldest > CONGESTION_AGE || g.queued_bytes > byte_limit
+    }
+
+    fn push_video(&self, kind: u8, payload: Vec<u8>) -> bool {
+        let mut g = self.inner.lock().unwrap();
+        if g.closed {
+            return false;
         }
+        let len = payload.len();
+        if g.items.len() >= MAX_QUEUE_ITEMS || g.queued_bytes + len > MAX_QUEUE_BYTES {
+            g.closed = true;
+            return false;
+        }
+        g.queued_bytes += len;
+        g.items.push_back(WriterItem {
+            enqueued_at: Instant::now(),
+            video_bytes: len,
+            is_frame: kind != 0,
+            msg: Message::Binary(payload.into()),
+        });
+        self.notify.notify_one();
+        true
+    }
+
+    fn push_control(&self, msg: Message) -> bool {
+        let mut g = self.inner.lock().unwrap();
+        if g.closed {
+            return false;
+        }
+        if g.items.len() >= MAX_QUEUE_ITEMS {
+            g.closed = true;
+            return false;
+        }
+        g.items.push_back(WriterItem {
+            enqueued_at: Instant::now(),
+            video_bytes: 0,
+            is_frame: false,
+            msg,
+        });
+        self.notify.notify_one();
+        true
+    }
+
+    fn take_stats(&self) -> (u64, u64) {
+        let mut g = self.inner.lock().unwrap();
+        let b = g.bytes_sent;
+        let f = g.frames_sent;
+        g.bytes_sent = 0;
+        g.frames_sent = 0;
+        (b, f)
+    }
+}
+
+fn spawn_writer(ws_tx: futures_util::stream::SplitSink<Ws, Message>, queue: Arc<WriterQueue>) -> (oneshot::Receiver<()>, AbortOnDrop) {
+    let (dead_tx, dead_rx) = oneshot::channel();
+    let task = tokio::spawn(async move {
+        let mut ws_tx = ws_tx;
+        loop {
+            let item = loop {
+                let notified = queue.notify.notified();
+                tokio::pin!(notified);
+                notified.as_mut().enable();
+                {
+                    let mut g = queue.inner.lock().unwrap();
+                    if g.closed {
+                        let _ = dead_tx.send(());
+                        return;
+                    }
+                    if let Some(item) = g.items.pop_front() {
+                        g.queued_bytes -= item.video_bytes;
+                        g.in_flight_since = Some(Instant::now());
+                        break item;
+                    }
+                }
+                notified.await;
+            };
+            let vbytes = item.video_bytes as u64;
+            let is_frame = item.is_frame;
+            if ws_tx.send(item.msg).await.is_err() {
+                queue.inner.lock().unwrap().closed = true;
+                let _ = dead_tx.send(());
+                return;
+            }
+            let mut g = queue.inner.lock().unwrap();
+            g.in_flight_since = None;
+            g.bytes_sent += vbytes;
+            if is_frame {
+                g.frames_sent += 1;
+            }
+        }
+    });
+    (dead_rx, AbortOnDrop(task.abort_handle()))
+}
+
+struct LiveEncoder {
+    packets: mpsc::Receiver<(u8, Vec<u8>)>,
+    child: Child,
+    _reader: AbortOnDrop,
+}
+
+impl LiveEncoder {
+    async fn stop(mut self) {
+        // Abort reader task first so stdout closes, then reap child before starting another.
+        drop(self._reader);
+        let _ = self.child.kill().await;
+    }
+}
+
+struct StartingEncoder {
+    rx: oneshot::Receiver<Option<Recorder>>,
+    _task: AbortOnDrop,
+}
+
+impl StartingEncoder {
+    fn spawn(output: String, bitrate: u64, gop: u32, rate: u32) -> Self {
+        let (tx, rx) = oneshot::channel();
+        let task = tokio::spawn(async move {
+            let rec = Recorder::start(&output, bitrate, gop, rate, true).await;
+            let _ = tx.send(rec);
+        });
+        Self { rx, _task: AbortOnDrop(task.abort_handle()) }
+    }
+}
+
+enum WsConnEnd {
+    Dropped,
+    Replaced(Ws),
+    End(&'static str),
+}
+
+struct WsSession {
+    dev: String,
+    sid: u64,
+    w: i32,
+    h: i32,
+    gop: u32,
+    rate: u32,
+    max_bitrate: u64,
+    target_bitrate: u64,
+    adaptive: bool,
+    screen_started: bool,
+    encoder_name: &'static str,
+    /// The live encoder refreshes the picture in waves (no periodic key frame): a dropped
+    /// frame heals within one GOP on its own, so nothing waits for a key frame or restarts.
+    refresh: bool,
+    restarts: Vec<Instant>,
+    output: watch::Receiver<String>,
+    input_tx: Sender<Cmd>,
+}
+
+impl WsSession {
+    fn emit_rate(&self) {
+        crate::emit(json!({"ev": "screenRate", "dev": self.dev, "sid": self.sid, "bitrate": self.target_bitrate}));
+    }
+
+    fn emit_live(&self, encoder: &'static str) {
+        crate::emit(json!({"ev": "screenLive", "dev": self.dev, "sid": self.sid, "encoder": encoder}));
+    }
+
+    fn apply_quality(&mut self, v: &Value) -> bool {
+        let old_max = self.max_bitrate;
+        if let Some(b) = v["bitrate"].as_u64() {
+            self.max_bitrate = b.clamp(MIN_BITRATE, MAX_BITRATE);
+        }
+        if let Some(a) = v["adaptive"].as_bool() {
+            self.adaptive = a;
+        }
+        let new_target = if !self.adaptive || self.max_bitrate < self.target_bitrate || self.target_bitrate == old_max {
+            self.max_bitrate
+        } else {
+            self.target_bitrate
+        };
+        if new_target != self.target_bitrate {
+            self.target_bitrate = new_target;
+            self.emit_rate();
+            true
+        } else {
+            false
+        }
+    }
+}
+
+async fn run_ws(mut conns: mpsc::UnboundedReceiver<Ws>, p: &Params) -> &'static str {
+    let Ok(Some(mut ws)) = timeout(CONNECT_TIMEOUT, conns.recv()).await else {
+        return "timeout";
+    };
+    let mut sess = WsSession {
+        dev: p.dev.clone(),
+        sid: p.sid,
+        w: p.w,
+        h: p.h,
+        // With intra refresh, the period a damaged picture takes to heal.
+        gop: p.fps,
+        rate: p.rate,
+        max_bitrate: p.bitrate,
+        target_bitrate: p.bitrate,
+        adaptive: p.adaptive,
+        screen_started: false,
+        encoder_name: "",
+        refresh: false,
+        restarts: Vec::new(),
+        output: p.output.clone(),
+        input_tx: p.input_tx.clone(),
+    };
+
+    loop {
+        match run_ws_conn(ws, &mut sess, &mut conns).await {
+            WsConnEnd::End(reason) => return reason,
+            WsConnEnd::Replaced(next) => ws = next,
+            WsConnEnd::Dropped => {
+                // A finger down when Wi-Fi went would stay down on the PC until it came back.
+                let _ = sess.input_tx.send(Cmd::ScreenFrame { fingers: Vec::new() });
+                match timeout(RECONNECT_GRACE, conns.recv()).await {
+                    Ok(Some(next)) => ws = next,
+                    _ => return "closed",
+                }
+            }
+        }
+    }
+}
+
+async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedReceiver<Ws>) -> WsConnEnd {
+    limit_unsent(&ws);
+    let (ws_tx, mut ws_rx) = ws.split();
+    let queue = WriterQueue::new();
+    let (mut writer_dead, _writer_guard) = spawn_writer(ws_tx, queue.clone());
+
+    let mut starting: Option<StartingEncoder> = Some(StartingEncoder::spawn(
+        sess.output.borrow().clone(),
+        sess.target_bitrate,
+        sess.gop,
+        sess.rate,
+    ));
+    let mut live: Option<LiveEncoder> = None;
+    let mut backoff_until: Option<tokio::time::Instant> = None;
+
+    let mut dropping = false;
+    let mut dropping_since: Option<Instant> = None;
+    let mut restarted_this_drop = false;
+    let mut congestion_events: Vec<Instant> = Vec::new();
+    let mut last_congestion_at = Instant::now();
+    let mut last_rate_change: Option<Instant> = None;
+    let mut last_idr: Option<Instant> = None;
+    let mut dropped_s: u64 = 0;
+
+    let mut stats_tick = tokio::time::interval_at(
+        tokio::time::Instant::now() + Duration::from_secs(1),
+        Duration::from_secs(1),
+    );
+    stats_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+
+    // Helper to trigger an intended encoder restart without counting toward crash limits.
+    async fn restart_intended(
+        sess: &WsSession,
+        live: &mut Option<LiveEncoder>,
+        starting: &mut Option<StartingEncoder>,
+        backoff_until: &mut Option<tokio::time::Instant>,
+        dropping: &mut bool,
+        dropping_since: &mut Option<Instant>,
+        restarted_this_drop: &mut bool,
+    ) {
+        *dropping = false;
+        *dropping_since = None;
+        *restarted_this_drop = false;
+        *backoff_until = None;
+        *starting = None;
+        if let Some(enc) = live.take() {
+            enc.stop().await;
+        }
+        *starting = Some(StartingEncoder::spawn(
+            sess.output.borrow().clone(),
+            sess.target_bitrate,
+            sess.gop,
+            sess.rate,
+        ));
+    }
+
+    loop {
+        tokio::select! {
+            rec = async {
+                match starting.as_mut() {
+                    Some(s) => (&mut s.rx).await.ok().flatten(),
+                    None => std::future::pending().await,
+                }
+            }, if starting.is_some() => {
+                starting = None;
+                let Some(rec) = rec else {
+                    return WsConnEnd::End(if !sess.screen_started { "encoder" } else { "encoder_exit" });
+                };
+                sess.encoder_name = rec.encoder;
+                sess.refresh = rec.refresh;
+                sess.emit_live(rec.encoder);
+                if !sess.screen_started {
+                    let _ = sess.input_tx.send(Cmd::ScreenStart { w: sess.w, h: sess.h });
+                    sess.screen_started = true;
+                }
+                dropping = false;
+                dropping_since = None;
+                restarted_this_drop = false;
+                let enc = rec.into_live();
+                live = Some(enc);
+            }
+            pkt = async {
+                match live.as_mut() {
+                    Some(enc) => enc.packets.recv().await,
+                    None => std::future::pending().await,
+                }
+            }, if live.is_some() => {
+                match pkt {
+                    None => {
+                        // Unexpected encoder exit: count toward 5-in-30s limit and settle 300 ms.
+                        if let Some(enc) = live.take() {
+                            enc.stop().await;
+                        }
+                        sess.restarts.retain(|t| t.elapsed() < Duration::from_secs(30));
+                        if sess.restarts.len() >= 5 {
+                            return WsConnEnd::End("encoder_exit");
+                        }
+                        sess.restarts.push(Instant::now());
+                        backoff_until = Some(tokio::time::Instant::now() + Duration::from_millis(300));
+                    }
+                    Some((kind, payload)) => {
+                        if kind == 0 {
+                            if !queue.push_video(kind, payload) {
+                                return WsConnEnd::Dropped;
+                            }
+                        } else if kind == 2 {
+                            dropping = false;
+                            dropping_since = None;
+                            restarted_this_drop = false;
+                            if !queue.push_video(kind, payload) {
+                                return WsConnEnd::Dropped;
+                            }
+                        } else {
+                            let congested = queue.is_congested(sess.target_bitrate);
+                            if dropping && !congested && sess.refresh {
+                                dropping = false;
+                                dropping_since = None;
+                                restarted_this_drop = false;
+                            }
+                            if congested {
+                                last_congestion_at = Instant::now();
+                            }
+                            if dropping || congested {
+                                if !dropping {
+                                    dropping = true;
+                                    dropping_since = Some(Instant::now());
+                                    restarted_this_drop = false;
+                                    if sess.adaptive {
+                                        congestion_events.retain(|t| t.elapsed() < CONGESTION_WINDOW);
+                                        if congestion_events.last().is_none_or(|t| t.elapsed() >= Duration::from_millis(400)) {
+                                            congestion_events.push(Instant::now());
+                                        }
+                                    }
+                                }
+                                dropped_s += 1;
+
+                                if sess.adaptive {
+                                    congestion_events.retain(|t| t.elapsed() < CONGESTION_WINDOW);
+                                    let floor = sess.max_bitrate.min(FLOOR_BITRATE);
+                                    let next_rate = ((sess.target_bitrate as f64) * 0.7).round().max(floor as f64) as u64;
+                                    if congestion_events.len() >= 2
+                                        && next_rate < sess.target_bitrate
+                                        && last_rate_change.is_none_or(|t| t.elapsed() >= RATE_COOLDOWN)
+                                    {
+                                        sess.target_bitrate = next_rate;
+                                        last_rate_change = Some(Instant::now());
+                                        last_congestion_at = Instant::now();
+                                        congestion_events.clear();
+                                        sess.emit_rate();
+                                        restart_intended(
+                                            sess,
+                                            &mut live,
+                                            &mut starting,
+                                            &mut backoff_until,
+                                            &mut dropping,
+                                            &mut dropping_since,
+                                            &mut restarted_this_drop,
+                                        )
+                                        .await;
+                                    } else if !sess.refresh && !restarted_this_drop && dropping_since.is_some_and(|t| t.elapsed() > DROP_IDR_AFTER) {
+                                        restarted_this_drop = true;
+                                        restart_intended(
+                                            sess,
+                                            &mut live,
+                                            &mut starting,
+                                            &mut backoff_until,
+                                            &mut dropping,
+                                            &mut dropping_since,
+                                            &mut restarted_this_drop,
+                                        )
+                                        .await;
+                                    }
+                                } else if !sess.refresh && !restarted_this_drop && dropping_since.is_some_and(|t| t.elapsed() > DROP_IDR_AFTER) {
+                                    restarted_this_drop = true;
+                                    restart_intended(
+                                        sess,
+                                        &mut live,
+                                        &mut starting,
+                                        &mut backoff_until,
+                                        &mut dropping,
+                                        &mut dropping_since,
+                                        &mut restarted_this_drop,
+                                    )
+                                    .await;
+                                }
+                            } else if !queue.push_video(kind, payload) {
+                                return WsConnEnd::Dropped;
+                            }
+                        }
+                    }
+                }
+            }
+            _ = async {
+                match backoff_until {
+                    Some(deadline) => tokio::time::sleep_until(deadline).await,
+                    None => std::future::pending::<()>().await,
+                }
+            }, if backoff_until.is_some() => {
+                backoff_until = None;
+                starting = Some(StartingEncoder::spawn(
+                    sess.output.borrow().clone(),
+                    sess.target_bitrate,
+                    sess.gop,
+                    sess.rate,
+                ));
+            }
+            _ = stats_tick.tick() => {
+                if sess.adaptive
+                    && sess.target_bitrate < sess.max_bitrate
+                    && last_congestion_at.elapsed() >= STEP_UP_QUIET
+                    && last_rate_change.is_none_or(|t| t.elapsed() >= RATE_COOLDOWN)
+                {
+                    let next_rate = (((sess.target_bitrate as f64) * 1.25).round() as u64).min(sess.max_bitrate);
+                    if next_rate > sess.target_bitrate {
+                        sess.target_bitrate = next_rate;
+                        last_rate_change = Some(Instant::now());
+                        last_congestion_at = Instant::now();
+                        sess.emit_rate();
+                        restart_intended(
+                            sess,
+                            &mut live,
+                            &mut starting,
+                            &mut backoff_until,
+                            &mut dropping,
+                            &mut dropping_since,
+                            &mut restarted_this_drop,
+                        )
+                        .await;
+                    }
+                }
+                if sess.screen_started {
+                    let (bytes_sent, frames_sent) = queue.take_stats();
+                    let dropped = std::mem::take(&mut dropped_s);
+                    let kbps = (bytes_sent * 8) / 1000;
+                    let msg = json!({
+                        "t": "stats",
+                        "bitrate": sess.target_bitrate,
+                        "max": sess.max_bitrate,
+                        "kbps": kbps,
+                        "fps": frames_sent,
+                        "dropped": dropped,
+                        "encoder": sess.encoder_name,
+                    })
+                    .to_string();
+                    if !queue.push_control(Message::text(msg)) {
+                        return WsConnEnd::Dropped;
+                    }
+                } else {
+                    dropped_s = 0;
+                    let _ = queue.take_stats();
+                }
+            }
+            msg = ws_rx.next() => match msg {
+                Some(Ok(Message::Binary(b))) => {
+                    let _ = parse_input_msg(&b, &sess.input_tx);
+                }
+                Some(Ok(Message::Text(t))) => {
+                    let Ok(v) = serde_json::from_str::<Value>(t.as_str()) else { continue };
+                    match v["t"].as_str().unwrap_or("") {
+                        "ping" => {
+                            let pong = json!({"t": "pong", "id": v["id"]}).to_string();
+                            if !queue.push_control(Message::text(pong)) {
+                                return WsConnEnd::Dropped;
+                            }
+                        }
+                        "quality" => {
+                            if sess.apply_quality(&v) {
+                                last_rate_change = Some(Instant::now());
+                                last_congestion_at = Instant::now();
+                                congestion_events.clear();
+                                restart_intended(
+                                    sess,
+                                    &mut live,
+                                    &mut starting,
+                                    &mut backoff_until,
+                                    &mut dropping,
+                                    &mut dropping_since,
+                                    &mut restarted_this_drop,
+                                )
+                                .await;
+                            }
+                        }
+                        "idr" => {
+                            // A refreshing encoder heals the phone's picture by itself: a restart
+                            // would only freeze it ~300 ms and send the burst refresh avoids.
+                            if !sess.refresh && last_idr.is_none_or(|t| t.elapsed() >= IDR_COOLDOWN) {
+                                last_idr = Some(Instant::now());
+                                restart_intended(
+                                    sess,
+                                    &mut live,
+                                    &mut starting,
+                                    &mut backoff_until,
+                                    &mut dropping,
+                                    &mut dropping_since,
+                                    &mut restarted_this_drop,
+                                )
+                                .await;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                Some(Ok(Message::Close(_))) | Some(Err(_)) | None => return WsConnEnd::Dropped,
+                Some(Ok(_)) => {}
+            },
+            changed = sess.output.changed() => {
+                if changed.is_err() {
+                    return WsConnEnd::End("stopped");
+                }
+                starting = None;
+                if let Some(enc) = live.take() {
+                    enc.stop().await;
+                }
+                backoff_until = Some(tokio::time::Instant::now() + Duration::from_millis(300));
+            }
+            _ = &mut writer_dead => return WsConnEnd::Dropped,
+            next = conns.recv() => match next {
+                Some(next_ws) => return WsConnEnd::Replaced(next_ws),
+                None => return WsConnEnd::End("stopped"),
+            },
+        }
+    }
+}
+
+/// The kernel's send buffer grows to megabytes: seconds of video at Wi-Fi rates, queued
+/// where the congestion check cannot see it. With little unsent data allowed there, a
+/// slow link backs up into [`WriterQueue`], whose age the dropping and the bitrate follow.
+fn limit_unsent(ws: &Ws) {
+    use std::os::fd::AsRawFd;
+    const NOTSENT_LOWAT: libc::c_int = 32 * 1024;
+    let fd = ws.get_ref().get_ref().0.as_raw_fd();
+    // SAFETY: a live socket's fd and a c_int option of the right size.
+    unsafe {
+        libc::setsockopt(
+            fd,
+            libc::IPPROTO_TCP,
+            libc::TCP_NOTSENT_LOWAT,
+            &NOTSENT_LOWAT as *const libc::c_int as *const libc::c_void,
+            std::mem::size_of::<libc::c_int>() as libc::socklen_t,
+        );
     }
 }
 
 // ── The encoder ──────────────────────────────────────────────────────────
 
 struct Recorder {
-    _child: Child,
+    child: Child,
     out: ChildStdout,
     encoder: &'static str,
+    refresh: bool,
     /// The video tag that proved the encoder works, sent before the rest.
     first: Option<(u32, Vec<u8>)>,
     nal_len: usize,
@@ -203,31 +1031,45 @@ struct Recorder {
 
 impl Recorder {
     /// The first encoder that produces a picture within a few seconds.
-    async fn start(p: &Params) -> Option<Recorder> {
-        let output = p.output.borrow().clone();
-        let b = format!("b={}", p.bitrate);
+    async fn start(output: &str, bitrate: u64, gop: u32, rate: u32, ws: bool) -> Option<Recorder> {
+        let b = format!("b={bitrate}");
+        let g = format!("g={gop}");
+        let mut nvenc_args = vec![
+            "-c", "h264_nvenc", "-p", "preset=p1", "-p", "tune=ull", "-p", "zerolatency=1", "-p", "rc=cbr", "-p", &b, "-p", &g,
+        ];
+        if ws {
+            // Intra refresh: no key frame after the first. A key frame is ~10× a frame (350 KB at
+            // 8 Mbit/s): a burst Wi-Fi delivers late every GOP, which was the periodic stutter.
+            nvenc_args.extend(["-p", "delay=0", "-p", "intra-refresh=1"]);
+        }
         let mut candidates: Vec<(&'static str, Vec<String>)> = vec![(
             "nvenc",
-            ["-c", "h264_nvenc", "-p", "preset=p1", "-p", "tune=ull", "-p", "zerolatency=1", "-p", "rc=cbr", "-p", &b, "-p", "g=240"]
-                .map(String::from)
-                .to_vec(),
+            nvenc_args.into_iter().map(String::from).collect(),
         )];
         let mut nodes: Vec<String> = std::fs::read_dir("/dev/dri")
             .map(|d| d.filter_map(|e| e.ok()).map(|e| e.path().to_string_lossy().into_owned()).filter(|p| p.contains("renderD")).collect())
             .unwrap_or_default();
         nodes.sort();
         for node in nodes {
-            candidates.push(("vaapi", ["-c", "h264_vaapi", "-d", &node, "-p", &b, "-p", "g=240"].map(String::from).to_vec()));
+            candidates.push(("vaapi", ["-c", "h264_vaapi", "-d", &node, "-p", &b, "-p", &g].map(String::from).to_vec()));
         }
         candidates.push((
             "x264",
-            ["-c", "libx264", "-x", "yuv420p", "-p", "preset=ultrafast", "-p", "tune=zerolatency", "-p", &b, "-p", "g=240"]
+            ["-c", "libx264", "-x", "yuv420p", "-p", "preset=ultrafast", "-p", "tune=zerolatency", "-p", &b, "-p", &g]
+                .into_iter()
+                .chain(if ws { ["-p", "intra-refresh=1"].to_vec() } else { Vec::new() })
                 .map(String::from)
-                .to_vec(),
+                .collect(),
         ));
         for (name, args) in candidates {
             let Ok(mut child) = Command::new("wf-recorder")
-                .args(["-o", &output, "-b", "0", "-m", "flv", "-f", "/dev/stdout", "-y"])
+                .args(["-o", output, "-b", "0", "-m", "flv", "-f", "/dev/stdout", "-y"])
+                // Every refresh, not only damaged ones: a hardware cursor moves without
+                // damaging the output, so a damage-driven capture froze while only the mouse
+                // moved, and a still headless output gave no first frame (5 s per encoder tried).
+                // A still screen costs ~100-byte frames, which also keep the phone's radio awake.
+                .arg("-D")
+                .args(if rate > 0 { vec!["-r".to_string(), rate.to_string()] } else { Vec::new() })
                 .args(&args)
                 .stdin(Stdio::null())
                 .stdout(Stdio::piped())
@@ -253,10 +1095,36 @@ impl Recorder {
             })
             .await;
             if let Ok(Ok(first)) = first {
-                return Some(Recorder { _child: child, out, encoder: name, first: Some(first), nal_len: 4 });
+                let refresh = ws && name != "vaapi";
+                return Some(Recorder { child, out, encoder: name, refresh, first: Some(first), nal_len: 4 });
             }
         }
         None
+    }
+
+    fn into_live(self) -> LiveEncoder {
+        let Recorder { child, mut out, mut first, mut nal_len, .. } = self;
+        let (tx, rx) = mpsc::channel(8);
+        let task = tokio::spawn(async move {
+            if let Some((ts, data)) = first.take() {
+                if let Some(pkt) = encode_tag(&mut nal_len, ts, &data) {
+                    if tx.send(pkt).await.is_err() {
+                        return;
+                    }
+                }
+            }
+            loop {
+                let Ok((kind, ts, data)) = read_tag(&mut out).await else { break };
+                if kind == 9 {
+                    if let Some(pkt) = encode_tag(&mut nal_len, ts, &data) {
+                        if tx.send(pkt).await.is_err() {
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+        LiveEncoder { packets: rx, child, _reader: AbortOnDrop(task.abort_handle()) }
     }
 
     async fn pump<W: AsyncWriteExt + Unpin>(&mut self, wr: &mut W) -> Pump {
@@ -273,36 +1141,46 @@ impl Recorder {
         }
     }
 
-    /// One FLV video tag as a packet for the phone, its NAL units in Annex-B.
+    /// One FLV video tag as a USB packet (`[u32 length]` + WS payload).
     async fn forward<W: AsyncWriteExt + Unpin>(&mut self, ts: u32, data: &[u8], wr: &mut W) -> std::io::Result<()> {
-        if data.len() < 5 || data[0] & 0x0f != 7 {
+        let Some((_, payload)) = encode_tag(&mut self.nal_len, ts, data) else {
             return Ok(());
-        }
-        let key = data[0] >> 4 == 1;
-        let cts = (i32::from_be_bytes([data[2], data[3], data[4], 0]) >> 8) as i64;
-        let pts_us = ((ts as i64 + cts).max(0) as u64) * 1000;
-        let body = &data[5..];
-        let (kind, annexb) = match data[1] {
-            0 => match config_annexb(body) {
-                Some((len, bytes)) => {
-                    self.nal_len = len;
-                    (0u8, bytes)
-                }
-                None => return Ok(()),
-            },
-            1 => (if key { 2 } else { 1 }, nalus_annexb(body, self.nal_len)),
-            _ => return Ok(()),
         };
-        if annexb.is_empty() {
-            return Ok(());
-        }
-        let mut pkt = Vec::with_capacity(13 + annexb.len());
-        pkt.extend_from_slice(&((9 + annexb.len()) as u32).to_be_bytes());
-        pkt.push(kind);
-        pkt.extend_from_slice(&pts_us.to_be_bytes());
-        pkt.extend_from_slice(&annexb);
+        let mut pkt = Vec::with_capacity(4 + payload.len());
+        pkt.extend_from_slice(&(payload.len() as u32).to_be_bytes());
+        pkt.extend_from_slice(&payload);
         wr.write_all(&pkt).await
     }
+}
+
+/// Encode one FLV video tag into `[u8 kind][u64 pts µs BE][Annex-B]`.
+fn encode_tag(nal_len: &mut usize, ts: u32, data: &[u8]) -> Option<(u8, Vec<u8>)> {
+    if data.len() < 5 || data[0] & 0x0f != 7 {
+        return None;
+    }
+    let key = data[0] >> 4 == 1;
+    let cts = (i32::from_be_bytes([data[2], data[3], data[4], 0]) >> 8) as i64;
+    let pts_us = ((ts as i64 + cts).max(0) as u64) * 1000;
+    let body = &data[5..];
+    let (kind, annexb) = match data[1] {
+        0 => match config_annexb(body) {
+            Some((len, bytes)) => {
+                *nal_len = len;
+                (0u8, bytes)
+            }
+            None => return None,
+        },
+        1 => (if key { 2 } else { 1 }, nalus_annexb(body, *nal_len)),
+        _ => return None,
+    };
+    if annexb.is_empty() {
+        return None;
+    }
+    let mut pkt = Vec::with_capacity(9 + annexb.len());
+    pkt.push(kind);
+    pkt.extend_from_slice(&pts_us.to_be_bytes());
+    pkt.extend_from_slice(&annexb);
+    Some((kind, pkt))
 }
 
 async fn read_tag<R: AsyncRead + Unpin>(out: &mut R) -> std::io::Result<(u8, u32, Vec<u8>)> {
@@ -350,4 +1228,106 @@ fn nalus_annexb(mut body: &[u8], len: usize) -> Vec<u8> {
         body = &body[len + n..];
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn input_msg_parses_all_kinds_and_rejects_bad() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        // Touch frame: 1 finger at (65535, 0)
+        parse_input_msg(&[1, 1, 2, 0xff, 0xff, 0x00, 0x00], &tx).unwrap();
+        match rx.recv().unwrap() {
+            Cmd::ScreenFrame { fingers } => {
+                assert_eq!(fingers.len(), 1);
+                assert_eq!(fingers[0].0, 2);
+                assert!((fingers[0].1 - 1.0).abs() < 1e-6);
+                assert!((fingers[0].2 - 0.0).abs() < 1e-6);
+            }
+            _ => panic!("expected ScreenFrame"),
+        }
+        // Text frame
+        parse_input_msg(&[2, 0, 2, b'h', b'i'], &tx).unwrap();
+        match rx.recv().unwrap() {
+            Cmd::ScreenText { text } => assert_eq!(text, "hi"),
+            _ => panic!("expected ScreenText"),
+        }
+        // Key frame: "Return" with shift+ctrl (1 | 2 = 3)
+        parse_input_msg(&[3, 6, b'R', b'e', b't', b'u', b'r', b'n', 3], &tx).unwrap();
+        match rx.recv().unwrap() {
+            Cmd::ScreenKey { key, mods } => {
+                assert_eq!(key, "Return");
+                assert_eq!(mods, vec!["shift".to_string(), "ctrl".to_string()]);
+            }
+            _ => panic!("expected ScreenKey"),
+        }
+        // Truncated / unknown
+        assert!(parse_input_msg(&[], &tx).is_err());
+        assert!(parse_input_msg(&[1, 1, 0], &tx).is_err());
+        assert!(parse_input_msg(&[9], &tx).is_err());
+    }
+
+    #[test]
+    fn writer_queue_congestion_by_bytes_and_age() {
+        let q = WriterQueue::new();
+        // 8 Mbps -> 0.2 s = 200_000 bytes
+        assert!(!q.is_congested(8_000_000));
+        assert!(q.push_video(1, vec![0u8; 150_000]));
+        assert!(!q.is_congested(8_000_000));
+        assert!(q.push_video(1, vec![0u8; 60_000]));
+        assert!(q.is_congested(8_000_000));
+
+        // Older than CONGESTION_AGE triggers congestion even with a tiny payload
+        let q2 = WriterQueue::new();
+        {
+            let mut g = q2.inner.lock().unwrap();
+            g.items.push_back(WriterItem {
+                enqueued_at: Instant::now() - CONGESTION_AGE - Duration::from_millis(20),
+                video_bytes: 100,
+                is_frame: true,
+                msg: Message::Binary(vec![0u8; 100].into()),
+            });
+            g.queued_bytes = 100;
+        }
+        assert!(q2.is_congested(80_000_000));
+    }
+
+    #[test]
+    fn apply_quality_respects_adaptive_and_clamps() {
+        let (_out_tx, out_rx) = watch::channel(String::from("HDMI-A-1"));
+        let (in_tx, _in_rx) = std::sync::mpsc::channel();
+        let mut sess = WsSession {
+            dev: "d".into(),
+            sid: 1,
+            w: 1920,
+            h: 1080,
+            gop: 120,
+            rate: 0,
+            max_bitrate: 16_000_000,
+            target_bitrate: 16_000_000,
+            adaptive: true,
+            screen_started: true,
+            encoder_name: "nvenc",
+            refresh: true,
+            restarts: Vec::new(),
+            output: out_rx,
+            input_tx: in_tx,
+        };
+        // Same settings -> no target change
+        assert!(!sess.apply_quality(&json!({"t": "quality", "bitrate": 16_000_000, "adaptive": true})));
+        // Lowered due to congestion, raising max doesn't immediately jump target while adaptive
+        sess.target_bitrate = 11_200_000;
+        assert!(!sess.apply_quality(&json!({"t": "quality", "bitrate": 24_000_000, "adaptive": true})));
+        assert_eq!(sess.max_bitrate, 24_000_000);
+        assert_eq!(sess.target_bitrate, 11_200_000);
+        // Turning adaptive off snaps target to max
+        assert!(sess.apply_quality(&json!({"t": "quality", "bitrate": 24_000_000, "adaptive": false})));
+        assert_eq!(sess.target_bitrate, 24_000_000);
+        // Clamp to 1..80 Mbps
+        assert!(sess.apply_quality(&json!({"t": "quality", "bitrate": 200_000_000, "adaptive": false})));
+        assert_eq!(sess.max_bitrate, 80_000_000);
+        assert_eq!(sess.target_bitrate, 80_000_000);
+    }
 }

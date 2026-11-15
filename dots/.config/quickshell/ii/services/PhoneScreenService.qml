@@ -10,12 +10,12 @@ import qs.modules.common
 /**
  * The phone as a monitor (ROADMAP 3.1): extend this PC onto it, or mirror a screen.
  *
- * Over USB only, for now. The phone asks over ii link (`{"t":"screen","a":"start"}`);
- * this service finds the phone in `adb devices`, makes the output (a headless one the
- * phone's size to extend, the focused screen to mirror), maps the helper's touchscreen
- * onto it, and has the helper (screen.rs) capture and serve it on a localhost port that
- * `adb reverse` hands to the phone, with a one-time token. Everything it made goes when
- * the phone leaves, closes the stream, or the setting is turned off.
+ * Over USB (raw TCP + `adb reverse`) or Wi-Fi (side WebSocket on the ii link). The phone
+ * asks over ii link (`{"t":"screen","a":"start"}`); this service resolves the transport,
+ * makes the output (a headless one the phone's size to extend, a chosen/focused screen to
+ * mirror), maps the helper's touchscreen onto it, and starts capture in the helper
+ * (screen.rs) with a one-time token. Everything it made goes when the phone leaves,
+ * closes the stream, or the setting is turned off.
  *
  * Hyprland forgets monitor and device rules made with `hyprctl eval` on a config
  * reload, so they are applied again then.
@@ -24,14 +24,17 @@ Singleton {
     id: root
 
     readonly property bool enabled: Config.options?.iiTools?.screen?.enable ?? true
+    readonly property bool wirelessEnabled: Config.options?.iiTools?.screen?.wireless ?? true
     property bool adbPresent: false
 
     readonly property string headlessName: "II-PHONE"
     // Hyprland's name for the helper's "ii tools screen" device.
     readonly property string deviceName: "ii-tools-screen"
 
-    /// "idle", "starting" (adb, the output, the helper), "ready" (the phone may connect), "live".
+    /// "idle", "starting" (adb/token, the output, the helper), "ready" (the phone may connect), "live".
     property string state: "idle"
+    /// Resolved transport for the active session: "usb", "wifi", or "" when idle.
+    property string transport: ""
     property string dev: ""
     property string mode: ""
     property string output: ""
@@ -44,6 +47,8 @@ Singleton {
     property string encoder: ""
     property string lastError: ""
     property bool _helperUp: false
+    property bool _adaptive: true
+    property string _wantTransport: "auto"
     // What the phone asked for (its settings): the extended output's size, refresh,
     // scale and side, and the stream's bitrate.
     property int _phoneW: 0
@@ -53,6 +58,8 @@ Singleton {
     property real scale: 1.5
     property string side: "right"
     property int bitrateMbps: 16
+    /// Current target bitrate (Mbps) reported by adaptive rate control, or 0 when idle.
+    property real liveBitrate: 0
     /// The extended output's place in the layout, "XxY", once worked out.
     property string position: "auto-right"
     // The screen the extended one sits beside: the focused one when it started.
@@ -62,6 +69,11 @@ Singleton {
 
     onEnabledChanged: {
         if (!root.enabled)
+            root.stop("disabled");
+    }
+
+    onWirelessEnabledChanged: {
+        if (!root.wirelessEnabled && root.transport === "wifi")
             root.stop("disabled");
     }
 
@@ -107,15 +119,21 @@ Singleton {
     function start(dev, m): void {
         const mode = String(m.mode ?? "extend");
         const phoneW = Number(m.w ?? 0), phoneH = Number(m.h ?? 0);
+        const wantTransport = ["usb", "wifi", "auto"].includes(String(m.transport ?? "")) ? String(m.transport) : "auto";
         if (!root.enabled)
             return IiLinkService.sendTo(dev, { t: "screen", err: "disabled" });
-        if (!root.adbPresent)
+        if (wantTransport === "usb" && !root.adbPresent)
+            return IiLinkService.sendTo(dev, { t: "screen", err: "adb" });
+        if (wantTransport === "wifi" && !root.wirelessEnabled)
+            return IiLinkService.sendTo(dev, { t: "screen", err: "wireless" });
+        if (wantTransport === "auto" && !root.adbPresent && !root.wirelessEnabled)
             return IiLinkService.sendTo(dev, { t: "screen", err: "adb" });
         if (root.state !== "idle") {
             if (dev !== root.dev)
                 return IiLinkService.sendTo(dev, { t: "screen", err: "busy" });
             root.stop("restart");
         }
+        const wifiOnly = wantTransport === "wifi" || (wantTransport === "auto" && !root.adbPresent);
         root.sid += 1;
         root.dev = dev;
         root.mode = mode === "mirror" ? "mirror" : "extend";
@@ -126,13 +144,20 @@ Singleton {
         root.scale = [1, 1.25, 1.5, 2].includes(Number(m.scale)) ? Number(m.scale) : 1.5;
         root.side = ["left", "right", "above", "below"].includes(String(m.side)) ? String(m.side) : "right";
         root.bitrateMbps = Math.max(2, Math.min(60, Math.round(Number(m.bitrate ?? 16))));
+        root.liveBitrate = root.bitrateMbps;
+        root._adaptive = m.adaptive !== false;
+        root._wantTransport = wantTransport;
+        root.transport = wifiOnly ? "wifi" : "usb";
         root.position = "auto-right";
         root._anchor = String(Hyprland.focusedMonitor?.name ?? "");
         root._wantMirror = String(m.output ?? "");
         root.lastError = "";
         root.state = "starting";
         root._reply({ state: "starting", mode: root.mode });
-        adbFind.running = true;
+        if (wifiOnly)
+            tokenGen.running = true;
+        else
+            adbFind.running = true;
     }
 
     /// Ends the session and removes what it made at once; the helper's own end, which
@@ -206,6 +231,24 @@ Singleton {
         root.stop(code);
     }
 
+    // A token from the kernel's RNG without touching adb (wireless path).
+    Process {
+        id: tokenGen
+        command: ["sh", "-c", "head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \\n'"]
+        stdout: StdioCollector {
+            id: tokenOut
+        }
+        onExited: code => {
+            if (root.state !== "starting")
+                return;
+            root.token = tokenOut.text.trim();
+            if (root.token.length < 16)
+                return root._fail("wireless");
+            root.serial = "";
+            root._setupOutput();
+        }
+    }
+
     // A token from the kernel's RNG, then the USB devices.
     Process {
         id: adbFind
@@ -219,14 +262,22 @@ Singleton {
             const lines = adbOut.text.split("\n");
             root.token = lines.shift().trim();
             const devices = lines.map(l => l.trim().split(/\s+/)).filter(f => f.length >= 2 && f[0] !== "List");
-            // USB only for now: wireless adb lists the same phone again, without `usb:`.
+            // USB only: wireless adb lists the same phone again, without `usb:`.
             const ready = devices.filter(f => f[1] === "device" && f.some(x => x.startsWith("usb:")));
             const want = String(IiLinkService.connections[root.dev]?.model ?? "").replace(/[^A-Za-z0-9]/g, "_");
             const match = ready.find(f => want !== "" && f.some(x => x === `model:${want}`)) ?? (ready.length === 1 ? ready[0] : null);
             if (root.token.length < 16)
-                return root._fail("adb");
-            if (!match)
+                return root._fail(root._wantTransport === "auto" && root.wirelessEnabled ? "wireless" : "adb");
+            if (!match) {
+                if (root._wantTransport === "auto" && root.wirelessEnabled) {
+                    root.transport = "wifi";
+                    root.serial = "";
+                    root._setupOutput();
+                    return;
+                }
                 return root._fail(devices.some(f => f[1] === "unauthorized") ? "unauthorized" : "usb");
+            }
+            root.transport = "usb";
             root.serial = match[0];
             root._setupOutput();
         }
@@ -321,7 +372,7 @@ Singleton {
             if (root.state !== "starting")
                 return;
             root._helperUp = true;
-            IiLinkService.send({
+            const op = {
                 op: "screen",
                 a: "start",
                 dev: root.dev,
@@ -330,8 +381,17 @@ Singleton {
                 token: root.token,
                 w: root.w,
                 h: root.h,
-                bitrate: root.bitrateMbps * 1000000
-            });
+                bitrate: root.bitrateMbps * 1000000,
+                // The capture's frame rate, always: without it wf-recorder sends every refresh
+                // (180 on a fast screen) and NVENC's CBR overshoots the bitrate by that ratio.
+                rate: root.fps
+            };
+            if (root.transport === "wifi") {
+                op.transport = "ws";
+                op.fps = root.fps;
+                op.adaptive = root._adaptive;
+            }
+            IiLinkService.send(op);
         }
     }
 
@@ -347,7 +407,7 @@ Singleton {
             if (code !== 0)
                 return root._fail("adb");
             root.state = "ready";
-            root._reply({ state: "ready", port: root.port, token: root.token, w: root.w, h: root.h, mode: root.mode, output: root.output, screens: root._monitors().length });
+            root._reply({ state: "ready", transport: "usb", port: root.port, token: root.token, w: root.w, h: root.h, mode: root.mode, output: root.output, screens: root._monitors().length });
         }
     }
 
@@ -357,9 +417,20 @@ Singleton {
         switch (ev.ev) {
         case "screen":
             root.port = Number(ev.port ?? 0);
-            adbReverse.command = ["adb", "-s", root.serial, "reverse", `tcp:${root.port}`, `tcp:${root.port}`];
-            adbReverse.running = true;
+            if (root.transport === "wifi" || ev.transport === "ws" || root.port <= 0) {
+                root.state = "ready";
+                root._reply({ state: "ready", transport: "wifi", token: root.token, w: root.w, h: root.h, mode: root.mode, output: root.output, screens: root._monitors().length });
+            } else {
+                adbReverse.command = ["adb", "-s", root.serial, "reverse", `tcp:${root.port}`, `tcp:${root.port}`];
+                adbReverse.running = true;
+            }
             break;
+        case "screenRate": {
+            const bps = Number(ev.bitrate ?? 0);
+            if (bps > 0)
+                root.liveBitrate = Math.round(bps / 100000) / 10;
+            break;
+        }
         case "screenLive":
             root.state = "live";
             root.encoder = String(ev.encoder ?? "");
@@ -378,7 +449,7 @@ Singleton {
     }
 
     function _cleanup(reason): void {
-        if (root.port > 0 && root.serial !== "")
+        if (root.transport !== "wifi" && root.port > 0 && root.serial !== "")
             Quickshell.execDetached(["adb", "-s", root.serial, "reverse", "--remove", `tcp:${root.port}`]);
         if (root.mode === "extend" && root.output !== "")
             Quickshell.execDetached(["hyprctl", "output", "remove", root.headlessName]);
@@ -390,6 +461,10 @@ Singleton {
         root.serial = "";
         root.token = "";
         root.port = 0;
+        root.transport = "";
+        root.liveBitrate = 0;
+        root._adaptive = true;
+        root._wantTransport = "auto";
         root.encoder = "";
     }
 
@@ -407,7 +482,7 @@ Singleton {
         target: "phoneScreen"
 
         function status(): string {
-            return JSON.stringify({ state: root.state, mode: root.mode, dev: root.dev, output: root.output, serial: root.serial, port: root.port, size: `${root.w}x${root.h}`, fps: root.fps, scale: root.scale, position: root.position, bitrate: root.bitrateMbps, encoder: root.encoder, error: root.lastError, adb: root.adbPresent });
+            return JSON.stringify({ state: root.state, transport: root.transport, mode: root.mode, dev: root.dev, output: root.output, serial: root.serial, port: root.port, size: `${root.w}x${root.h}`, fps: root.fps, scale: root.scale, position: root.position, bitrate: root.bitrateMbps, liveBitrate: root.liveBitrate, encoder: root.encoder, error: root.lastError, adb: root.adbPresent });
         }
 
         function stop(): string {

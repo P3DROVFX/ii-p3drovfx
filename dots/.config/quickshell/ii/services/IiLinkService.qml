@@ -196,7 +196,7 @@ Singleton {
         .concat(root.touchpadEnabled ? ["touchpad"] : [])
         .concat(root.drawEnabled && LiveDraw.enabled ? ["draw"] : [])
         .concat(root.presentEnabled ? ["present"] : [])
-        .concat(PhoneScreenService.enabled ? ["screen"] : [])
+        .concat(PhoneScreenService.enabled ? (PhoneScreenService.wirelessEnabled ? ["screen", "screenWifi"] : ["screen"]) : [])
         .concat(root.cameraEnabled ? ["camera"] : [])
         .concat(root.micEnabled ? ["mic"] : [])
         .concat(root.usageEnabled ? ["usage"] : [])
@@ -3654,6 +3654,7 @@ Singleton {
                 root._setTransfer({ received: Number(ev.received ?? 0) });
             break;
         case "screen":
+        case "screenRate":
         case "screenLive":
         case "screenEnd":
             PhoneScreenService.handleEvent(ev);

@@ -278,9 +278,12 @@ Overlay surface with no input, mapped only while the dot shows).
 ## Second screen
 
 The phone as a monitor (cap `screen` in the shell's hello; Settings → ii tools → Phone as a
-monitor, `iiTools.screen`). **USB only for now:** the video does not ride the link but a
-plain socket the helper binds on 127.0.0.1, which `adb reverse` brings to the phone. The
-shell (`PhoneScreenService`) finds the phone in `adb devices -l` (a USB entry, by model),
+monitor, `iiTools.screen`). Two transports. **USB:** the video does not ride the link but a
+plain socket the helper binds on 127.0.0.1, which `adb reverse` brings to the phone.
+**Wi-Fi** (cap `screenWifi`, `iiTools.screen.wireless`): a side WebSocket on the link's own
+TLS port (below), no adb at all. `transport` in `start` picks one; `auto` (the default, and
+what an older phone that sends none gets) uses USB when `adb devices -l` lists the phone on
+USB and Wi-Fi otherwise. The shell (`PhoneScreenService`) finds the phone in `adb devices -l` (a USB entry, by model),
 makes the output (extend: `hyprctl output create headless II-PHONE` at the phone's size
 times `res`, `fps` and `scale`, placed against the screen that had focus on the chosen
 `side`, centred, or the next free side; mirror: the focused screen) and maps the
@@ -289,26 +292,65 @@ reload. Whatever it made goes when the session ends.
 
 | Direction | Message | |
 | --- | --- | --- |
-| phone → shell | `{"t":"screen","a":"start","mode":"extend"\|"mirror","w":px,"h":px,"res":1\|0.75\|0.5,"fps":30\|60\|90\|120,"scale":1\|1.25\|1.5\|2,"side":"left"\|"right"\|"above"\|"below","bitrate":Mbps}` | `w`×`h`: the phone's whole display, held sideways. The phone's settings; mirror uses only the bitrate. |
+| phone → shell | `{"t":"screen","a":"start","mode":"extend"\|"mirror","w":px,"h":px,"res":1\|0.75\|0.5,"fps":30\|60\|90\|120,"scale":1\|1.25\|1.5\|2,"side":"left"\|"right"\|"above"\|"below","bitrate":Mbps,"transport":"auto"\|"usb"\|"wifi","adaptive":bool}` | `w`×`h`: the phone's whole display, held sideways. The phone's settings; mirror uses only the bitrate (on Wi-Fi, the maximum when `adaptive`). A phone whose shell lacks `screenWifi` sends `usb`. |
 | phone → shell | `{"t":"screen","a":"monitors"}` → `{"t":"screen","monitors":[{"name","label","w","h","focused"}]}` | The PC's screens, for mirror's choice (`"output"` in `start`, `""` for the focused one). |
 | phone → shell | `{"t":"screen","a":"switch","output":name\|"next"}` | Mirror another screen without stopping: the capture starts again there (`{"op":"screen","a":"output","output"}` to the helper) and the phone gets `state: "size"` with `w`, `h`, `output`. |
 | phone → shell | `{"t":"screen","a":"draw"}` | The floating toolbar: focus the phone's output and toggle live draw there. |
-| shell → phone | `{"t":"screen","state":"starting"\|"ready"\|"live"\|"stopped","port"?,"token"?,"w"?,"h"?,"mode"?,"encoder"?,"reason"?}` | `ready` carries the port to connect to on 127.0.0.1 and the one-time token; `w`×`h` is the picture. |
-| shell → phone | `{"t":"screen","err":"disabled"\|"adb"\|"usb"\|"unauthorized"\|"busy"\|"encoder"\|"timeout"\|"output"\|"bind"\|"encoder_exit"}` | `adb`: no adb on the PC; `usb`: the phone is not on USB with debugging; `unauthorized`: debugging not allowed for this PC. |
+| shell → phone | `{"t":"screen","state":"starting"\|"ready"\|"live"\|"stopped","transport"?,"port"?,"token"?,"w"?,"h"?,"mode"?,"encoder"?,"reason"?}` | `ready` carries `transport` (`usb`: the port to connect to on 127.0.0.1; `wifi`: no port, open `/iilink/1/screen`) and the one-time token; `w`×`h` is the picture. |
+| shell → phone | `{"t":"screen","err":"disabled"\|"adb"\|"usb"\|"unauthorized"\|"busy"\|"encoder"\|"timeout"\|"output"\|"bind"\|"encoder_exit"\|"wireless"}` | `adb`: no adb on the PC; `usb`: the phone is not on USB with debugging; `unauthorized`: debugging not allowed for this PC; `wireless`: Wi-Fi asked for and `iiTools.screen.wireless` is off. |
 | phone → shell | `{"t":"screen","a":"stop"}` | Leaving the picture ends it. |
 
-Helper ops: `{"op":"screen","a":"start","dev","sid","output","token","w","h","bitrate"}` /
-`{"op":"screen","a":"stop"}`; events `{"ev":"screen","dev","sid","port"}`,
-`{"ev":"screenLive","dev","sid","encoder"}` (`nvenc`, `vaapi` or `x264`) and
-`{"ev":"screenEnd","dev","sid","reason"}`.
+Helper ops: `{"op":"screen","a":"start","transport"?:"usb"|"ws","dev","sid","output","token","w","h","bitrate","rate","fps"?,"adaptive"?:bool}` /
+`{"op":"screen","a":"output","output"}` / `{"op":"screen","a":"stop"}`; events
+`{"ev":"screen","dev","sid","port"}` (USB, `port` > 0) or
+`{"ev":"screen","dev","sid","port":0,"transport":"ws"}` (`ws`),
+`{"ev":"screenLive","dev","sid","encoder"}` (`nvenc`, `vaapi` or `x264`),
+`{"ev":"screenRate","dev","sid","bitrate"}` (bps, when adaptive bitrate or live quality changes the target) and
+`{"ev":"screenEnd","dev","sid","reason"}` (`stopped`, `closed`, `timeout`, `bad_arg`, `bind`, `encoder`, `encoder_exit`).
 
-On the socket (screen.rs): the phone sends the token and `\n`, then touch frames `[1][n]`
+On the USB socket (screen.rs): the phone sends the token and `\n`, then touch frames `[1][n]`
 and n × `[u8 id][u16 x][u16 y]` (every finger down, 0–65535 of the picture), typed text
 `[2][u16 n][utf-8]` and named keys `[3][u8 n][name][u8 mods]` (1 shift, 2 ctrl, 4 alt,
 8 super) for a keyboard of its own the helper makes on the first key. The PC sends
 `[u32 length][u8 kind][u64 pts µs][Annex-B H.264]`, kind 0 the SPS/PPS, 1 a frame, 2 a key
-frame. wf-recorder captures and encodes (FLV out, one tag per frame); a still screen
-sends nothing. The phone has 60 s to connect; the session ends when the socket closes.
+frame. wf-recorder captures and encodes (FLV out, one tag per frame, `g=240`) every
+refresh (`-D`, a hardware cursor damages nothing) at the session's fps (`-r`, from the
+shell's `rate`; without it a 180 Hz screen sends 180 fps and NVENC's CBR overshoots by that
+ratio). A still screen costs ~100-byte frames. The phone has 60 s to connect; the session ends when the socket closes.
+
+On the Wi-Fi side WebSocket `/iilink/1/screen` (link's TLS port, `transport:"ws"`):
+
+- First message within 5 s: text `{"t":"hello","token":"…"}` (60 s from slot creation to
+  connect, else `screenEnd` `timeout`; wrong token closes).
+- Reconnect grace: if the socket drops, the output and touchscreen stay up and the encoder
+  stops; the phone has 10 s to reconnect with the same token (encoder restarts with a fresh
+  key frame), else `screenEnd` `closed`. Shell `stop` or a new `start` aborts at once.
+- PC → phone binary: `[u8 kind][u64 pts µs BE][Annex-B H.264]` (same packet as USB without
+  the `u32` length).
+- Phone → PC binary: the same `[1]`/`[2]`/`[3]` input frames as USB, one per WS message.
+- PC → phone text (every 1 s while live):
+  `{"t":"stats","bitrate":bps,"max":bps,"kbps":measured_out_kbps,"fps":frames_sent_last_s,"dropped":frames_dropped_last_s,"encoder":"nvenc"|"vaapi"|"x264"}`.
+- Phone → PC text:
+  - `{"t":"ping","id":n}` → `{"t":"pong","id":n}` through the same ordered writer queue as
+    video so RTT includes queued video.
+  - `{"t":"quality","bitrate":bps,"adaptive":bool}` → live max (clamped 1–80 Mbit/s) and
+    adaptive toggle; encoder restarts only if the target bitrate changes.
+  - `{"t":"idr"}` → restarts the encoder for a fresh key frame (at most once per 2 s).
+- Low latency and adaptive bitrate: packets pass through a bounded non-blocking queue.
+  Congestion (oldest queued packet > 200 ms or more than 200 ms of the target bitrate queued) drops
+  non-key frames (`kind == 1`, counted in `dropped`) until the next key frame or encoder
+  restart (`kind == 0` and `kind == 2` are never dropped). When `adaptive`, two congestion
+  events within 3 s step down ×0.7 (down to 2 Mbit/s) and 10 s without congestion step up
+  ×1.25 (up to max), at most once per 2 s, emitting `screenRate`. Either way, a drop
+  streak of 250 ms without a key frame restarts the encoder once for one. The socket has
+  `TCP_NOTSENT_LOWAT` 32 KiB, so a slow link backs up into this queue instead of the
+  kernel's send buffer, where its age could not be seen. A socket that drops lifts every
+  finger on the PC. Intended restarts (rate
+  change, `idr`, output switch) do not count toward the 5-in-30 s `encoder_exit` limit. Over Wi-Fi NVENC and x264 use
+  intra refresh (`g = fps` is the refresh period; one key frame per encoder start): a frame
+  dropped on either side heals within a second, so a refreshing encoder resumes sending as
+  soon as the backlog is gone and ignores `idr`. VA-API has no refresh and keeps key frames
+  every `fps` frames. `nvenc` passes `delay=0`.
 
 ## Touchpad and keyboard
 

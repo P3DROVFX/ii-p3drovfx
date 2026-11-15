@@ -15845,5 +15845,8 @@
     "Untitled key": "Tecla sem título",
     "Needs command": "Sem comando",
     "Enter a bash command below to publish this key": "Digite um comando bash abaixo para publicar esta tecla",
-    "Remove command": "Remover comando"
+    "Remove command": "Remover comando",
+    "Extend or mirror this PC on the phone over USB or Wi-Fi, touch included": "Estenda ou espelhe este PC no celular por USB ou Wi-Fi, com toque incluído",
+    "Phone as a monitor over Wi-Fi": "Celular como monitor por Wi-Fi",
+    "Without a USB cable, the screen goes over ii link on the local network. USB is still used when plugged in, for the lowest latency": "Sem cabo USB, a tela vai pelo ii link na rede local. O USB ainda é usado quando conectado, para a menor latência"
 }

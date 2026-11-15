@@ -23,6 +23,8 @@ qrcodegen = "1.8"
 # MPRIS players for the phone's media, on the session bus (no process of their own).
 zbus = { version = "5", default-features = false, features = ["tokio"] }
 base64 = "0.22"
+# TCP_NOTSENT_LOWAT on the second screen's socket (already in the tree through tokio).
+libc = "0.2"
 # The phone as a touchpad (a multitouch uinput device libinput treats as real) and a
 # keyboard (Wayland's virtual keyboard, any character whatever the layout).
 evdev = "0.13"
