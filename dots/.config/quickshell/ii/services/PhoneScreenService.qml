@@ -5,6 +5,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Hyprland
+import qs
 import qs.modules.common
 
 /**
@@ -57,6 +58,7 @@ Singleton {
     property int fps: 60
     property real scale: 1.5
     property string side: "right"
+    property string orient: "landscape"
     property int bitrateMbps: 16
     /// Current target bitrate (Mbps) reported by adaptive rate control, or 0 when idle.
     property real liveBitrate: 0
@@ -66,6 +68,11 @@ Singleton {
     property string _anchor: ""
     // The screen to mirror the phone asked for ("" for the focused one).
     property string _wantMirror: ""
+    // Panel family remembered on the first phone-driven switch, restored on end if untouched.
+    property string _savedFamily: ""
+    property string _switchedFamily: ""
+    property string _sentToolsKey: ""
+    property bool _rulesPending: false
 
     onEnabledChanged: {
         if (!root.enabled)
@@ -77,7 +84,68 @@ Singleton {
             root.stop("disabled");
     }
 
-    Component.onCompleted: adbCheck.running = true
+    Component.onCompleted: {
+        adbCheck.running = true;
+        // A shell that went away mid-session left the phone's sink as the default: undo it.
+        Quickshell.execDetached(["sh", "-c", root._audioOffScript("")]);
+    }
+
+    // ── The PC's sound on the phone (Wi-Fi sessions) ─────────────────────
+    // A virtual sink takes the default and every stream while on; the helper captures its
+    // monitor as Opus on the screen socket. Off restores the sink that was the default.
+    readonly property string audioSink: "ii_tools_phone"
+    /// Whether the phone hears the PC now (the helper confirmed it).
+    property bool audioOn: false
+    property bool _audioWanted: false
+    property string _audioPrev: ""
+
+    function _audioOffScript(prev): string {
+        const sink = root.audioSink;
+        const back = prev !== "" ? `pactl set-default-sink '${prev}'; for i in $(pactl list short sink-inputs | cut -f1); do pactl move-sink-input "$i" '${prev}'; done; ` : "";
+        return `${back}pactl list short modules | grep 'sink_name=${sink}' | cut -f1 | xargs -r -n1 pactl unload-module`;
+    }
+
+    function setAudio(on): void {
+        if (on === root._audioWanted)
+            return root._reply({ audio: root.audioOn });
+        if (on && (root.transport !== "wifi" || (root.state !== "ready" && root.state !== "live")))
+            return root._reply({ audio: false });
+        root._audioWanted = on;
+        if (on) {
+            audioUp.running = true;
+        } else {
+            IiLinkService.send({ op: "screen", a: "audio", on: false });
+            root._audioDown();
+        }
+    }
+
+    function _audioDown(): void {
+        Quickshell.execDetached(["sh", "-c", root._audioOffScript(root._audioPrev)]);
+        root._audioPrev = "";
+        root._audioWanted = false;
+        root.audioOn = false;
+        root._reply({ audio: false });
+    }
+
+    // Prints the default sink before, then makes the phone's sink the default with every stream on it.
+    Process {
+        id: audioUp
+        command: ["sh", "-c", `prev=$(pactl get-default-sink); ${root._audioOffScript("")}; `
+            + `pactl load-module module-null-sink sink_name=${root.audioSink} rate=48000 channels=2 sink_properties=device.description=Phone >/dev/null || exit 1; `
+            + `pactl set-default-sink ${root.audioSink}; for i in $(pactl list short sink-inputs | cut -f1); do pactl move-sink-input "$i" ${root.audioSink}; done; echo "$prev"`]
+        stdout: StdioCollector {
+            id: audioUpOut
+        }
+        onExited: code => {
+            const prev = audioUpOut.text.trim();
+            if (code !== 0 || !root._audioWanted || root.state === "idle") {
+                root._audioPrev = prev;
+                return root._audioDown();
+            }
+            root._audioPrev = prev === root.audioSink ? "" : prev;
+            IiLinkService.send({ op: "screen", a: "audio", on: true, source: `${root.audioSink}.monitor` });
+        }
+    }
 
     Process {
         id: adbCheck
@@ -102,17 +170,139 @@ Singleton {
             if (dev === root.dev)
                 root.switchMirror(String(m.output ?? ""));
             return;
+        case "orient":
+            if (dev === root.dev)
+                root._setOrient(String(m.to ?? ""));
+            return;
         case "draw":
             // Live draw on the phone's screen: focus it, then the same toggle as everywhere.
             if (dev === root.dev && root.output !== "") {
-                Hyprland.dispatch(`hl.dsp.focus({ monitor = '${root.output}' })`);
+                Hyprland.dispatch(`hl.dsp.focus({ monitor = ${JSON.stringify(root.output)} })`);
                 LiveDraw.toggle();
             }
+            return;
+        case "pointer":
+            if (dev === root.dev && root.output !== "")
+                root._warpPointer();
+            return;
+        case "workspace":
+            if (dev === root.dev && root.output !== "")
+                root._switchWorkspace(m.to);
+            return;
+        case "family":
+            if (dev === root.dev && root.state !== "idle")
+                root._selectFamily(String(m.to ?? ""));
+            return;
+        case "launcher":
+            if (dev === root.dev && root.output !== "")
+                root._openLauncher();
+            return;
+        case "audio":
+            if (dev === root.dev)
+                root.setAudio(m.on === true);
             return;
         case "stop":
             if (dev === root.dev)
                 root.stop("phone");
             return;
+        }
+    }
+
+    function _warpPointer(): void {
+        const mon = Hyprland.monitors.values.find(m => m.name === root.output);
+        const info = mon?.lastIpcObject ?? HyprlandData.monitors?.find(m => m.name === root.output) ?? null;
+        if (!mon && !info)
+            return;
+        const x = Number(info?.x ?? mon?.x ?? 0);
+        const y = Number(info?.y ?? mon?.y ?? 0);
+        const pw = Number(info?.width ?? mon?.width ?? root.w);
+        const ph = Number(info?.height ?? mon?.height ?? root.h);
+        const rawScale = Number(info?.scale ?? mon?.scale ?? (root.mode === "extend" ? root.scale : 1));
+        const s = rawScale > 0 ? rawScale : 1;
+        const turned = Number(info?.transform ?? 0) % 2 === 1;
+        const lw = (turned ? ph : pw) / s;
+        const lh = (turned ? pw : ph) / s;
+        const cx = Math.round(x + lw / 2);
+        const cy = Math.round(y + lh / 2);
+        Hyprland.dispatch(`hl.dsp.cursor.move({ x = ${cx}, y = ${cy} })`);
+    }
+
+    function _switchWorkspace(to): void {
+        const target = String(to ?? "");
+        if (target === "next" || target === "prev") {
+            Hyprland.dispatch(`hl.dsp.focus({ monitor = ${JSON.stringify(root.output)} })`);
+            Hyprland.dispatch(`hl.dsp.focus({ workspace = '${target === "next" ? "m+1" : "m-1"}' })`);
+            return;
+        }
+        const n = Number(to);
+        if (!Number.isInteger(n) || n < 1 || n > 100)
+            return;
+        Hyprland.dispatch(`hl.dsp.focus({ monitor = ${JSON.stringify(root.output)} })`);
+        Hyprland.dispatch(`hl.dsp.focus({ workspace = ${n} })`);
+    }
+
+    function _selectFamily(to): void {
+        if (!PanelFamily.entry(to) || to === PanelFamily.current)
+            return;
+        if (root._savedFamily === "")
+            root._savedFamily = PanelFamily.current;
+        root._switchedFamily = to;
+        PanelFamily.select(to);
+    }
+
+    function _openLauncher(): void {
+        Hyprland.dispatch(`hl.dsp.focus({ monitor = ${JSON.stringify(root.output)} })`);
+        if (PanelFamily.isTablet)
+            GlobalStates.toggleAppDrawer(root.output);
+        else if (PanelFamily.isWaffle)
+            GlobalStates.searchOpen = !GlobalStates.searchOpen;
+        else
+            GlobalStates.toggleOverview(root.output);
+    }
+
+    function _toolsMsg(): var {
+        const mon = Hyprland.monitors.values.find(m => m.name === root.output);
+        const activeId = Number(mon?.activeWorkspace?.id ?? -1);
+        const byId = HyprlandData.workspaceById ?? {};
+        const workspaces = (Hyprland.workspaces?.values ?? [])
+            .filter(w => w && Number(w.id) > 0 && !String(w.name ?? "").startsWith("special:") && (w.monitor?.name ?? "") === root.output)
+            .map(w => ({
+                id: Number(w.id),
+                name: String(w.name ?? w.id),
+                active: activeId > 0 ? Number(w.id) === activeId : Boolean(w.active),
+                windows: Number(byId[w.id]?.windows ?? w.lastIpcObject?.windows ?? w.toplevels?.values?.length ?? 0)
+            }))
+            .sort((a, b) => a.id - b.id);
+        return {
+            workspaces: workspaces,
+            family: PanelFamily.current
+        };
+    }
+
+    readonly property string _toolsKey: root.state === "live" && root.output !== ""
+        ? JSON.stringify(root._toolsMsg())
+        : ""
+    on_ToolsKeyChanged: {
+        if (root._toolsKey === "") {
+            toolsPushTimer.stop();
+            root._sentToolsKey = "";
+        } else if (root._sentToolsKey === "") {
+            toolsPushTimer.stop();
+            root._sentToolsKey = root._toolsKey;
+            root._reply(JSON.parse(root._toolsKey));
+        } else {
+            toolsPushTimer.restart();
+        }
+    }
+    Timer {
+        id: toolsPushTimer
+        interval: 100
+        onTriggered: {
+            const key = root._toolsKey;
+            if (key === "" || key === root._sentToolsKey)
+                return;
+            root._sentToolsKey = key;
+            root._reply(JSON.parse(key));
         }
     }
 
@@ -137,6 +327,7 @@ Singleton {
         root.sid += 1;
         root.dev = dev;
         root.mode = mode === "mirror" ? "mirror" : "extend";
+        root.orient = root.mode === "extend" && String(m.orient ?? "") === "portrait" ? "portrait" : "landscape";
         root._phoneW = Math.max(320, Math.min(7680, Math.round(Math.max(phoneW, phoneH))));
         root._phoneH = Math.max(240, Math.min(4320, Math.round(Math.min(phoneW, phoneH))));
         root._res = [0.5, 0.75, 1].includes(Number(m.res)) ? Number(m.res) : 1;
@@ -199,10 +390,28 @@ Singleton {
         root.output = pick.name;
         root.w = pick.w;
         root.h = pick.h;
-        hyprRules.command = ["sh", "-c", root._rulesScript()];
-        hyprRules.running = true;
+        root._applyRules();
         IiLinkService.send({ op: "screen", a: "output", output: root.output });
         root._reply({ state: "size", w: root.w, h: root.h, output: root.output, label: pick.label });
+    }
+
+    /// Swap the extended output between landscape and portrait while live, re-applying
+    /// rules and re-placing against the anchor; wf-recorder exit triggers helper restart.
+    function _setOrient(to): void {
+        if (root.mode !== "extend" || (root.state !== "ready" && root.state !== "live"))
+            return;
+        if ((to !== "landscape" && to !== "portrait") || to === root.orient)
+            return;
+        const prevW = root.w;
+        root.w = root.h;
+        root.h = prevW;
+        root.orient = to;
+        const monitors = (HyprlandData.monitors ?? []).length > 0
+            ? HyprlandData.monitors
+            : (Hyprland.monitors?.values ?? []).map(m => m.lastIpcObject).filter(Boolean);
+        root.position = root._place(monitors);
+        root._applyRules();
+        root._reply({ state: "size", w: root.w, h: root.h, output: root.output, orient: root.orient });
     }
 
     /// A change to the extended output from the Displays page: kept for the rest of the
@@ -217,12 +426,13 @@ Singleton {
         if (m.width > 0 && m.height > 0 && (m.width !== root.w || m.height !== root.h)) {
             root.w = m.width;
             root.h = m.height;
-            root._reply({ state: "size", w: root.w, h: root.h });
+            if (root.w !== root.h)
+                root.orient = root.h > root.w ? "portrait" : "landscape";
+            root._reply({ state: "size", w: root.w, h: root.h, output: root.output, orient: root.orient });
         }
         if (m.refreshRate > 0)
             root.fps = Math.round(m.refreshRate);
-        hyprRules.command = ["sh", "-c", root._rulesScript()];
-        hyprRules.running = true;
+        root._applyRules();
     }
 
     function _fail(code): void {
@@ -287,9 +497,10 @@ Singleton {
         if (root.mode === "extend") {
             // Even sides: the encoders want them.
             const even = v => Math.max(2, Math.round(v / 2) * 2);
+            const portrait = root.orient === "portrait";
             root.output = root.headlessName;
-            root.w = even(root._phoneW * root._res);
-            root.h = even(root._phoneH * root._res);
+            root.w = even((portrait ? root._phoneH : root._phoneW) * root._res);
+            root.h = even((portrait ? root._phoneW : root._phoneH) * root._res);
             // Made, then the layout read to place it against the focused screen.
             hyprPlace.command = ["sh", "-c", `hyprctl output create headless ${root.headlessName} >/dev/null; ${root._rulesScript()}; hyprctl monitors -j`];
             hyprPlace.running = true;
@@ -395,8 +606,24 @@ Singleton {
         }
     }
 
+    function _applyRules(): void {
+        if (hyprRules.running) {
+            root._rulesPending = true;
+            return;
+        }
+        hyprRules.command = ["sh", "-c", root._rulesScript()];
+        hyprRules.running = true;
+    }
+
     Process {
         id: hyprRules
+        onExited: {
+            if (!root._rulesPending)
+                return;
+            root._rulesPending = false;
+            if (root.state !== "idle" && root.output !== "")
+                root._applyRules();
+        }
     }
 
     Process {
@@ -407,7 +634,7 @@ Singleton {
             if (code !== 0)
                 return root._fail("adb");
             root.state = "ready";
-            root._reply({ state: "ready", transport: "usb", port: root.port, token: root.token, w: root.w, h: root.h, mode: root.mode, output: root.output, screens: root._monitors().length });
+            root._reply({ state: "ready", transport: "usb", port: root.port, token: root.token, w: root.w, h: root.h, mode: root.mode, output: root.output, orient: root.orient, screens: root._monitors().length });
         }
     }
 
@@ -419,10 +646,19 @@ Singleton {
             root.port = Number(ev.port ?? 0);
             if (root.transport === "wifi" || ev.transport === "ws" || root.port <= 0) {
                 root.state = "ready";
-                root._reply({ state: "ready", transport: "wifi", token: root.token, w: root.w, h: root.h, mode: root.mode, output: root.output, screens: root._monitors().length });
+                root._reply({ state: "ready", transport: "wifi", token: root.token, w: root.w, h: root.h, mode: root.mode, output: root.output, orient: root.orient, screens: root._monitors().length });
             } else {
                 adbReverse.command = ["adb", "-s", root.serial, "reverse", `tcp:${root.port}`, `tcp:${root.port}`];
                 adbReverse.running = true;
+            }
+            break;
+        case "screenAudio":
+            // The helper's capture: confirmed, or ended (ffmpeg died, the source went).
+            if (ev.on === true && root._audioWanted) {
+                root.audioOn = true;
+                root._reply({ audio: true });
+            } else if (ev.on !== true) {
+                root._audioDown();
             }
             break;
         case "screenRate": {
@@ -449,6 +685,14 @@ Singleton {
     }
 
     function _cleanup(reason): void {
+        toolsPushTimer.stop();
+        if (root._audioWanted || root.audioOn)
+            root._audioDown();
+        root._sentToolsKey = "";
+        if (root._savedFamily !== "" && PanelFamily.current === root._switchedFamily)
+            PanelFamily.select(root._savedFamily);
+        root._savedFamily = "";
+        root._switchedFamily = "";
         if (root.transport !== "wifi" && root.port > 0 && root.serial !== "")
             Quickshell.execDetached(["adb", "-s", root.serial, "reverse", "--remove", `tcp:${root.port}`]);
         if (root.mode === "extend" && root.output !== "")
@@ -465,16 +709,16 @@ Singleton {
         root.liveBitrate = 0;
         root._adaptive = true;
         root._wantTransport = "auto";
+        root.orient = "landscape";
+        root._rulesPending = false;
         root.encoder = "";
     }
 
     Connections {
         target: Hyprland
         function onRawEvent(event): void {
-            if (event.name === "configreloaded" && root.state !== "idle" && root.output !== "") {
-                hyprRules.command = ["sh", "-c", root._rulesScript()];
-                hyprRules.running = true;
-            }
+            if (event.name === "configreloaded" && root.state !== "idle" && root.output !== "")
+                root._applyRules();
         }
     }
 
@@ -482,7 +726,7 @@ Singleton {
         target: "phoneScreen"
 
         function status(): string {
-            return JSON.stringify({ state: root.state, transport: root.transport, mode: root.mode, dev: root.dev, output: root.output, serial: root.serial, port: root.port, size: `${root.w}x${root.h}`, fps: root.fps, scale: root.scale, position: root.position, bitrate: root.bitrateMbps, liveBitrate: root.liveBitrate, encoder: root.encoder, error: root.lastError, adb: root.adbPresent });
+            return JSON.stringify({ state: root.state, transport: root.transport, mode: root.mode, orient: root.orient, dev: root.dev, output: root.output, serial: root.serial, port: root.port, size: `${root.w}x${root.h}`, fps: root.fps, scale: root.scale, position: root.position, bitrate: root.bitrateMbps, liveBitrate: root.liveBitrate, encoder: root.encoder, error: root.lastError, adb: root.adbPresent });
         }
 
         function stop(): string {

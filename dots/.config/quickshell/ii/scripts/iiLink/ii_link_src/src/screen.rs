@@ -53,6 +53,8 @@ const CONGESTION_WINDOW: Duration = Duration::from_secs(3);
 const STEP_UP_QUIET: Duration = Duration::from_secs(10);
 const RATE_COOLDOWN: Duration = Duration::from_secs(2);
 const IDR_COOLDOWN: Duration = Duration::from_secs(2);
+/// 10 ms packets: half a second.
+const AUDIO_QUEUE: usize = 50;
 /// Dropping this long without a key frame: restart the encoder for one (the GOP is 2 s).
 const DROP_IDR_AFTER: Duration = Duration::from_millis(250);
 
@@ -64,6 +66,8 @@ pub struct Slot {
     task: tokio::task::AbortHandle,
     end: Arc<End>,
     output: watch::Sender<String>,
+    /// The PC's sound for the phone: the PulseAudio source to capture, or none.
+    audio: watch::Sender<Option<String>>,
 }
 
 struct End {
@@ -125,6 +129,7 @@ pub struct Params {
     pub adaptive: bool,
     /// Frames per second to cap the capture at (mirror of a fast screen), 0 for the output's own rate.
     pub rate: u32,
+    pub audio: watch::Receiver<Option<String>>,
     pub input_tx: Sender<Cmd>,
 }
 
@@ -134,6 +139,14 @@ pub fn op(state: &State, op: &Value) {
     if op["a"] == "output" {
         if let (Some(slot), Some(name)) = (s.screen.as_ref(), op["output"].as_str()) {
             let _ = slot.output.send(name.to_string());
+        }
+        return;
+    }
+    // The PC's sound on the phone, on or off, for the running Wi-Fi session.
+    if op["a"] == "audio" {
+        if let Some(slot) = s.screen.as_ref() {
+            let src = op["source"].as_str().filter(|_| op["on"].as_bool() == Some(true)).map(str::to_owned);
+            let _ = slot.audio.send(src);
         }
         return;
     }
@@ -148,6 +161,7 @@ pub fn op(state: &State, op: &Value) {
     let sid = op["sid"].as_u64().unwrap_or(0);
     let (out_tx, mut out_rx) = watch::channel(op["output"].as_str().unwrap_or("").to_string());
     out_rx.mark_unchanged();
+    let (audio_tx, audio_rx) = watch::channel(None);
     let params = Params {
         dev: dev.clone(),
         sid,
@@ -159,6 +173,7 @@ pub fn op(state: &State, op: &Value) {
         fps: op["fps"].as_u64().unwrap_or(60).clamp(15, 240) as u32,
         adaptive: op["adaptive"].as_bool().unwrap_or(true),
         rate: op["rate"].as_u64().unwrap_or(0).min(240) as u32,
+        audio: audio_rx,
         input_tx: s.input_tx.clone(),
     };
     if params.output.borrow().is_empty() || params.token.len() < 16 {
@@ -176,7 +191,7 @@ pub fn op(state: &State, op: &Value) {
             guard.reason = run_ws(conn_rx, &params).await;
         })
         .abort_handle();
-        s.screen = Some(Slot { sid, token: Some(token), conns: Some(conn_tx), task, end, output: out_tx });
+        s.screen = Some(Slot { sid, token: Some(token), conns: Some(conn_tx), task, end, output: out_tx, audio: audio_tx });
         crate::emit(json!({"ev": "screen", "dev": dev, "sid": sid, "port": 0, "transport": "ws"}));
         return;
     }
@@ -201,7 +216,7 @@ pub fn op(state: &State, op: &Value) {
         guard.reason = run_usb(listener, &params).await;
     })
     .abort_handle();
-    s.screen = Some(Slot { sid, token: None, conns: None, task, end, output: out_tx });
+    s.screen = Some(Slot { sid, token: None, conns: None, task, end, output: out_tx, audio: audio_tx });
     crate::emit(json!({"ev": "screen", "dev": dev, "sid": sid, "port": port}));
 }
 
@@ -414,6 +429,8 @@ struct WriterItem {
 
 struct QueueInner {
     items: VecDeque<WriterItem>,
+    /// Sound: written before any queued video, so a video backlog never delays it.
+    prio: VecDeque<WriterItem>,
     queued_bytes: usize,
     in_flight_since: Option<Instant>,
     closed: bool,
@@ -431,6 +448,7 @@ impl WriterQueue {
         Arc::new(Self {
             inner: Mutex::new(QueueInner {
                 items: VecDeque::new(),
+                prio: VecDeque::new(),
                 queued_bytes: 0,
                 in_flight_since: None,
                 closed: false,
@@ -496,6 +514,20 @@ impl WriterQueue {
         true
     }
 
+    /// A sound packet. Half a second waiting is stale: the oldest goes first.
+    fn push_prio(&self, payload: Vec<u8>) -> bool {
+        let mut g = self.inner.lock().unwrap();
+        if g.closed {
+            return false;
+        }
+        if g.prio.len() >= AUDIO_QUEUE {
+            g.prio.pop_front();
+        }
+        g.prio.push_back(WriterItem { enqueued_at: Instant::now(), video_bytes: 0, is_frame: false, msg: Message::Binary(payload.into()) });
+        self.notify.notify_one();
+        true
+    }
+
     fn take_stats(&self) -> (u64, u64) {
         let mut g = self.inner.lock().unwrap();
         let b = g.bytes_sent;
@@ -521,7 +553,7 @@ fn spawn_writer(ws_tx: futures_util::stream::SplitSink<Ws, Message>, queue: Arc<
                         let _ = dead_tx.send(());
                         return;
                     }
-                    if let Some(item) = g.items.pop_front() {
+                    if let Some(item) = g.prio.pop_front().or_else(|| g.items.pop_front()) {
                         g.queued_bytes -= item.video_bytes;
                         g.in_flight_since = Some(Instant::now());
                         break item;
@@ -601,6 +633,8 @@ struct WsSession {
     restarts: Vec<Instant>,
     output: watch::Receiver<String>,
     input_tx: Sender<Cmd>,
+    audio_src: watch::Receiver<Option<String>>,
+    audio: Option<Audio>,
 }
 
 impl WsSession {
@@ -656,6 +690,8 @@ async fn run_ws(mut conns: mpsc::UnboundedReceiver<Ws>, p: &Params) -> &'static 
         restarts: Vec::new(),
         output: p.output.clone(),
         input_tx: p.input_tx.clone(),
+        audio_src: p.audio.clone(),
+        audio: None,
     };
 
     loop {
@@ -679,6 +715,10 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
     let (ws_tx, mut ws_rx) = ws.split();
     let queue = WriterQueue::new();
     let (mut writer_dead, _writer_guard) = spawn_writer(ws_tx, queue.clone());
+    // A phone that reconnects needs the sound's codec header again.
+    if let Some(head) = sess.audio.as_ref().and_then(|a| a.head.clone()) {
+        queue.push_prio(head);
+    }
 
     let mut starting: Option<StartingEncoder> = Some(StartingEncoder::spawn(
         sess.output.borrow().clone(),
@@ -990,6 +1030,34 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
                 backoff_until = Some(tokio::time::Instant::now() + Duration::from_millis(300));
             }
             _ = &mut writer_dead => return WsConnEnd::Dropped,
+            changed = sess.audio_src.changed() => {
+                if changed.is_err() {
+                    return WsConnEnd::End("stopped");
+                }
+                let src = sess.audio_src.borrow_and_update().clone();
+                sess.audio = src.and_then(|s| Audio::start(&s));
+                crate::emit(json!({"ev": "screenAudio", "dev": sess.dev, "sid": sess.sid, "on": sess.audio.is_some()}));
+            }
+            pkt = async {
+                match sess.audio.as_mut() {
+                    Some(a) => a.rx.recv().await,
+                    None => std::future::pending().await,
+                }
+            }, if sess.audio.is_some() => match pkt {
+                Some(pkt) => {
+                    if pkt[0] == 8 {
+                        if let Some(a) = sess.audio.as_mut() {
+                            a.head = Some(pkt.clone());
+                        }
+                    }
+                    queue.push_prio(pkt);
+                }
+                None => {
+                    // ffmpeg ended (PulseAudio went, the source vanished): the phone hears nothing.
+                    sess.audio = None;
+                    crate::emit(json!({"ev": "screenAudio", "dev": sess.dev, "sid": sess.sid, "on": false}));
+                }
+            },
             next = conns.recv() => match next {
                 Some(next_ws) => return WsConnEnd::Replaced(next_ws),
                 None => return WsConnEnd::End("stopped"),
@@ -1015,6 +1083,88 @@ fn limit_unsent(ws: &Ws) {
             std::mem::size_of::<libc::c_int>() as libc::socklen_t,
         );
     }
+}
+
+// ── The PC's sound ───────────────────────────────────────────────────────
+
+/// The PC's sound for the phone: ffmpeg captures a PulseAudio source (the shell's
+/// virtual sink's monitor) as Opus, 10 ms packets in Ogg, which are unwrapped here.
+/// To the phone: `[8][u64 0][OpusHead]` once (codec config), then `[9][u64 pts µs][packet]`.
+/// Opus rather than PCM: 128 kbit/s instead of 1.5 Mbit/s on a Wi-Fi that drops packets.
+struct Audio {
+    rx: mpsc::Receiver<Vec<u8>>,
+    head: Option<Vec<u8>>,
+    _child: Child,
+    _reader: AbortOnDrop,
+}
+
+impl Audio {
+    fn start(source: &str) -> Option<Audio> {
+        let mut child = Command::new("ffmpeg")
+            .args(["-hide_banner", "-loglevel", "error", "-fflags", "nobuffer"])
+            // 10 ms fragments from PulseAudio: its default is far larger, and waits that long.
+            .args(["-f", "pulse", "-fragment_size", "1920", "-i", source])
+            .args(["-ac", "2", "-ar", "48000", "-c:a", "libopus", "-application", "lowdelay", "-frame_duration", "10", "-b:a", "128k"])
+            // One Ogg page per packet (its default holds a second), out at once.
+            .args(["-flush_packets", "1", "-page_duration", "10000", "-f", "ogg", "-"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .kill_on_drop(true)
+            .spawn()
+            .ok()?;
+        let out = child.stdout.take()?;
+        let (tx, rx) = mpsc::channel(64);
+        let task = tokio::spawn(async move {
+            let mut out = BufReader::new(out);
+            let mut n: u64 = 0;
+            let mut packet = Vec::new();
+            loop {
+                let mut h = [0u8; 27];
+                if out.read_exact(&mut h).await.is_err() || &h[..4] != b"OggS" {
+                    return;
+                }
+                let mut segs = vec![0u8; h[26] as usize];
+                if out.read_exact(&mut segs).await.is_err() {
+                    return;
+                }
+                for len in segs {
+                    let at = packet.len();
+                    packet.resize(at + len as usize, 0);
+                    if out.read_exact(&mut packet[at..]).await.is_err() {
+                        return;
+                    }
+                    if len == 255 {
+                        continue;
+                    }
+                    let data = std::mem::take(&mut packet);
+                    let pkt = if data.starts_with(b"OpusHead") {
+                        Some(audio_packet(8, 0, &data))
+                    } else if data.starts_with(b"OpusTags") {
+                        None
+                    } else {
+                        n += 1;
+                        Some(audio_packet(9, n * 10_000, &data))
+                    };
+                    // Never wait on the phone: a full channel loses the packet, not the timing.
+                    if let Some(pkt) = pkt {
+                        if let Err(mpsc::error::TrySendError::Closed(_)) = tx.try_send(pkt) {
+                            return;
+                        }
+                    }
+                }
+            }
+        });
+        Some(Audio { rx, head: None, _child: child, _reader: AbortOnDrop(task.abort_handle()) })
+    }
+}
+
+fn audio_packet(kind: u8, pts: u64, data: &[u8]) -> Vec<u8> {
+    let mut pkt = Vec::with_capacity(9 + data.len());
+    pkt.push(kind);
+    pkt.extend_from_slice(&pts.to_be_bytes());
+    pkt.extend_from_slice(data);
+    pkt
 }
 
 // ── The encoder ──────────────────────────────────────────────────────────
@@ -1314,6 +1464,8 @@ mod tests {
             restarts: Vec::new(),
             output: out_rx,
             input_tx: in_tx,
+            audio_src: watch::channel(None).1,
+            audio: None,
         };
         // Same settings -> no target change
         assert!(!sess.apply_quality(&json!({"t": "quality", "bitrate": 16_000_000, "adaptive": true})));

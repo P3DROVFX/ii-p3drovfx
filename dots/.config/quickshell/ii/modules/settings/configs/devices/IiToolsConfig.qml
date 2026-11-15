@@ -275,6 +275,60 @@ Item {
                 Layout.fillWidth: true
             }
 
+            // A firewall that drops the link's port makes the phone say only "can't reach
+            // the PC". Checked when this page opens and when pairing starts, never in the
+            // background: firewalld answers without root; ufw does not, so it gets a hint.
+            Process {
+                id: firewallCheck
+                property string verdict: ""
+                command: ["sh", "-c", `p=${IiLinkService.port}
+if systemctl is-active -q firewalld; then
+  firewall-cmd --state >/dev/null 2>&1 || { echo unknown; exit; }
+  for z in $(firewall-cmd --get-active-zones 2>/dev/null | grep -v '^ ' | sed 's/ (.*//'); do
+    [ "$z" = trusted ] && continue
+    firewall-cmd --zone="$z" --query-port=$p/tcp >/dev/null 2>&1 || { echo "firewalld $z"; exit; }
+  done
+  echo ok
+elif systemctl is-active -q ufw; then
+  ufw status 2>/dev/null | grep -q "^$p" && echo ok || echo ufw
+else
+  echo ok
+fi`]
+                stdout: StdioCollector {
+                    onStreamFinished: firewallCheck.verdict = text.trim()
+                }
+                Component.onCompleted: running = true
+            }
+            Connections {
+                target: IiLinkService
+                function onPairingRequestedChanged() {
+                    if (IiLinkService.pairingRequested && !firewallCheck.running)
+                        firewallCheck.running = true;
+                }
+            }
+
+            AppSettingRow {
+                Layout.fillWidth: true
+                readonly property string zone: firewallCheck.verdict.startsWith("firewalld ") ? firewallCheck.verdict.slice(10) : ""
+                readonly property string fix: firewallCheck.verdict === "ufw"
+                    ? `sudo ufw allow ${IiLinkService.port}/tcp && sudo ufw allow ${IiLinkService.port}/udp`
+                    : `sudo firewall-cmd --permanent --zone=${zone} --add-port=${IiLinkService.port}/tcp --add-port=${IiLinkService.port}/udp && sudo firewall-cmd --reload`
+                visible: firewallCheck.verdict === "ufw" || zone !== ""
+                symbol: "shield"
+                title: firewallCheck.verdict === "ufw"
+                    ? Translation.tr("ufw may block the phone")
+                    : Translation.tr("The firewall blocks the phone")
+                description: (firewallCheck.verdict === "ufw"
+                    ? Translation.tr("ufw is on and its rules need root to read. Unless port %1 is allowed, the phone only says it can't reach the PC. Tap to copy:").arg(IiLinkService.port)
+                    : Translation.tr("firewalld's %1 zone doesn't allow port %2, so the phone can't reach the PC. Tap to copy:").arg(zone).arg(IiLinkService.port))
+                    + "\n" + fix
+                clickable: true
+                onClicked: {
+                    Quickshell.clipboardText = fix;
+                    firewallCheck.running = true;
+                }
+            }
+
             PairingPanel {
                 Layout.fillWidth: true
                 visible: IiLinkService.pairingRequested || IiLinkService.pairing !== null

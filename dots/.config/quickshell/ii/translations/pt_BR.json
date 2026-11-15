@@ -15848,5 +15848,9 @@
     "Remove command": "Remover comando",
     "Extend or mirror this PC on the phone over USB or Wi-Fi, touch included": "Estenda ou espelhe este PC no celular por USB ou Wi-Fi, com toque incluído",
     "Phone as a monitor over Wi-Fi": "Celular como monitor por Wi-Fi",
-    "Without a USB cable, the screen goes over ii link on the local network. USB is still used when plugged in, for the lowest latency": "Sem cabo USB, a tela vai pelo ii link na rede local. O USB ainda é usado quando conectado, para a menor latência"
+    "Without a USB cable, the screen goes over ii link on the local network. USB is still used when plugged in, for the lowest latency": "Sem cabo USB, a tela vai pelo ii link na rede local. O USB ainda é usado quando conectado, para a menor latência",
+    "ufw may block the phone": "O ufw pode estar bloqueando o celular",
+    "The firewall blocks the phone": "O firewall está bloqueando o celular",
+    "ufw is on and its rules need root to read. Unless port %1 is allowed, the phone only says it can't reach the PC. Tap to copy:": "O ufw está ativo e suas regras só podem ser lidas como root. Se a porta %1 não estiver liberada, o celular só diz que não alcança o PC. Toque para copiar:",
+    "firewalld's %1 zone doesn't allow port %2, so the phone can't reach the PC. Tap to copy:": "A zona %1 do firewalld não libera a porta %2, então o celular não alcança o PC. Toque para copiar:"
 }

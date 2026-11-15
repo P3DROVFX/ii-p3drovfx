@@ -16658,5 +16658,9 @@
     "Remove command": "Remove command",
     "Extend or mirror this PC on the phone over USB or Wi-Fi, touch included": "Extend or mirror this PC on the phone over USB or Wi-Fi, touch included",
     "Phone as a monitor over Wi-Fi": "Phone as a monitor over Wi-Fi",
-    "Without a USB cable, the screen goes over ii link on the local network. USB is still used when plugged in, for the lowest latency": "Without a USB cable, the screen goes over ii link on the local network. USB is still used when plugged in, for the lowest latency"
+    "Without a USB cable, the screen goes over ii link on the local network. USB is still used when plugged in, for the lowest latency": "Without a USB cable, the screen goes over ii link on the local network. USB is still used when plugged in, for the lowest latency",
+    "ufw may block the phone": "ufw may block the phone",
+    "The firewall blocks the phone": "The firewall blocks the phone",
+    "ufw is on and its rules need root to read. Unless port %1 is allowed, the phone only says it can't reach the PC. Tap to copy:": "ufw is on and its rules need root to read. Unless port %1 is allowed, the phone only says it can't reach the PC. Tap to copy:",
+    "firewalld's %1 zone doesn't allow port %2, so the phone can't reach the PC. Tap to copy:": "firewalld's %1 zone doesn't allow port %2, so the phone can't reach the PC. Tap to copy:"
 }
