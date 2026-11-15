@@ -187,7 +187,6 @@ Item {
         // ── Unified Phone Integration Service (mutually exclusive) ──────
         AppSettingsSection {
             Layout.topMargin: 4
-            visible: Config.options.policies.phone !== 0
             symbol: "smartphone"
             title: Translation.tr("Phone integration")
             description: Translation.tr("One phone bridge at a time. ii tools is the companion built for this shell; KDE Connect stays available as the alternative.")
@@ -195,7 +194,7 @@ Item {
             PhoneServiceSelector {
                 Layout.fillWidth: true
                 Layout.bottomMargin: 8
-                interactive: Config.options.policies.phone !== 0
+                kdeAvailable: !KdeConnectService.kdeChecked || KdeConnectService._kdeAvailable
                 currentService: root.activeService
                 onSelected: service => KdeConnectService.selectPhoneService(service)
             }
@@ -207,7 +206,6 @@ Item {
                 visible: !root.kdeActive
                 active: root.iiActive
                 connected: root.iiActive && IiLinkService.phoneConnected
-                switchEnabled: Config.options.policies.phone !== 0
                 statusText: {
                     if (!root.iiActive)
                         return Translation.tr("Not in use");
@@ -239,7 +237,6 @@ Item {
                 shapeIdle: MaterialShape.Shape.Circle
                 active: root.kdeActive
                 connected: root.kdeActive && KdeConnectService.activeReachable
-                switchEnabled: Config.options.policies.phone !== 0
 
                 primaryStatLabel: Translation.tr("Paired devices")
                 primaryStatValue: {
@@ -255,7 +252,7 @@ Item {
                 secondaryStatLabel: Translation.tr("Daemon")
                 secondaryStatValue: !root.kdeActive
                     ? Translation.tr("Dormant")
-                    : (KdeConnectService.available ? Translation.tr("Running") : Translation.tr("Missing"))
+                    : (KdeConnectService._kdeAvailable ? Translation.tr("Running") : Translation.tr("Not found"))
 
                 statusText: !root.kdeActive
                     ? Translation.tr("Standby")
@@ -264,7 +261,7 @@ Item {
                     ? Translation.tr("Open app")
                     : Translation.tr("Use KDE Connect")
                 actionIcon: root.kdeActive ? "open_in_new" : "check"
-                showAction: !root.kdeActive || KdeConnectService.available
+                showAction: !root.kdeActive || KdeConnectService._kdeAvailable
                 onToggled: wantActive => KdeConnectService.selectPhoneService(wantActive ? "kdeconnect" : "off")
                 onActionRequested: {
                     if (!root.kdeActive) {

@@ -13,6 +13,8 @@ Rectangle {
 
     property string currentService: "off"
     property bool interactive: true
+    // false once KDE Connect is known to be missing: its segment stays, greyed.
+    property bool kdeAvailable: true
 
     signal selected(string service)
 
@@ -40,6 +42,8 @@ Rectangle {
                 required property var modelData
                 readonly property bool chosen: root.currentService === modelData.id
                 readonly property bool offVariant: modelData.id === "off"
+                readonly property bool unavailable: modelData.id === "kdeconnect" && !root.kdeAvailable && !seg.chosen
+                opacity: seg.unavailable ? 0.45 : 1
 
                 Layout.fillWidth: true
                 Layout.fillHeight: true
@@ -66,7 +70,7 @@ Rectangle {
                     }
 
                     StyledText {
-                        text: seg.modelData.label
+                        text: seg.unavailable ? Translation.tr("%1 · Not found").arg(seg.modelData.label) : seg.modelData.label
                         font.pixelSize: Appearance.font.pixelSize.small
                         font.variableAxes: seg.chosen ? Appearance.font.variableAxes.title : Appearance.font.variableAxes.main
                         font.weight: seg.chosen ? Font.DemiBold : Font.Medium
@@ -85,13 +89,13 @@ Rectangle {
                         seg.chosen && !seg.offVariant ? Appearance.colors.colOnPrimary : Appearance.colors.colPrimary,
                         0.14
                     )
-                    enabled: root.interactive
+                    enabled: root.interactive && !seg.unavailable
                     onClicked: root.selected(seg.modelData.id)
                 }
 
                 HoverHandler {
                     id: segHover
-                    cursorShape: root.interactive ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    cursorShape: root.interactive && !seg.unavailable ? Qt.PointingHandCursor : Qt.ArrowCursor
                 }
             }
         }

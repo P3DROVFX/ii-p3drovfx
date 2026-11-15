@@ -187,7 +187,6 @@ Item {
                     }
 
                     StyledSwitch {
-                        enabled: Config.options.policies.phone !== 0
                         checked: root.isSelected
                         onToggled: value => KdeConnectService.selectPhoneService(value ? "iiTools" : "off")
                     }
@@ -1441,7 +1440,7 @@ Item {
                     implicitHeight: 56
                     horizontalPadding: 26
                     centerContent: true
-                    enabled: Config.options.policies.phone !== 0 && (IiLinkService.binaryPresent || !IiLinkService.probed)
+                    enabled: IiLinkService.binaryPresent || !IiLinkService.probed
                     materialIcon: "qr_code_2"
                     iconPixelSize: 22
                     textPixelSize: Appearance.font.pixelSize.normal

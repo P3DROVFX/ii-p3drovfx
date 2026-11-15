@@ -30,6 +30,9 @@ Singleton {
 
     /// KDE Connect itself is installed (kdeconnect-cli found).
     property bool _kdeAvailable: false
+    /// The one-shot `kdeconnect-cli` probe has answered (Settings greys KDE
+    /// Connect out only after it has, never while it is still asking).
+    property bool kdeChecked: false
     /// A phone to talk to: KDE Connect, or the ii tools app (IiLinkService).
     readonly property bool available: root._kdeAvailable || IiLinkService.phoneDevice !== null
     property bool ready: false
@@ -526,10 +529,11 @@ Singleton {
             checkScrcpyProc.running = true
             checkAdbProc.running = true
         }
-        if (root._enabled) {
-            checkAvailabilityProc.running = true
+        if (root._enabled)
             checkPythonDbusProc.running = true
-        }
+        // Always: Settings shows KDE Connect as unavailable without it, and the
+        // unchosen default only falls back to it when it is installed.
+        checkAvailabilityProc.running = true
     }
 
     // Unified mutually-exclusive phone integration service: "iiTools" | "kdeconnect" | "off".
@@ -547,7 +551,8 @@ Singleton {
             return "off"
         if (IiLinkService.serviceSelected)
             return "iiTools"
-        return kdeCfg ? "kdeconnect" : "off"
+        // Nothing chosen yet: KDE Connect only when it is installed.
+        return kdeCfg && root._kdeAvailable ? "kdeconnect" : "off"
     }
 
     // Reflects whether the KDE Connect backend specifically should run background daemons.
@@ -568,6 +573,9 @@ Singleton {
 
     /// Switch the single active phone integration backend ("iiTools", "kdeconnect", or "off").
     function selectPhoneService(mode) {
+        // Picking a bridge is meaningless with the Phone policy off.
+        if (mode !== "off" && Config.options.policies.phone === 0)
+            Config.options.policies.phone = 1
         if (mode === "iiTools") {
             Config.options.phone.service = "iiTools"
             Config.options.iiTools.enable = true
@@ -643,8 +651,10 @@ Singleton {
         command: ["bash", "-c", "command -v kdeconnect-cli >/dev/null"]
         onExited: (code, status) => {
             root._kdeAvailable = (code === 0)
+            root.kdeChecked = true
             if (root._kdeAvailable) {
-                root.startMonitor()
+                if (root._enabled)
+                    root.startMonitor()
             } else {
                 // Optional now: the ii tools app is a phone backend of its own.
                 console.info("[KdeConnect] kdeconnect-cli not found; phones only through ii tools")
