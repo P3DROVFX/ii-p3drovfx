@@ -12,7 +12,9 @@
 // only batches small images; 1024x1024 holds everything up to 512 px and costs 4 MB.
 //@ pragma Env QSG_ATLAS_WIDTH=1024
 //@ pragma Env QSG_ATLAS_HEIGHT=1024
-//@ pragma Env MALLOC_CONF=dirty_decay_ms:1000,muzzy_decay_ms:1000,background_thread:true
+// No MALLOC_CONF pragma: jemalloc reads its options at the first allocation, before any pragma is
+// applied, so it never reached the shell's own allocator; it only replaced the launcher's narenas:1
+// for a crash-relaunched shell. The patched Quickshell compiles narenas:1 in (quickshell-build 0006).
 // FFmpeg's hardware decoders on NVIDIA create a CUDA context on the first sound of a session
 // (~40 MB that is never released). The shell only plays short sounds and two optional videos
 // (lock screen wallpaper, video editor preview), so software decoding is enough.
