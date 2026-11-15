@@ -257,6 +257,18 @@
             "packages": [{ "arch": "rust", "fedora": "cargo", "bin": "cargo" }]
         },
         {
+            "id": "cpp-helpers",
+            "tier": "optional",
+            "label": "C++ helpers from source",
+            "description": "Building the Bluetooth, KDE Connect, keypress, privacy and other C++ helpers here instead of running the committed binaries.",
+            "packages": [
+                { "arch": "gcc", "fedora": "gcc-c++", "bin": ["g++", "clang++"] },
+                { "arch": "pkgconf", "fedora": "pkgconf-pkg-config", "bin": "pkg-config" },
+                { "arch": "glib2", "fedora": "glib2-devel" },
+                { "arch": "libxkbcommon", "fedora": "libxkbcommon-devel" }
+            ]
+        },
+        {
             "id": "preset-signin",
             "tier": "optional",
             "label": "Preset store sign-in",

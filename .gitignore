@@ -80,6 +80,10 @@ __pycache__/
 # What each locally built helper was built from — written by scripts/rust-helpers.sh,
 # meaningful only on the machine that compiled it.
 /dots/.config/quickshell/ii/scripts/*/.*.stamp
+# The same for the C++ helpers built locally by scripts/cpp-helpers.sh; their
+# committed binaries stay tracked, only the stamp of a local build is ignored.
+/dots/.config/quickshell/ii/scripts/.*.stamp
+/dots/.config/quickshell/ii/services/.*.stamp
 
 /dots/.config/quickshell/ii/.tmp
 /dots/.config/quickshell/ii/.commandcode
