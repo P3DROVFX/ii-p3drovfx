@@ -183,7 +183,9 @@ Scope {
         id: stateResetTimer
         interval: 150
         repeat: true
-        running: true
+        // Its check needs an OSD window; without one it only woke the shell
+        // ~7 times a second for nothing.
+        running: osdLoader.item !== null
         onTriggered: {
             // If the OSD Loader has a live item but the shell-level flags say it
             // should be fully closed, force-reset the expansion state. This catches
