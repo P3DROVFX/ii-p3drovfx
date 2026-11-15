@@ -988,6 +988,16 @@ Item {
 
             AppToggleRow {
                 Layout.topMargin: 4
+                visible: Config.options.iiTools.remote.enable
+                symbol: "power_settings_new"
+                title: Translation.tr("Shut down and restart from phone")
+                description: Translation.tr("The Remote page can power off or restart this PC after asking for confirmation")
+                checked: Config.options.iiTools.remote.power
+                onToggled: value => Config.options.iiTools.remote.power = value
+            }
+
+            AppToggleRow {
+                Layout.topMargin: 4
                 visible: Config.options.iiTools.clipboard.enable
                 symbol: "history"
                 title: Translation.tr("Clipboard history on phone")

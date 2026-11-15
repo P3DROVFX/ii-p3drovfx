@@ -108,6 +108,7 @@ Commands with an argument, answered with `ok` or `err` (`bad_arg`, `not_found`, 
 | `clipCopyPc` | `"<cliphist id>"`: copies that entry to the PC's current clipboard (`locked`, `not_found`) | clipHistory |
 | `share` | `{to: "browser"\|"ai"\|"note"\|"reminder"\|"task", text}`. `browser` takes only an `http(s)` link. | share |
 | `deck` | a deck id: `g:<gesture action>`, `c:<command id>`, `app:<desktop id>`, `discordMute`, `discordDeafen` (`locked`, `unavailable`, `not_found`) | deck |
+| `power` | `"poweroff"` / `"reboot"`: replies `ok`, then runs it 0.8 s later (the phone confirms before sending). Off with `iiTools.remote.power`. | power |
 
 ## Clipboard history
 

@@ -39,6 +39,7 @@ Singleton {
             || (root._phoneService === "" && (root.hasPeers || root.pairingRequested || !root._kdeFlag)))
     readonly property bool enabled: root.serviceSelected
     readonly property bool remoteEnabled: root.opts?.remote?.enable ?? true
+    readonly property bool powerEnabled: root.remoteEnabled && (root.opts?.remote?.power ?? true)
     readonly property bool audioEnabled: root.opts?.audio?.enable ?? true
     readonly property bool deckEnabled: root.opts?.deck?.enable ?? true
     readonly property bool wallpaperEnabled: root.opts?.wallpaper?.enable ?? true
@@ -173,6 +174,7 @@ Singleton {
     readonly property var allowedActions: root.remoteEnabled ? root.actions : []
     readonly property var capabilities: (root.remoteEnabled ? ["remote", "workspaces", "modes", "presets"] : [])
         .concat(root.remoteEnabled ? ["display", "modeActions"] : [])
+        .concat(root.powerEnabled ? ["power"] : [])
         .concat(root.audioEnabled ? ["audio"] : [])
         .concat(root.deckEnabled ? ["deck", "appIcons", "deckFocus"] : [])
         .concat(root.wallpaperEnabled ? ["wallpaper"] : [])
@@ -391,6 +393,32 @@ Singleton {
         add("discordMute", DiscordVoice.channel !== null && DiscordVoice.muted);
         add("discordDeafen", DiscordVoice.channel !== null && DiscordVoice.deafened);
         return on;
+    }
+
+    // ── Power: shut down or restart from the phone ───────────────────────
+    // The phone confirms before it sends. The reply goes out first, then the timer runs
+    // the session action, so the phone sees "ok" rather than a dropped link.
+    property string _pendingPower: ""
+
+    function _runPower(kind): string {
+        if (kind !== "poweroff" && kind !== "reboot")
+            return "unknown_action";
+        root._pendingPower = kind;
+        powerTimer.restart();
+        return "";
+    }
+
+    Timer {
+        id: powerTimer
+        interval: 800
+        onTriggered: {
+            const kind = root._pendingPower;
+            root._pendingPower = "";
+            if (kind === "poweroff")
+                Session.poweroff();
+            else if (kind === "reboot")
+                Session.reboot();
+        }
     }
 
     function _runDeck(id): string {
@@ -3377,6 +3405,8 @@ Singleton {
                 why = root.shareEnabled ? root._share(m.arg) : "disabled";
             else if (action === "deck")
                 why = root.deckEnabled ? root._runDeck(String(m.arg ?? "")) : "disabled";
+            else if (action === "power")
+                why = root.powerEnabled ? root._runPower(String(m.arg ?? "")) : "disabled";
             else if (root._remoteArgActions.includes(action))
                 why = root.remoteEnabled ? root._runArg(action, m.arg) : "disabled";
             else if (root._audioArgActions.includes(action))

@@ -2897,6 +2897,8 @@ Singleton {
                 property int port: 47210
                 property JsonObject remote: JsonObject {
                     property bool enable: true
+                    // Shut down or restart the PC from the phone (the app asks first).
+                    property bool power: true
                 }
                 // The PC's audio from the phone: devices, apps, EasyEffects.
                 property JsonObject audio: JsonObject {
