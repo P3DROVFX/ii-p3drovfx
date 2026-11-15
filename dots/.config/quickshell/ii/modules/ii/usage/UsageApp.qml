@@ -22,6 +22,27 @@ import qs.modules.common.widgets
 Scope {
     id: root
 
+    // The window's component: compiled on the first open (synchronously, so the
+    // build below starts at once) and held for later opens. The build itself
+    // stays asynchronous.
+    property Component windowComponent: null
+    readonly property bool windowRequested: GlobalStates.usageOpen
+    onWindowRequestedChanged: root.ensureWindowComponent()
+    Component.onCompleted: root.ensureWindowComponent()
+    function ensureWindowComponent(): void {
+        if (!root.windowRequested || root.windowComponent !== null)
+            return;
+        const component = Qt.createComponent("UsageAppWindow.qml");
+        // A window that fails to compile is reported and not kept, so the
+        // next open tries again instead of silently never opening.
+        if (component.status === Component.Error) {
+            console.warn("[UsageApp] UsageAppWindow.qml failed to load:", component.errorString());
+            Qt.callLater(() => root.requestClose());
+            return;
+        }
+        root.windowComponent = component;
+    }
+
     readonly property var tabIds: ["apps", "battery", "limits"]
 
     function requestOpen(tab = ""): void {
@@ -44,14 +65,22 @@ Scope {
     }
 
     RetainedLoader {
+        id: windowLoader
         requested: GlobalStates.usageOpen
         retainFor: 30000
         onActiveChanged: {
             if (!active)
                 AppStats.releaseCache();
         }
-        sourceComponent: UsageAppWindow {
-            onCloseRequested: root.requestClose()
+        // The window compiles on its first open, not with the shell: an inline
+        // `sourceComponent: UsageAppWindow {}` compiled its whole tree at start.
+        sourceComponent: root.windowComponent
+    }
+
+    Connections {
+        target: windowLoader.item
+        function onCloseRequested(): void {
+            root.requestClose();
         }
     }
 

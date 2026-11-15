@@ -302,17 +302,21 @@ ShellRoot {
         }
     }
 
-    // Compiles Settings and every page ahead of the first open. Compiling is
-    // what made the first open of a session (and each first page visit) slow;
-    // an asynchronous component compiles off the GUI thread, and the engine
-    // keeps compiled code after a first visit anyway. No objects are created.
+    // Compiles Settings and the page it opens on ahead of the first open.
+    // Compiling is what made the first open of a session slow; an asynchronous
+    // component compiles off the GUI thread, and holding it here keeps the
+    // compiled code. No objects are created. The other pages (~150 files)
+    // compile on their first visit instead of staying resident all session.
+    // A fresh window always opens on the first registry page (currentPage 0);
+    // deep links name their own page.
     Timer {
         id: settingsWarmup
         property var components: []
         interval: 15000
         running: Config.ready && components.length === 0
         onTriggered: {
-            const urls = ["SettingsWindow.qml"].concat(SettingsPageRegistry.pages.map(page => page.component));
+            const first = SettingsPageRegistry.pages.length > 0 ? SettingsPageRegistry.pages[0].component : "";
+            const urls = first !== "" ? ["SettingsWindow.qml", first] : ["SettingsWindow.qml"];
             settingsWarmup.components = urls.map(url => Qt.createComponent(url, Component.Asynchronous));
         }
     }
