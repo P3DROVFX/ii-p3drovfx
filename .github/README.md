@@ -215,6 +215,25 @@ The left sidebar holds an **AI chat** for cloud and local models, a **Translator
   </tr>
 </table>
 
+## Side projects
+
+Two projects grew out of this shell and live in their own repositories.
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <a href="https://github.com/P3DROVFX/ii-tools"><img src="https://raw.githubusercontent.com/P3DROVFX/ii-tools/master/.github/assets/Home_Screenshot_1.0.01.jpg" width="32%" alt="ii-tools: the PC card on the phone's home" /><img src="https://raw.githubusercontent.com/P3DROVFX/ii-tools/master/.github/assets/Home_Screenshot_1.0.02.jpg" width="32%" alt="ii-tools: tools and controls" /><img src="https://raw.githubusercontent.com/P3DROVFX/ii-tools/master/.github/assets/Home_Screenshot_1.0.03.jpg" width="32%" alt="ii-tools: camera, microphone and PC load" /></a>
+    </td>
+    <td width="50%" align="center">
+      <a href="https://github.com/P3DROVFX/ii-icon-pack"><img src="https://raw.githubusercontent.com/P3DROVFX/ii-icon-pack/main/assets/hero-banner.jpg" width="100%" alt="ii-icon-pack: a monochrome icon pack in the shell's colours" /></a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center"><b><a href="https://github.com/P3DROVFX/ii-tools">ii-tools</a></b><br><sub>The Android companion, in place of KDE Connect. It makes the phone the PC's remote, microphone, webcam and second screen, and brings its notifications and live activities to the shell. Pairs with the <b>ii tools</b> page in Settings.</sub></td>
+    <td align="center"><b><a href="https://github.com/P3DROVFX/ii-icon-pack">ii-icon-pack</a></b><br><sub>A Material You monochrome icon pack for Linux, in any Material 3 Expressive shape. Over 33,000 vector icons that recolor with your wallpaper.</sub></td>
+  </tr>
+</table>
+
 ## Credits
 
 - **[end-4](https://github.com/end-4):** Creator of illogical-impulse.
