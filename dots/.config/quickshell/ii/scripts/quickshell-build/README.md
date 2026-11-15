@@ -28,13 +28,36 @@ They apply in order to upstream Quickshell at the commit in `revision`. Measured
 
 Releasing the graphics of hidden windows needs no patch at this commit: `PanelWindow` and `PopupWindow` already destroy their `QQuickWindow` when hidden (`deleteOnInvisible()`), which frees the window's scene graph, render thread and GL context; a hidden `FloatingWindow` keeps its window, but the shell's are destroyed by their loaders after their retain time.
 
+## The build
+
+Arch builds `RelWithDebInfo` unstripped (`options=(!strip !debug)`), Fedora `Release` without a debuginfo package, and the Nix package keeps nixpkgs' `RelWithDebInfo` with `separateDebugInfo`. `QS_CMAKE_OPTIONS` at the top of `qs-build.sh` holds the options both recipes add (the Nix package sets the same):
+
+- **Modules nothing imports are off.** `-DX11=OFF -DI3=OFF -DSERVICE_GREETD=OFF`: no QML file in this config (every panel family, the three entry files, the lock screen; the SDDM theme runs in sddm-greeter, not Quickshell) imports `Quickshell.X11`, `Quickshell.I3` or `Quickshell.Services.Greetd`. The X11 plugin also only ever applies on the xcb platform. Every other module is imported somewhere and stays on. The package replaces the system's `/usr/bin/quickshell`, so these modules are gone for every Quickshell config on the machine, not only this one: a config of your own that imports one of them needs the distribution's package back (`./qs-build.sh restore`). With X11 off nothing in Quickshell links libxcb, so the PKGBUILD no longer lists it (Qt still pulls it in).
+
+A Release + LTO build was measured on NixOS (Qt 6.12.0, GCC 16.2, all nine patches; nested-Hyprland rig, warm `.qmlc` cache, 5 interleaved runs each) and gave nothing outside run-to-run noise: launch → first frame 1.62 → 1.58 s, PSS at 110 s 498.8 → 497.4 MiB, only `.text` shrank (6.64 → 6.13 MB). It was dropped.
+
+NixOS's Qt 6.12.0 `libQt6Qml` calls `resolvedCompositeSingletons()` directly, not through the PLT, so 0005's filter never runs there: no "singleton filter active" in the log. Whether a distribution's Qt goes through the PLT shows in `objdump -d libQt6Qml.so.6 | grep 'call.*resolvedCompositeSingletonsEv'`: `@plt` means it does.
+
+### Rebuilds happen by themselves
+
+Each package records a *build stamp* in `/usr/share/quickshell-ii-git/build-stamp`: a SHA-256 of this distribution's generated PKGBUILD or spec (commit, version, CMake options, dependencies, patch list, packaging) and of every patch's bytes. Machine-dependent parts (whether the crash handler is built) are left out, so the same checkout gives the same stamp everywhere. `qs-build.sh check` prints `current`, `outdated` or `absent`, and `install` builds only when the stamp differs (or Qt changed). A package from before stamps has none and counts as outdated.
+
+Each package also records the directory it was built from (`source <dir>`, printed by `./qs-build.sh source`).
+
+`setup-ii-p3drovfx.sh` runs `check` on the staged config during every deployment (`update`, `switch`, `apply`), before it restarts the shell: when the installed `quickshell-ii-git` is `outdated` it runs `qs-build.sh install` from that staged tree, so the restart that follows runs the new build. It never passes `--yes`, not even when the updater itself got one (Settings' branch and fork switches do): replacing a system package is asked about in the terminal, and declined where there is none. Every package from before stamps has none and reads `outdated`, so each existing installation is rebuilt once, on its first update after stamps arrived.
+
+An update made by an older updater, which has no such step, is caught by the start guard (`../quickshell-guard/qs-guard.sh`): once the shell is up it runs `check` in the background and, when `outdated`, opens a terminal on `qs-build.sh install` (or, with `health.guard.openTerminal` off or no terminal installed, says the command in a notification). The offer is keyed on the build stamp in `~/.local/state/quickshell/qs-build-offered`: the same build is offered again at most once every 7 days, a different one at once, and an offer nobody saw (no terminal, no notification daemon) is not recorded. A "no" in the updater is written there too, so the restart does not ask a second time. The guard says nothing when the installed build came from another checkout that still exists (a developer's tree with its own patches): offering this tree's set would undo it.
+
+`install`, `rebuild`, `build` and `restore` take a lock (`$XDG_RUNTIME_DIR/quickshell-ii-git-build.lock`); a second one waits and then finds the package current. Before installing, the freshly built binary is run with `--private-check-compat`: a build that no longer matches the installed Qt (Qt updated during the build) is not installed. The question names the build dependencies it would install.
+
 ## Usage
 
 ```bash
-./qs-build.sh install    # build and install quickshell-ii-git (asks first)
+./qs-build.sh install    # build and install quickshell-ii-git (asks first); nothing when current
 ./qs-build.sh rebuild    # the same, even when current — e.g. after a Qt update
 ./qs-build.sh restore    # put the distribution's quickshell-git back
-./qs-build.sh status     # what is installed, patched or not, Qt match
+./qs-build.sh status     # what is installed, patched or not, built from these patches, Qt match
+./qs-build.sh check      # one word: current, outdated or absent
 ```
 
 `-y` answers every question. The setup script does the same through
@@ -65,4 +88,5 @@ Quickshell built for one Qt does not start on another. The guard
 1. In a clone of quickshell, `git checkout <commit>` and `git apply --check` every patch.
 2. Update `QS_COMMIT` and `QS_VERSION` in `revision` (`git describe --tags`,
    `v0.3.2-11-g9b0f339` → `0.3.2.r11.g9b0f339`); reset `QS_RELEASE` to 1.
+   (Patch and option changes need no bump: the build stamp catches them.)
 3. `./qs-build.sh rebuild`, start the shell, and check the log has no new warnings.

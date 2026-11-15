@@ -12,7 +12,12 @@
 #     one that never answers over IPC (its config did not load) has not started;
 #   - when it has not started and Qt is the reason, a terminal opens on
 #     qs-rebuild.sh, which rebuilds the package once you say yes;
-#   - a crash later on restarts it, at most 3 times in 10 minutes.
+#   - a crash later on restarts it, at most 3 times in 10 minutes;
+#   - once the shell is up, ii's patched Quickshell (quickshell-ii-git, Arch and
+#     Fedora) is checked against the patches and build options this config
+#     ships (`qs-build.sh check`, in the background); when it is outdated, the
+#     rebuild is offered: on the first start after the change, then at most once
+#     every 7 days while it stays outdated.
 #
 # Stopping the shell on purpose (`qs kill`, killall, Ctrl+Super+R) ends it with a
 # clean exit or SIGTERM, which the guard takes as "stopped" and exits with it.
@@ -60,9 +65,11 @@ notify() {
     fi
     # Only a daemon that already runs: activating one by D-Bus can hang here.
     if have notify-send && have busctl && busctl --user status org.freedesktop.Notifications >/dev/null 2>&1; then
-        notify-send -u critical -a Quickshell Quickshell "$3"
+        notify-send -u critical -a Quickshell Quickshell "$3" && return 0
     fi
     printf 'qs-guard: %s\n' "$3" >&2
+    # Only the log saw it.
+    return 1
 }
 
 if ! have qs; then
@@ -92,6 +99,7 @@ qt_mismatch_text() {
     fi
 }
 
+# open_terminal [command...]: the rebuild in a terminal; qs-rebuild.sh by default.
 open_terminal() {
     [[ "$(opt .health.guard.openTerminal true)" == true ]] || return 1
     local term=""
@@ -99,7 +107,13 @@ open_terminal() {
     [[ -n "$term" ]] || term="kitty -1"
     local cmd
     read -ra cmd <<<"$term"
-    cmd+=(-e bash "$dir/qs-rebuild.sh" "${args[@]}")
+    if (($# > 0)); then
+        cmd+=(-e "$@")
+    else
+        cmd+=(-e bash "$dir/qs-rebuild.sh" "${args[@]}")
+    fi
+    # setsid -f succeeds before the exec, so a missing terminal would pass for open.
+    have "${cmd[0]}" || return 1
     if [[ -n "${QS_GUARD_DRY:-}" ]]; then
         printf 'terminal: %s\n' "${cmd[*]}" >&2
         return 0
@@ -137,6 +151,50 @@ if [[ "$qt_ok" == false ]]; then
     notify 0 600 "$(qt_mismatch_text). The shell may crash until it is rebuilt: $rebuild_cmd"
 fi
 
+# ── Patches ─────────────────────────────────────────────────────────────
+# An update can ship new patches or build options for quickshell-ii-git, which
+# only a rebuild brings in (qs-build.sh compares a stamp the package records).
+# The updater rebuilds it itself; this covers an updater too old to know, and a
+# rebuild that was declined. Run once the shell is up, in the background: the
+# check is ~10 ms where it does not apply (NixOS, other distributions: exit 3)
+# and a package query plus a hash of the recipe on Arch and Fedora. Not while Qt
+# mismatches: that rebuild comes first and records the new stamp too.
+qsbuild="$(cd -P "$dir/../quickshell-build" 2>/dev/null && pwd)"
+builder="$qsbuild/qs-build.sh"
+offer_file="${XDG_STATE_HOME:-$HOME/.local/state}/quickshell/qs-build-offered"
+OFFER_EVERY=$((7 * 24 * 3600))
+
+offer_patch_rebuild() {
+    [[ "$qt_ok" == true && -n "$qsbuild" && -f "$builder" ]] || return 0
+    [[ "$(bash "$builder" check 2>/dev/null)" == outdated ]] || return 0
+    # Built on purpose from another checkout that still exists (a developer's
+    # tree with its own patches): offering this tree's set would undo it.
+    local src
+    src="$(bash "$builder" source 2>/dev/null)"
+    [[ -n "$src" && "$src" != "$qsbuild" && -d "$src" ]] && return 0
+    # The offer is keyed on what would be built (the build stamp): a newer change
+    # is offered at once, the same one again only after OFFER_EVERY. The updater
+    # writes the same file when it asked itself.
+    local key now last_key="" last_at=0
+    key="$(bash "$builder" stamp 2>/dev/null)"
+    [[ -n "$key" ]] || return 0
+    now="$(date +%s)"
+    [[ -r "$offer_file" ]] && read -r last_key last_at <"$offer_file"
+    [[ "$last_key" == "$key" ]] && ((now - ${last_at:-0} < OFFER_EVERY)) && return 0
+    local build_cmd="${builder/#$HOME/\~}" shown=false
+    local text="Quickshell (quickshell-ii-git) was built from other patches or build options than this config ships."
+    # shellcheck disable=SC2016 # $1 expands in the terminal's bash, not here.
+    if open_terminal bash -c 'bash "$1" install; printf "\nPress Enter to close. "; read -r _' _ "$builder"; then
+        shown=true
+        notify 1 30 "$text A terminal is open to rebuild it; the new build runs after the next restart."
+    elif notify 1 120 "$text Rebuild it: $build_cmd install"; then
+        shown=true
+    fi
+    # Not recorded when nobody saw it: the next start tries again.
+    [[ "$shown" == true ]] || return 0
+    mkdir -p "$(dirname "$offer_file")" && printf '%s %s\n' "$key" "$now" >"$offer_file"
+}
+
 # ── Running it ──────────────────────────────────────────────────────────
 child=0
 trap '((child > 0)) && kill -TERM "$child" 2>/dev/null; exit 0' TERM INT HUP
@@ -162,6 +220,10 @@ while :; do
     if [[ "$up" == false ]] && kill -0 "$child" 2>/dev/null; then
         # Left running: a config fixed on disk hot-reloads into it.
         not_started "its config did not load"
+    fi
+    if [[ "$up" == true && -z "${patches_checked:-}" ]]; then
+        patches_checked=1
+        offer_patch_rebuild </dev/null &
     fi
 
     wait "$child"

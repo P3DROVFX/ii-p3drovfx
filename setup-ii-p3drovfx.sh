@@ -76,9 +76,10 @@
 # only what `deps` itself installed, recorded in ~/.local/state/ii-p3drovfx.
 #
 # `install` ends by replacing the base's Quickshell with quickshell-ii-git:
-# upstream Quickshell at a pinned commit with the config's two startup patches
-# (scripts/quickshell-build), built as a native package on Arch and Fedora. The
-# stock build takes ~5 s to show the bar; the patched one under 2 s. Where it
+# upstream Quickshell at a pinned commit with the config's startup and memory
+# patches (scripts/quickshell-build), built as a native package on Arch and
+# Fedora. The stock build takes ~5 s to show the bar; the patched one under 2 s.
+# Every later deployment rebuilds it when the patches or build options changed. Where it
 # cannot be built, Arch falls back to the AUR's quickshell-git (the base pins an
 # older one) and other distributions keep the base's. That happens before any
 # config lands, and asks first unless -y. `quickshell` does only this step.
@@ -2100,7 +2101,7 @@ ensure_quickshell_git() {
 # ── Patched Quickshell (quickshell-ii-git) ───────────────────────────────────
 #
 # The stock Quickshell spends ~5-7 s scanning this config before any QML runs
-# and recompiles every QML file on every start. The config ships two patches
+# and recompiles every QML file on every start. The config ships patches
 # and a builder (scripts/quickshell-build/qs-build.sh) that turn upstream
 # Quickshell at a pinned commit into a native package, quickshell-ii-git, which
 # replaces quickshell / quickshell-git on Arch (and derivatives) and Fedora.
@@ -2155,6 +2156,40 @@ ensure_quickshell() {
         *) ui_warn "The patched Quickshell was not installed; falling back to the packaged one." ;;
     esac
     ensure_quickshell_git
+}
+
+# patched_quickshell_step <config_dir> — during a deployment, on the staged
+# tree: rebuild quickshell-ii-git when that config builds it differently (other
+# patches, CMake options or packaging) from the installed package. The builder
+# compares a build stamp the package records, so no version bump is needed for
+# this to happen. Only where the patched package is installed: someone who
+# declined it or put the distribution's back is never asked here. Never with
+# --yes: agreeing to an update or a branch switch is not agreeing to replace a
+# system package, so the builder always asks (and declines without a terminal).
+# A "no" is written where the start guard looks, so the restart that follows
+# does not ask again; the guard offers it again after a week.
+patched_quickshell_step() {
+    local builder="$1/scripts/quickshell-build/qs-build.sh" state
+    [[ -f "$builder" ]] || return 0
+    state="$(bash "$builder" check 2>>"$LOG_FILE")" || return 0
+    [[ "$state" == outdated ]] || return 0
+    ui_note "This version builds Quickshell from other patches or build options than"
+    ui_note "the installed quickshell-ii-git, which is rebuilt to match (a few minutes)."
+    local rc=0
+    bash "$builder" install || rc=$?
+    printf '\n'
+    if ((rc == 0)); then
+        ui_ok "Quickshell" "quickshell-ii-git rebuilt; it runs from the restart below"
+        return 0
+    fi
+    ui_warn "quickshell-ii-git was not rebuilt; the shell keeps the installed build."
+    ui_note "Later: $CLI_NAME quickshell install"
+    local key offer="${XDG_STATE_HOME:-$HOME/.local/state}/quickshell/qs-build-offered"
+    key="$(bash "$builder" stamp 2>>"$LOG_FILE")" || key=""
+    if [[ -n "$key" ]]; then
+        mkdir -p "$(dirname "$offer")" && printf '%s %s\n' "$key" "$(date +%s)" >"$offer"
+    fi
+    return 0
 }
 
 # The `quickshell` command: install only the patched Quickshell (or put the
@@ -2848,6 +2883,11 @@ apply_config() {
     # Installed now rather than after the restart: the shell probes for most of
     # these once, when it starts, and would come up thinking they are missing.
     deps_required_step "$STAGE_DIR"
+
+    # Before the restart below, so the shell comes back on the new build and its
+    # start guard finds nothing to offer. The old shell keeps running meanwhile:
+    # pacman/dnf replace the binary under it.
+    patched_quickshell_step "$STAGE_DIR"
 
     # Mirror before the swap, never after. The settings panel runs the mirrored
     # copy, so a fault in swap_in used to be self-perpetuating: the swap failed,
