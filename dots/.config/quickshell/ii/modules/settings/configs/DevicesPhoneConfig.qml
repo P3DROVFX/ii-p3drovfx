@@ -180,6 +180,17 @@ Item {
                             ? `${KdeConnectService.activeDeviceDisplayName} · ${Math.round(KdeConnectService.activeDevice.charge)}%`
                             : KdeConnectService.activeDeviceDisplayName
                     }
+
+                    Repeater {
+                        model: KdeConnectService.activeReachable ? (KdeConnectService.activeDevice?.peripherals ?? []) : []
+                        delegate: HeroStatusPill {
+                            required property var modelData
+                            symbol: IiLinkService.peripheralIcon(modelData.kind)
+                            primaryStyle: false
+                            secondaryStyle: true
+                            label: modelData.level >= 0 ? `${modelData.name} · ${Math.round(modelData.level)}%` : modelData.name
+                        }
+                    }
                 }
             }
         }

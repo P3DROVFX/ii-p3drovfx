@@ -41,6 +41,7 @@ Item {
     readonly property var _device: KdeConnectService.activeDevice
     readonly property int _battery: _device?.charge ?? -1
     readonly property bool _charging: _device?.charging ?? false
+    readonly property var _peripherals: (_device?.reachable && Array.isArray(_device?.peripherals)) ? _device.peripherals.slice(0, 2) : []
     readonly property string _signalType: _device?.signalType ?? ""
     readonly property int _signalStrength: _device?.signalStrength ?? 0
 
@@ -159,6 +160,49 @@ Item {
         }
 
         Item { Layout.fillWidth: true }
+
+        // ─── Bluetooth peripherals (from ii tools) ───
+        Repeater {
+            model: root._peripherals
+            delegate: Rectangle {
+                id: peripheralPill
+                required property var modelData
+                Layout.preferredHeight: 38
+                Layout.preferredWidth: peripheralRow.implicitWidth + 20
+                radius: Appearance.rounding.full
+                color: Appearance.colors.colLayer3
+
+                RowLayout {
+                    id: peripheralRow
+                    anchors.centerIn: parent
+                    spacing: 4
+
+                    MaterialSymbol {
+                        Layout.alignment: Qt.AlignVCenter
+                        text: IiLinkService.peripheralIcon(peripheralPill.modelData.kind)
+                        iconSize: 16
+                        color: Appearance.colors.colOnLayer3
+                    }
+
+                    StyledText {
+                        Layout.alignment: Qt.AlignVCenter
+                        text: `${Math.round(peripheralPill.modelData.level)}%`
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        font.weight: Font.DemiBold
+                        color: Appearance.colors.colOnLayer3
+                    }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+
+                    StyledToolTip {
+                        text: `${peripheralPill.modelData.name} · ${peripheralPill.modelData.level}%`
+                    }
+                }
+            }
+        }
 
         // ─── Battery pill ───
         Rectangle {

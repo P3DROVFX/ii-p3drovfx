@@ -110,7 +110,7 @@ Scope {
                 readonly property real handleSize: Math.max(Appearance.sizes.minimumTouchTarget, 36)
                 readonly property real gap: 6
 
-                readonly property bool stripAbove: controlsWindow.windowY - controlsWindow.stripHeight - controlsWindow.gap >= 0
+                readonly property bool stripAbove: controlsWindow.effectiveY - controlsWindow.stripHeight - controlsWindow.gap >= 0
 
                 anchors {
                     top: true
@@ -206,10 +206,20 @@ Scope {
                 }
 
                 property string lastManagedAddress: ""
+                property bool userAdjustedGeometry: false
+                property bool _pendingOrientationRefit: false
+
                 onTargetAddressChanged: {
                     controlsWindow.clearPending();
-                    if (controlsWindow.targetAddress.length > 0 && controlsWindow.targetAddress !== controlsWindow.lastManagedAddress) {
+                    controlsWindow._pendingOrientationRefit = false;
+                    if (controlsWindow.targetAddress.length === 0) {
+                        controlsWindow.userAdjustedGeometry = false;
+                        return;
+                    }
+                    if (controlsWindow.targetAddress !== controlsWindow.lastManagedAddress) {
                         controlsWindow.lastManagedAddress = controlsWindow.targetAddress;
+                        controlsWindow.userAdjustedGeometry = false;
+                        HyprlandData.updateMonitors();
                         controlsWindow.initializeWindowGeometry();
                     }
                 }
@@ -217,12 +227,119 @@ Scope {
                 // The phone's resolution is read over adb when the mirror is
                 // asked for and can land after the window does; the window is
                 // cropped again with it rather than left at the fallback aspect.
+                // A rotation (scrcpy's video size, via PhoneMirrorService.mirrorAspect)
+                // refits the window in place.
                 Connections {
                     target: PhoneMirrorService
                     function onDeviceHeightChanged() {
-                        if (!controlsWindow.dragging && controlsWindow.targetAddress.length > 0)
+                        if (!controlsWindow.dragging && !controlsWindow.userAdjustedGeometry
+                                && controlsWindow.targetAddress.length > 0)
                             controlsWindow.initializeWindowGeometry();
                     }
+                    function onMirrorAspectChanged() {
+                        if (controlsWindow.targetAddress.length === 0)
+                            return;
+                        if (controlsWindow.dragging) {
+                            controlsWindow._pendingOrientationRefit = true;
+                            return;
+                        }
+                        controlsWindow.refitForOrientation();
+                    }
+                }
+
+                function usableBounds() {
+                    const screenW = controlsWindow.screen?.width ?? 1920;
+                    const screenH = controlsWindow.screen?.height ?? 1080;
+                    const area = TabletWindowActions.usableArea(controlsWindow.monitor);
+                    if (!area || area.width <= 0 || area.height <= 0)
+                        return { minX: 0, minY: 0, width: screenW, height: screenH };
+                    const monX = Number(controlsWindow.monitor?.x ?? 0);
+                    const monY = Number(controlsWindow.monitor?.y ?? 0);
+                    return {
+                        minX: area.x - monX,
+                        minY: area.y - monY,
+                        width: area.width,
+                        height: area.height
+                    };
+                }
+
+                function fitSizeToBounds(targetW, targetH, aspect, bounds) {
+                    const safeAspect = (aspect > 0) ? aspect : (9 / 20);
+                    const stripReserve = controlsWindow.stripHeight + controlsWindow.gap;
+                    const availH = Math.max(TabletWindowActions.minimumHeight,
+                        bounds.height - (bounds.height > stripReserve + TabletWindowActions.minimumHeight ? stripReserve : 0));
+                    const maxW = Math.max(TabletWindowActions.minimumWidth, Math.round(bounds.width * 0.94));
+                    const maxH = Math.max(TabletWindowActions.minimumHeight, Math.round(availH * 0.94));
+
+                    let w = Math.max(TabletWindowActions.minimumWidth, Math.round(targetW));
+                    let h = Math.max(TabletWindowActions.minimumHeight, Math.round(w / safeAspect));
+
+                    if (w > maxW) {
+                        w = maxW;
+                        h = Math.round(w / safeAspect);
+                    }
+                    if (h > maxH) {
+                        h = maxH;
+                        w = Math.round(h * safeAspect);
+                    }
+                    if (w < TabletWindowActions.minimumWidth) {
+                        w = TabletWindowActions.minimumWidth;
+                        h = Math.round(w / safeAspect);
+                    }
+                    if (h < TabletWindowActions.minimumHeight) {
+                        h = TabletWindowActions.minimumHeight;
+                        w = Math.round(h * safeAspect);
+                    }
+                    return { width: w, height: h };
+                }
+
+                function clampOriginToBounds(localX, localY, w, h, bounds) {
+                    const stripReserve = controlsWindow.stripHeight + controlsWindow.gap;
+                    const minY = bounds.minY + (h + stripReserve <= bounds.height ? stripReserve : 0);
+                    const maxX = bounds.minX + Math.max(0, bounds.width - w);
+                    const maxY = bounds.minY + Math.max(0, bounds.height - h);
+                    return {
+                        x: Math.round(Math.max(bounds.minX, Math.min(maxX, localX))),
+                        y: Math.round(Math.max(minY, Math.min(maxY, localY)))
+                    };
+                }
+
+                function applyWindowGeometry(localX, localY, w, h) {
+                    const originX = localX + Number(controlsWindow.monitor?.x ?? 0);
+                    const originY = localY + Number(controlsWindow.monitor?.y ?? 0);
+                    TabletWindowActions.setGeometry(controlsWindow.targetAddress, originX, originY, w, h);
+                    controlsWindow.pendingX = localX;
+                    controlsWindow.pendingY = localY;
+                    controlsWindow.pendingWidth = w;
+                    controlsWindow.pendingHeight = h;
+                    settleTimeout.restart();
+                    TabletWindowActions.requestGeometryRefresh();
+                }
+
+                function aspectLockedResize(rawW, rawH, aspect, curX, curY) {
+                    const safeAspect = (aspect > 0) ? aspect : (9 / 20);
+                    const bounds = controlsWindow.usableBounds();
+                    const minH = Math.max(TabletWindowActions.minimumHeight,
+                        Math.ceil(TabletWindowActions.minimumWidth / safeAspect));
+                    const maxAvailW = Math.max(TabletWindowActions.minimumWidth, (bounds.minX + bounds.width) - curX);
+                    const maxAvailH = Math.max(TabletWindowActions.minimumHeight, (bounds.minY + bounds.height) - curY);
+                    const maxH = Math.max(minH, Math.min(maxAvailH, Math.floor(maxAvailW / safeAspect)));
+
+                    // Project cursor delta onto the aspect diagonal so horizontal,
+                    // vertical, and diagonal drags all track smoothly without jumping.
+                    const projectedH = (rawW * safeAspect + rawH) / (safeAspect * safeAspect + 1);
+                    let h = Math.round(Math.max(minH, Math.min(maxH, projectedH)));
+                    let w = Math.round(h * safeAspect);
+
+                    if (w < TabletWindowActions.minimumWidth) {
+                        w = TabletWindowActions.minimumWidth;
+                        h = Math.round(w / safeAspect);
+                    }
+                    if (h < TabletWindowActions.minimumHeight) {
+                        h = TabletWindowActions.minimumHeight;
+                        w = Math.round(h * safeAspect);
+                    }
+                    return { width: w, height: h };
                 }
 
                 function initializeWindowGeometry() {
@@ -235,41 +352,68 @@ Scope {
                             TabletWindowActions.setFloating(controlsWindow.targetAddress, false);
                             TabletWindowActions.requestGeometryRefresh();
                         }
-                    } else {
-                        // Normal mode: Phone screen mirroring -> FLOATING with exact phone dimensions & aspect ratio
-                        if (!controlsWindow.target.floating) {
-                            TabletWindowActions.setFloating(controlsWindow.targetAddress, true);
-                        }
-
-                        const screenW = controlsWindow.screen?.width ?? 1920;
-                        const screenH = controlsWindow.screen?.height ?? 1080;
-                        const devW = PhoneMirrorService.deviceWidth;
-                        const devH = PhoneMirrorService.deviceHeight;
-                        const aspect = (devW > 0 && devH > 0) ? (devW / devH) : PhoneMirrorService.deviceAspect;
-
-                        // Match exact phone dimensions, scaled if needed to fit comfortably on screen
-                        let targetH = (devH > 0) ? devH : Math.round(screenH * 0.75);
-                        const maxH = Math.round(screenH * 0.82);
-                        if (targetH > maxH) {
-                            targetH = maxH;
-                        }
-                        let targetW = Math.round(targetH * aspect);
-                        if (targetW > Math.round(screenW * 0.9)) {
-                            targetW = Math.round(screenW * 0.9);
-                            targetH = Math.round(targetW / aspect);
-                        }
-
-                        const originX = Math.round((screenW - targetW) / 2) + Number(controlsWindow.monitor?.x ?? 0);
-                        const originY = Math.round((screenH - targetH) / 2) + Number(controlsWindow.monitor?.y ?? 0);
-
-                        TabletWindowActions.setGeometry(controlsWindow.targetAddress, originX, originY, targetW, targetH);
-                        controlsWindow.pendingX = originX - Number(controlsWindow.monitor?.x ?? 0);
-                        controlsWindow.pendingY = originY - Number(controlsWindow.monitor?.y ?? 0);
-                        controlsWindow.pendingWidth = targetW;
-                        controlsWindow.pendingHeight = targetH;
-                        settleTimeout.restart();
-                        TabletWindowActions.requestGeometryRefresh();
+                        return;
                     }
+
+                    // Normal mode: Phone screen mirroring -> FLOATING with exact phone dimensions & aspect ratio
+                    if (!controlsWindow.target.floating) {
+                        TabletWindowActions.setFloating(controlsWindow.targetAddress, true);
+                    }
+
+                    const bounds = controlsWindow.usableBounds();
+                    const stripReserve = controlsWindow.stripHeight + controlsWindow.gap;
+                    const availH = Math.max(TabletWindowActions.minimumHeight, bounds.height - stripReserve);
+                    const devW = PhoneMirrorService.mirrorWidth;
+                    const devH = PhoneMirrorService.mirrorHeight;
+                    const aspect = PhoneMirrorService.mirrorAspect;
+
+                    const maxLongSide = Math.round(Math.min(bounds.width * 0.9, availH * 0.85));
+                    const naturalLong = (devW > 0 && devH > 0) ? Math.max(devW, devH) : maxLongSide;
+                    const longSide = Math.min(naturalLong, maxLongSide);
+                    const rawW = aspect >= 1 ? longSide : Math.round(longSide * aspect);
+                    const rawH = aspect >= 1 ? Math.round(longSide / aspect) : longSide;
+
+                    const fitted = controlsWindow.fitSizeToBounds(rawW, rawH, aspect, bounds);
+                    const topMinY = bounds.minY + (fitted.height + stripReserve <= bounds.height ? stripReserve : 0);
+                    const centeredX = bounds.minX + (bounds.width - fitted.width) / 2;
+                    const centeredY = topMinY + (bounds.height - (topMinY - bounds.minY) - fitted.height) / 2;
+                    const origin = controlsWindow.clampOriginToBounds(centeredX, centeredY, fitted.width, fitted.height, bounds);
+
+                    controlsWindow.applyWindowGeometry(origin.x, origin.y, fitted.width, fitted.height);
+                }
+
+                function refitForOrientation() {
+                    if (!controlsWindow.target || controlsWindow.targetAddress.length === 0)
+                        return;
+                    if (controlsWindow.isFlexDisplay || !controlsWindow.target.floating)
+                        return;
+
+                    const curX = controlsWindow.effectiveX;
+                    const curY = controlsWindow.effectiveY;
+                    const curW = controlsWindow.effectiveWidth;
+                    const curH = controlsWindow.effectiveHeight;
+                    if (curW <= 0 || curH <= 0) {
+                        controlsWindow.initializeWindowGeometry();
+                        return;
+                    }
+
+                    const bounds = controlsWindow.usableBounds();
+                    const aspect = PhoneMirrorService.mirrorAspect;
+                    // Keep the same longest side (which also preserves area across 90° rotations).
+                    const longSide = Math.max(curW, curH);
+                    const rawW = aspect >= 1 ? longSide : Math.round(longSide * aspect);
+                    const rawH = aspect >= 1 ? Math.round(longSide / aspect) : longSide;
+
+                    const fitted = controlsWindow.fitSizeToBounds(rawW, rawH, aspect, bounds);
+                    const centerX = curX + (curW - fitted.width) / 2;
+                    const centerY = curY + (curH - fitted.height) / 2;
+                    const origin = controlsWindow.clampOriginToBounds(centerX, centerY, fitted.width, fitted.height, bounds);
+
+                    if (Math.abs(fitted.width - curW) <= 2 && Math.abs(fitted.height - curH) <= 2
+                            && Math.abs(origin.x - curX) <= 2 && Math.abs(origin.y - curY) <= 2)
+                        return;
+
+                    controlsWindow.applyWindowGeometry(origin.x, origin.y, fitted.width, fitted.height);
                 }
 
                 Timer {
@@ -335,8 +479,14 @@ Scope {
                     controlsWindow.pendingY = finalY;
                     controlsWindow.pendingWidth = resized ? finalWidth : -1;
                     controlsWindow.pendingHeight = resized ? finalHeight : -1;
+                    controlsWindow.userAdjustedGeometry = true;
                     settleTimeout.restart();
                     TabletWindowActions.requestGeometryRefresh();
+
+                    if (controlsWindow._pendingOrientationRefit) {
+                        controlsWindow._pendingOrientationRefit = false;
+                        controlsWindow.refitForOrientation();
+                    }
                 }
 
                 // ── The Toolbar accompanying the window ─────────────────
@@ -856,6 +1006,7 @@ Scope {
                         property real pressGlobalY: 0
                         property real originWidth: 0
                         property real originHeight: 0
+                        property real dragAspect: 9 / 20
 
                         StyledToolTip {
                             requireOverlay: false
@@ -868,6 +1019,9 @@ Scope {
                             resizeDrag.pressGlobalY = point.y;
                             resizeDrag.originWidth = controlsWindow.effectiveWidth;
                             resizeDrag.originHeight = controlsWindow.effectiveHeight;
+                            resizeDrag.dragAspect = PhoneMirrorService.mirrorAspect > 0
+                                ? PhoneMirrorService.mirrorAspect
+                                : (resizeDrag.originWidth / Math.max(1, resizeDrag.originHeight));
                             const heldX = controlsWindow.effectiveX;
                             const heldY = controlsWindow.effectiveY;
                             controlsWindow.clearPending();
@@ -881,10 +1035,13 @@ Scope {
                             if (!resizeDrag.pressed)
                                 return;
                             const point = resizeDrag.mapToItem(null, mouse.x, mouse.y);
-                            controlsWindow.liveWidth = Math.max(TabletWindowActions.minimumWidth,
-                                resizeDrag.originWidth + (point.x - resizeDrag.pressGlobalX));
-                            controlsWindow.liveHeight = Math.max(TabletWindowActions.minimumHeight,
-                                resizeDrag.originHeight + (point.y - resizeDrag.pressGlobalY));
+                            const rawW = resizeDrag.originWidth + (point.x - resizeDrag.pressGlobalX);
+                            const rawH = resizeDrag.originHeight + (point.y - resizeDrag.pressGlobalY);
+                            const sized = controlsWindow.aspectLockedResize(
+                                rawW, rawH, resizeDrag.dragAspect,
+                                controlsWindow.effectiveX, controlsWindow.effectiveY);
+                            controlsWindow.liveWidth = sized.width;
+                            controlsWindow.liveHeight = sized.height;
                             controlsWindow.commitGeometry();
                         }
 

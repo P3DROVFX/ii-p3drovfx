@@ -3,6 +3,7 @@ import os
 import sys
 import json
 import signal
+import shutil
 import subprocess
 import threading
 import time
@@ -576,9 +577,19 @@ class ScrcpySessionManager:
 
             title = f"ii-phone-{type_str}-{session_id.replace(':', '_')}"
             cmd = ["scrcpy"] + resolved_target + ["--window-title=" + title] + args
+            watch_video = (type_str == "mirror")
+            if watch_video and shutil.which("stdbuf"):
+                # Force line-buffered stdout so scrcpy's "INFO: Texture: WxH"
+                # arrives immediately when the device rotates instead of waiting
+                # in glibc's 4 KB pipe buffer.
+                cmd = ["stdbuf", "-oL"] + cmd
 
-            proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
-                                    preexec_fn=_default_sigint)
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE if watch_video else subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+                preexec_fn=_default_sigint)
             with self.lock:
                 self.processes[session_id] = proc
                 self.session_info[session_id] = {
@@ -595,6 +606,8 @@ class ScrcpySessionManager:
                 "pid": proc.pid,
                 "title": title
             })
+            if watch_video and proc.stdout is not None:
+                threading.Thread(target=self._watch_stdout, args=(session_id, proc), daemon=True).start()
         except Exception as e:
             if dark:
                 self._restore_panel()
@@ -609,6 +622,38 @@ class ScrcpySessionManager:
                 self.starting.discard(session_id)
 
         self._wait_process(session_id, proc)
+
+    _TEXTURE_RE = re.compile(r"INFO:\s+Texture:\s+(\d+)x(\d+)")
+
+    def _watch_stdout(self, session_id, proc):
+        # Drain stdout for the lifetime of the mirror so the pipe never fills,
+        # and notify the shell whenever scrcpy allocates a rotated texture.
+        last_size = None
+        try:
+            for line in proc.stdout:
+                m = self._TEXTURE_RE.search(line)
+                if not m:
+                    continue
+                w, h = int(m.group(1)), int(m.group(2))
+                if w <= 0 or h <= 0:
+                    continue
+                size = (w, h)
+                if size == last_size:
+                    continue
+                last_size = size
+                self.emit({
+                    "event": "video_size",
+                    "id": session_id,
+                    "width": w,
+                    "height": h
+                })
+        except Exception:
+            pass
+        finally:
+            try:
+                proc.stdout.close()
+            except Exception:
+                pass
 
     def _wait_process(self, session_id, proc):
         # Drained as it comes, not read at the end: a pipe nobody reads fills

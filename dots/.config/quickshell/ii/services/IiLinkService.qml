@@ -1242,7 +1242,7 @@ Singleton {
     // the list only when it changed, then each missing photo as a file. Both are kept
     // in the state folder (PhoneContactsService reads contacts.json itself).
 
-    /// { battery: { level, charging, plug, temp, health }, net: { type, signal }, ringer, at } or null.
+    /// { battery: { level, charging, plug, temp, health }, net: { type, signal }, ringer, peripherals: [{ id, name, kind, level }], at } or null.
     property var phoneStatus: null
     readonly property string contactsDir: `${root.stateDir}/contacts`
 
@@ -1274,8 +1274,58 @@ Singleton {
             root.sendTo(root.dataDev, { t: "get", what: "contacts", have: root._contactsHash() });
     }
 
+    function _sanitizePeripherals(raw): var {
+        if (!Array.isArray(raw))
+            return [];
+        const out = [];
+        for (const item of raw) {
+            if (!item || typeof item !== "object")
+                continue;
+            const id = String(item.id ?? "").trim();
+            const name = String(item.name ?? "").trim();
+            if (!id || !name)
+                continue;
+            const level = Number(item.level);
+            if (!Number.isFinite(level) || level < 0 || level > 100)
+                continue;
+            const entry = {
+                id: id,
+                name: name,
+                kind: String(item.kind ?? "other").trim() || "other",
+                level: Math.round(level)
+            };
+            out.push(entry);
+        }
+        return out;
+    }
+
+    function peripheralIcon(kind): string {
+        switch (kind) {
+        case "earbuds":
+            return "earbuds";
+        case "watch":
+            return "watch";
+        case "headset":
+            return "headphones";
+        case "speaker":
+            return "speaker";
+        case "keyboard":
+            return "keyboard";
+        case "mouse":
+            return "mouse";
+        default:
+            return "bluetooth";
+        }
+    }
+
     function _status(m): void {
-        root.phoneStatus = { battery: m.battery ?? null, net: m.net ?? null, ringer: String(m.ringer ?? ""), at: Date.now() };
+        root.phoneStatus = {
+            battery: m.battery ?? null,
+            net: m.net ?? null,
+            ringer: String(m.ringer ?? ""),
+            peripherals: root._sanitizePeripherals(m.peripherals),
+            at: Date.now()
+        };
         if ("alarm" in m)
             PhoneAlarmService.fromLink(m.alarm);
     }
@@ -2560,6 +2610,7 @@ Singleton {
             paired: true,
             charge: conn && st?.battery ? Number(st.battery.level ?? -1) : -1,
             charging: !!(conn && st?.battery?.charging),
+            peripherals: conn && Array.isArray(st?.peripherals) ? st.peripherals : [],
             signalType: st?.net?.type === "wifi" ? "Wi-Fi" : st?.net?.type === "cellular" ? Translation.tr("Mobile") : "",
             signalStrength: Math.max(0, Number(st?.net?.signal ?? 0)),
             supportedPlugins: plugins,

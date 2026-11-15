@@ -95,6 +95,33 @@ Singleton {
         ? (deviceWidth / deviceHeight)
         : (9 / 20)
 
+    // The floating mirror's orientation. `wm size` is the natural (portrait) size and never
+    // changes on rotation, so the live shape comes from scrcpy itself: its session manager
+    // reports the video size it decodes (`video_size`), which flips when the phone rotates.
+    // The sidebar embed keeps using the natural size above.
+    property bool landscape: false
+
+    readonly property int mirrorWidth: {
+        if (deviceWidth > 0 && deviceHeight > 0)
+            return landscape === (deviceWidth > deviceHeight) ? deviceWidth : deviceHeight;
+        return landscape ? 2340 : 1080;
+    }
+    readonly property int mirrorHeight: {
+        if (deviceWidth > 0 && deviceHeight > 0)
+            return landscape === (deviceWidth > deviceHeight) ? deviceHeight : deviceWidth;
+        return landscape ? 1080 : 2340;
+    }
+    readonly property real mirrorAspect: mirrorWidth / mirrorHeight
+
+    function updateStreamSize(width: int, height: int): void {
+        if (width > 0 && height > 0)
+            root.landscape = width > height;
+    }
+
+    function resetMirrorOrientation(): void {
+        root.landscape = false;
+    }
+
     // ─── Session lifecycle ────────────────────────────────────
 
     /** How long a mirror stays up after its page goes away. The sidebar drops

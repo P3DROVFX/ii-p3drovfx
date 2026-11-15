@@ -236,6 +236,16 @@ Item {
                         secondaryStyle: true
                     }
 
+                    Repeater {
+                        model: IiLinkService.phoneConnected ? (IiLinkService.phoneStatus?.peripherals ?? []) : []
+                        delegate: HeroPill {
+                            required property var modelData
+                            symbol: IiLinkService.peripheralIcon(modelData.kind)
+                            label: modelData.level >= 0 ? `${modelData.name} · ${modelData.level}%` : modelData.name
+                            secondaryStyle: true
+                        }
+                    }
+
                     HeroPill {
                         visible: IiLinkService.running && stats.text !== "—"
                         symbol: "memory"
@@ -1567,6 +1577,12 @@ fi`]
             const n = st.net;
             if (n && n.type && n.type !== "none")
                 parts.push(n.type === "wifi" ? "Wi-Fi" : n.type === "cellular" ? Translation.tr("Mobile data") : n.type);
+            if (Array.isArray(st.peripherals)) {
+                for (const p of st.peripherals) {
+                    if (p.level >= 0)
+                        parts.push(`${p.name} ${p.level}%`);
+                }
+            }
             return parts;
         }
 

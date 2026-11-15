@@ -1128,6 +1128,7 @@ Singleton {
             root._updateMirrorRadio()
             root.mirrorRunning = false
             root.mirrorLaunching = false
+            PhoneMirrorService.resetMirrorOrientation()
             root.embedRunning = false
             root.embedLaunching = false
             root.recordingRunning = false
@@ -1204,6 +1205,10 @@ Singleton {
                                     : Translation.tr("Unlock your phone in the window that just opened")
                         KdeConnectService.dispatchActionFeedback(waitText, true)
 
+                    } else if (ev === "video_size") {
+                        if (msg.id === "mirror")
+                            PhoneMirrorService.updateStreamSize(Number(msg.width) || 0, Number(msg.height) || 0)
+
                     } else if (ev === "exited") {
                         const sid = msg.id
                         const asked = !!root._intentionalStops[sid]
@@ -1232,6 +1237,8 @@ Singleton {
                         if (sid === "mirror") {
                             root.mirrorRunning = false
                             root.mirrorLaunching = resuming
+                            if (!resuming)
+                                PhoneMirrorService.resetMirrorOrientation()
                             if (failed) root.reportFailure(sid, msg.error || "")
                         } else if (sid === root.embedSessionId) {
                             root.embedRunning = false
@@ -1262,6 +1269,7 @@ Singleton {
                             return
                         }
                         if (msg.id === root.recordSessionId) root.recordingLaunching = false
+                        if (errSid === "mirror") PhoneMirrorService.resetMirrorOrientation()
                         root.reportFailure(errSid, msg.message || "")
                     }
                 } catch (e) {
