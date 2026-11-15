@@ -63,6 +63,10 @@ Singleton {
     onMediaEnabledChanged: root.send({ op: "config", media: root.mediaEnabled })
     readonly property bool pcLiveEnabled: root.opts?.pcLive?.enable ?? true
     readonly property bool pcMediaEnabled: root.opts?.pcMedia?.enable ?? true
+    onPcMediaEnabledChanged: {
+        if (!root.pcMediaEnabled)
+            root._clearPcLyricsWatchers();
+    }
     readonly property bool lookEnabled: root.opts?.look?.enable ?? true
     readonly property bool filesEnabled: root.opts?.files?.enable ?? true
     readonly property bool galleryEnabled: root.opts?.gallery?.enable ?? true
@@ -184,7 +188,7 @@ Singleton {
         .concat(root.pcLiveEnabled ? ["pcLive"] : [])
         .concat(root.perfEnabled ? ["perf"] : [])
         .concat(root.mediaEnabled ? ["media"] : [])
-        .concat(root.pcMediaEnabled ? ["pcMedia"] : [])
+        .concat(root.pcMediaEnabled ? ["pcMedia", "pcLyrics"] : [])
         .concat(root.filesEnabled ? ["files"] : [])
         .concat(root.galleryEnabled ? ["gallery"] : [])
         .concat(root.touchpadEnabled ? ["touchpad"] : [])
@@ -1577,6 +1581,7 @@ Singleton {
     // sent back to it.
 
     readonly property string pcMediaDev: root.pcMediaEnabled ? root._capDev("pcMedia") : ""
+    readonly property string pcLyricsDev: root.pcMediaEnabled ? root._capDev("pcLyrics") : ""
 
     function _isPhonePlayer(player): bool {
         return (player?.dbusName ?? "").startsWith("org.mpris.MediaPlayer2.iitools_");
@@ -1595,6 +1600,13 @@ Singleton {
     readonly property string _pcArtPath: root.pcMediaPlayer ? CoverArt.localPath(root.pcMediaPlayer.trackArtUrl ?? "") : ""
     readonly property string _pcArt: root._pcArtPath !== "" ? Qt.md5(root._pcArtPath) : ""
 
+    function _pcTrackId(player): string {
+        if (!player)
+            return "";
+        const len = Math.round(MprisController.trackLengthOf(player) * 1000);
+        return Qt.md5(`${player.dbusName ?? ""}\n${player.trackTitle ?? ""}\n${player.trackArtist ?? ""}\n${len}`);
+    }
+
     function _pcMedia(): var {
         const p = root.pcMediaPlayer;
         if (!p)
@@ -1603,6 +1615,7 @@ Singleton {
             t: "pcMedia",
             on: true,
             id: p.dbusName ?? "",
+            track: root._pcTrackId(p),
             app: p.identity ?? "",
             title: p.trackTitle ?? "",
             artist: p.trackArtist ?? "",
@@ -1749,6 +1762,196 @@ Singleton {
         root._pcArtSent = root._pcArt;
         root.send({ op: "sendFile", dev: root.pcMediaDev, id: 700000 + root._fileSerial++, path: root._pcArtPath,
             name: root._pcArt, purpose: "pcMediaArt" });
+    }
+
+    // ── The PC's lyrics on the phone ────────────────────────────────────
+    // Sent to the phone that asked (`pcLyrics` in its caps) only while it watches
+    // (`cmd pcLyrics {a: "watch", on: true|false}`). Holds LyricsService open via a
+    // set of watching devices (cleared when the phone leaves or the link drops) and pushes
+    // once per track or lyrics change (150 ms coalesced). LyricsService is only initialised;
+    // `mediaModeOpenCount` is not touched (it also arms the shell's recolour from the cover).
+
+    /// dev id -> 1 while that phone watches
+    property var _pcLyricsWatchers: ({})
+    property bool _pcLyricsClaimed: false
+    property bool _pcLyricsForce: false
+    readonly property bool _pcLyricsWatching: root.pcMediaEnabled
+        && root.pcLyricsDev !== ""
+        && (root._pcLyricsWatchers[root.pcLyricsDev] ?? 0) > 0
+
+    function _syncPcLyricsClaim(): void {
+        const watching = Object.keys(root._pcLyricsWatchers).length > 0;
+        root._pcLyricsClaimed = watching;
+        if (watching && !LyricsService.isInitialized)
+            LyricsService.initiliazeLyrics();
+    }
+
+    function _releasePcLyricsDev(dev): void {
+        if (!root._pcLyricsWatchers[dev])
+            return;
+        const next = Object.assign({}, root._pcLyricsWatchers);
+        delete next[dev];
+        root._pcLyricsWatchers = next;
+        root._syncPcLyricsClaim();
+    }
+
+    function _clearPcLyricsWatchers(): void {
+        if (Object.keys(root._pcLyricsWatchers).length === 0 && !root._pcLyricsClaimed)
+            return;
+        root._pcLyricsWatchers = ({});
+        root._syncPcLyricsClaim();
+    }
+
+    function _pcLyricsSourcePlain(): string {
+        if (LyricsService.usingLocalLyrics)
+            return "local";
+        const provider = LyricsService.lyricsProvider;
+        if (provider === "betterlyrics")
+            return "BetterLyrics";
+        if (provider === "lrclib")
+            return "LRCLib";
+        if (provider === "lrcmux")
+            return "lrcmux";
+        if (provider === "netease")
+            return "NetEase";
+        if (provider === "ytmusic")
+            return "YT Music";
+        if (provider === "genius")
+            return "Genius";
+        const states = LyricsService.providerStates ?? [];
+        const has = key => states.some(s => s.key === key && s.found);
+        if (has("betterlyrics"))
+            return "BetterLyrics";
+        if (has("lrclib"))
+            return "LRCLib";
+        if (has("ytmusic"))
+            return "YT Music";
+        if (has("genius"))
+            return "Genius";
+        return "";
+    }
+
+    function _pcLyrics(): var {
+        const p = root.pcMediaPlayer;
+        const track = root._pcTrackId(p);
+        const offset = Math.round(Config.options?.background?.mediaMode?.lyricsOffsetMs ?? 0);
+        if (!p || LyricsService.activePlayer !== p) {
+            return {
+                t: "pcLyrics",
+                track: track,
+                state: "none",
+                source: "",
+                offset: offset
+            };
+        }
+
+        if (LyricsService.hasSyncedLines) {
+            const out = [];
+            for (const line of (LyricsService.syncedLines ?? [])) {
+                const ms = Math.max(0, Math.round(Number(line?.time ?? 0) * 1000));
+                const entry = { ms: ms, text: String(line?.text ?? "").trim() };
+                if (line?.endTime !== undefined && isFinite(line.endTime) && line.endTime > (line?.time ?? 0))
+                    entry.end = Math.round(Number(line.endTime) * 1000);
+                if (Array.isArray(line?.words) && line.words.length > 0) {
+                    const words = [];
+                    for (const w of line.words) {
+                        const b = w?.begin !== undefined ? w.begin : (w?.startTime ?? 0);
+                        const e = w?.end !== undefined ? w.end : (w?.endTime ?? b);
+                        const wMs = Math.max(0, Math.round(Number(b) * 1000));
+                        const wEnd = Math.max(wMs, Math.round(Number(e) * 1000));
+                        // The word keeps its trailing space: the phone just joins them.
+                        words.push({ ms: wMs, end: wEnd, text: String(w?.text ?? "") + String(w?.trailingSpace ?? "") });
+                    }
+                    if (words.length > 0)
+                        entry.words = words;
+                }
+                out.push(entry);
+            }
+            out.sort((a, b) => a.ms - b.ms);
+            while (out.length > 0 && out[out.length - 1].text === "")
+                out.pop();
+            if (out.length > 0) {
+                const source = LyricsService.usingCustomLyrics ? "custom"
+                    : LyricsService.usingLocalLyrics ? "local"
+                    : (LyricsService.syncedSourceName ?? "");
+                return {
+                    t: "pcLyrics",
+                    track: track,
+                    state: "synced",
+                    source: source,
+                    offset: offset,
+                    lines: out
+                };
+            }
+        }
+
+        if (LyricsService.hasPlainLyrics) {
+            return {
+                t: "pcLyrics",
+                track: track,
+                state: "plain",
+                source: root._pcLyricsSourcePlain(),
+                offset: offset,
+                plain: String(LyricsService.plainLyrics ?? "").trim()
+            };
+        }
+
+        if (LyricsService.instrumental) {
+            return {
+                t: "pcLyrics",
+                track: track,
+                state: "instrumental",
+                source: "LRCLib",
+                offset: offset
+            };
+        }
+
+        if (LyricsService.searching) {
+            return {
+                t: "pcLyrics",
+                track: track,
+                state: "searching",
+                source: "",
+                offset: offset
+            };
+        }
+
+        return {
+            t: "pcLyrics",
+            track: track,
+            state: "none",
+            source: "",
+            offset: offset
+        };
+    }
+
+    readonly property string _pcLyricsKey: root._pcLyricsWatching ? JSON.stringify(root._pcLyrics()) : ""
+
+    onPcLyricsDevChanged: {
+        root._sentKeys["pcLyrics"] = "";
+        if (root._pcLyricsKey !== "" && !pcLyricsPush.running)
+            pcLyricsPush.start();
+    }
+    on_PcLyricsKeyChanged: {
+        if (root._pcLyricsKey === "") {
+            pcLyricsPush.stop();
+            root._pcLyricsForce = false;
+            root._sentKeys["pcLyrics"] = "";
+        } else if (!pcLyricsPush.running) {
+            pcLyricsPush.start();
+        }
+    }
+    Timer {
+        id: pcLyricsPush
+        interval: 150
+        onTriggered: {
+            const key = root._pcLyricsKey;
+            if (key === "" || (!root._pcLyricsForce && key === (root._sentKeys["pcLyrics"] ?? "")))
+                return;
+            root._pcLyricsForce = false;
+            root._sentKeys["pcLyrics"] = key;
+            root.sendTo(root.pcLyricsDev, JSON.parse(key));
+        }
     }
 
     // ── The shell's look on the phone ───────────────────────────────────
@@ -1915,6 +2118,27 @@ Singleton {
         }
         }
         return "bad_arg";
+    }
+
+    /// Media Mode on the phone: {a: "watch", on: bool}.
+    function _runPcLyrics(dev, arg): string {
+        if (String(arg?.a ?? "") !== "watch" || typeof arg?.on !== "boolean")
+            return "bad_arg";
+        const next = Object.assign({}, root._pcLyricsWatchers);
+        if (arg.on) {
+            next[dev] = 1;
+            root._pcLyricsWatchers = next;
+            root._syncPcLyricsClaim();
+            if (dev === root.pcLyricsDev) {
+                root._pcLyricsForce = true;
+                pcLyricsPush.restart();
+            }
+        } else {
+            delete next[dev];
+            root._pcLyricsWatchers = next;
+            root._syncPcLyricsClaim();
+        }
+        return "";
     }
 
     // ── The phone as a slide clicker ────────────────────────────────────
@@ -3140,6 +3364,8 @@ Singleton {
                 why = root.pcLiveEnabled ? root._runLive(m.arg) : "disabled";
             else if (action === "pcMedia")
                 why = root.pcMediaEnabled ? root._runPcMedia(m.arg) : "disabled";
+            else if (action === "pcLyrics")
+                why = root.pcMediaEnabled ? root._runPcLyrics(dev, m.arg) : "disabled";
             else if (action === "clip")
                 why = root.clipEnabled ? root._clipFromPhone(dev, m.arg) : "disabled";
             else if (action === "clipPull") {
@@ -3243,6 +3469,8 @@ Singleton {
                 if (root.mirrorActive)
                     root.sendTo(dev, { t: "mirror", on: true });
             }
+            if (!next[dev].includes("pcLyrics"))
+                root._releasePcLyricsDev(dev);
             return;
         }
         case "notifs":
@@ -3371,6 +3599,7 @@ Singleton {
             }
             if (root._presentDev === ev.dev)
                 root._presentDev = "";
+            root._releasePcLyricsDev(String(ev.dev));
             IiCameraService.handleDisconnect(String(ev.dev));
             IiMicService.handleDisconnect(String(ev.dev));
             // Without the phone that sent them they go stale: KDE Connect's list takes over.
@@ -3552,6 +3781,7 @@ Singleton {
             root.running = false;
             root.connections = ({});
             root.pairing = null;
+            root._clearPcLyricsWatchers();
             if (root._restarting || !root.wanted)
                 return;
             if (code !== 0) {

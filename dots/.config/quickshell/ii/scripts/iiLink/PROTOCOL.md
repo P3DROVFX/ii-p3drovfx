@@ -218,9 +218,21 @@ phone; the app's own switch). The phone's own players (`iitools_` buses) are nev
 
 | Direction | Message | |
 | --- | --- | --- |
-| shell → phone | `{"t":"pcMedia","on":true,"id":"<bus>","app","title","artist","album","playing","position":ms,"length":ms,"rate","canPlay","canPause","canNext","canPrevious","canSeek","art":"<md5>"}` | On change (coalesced 150 ms) and on connect; `{"t":"pcMedia","on":false}` when nothing plays. The position is only re-sent when it jumps (a seek): the phone runs the clock from `position`, `playing` and `rate`. |
+| shell → phone | `{"t":"pcMedia","on":true,"id":"<bus>","app","title","artist","album","playing","position":ms,"length":ms,"rate","canPlay","canPause","canNext","canPrevious","canSeek","art":"<md5>","track":"<md5>"}` | On change (coalesced 150 ms) and on connect; `{"t":"pcMedia","on":false}` when nothing plays. The position is only re-sent when it jumps (a seek): the phone runs the clock from `position`, `playing` and `rate`. |
 | shell → phone | `sendFile` purpose `pcMediaArt`, name `<md5>` | The cover, once per image per connection; `art` names it. |
 | phone → shell | `cmd` `pcMedia`, arg `{"a":"play"\|"pause"\|"toggle"\|"next"\|"previous"\|"seek","value"?:ms}` | The phone's buttons. `unsupported` for a seek the player cannot do. |
+
+### The PC's lyrics
+
+The phone's Media Mode shows the lyrics the shell already fetched for the PC's player
+(`LyricsService`). Needs `pcLyrics` in the phone's caps, which the shell offers together with
+`pcMedia`. The shell sends them only while the phone watches, and holds `LyricsService` open
+for as long as a phone does.
+
+| Direction | Message | |
+| --- | --- | --- |
+| phone → shell | `cmd` `pcLyrics`, arg `{"a":"watch","on":true\|false}` | Media Mode opened or closed. The phone asks again after a reconnect. |
+| shell → phone | `{"t":"pcLyrics","track":"<md5>","state":"synced"\|"plain"\|"instrumental"\|"searching"\|"none","source","offset":ms,"lines":[{"ms","end"?,"text","words"?:[{"ms","end","text"}]}],"plain"?}` | `track` is the same id as in `pcMedia` (`track`), so the phone drops lyrics that belong to another song. `lines` comes with `synced` (word timing when the source has it, each word keeping its trailing space), `plain` with `plain`. `offset` is the shell's own sync nudge (`background.mediaMode.lyricsOffsetMs`). Resent on any change. |
 
 ## The shell's look
 
