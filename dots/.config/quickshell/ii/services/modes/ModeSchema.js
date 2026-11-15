@@ -399,6 +399,13 @@ function normalizeTrigger(raw) {
     case "phone":
         t.reachable = t.reachable !== false;
         t.batteryBelow = optionalInt(t.batteryBelow, 1, 100);
+        t.batteryAbove = optionalInt(t.batteryAbove, 0, 99);
+        // What the phone itself reports over ii tools; "any" ignores it.
+        t.charging = ["any", "yes", "no"].indexOf(t.charging) !== -1 ? t.charging : "any";
+        t.dnd = ["any", "on", "off"].indexOf(t.dnd) !== -1 ? t.dnd : "any";
+        t.call = ["any", "yes", "no"].indexOf(t.call) !== -1 ? t.call : "any";
+        t.ringer = ["any", "normal", "vibrate", "silent"].indexOf(t.ringer) !== -1 ? t.ringer : "any";
+        t.net = ["any", "wifi", "cellular", "none"].indexOf(t.net) !== -1 ? t.net : "any";
         break;
     case "pomodoro":
         t.phase = ["focus", "break", "any"].indexOf(t.phase) !== -1 ? t.phase : "any";

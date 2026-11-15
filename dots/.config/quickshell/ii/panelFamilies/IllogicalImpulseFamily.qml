@@ -44,6 +44,7 @@ import qs.modules.ii.scratchpadOverlay
 import qs.modules.ii.keyboardLayoutTransitionPopup
 import qs.modules.ii.keypressDisplay
 import qs.modules.ii.liveDraw
+import qs.modules.ii.presenter
 import qs.modules.ii.topLayer
 import qs.modules.ii.tilingAssistant
 import qs.modules.ii.usage
@@ -159,12 +160,22 @@ Scope {
         panelUrl: Qt.resolvedUrl("../modules/ii/bluetoothConnectionPopup/BluetoothConnectionPopup.qml")
     }
     PanelUrlLoader {
+        // A call on the phone, when the island is not the one showing it.
+        extraCondition: !IslandPolicy.ownsPhoneCall
+        panelUrl: Qt.resolvedUrl("../modules/ii/phoneCallPopup/PhoneCallPopup.qml")
+    }
+    PanelUrlLoader {
         extraCondition: !IslandPolicy.ownsKeyboardPopup
         panelUrl: Qt.resolvedUrl("../modules/ii/keyboardLayoutTransitionPopup/KeyboardLayoutTransitionPopup.qml")
     }
     PanelUrlLoader {
         extraCondition: !IslandPolicy.ownsLocalSendPopup && GlobalStates.localSendPopupOpen
         panelUrl: Qt.resolvedUrl("../modules/ii/localSendPopup/LocalSendPopup.qml")
+    }
+    PanelUrlLoader {
+        // A file from the ii tools app; loaded only while one is shown.
+        extraCondition: GlobalStates.phoneFilePopupOpen
+        panelUrl: Qt.resolvedUrl("../modules/ii/phoneFilePopup/PhoneFilePopup.qml")
     }
     PanelUrlLoader {
         // Wallpaper upscaling card; switchwall.sh opens it through `ipc call upscayl prompt`.
@@ -193,6 +204,10 @@ Scope {
         // The Scope is a keybind and an IPC target; the per-screen surfaces inside load
         // only while the tray is open or a screen has ink on it.
         panelUrl: Qt.resolvedUrl("../modules/ii/liveDraw/LiveDrawOverlay.qml")
+    }
+    PanelUrlLoader {
+        // The phone's laser pointer; its surface maps only while the dot shows.
+        panelUrl: Qt.resolvedUrl("../modules/ii/presenter/PresenterLaser.qml")
     }
     PanelUrlLoader {
         panelUrl: Qt.resolvedUrl("../modules/common/onScreenKeyboard/OnScreenKeyboard.qml")

@@ -29,7 +29,7 @@ QtObject {
 
     readonly property string status: {
         if (!KdeConnectService.available)
-            return Translation.tr("KDE Connect is off");
+            return Translation.tr("No phone");
         if (!root.hasDevice)
             return Translation.tr("Not connected");
         if (!root.mirrorAvailable)

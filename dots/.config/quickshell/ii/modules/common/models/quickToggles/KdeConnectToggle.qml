@@ -12,10 +12,10 @@ QuickToggleModel {
     readonly property bool hasBattery: root.deviceConnected && (root.device?.charge ?? -1) >= 0
     readonly property string deviceLabel: KdeConnectService.activeDeviceDisplayName || root.device?.name || ""
 
-    name: Translation.tr("KDE Connect")
+    name: root.serviceEnabled ? KdeConnectService.backendName : Translation.tr("Phone")
     // The install check only runs while the service is enabled, so a disabled
     // service must stay clickable or it can never be re-enabled from here.
-    available: !root.serviceEnabled || KdeConnectService.available
+    available: !root.serviceEnabled || KdeConnectService.activePhoneService === "iiTools" || KdeConnectService.available
     toggled: root.serviceEnabled
     statusText: {
         if (!root.serviceEnabled)
@@ -28,11 +28,11 @@ QuickToggleModel {
     }
     tooltipText: {
         if (!root.serviceEnabled)
-            return Translation.tr("KDE Connect service is disabled | Right-click for options");
+            return Translation.tr("Phone integration is disabled | Right-click for options");
         if (root.deviceConnected && root.hasBattery)
             return Translation.tr("%1 · %2% battery | Right-click for options")
                 .arg(root.deviceLabel).arg(String(Math.round(root.device.charge)));
-        return Translation.tr("KDE Connect: %1 | Right-click for options").arg(root.statusText);
+        return Translation.tr("%1: %2 | Right-click for options").arg(KdeConnectService.backendName).arg(root.statusText);
     }
     icon: !root.serviceEnabled ? "sync_disabled"
         : root.deviceConnected ? "phonelink"
@@ -40,6 +40,6 @@ QuickToggleModel {
     hasMenu: true
 
     mainAction: () => {
-        Config.options.phone.kdeconnectEnabled = !root.serviceEnabled;
+        KdeConnectService.togglePhoneService();
     }
 }

@@ -559,6 +559,19 @@ FloatingWindow {
                 return;
             }
         }
+        if (pending === "iiTools") {
+            const devicesIndex = root.pageIndexById("devicesPhone");
+            if (devicesIndex >= 0) {
+                root.currentPage = devicesIndex;
+                const targetSubPage = "devices/IiToolsConfig.qml";
+                if (pageLoader.status === Loader.Ready) {
+                    Qt.callLater(() => root.restoreSubPagePath(targetSubPage));
+                } else {
+                    root.pendingSubPage = targetSubPage;
+                }
+                return;
+            }
+        }
 
         const directIndex = root.pageIndexById(pending);
         if (directIndex >= 0) {

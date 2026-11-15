@@ -15,6 +15,8 @@ ColumnLayout {
     property var host: null
     readonly property var tile: panel.host?.tile ?? null
     readonly property var items: panel.tile?.items ?? []
+    // What the grid lists: the phone's recents, then the shelf's own files.
+    readonly property var entries: FileShelf.entries
     readonly property bool removeAfterDrag: Config.options?.dock?.utilities?.shelf?.removeAfterDrag ?? false
 
     spacing: 8
@@ -49,10 +51,13 @@ ColumnLayout {
         }
     }
 
+    Component.onCompleted: FileShelf.watchPhone(true)
+    Component.onDestruction: FileShelf.watchPhone(false)
+
     FileGrid {
         Layout.fillWidth: true
-        visible: panel.items.length > 0
-        files: panel.items.slice().reverse().map(path => ({ path: path, name: UtilityFiles.baseName(path), modified: 0 }))
+        visible: panel.entries.length > 0
+        files: panel.entries.map(path => ({ path: path, name: FileShelf.name(path), modified: 0 }))
         showAge: false
         removable: true
         onRemoveRequested: path => panel.tile?.remove(path)
@@ -64,7 +69,7 @@ ColumnLayout {
 
     Rectangle {
         Layout.fillWidth: true
-        visible: panel.items.length === 0
+        visible: panel.entries.length === 0
         implicitHeight: 96
         radius: ClockStyle.radiusLarge
         color: ClockStyle.colField

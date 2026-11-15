@@ -17,7 +17,7 @@ import qs.services
  * `visible`. It catches clicks outside its card to close itself.
  *
  * Each entry in `missingDeps` is:
- *   { key, name, description, present, installCommands: {arch, fedora, debian} }
+ *   { key, name, description, present, installCommands: {arch, fedora, debian, opensuse} }
  *
  * `detectedDistro` selects which command line to show by default. The user
  * can switch between distros via a small pill row.
@@ -27,7 +27,7 @@ Item {
 
     /** Array of dependency descriptors (see services missingDeps). */
     property var missingDeps: []
-    /** Auto-detected distro: "arch" | "fedora" | "debian" | "unknown". */
+    /** Auto-detected distro: "arch" | "fedora" | "debian" | "opensuse" | "unknown". */
     property string detectedDistro: "unknown"
     /** Title for the popup header. */
     property string headerTitle: Translation.tr("Missing Dependencies")
@@ -154,7 +154,7 @@ Item {
                 }
 
                 // ─── Distro selector pills ────────────────────
-                RowLayout {
+                Flow {
                     Layout.fillWidth: true
                     spacing: 6
 
@@ -162,11 +162,12 @@ Item {
                         model: [
                             { key: "arch", label: "Arch" },
                             { key: "fedora", label: "Fedora" },
-                            { key: "debian", label: "Debian" }
+                            { key: "debian", label: "Debian" },
+                            { key: "opensuse", label: "openSUSE" }
                         ]
                         delegate: RippleButton {
                             required property var modelData
-                            Layout.preferredHeight: 30
+                            height: 30
                             buttonRadius: Appearance.rounding.full
                             colBackground: root._selectedDistro === modelData.key
                                 ? Appearance.colors.colPrimaryContainer
@@ -186,16 +187,15 @@ Item {
                                     ? Appearance.colors.colOnPrimaryContainer
                                     : Appearance.colors.colOnSurfaceVariant
                             }
-                            leftPadding: 14
-                            rightPadding: 14
+                            leftPadding: 12
+                            rightPadding: 12
                             onClicked: root._selectedDistro = modelData.key
                         }
                     }
 
-                    Item { Layout.fillWidth: true }
-
                     StyledText {
-                        Layout.alignment: Qt.AlignVCenter
+                        height: 30
+                        verticalAlignment: Text.AlignVCenter
                         text: root.detectedDistro !== "unknown"
                             ? Translation.tr("Detected: %1").arg(root.detectedDistro)
                             : ""
@@ -207,143 +207,168 @@ Item {
                 }
 
                 // ─── Dependency list ──────────────────────────
-                Repeater {
-                    model: root.missingDeps
+                StyledFlickable {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.preferredHeight: depsColumn.implicitHeight
+                    clip: true
+                    contentHeight: depsColumn.implicitHeight
+                    boundsBehavior: Flickable.StopAtBounds
 
-                    delegate: Rectangle {
-                        required property var modelData
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: depColumn.implicitHeight + 18
-                        radius: Appearance.rounding.normal
-                        color: Appearance.colors.colSurfaceContainerLow
+                    ColumnLayout {
+                        id: depsColumn
+                        width: parent.width
+                        spacing: 10
 
-                        ColumnLayout {
-                            id: depColumn
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.verticalCenter: parent.verticalCenter
-                            anchors.leftMargin: 12
-                            anchors.rightMargin: 12
-                            spacing: 6
+                        Repeater {
+                            model: root.missingDeps
 
-                            // Dep name + description
-                            RowLayout {
+                            delegate: Rectangle {
+                                required property var modelData
                                 Layout.fillWidth: true
-                                spacing: 8
-
-                                MaterialSymbol {
-                                    text: "error"
-                                    iconSize: 16
-                                    color: Appearance.colors.colError
-                                    fill: 1.0
-                                    Layout.alignment: Qt.AlignTop
-                                }
+                                Layout.preferredHeight: depColumn.implicitHeight + 18
+                                radius: Appearance.rounding.normal
+                                color: Appearance.colors.colSurfaceContainerLow
 
                                 ColumnLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 2
-
-                                    StyledText {
-                                        Layout.fillWidth: true
-                                        text: modelData.name
-                                        font.pixelSize: Appearance.font.pixelSize.small
-                                        font.weight: Font.DemiBold
-                                        color: Appearance.colors.colOnSurface
-                                        wrapMode: Text.WordWrap
-                                    }
-                                    StyledText {
-                                        Layout.fillWidth: true
-                                        text: modelData.description
-                                        font.pixelSize: Appearance.font.pixelSize.smallest
-                                        color: Appearance.colors.colOnSurfaceVariant
-                                        opacity: 0.85
-                                        wrapMode: Text.WordWrap
-                                    }
-                                }
-                            }
-
-                            // Install command box + copy button
-                            Rectangle {
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: Math.max(34, cmdRow.implicitHeight + 10)
-                                radius: Appearance.rounding.small
-                                color: Appearance.colors.colSurfaceContainerHigh
-                                visible: {
-                                    const cmds = modelData.installCommands
-                                    return cmds && cmds[root._selectedDistro]
-                                }
-
-                                RowLayout {
-                                    id: cmdRow
-                                    anchors.fill: parent
-                                    anchors.leftMargin: 10
-                                    anchors.rightMargin: 6
-                                    anchors.topMargin: 5
-                                    anchors.bottomMargin: 5
+                                    id: depColumn
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    anchors.leftMargin: 12
+                                    anchors.rightMargin: 12
                                     spacing: 6
 
-                                    StyledText {
+                                    // Dep name + description
+                                    RowLayout {
                                         Layout.fillWidth: true
-                                        text: {
-                                            const cmds = modelData.installCommands
-                                            if (!cmds) return ""
-                                            const cmd = cmds[root._selectedDistro]
-                                            return cmd || ""
-                                        }
-                                        font.pixelSize: Appearance.font.pixelSize.smallest
-                                        font.family: Appearance.font.family.monospace || font.family
-                                        color: Appearance.colors.colOnSurface
-                                        wrapMode: Text.WrapAnywhere
-                                        elide: Text.ElideRight
-                                        maximumLineCount: 2
-                                    }
+                                        spacing: 8
 
-                                    RippleButton {
-                                        Layout.preferredWidth: 30
-                                        Layout.preferredHeight: 30
-                                        buttonRadius: Appearance.rounding.full
-                                        colBackground: Appearance.colors.colSurfaceContainerHighest
-                                        colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
-                                        scale: down ? 0.92 : 1.0
-                                        Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
-                                        contentItem: MaterialSymbol {
-                                            anchors.centerIn: parent
-                                            text: copyLabel.showCheck ? "check" : "content_copy"
-                                            iconSize: 15
-                                            color: copyLabel.showCheck
-                                                ? Appearance.colors.colPrimary
-                                                : Appearance.colors.colOnSurface
+                                        MaterialSymbol {
+                                            text: "error"
+                                            iconSize: 16
+                                            color: Appearance.colors.colError
                                             fill: 1.0
+                                            Layout.alignment: Qt.AlignTop
                                         }
-                                        property bool _copied: false
 
-                                        onClicked: {
-                                            const cmds = modelData.installCommands
-                                            if (!cmds) return
-                                            const cmd = cmds[root._selectedDistro]
-                                            if (cmd) {
-                                                root._copyToClipboard(cmd)
-                                                copyLabel.showCheck = true
-                                                copyLabelTimer.restart()
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 2
+
+                                            StyledText {
+                                                Layout.fillWidth: true
+                                                text: modelData.name
+                                                font.pixelSize: Appearance.font.pixelSize.small
+                                                font.weight: Font.DemiBold
+                                                color: Appearance.colors.colOnSurface
+                                                wrapMode: Text.WordWrap
+                                            }
+                                            StyledText {
+                                                Layout.fillWidth: true
+                                                text: modelData.description
+                                                font.pixelSize: Appearance.font.pixelSize.smallest
+                                                color: Appearance.colors.colOnSurfaceVariant
+                                                opacity: 0.85
+                                                wrapMode: Text.WordWrap
                                             }
                                         }
+                                    }
 
-                                        Timer {
-                                            id: copyLabelTimer
-                                            interval: 1500
-                                            repeat: false
-                                            onTriggered: copyLabel.showCheck = false
+                                    // Install command box + copy button
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: Math.max(34, cmdRow.implicitHeight + 10)
+                                        radius: Appearance.rounding.small
+                                        color: Appearance.colors.colSurfaceContainerHigh
+                                        visible: {
+                                            const cmds = modelData.installCommands
+                                            return Boolean(cmds && cmds[root._selectedDistro])
                                         }
 
-                                        StyledText {
-                                            id: copyLabel
-                                            property bool showCheck: false
-                                            visible: false
-                                        }
+                                        RowLayout {
+                                            id: cmdRow
+                                            anchors.fill: parent
+                                            anchors.leftMargin: 10
+                                            anchors.rightMargin: 6
+                                            anchors.topMargin: 5
+                                            anchors.bottomMargin: 5
+                                            spacing: 6
 
-                                        StyledToolTip {
-                                            text: Translation.tr("Copy install command")
+                                            StyledText {
+                                                Layout.fillWidth: true
+                                                text: {
+                                                    const cmds = modelData.installCommands
+                                                    if (!cmds) return ""
+                                                    const cmd = cmds[root._selectedDistro]
+                                                    return cmd || ""
+                                                }
+                                                font.pixelSize: Appearance.font.pixelSize.smallest
+                                                font.family: Appearance.font.family.monospace || font.family
+                                                color: Appearance.colors.colOnSurface
+                                                wrapMode: Text.WrapAnywhere
+                                            }
+
+                                            RippleButton {
+                                                Layout.preferredWidth: 30
+                                                Layout.preferredHeight: 30
+                                                buttonRadius: Appearance.rounding.full
+                                                colBackground: Appearance.colors.colSurfaceContainerHighest
+                                                colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
+                                                scale: down ? 0.92 : 1.0
+                                                Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
+                                                contentItem: MaterialSymbol {
+                                                    anchors.centerIn: parent
+                                                    text: copyLabel.showCheck ? "check" : "content_copy"
+                                                    iconSize: 15
+                                                    color: copyLabel.showCheck
+                                                        ? Appearance.colors.colPrimary
+                                                        : Appearance.colors.colOnSurface
+                                                    fill: 1.0
+                                                }
+                                                property bool _copied: false
+
+                                                onClicked: {
+                                                    const cmds = modelData.installCommands
+                                                    if (!cmds) return
+                                                    const cmd = cmds[root._selectedDistro]
+                                                    if (cmd) {
+                                                        root._copyToClipboard(cmd)
+                                                        copyLabel.showCheck = true
+                                                        copyLabelTimer.restart()
+                                                    }
+                                                }
+
+                                                Timer {
+                                                    id: copyLabelTimer
+                                                    interval: 1500
+                                                    repeat: false
+                                                    onTriggered: copyLabel.showCheck = false
+                                                }
+
+                                                StyledText {
+                                                    id: copyLabel
+                                                    property bool showCheck: false
+                                                    visible: false
+                                                }
+
+                                                StyledToolTip {
+                                                    text: Translation.tr("Copy install command")
+                                                }
+                                            }
                                         }
+                                    }
+
+                                    StyledText {
+                                        Layout.fillWidth: true
+                                        visible: {
+                                            const cmds = modelData.installCommands
+                                            return !cmds || !cmds[root._selectedDistro]
+                                        }
+                                        text: Translation.tr("No command listed for %1 — install %2 using your distribution's package manager.").arg(root._selectedDistro).arg(modelData.name)
+                                        font.pixelSize: Appearance.font.pixelSize.smallest
+                                        color: Appearance.colors.colSubtext
+                                        wrapMode: Text.WordWrap
                                     }
                                 }
                             }

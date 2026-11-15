@@ -363,7 +363,11 @@ Singleton {
     property string detectedDistro: "unknown"
 
     // Composite: pactl is required AND (scrcpy OR droidcam-cli).
-    readonly property bool available: root.pactlPresent && (root.scrcpyPresent || root.droidcamCliPresent)
+    // The ii tools phone as the microphone (IiMicService, PipeWire source `ii-tools-mic`) needs
+    // none of the above: it is the first choice whenever the connected phone offers it.
+    readonly property bool iiBackend: IiMicService.usable
+    readonly property bool available: root.iiBackend
+        || (root.pactlPresent && (root.scrcpyPresent || root.droidcamCliPresent))
 
     readonly property var missingDeps: {
         const deps = []
@@ -548,6 +552,12 @@ Singleton {
      */
     function startMic(): void {
         if (!root.available || root.running || root.connecting) return
+        if (root.iiBackend) {
+            root.lastError = ""
+            root._backend = "iilink"
+            IiMicService.request()
+            return
+        }
         if (!KdeConnectService.activeReachable) {
             root.lastError = "No reachable KDE Connect device — pair a device first"
             root.errorOccurred(root.lastError)
@@ -1154,6 +1164,14 @@ Singleton {
     }
 
     function stopMic(): void {
+        if (root._backend === "iilink") {
+            // The phone's side ends the stream; IiMicService's state clears running.
+            monitorProc.command = ["bash", "-c", "pactl unload-module module-loopback 2>/dev/null; true"]
+            monitorProc.running = true
+            root.monitorEnabled = false
+            IiMicService.stop()
+            return
+        }
         if (!root.running && !root.connecting) return
         failTimer.stop()
         startDelayTimer.stop()
@@ -1301,7 +1319,8 @@ Singleton {
         if (root.monitorEnabled) {
             // Create a loopback from DroidCam-Mic.monitor to default output.
             monitorProc.command = ["bash", "-c",
-                "pactl load-module module-loopback source=DroidCam-Mic.monitor " +
+                "pactl load-module module-loopback source=" +
+                (root._backend === "iilink" ? IiMicService.sourceName : "DroidCam-Mic.monitor") + " " +
                 "sink=@DEFAULT_SINK@ 2>/dev/null && " +
                 "echo $! > /tmp/ii-monitor-loopback-pid || true"]
             monitorProc.running = true
@@ -1317,6 +1336,37 @@ Singleton {
     }
 
     Process { id: monitorProc; running: false }
+
+    // The ii tools phone's stream drives running/connecting while it is the backend, however it
+    // started (this panel, or the phone's own Mic screen).
+    Connections {
+        target: IiMicService
+        function onStateChanged(): void {
+            const st = IiMicService.state
+            if (st === "idle") {
+                if (root._backend !== "iilink") return
+                root.running = false
+                root.connecting = false
+                root.pulseSource = ""
+                root.monitorEnabled = false
+                root.elapsedMs = 0
+                root._backend = ""
+            } else if (root.running && root._backend !== "iilink") {
+                return // a scrcpy/DroidCam session owns the mic
+            } else {
+                root._backend = "iilink"
+                root.connecting = st !== "live"
+                root.running = st === "live"
+                root.pulseSource = st === "live" ? IiMicService.sourceName : ""
+                if (st === "live") root.elapsedMs = 0
+            }
+            root.stateChanged()
+        }
+        function onErrorOccurred(message: string): void {
+            root.lastError = message
+            root.errorOccurred(message)
+        }
+    }
 
     // ─── Internals ─────────────────────────────────────────
 

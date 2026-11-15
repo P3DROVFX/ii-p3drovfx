@@ -235,10 +235,49 @@ Singleton {
     }
 
     /**
+     * Latest phone interactive timestamp belonging to night `key`, or 0 when disabled/unknown.
+     */
+    function phoneLastActiveForNight(key, sessionsMap): real {
+        if (!IiLinkService.usageEnabled)
+            return 0;
+        const evening = root.parseKey(key);
+        const morning = new Date(evening.getTime());
+        morning.setDate(morning.getDate() + 1);
+        const morningKey = root.dayKey(morning);
+        const record = root.recordFor(key);
+        const target = root.targetFor(key, record?.target);
+        const windowStart = target.getTime() - 4 * 3600000;
+        const windowEnd = root.nightEnd(key).getTime();
+        const phoneHist = AppStats.phoneHistory ?? {};
+        const sources = [
+            sessionsMap?.[key] ?? phoneHist[key]?.sessions,
+            sessionsMap?.[morningKey] ?? phoneHist[morningKey]?.sessions
+        ];
+        let last = 0;
+        for (const list of sources) {
+            if (!Array.isArray(list))
+                continue;
+            for (const s of list) {
+                if (!Array.isArray(s) || s.length < 2)
+                    continue;
+                const s0 = Number(s[0]);
+                const s1 = Number(s[1]);
+                const clippedEnd = Math.min(s1, windowEnd);
+                const clippedStart = Math.max(s0, windowStart);
+                if (clippedEnd - clippedStart >= 10000)
+                    last = Math.max(last, clippedEnd);
+            }
+        }
+        return last;
+    }
+
+    /**
      * The last `count` nights, oldest first, recorded or estimated:
-     * [{ night, target (Date), lastActive (ms, 0 unknown), lateMinutes, estimated, onTime, applies }].
+     * [{ night, target (Date), lastActive (ms, 0 unknown), phoneLastActive (ms, 0 unknown), lateMinutes, estimated, onTime, applies }].
      */
     function history(count) {
+        if (IiLinkService.usageEnabled)
+            AppStats.phoneHistory;
         const out = [];
         const today = root.parseKey(root.tonightKey);
         for (let i = count; i >= 1; i--) {
@@ -255,11 +294,15 @@ Singleton {
                     estimated = true;
                 }
             }
+            const phoneLastActive = IiLinkService.usageEnabled
+                ? Math.max(Number(record?.phoneLastActive ?? 0), root.phoneLastActiveForNight(key, null))
+                : 0;
             const lateMinutes = lastActive ? Math.round((lastActive - target.getTime()) / 60000) : 0;
             out.push({
                 night: key,
                 target: target,
                 lastActive: lastActive,
+                phoneLastActive: phoneLastActive,
                 lateMinutes: lateMinutes,
                 estimated: estimated,
                 onTime: lastActive > 0 && lateMinutes <= root.onTimeGraceMinutes,
@@ -290,6 +333,8 @@ Singleton {
             dates.push(root.dayKey(new Date(today.getFullYear(), today.getMonth(), today.getDate() - i)));
         if (typeof AppStats.ensureDates === "function")
             AppStats.ensureDates(dates);
+        if (IiLinkService.usageEnabled)
+            IiLinkService.requestPhoneUsage();
     }
 
     // ── Tracking ────────────────────────────────────────────────────────
@@ -400,4 +445,28 @@ Singleton {
     onEnabledChanged: root.refresh()
     onTargetTimeChanged: root.refresh()
     onWindDownMinutesChanged: root.refresh()
+
+    Connections {
+        target: IiLinkService
+
+        function onPhoneUsageUpdated(dates, sessionsByDate) {
+            if (!IiLinkService.usageEnabled || !Persistent.ready)
+                return;
+            const nights = new Set();
+            for (const date of (dates ?? [])) {
+                nights.add(date);
+                const d = root.parseKey(date);
+                d.setDate(d.getDate() - 1);
+                nights.add(root.dayKey(d));
+            }
+            for (const nightKey of nights) {
+                const phoneLast = root.phoneLastActiveForNight(nightKey, sessionsByDate);
+                if (phoneLast <= 0)
+                    continue;
+                const existing = root.recordFor(nightKey);
+                if (!existing || phoneLast > Number(existing.phoneLastActive ?? 0))
+                    root.writeRecord(nightKey, { phoneLastActive: phoneLast });
+            }
+        }
+    }
 }

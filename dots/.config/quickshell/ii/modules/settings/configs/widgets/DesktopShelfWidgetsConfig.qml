@@ -74,6 +74,16 @@ ContentPage {
             }
         }
 
+        ConfigSwitch {
+            buttonIcon: "smartphone"
+            text: Translation.tr("Show the phone's recent photos and videos")
+            checked: Config.options.dock.utilities.shelf.phoneRecents
+            onCheckedChanged: Config.options.dock.utilities.shelf.phoneRecents = checked
+            StyledToolTip {
+                text: Translation.tr("ii tools phone: its newest photos, screenshots and videos appear on the shelf with a preview and stay on the phone until you drag one out")
+            }
+        }
+
         StyledText {
             Layout.fillWidth: true
             text: Translation.tr("Drop files anywhere on a shelf. Drag the stack to hand every file over at once, or a single file from the list; a click opens it.")

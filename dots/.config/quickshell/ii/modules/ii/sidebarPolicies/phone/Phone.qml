@@ -59,12 +59,18 @@ Item {
 
     property int entranceTrigger: -1
 
-    // ─── Phone media (KDE Connect MPRIS) ───
-    // The KDE Connect daemon mirrors the phone's playback on the session bus as
-    // `org.mpris.MediaPlayer2.kdeconnect` and only publishes it while the phone
-    // actually has a media session — existence is the "has media" gate.
-    readonly property var phoneMprisPlayer: MprisController.players.find(
-        p => p.dbusName?.indexOf("kdeconnect") >= 0) ?? null
+    // ─── Phone media (MPRIS) ───
+    // Both backends mirror the phone's playback on the session bus and publish it only
+    // while the phone has a media session, so existence is the "has media" gate: KDE
+    // Connect as `org.mpris.MediaPlayer2.kdeconnect`, the ii tools helper as one
+    // `org.mpris.MediaPlayer2.iitools_<app>` per app (the one playing first).
+    readonly property var phoneMprisPlayer: {
+        if (KdeConnectService.activeIsIi) {
+            const mine = MprisController.players.filter(p => p.dbusName?.indexOf("iitools_") >= 0);
+            return mine.find(p => p.isPlaying) ?? mine[0] ?? null;
+        }
+        return MprisController.players.find(p => p.dbusName?.indexOf("kdeconnect") >= 0) ?? null;
+    }
     readonly property bool phoneHasMedia: root.phoneMprisPlayer !== null
         && (root.phoneMprisPlayer.trackTitle ?? "") !== ""
 
@@ -1097,7 +1103,7 @@ Item {
                     text: emptyState.serviceOff ? Translation.tr("Phone integration is off")
                           : KdeConnectService.available
                           ? Translation.tr("No device connected")
-                          : Translation.tr("KDE Connect not installed")
+                          : Translation.tr("No phone paired")
                     font.pixelSize: Appearance.font.pixelSize.huge
                     font.weight: Font.Bold
                     color: Appearance.colors.colOnLayer2
@@ -1113,10 +1119,8 @@ Item {
                     Layout.alignment: Qt.AlignHCenter
                     Layout.preferredWidth: root.width * 0.85
                     text: emptyState.serviceOff
-                          ? Translation.tr("KDE Connect is switched off, so notifications, clipboard and file sharing are paused. Turn it on to reconnect your phone.")
-                          : KdeConnectService.available
-                          ? Translation.tr("Pair a device through KDE Connect on your phone — once it shows up here, sync notifications, share clipboard, dump files and launch scrcpy mirror.")
-                          : Translation.tr("Install `kdeconnect-cli` and the KDE Connect Android app, then pair a device. After pairing it will mirror here automatically.")
+                          ? Translation.tr("KDE Connect is switched off and no phone is paired with ii tools. Pair one with the ii tools app, or turn KDE Connect back on.")
+                          : Translation.tr("Pair your phone with the ii tools app (or KDE Connect). Notifications, the clipboard, files and the screen mirror then show up here.")
                     font.pixelSize: Appearance.font.pixelSize.small
                     color: Appearance.colors.colSubtext
                     horizontalAlignment: Text.AlignHCenter
@@ -1137,32 +1141,25 @@ Item {
                     buttonRadius: Appearance.rounding.full
                     colBackground: Appearance.colors.colPrimaryContainer
                     colBackgroundHover: Appearance.colors.colPrimaryContainerHover
-                    visible: !KdeConnectService.available
+                    // ii tools first: pairing it needs nothing else installed.
+                    visible: IiLinkService.peers.length === 0
                     contentItem: RowLayout {
                         spacing: 6
                         MaterialSymbol {
                             Layout.alignment: Qt.AlignVCenter
-                            text: emptyState.serviceOff ? "power_settings_new" : "download"
+                            text: "qr_code_2"
                             iconSize: Appearance.font.pixelSize.normal
                             color: Appearance.colors.colOnPrimaryContainer
                         }
                         StyledText {
                             Layout.alignment: Qt.AlignVCenter
-                            text: emptyState.serviceOff ? Translation.tr("Turn on KDE Connect")
-                                : Translation.tr("Install KDE Connect")
+                            text: Translation.tr("Pair with ii tools")
                             color: Appearance.colors.colOnPrimaryContainer
                             font.pixelSize: Appearance.font.pixelSize.small
                             font.weight: Font.DemiBold
                         }
                     }
-                    onClicked: () => {
-                        if (emptyState.serviceOff) {
-                            Config.options.phone.kdeconnectEnabled = true
-                            return
-                        }
-                        Quickshell.execDetached(["xdg-open",
-                            "https://kdeconnect.kde.org/download.html"])
-                    }
+                    onClicked: () => GlobalStates.openSettingsPage("devicesPhone", "devices/IiToolsConfig.qml")
                 }
 
                 Item { Layout.fillHeight: true }
@@ -1242,7 +1239,7 @@ Item {
 
                 StyledText {
                     Layout.alignment: Qt.AlignHCenter
-                    text: Translation.tr("Ready to send via KDE Connect")
+                    text: Translation.tr("Ready to send via %1").arg(KdeConnectService.backendName)
                     font.pixelSize: Appearance.font.pixelSize.normal
                     color: Appearance.colors.colSubtext
                     opacity: 0.8

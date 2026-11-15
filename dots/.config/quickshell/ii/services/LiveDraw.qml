@@ -39,16 +39,27 @@ Singleton {
     /// A stroke: { points: [{x, y, p}], color, width, usePressure }.
     /// Sheets: { "<monitor>:<workspace>": [stroke, …] }.
     ///
-    /// Held by a PersistentProperties, so a live reload of the shell — which rebuilds
-    /// every singleton, and on this machine happens whenever any QML file is saved —
-    /// does not rub out a drawing someone is in the middle of presenting. Still memory
-    /// only: a restart starts clean, as it should.
-    property alias sheets: keptSheets.sheets
+    /// Kept across a live reload of the shell — which rebuilds every singleton, and on
+    /// this machine happens whenever any QML file is saved — so a drawing someone is in
+    /// the middle of presenting is not rubbed out. Still memory only: a restart starts
+    /// clean, as it should.
+    ///
+    /// Carried as JSON text, not as the object: a JS object handed from the old engine
+    /// to the new one arrives undefined ("JSValue can't be reassigned to another
+    /// engine"), and every stroke after that reload failed to commit — the live line
+    /// showed and vanished on release.
+    property var sheets: ({})
+    onSheetsChanged: keepSheets.restart()
+    Timer {
+        id: keepSheets
+        interval: 400
+        onTriggered: keptSheets.sheetsJson = JSON.stringify(root.sheets ?? {})
+    }
 
     PersistentProperties {
         id: keptSheets
         reloadableId: "liveDrawSheets"
-        property var sheets: ({})
+        property string sheetsJson: "{}"
         // The pen and the tray too: a reload mid-annotation should leave the user
         // where they were, not drop them out of drawing.
         property bool drawing: false
@@ -62,7 +73,15 @@ Singleton {
         property string board: ""
         property bool spotlight: false
         property bool zoom: false
-        onLoaded: root.revision++
+        onLoaded: {
+            try {
+                const kept = JSON.parse(keptSheets.sheetsJson || "{}");
+                root.sheets = kept && typeof kept === "object" ? kept : ({});
+            } catch (e) {
+                root.sheets = ({});
+            }
+            root.revision++;
+        }
     }
     /// Bumped on every change, because a nested mutation of `sheets` is invisible to a
     /// binding. Everything that draws watches this rather than the object.
@@ -235,6 +254,12 @@ Singleton {
      *   save, copy, copyScreen, exportPng, exportSvg, screenshot, undo, redo, clear
      */
     signal command(string action, var argument)
+    /**
+     * A stroke drawn on the phone (ii tools' drawing pad): `phase` down, move or up,
+     * `points` [[x, y, pressure], …] with x and y in 0–1 of the focused screen. That
+     * screen's surface feeds them through the same smoothing as the mouse and the pen.
+     */
+    signal remoteStroke(string phase, var points)
 
     // ── Sheets: per workspace or fixed to the screen ───────────────────────
     /// "workspace": every workspace its own sheet. "screen": one sheet per monitor that

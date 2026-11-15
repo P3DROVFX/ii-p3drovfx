@@ -28,7 +28,7 @@ ExpressiveCardWidget {
     readonly property bool wide: root.footprint === "2x1"
     readonly property bool tall: root.footprint === "1x2"
     // Empty, every footprint is the header over one big drop target.
-    readonly property bool sideBySide: root.wide && root.count > 0
+    readonly property bool sideBySide: root.wide && root.entryCount > 0
 
     designWidth: root.wide ? 492 : 240
     designHeight: root.tall ? 492 : 240
@@ -38,13 +38,28 @@ ExpressiveCardWidget {
 
     readonly property var items: FileShelf.items
     readonly property int count: FileShelf.count
-    // Newest first, the way the files are shown.
-    readonly property var newestFirst: root.items.slice().reverse()
+    // What the list shows, newest first: the phone's recents (they stay on the phone until
+    // dragged), then the files left on the shelf. The deck above is only the shelf's own.
+    readonly property var newestFirst: FileShelf.entries
+    readonly property int entryCount: FileShelf.entryCount
+
+    // The phone's recents are watched only while a real card is showing.
+    property bool _watching: false
+    Component.onCompleted: {
+        if (!root.isPreview) {
+            root._watching = true;
+            FileShelf.watchPhone(true);
+        }
+    }
+    Component.onDestruction: {
+        if (root._watching)
+            FileShelf.watchPhone(false);
+    }
     property bool dragOver: false
 
     function open(path) {
         if (root.actionsEnabled)
-            Quickshell.execDetached(["xdg-open", path]);
+            FileShelf.open(path);
     }
 
     DropArea {
@@ -146,7 +161,7 @@ ExpressiveCardWidget {
         y: root.sideBySide ? root.padding : header.y + header.height + 8
         width: root.sideBySide ? 200 : root.designWidth - root.padding * 2
         height: root.sideBySide ? root.designHeight - root.padding * 2
-            : root.tall && root.count > 0 ? 190 : root.designHeight - deckBlock.y - root.padding
+            : root.tall && root.entryCount > 0 ? 190 : root.designHeight - deckBlock.y - root.padding
         radius: Appearance.rounding.large
         color: allDrag.containsMouse && root.count > 0
             ? ColorUtils.mix(WidgetColorScheme.textColorOnBg, WidgetColorScheme.pillBgColor, 0.06)
@@ -283,7 +298,7 @@ ExpressiveCardWidget {
             anchors.right: parent.right
             anchors.rightMargin: 40
             anchors.verticalCenter: parent.verticalCenter
-            text: UtilityFiles.baseName(cell.path)
+            text: FileShelf.name(cell.path)
             elide: Text.ElideMiddle
             color: WidgetColorScheme.textColorOnBg
             font.pixelSize: Appearance.font.pixelSize.small
@@ -295,7 +310,7 @@ ExpressiveCardWidget {
             anchors.fill: parent
             enabled: root.actionsEnabled
             paths: [cell.path]
-            dragIcon: UtilityFiles.isImage(cell.path) ? "image-x-generic" : "text-x-generic"
+            dragIcon: FileShelf.isImage(cell.path) ? "image-x-generic" : "text-x-generic"
             onClicked: root.open(cell.path)
             onDragFinished: FileShelf.dragged([cell.path])
         }
@@ -319,7 +334,7 @@ ExpressiveCardWidget {
         }
 
         StyledToolTip {
-            text: UtilityFiles.baseName(cell.path)
+            text: FileShelf.name(cell.path)
             extraVisibleCondition: !cell.showName && cellDrag.containsMouse
         }
     }
@@ -327,7 +342,7 @@ ExpressiveCardWidget {
     // ── 2x1: the files in a grid beside the deck; 1x2: listed under it ──
     Flickable {
         id: listFlick
-        visible: (root.wide || root.tall) && root.count > 0
+        visible: (root.wide || root.tall) && root.entryCount > 0
         x: root.sideBySide ? deckBlock.x + deckBlock.width + 12 : root.padding
         y: root.sideBySide ? header.y + header.height + 8 : deckBlock.y + deckBlock.height + 10
         width: root.designWidth - listFlick.x - root.padding

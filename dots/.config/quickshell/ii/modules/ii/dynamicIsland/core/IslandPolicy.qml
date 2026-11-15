@@ -215,6 +215,8 @@ Singleton {
     readonly property bool ownsOsd: root.enabled && root.widgetEnabled("osd")
     readonly property bool ownsModeFlash: root.enabled
     readonly property bool ownsBluetoothPopup: root.enabled && root.widgetEnabled("bluetooth")
+    /** Calls: the island's card; otherwise the corner popup (phoneCallPopup). */
+    readonly property bool ownsPhoneCall: root.enabled && root.widgetEnabled("phoneCall")
     readonly property bool ownsKeyboardPopup: root.enabled && root.widgetEnabled("keyboard")
     readonly property bool ownsLocalSendPopup: root.enabled && root.widgetEnabled("localSend")
     /** Whether the drag panel offers a KDE Connect column beside LocalSend. */

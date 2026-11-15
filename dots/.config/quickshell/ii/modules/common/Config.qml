@@ -1122,7 +1122,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 31
+    readonly property int currentConfigVersion: 33
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -1878,6 +1878,22 @@ Singleton {
             }
             console.log("[Config] Migrated desktop icon menu: zed -> editor");
         }
+        if (from < 32) {
+            const wl = raw.phone?.scrcpy?.wireless;
+            if (wl) {
+                if (wl.bitRate === "4M") wl.bitRate = "14M";
+                if (wl.maxSize === 1600) wl.maxSize = 0;
+                console.log("[Config] Migrated phone.scrcpy.wireless defaults (4M/1600 -> 14M/0)");
+            }
+        }
+
+        if (from < 33) {
+            const sc = raw.phone?.scrcpy;
+            if (sc && sc.bitRate === "8M") {
+                sc.bitRate = "20M";
+                console.log("[Config] Migrated phone.scrcpy.bitRate 8M -> 20M");
+            }
+        }
 
         raw.configVersion = root.currentConfigVersion;
         console.log(`[Config] Migrated config schema ${from} -> ${root.currentConfigVersion}`);
@@ -1994,6 +2010,7 @@ Singleton {
             "phone.webcam.resolution": ["640x480", "1280x720", "1920x1080"],
             "phone.webcam.rotateDegrees": [0, 90, 180, 270],
             "phone.webcam.connection": ["wifi", "usb"],
+            "phone.scrcpy.wireless.codec": ["auto", "h265", "h264"],
             "appearance.fakeScreenRounding": [0, 1, 2, 3, 4],
             "background.zoomOutStyle": [0, 1, 2],
             "background.overviewBackgroundStyle": ["", "gnome", "real-gnome", "soft-focus", "camera-push", "depth", "card-lift", "desaturate", "directional", "material-shape"],
@@ -2737,6 +2754,8 @@ Singleton {
             }
 
             property JsonObject phone: JsonObject {
+                // Active phone integration service: "" (auto/legacy), "iiTools", "kdeconnect", "off"
+                property string service: ""
                 property bool kdeconnectEnabled: true
                 // Shell actions offered to the phone through KDE Connect's Run Command plugin
                 // (mirror, recording, media, lock...). Written into kdeconnect's own config.
@@ -2762,7 +2781,9 @@ Singleton {
                     property bool fullscreen: false
                     property bool alwaysOnTop: false
                     property int maxFps: 0  // 0 = use device's native frame rate (matches bare `scrcpy`)
-                    property string bitRate: "8M"
+                    // 8M starved a 120 Hz phone screen of bits (about 65 kbit a frame) and the picture
+                    // smeared in motion; USB has the room, and the network is capped below.
+                    property string bitRate: "20M"
                     property int maxSize: 0
                     property int videoBuffer: 0  // scrcpy 4.0 default is 0ms — 80ms adds visible latency
                     property bool useWireless: false
@@ -2775,6 +2796,17 @@ Singleton {
                     // adbd comes back a few seconds after each restart, but whatever was
                     // mirroring died with it — reopen the same window once the phone answers.
                     property bool autoResume: true
+                    // Caps for a session that runs over the network. Wi-Fi latency is
+                    // jitter (power save, roaming scans, two hops through the AP), not
+                    // bandwidth: fewer frames and bits mean shorter queues on the air.
+                    // Only ever tightens the settings above; USB keeps them as they are.
+                    property JsonObject wireless: JsonObject {
+                        property bool limit: true
+                        property int maxFps: 60
+                        property string bitRate: "14M"
+                        property int maxSize: 0
+                        property string codec: "auto"
+                    }
                     property string wirelessIp: ""
                     property string wirelessPort: "5555"
                     property bool showTerminal: false
@@ -2788,6 +2820,12 @@ Singleton {
                     property JsonObject recording: JsonObject {
                         property string folder: ""
                         property bool withAudio: true
+                        // Its own quality, not the mirror's: a recording has no latency to
+                        // protect, and a 60 fps file spends its bits on sharper frames than
+                        // the phone's 120 Hz refresh would leave per frame. Over the network
+                        // it is held to 16M, and to 6M on a weak link.
+                        property string bitRate: "24M"
+                        property int maxFps: 60
                     }
                     // The mirror the Phone sidebar draws inside itself.
                     property JsonObject embed: JsonObject {
@@ -2845,6 +2883,179 @@ Singleton {
                     property bool autoGainControl: false
                     property int micGain: 100
                     property bool setAsDefault: false
+                }
+            }
+
+            // The ii tools Android app (~/Projects/ii-tools). Nothing runs until a phone
+            // is paired: the link helper starts only with a paired (or pairing) phone.
+            property JsonObject iiTools: JsonObject {
+                property bool enable: true
+                // The paired phone is the Phone tab's device (over KDE Connect's entry for
+                // the same phone): ii tools drives the dock, widgets and toggles.
+                property bool primary: true
+                // TCP for the link, UDP for discovery (the same number).
+                property int port: 47210
+                property JsonObject remote: JsonObject {
+                    property bool enable: true
+                }
+                // The PC's audio from the phone: devices, apps, EasyEffects.
+                property JsonObject audio: JsonObject {
+                    property bool enable: true
+                }
+                // The phone's media players on the PC (as MPRIS players: media widgets, keys).
+                property JsonObject media: JsonObject {
+                    property bool enable: true
+                }
+                // CPU, GPU, RAM and FPS on the phone, sampled only while its panel is open.
+                property JsonObject perf: JsonObject {
+                    property bool enable: true
+                }
+                // Tell the phone this PC's MAC addresses, so the app can wake it (Wake-on-LAN).
+                property JsonObject wol: JsonObject {
+                    property bool enable: true
+                }
+                // Do Not Disturb both ways: the shell's own (and chosen modes) silence the
+                // phone; the phone's turns on the shell's, or a mode.
+                property JsonObject dnd: JsonObject {
+                    property bool enable: true
+                    property bool phoneFollowsShell: true
+                    // Modes that also silence the phone while active.
+                    property list<string> modes: []
+                    property bool shellFollowsPhone: true
+                    // What the phone's DND turns on here: "" for the shell's own DND, or a mode id.
+                    property string phoneTurnsOn: ""
+                }
+                // The PC's timers, recording, alarm and progress as Live Updates on the phone.
+                property JsonObject pcLive: JsonObject {
+                    property bool enable: true
+                }
+                // What plays on the PC as a media player on the phone (lock screen,
+                // Quick Settings), controlling the shell's active player.
+                property JsonObject pcMedia: JsonObject {
+                    property bool enable: true
+                }
+                // Media handoff: a web page playing here (xesam:url) continues on the phone
+                // at the same point, from the phone's card or, on lock, a notification.
+                property JsonObject handoff: JsonObject {
+                    property bool onLock: true
+                }
+                // The PC's wallpaper as the phone's home and lock wallpaper, for a phone that
+                // turned "Use the PC's wallpaper" on (a 3840 px JPEG, once per image).
+                property JsonObject wallSync: JsonObject {
+                    property bool enable: true
+                }
+                // The desktop wallpaper behind the phone's PC card (a 1080 px JPEG, once per image).
+                property JsonObject look: JsonObject {
+                    property bool enable: true
+                }
+                // The phone's storage in the file manager (SFTP + sshfs, as KDE Connect).
+                property JsonObject files: JsonObject {
+                    property bool enable: true
+                }
+                // Browse the phone's photos and videos in the Phone tab (read-only).
+                property JsonObject gallery: JsonObject {
+                    property bool enable: true
+                }
+                // The phone as this PC's touchpad (uinput: the input group) and keyboard.
+                property JsonObject touchpad: JsonObject {
+                    property bool enable: true
+                }
+                // A call's audio on this PC: it becomes the phone's Bluetooth headset (HFP)
+                // for that call only. Needs the phone paired over Bluetooth.
+                // The phone as a drawing pad for live draw, mapped onto the focused screen.
+                property JsonObject draw: JsonObject {
+                    property bool enable: true
+                }
+                property JsonObject present: JsonObject {
+                    property bool enable: true
+                }
+                property JsonObject screen: JsonObject {
+                    // Resolution, refresh, scale, side and bitrate are the phone's to choose.
+                    property bool enable: true
+                }
+                // The phone's camera as this PC's webcam over ii link, instead of DroidCam.
+                property JsonObject camera: JsonObject {
+                    property bool enable: true
+                    property bool useDroidcam: false
+                    // "auto": a v4l2loopback device when the module is there (every app
+                    // sees it), else a PipeWire camera (no kernel module, fewer apps).
+                    property string output: "auto" // "auto" | "v4l2" | "pipewire"
+                }
+                // The phone's microphone as this PC's mic over ii link (PipeWire source
+                // `ii-tools-mic`), instead of scrcpy or DroidCam.
+                property JsonObject mic: JsonObject {
+                    property bool enable: true
+                    property bool useDroidcam: false
+                }
+                property JsonObject callAudio: JsonObject {
+                    property bool enable: true
+                    // Every call on the PC by itself (ringing or dialled); off, only on request.
+                    property bool auto: true
+                }
+                // The phone's next alarm, contacts with photos, battery and network, from
+                // the app instead of ADB and KDE Connect.
+                property JsonObject phoneData: JsonObject {
+                    property bool enable: true
+                }
+                // Screenshots both ways: the PC's go to the phone's gallery (queued until
+                // it connects), the phone's land in Pictures/Screenshots/Phone with the
+                // screenshot preview.
+                property JsonObject screenshots: JsonObject {
+                    property bool enable: true
+                    // Every PC screenshot to the phone's gallery; off, the screenshot
+                    // preview offers "Save to phone gallery" instead.
+                    property bool autoToPhone: true
+                }
+                // The clipboard both ways, images included: what is copied here reaches
+                // the phone while the link is up; the phone sends its own on request.
+                property JsonObject clipboard: JsonObject {
+                    property bool enable: true
+                    // Let the phone browse cliphist entries and pull older copies.
+                    property bool history: true
+                }
+                // "Send to PC" in the phone's share sheet: links to the browser or the AI
+                // chat, text to notes, reminders or tasks, files to the shelf or the AI.
+                property JsonObject share: JsonObject {
+                    property bool enable: true
+                }
+                // Phone notifications over the link: Phone tab and popups, with icons,
+                // images, actions and replies. KDE Connect's copies are then left out.
+                property JsonObject notifications: JsonObject {
+                    property bool enable: true
+                }
+                // Verification codes in the phone's notifications (SMS or app) become a popup
+                // here with Copy; copied codes stay out of the clipboard history and are
+                // cleared after a while.
+                property JsonObject otp: JsonObject {
+                    property bool enable: true
+                    property bool autoCopy: true
+                    property int clearAfter: 60 // seconds, 0 keeps it
+                }
+                // Calls reported by the app: the call card follows the phone and its buttons
+                // work without ADB. Off, or app not reporting: the ADB path as before.
+                property JsonObject calls: JsonObject {
+                    property bool enable: true
+                    // Pause playing PC MPRIS players while a call rings or is active, and
+                    // resume only those still paused when it ends (both ii link and ADB).
+                    property bool pauseMedia: true
+                }
+                // Images shared from the phone become the wallpaper (desktop, lock or both).
+                property JsonObject wallpaper: JsonObject {
+                    property bool enable: true
+                }
+                // The phone as a stream deck: the shell's actions, apps and these commands.
+                property JsonObject deck: JsonObject {
+                    property bool enable: true
+                    // [{ id, name, icon, command }]: run with bash -c when tapped.
+                    property list<var> commands: []
+                }
+                property JsonObject liveUpdates: JsonObject {
+                    property bool enable: true
+                }
+                // The phone's screen time in the usage app (PC / Phone / All) and the bedtime
+                // record. Costs nothing until the app shares it (its own toggle and usage access).
+                property JsonObject usage: JsonObject {
+                    property bool enable: true
                 }
             }
 
@@ -3305,6 +3516,8 @@ Singleton {
                 // Apps under this many seconds for the chosen metric are left out of
                 // the list. Duration metrics only; energy is never thresholded.
                 property int minDurationSec: 0
+                // Source filter when iiTools.usage.enable is on: "all" | "pc" | "phone"
+                property string sourceFilter: "all"
             }
 
             // Daily limits (services/ScreenTimeLimits.qml), the Limits tab of the
@@ -6251,6 +6464,9 @@ Singleton {
                     property JsonObject shelf: JsonObject {
                         // Items leave the shelf once dragged out of the panel.
                         property bool removeAfterDrag: false
+                        // The phone's newest photos, screenshots and videos show up on the shelf
+                        // by themselves (ii tools phone); they stay on the phone until dragged.
+                        property bool phoneRecents: true
                     }
                     property JsonObject search: JsonObject {
                         // MaterialShape name of the square face's plate.

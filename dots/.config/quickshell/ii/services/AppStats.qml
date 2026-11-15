@@ -116,6 +116,36 @@ Singleton {
     property var loadBatch: []
     property bool restarting: false
 
+    readonly property bool phoneUsageEnabled: IiLinkService.usageEnabled && IiLinkService.hasPeers
+    readonly property string phonePrefix: "phone:"
+    property var phoneHistory: ({})
+    property var phoneLoadBatch: []
+    property var pendingPhoneDays: ({})
+    property var phoneAppNames: ({})
+    property var phoneIconPaths: ({})
+    property bool _phoneIconsScanned: false
+    property string _phoneIconsScanDir: ""
+    property var _requestedPhoneIcons: ({})
+
+    function isPhoneKey(key): bool {
+        return String(key ?? "").startsWith(root.phonePrefix);
+    }
+
+    function phonePackage(key): string {
+        return root.isPhoneKey(key) ? String(key).slice(root.phonePrefix.length) : "";
+    }
+
+    onPhoneUsageEnabledChanged: {
+        if (!root.phoneUsageEnabled) {
+            phoneCommitTimer.stop();
+            root.pendingPhoneDays = ({});
+            root.phoneLoadBatch = [];
+            root.phoneHistory = ({});
+            root.phoneAppNames = ({});
+            root._requestedPhoneIcons = ({});
+        }
+    }
+
     readonly property string todayDate: root.dateKey(clock.date)
 
     function pad(n) {
@@ -287,6 +317,8 @@ Singleton {
     /// Request whichever of `dates` is not cached yet. Today is excluded: it belongs
     /// to the watched view, which the sampler keeps current on its own.
     function ensureDates(dates) {
+        if (root.phoneUsageEnabled)
+            root.ensurePhoneDates(dates);
         const wanted = [];
         for (const date of dates) {
             if (date === root.todayDate) continue;
@@ -303,9 +335,102 @@ Singleton {
         root.loadBatch = wanted;
     }
 
+    function parsePhoneDoc(text) {
+        if (!text || text.length === 0) return null;
+        try {
+            const doc = JSON.parse(text);
+            if (!doc || !Array.isArray(doc.apps)) return null;
+            return doc;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function isKnownPhoneDay(date) {
+        return root.phoneHistory[date] !== undefined || date in root.pendingPhoneDays;
+    }
+
+    function storePhoneDay(date, doc) {
+        root.pendingPhoneDays[date] = doc;
+        const outstanding = root.phoneLoadBatch.some(d => root.phoneHistory[d] === undefined && !(d in root.pendingPhoneDays));
+        if (!outstanding)
+            root.commitPhoneDays();
+        else if (!phoneCommitTimer.running)
+            phoneCommitTimer.start();
+    }
+
+    function commitPhoneDays() {
+        phoneCommitTimer.stop();
+        const pending = root.pendingPhoneDays;
+        const keys = Object.keys(pending);
+        if (keys.length === 0)
+            return;
+        root.pendingPhoneDays = ({});
+        const nextNames = Object.assign({}, root.phoneAppNames);
+        let namesChanged = false;
+        for (const k of keys) {
+            const doc = pending[k];
+            if (!doc || !Array.isArray(doc.apps)) continue;
+            for (const a of doc.apps) {
+                if (a?.pkg && a?.name && nextNames[a.pkg] !== a.name) {
+                    nextNames[a.pkg] = a.name;
+                    namesChanged = true;
+                }
+            }
+        }
+        if (namesChanged)
+            root.phoneAppNames = nextNames;
+        root.phoneHistory = Object.assign({}, root.phoneHistory, pending);
+        root._syncPhoneIcons();
+    }
+
+    function ensurePhoneDates(dates) {
+        if (!root.phoneUsageEnabled) return;
+        const wanted = [];
+        for (const date of dates) {
+            if (date === root.todayDate) continue;
+            if (root.isKnownPhoneDay(date)) continue;
+            if (wanted.includes(date)) continue;
+            wanted.push(date);
+        }
+        if (wanted.length === 0) return;
+        for (const date of root.phoneLoadBatch) {
+            if (!root.isKnownPhoneDay(date) && !wanted.includes(date)) wanted.push(date);
+        }
+        if (wanted.length === root.phoneLoadBatch.length && wanted.every(d => root.phoneLoadBatch.includes(d))) return;
+        root.phoneLoadBatch = wanted;
+    }
+
+    function _syncPhoneIcons() {
+        if (!root.phoneUsageEnabled) return;
+        const dir = IiLinkService.activeLauncherIconDir();
+        if (dir === "") return;
+        if (!root._phoneIconsScanned || root._phoneIconsScanDir !== dir) {
+            if (!phoneIconScan.running) {
+                root._phoneIconsScanDir = dir;
+                phoneIconScan.command = ["sh", "-c", 'ls -1 -- "$1" 2>/dev/null || true', "sh", dir];
+                phoneIconScan.running = true;
+            }
+            return;
+        }
+        const missing = [];
+        for (const pkg of Object.keys(root.phoneAppNames)) {
+            if (root.phoneIconPaths[pkg] || PhoneAppIconService.iconFor(pkg) || root._requestedPhoneIcons[pkg])
+                continue;
+            root._requestedPhoneIcons[pkg] = true;
+            missing.push(pkg);
+        }
+        if (missing.length > 0)
+            IiLinkService.requestLauncherIcons(missing);
+    }
+
     /// Ask the sampler to write the day file now, so the overlay opens on data that
     /// is seconds old rather than up to `flushMs` old.
     function refresh() {
+        if (root.phoneUsageEnabled) {
+            IiLinkService.requestPhoneUsage();
+            phoneTodayView.reload();
+        }
         if (sampler.running) {
             sampler.write(`${JSON.stringify({
                 t: "flush"
@@ -358,6 +483,15 @@ Singleton {
         else
             root.todayHash = -1;
         root.history = kept;
+
+        phoneCommitTimer.stop();
+        root.pendingPhoneDays = ({});
+        root.phoneLoadBatch = [];
+        const phoneToday = root.phoneHistory[root.todayDate];
+        const keptPhone = ({});
+        if (phoneToday !== undefined)
+            keptPhone[root.todayDate] = phoneToday;
+        root.phoneHistory = keptPhone;
     }
 
     function openStateDir() {
@@ -485,6 +619,9 @@ Singleton {
         const from = o.hourFrom ?? 0;
         const to = o.hourTo ?? 23;
         const wantHeadless = o.headless ?? root.showHeadless;
+        const source = o.source ?? "pc";
+        const includePc = source === "pc" || source === "all";
+        const includePhone = root.phoneUsageEnabled && (source === "phone" || source === "all");
 
         const byKey = ({});
         const systemKey = root.systemKey;
@@ -493,27 +630,55 @@ Singleton {
         // history update of an open overlay: property reads are hoisted out of the
         // loop, and the hour key is only parsed when a range was actually asked for.
         const history = root.history;
+        const phoneHistory = root.phoneHistory;
         const f = root.field;
         const wholeDay = from <= 0 && to >= 23;
+        const clampFrom = Math.max(0, from);
+        const clampTo = Math.min(23, to);
 
         for (const date of dates) {
-            const apps = history[date]?.apps;
-            if (!apps) continue;
-            for (const key in apps) {
-                const rec = apps[key];
-                let target = system;
-                if (key !== systemKey) {
-                    target = byKey[key];
-                    if (!target)
-                        target = byKey[key] = root.blankRecord(key, rec.exe, rec.headless);
-                }
-                const hours = rec.h;
-                for (const hour in hours) {
-                    if (!wholeDay) {
-                        const h = parseInt(hour);
-                        if (h < from || h > to) continue;
+            if (includePc) {
+                const apps = history[date]?.apps;
+                if (apps) {
+                    for (const key in apps) {
+                        const rec = apps[key];
+                        let target = system;
+                        if (key !== systemKey) {
+                            target = byKey[key];
+                            if (!target)
+                                target = byKey[key] = root.blankRecord(key, rec.exe, rec.headless);
+                        }
+                        const hours = rec.h;
+                        for (const hour in hours) {
+                            if (!wholeDay) {
+                                const h = parseInt(hour);
+                                if (h < from || h > to) continue;
+                            }
+                            root.addTuple(target, hours[hour], f);
+                        }
                     }
-                    root.addTuple(target, hours[hour], f);
+                }
+            }
+            if (includePhone) {
+                const phoneApps = phoneHistory[date]?.apps;
+                if (phoneApps) {
+                    for (const a of phoneApps) {
+                        if (!a?.pkg) continue;
+                        const key = `${root.phonePrefix}${a.pkg}`;
+                        let target = byKey[key];
+                        if (!target) {
+                            target = byKey[key] = root.blankRecord(key, "", false);
+                            target.isPhone = true;
+                        }
+                        const hArr = a.h ?? [];
+                        for (let hr = clampFrom; hr <= clampTo; hr++) {
+                            const sec = hArr[hr] ?? 0;
+                            if (sec > 0) {
+                                target.fg += sec;
+                                target.focus += sec;
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -592,40 +757,101 @@ Singleton {
     /// chart, the screen-time card and the comparison each ask for the same days;
     /// a new `history` (or headless setting) discards the whole table. Mutated in
     /// place, never reassigned: the bindings that call this must not be notified.
-    readonly property var deviceHoursCache: ({ owner: null, table: ({}) })
+    readonly property var deviceHoursCache: ({ owner: null, ownerPhone: null, table: ({}) })
 
-    function deviceHours(date, fieldName) {
+    function deviceHours(date, fieldName, source) {
+        const effSource = (root.phoneUsageEnabled && source) ? source : "pc";
         const history = root.history;
-        const cacheKey = `${date}|${fieldName}|${root.showHeadless}`;
+        const phoneHistory = root.phoneHistory;
+        const cacheKey = `${date}|${fieldName}|${root.showHeadless}|${effSource}`;
         const cache = root.deviceHoursCache;
-        if (cache.owner !== history) {
+        if (cache.owner !== history || cache.ownerPhone !== phoneHistory) {
             cache.owner = history;
+            cache.ownerPhone = phoneHistory;
             cache.table = ({});
         }
         let hours = cache.table[cacheKey];
         if (!hours) {
-            hours = root.computeDeviceHours(date, fieldName);
+            hours = root.computeDeviceHours(date, fieldName, effSource);
             cache.table[cacheKey] = hours;
         }
         // Callers may keep or reshape the series; the cached one stays untouched.
         return hours.slice();
     }
 
-    function computeDeviceHours(date, fieldName) {
-        const idx = root.field[fieldName];
-        const device = new Array(24).fill(0);
-        const fallback = new Array(24).fill(0);
-        const apps = root.history[date]?.apps;
-        if (!apps) return device;
-
-        for (const appKey in apps) {
-            const rec = apps[appKey];
-            const isSystem = appKey === root.systemKey;
-            if (!isSystem && rec.headless && !root.showHeadless) continue;
-            const target = isSystem ? device : fallback;
-            for (const hour in rec.h) target[parseInt(hour)] += rec.h[hour][idx] ?? 0;
+    function computePhoneDeviceHours(date, fieldName) {
+        const out = new Array(24).fill(0);
+        if (fieldName !== "fg" && fieldName !== "focus")
+            return out;
+        const doc = root.phoneHistory[date];
+        if (!doc)
+            return out;
+        const rawSessions = Array.isArray(doc.sessions) ? doc.sessions : [];
+        if (rawSessions.length > 0) {
+            const parts = date.split("-");
+            const y = parseInt(parts[0]);
+            const m = parseInt(parts[1]) - 1;
+            const d = parseInt(parts[2]);
+            const sorted = rawSessions
+                .filter(s => Array.isArray(s) && s.length >= 2 && s[1] > s[0])
+                .map(s => [Number(s[0]), Number(s[1])])
+                .sort((a, b) => a[0] - b[0]);
+            const merged = [];
+            for (const iv of sorted) {
+                if (merged.length > 0 && iv[0] <= merged[merged.length - 1][1])
+                    merged[merged.length - 1][1] = Math.max(merged[merged.length - 1][1], iv[1]);
+                else
+                    merged.push([iv[0], iv[1]]);
+            }
+            for (let hr = 0; hr < 24; hr++) {
+                const hrStart = new Date(y, m, d, hr, 0, 0, 0).getTime();
+                const hrEnd = new Date(y, m, d, hr + 1, 0, 0, 0).getTime();
+                let ms = 0;
+                for (const iv of merged) {
+                    if (iv[1] <= hrStart) continue;
+                    if (iv[0] >= hrEnd) break;
+                    ms += Math.min(hrEnd, iv[1]) - Math.max(hrStart, iv[0]);
+                }
+                out[hr] = Math.min(3600, Math.round(ms / 1000));
+            }
         }
-        return device.map((value, hour) => value > 0 ? value : fallback[hour]);
+        const fallback = new Array(24).fill(0);
+        for (const a of (doc.apps ?? [])) {
+            const hArr = a.h ?? [];
+            for (let hr = 0; hr < 24; hr++)
+                fallback[hr] += hArr[hr] ?? 0;
+        }
+        return out.map((value, hour) => value > 0 ? value : Math.min(3600, fallback[hour]));
+    }
+
+    function computeDeviceHours(date, fieldName, source) {
+        const effSource = source ?? "pc";
+        const idx = root.field[fieldName];
+        const pcHours = new Array(24).fill(0);
+        if (effSource === "pc" || effSource === "all") {
+            const apps = root.history[date]?.apps;
+            if (apps) {
+                const fallback = new Array(24).fill(0);
+                for (const appKey in apps) {
+                    const rec = apps[appKey];
+                    const isSystem = appKey === root.systemKey;
+                    if (!isSystem && rec.headless && !root.showHeadless) continue;
+                    const target = isSystem ? pcHours : fallback;
+                    for (const hour in rec.h) target[parseInt(hour)] += rec.h[hour][idx] ?? 0;
+                }
+                for (let hr = 0; hr < 24; hr++) {
+                    if (pcHours[hr] <= 0) pcHours[hr] = fallback[hr];
+                }
+            }
+        }
+        if (effSource === "phone")
+            return root.computePhoneDeviceHours(date, fieldName);
+        if (effSource === "all" && root.phoneUsageEnabled) {
+            const phone = root.computePhoneDeviceHours(date, fieldName);
+            for (let hr = 0; hr < 24; hr++)
+                pcHours[hr] += phone[hr];
+        }
+        return pcHours;
     }
 
     /// Package energy per hour of `date` in mWh (24 entries): every row's watt-hours,
@@ -714,32 +940,74 @@ Singleton {
     }
 
     /// One field summed per hour of day (24 entries) across `dates`.
-    function hourlySeries(dates, fieldName, key) {
+    function hourlySeries(dates, fieldName, key, source) {
         const idx = root.field[fieldName];
         const out = new Array(24).fill(0);
+        const effSource = (root.phoneUsageEnabled && source) ? source : "pc";
+        const isPhoneTarget = root.isPhoneKey(key);
+        const wantPc = !isPhoneTarget && (key ? true : effSource !== "phone");
+        const wantPhone = root.phoneUsageEnabled
+            && (fieldName === "fg" || fieldName === "focus")
+            && (isPhoneTarget || (!key && effSource !== "pc"));
+        const targetPkg = isPhoneTarget ? root.phonePackage(key) : "";
+
         for (const date of dates) {
-            const apps = root.history[date]?.apps;
-            if (!apps) continue;
-            for (const appKey in apps) {
-                const rec = apps[appKey];
-                if (!root.inSeries(appKey, rec, key)) continue;
-                for (const hour in rec.h) out[parseInt(hour)] += rec.h[hour][idx] ?? 0;
+            if (wantPc) {
+                const apps = root.history[date]?.apps;
+                if (apps) {
+                    for (const appKey in apps) {
+                        const rec = apps[appKey];
+                        if (!root.inSeries(appKey, rec, key)) continue;
+                        for (const hour in rec.h) out[parseInt(hour)] += rec.h[hour][idx] ?? 0;
+                    }
+                }
+            }
+            if (wantPhone) {
+                const phoneApps = root.phoneHistory[date]?.apps;
+                if (phoneApps) {
+                    for (const a of phoneApps) {
+                        if (isPhoneTarget && a.pkg !== targetPkg) continue;
+                        const hArr = a.h ?? [];
+                        for (let hr = 0; hr < 24; hr++) out[hr] += hArr[hr] ?? 0;
+                    }
+                }
             }
         }
         return out;
     }
 
     /// One field summed per date, parallel to `dates`. Same selection as above.
-    function dailySeries(dates, fieldName, key) {
+    function dailySeries(dates, fieldName, key, source) {
         const idx = root.field[fieldName];
+        const effSource = (root.phoneUsageEnabled && source) ? source : "pc";
+        const isPhoneTarget = root.isPhoneKey(key);
+        const wantPc = !isPhoneTarget && (key ? true : effSource !== "phone");
+        const wantPhone = root.phoneUsageEnabled
+            && (fieldName === "fg" || fieldName === "focus")
+            && (isPhoneTarget || (!key && effSource !== "pc"));
+        const targetPkg = isPhoneTarget ? root.phonePackage(key) : "";
+
         return dates.map(date => {
-            const apps = root.history[date]?.apps;
-            if (!apps) return 0;
             let sum = 0;
-            for (const appKey in apps) {
-                const rec = apps[appKey];
-                if (!root.inSeries(appKey, rec, key)) continue;
-                for (const hour in rec.h) sum += rec.h[hour][idx] ?? 0;
+            if (wantPc) {
+                const apps = root.history[date]?.apps;
+                if (apps) {
+                    for (const appKey in apps) {
+                        const rec = apps[appKey];
+                        if (!root.inSeries(appKey, rec, key)) continue;
+                        for (const hour in rec.h) sum += rec.h[hour][idx] ?? 0;
+                    }
+                }
+            }
+            if (wantPhone) {
+                const phoneApps = root.phoneHistory[date]?.apps;
+                if (phoneApps) {
+                    for (const a of phoneApps) {
+                        if (isPhoneTarget && a.pkg !== targetPkg) continue;
+                        const hArr = a.h ?? [];
+                        for (let hr = 0; hr < 24; hr++) sum += hArr[hr] ?? 0;
+                    }
+                }
             }
             return sum;
         });
@@ -929,6 +1197,10 @@ Singleton {
 
     function displayName(key) {
         if (key === root.systemKey) return Translation.tr("System");
+        if (root.isPhoneKey(key)) {
+            const pkg = root.phonePackage(key);
+            return root.phoneAppNames[pkg] || pkg.split(".").pop() || pkg;
+        }
         const name = root.entryFor(key)?.name;
         if (name) return name;
         // A headless daemon, or a window class matching no desktop entry. Its own
@@ -946,6 +1218,10 @@ Singleton {
     /// entry it takes its name from sits right there.
     function iconFor(key) {
         if (key === root.systemKey) return "";
+        if (root.isPhoneKey(key)) {
+            const pkg = root.phonePackage(key);
+            return root.phoneIconPaths[pkg] || PhoneAppIconService.iconFor(pkg) || "";
+        }
         const entryIcon = root.entryFor(key)?.icon;
         if (entryIcon) return entryIcon;
         const icon = AppSearch.guessIcon(key);
@@ -1003,6 +1279,70 @@ Singleton {
         id: commitTimer
         interval: 100
         onTriggered: root.commitDays()
+    }
+
+    Timer {
+        id: phoneCommitTimer
+        interval: 100
+        onTriggered: root.commitPhoneDays()
+    }
+
+    Connections {
+        target: IiLinkService
+
+        function onPhoneUsageUpdated(dates, _sessionsByDate) {
+            if (!root.phoneUsageEnabled) return;
+            const list = Array.isArray(dates) ? dates : [];
+            if (list.includes(root.todayDate))
+                phoneTodayView.reload();
+            const reload = [];
+            let evicted = false;
+            const next = Object.assign({}, root.phoneHistory);
+            for (const d of list) {
+                if (d === root.todayDate) continue;
+                if (next[d] !== undefined) {
+                    delete next[d];
+                    evicted = true;
+                    reload.push(d);
+                }
+            }
+            if (evicted) {
+                root.phoneHistory = next;
+                root.ensurePhoneDates(reload);
+            }
+        }
+
+        function onLauncherIconReady(pkg, path) {
+            if (!root.phoneUsageEnabled || !pkg || !path) return;
+            const next = Object.assign({}, root.phoneIconPaths);
+            next[pkg] = path;
+            root.phoneIconPaths = next;
+        }
+
+        function onLauncherIconDevChanged() {
+            if (root.phoneUsageEnabled && IiLinkService.launcherIconDev !== "")
+                root._syncPhoneIcons();
+        }
+    }
+
+    Process {
+        id: phoneIconScan
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const dir = root._phoneIconsScanDir;
+                const next = Object.assign({}, root.phoneIconPaths);
+                for (const line of String(this.text ?? "").split("\n")) {
+                    const name = line.trim();
+                    if (!name.endsWith(".png")) continue;
+                    const pkg = name.slice(0, -4);
+                    if (pkg !== "")
+                        next[pkg] = `${dir}/${name}`;
+                }
+                root._phoneIconsScanned = true;
+                root.phoneIconPaths = next;
+                root._syncPhoneIcons();
+            }
+        }
     }
 
     // Long enough for the flush asked for by refresh() to land inside it: its
@@ -1094,6 +1434,36 @@ Singleton {
 
             onLoaded: root.storeDay(modelData, root.parseDoc(text()))
             onLoadFailed: root.storeDay(modelData, null)
+        }
+    }
+
+    FileView {
+        id: phoneTodayView
+        path: root.phoneUsageEnabled ? `${IiLinkService.phoneUsageDir}/${root.todayDate}.json` : ""
+        watchChanges: root.phoneUsageEnabled
+        printErrors: false
+
+        onFileChanged: phoneTodayView.reload()
+        onLoaded: {
+            if (!root.phoneUsageEnabled) return;
+            root.storePhoneDay(root.todayDate, root.parsePhoneDoc(phoneTodayView.text()));
+        }
+        onLoadFailed: error => {
+            if (root.phoneUsageEnabled && error === FileViewError.FileNotFound)
+                root.storePhoneDay(root.todayDate, null);
+        }
+    }
+
+    Instantiator {
+        model: root.phoneUsageEnabled ? root.phoneLoadBatch : []
+
+        delegate: FileView {
+            required property string modelData
+            path: `${IiLinkService.phoneUsageDir}/${modelData}.json`
+            printErrors: false
+
+            onLoaded: root.storePhoneDay(modelData, root.parsePhoneDoc(text()))
+            onLoadFailed: root.storePhoneDay(modelData, null)
         }
     }
 

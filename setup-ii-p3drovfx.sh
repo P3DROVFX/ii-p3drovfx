@@ -195,6 +195,7 @@ PROTECTED_PATTERNS=(
     "scripts/touchGestures/touch_gestures"
     "scripts/tray/sni_watcher"
     "scripts/health/health_watch"
+    "scripts/iiLink/ii_link"
     # What each of those was built from. Carried for the same reason the binaries
     # are: without it every helper reads as "never verified" after every update,
     # and a warning that fires every time is one nobody reads.

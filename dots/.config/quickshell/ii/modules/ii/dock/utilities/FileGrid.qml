@@ -70,7 +70,7 @@ GridLayout {
                 spacing: 0
                 StyledText {
                     Layout.fillWidth: true
-                    text: card.modelData.name ?? UtilityFiles.baseName(card.path)
+                    text: card.modelData.name ?? FileShelf.name(card.path)
                     color: ClockStyle.colOnSurface
                     font.pixelSize: ClockStyle.textSmall
                     font.weight: Font.DemiBold
@@ -89,8 +89,8 @@ GridLayout {
             FileDragArea {
                 anchors.fill: parent
                 paths: [card.path]
-                dragIcon: UtilityFiles.isImage(card.path) ? "image-x-generic" : "text-x-generic"
-                onClicked: Quickshell.execDetached(["xdg-open", card.path])
+                dragIcon: FileShelf.isImage(card.path) ? "image-x-generic" : "text-x-generic"
+                onClicked: FileShelf.open(card.path)
                 onDragFinished: grid.dragged(card.path)
             }
 

@@ -1,0 +1,7 @@
+module qs.modules.settings.configs.devices
+
+DeckCommandsSection 1.0 DeckCommandsSection.qml
+IiToolsConfig 1.0 IiToolsConfig.qml
+LocalSendSection 1.0 LocalSendSection.qml
+PhoneServiceCard 1.0 PhoneServiceCard.qml
+PhoneServiceSelector 1.0 PhoneServiceSelector.qml

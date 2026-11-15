@@ -98,7 +98,7 @@ AppSettingsPage {
         AppToggleRow {
             symbol: "cake"
             title: Translation.tr("Show contact birthdays")
-            description: Translation.tr("Projects birthdays from KDE Connect contacts as read-only entries without adding calendar events.")
+            description: Translation.tr("Projects birthdays from the phone's contacts as read-only entries without adding calendar events.")
             checked: root.timetable.birthdays.enable
             onToggled: value => root.timetable.birthdays.enable = value
         }

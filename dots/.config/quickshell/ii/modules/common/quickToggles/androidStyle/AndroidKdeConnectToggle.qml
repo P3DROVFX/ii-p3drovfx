@@ -14,7 +14,7 @@ AndroidQuickToggleButton {
     readonly property bool connected: KdeConnectService.serviceEnabled && KdeConnectService.activeReachable
     readonly property bool hasBattery: root.connected && (root.device?.charge ?? -1) >= 0
 
-    expandedTitle: !root.serviceEnabled ? Translation.tr("KDE Connect off")
+    expandedTitle: !root.serviceEnabled ? Translation.tr("Phone off")
         : root.connected ? (KdeConnectService.activeDeviceDisplayName || root.device?.name || Translation.tr("Device"))
         : Translation.tr("No devices")
     expandedStatus: root.hasBattery

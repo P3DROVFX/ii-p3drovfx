@@ -17,22 +17,22 @@ QuickToggleButton {
         : Translation.tr("No devices")
 
     // Install check only runs while enabled; keep a disabled service clickable.
-    interactive: !root.serviceEnabled || KdeConnectService.available
+    interactive: !root.serviceEnabled || KdeConnectService.activePhoneService === "iiTools" || KdeConnectService.available
     toggled: root.serviceEnabled
     buttonIcon: !root.serviceEnabled ? "sync_disabled"
         : root.connected ? "phonelink"
         : "phonelink_off"
     onClicked: {
-        Config.options.phone.kdeconnectEnabled = !root.serviceEnabled;
+        KdeConnectService.togglePhoneService();
     }
     StyledToolTip {
         text: {
             if (!root.serviceEnabled)
-                return Translation.tr("KDE Connect service is disabled | Right-click for options");
+                return Translation.tr("Phone integration is disabled | Right-click for options");
             if (root.connected && root.hasBattery)
                 return Translation.tr("%1 · %2% battery | Right-click for options")
                     .arg(KdeConnectService.activeDeviceDisplayName).arg(String(Math.round(root.device.charge)));
-            return Translation.tr("KDE Connect: %1 | Right-click for options").arg(KdeConnectService.statusText);
+            return Translation.tr("%1: %2 | Right-click for options").arg(KdeConnectService.backendName).arg(KdeConnectService.statusText);
         }
     }
 }

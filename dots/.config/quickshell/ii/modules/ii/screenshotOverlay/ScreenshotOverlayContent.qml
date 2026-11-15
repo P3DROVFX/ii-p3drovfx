@@ -475,9 +475,26 @@ Item {
                 }
             }
 
+            // ii tools: straight into the phone's gallery (instead of KDE Connect's copy
+            // to Downloads), when PC screenshots are not already sent automatically.
+            OverlayButton {
+                objectName: "phoneGalleryButton"
+                visible: IiLinkService.canSaveShotToPhone
+                size: root.toolbarBtnHeight
+                symbol: "add_photo_alternate"
+                label: Translation.tr("Save to %1").arg(String(IiLinkService.shotPhoneName || Translation.tr("phone")))
+                onClicked: {
+                    IiLinkService.saveShotToPhone(GlobalStates.screenshotOverlayImagePath, {
+                        x: GlobalStates.screenshotOverlayRegionX, y: GlobalStates.screenshotOverlayRegionY,
+                        w: GlobalStates.screenshotOverlayRegionW, h: GlobalStates.screenshotOverlayRegionH
+                    });
+                    root._startClose();
+                }
+            }
+
             OverlayButton {
                 objectName: "phoneShareButton"
-                visible: root.phoneShareAvailable
+                visible: root.phoneShareAvailable && !IiLinkService.canSaveShotToPhone
                 size: root.toolbarBtnHeight
                 symbol: "smartphone"
                 label: Translation.tr("Send to %1").arg(String(KdeConnectService.activeDeviceDisplayName || Translation.tr("phone")))

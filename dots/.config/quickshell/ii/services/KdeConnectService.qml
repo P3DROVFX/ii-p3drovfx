@@ -28,7 +28,10 @@ import Quickshell.Io
 Singleton {
     id: root
 
-    property bool available: false
+    /// KDE Connect itself is installed (kdeconnect-cli found).
+    property bool _kdeAvailable: false
+    /// A phone to talk to: KDE Connect, or the ii tools app (IiLinkService).
+    readonly property bool available: root._kdeAvailable || IiLinkService.phoneDevice !== null
     property bool ready: false
     readonly property bool hasDevices: devices.length > 0
 
@@ -42,7 +45,22 @@ Singleton {
         root._pickMdnsHost()
     }
 
-    property var devices: []
+    /// KDE Connect's own devices, as its monitor reports them.
+    property var _kdeDevices: []
+    /// Every phone: the ii tools one first (it is what the shell is moving to), then KDE
+    /// Connect's. The ii tools device behaves like any other; its actions are routed to
+    /// IiLinkService below (`_isIi`).
+    readonly property var devices: (IiLinkService.phoneDevice ? [IiLinkService.phoneDevice] : []).concat(root._kdeDevices)
+    Connections {
+        target: IiLinkService
+        function onPhoneDeviceChanged() {
+            root._sanitiseActiveDevice()
+        }
+    }
+
+    function _isIi(devId) {
+        return String(devId ?? "").startsWith("iitools:")
+    }
     readonly property var activeDevice: root._findDevice(root.activeDeviceId)
 
     /** Recent paired devices (excluding the active one) in MRU order.
@@ -167,7 +185,17 @@ Singleton {
     /** Newest first: {publicId, id, package, appName, title, text, lines[],
      *  progress (0..1 or -1), indeterminate, chrono, countdown, color, iconPath,
      *  posted}. Empty when the phone is unreachable. */
-    readonly property var liveUpdates: (root._enabled && root.activeReachable) ? root._liveRelays : []
+    readonly property var liveUpdates: {
+        if (!(Config.options?.iiTools?.liveUpdates?.enable ?? true))
+            return []
+        // Over ii link while it is up (the app then posts no relay copy); a relay of the
+        // same live update still in KDE Connect's list is the stale one.
+        const linked = IiLinkService.linkLives.map(p => root._liveFromPayload(p, `ii:live:${p.id ?? ""}`,
+            IiLinkService.iconFor(String(p.pkg ?? ""))))
+        const ids = new Set(linked.map(l => l.id))
+        const relayed = (root._enabled && root.activeReachable) ? root._liveRelays.filter(l => !ids.has(l.id)) : []
+        return linked.concat(relayed).sort((a, b) => b.posted - a.posted)
+    }
 
     function isLiveRelay(n) {
         if (!n) return false
@@ -181,28 +209,33 @@ Singleton {
         const b64 = body.slice(at + root.liveRelayMarker.length).trim().split(/[^A-Za-z0-9_\-+\/=]/)[0]
         try {
             const p = JSON.parse(root._base64UrlToUtf8(b64))
-            const max = Number(p.max ?? 0)
-            return {
-                publicId: String(n.publicId ?? n.key ?? ""),
-                id: String(p.id ?? ""),
-                package: String(p.pkg ?? ""),
-                appName: String(p.app ?? p.pkg ?? ""),
-                title: String(p.title ?? ""),
-                text: String(p.text ?? ""),
-                sub: String(p.sub ?? ""),
-                critical: String(p.crit ?? ""),
-                lines: Array.isArray(p.lines) ? p.lines.map(String) : [],
-                progress: max > 0 ? Math.max(0, Math.min(1, Number(p.progress ?? 0) / max)) : -1,
-                indeterminate: p.indeterminate === true,
-                chrono: Number(p.chrono ?? 0),
-                countdown: p.countdown === true,
-                color: String(p.color ?? ""),
-                iconPath: String(n.iconPath ?? ""),
-                posted: Number(p.posted ?? 0),
-            }
+            return root._liveFromPayload(p, String(n.publicId ?? n.key ?? ""), String(n.iconPath ?? ""))
         } catch (e) {
             console.warn("[KdeConnect] Bad live relay payload:", e)
             return null
+        }
+    }
+
+    /** A live update from its payload: an `iilive1:` relay's, or one sent over ii link. */
+    function _liveFromPayload(p, publicId, iconPath) {
+        const max = Number(p.max ?? 0)
+        return {
+            publicId: publicId,
+            id: String(p.id ?? ""),
+            package: String(p.pkg ?? ""),
+            appName: String(p.app ?? p.pkg ?? ""),
+            title: String(p.title ?? ""),
+            text: String(p.text ?? ""),
+            sub: String(p.sub ?? ""),
+            critical: String(p.crit ?? ""),
+            lines: Array.isArray(p.lines) ? p.lines.map(String) : [],
+            progress: max > 0 ? Math.max(0, Math.min(1, Number(p.progress ?? 0) / max)) : -1,
+            indeterminate: p.indeterminate === true,
+            chrono: Number(p.chrono ?? 0),
+            countdown: p.countdown === true,
+            color: String(p.color ?? ""),
+            iconPath: iconPath,
+            posted: Number(p.posted ?? 0),
         }
     }
 
@@ -414,6 +447,8 @@ Singleton {
         // DBus iteration order, which may not match arrival time.
         for (const key in groups) {
             groups[key].notifications.sort((a, b) => (b.time || 0) - (a.time || 0))
+            // ii tools sends the sender's photo apart: the newest one heads the group.
+            groups[key].image = groups[key].notifications[0].avatar || ""
         }
         return groups
     }
@@ -486,47 +521,116 @@ Singleton {
         // tab in SidebarsConfig, we don't start the DBus monitor or any
         // polling process — keeps memory/CPU at zero for users who don't
         // use phone integration.
-        if (!root._enabled) return
-        detectDistroProc.running = true
-        checkAvailabilityProc.running = true
-        checkScrcpyProc.running = true
-        checkAdbProc.running = true
-        checkPythonDbusProc.running = true
+        if (root.serviceEnabled) {
+            detectDistroProc.running = true
+            checkScrcpyProc.running = true
+            checkAdbProc.running = true
+        }
+        if (root._enabled) {
+            checkAvailabilityProc.running = true
+            checkPythonDbusProc.running = true
+        }
     }
 
-    // Reflects Config.options.policies.phone and Config.options.phone.kdeconnectEnabled.
-    // When false, the service stays dormant: no DBus monitor, no pgrep polling, no ADB probing.
-    readonly property bool _enabled: Config.options.policies.phone !== 0
-        && (Config.options.phone.kdeconnectEnabled === undefined || Config.options.phone.kdeconnectEnabled)
+    // Unified mutually-exclusive phone integration service: "iiTools" | "kdeconnect" | "off".
+    readonly property string activePhoneService: {
+        if (Config.options.policies.phone === 0)
+            return "off"
+        const svc = Config.options.phone.service ?? ""
+        const kdeCfg = Config.options.phone.kdeconnectEnabled === undefined || Config.options.phone.kdeconnectEnabled
+        const iiCfg = Config.options.iiTools?.enable ?? true
+        if (svc === "iiTools")
+            return iiCfg ? "iiTools" : "off"
+        if (svc === "kdeconnect")
+            return kdeCfg ? "kdeconnect" : "off"
+        if (svc === "off")
+            return "off"
+        if (IiLinkService.serviceSelected)
+            return "iiTools"
+        return kdeCfg ? "kdeconnect" : "off"
+    }
 
-    // Public read-only view for toggle models and dialogs that mirror the service state.
-    readonly property bool serviceEnabled: root._enabled
+    // Reflects whether the KDE Connect backend specifically should run background daemons.
+    readonly property bool _enabled: Config.options.policies.phone !== 0
+        && root.activePhoneService === "kdeconnect"
+
+    // Public read-only view for toggle models and dialogs that mirror the active service state.
+    readonly property bool serviceEnabled: Config.options.policies.phone !== 0
+        && root.activePhoneService !== "off"
+    /// The picked phone is the ii tools one.
+    readonly property bool activeIsIi: root.activePhoneService === "iiTools" || root._isIi(root.activeDeviceId)
+    /// Human-readable active backend name.
+    readonly property string backendName: root.activePhoneService === "iiTools"
+        ? "ii tools"
+        : (root.activePhoneService === "kdeconnect" ? "KDE Connect" : Translation.tr("Off"))
+
+    onActivePhoneServiceChanged: root._sanitiseActiveDevice()
+
+    /// Switch the single active phone integration backend ("iiTools", "kdeconnect", or "off").
+    function selectPhoneService(mode) {
+        if (mode === "iiTools") {
+            Config.options.phone.service = "iiTools"
+            Config.options.iiTools.enable = true
+            Config.options.iiTools.primary = true
+            Config.options.phone.kdeconnectEnabled = false
+        } else if (mode === "kdeconnect") {
+            Config.options.phone.service = "kdeconnect"
+            Config.options.phone.kdeconnectEnabled = true
+            Config.options.iiTools.enable = false
+            Config.options.iiTools.primary = false
+        } else {
+            Config.options.phone.service = "off"
+            Config.options.phone.kdeconnectEnabled = false
+            Config.options.iiTools.enable = false
+        }
+    }
+
+    /// Toggle between off and the preferred/last-used phone backend.
+    function togglePhoneService() {
+        if (root.serviceEnabled) {
+            root._lastPhoneService = root.activePhoneService
+            root.selectPhoneService("off")
+        } else {
+            const target = (root._lastPhoneService === "iiTools" || IiLinkService.hasPeers)
+                ? "iiTools"
+                : "kdeconnect"
+            root.selectPhoneService(target)
+        }
+    }
+
+    property string _lastPhoneService: ""
 
     // Stop all background activity when the Phone tab is toggled off at runtime.
     // Restart when toggled back on. This lets users enable/disable Phone
     // integration without reloading the shell.
-    on_EnabledChanged: {
-        if (root._enabled) {
-            // Re-enabled: spin the background workers back up.
+    onServiceEnabledChanged: {
+        if (root.serviceEnabled) {
             detectDistroProc.running = true
-            checkAvailabilityProc.running = true
             checkScrcpyProc.running = true
             checkAdbProc.running = true
-            checkPythonDbusProc.running = true
         } else {
-            // Disabled: stop everything that consumes CPU/IPC.
-            monitorProc.running = false
-            checkScrcpyRunningProc.running = false
             checkScrcpyProc.running = false
             adbProbeProc.running = false
             adbProber.running = false
             scrcpyStatusTimer.running = false
             scrcpyLaunchFallbackTimer.running = false
             scrcpyElapsedTicker.running = false
-            // Reset user-facing state so UI doesn't show stale data.
             root.scrcpyRunning = false
             root.scrcpyLaunching = false
-            root.devices = []
+            root.adbReachable = false
+        }
+    }
+
+    on_EnabledChanged: {
+        if (root._enabled) {
+            // Re-enabled: spin the KDE Connect workers back up.
+            checkAvailabilityProc.running = true
+            checkPythonDbusProc.running = true
+        } else {
+            // Disabled: stop everything that consumes CPU/IPC.
+            monitorProc.running = false
+            // Reset user-facing state so UI doesn't show stale data.
+            root._kdeDevices = []
             root.notifications = []
             root._liveRelays = []
             root.pendingPairRequests = []
@@ -538,14 +642,12 @@ Singleton {
         running: false
         command: ["bash", "-c", "command -v kdeconnect-cli >/dev/null"]
         onExited: (code, status) => {
-            root.available = (code === 0)
-            if (root.available) {
+            root._kdeAvailable = (code === 0)
+            if (root._kdeAvailable) {
                 root.startMonitor()
             } else {
-                // KDE Connect is the backbone of the entire Phone tab.
-                // If it's missing, warn the user immediately.
-                root.criticalDepMissing("kdeconnect-cli",
-                    Translation.tr("KDE Connect is not installed — phone integration requires it"))
+                // Optional now: the ii tools app is a phone backend of its own.
+                console.info("[KdeConnect] kdeconnect-cli not found; phones only through ii tools")
             }
         }
     }
@@ -632,6 +734,7 @@ Singleton {
         command: ["bash", "-c", "command -v adb >/dev/null 2>&1"]
         onExited: (code, status) => {
             root.adbPresent = (code === 0)
+            if (root.adbPresent && root.serviceEnabled) root._probeAdb()
         }
     }
 
@@ -720,7 +823,7 @@ Singleton {
         interval: 4000
         repeat: false
         onTriggered: {
-            if (root.available && Persistent.ready) root.startMonitor()
+            if (root._kdeAvailable && Persistent.ready) root.startMonitor()
         }
     }
 
@@ -785,7 +888,7 @@ Singleton {
             break
         case "sync_notifications":
             if (ev.id === root.activeDeviceId) {
-                root.notifications = root._normaliseNotifications(ev.notifications ?? [])
+                root.notifications = root._withLink(root._normaliseNotifications(ev.notifications ?? []))
             }
             break
         case "notif_cleared":
@@ -824,7 +927,7 @@ Singleton {
     }
 
     function _mergeDevice(ev) {
-        const devices = root.devices.slice()
+        const devices = root._kdeDevices.slice()
         const idx = devices.findIndex(d => d.id === ev.id)
         const normalized = {
             id: ev.id,
@@ -843,12 +946,12 @@ Singleton {
         }
         if (idx < 0) devices.push(normalized)
         else devices[idx] = Object.assign({}, devices[idx], normalized)
-        root.devices = devices
+        root._kdeDevices = devices
         if (normalized.paired) root._removePairingRequest(ev.id)
     }
 
     function _patchDevice(id, patch) {
-        const devices = root.devices.slice()
+        const devices = root._kdeDevices.slice()
         const idx = devices.findIndex(d => d.id === id)
         if (idx < 0) return
         const prev = devices[idx]
@@ -888,7 +991,7 @@ Singleton {
         }
 
         devices[idx] = merged
-        root.devices = devices
+        root._kdeDevices = devices
         if (patch.paired === true) root._removePairingRequest(id)
     }
 
@@ -932,8 +1035,13 @@ Singleton {
     }
 
     function _removeDevice(id) {
-        root.devices = root.devices.filter(d => d.id !== id)
+        root._kdeDevices = root._kdeDevices.filter(d => d.id !== id)
         root._removePairingRequest(id)
+    }
+
+    /// What an ii tools action says: done, or the phone is away.
+    function _iiFeedback(ok, message) {
+        root.actionFeedback(ok ? message : Translation.tr("The phone is not connected"), ok)
     }
 
     function _feedback(message, ok) {
@@ -956,6 +1064,17 @@ Singleton {
 
     function _sanitiseActiveDevice() {
         const current = root._findDevice(root.activeDeviceId)
+        // The same phone paired both ways: the ii tools side takes over (Settings →
+        // ii tools → "Use ii tools for this phone"); another phone stays as picked.
+        const ii = IiLinkService.phoneDevice
+        const preferIi = ii !== null && (Config.options?.iiTools?.primary ?? true)
+        if (preferIi && current?.id !== ii.id
+                && (!current || !current.reachable || String(current.name).toLowerCase() === String(ii.name).toLowerCase())) {
+            root.activeDeviceId = ii.id
+            root._persistActiveDeviceId(ii.id)
+            requestNotificationsRefresh()
+            return
+        }
         if (current && current.reachable && current.paired) return
         const fallback = root.devices.find(d => d.reachable && d.paired)
             || root.devices.find(d => d.paired)
@@ -994,6 +1113,50 @@ Singleton {
             console.warn("[KdeConnect] Could not persist activeDeviceId:",
                          e.message)
         }
+    }
+
+    // ── Notifications mirrored over ii link ─────────────────────────────────
+    // With the ii tools app the phone's notifications also arrive over ii link, with
+    // their actions and replies. They join this list as `ii:<key>`, and KDE Connect's
+    // copy of the same text is left out; without the link nothing changes.
+    Connections {
+        target: IiLinkService
+        function onLinkNotificationsChanged() {
+            root.notifications = root._withLink(root.notifications)
+        }
+    }
+
+    function _isLinkId(publicId) {
+        return String(publicId ?? "").startsWith("ii:")
+    }
+
+    function _withLink(list) {
+        const base = list.filter(n => !root._isLinkId(n.publicId))
+        const linked = IiLinkService.linkNotifications
+        if (linked.length === 0)
+            return base
+        const sigs = new Set(linked.map(n => root._phoneSignature(n.title, n.text)))
+        const kept = base.filter(n => n.live === true || !sigs.has(root._phoneSignature(n.summary, n.body)))
+        return kept.concat(linked.map(n => {
+            const reply = n.actions.find(a => a.reply)
+            return {
+                publicId: `ii:${n.key}`,
+                appName: n.app,
+                summary: n.title || n.app,
+                body: n.text,
+                ticker: "",
+                time: n.time,
+                dismissable: true,
+                iconPath: IiLinkService.iconFor(n.pkg),
+                image: n.image,
+                avatar: n.avatar,
+                actions: n.actions.filter(a => !a.reply).map(a => ({ key: String(a.i), label: a.label })),
+                replyId: reply ? String(reply.i) : "",
+                replyPlaceholder: reply?.hint || Translation.tr("Reply"),
+                package: n.pkg,
+                live: false,
+            }
+        }))
     }
 
     function _normaliseNotifications(list) {
@@ -1087,6 +1250,11 @@ Singleton {
     }
 
     function requestNotificationsRefresh() {
+        // The ii tools phone's notifications arrive over the link, nothing to fetch.
+        if (root._isIi(root.activeDeviceId)) {
+            root.notifications = root._withLink([])
+            return
+        }
         if (!root.activeDeviceId) {
             root.notifications = []
             root._liveRelays = []
@@ -1158,6 +1326,10 @@ Singleton {
 
     function discardNotification(publicId) {
         if (!publicId) return
+        if (root._isLinkId(publicId)) {
+            IiLinkService.notifDismiss(publicId.slice(3))
+            return
+        }
         // Calls `dismiss()` on the per-notification leaf interface at
         // `/modules/kdeconnect/devices/<dev>/notifications/<publicId>`.
         // This is the *correct* way to dismiss a notification on the phone:
@@ -1194,6 +1366,10 @@ Singleton {
     }
 
     function sendAction(devId, key, action) {
+        if (root._isLinkId(key)) {
+            IiLinkService.notifAction(key.slice(3), Number(action))
+            return
+        }
         if (!devId || !key) return
         const identity = root._shellQuote(key)
         const actionArg = root._shellQuote(action ?? "")
@@ -1204,6 +1380,13 @@ Singleton {
 
     function replyNotification(publicId, message) {
         if (!publicId || !message) return
+        if (root._isLinkId(publicId)) {
+            const n = root.notifications.find(x => x.publicId === publicId)
+            if (!n || n.replyId === "") return
+            IiLinkService.notifReply(publicId.slice(3), Number(n.replyId), message)
+            root.actionFeedback(Translation.tr("Reply sent"), true)
+            return
+        }
         const devId = root.activeDeviceId
         const notif = root.notifications.find(n => n.publicId === publicId)
         if (!notif || !notif.replyId) return
@@ -1231,11 +1414,15 @@ Singleton {
     }
 
     function findMyPhone(devId) {
+        if (root._isIi(devId))
+            return root._iiFeedback(IiLinkService.phoneAct(devId, "ring"), Translation.tr("Ringing the phone"))
         root._call(devId, "findmyphone",
                    "org.kde.kdeconnect.device.findmyphone.ring", [])
     }
 
     function sendPing(devId, message) {
+        if (root._isIi(devId))
+            return root._iiFeedback(IiLinkService.phoneAct(devId, "ping", { text: message || "" }), Translation.tr("Ping sent"))
         const args = message ? [root._shellQuote(message)] : []
         root._call(devId, "ping",
                    "org.kde.kdeconnect.device.ping.sendPing", args)
@@ -1244,6 +1431,12 @@ Singleton {
     function shareUrl(devId, url) {
         if (!url) return
         url = root._normalizeFileUrl(url)
+        if (root._isIi(devId)) {
+            if (String(url).startsWith("file://"))
+                return root._iiFeedback(IiLinkService.sendFileToPhone(devId, FileUtils.trimFileProtocol(decodeURIComponent(url))),
+                    Translation.tr("Sending to the phone"))
+            return root._iiFeedback(IiLinkService.phoneAct(devId, "url", { url: String(url) }), Translation.tr("Sent to the phone"))
+        }
         if (String(url).startsWith("file://")) {
             // Track the outgoing transfer so the daemon's own "transfer
             // finished/failed" notification (which the shell swallows) can be
@@ -1257,6 +1450,8 @@ Singleton {
 
     function shareText(devId, text) {
         if (!text) return
+        if (root._isIi(devId))
+            return root._iiFeedback(IiLinkService.phoneAct(devId, "text", { text: String(text) }), Translation.tr("Sent to the phone"))
         root._call(devId, "share",
                    "org.kde.kdeconnect.device.share.shareText",
                    [root._shellQuote(text)])
@@ -1264,6 +1459,8 @@ Singleton {
 
     function sendClipboard(devId) {
         if (!devId) return
+        if (root._isIi(devId))
+            return root._iiFeedback(IiLinkService.sendClipboardToPhone(), Translation.tr("Clipboard sent to the phone"))
         root._call(devId, "clipboard",
                    "org.kde.kdeconnect.device.clipboard.sendClipboard", [])
     }
@@ -1321,6 +1518,11 @@ Singleton {
 
     function browseFiles(devId) {
         if (!devId) return
+        if (root._isIi(devId)) {
+            if (!IiLinkService.browsePhoneFiles(devId.slice(8)))
+                root.actionFeedback(Translation.tr("The phone is not sharing its files"), false)
+            return
+        }
         mountSftp(devId)
         sftpOpenTimer.devId = devId
         sftpOpenTimer.restart()
@@ -1338,7 +1540,7 @@ Singleton {
         id: adbProber
         interval: 30000
         repeat: true
-        running: root.ready && root._enabled
+        running: root.serviceEnabled && root.adbPresent
         onTriggered: root._probeAdb()
     }
 
@@ -1454,7 +1656,7 @@ Singleton {
     on_ActiveKdeConnectIpChanged: root._checkWirelessAdbLink()
 
     function _checkWirelessAdbLink() {
-        if (!root.ready || !root._enabled || !root.adbPresent) return
+        if (!root.serviceEnabled || !root.adbPresent) return
         if (root._adbTargetResolving) return
         root._probeAdb()
     }
@@ -1533,7 +1735,7 @@ Singleton {
     // announce and goodbye as it happens, so a new port shows up within a
     // second instead of on the next poll. Only runs while wireless auto
     // mode is on.
-    readonly property bool _mdnsBrowseWanted: root.ready && root._enabled
+    readonly property bool _mdnsBrowseWanted: root.serviceEnabled
         && !!Config.options.phone && !!Config.options.phone.scrcpy
         && Config.options.phone.scrcpy.useWireless
         && Config.options.phone.scrcpy.autoWirelessIp
@@ -1715,7 +1917,7 @@ Singleton {
      */
     function openNotificationIntent(publicId) {
         const notif = root.notifications.find(n => n.publicId === publicId)
-            ?? root._liveRelays.find(n => n.publicId === publicId)
+            ?? root.liveUpdates.find(n => n.publicId === publicId)
         if (!notif) return
 
         const pkg = notif.package || ""
@@ -2250,6 +2452,56 @@ Singleton {
         return host ? ["-s", host] : []
     }
 
+    /** True when the device adb will use is reached over the network: an
+     *  `ip:port` serial, or the name adb gives a phone it joined by mDNS. */
+    readonly property bool adbOverNetwork: root.resolvedAdbSerial.indexOf(":") > 0
+        || root.resolvedAdbSerial.indexOf("._adb-tls-connect") > 0
+
+    /** Frame rate, bit rate and size for a scrcpy session. Over the network
+     *  `phone.scrcpy.wireless` caps them; it never loosens what the user set.
+     *  `baseMaxSize` overrides `maxSize` (the sidebar sizes its own stream). */
+    function scrcpyStreamCaps(baseMaxSize, overNetwork, weakLink) {
+        const opts = Config.options?.phone?.scrcpy
+        const caps = {
+            "maxFps": opts?.maxFps ?? 0,
+            "bitRate": String(opts?.bitRate ?? "").trim(),
+            "maxSize": baseMaxSize !== undefined ? baseMaxSize : (opts?.maxSize ?? 0)
+        }
+        const wl = opts?.wireless
+        const network = overNetwork !== undefined ? overNetwork : root.adbOverNetwork
+        if (!network || !(wl?.limit ?? true)) return caps
+
+        const effFps = weakLink ? 60 : (wl?.maxFps ?? 60)
+        const effSize = weakLink ? 1600 : (wl?.maxSize ?? 0)
+        const effRate = weakLink ? "4M" : String(wl?.bitRate ?? "14M").trim()
+
+        caps.maxFps = root._tighterCap(caps.maxFps, effFps)
+        caps.maxSize = root._tighterCap(caps.maxSize, effSize)
+        const userBps = root._bitRateBps(caps.bitRate)
+        const wlBps = root._bitRateBps(effRate)
+        const rawBitRate = String(opts?.bitRate ?? "").trim()
+        const userLoweredBase = rawBitRate !== "" && rawBitRate !== "8M" && rawBitRate !== "20M"
+        if (wlBps > 0 && (userBps <= 0 || wlBps < userBps || (!weakLink && !userLoweredBase))) {
+            caps.bitRate = effRate
+        }
+        return caps
+    }
+
+    // 0 means "no cap", so the tighter of two caps is the smaller nonzero one.
+    function _tighterCap(a, b) {
+        if (!(a > 0)) return b > 0 ? b : 0
+        if (!(b > 0)) return a
+        return Math.min(a, b)
+    }
+
+    // scrcpy's bit-rate syntax: a number with an optional K/M suffix.
+    function _bitRateBps(text) {
+        const m = /^(\d+(?:\.\d+)?)\s*([kKmMgG]?)$/.exec(String(text ?? "").trim())
+        if (!m) return 0
+        const mult = { "": 1, "k": 1e3, "m": 1e6, "g": 1e9 }[m[2].toLowerCase()]
+        return parseFloat(m[1]) * mult
+    }
+
     function launchScrcpy(devId, mode, deepLink) {
         if (!devId) return
 
@@ -2352,9 +2604,12 @@ Singleton {
         if (fullscreen) scrcpyArgs.push("--fullscreen")
         if (alwaysOnTop) scrcpyArgs.push("--always-on-top")
 
-        if (maxFps > 0) scrcpyArgs.push("--max-fps=" + maxFps)
-        if (bitRate && bitRate !== "") scrcpyArgs.push("--video-bit-rate=" + bitRate)
-        if (maxSize > 0) scrcpyArgs.push("--max-size=" + maxSize)
+        // Network sessions get the wireless caps: the resolved serial says how
+        // adb will reach the phone; without one, the mode picked above does.
+        const caps = root.scrcpyStreamCaps(maxSize, root.resolvedAdbSerial ? root.adbOverNetwork : useWireless)
+        if (caps.maxFps > 0) scrcpyArgs.push("--max-fps=" + caps.maxFps)
+        if (caps.bitRate !== "") scrcpyArgs.push("--video-bit-rate=" + caps.bitRate)
+        if (caps.maxSize > 0) scrcpyArgs.push("--max-size=" + caps.maxSize)
         if (videoBuffer > 0) scrcpyArgs.push("--video-buffer=" + videoBuffer)
 
         let baseCmd = ""
@@ -2625,7 +2880,7 @@ Singleton {
     Timer {
         id: scrcpyStatusTimer
         interval: 10000
-        running: root.ready && root._enabled
+        running: root.serviceEnabled
         repeat: true
         triggeredOnStart: true
         onTriggered: {

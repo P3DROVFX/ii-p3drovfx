@@ -161,6 +161,29 @@ Item {
     readonly property int minDuration: Config.options.appStats?.minDurationSec ?? 0
     readonly property bool showComparison: Config.options.appStats?.showComparison ?? false
     readonly property bool limitsOn: Config.options.screenTime?.enable ?? true
+    readonly property bool phoneEnabled: AppStats.phoneUsageEnabled
+    readonly property var sources: [
+        { key: "pc", icon: "computer", name: Translation.tr("PC") },
+        { key: "phone", icon: "smartphone", name: Translation.tr("Phone") },
+        { key: "all", icon: "devices", name: Translation.tr("All") }
+    ]
+    readonly property string sourceFilter: {
+        if (!root.phoneEnabled)
+            return "pc";
+        const s = Config.options.appStats?.sourceFilter ?? "all";
+        return (s === "pc" || s === "phone" || s === "all") ? s : "all";
+    }
+
+    function setSourceFilter(key: string): void {
+        Config.options.appStats.sourceFilter = key;
+    }
+
+    onPhoneEnabledChanged: {
+        if (root.phoneEnabled) {
+            AppStats.ensureDates(root.dates);
+            IiLinkService.requestPhoneUsage();
+        }
+    }
 
     readonly property bool isSingleDay: root.granularity === "day"
     readonly property var dates: AppStats.periodDates(root.granularity, root.periodOffset)
@@ -217,11 +240,13 @@ Item {
     }
 
     readonly property var summary: {
-        // Touching `history` here is what makes every derived figure recompute when a
-        // day file lands; `dates` alone does not change when the data does.
+        // Touching `history` and `phoneHistory` here makes every derived figure
+        // recompute when a day file lands; `dates` alone does not change when data does.
         AppStats.history;
+        AppStats.phoneHistory;
         const opts = {
-            headless: root.showHeadless
+            headless: root.showHeadless,
+            source: root.sourceFilter
         };
         if (root.focusedHour >= 0) {
             opts.hourFrom = root.focusedHour;
@@ -305,7 +330,7 @@ Item {
     /// once rather than once per window.
     function deviceScreenTimeFor(dates, hour: int): real {
         return dates.reduce((total, date) => {
-            const hours = AppStats.deviceHours(date, "fg");
+            const hours = AppStats.deviceHours(date, "fg", root.sourceFilter);
             if (hour >= 0)
                 return total + (hours[hour] ?? 0);
             return total + hours.reduce((sum, value) => sum + value, 0);
@@ -325,8 +350,8 @@ Item {
         const out = new Array(length).fill(0);
         for (const field of root.metric.fields) {
             const series = root.isSingleDay
-                ? AppStats.hourlySeries(root.dates, field, key)
-                : AppStats.dailySeries(root.dates, field, key);
+                ? AppStats.hourlySeries(root.dates, field, key, root.sourceFilter)
+                : AppStats.dailySeries(root.dates, field, key, root.sourceFilter);
             for (let i = 0; i < length; i++)
                 out[i] += series[i] ?? 0;
         }
@@ -336,7 +361,7 @@ Item {
     /// One value per bucket for the device as a whole. Built from hours rather than
     /// from a day total, because that is the resolution its fallback works at.
     function deviceSeries(field: string): var {
-        const perDay = root.dates.map(date => AppStats.deviceHours(date, field));
+        const perDay = root.dates.map(date => AppStats.deviceHours(date, field, root.sourceFilter));
         if (root.isSingleDay)
             return perDay[0] ?? new Array(24).fill(0);
         return perDay.map(hours => hours.reduce((sum, value) => sum + value, 0));
@@ -345,6 +370,7 @@ Item {
     /// The chart series for the current range, metric and selection.
     readonly property var chartValues: {
         AppStats.history;
+        AppStats.phoneHistory;
         // The device series is screen time and nothing else; drawing it whenever the
         // system row was the subject put seconds under a watt-hour axis.
         if (root.metric.key === "fg" && root.chartKey === AppStats.systemKey)
@@ -374,10 +400,12 @@ Item {
 
     readonly property real previousTotal: {
         AppStats.history;
+        AppStats.phoneHistory;
         if (!root.comparisonReady || root.previousDates.length === 0)
             return -1;
         const summary = AppStats.summarize(root.previousDates, {
-            headless: root.showHeadless
+            headless: root.showHeadless,
+            source: root.sourceFilter
         });
         return root.totalFor(summary, root.previousDates, root.selectedKey, -1);
     }
@@ -453,6 +481,7 @@ Item {
     readonly property var heroStats: {
         const rec = root.selectedRecord;
         const summary = root.summary;
+        const phoneOnly = (rec && AppStats.isPhoneKey(rec.key)) || root.sourceFilter === "phone";
         const list = [];
         if (root.metric.key !== "fg" && root.selectedKey !== AppStats.systemKey) {
             list.push({
@@ -461,6 +490,8 @@ Item {
                 value: Format.duration(rec ? rec.fg : root.deviceScreenTimeFor(root.targetDates, root.focusedHour))
             });
         }
+        if (phoneOnly)
+            return list;
         // Apps plus the share that belongs to none of them, matching the chart and the
         // list rather than counting the apps alone.
         if (root.metric.key !== "energy") {
@@ -559,7 +590,11 @@ Item {
 
     onDatesChanged: AppStats.ensureDates(root.dates)
     // The shell asks the sampler for a fresh flush once the window has opened.
-    Component.onCompleted: AppStats.ensureDates(root.dates)
+    Component.onCompleted: {
+        AppStats.ensureDates(root.dates);
+        if (root.phoneEnabled)
+            IiLinkService.requestPhoneUsage();
+    }
 
     Component {
         id: appSheet
@@ -818,6 +853,34 @@ Item {
 
         Flow {
             Layout.fillWidth: true
+            visible: root.phoneEnabled
+            spacing: ClockStyle.gapSmall
+
+            Repeater {
+                model: root.sources
+
+                ClockChip {
+                    id: sourceChip
+                    required property var modelData
+                    symbol: sourceChip.modelData.icon
+                    label: sourceChip.modelData.name
+                    selected: root.sourceFilter === sourceChip.modelData.key
+                    onClicked: root.setSourceFilter(sourceChip.modelData.key)
+                }
+            }
+        }
+
+        StyledText {
+            Layout.fillWidth: true
+            visible: root.phoneEnabled && root.sourceFilter !== "pc" && IiLinkService.usageDev === ""
+            text: Translation.tr("The phone is not sharing screen time. Allow usage access in the ii tools app (Phone data) and connect it.")
+            wrapMode: Text.WordWrap
+            font.pixelSize: ClockStyle.textSmall
+            color: ClockStyle.colOnSurfaceVariant
+        }
+
+        Flow {
+            Layout.fillWidth: true
             spacing: ClockStyle.gapSmall
 
             Repeater {
@@ -915,6 +978,7 @@ Item {
         required property int index
         readonly property string appKey: row.modelData.key
         readonly property bool isSystem: row.appKey === AppStats.systemKey
+        readonly property bool isPhone: AppStats.isPhoneKey(row.appKey)
         readonly property bool selected: root.selectedKey === row.appKey
         readonly property real value: root.metricValue(row.modelData)
         readonly property bool engaged: rowHover.hovered || limitButton.activeFocus
@@ -966,7 +1030,7 @@ Item {
                     anchors.centerIn: parent
                     size: 30
                     appKey: row.isSystem ? "" : row.appKey
-                    fallbackSymbol: row.isSystem ? "memory" : (row.modelData.headless ?? false) ? "terminal" : "apps"
+                    fallbackSymbol: row.isSystem ? "memory" : row.isPhone ? "smartphone" : (row.modelData.headless ?? false) ? "terminal" : "apps"
                     colFallback: row.selected ? ClockStyle.colOnSecondaryContainer : ClockStyle.colOnSurfaceVariant
                 }
             }
@@ -1031,7 +1095,7 @@ Item {
 
             Item {
                 id: actionSlot
-                readonly property bool available: root.limitsOn && !row.isSystem
+                readonly property bool available: root.limitsOn && !row.isSystem && !row.isPhone
                 property real revealProgress: row.engaged && actionSlot.available ? 1 : 0
 
                 Layout.preferredWidth: (limitButton.implicitWidth + 4) * actionSlot.revealProgress

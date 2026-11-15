@@ -231,7 +231,6 @@ Rectangle {
                     }
                 }
                 ClockSettingsRow {
-                    last: true
                     symbol: "filter_alt"
                     title: Translation.tr("Hide apps under")
                     description: Translation.tr("Applies to the list only, and only to the metrics measured in time. The totals still count every app")
@@ -242,6 +241,19 @@ Rectangle {
                         stepSize: 30
                         format: value => value === 0 ? Translation.tr("Off") : root.seconds(value)
                         onMoved: value => root.opts.minDurationSec = value
+                    }
+                }
+                ClockSettingsRow {
+                    last: true
+                    symbol: "smartphone"
+                    title: Translation.tr("Include phone screen time")
+                    description: Translation.tr("Needs the ii tools app on your phone with usage access")
+                    clickable: true
+                    onClicked: Config.options.iiTools.usage.enable = !Config.options.iiTools.usage.enable
+                    StyledSwitch {
+                        checked: Config.options.iiTools.usage.enable
+                        checkable: false
+                        onClicked: Config.options.iiTools.usage.enable = !Config.options.iiTools.usage.enable
                     }
                 }
             }

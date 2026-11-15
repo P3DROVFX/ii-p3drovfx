@@ -66,6 +66,12 @@ NestableObject {
             return;
         }
 
+        // The phone as a monitor is not hyprmon's: its output lives only while the phone
+        // streams. Changes to it go to PhoneScreenService, which applies them live.
+        const phone = root.monitors.find(m => m && m.name === PhoneScreenService.headlessName);
+        if (phone)
+            PhoneScreenService.adjust(phone);
+
         const jsonStr = buildProfileJson("__quickshell_live__");
 
         saveProc.command = ["bash", "-c", "mkdir -p ~/.config/hyprmon/profiles && cat << 'EOF' > ~/.config/hyprmon/profiles/__quickshell_live__.json\n" + jsonStr + "\nEOF\nhyprmon -profile __quickshell_live__ && mkdir -p ~/.config/hypr/hyprmon_backups && mv ~/.config/hypr/*.bak.* ~/.config/hypr/hyprmon_backups/ 2>/dev/null || true; ls -t ~/.config/hypr/hyprmon_backups/*.bak.* 2>/dev/null | tail -n +21 | xargs rm -f 2>/dev/null || true"];
@@ -116,7 +122,12 @@ NestableObject {
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
-                    root.monitors = JSON.parse(text).map(m => ({
+                    root.monitors = JSON.parse(text).map(m => {
+                        // A custom mode (a headless output's, like the phone as a monitor)
+                        // is not among the modes the output lists: offer it too.
+                        const current = `${m.width}x${m.height}@${m.refreshRate.toFixed(2)}Hz`;
+                        const modes = m.availableModes ?? [];
+                        return {
                                 name: m.name,
                                 description: m.description,
                                 width: m.width,
@@ -127,15 +138,16 @@ NestableObject {
                                 scale: m.scale,
                                 transform: (m.transform !== undefined && m.transform !== null) ? m.transform : 0,
                                 disabled: m.disabled,
-                                availableModes: m.availableModes,
-                                currentMode: `${m.width}x${m.height}@${m.refreshRate.toFixed(2)}Hz`,
+                                availableModes: modes.includes(current) ? modes : [current].concat(modes),
+                                currentMode: current,
                                 mirrorOf: m.mirrorOf || "none",
                                 bitDepth: (m.currentFormat && m.currentFormat.indexOf("2101010") !== -1) ? 10 : 8,
                                 colorManagementPreset: m.colorManagementPreset || "srgb",
                                 sdrBrightness: m.sdrBrightness !== undefined ? m.sdrBrightness : 1.0,
                                 sdrSaturation: m.sdrSaturation !== undefined ? m.sdrSaturation : 1.0,
                                 vrr: m.vrr ? 1 : 0
-                            }));
+                            };
+                    });
                 } catch (e) {
                     console.log("[MonitorConfigOption] Error:", e);
                 }
@@ -213,7 +225,7 @@ NestableObject {
     function buildProfileJson(name) {
         const profile = {
             name: name,
-            monitors: root.monitors.map(m => {
+            monitors: root.monitors.filter(m => m.name !== PhoneScreenService.headlessName).map(m => {
                 return {
                     name: m.name,
                     make: "",

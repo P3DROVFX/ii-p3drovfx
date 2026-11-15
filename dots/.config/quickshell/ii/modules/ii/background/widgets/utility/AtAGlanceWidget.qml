@@ -122,7 +122,7 @@ AbstractBackgroundWidget {
 
                 StyledText {
                     anchors.centerIn: parent
-                    text: Translation.tr("Drop files to share via LocalSend / KDE Connect")
+                    text: Translation.tr("Drop files to share via LocalSend or your phone")
                     color: Appearance.colors.colOnLayer0
                     font.pixelSize: Math.round(14 * root.contentScale)
                     font.weight: Font.Bold

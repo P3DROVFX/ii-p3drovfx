@@ -255,6 +255,8 @@ Singleton {
     }
     onToplevelChanged: {
         if (root.toplevel) {
+            pointerFix.pass = 0;
+            pointerFix.restart();
             root._schedulePlacement();
             if (!root.wanted)
                 strayCheck.restart();
@@ -370,8 +372,11 @@ Singleton {
      *  coordinates are relative to, and a surface that is not mapped has no
      *  cut-out to sit under. */
     function _luaFindPanel(): string {
-        return `local ns="${root.layerNamespace}" local lx,ly,mon `
-            + `for _,l in ipairs(hl.get_layers()) do if l.namespace==ns then lx=l.x ly=l.y mon=l.monitor end end `
+        return `local ns="${root.layerNamespace}" local sn="${root.screenName}" local lx,ly,mon `
+            + `for _,l in ipairs(hl.get_layers()) do `
+            + `if l.namespace==ns and (sn=="" or not l.monitor or l.monitor.name==sn) then `
+            + `lx=l.x ly=l.y mon=l.monitor `
+            + `if sn=="" or (l.monitor and l.monitor.name==sn) then break end end end `
             + `if not lx then return hl.dsp.no_op() end `;
     }
 
@@ -474,6 +479,70 @@ Singleton {
             .concat(KdeConnectService.adbTargetArgs())
             .concat(["shell", "wm", "size"]);
         deviceSizeProc.running = true;
+    }
+
+    // ── The pointer when the window opens ───────────────────────────────
+    // Hyprland warps the pointer to a window it focuses. The embedded scrcpy window opens
+    // parked far off the monitor (and `no_initial_focus` does not stop it being focused),
+    // so the warp lands clamped on the monitor's bottom-right corner. The pointer is read
+    // when the launch starts and put back if it is found sitting in a corner afterwards.
+    property point _pointerBefore: Qt.point(-1, -1)
+    property bool _pointerSave: false
+
+    function _pointerRead(save: bool): void {
+        root._pointerSave = save;
+        pointerProbe.running = false;
+        pointerProbe.running = true;
+    }
+
+    function _pointerCheck(x: real, y: real): void {
+        if (root._pointerBefore.x < 0)
+            return;
+        for (const m of (HyprlandData.monitors ?? [])) {
+            const right = Number(m.x) + Number(m.width) / (Number(m.scale) || 1) - 3;
+            const bottom = Number(m.y) + Number(m.height) / (Number(m.scale) || 1) - 3;
+            if (x >= right && y >= bottom && Number(m.x) <= x && Number(m.y) <= y) {
+                Hyprland.dispatch(root._luaWrap(
+                    `hl.dispatch(hl.dsp.cursor.move({x=${Math.round(root._pointerBefore.x)},y=${Math.round(root._pointerBefore.y)}})) `));
+                return;
+            }
+        }
+    }
+
+    Process {
+        id: pointerProbe
+        command: ["hyprctl", "cursorpos"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const parts = String(text).trim().split(",");
+                const x = Number(parts[0]);
+                const y = Number(parts[1]);
+                if (isNaN(x) || isNaN(y))
+                    return;
+                if (root._pointerSave)
+                    root._pointerBefore = Qt.point(x, y);
+                else
+                    root._pointerCheck(x, y);
+            }
+        }
+    }
+
+    Timer {
+        id: pointerFix
+        property int pass: 0
+        interval: 120
+        repeat: true
+        onTriggered: {
+            root._pointerRead(false);
+            pointerFix.pass += 1;
+            if (pointerFix.pass >= 6)
+                pointerFix.stop();
+        }
+    }
+
+    onLaunchingChanged: {
+        if (root.launching)
+            root._pointerRead(true);
     }
 
     // A phone that rotates changes the aspect the frame has to keep.

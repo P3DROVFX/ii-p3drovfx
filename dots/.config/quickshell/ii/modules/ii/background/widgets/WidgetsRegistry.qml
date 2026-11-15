@@ -836,7 +836,7 @@ Singleton {
             "category": "Devices",
             "qmlPath": Qt.resolvedUrl("bluetooth/MobileBatteryWidget.qml"),
             "icon": "smartphone",
-            "description": Translation.tr("1x1 widget displaying KDE Connect mobile phone battery percentage and 3D device visual."),
+            "description": Translation.tr("1x1 widget displaying the paired phone's battery percentage and 3D device visual."),
             "configPage": "widgets/DesktopMobileBatteryConfig.qml"
         },
         {
@@ -1178,7 +1178,7 @@ Singleton {
             "category": "Devices",
             "qmlPath": Qt.resolvedUrl("phone/PhoneKeyWidget.qml"),
             "icon": "cast",
-            "description": Translation.tr("1x1 phone mirror key (scrcpy) with battery and keys to send a file or the clipboard over KDE Connect."),
+            "description": Translation.tr("1x1 phone mirror key (scrcpy) with battery and keys to send a file or the clipboard to the phone."),
             "configPage": "widgets/DesktopPhoneWidgetsConfig.qml"
         },
         {
@@ -1205,7 +1205,7 @@ Singleton {
             "category": "Devices",
             "qmlPath": Qt.resolvedUrl("phone/SendDropWidget.qml"),
             "icon": "send_to_mobile",
-            "description": Translation.tr("2x1 drop target that sends files over KDE Connect or LocalSend to the device you pick."),
+            "description": Translation.tr("2x1 drop target that sends files to the phone or over LocalSend to the device you pick."),
             "configPage": "widgets/DesktopPhoneWidgetsConfig.qml"
         },
         {

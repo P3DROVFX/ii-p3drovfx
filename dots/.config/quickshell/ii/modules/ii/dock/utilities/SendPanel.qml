@@ -189,8 +189,8 @@ ColumnLayout {
             Layout.fillWidth: true
             Layout.margins: 6
             visible: panel.kdeDevices.length === 0
-            text: KdeConnectService.available ? Translation.tr("No paired devices. Pair one in KDE Connect.")
-                : Translation.tr("KDE Connect is not running")
+            text: KdeConnectService.available ? Translation.tr("No paired devices. Pair one in Settings → ii tools.")
+                : Translation.tr("No phone connected")
             color: ClockStyle.colOnSurfaceVariant
             font.pixelSize: ClockStyle.textNormal
             wrapMode: Text.WordWrap

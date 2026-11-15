@@ -1693,6 +1693,8 @@ Singleton {
 
     // LocalSend transfer popup
     property bool localSendPopupOpen: false
+    /** A file arriving from the ii tools app ("Send to PC"); IiLinkService.transfer has it. */
+    property bool phoneFilePopupOpen: false
     property var localSendPopupTransfer: null
     // Search's "Send with LocalSend" asks the dashboard to show its dialog. A
     // flag rather than a signal: the dashboard content may not exist until the

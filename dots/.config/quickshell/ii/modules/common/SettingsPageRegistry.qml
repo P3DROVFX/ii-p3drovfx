@@ -437,9 +437,20 @@ Singleton {
             "name": "Devices & Phone",
             "icon": "smartphone",
             "component": "modules/settings/configs/DevicesPhoneConfig.qml",
+            "subPages": ["devices/IiToolsConfig.qml"],
+            "searchSources": ["sections/PhoneBluetoothImagesSection.qml", "devices/LocalSendSection.qml"],
+            "aliases": ["Core Services", "Bluetooth Device Images", "LocalSend", "Phone", "KDE Connect", "File Sharing", "Share files", "ii tools", "ii link", "Companion app", "Pair phone", "Remote control", "Live updates"]
+        },
+        {
+            "id": "iiTools",
+            "movedTo": "devicesPhone",
+            "hidden": true,
+            "searchable": false,
+            "name": "ii tools",
+            "icon": "phonelink",
+            "component": "modules/settings/configs/devices/IiToolsConfig.qml",
             "subPages": [],
-            "searchSources": ["sections/PhoneBluetoothImagesSection.qml"],
-            "aliases": ["Core Services", "Bluetooth Device Images", "LocalSend", "Phone", "KDE Connect", "File Sharing", "Share files"]
+            "aliases": ["Android", "Phone app", "Companion app", "Pair phone", "Remote control", "Live updates", "ii link"]
         },
         {
             "id": "privacy",

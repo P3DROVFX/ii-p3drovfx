@@ -34,8 +34,9 @@ ClockSheet {
     signal clearRequested()
 
     readonly property bool isSystem: root.appKey === AppStats.systemKey
+    readonly property bool isPhone: AppStats.isPhoneKey(root.appKey)
     readonly property bool isHeadless: root.record?.headless ?? false
-    readonly property bool limitsOn: (Config.options.screenTime?.enable ?? true) && !root.isSystem
+    readonly property bool limitsOn: (Config.options.screenTime?.enable ?? true) && !root.isSystem && !root.isPhone
     /// The app limit that already covers this app, if any.
     readonly property var limit: {
         for (const rule of ScreenTimeLimits.limits) {
@@ -66,6 +67,9 @@ ClockSheet {
         // The system row only ever holds energy; a grid of dashes says nothing.
         if (root.isSystem)
             return list.filter(f => f.key === "energy");
+        // Phone apps only carry foreground screen time.
+        if (root.isPhone)
+            return list.filter(f => f.key === "fg");
         return list;
     }
     readonly property var lead: root.figures.find(f => f.key === root.metricKey) ?? root.figures[0]
@@ -100,7 +104,7 @@ ClockSheet {
                         anchors.centerIn: parent
                         size: 36
                         appKey: root.isSystem ? "" : root.appKey
-                        fallbackSymbol: root.isSystem ? "memory" : root.isHeadless ? "terminal" : "apps"
+                        fallbackSymbol: root.isSystem ? "memory" : root.isPhone ? "smartphone" : root.isHeadless ? "terminal" : "apps"
                         colFallback: ClockStyle.colOnPrimary
                     }
                 }

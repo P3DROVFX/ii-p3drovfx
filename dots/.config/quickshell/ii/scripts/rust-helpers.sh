@@ -48,6 +48,7 @@ HELPERS=(
     "workspace_profile_manager:hyprland"
     "sni_watcher:tray"
     "health_watch:health"
+    "ii_link:iiLink"
 )
 
 # name:former name, in the same directory. An updater from before the rename

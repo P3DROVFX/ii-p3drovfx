@@ -80,6 +80,15 @@ MaterialShape { // App icon
                 cache: false
                 antialiasing: true
                 asynchronous: !source.toString().startsWith("image://icon/")
+                // A photo (a sender's avatar) takes the icon's round shape, not a square.
+                layer.enabled: true
+                layer.effect: OpacityMask {
+                    maskSource: Rectangle {
+                        width: notifImage.width
+                        height: notifImage.height
+                        radius: width / 2
+                    }
+                }
             }
             Loader {
                 id: notifImageAppIconLoader

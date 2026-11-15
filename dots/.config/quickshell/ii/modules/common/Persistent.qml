@@ -537,6 +537,7 @@ Singleton {
                             property string cachedNotificationsJson: ""
                             property JsonObject scrcpy: JsonObject {
                                 property list<string> recentPackages: []
+                                property string hevcEncodersJson: "{}"
                             }
                             // Mirror / Webcam / Microphone group at the bottom of the tab
                             property JsonObject peripherals: JsonObject {

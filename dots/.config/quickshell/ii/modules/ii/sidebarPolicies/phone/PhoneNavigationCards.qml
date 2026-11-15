@@ -8,16 +8,21 @@ import qs.services
 
 Item {
     id: root
-    implicitHeight: navigationRow.implicitHeight
+    implicitHeight: navColumn.implicitHeight
     height: implicitHeight
 
     signal requestOpenSubPage(url subPageUrl)
 
-    RowLayout {
-        id: navigationRow
+    ColumnLayout {
+        id: navColumn
         anchors.left: parent.left
         anchors.right: parent.right
         spacing: 8
+
+        RowLayout {
+            id: navigationRow
+            Layout.fillWidth: true
+            spacing: 8
 
         // Contacts Card
         RippleButton {
@@ -153,6 +158,78 @@ Item {
             }
 
             onClicked: root.requestOpenSubPage(Qt.resolvedUrl("PhoneAppsPage.qml"))
+        }
+        }
+
+        RippleButton {
+            visible: PhoneGalleryService.cardVisible
+            Layout.fillWidth: true
+            Layout.preferredHeight: 58
+            buttonRadius: Appearance.rounding.normal
+            colBackground: Appearance.colors.colLayer3
+            colBackgroundHover: Appearance.colors.colLayer3Hover
+            colBackgroundActive: Appearance.colors.colLayer3Active ?? Appearance.colors.colLayer3Hover
+            onClicked: root.requestOpenSubPage(Qt.resolvedUrl("PhoneGalleryPage.qml"))
+
+            contentItem: RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 12
+                anchors.rightMargin: 12
+                spacing: 10
+
+                MaterialShapeWrappedMaterialSymbol {
+                    Layout.alignment: Qt.AlignVCenter
+                    text: "photo_library"
+                    iconSize: 20
+                    padding: 8
+                    fill: 1.0
+                    color: Appearance.colors.colTertiaryContainer
+                    colSymbol: Appearance.colors.colOnTertiaryContainer
+                    shape: MaterialShape.Shape.Cookie9Sided
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignVCenter
+                    spacing: 0
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: Translation.tr("Gallery")
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        font.weight: Font.DemiBold
+                        color: Appearance.colors.colOnLayer3
+                        elide: Text.ElideRight
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: {
+                            if (PhoneGalleryService.setupState === "offline")
+                                return Translation.tr("Phone not connected");
+                            if (PhoneGalleryService.setupState === "setup")
+                                return Translation.tr("Set up on the phone");
+                            if (PhoneGalleryService.totalCount >= 0) {
+                                return PhoneGalleryService.totalCount === 1
+                                    ? Translation.tr("1 photo or video")
+                                    : Translation.tr("%1 photos and videos").arg(String(PhoneGalleryService.totalCount));
+                            }
+                            return Translation.tr("Photos and videos");
+                        }
+                        font.pixelSize: Appearance.font.pixelSize.smallest
+                        color: Appearance.colors.colSubtext
+                        opacity: 0.8
+                        elide: Text.ElideRight
+                    }
+                }
+
+                MaterialSymbol {
+                    Layout.alignment: Qt.AlignVCenter
+                    text: "chevron_right"
+                    iconSize: Appearance.font.pixelSize.normal
+                    color: Appearance.colors.colSubtext
+                }
+            }
         }
     }
 }

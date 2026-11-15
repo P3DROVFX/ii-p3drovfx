@@ -384,6 +384,40 @@ PanelWindow {
         }
     }
 
+    // The phone as a drawing pad: its points go through this screen's own surface, so
+    // smoothing, tools, the eraser and undo are the ones the mouse and the pen get.
+    Connections {
+        target: LiveDraw
+        function onRemoteStroke(phase, points) {
+            if (!root.focusedHere || !Array.isArray(points))
+                return;
+            const w = inkSurface.width;
+            const h = inkSurface.height;
+            const at = q => ({ x: Number(q[0]) * w, y: Number(q[1]) * h, p: Math.max(0.05, Math.min(1, Number(q[2] ?? 1))) });
+            if (LiveDraw.eraser) {
+                for (const q of points) {
+                    const pt = at(q);
+                    LiveDraw.eraseAt(root.sheetKey, pt.x, pt.y, inkSurface.eraserRadius);
+                }
+                return;
+            }
+            let rest = points;
+            if (phase === "down") {
+                if (points.length === 0)
+                    return;
+                const first = at(points[0]);
+                inkSurface.beginStroke(first.x, first.y, first.p, false);
+                rest = points.slice(1);
+            }
+            for (const q of rest) {
+                const pt = at(q);
+                inkSurface.extendStroke(pt.x, pt.y, pt.p);
+            }
+            if (phase === "up")
+                inkSurface.endStroke();
+        }
+    }
+
     // Kept for callers of the older counter.
     Connections {
         target: GlobalStates

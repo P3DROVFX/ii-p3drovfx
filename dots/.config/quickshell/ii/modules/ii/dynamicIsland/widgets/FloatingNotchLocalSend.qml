@@ -170,7 +170,7 @@ Item {
                     const n = root.kdeDevice ? root.kdeDevice.name : "KDE Connect"
                     return root.queueFiles.length > 0
                         ? Translation.tr("%1 file(s) → %2").arg(root.queueFiles.length).arg(n)
-                        : Translation.tr("KDE Connect ready")
+                        : Translation.tr("%1 ready").arg(KdeConnectService.backendName)
                 }
                 if (root.serviceChoice === 1) {
                     return LocalSend.droppedFiles.length > 0
@@ -964,7 +964,7 @@ Item {
                     }
                     StyledText {
                         Layout.fillWidth: true
-                        text: Translation.tr("Sending via KDE Connect…")
+                        text: Translation.tr("Sending via %1…").arg(KdeConnectService.backendName)
                         font.pixelSize: Appearance.font.pixelSize.small
                         color: Appearance.colors.colSubtext
                     }

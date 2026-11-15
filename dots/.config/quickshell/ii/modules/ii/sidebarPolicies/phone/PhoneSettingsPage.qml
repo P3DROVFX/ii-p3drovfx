@@ -121,7 +121,7 @@ Item {
                     symbol: "notifications"
                     title: Translation.tr("Show phone notifications with desktop ones")
                     help: Translation.tr("On, phone notifications pop up and stay in the sidebar list like any other, and also show in the Phone tab. Off, they only show in the Phone tab while your phone is connected.")
-                    enabled: Config.options.phone.kdeconnectEnabled
+                    enabled: KdeConnectService.serviceEnabled
                     checked: Config.options.phone.mirrorNotificationsToDesktop
                     onToggled: value => Config.options.phone.mirrorNotificationsToDesktop = value
                 }
@@ -161,12 +161,12 @@ Item {
                 }
                 ToggleRow {
                     symbol: "sync_alt"
-                    title: Translation.tr("Auto-detect IP (KDE Connect)")
+                    title: Translation.tr("Auto-detect IP")
                     description: !root.scrcpy.useWireless ? ""
                         : root.scrcpy.autoWirelessIp
                             ? (KdeConnectService.resolvedWirelessHost !== ""
                                 ? Translation.tr("Will connect to %1").arg(KdeConnectService.resolvedWirelessHost)
-                                : Translation.tr("Waiting for KDE Connect to report the phone's IP…"))
+                                : Translation.tr("Waiting for the phone's IP…"))
                             : ""
                     enabled: root.scrcpy.useWireless
                     checked: root.scrcpy.autoWirelessIp
@@ -197,6 +197,51 @@ Item {
                     enabled: root.scrcpy.useWireless
                     checked: root.scrcpy.pinAdbPort
                     onToggled: value => root.scrcpy.pinAdbPort = value
+                }
+                ToggleRow {
+                    symbol: "network_check"
+                    title: Translation.tr("Lighter stream over Wi-Fi")
+                    help: Translation.tr("Over Wi-Fi, lag comes from the radio, not the bandwidth. Fewer frames and a lower bit rate keep the stream short on the air, so touches answer sooner. Only applies when the phone is reached over the network, and never raises what scrcpy Options set.")
+                    checked: root.scrcpy.wireless.limit
+                    onToggled: value => root.scrcpy.wireless.limit = value
+                }
+                StepperRow {
+                    symbol: "speed"
+                    title: Translation.tr("Wi-Fi max FPS")
+                    visible: root.scrcpy.wireless.limit
+                    value: root.scrcpy.wireless.maxFps
+                    from: 0; to: 120; stepSize: 10
+                    format: v => v === 0 ? Translation.tr("Native") : String(v)
+                    onMoved: v => root.scrcpy.wireless.maxFps = v
+                }
+                FieldRow {
+                    symbol: "wifi_tethering"
+                    title: Translation.tr("Wi-Fi bitrate")
+                    placeholder: Translation.tr("e.g. 14M")
+                    visible: root.scrcpy.wireless.limit
+                    value: root.scrcpy.wireless.bitRate
+                    onEdited: text => root.scrcpy.wireless.bitRate = text
+                }
+                StepperRow {
+                    symbol: "aspect_ratio"
+                    title: Translation.tr("Wi-Fi max size")
+                    visible: root.scrcpy.wireless.limit
+                    value: root.scrcpy.wireless.maxSize
+                    from: 0; to: 3840; stepSize: 160
+                    format: v => v === 0 ? Translation.tr("Any") : String(v)
+                    onMoved: v => root.scrcpy.wireless.maxSize = v
+                }
+                ChoiceRow {
+                    symbol: "movie"
+                    title: Translation.tr("Wi-Fi video codec")
+                    help: Translation.tr("H.265 needs roughly half the bit rate of H.264 for the same sharpness over Wi-Fi. Auto uses H.265 when the phone has an HEVC encoder and falls back to H.264 if not.")
+                    currentValue: root.scrcpy.wireless.codec
+                    onSelected: value => root.scrcpy.wireless.codec = value
+                    options: [
+                        { label: Translation.tr("Auto"), value: "auto" },
+                        { label: "H.265", value: "h265" },
+                        { label: "H.264", value: "h264" }
+                    ]
                 }
                 ToggleRow {
                     symbol: "restart_alt"
@@ -271,7 +316,7 @@ Item {
                 FieldRow {
                     symbol: "wifi_tethering"
                     title: Translation.tr("Bitrate")
-                    placeholder: Translation.tr("e.g. 8M, 4M")
+                    placeholder: Translation.tr("e.g. 20M, 8M")
                     value: root.scrcpy.bitRate
                     onEdited: text => root.scrcpy.bitRate = text
                 }
@@ -315,6 +360,21 @@ Item {
                     title: Translation.tr("Record phone audio too")
                     checked: root.scrcpy.recording.withAudio
                     onToggled: value => root.scrcpy.recording.withAudio = value
+                }
+                FieldRow {
+                    symbol: "high_quality"
+                    title: Translation.tr("Recording bitrate")
+                    placeholder: "24M"
+                    value: root.scrcpy.recording.bitRate
+                    onEdited: text => root.scrcpy.recording.bitRate = text.trim() === "" ? "24M" : text.trim()
+                }
+                StepperRow {
+                    symbol: "speed"
+                    title: Translation.tr("Recording FPS")
+                    value: root.scrcpy.recording.maxFps
+                    from: 0; to: 120; stepSize: 5
+                    format: v => v === 0 ? Translation.tr("Native") : String(v)
+                    onMoved: v => root.scrcpy.recording.maxFps = v
                 }
                 FieldRow {
                     symbol: "folder"

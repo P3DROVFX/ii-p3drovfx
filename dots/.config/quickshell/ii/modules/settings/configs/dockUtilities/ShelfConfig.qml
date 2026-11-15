@@ -19,5 +19,15 @@ UtilityConfigPage {
                 text: Translation.tr("Applies to drags from the shelf panel. Off: files stay until you remove them")
             }
         }
+
+        ConfigSwitch {
+            buttonIcon: "smartphone"
+            text: Translation.tr("Show the phone's recent photos and videos")
+            checked: Config.options.dock.utilities.shelf.phoneRecents
+            onCheckedChanged: Config.options.dock.utilities.shelf.phoneRecents = checked
+            StyledToolTip {
+                text: Translation.tr("ii tools phone: its newest photos, screenshots and videos appear on the shelf with a preview and stay on the phone until you drag one out")
+            }
+        }
     }
 }

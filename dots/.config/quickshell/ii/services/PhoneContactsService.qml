@@ -35,6 +35,44 @@ Singleton {
     readonly property bool hideUnnamed: Config.options?.phone?.contacts?.hideUnnamed ?? true
     onHideUnnamedChanged: root._updateFilteredContacts()
 
+    // ── From the ii tools app ───────────────────────────────────────────
+    // IiLinkService keeps the phone's contacts (and their photos) in its state folder,
+    // so they are there with the phone away. While that file has contacts, it is the
+    // source and KDE Connect's vCards are not read.
+    readonly property string linkDir: FileUtils.trimFileProtocol(`${Directories.state}/user/iilink`)
+    readonly property bool linkEnabled: Config.options?.iiTools?.phoneData?.enable ?? true
+    property bool linkMode: false
+
+    FileView {
+        id: linkFile
+        path: root._enabled && root.linkEnabled ? `${root.linkDir}/contacts.json` : ""
+        watchChanges: true
+        printErrors: false
+        onFileChanged: linkFile.reload()
+        onLoaded: root._fromLink(linkFile.text())
+        onLoadFailed: root.linkMode = false
+    }
+
+    function _fromLink(text: string): void {
+        let list = [];
+        try {
+            list = JSON.parse(text)?.list ?? [];
+        } catch (e) {
+            list = [];
+        }
+        root.linkMode = list.length > 0;
+        if (!root.linkMode)
+            return;
+        root.contacts = list.map(c => Object.assign({}, c, {
+            avatarPath: c.photo ? `${root.linkDir}/contacts/${c.photo}.jpg` : "",
+            source: "ii-tools",
+            nameless: !c.displayName
+        }));
+        root.available = true;
+        root.ready = true;
+        root.lastError = "";
+    }
+
     function _syncRemoteContacts(): void {
         const devId = KdeConnectService.activeDeviceId || ""
         if (!devId) return
@@ -49,6 +87,8 @@ Singleton {
     }
 
     function refresh(): void {
+        if (root.linkMode)
+            return;
         if (!root._enabled) return
         root._forceEmit = true
         root._syncRemoteContacts()
@@ -97,6 +137,11 @@ Singleton {
 
     function openDialer(number: string): void {
         if (!number) return
+        // The ii tools app places the call itself, no ADB needed.
+        if (IiLinkService.phoneCommand("dial", number)) {
+            KdeConnectService.dispatchActionFeedback(Translation.tr("Calling %1…").arg(number), true)
+            return
+        }
         if (!KdeConnectService.activeReachable) {
             KdeConnectService.dispatchActionFeedback(Translation.tr("Phone is not connected or reachable"), false)
             return
@@ -222,6 +267,8 @@ Singleton {
     property bool _usePolling: false
 
     function _readOnce(): void {
+        if (root.linkMode)
+            return;
         readProcess.running = false
         readProcess.running = true
     }
@@ -265,7 +312,7 @@ Singleton {
         id: pollTimer
         interval: 3000
         repeat: true
-        running: root._enabled && root._usePolling
+        running: root._enabled && !root.linkMode && root._usePolling
         onTriggered: root._readOnce()
     }
 
@@ -284,7 +331,7 @@ Singleton {
     Process {
         id: watchProcess
         command: ProcUtils.pdeath(["gio", "monitor", "-d", root.sourcePath])
-        running: root._enabled && root._watching && !root._usePolling && root.sourcePath !== ""
+        running: root._enabled && !root.linkMode && root._watching && !root._usePolling && root.sourcePath !== ""
 
         onRunningChanged: {
             if (running)
