@@ -93,6 +93,19 @@ Singleton {
     property var savedPaths: ({})
     property bool videoMounting: false
 
+    // ── Recents: the newest items, for the drop shelf ────────────────────
+    // What the phone shot, screenshotted or recorded last, newest first, kept up to date by the
+    // phone's own change feed (new / gone / changed) while a shelf surface is showing. The
+    // pictures stay on the phone: only the thumbnails come over, and an original is fetched
+    // (or, for a video, mounted) when the pointer lingers on it or it is dragged.
+    readonly property int recentsLimit: 12
+    property var recents: []
+    property int _recentsWatchers: 0
+    property int _recentsReq: 1000000
+    readonly property bool recentsOn: root._recentsWatchers > 0 && root.setupState === "ready"
+    // The thumbnail session is shared with the gallery page: either one keeps it alive.
+    readonly property bool _sessionOn: root.isOpen || root.recentsOn
+
     // ── Internal state ──────────────────────────────────────────────────
     property string _lastDev: ""
     property var _thumbsOnDisk: new Set()
@@ -120,6 +133,10 @@ Singleton {
         root._resetState();
         if (root.isOpen && root.setupState === "ready")
             root._startSession();
+        else if (root.recentsOn) {
+            root._startBasics();
+            root._requestRecents();
+        }
     }
 
     onHasGalleryCapChanged: {
@@ -147,6 +164,46 @@ Singleton {
             root._startSession();
     }
 
+    // ── Drag support for a recent item ───────────────────────────────────
+    function recentById(id): var {
+        const sid = String(id ?? "");
+        return root.recents.find(it => String(it.id) === sid) ?? null;
+    }
+
+    /** A path the item can be read from on this PC right now ("" while it is only on the phone). */
+    function localPath(item): string {
+        if (!item)
+            return "";
+        if (item.kind === "video") {
+            const mount = IiLinkService.filesMounts[root.activeDev];
+            const rel = String(item.path ?? "");
+            return mount && rel !== "" ? `${mount.dir}${rel.startsWith("/") ? "" : "/"}${rel}` : "";
+        }
+        return root.fullPathFor(item.id);
+    }
+
+    /** Starts bringing an item within reach: an image's original over the link, a video's folder mounted. */
+    function prepare(item): void {
+        if (!item || root.localPath(item) !== "")
+            return;
+        if (item.kind === "video")
+            root._withPhonePath(item, () => {});
+        else
+            root.get(item.id);
+    }
+
+    /** 0..1 while an original is on its way, -1 when it is not being fetched. */
+    function prepareProgress(item): real {
+        if (!item)
+            return -1;
+        if (item.kind === "video")
+            return root.videoMounting ? 0 : -1;
+        const p = root.fullProgress[String(item.id)];
+        if (!p)
+            return -1;
+        return p.size > 0 ? Math.min(1, p.received / p.size) : 0;
+    }
+
     Connections {
         target: IiLinkService
         function onPhoneCapsChanged(): void {
@@ -163,6 +220,7 @@ Singleton {
         thumbDebounce.stop();
         listTimeout.stop();
         root.items = [];
+        root.recents = [];
         root.albums = [];
         root.album = "";
         root.loading = false;
@@ -216,6 +274,50 @@ Singleton {
         fullPruneProc.running = true;
         root._requestAlbums();
         root._requestList(false);
+    }
+
+    /** A shelf surface starts (true) or stops (false) showing the phone's recents. */
+    function watchRecents(on: bool): void {
+        root._recentsWatchers = Math.max(0, root._recentsWatchers + (on ? 1 : -1));
+    }
+
+    onRecentsOnChanged: {
+        if (root.recentsOn) {
+            if (!root.isOpen)
+                root._startBasics();
+            root._requestRecents();
+        } else {
+            root._pendingThumbIds = root.isOpen ? root._pendingThumbIds : [];
+        }
+    }
+
+    // The thumbnail and original caches, without the albums and the page's list.
+    function _startBasics(): void {
+        root._thumbsScanned = false;
+        thumbScanProc.running = false;
+        thumbScanProc.running = true;
+        fullPruneProc.running = false;
+        fullPruneProc.running = true;
+    }
+
+    function _requestRecents(): void {
+        if (!root.recentsOn)
+            return;
+        IiLinkService.sendTo(root.activeDev, {
+            t: "gallery",
+            a: "list",
+            req: ++root._recentsReq,
+            album: "",
+            before: null,
+            n: root.recentsLimit
+        });
+    }
+
+    function _takeRecents(m: var): void {
+        if (m.err !== undefined)
+            return;
+        root.recents = (Array.isArray(m.items) ? m.items : []).slice(0, root.recentsLimit);
+        thumbDebounce.restart();
     }
 
     function refresh(): void {
@@ -290,7 +392,7 @@ Singleton {
 
     function wantThumbs(ids): void {
         root._pendingThumbIds = Array.from(ids ?? []).map(x => String(x)).filter(s => s !== "");
-        if (!root.isOpen || root.setupState !== "ready" || root._pendingThumbIds.length === 0)
+        if (!root._sessionOn || root.setupState !== "ready" || root._pendingThumbIds.length === 0)
             return;
         thumbDebounce.restart();
     }
@@ -303,11 +405,12 @@ Singleton {
     }
 
     function _flushThumbRequest(): void {
-        if (!root.isOpen || root.setupState !== "ready" || !root._thumbsScanned)
+        if (!root._sessionOn || root.setupState !== "ready" || !root._thumbsScanned)
             return;
         const seen = new Set();
         const wanted = [];
-        for (const sid of root._pendingThumbIds) {
+        // The recents ride along with the page's: the phone keeps one thumbnail queue.
+        for (const sid of root.recents.map(it => String(it.id)).concat(root._pendingThumbIds)) {
             if (seen.has(sid) || root._thumbsOnDisk.has(sid))
                 continue;
             seen.add(sid);
@@ -338,7 +441,7 @@ Singleton {
                 root._thumbsOnDisk = set;
                 root._thumbsScanned = true;
                 root.thumbRevision += 1;
-                if (root._pendingThumbIds.length > 0)
+                if (root._pendingThumbIds.length > 0 || root.recents.length > 0)
                     thumbDebounce.restart();
             }
         }
@@ -388,7 +491,7 @@ Singleton {
             return;
         if (root.fullPaths[sid])
             return;
-        const item = root.items.find(it => String(it.id) === sid) ?? null;
+        const item = root.items.find(it => String(it.id) === sid) ?? root.recentById(sid);
         if (item?.kind === "video")
             return;
         if (root.fullProgress[sid])
@@ -618,6 +721,10 @@ Singleton {
             return;
 
         case "list": {
+            if (Number(m.req ?? 0) === root._recentsReq) {
+                root._takeRecents(m);
+                return;
+            }
             if (Number(m.req ?? 0) !== root._listReq || String(m.album ?? "") !== root.album)
                 return;
             listTimeout.stop();
@@ -657,6 +764,14 @@ Singleton {
         }
 
         case "new": {
+            if (root.recentsOn) {
+                const seen = new Set(root.recents.map(it => String(it.id)));
+                const fresh = (Array.isArray(m.items) ? m.items : []).filter(it => !seen.has(String(it.id)));
+                if (fresh.length > 0) {
+                    root.recents = fresh.concat(root.recents).slice(0, root.recentsLimit);
+                    thumbDebounce.restart();
+                }
+            }
             if (!root.isOpen && !root.viewerOpen)
                 return;
             const incoming = (Array.isArray(m.items) ? m.items : [])
@@ -680,6 +795,8 @@ Singleton {
             if (ids.length === 0)
                 return;
             const goneSet = new Set(ids);
+            if (root.recents.some(it => goneSet.has(String(it.id))))
+                root.recents = root.recents.filter(it => !goneSet.has(String(it.id)));
             const currentViewedId = root.viewerItem ? String(root.viewerItem.id) : "";
             root.items = root.items.filter(it => !goneSet.has(String(it.id)));
 
@@ -724,6 +841,7 @@ Singleton {
         }
 
         case "changed":
+            root._requestRecents();
             if (root.isOpen) {
                 root._requestAlbums();
                 root._requestList(false);

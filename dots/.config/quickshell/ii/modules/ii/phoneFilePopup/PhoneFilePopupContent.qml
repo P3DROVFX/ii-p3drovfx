@@ -7,11 +7,14 @@ import qs.services
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Widgets
+import qs.modules.ii.dock.utilities
 
 /**
  * The card for a file from the phone, in three states: receiving (a progress bar under
- * the file), received (Open / Show in folder; it leaves on its own after a while unless
- * hovered) and failed. The close button only hides it: a transfer still running goes on.
+ * the file), received (Open / Copy / Show in folder, and the file itself can be dragged
+ * out of the card into any app; it leaves on its own after a while unless hovered or being
+ * dragged) and failed. The close button only hides it: a transfer still running goes on.
  */
 Item {
     id: root
@@ -33,8 +36,19 @@ Item {
     Timer {
         id: dismissTimer
         interval: 8000
-        running: !root.receiving && !root.isHovered
+        running: !root.receiving && !root.isHovered && !GlobalStates.fileDragActive
         onTriggered: root.dismissed()
+    }
+
+    readonly property bool isImage: /\.(png|jpe?g|webp|gif|bmp|avif)$/i.test(root.path)
+
+    // The file the way a file manager's Copy puts it: pastes as a file in chats, as a
+    // picture where an image is wanted.
+    function copy(): void {
+        if (root.path === "")
+            return;
+        Quickshell.execDetached([`${Directories.scriptPath}/clipboard/copy_file_to_clipboard.py`, root.path]);
+        root.dismissed();
     }
 
     function open(folder: bool): void {
@@ -241,6 +255,22 @@ Item {
                 border.width: 1
                 border.color: Appearance.colors.colLayer0Border
 
+                // Press and move: the file leaves with the pointer, for any app, the shelf
+                // or the AI chat to take. Only a finished file has anything to drag.
+                FileDragArea {
+                    anchors.fill: parent
+                    enabled: root.done
+                    paths: root.done ? [root.path] : []
+                    dragIcon: root.isImage ? "image-x-generic" : "text-x-generic"
+                    onClicked: root.open(false)
+                    onDragFinished: root.dismissed()
+                    StyledToolTip {
+                        requireOverlay: false
+                        extraVisibleCondition: root.done
+                        text: Translation.tr("Click to open, drag to move the file")
+                    }
+                }
+
                 ColumnLayout {
                     id: fileColumn
                     anchors {
@@ -255,7 +285,22 @@ Item {
                         Layout.fillWidth: true
                         spacing: 12
 
+                        ClippingRectangle {
+                            visible: root.done && root.isImage
+                            implicitWidth: 48
+                            implicitHeight: 48
+                            radius: Appearance.rounding.small
+                            color: Appearance.colors.colSurfaceContainerHigh
+                            Image {
+                                anchors.fill: parent
+                                source: root.done && root.isImage ? "file://" + root.path : ""
+                                sourceSize: Qt.size(96, 96)
+                                fillMode: Image.PreserveAspectCrop
+                                asynchronous: true
+                            }
+                        }
                         MaterialSymbol {
+                            visible: !(root.done && root.isImage)
                             text: "description"
                             iconSize: 24
                             color: Appearance.colors.colOnSurface
@@ -287,6 +332,12 @@ Item {
                             font.weight: Font.Bold
                             color: Appearance.colors.colPrimary
                         }
+                        MaterialSymbol {
+                            visible: root.done
+                            text: "drag_indicator"
+                            iconSize: 24
+                            color: Appearance.colors.colSubtext
+                        }
                     }
 
                     StyledProgressBar {
@@ -309,7 +360,7 @@ Item {
                 }
             }
 
-            // === WHEN DONE: OPEN IT, OR ITS FOLDER ===
+            // === WHEN DONE: OPEN IT, COPY IT, OR ITS FOLDER (icons: the card is too narrow for words) ===
             RowLayout {
                 Layout.fillWidth: true
                 Layout.topMargin: 4
@@ -317,18 +368,27 @@ Item {
                 spacing: 8
 
                 PillButton {
-                    Layout.preferredWidth: 120
+                    Layout.preferredWidth: 64
                     icon: "folder_open"
-                    label: Translation.tr("Folder")
+                    tip: Translation.tr("Show in folder")
                     colBackground: Appearance.colors.colSurfaceContainerHighest
                     colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
                     colForeground: Appearance.colors.colOnSurface
                     onClicked: root.open(true)
                 }
                 PillButton {
+                    Layout.preferredWidth: 64
+                    icon: "content_copy"
+                    tip: Translation.tr("Copy")
+                    colBackground: Appearance.colors.colSurfaceContainerHighest
+                    colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
+                    colForeground: Appearance.colors.colOnSurface
+                    onClicked: root.copy()
+                }
+                PillButton {
                     Layout.fillWidth: true
                     icon: "open_in_new"
-                    label: Translation.tr("Open")
+                    tip: Translation.tr("Open")
                     colBackground: Appearance.colors.colPrimaryContainer
                     colBackgroundHover: Appearance.colors.colPrimaryContainerHover
                     colForeground: Appearance.colors.colOnPrimaryContainer
@@ -342,7 +402,9 @@ Item {
     component PillButton: Rectangle {
         id: pill
         property string icon
-        property string label
+        // Icon-only when empty; `tip` then names it on hover.
+        property string label: ""
+        property string tip: ""
         property color colBackground
         property color colBackgroundHover
         property color colForeground
@@ -369,10 +431,11 @@ Item {
             spacing: 6
             MaterialSymbol {
                 text: pill.icon
-                iconSize: Appearance.font.pixelSize.large
+                iconSize: pill.label === "" ? Appearance.font.pixelSize.larger : Appearance.font.pixelSize.large
                 color: pill.colForeground
             }
             StyledText {
+                visible: pill.label !== ""
                 text: pill.label
                 font.pixelSize: Appearance.font.pixelSize.small
                 font.weight: Font.Bold
@@ -386,6 +449,12 @@ Item {
             cursorShape: Qt.PointingHandCursor
             hoverEnabled: true
             onClicked: pill.clicked()
+        }
+
+        StyledToolTip {
+            requireOverlay: false
+            extraVisibleCondition: pill.tip !== "" && pillMa.containsMouse
+            text: pill.tip
         }
     }
 }

@@ -23,6 +23,12 @@ UtilityTile {
     readonly property var items: FileShelf.items
     readonly property int count: FileShelf.count
     readonly property string newest: FileShelf.newest
+    // What the tile shows: the phone's recents (they wait on the phone) and then the shelf's
+    // own files. Dragging the tile off the dock and "clear" only ever touch the shelf's files.
+    readonly property int entryCount: FileShelf.entryCount
+    readonly property string lead: FileShelf.entries[0] ?? ""
+    Component.onCompleted: FileShelf.watchPhone(true)
+    Component.onDestruction: FileShelf.watchPhone(false)
 
     function dropFiles(urls) {
         FileShelf.add(urls);
@@ -40,10 +46,10 @@ UtilityTile {
     surfaceColor: tile.dropHovering ? ClockStyle.colPrimaryContainer : ClockStyle.colSurfaceHigh
     contentColor: tile.dropHovering ? ClockStyle.colOnPrimaryContainer : ClockStyle.colOnSurface
 
-    tooltipText: tile.count === 0 ? Translation.tr("Shelf · drop files here")
-        : tile.count === 1 ? Translation.tr("Shelf · 1 item · drag off the dock to use it")
-        : Translation.tr("Shelf · %1 items · drag off the dock to use them").arg(tile.count)
-    panelSubtitle: tile.count === 1 ? Translation.tr("1 item") : Translation.tr("%1 items").arg(tile.count)
+    tooltipText: tile.entryCount === 0 ? Translation.tr("Shelf · drop files here")
+        : tile.entryCount === 1 ? Translation.tr("Shelf · 1 item")
+        : Translation.tr("Shelf · %1 items").arg(tile.entryCount)
+    panelSubtitle: tile.entryCount === 1 ? Translation.tr("1 item") : Translation.tr("%1 items").arg(tile.entryCount)
     panelWidth: 380
     menuActions: [
         { id: "clear", icon: "clear_all", text: Translation.tr("Clear shelf"), visible: tile.count > 0 }
@@ -61,7 +67,7 @@ UtilityTile {
         // Concentric with the dock widget corner, like the other tiles.
         readonly property real cardRadius: Math.max(4, Math.min(deck.card / 2, tile.radius - (tile.side - deck.card) / 2))
         Repeater {
-            model: Math.min(2, tile.count - 1)
+            model: Math.min(2, tile.entryCount - 1)
             delegate: Rectangle {
                 required property int index
                 readonly property int depth: index + 1
@@ -79,7 +85,7 @@ UtilityTile {
             height: deck.card
             x: (deck.width - deck.card) / 2
             y: (deck.height - deck.card) / 2
-            path: tile.newest
+            path: tile.lead
             radius: deck.cardRadius
             renderScale: tile.renderScale
             colPlate: ClockStyle.colSecondaryContainer
@@ -114,7 +120,7 @@ UtilityTile {
 
         EmptyBadge {
             anchors.centerIn: parent
-            visible: tile.count === 0 || tile.dropHovering
+            visible: tile.entryCount === 0 || tile.dropHovering
             width: Math.round(tile.side * 0.7)
             height: width
             inset: (tile.side - width) / 2
@@ -122,10 +128,10 @@ UtilityTile {
         Deck {
             anchors.fill: parent
             anchors.margins: Math.round(tile.side * 0.06)
-            visible: tile.count > 0 && !tile.dropHovering
+            visible: tile.entryCount > 0 && !tile.dropHovering
         }
         Rectangle {
-            visible: tile.count > 1 && !tile.dropHovering
+            visible: tile.entryCount > 1 && !tile.dropHovering
             anchors.right: parent.right
             anchors.bottom: parent.bottom
             anchors.margins: Math.round(tile.side * 0.06)
@@ -136,7 +142,7 @@ UtilityTile {
             TileValue {
                 id: countText
                 anchors.centerIn: parent
-                text: String(tile.count)
+                text: String(tile.entryCount)
                 color: ClockStyle.colOnPrimary
                 font.pixelSize: Math.round(parent.height * 0.72)
             }
@@ -147,7 +153,7 @@ UtilityTile {
     RowLayout {
         anchors.fill: parent
         anchors.margins: tile.pad
-        anchors.rightMargin: tile.pad * (tile.count > 0 ? 1 : 2)
+        anchors.rightMargin: tile.pad * (tile.entryCount > 0 ? 1 : 2)
         visible: tile.wide
         spacing: tile.pad
 
@@ -156,11 +162,11 @@ UtilityTile {
             implicitHeight: tile.badgeSize
             EmptyBadge {
                 anchors.fill: parent
-                visible: tile.count === 0 || tile.dropHovering
+                visible: tile.entryCount === 0 || tile.dropHovering
             }
             Deck {
                 anchors.fill: parent
-                visible: tile.count > 0 && !tile.dropHovering
+                visible: tile.entryCount > 0 && !tile.dropHovering
             }
         }
 
@@ -171,7 +177,7 @@ UtilityTile {
             TileText {
                 Layout.fillWidth: true
                 text: tile.dropHovering ? Translation.tr("Drop to keep")
-                    : tile.count === 0 ? Translation.tr("Shelf") : UtilityFiles.baseName(tile.newest)
+                    : tile.entryCount === 0 ? Translation.tr("Shelf") : FileShelf.name(tile.lead)
                 color: tile.contentColor
                 font.pixelSize: Math.round(tile.height * 0.27)
                 font.weight: Font.DemiBold
@@ -179,8 +185,8 @@ UtilityTile {
             }
             TileCaption {
                 Layout.fillWidth: true
-                text: tile.count === 0 ? Translation.tr("Drop files here")
-                    : tile.count === 1 ? Translation.tr("1 item") : Translation.tr("%1 items").arg(tile.count)
+                text: tile.entryCount === 0 ? Translation.tr("Drop files here")
+                    : tile.entryCount === 1 ? Translation.tr("1 item") : Translation.tr("%1 items").arg(tile.entryCount)
                 color: tile.captionColor
                 font.pixelSize: tile.captionSize
             }

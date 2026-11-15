@@ -1122,7 +1122,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 32
+    readonly property int currentConfigVersion: 33
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -1884,6 +1884,14 @@ Singleton {
                 if (wl.bitRate === "4M") wl.bitRate = "14M";
                 if (wl.maxSize === 1600) wl.maxSize = 0;
                 console.log("[Config] Migrated phone.scrcpy.wireless defaults (4M/1600 -> 14M/0)");
+            }
+        }
+
+        if (from < 33) {
+            const sc = raw.phone?.scrcpy;
+            if (sc && sc.bitRate === "8M") {
+                sc.bitRate = "20M";
+                console.log("[Config] Migrated phone.scrcpy.bitRate 8M -> 20M");
             }
         }
 
@@ -2773,7 +2781,9 @@ Singleton {
                     property bool fullscreen: false
                     property bool alwaysOnTop: false
                     property int maxFps: 0  // 0 = use device's native frame rate (matches bare `scrcpy`)
-                    property string bitRate: "8M"
+                    // 8M starved a 120 Hz phone screen of bits (about 65 kbit a frame) and the picture
+                    // smeared in motion; USB has the room, and the network is capped below.
+                    property string bitRate: "20M"
                     property int maxSize: 0
                     property int videoBuffer: 0  // scrcpy 4.0 default is 0ms — 80ms adds visible latency
                     property bool useWireless: false
@@ -2810,6 +2820,12 @@ Singleton {
                     property JsonObject recording: JsonObject {
                         property string folder: ""
                         property bool withAudio: true
+                        // Its own quality, not the mirror's: a recording has no latency to
+                        // protect, and a 60 fps file spends its bits on sharper frames than
+                        // the phone's 120 Hz refresh would leave per frame. Over the network
+                        // it is held to 16M, and to 6M on a weak link.
+                        property string bitRate: "24M"
+                        property int maxFps: 60
                     }
                     // The mirror the Phone sidebar draws inside itself.
                     property JsonObject embed: JsonObject {
@@ -6448,6 +6464,9 @@ Singleton {
                     property JsonObject shelf: JsonObject {
                         // Items leave the shelf once dragged out of the panel.
                         property bool removeAfterDrag: false
+                        // The phone's newest photos, screenshots and videos show up on the shelf
+                        // by themselves (ii tools phone); they stay on the phone until dragged.
+                        property bool phoneRecents: true
                     }
                     property JsonObject search: JsonObject {
                         // MaterialShape name of the square face's plate.

@@ -316,7 +316,7 @@ Item {
                 FieldRow {
                     symbol: "wifi_tethering"
                     title: Translation.tr("Bitrate")
-                    placeholder: Translation.tr("e.g. 8M, 4M")
+                    placeholder: Translation.tr("e.g. 20M, 8M")
                     value: root.scrcpy.bitRate
                     onEdited: text => root.scrcpy.bitRate = text
                 }
@@ -360,6 +360,21 @@ Item {
                     title: Translation.tr("Record phone audio too")
                     checked: root.scrcpy.recording.withAudio
                     onToggled: value => root.scrcpy.recording.withAudio = value
+                }
+                FieldRow {
+                    symbol: "high_quality"
+                    title: Translation.tr("Recording bitrate")
+                    placeholder: "24M"
+                    value: root.scrcpy.recording.bitRate
+                    onEdited: text => root.scrcpy.recording.bitRate = text.trim() === "" ? "24M" : text.trim()
+                }
+                StepperRow {
+                    symbol: "speed"
+                    title: Translation.tr("Recording FPS")
+                    value: root.scrcpy.recording.maxFps
+                    from: 0; to: 120; stepSize: 5
+                    format: v => v === 0 ? Translation.tr("Native") : String(v)
+                    onMoved: v => root.scrcpy.recording.maxFps = v
                 }
                 FieldRow {
                     symbol: "folder"

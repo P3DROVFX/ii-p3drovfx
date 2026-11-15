@@ -364,7 +364,7 @@ ContentPage {
         ConfigTextField {
             text: Translation.tr("Bitrate")
             icon: "network_check"
-            placeholderText: "8M"
+            placeholderText: "20M"
             inputText: Config.options.phone.scrcpy.bitRate
             textField.onEditingFinished: Config.options.phone.scrcpy.bitRate = textField.text.trim()
         }

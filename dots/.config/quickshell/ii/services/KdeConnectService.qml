@@ -2480,7 +2480,7 @@ Singleton {
         const userBps = root._bitRateBps(caps.bitRate)
         const wlBps = root._bitRateBps(effRate)
         const rawBitRate = String(opts?.bitRate ?? "").trim()
-        const userLoweredBase = rawBitRate !== "" && rawBitRate !== "8M"
+        const userLoweredBase = rawBitRate !== "" && rawBitRate !== "8M" && rawBitRate !== "20M"
         if (wlBps > 0 && (userBps <= 0 || wlBps < userBps || (!weakLink && !userLoweredBase))) {
             caps.bitRate = effRate
         }

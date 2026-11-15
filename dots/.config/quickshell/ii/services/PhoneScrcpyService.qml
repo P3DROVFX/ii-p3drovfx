@@ -502,10 +502,18 @@ Singleton {
             // without it.
             const args = ["--no-playback", "--no-control", "--record=" + root.recordingPath]
             if (opts?.noAudio || !(opts?.recording?.withAudio ?? true)) args.push("--no-audio")
-            const caps = KdeConnectService.scrcpyStreamCaps(undefined, !!netCfg.overNetwork, !!netCfg.weakLink)
-            if (caps.maxFps > 0) args.push("--max-fps=" + caps.maxFps)
-            if (caps.bitRate !== "") args.push("--video-bit-rate=" + caps.bitRate)
-            if (caps.maxSize > 0) args.push("--max-size=" + caps.maxSize)
+            // Its own settings, not the mirror's: a file has no latency to protect, so it
+            // takes the bits (a capped frame rate puts them into sharper frames). The
+            // network only ever tightens it.
+            const rec = opts?.recording
+            let bps = KdeConnectService._bitRateBps(rec?.bitRate ?? "24M")
+            if (bps <= 0) bps = 24e6
+            if (netCfg.overNetwork) bps = Math.min(bps, netCfg.weakLink ? 6e6 : 16e6)
+            let fps = rec?.maxFps ?? 60
+            if (netCfg.weakLink && !(fps > 0 && fps <= 30)) fps = 30
+            args.push("--video-bit-rate=" + Math.round(bps))
+            if (fps > 0) args.push("--max-fps=" + fps)
+            if (opts?.maxSize > 0) args.push("--max-size=" + opts.maxSize)
             if (netCfg.overNetwork && netCfg.codec) args.push("--video-codec=" + netCfg.codec)
 
             root._recordNetworkSession(root.recordSessionId, !!netCfg.overNetwork)

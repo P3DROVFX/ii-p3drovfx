@@ -38,6 +38,14 @@ hl.window_rule({match = {title = "^(ii System Health)$" },                   cen
 -- into the current layout.
 hl.window_rule({match = {title = "^(ii-phone-unlock)$" },                    float = true})
 hl.window_rule({match = {title = "^(ii-phone-unlock)$" },                    center = true})
+-- The phone's own windows (the mirror and app windows) open floating and centred, wherever
+-- they were asked for from: the controls overlay sizes them to the phone afterwards, but
+-- left to it the window first lands in the tiling layout, and from some entry points stays there.
+-- (Flex display, which is meant to tile, is put back by the controls overlay.)
+hl.window_rule({match = {title = "^(ii-phone-mirror-)(.*)$" },              float = true})
+hl.window_rule({match = {title = "^(ii-phone-mirror-)(.*)$" },              center = true})
+hl.window_rule({match = {title = "^(ii-phone-app-)(.*)$" },                 float = true})
+hl.window_rule({match = {title = "^(ii-phone-app-)(.*)$" },                 center = true})
 -- The scrcpy window the Phone sidebar embeds. It is a real window kept exactly
 -- under a cut-out in the panel's input region, which is what makes touches and
 -- the keyboard reach the phone natively; the panel paints the captured picture
