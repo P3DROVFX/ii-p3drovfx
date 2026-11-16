@@ -57,6 +57,13 @@ const IDR_COOLDOWN: Duration = Duration::from_secs(2);
 const AUDIO_QUEUE: usize = 50;
 /// Dropping this long without a key frame: restart the encoder for one (the GOP is 2 s).
 const DROP_IDR_AFTER: Duration = Duration::from_millis(250);
+/// VA-API's key-frame interval in frames (10 s at 60 Hz): see `Recorder::start`.
+const VAAPI_GOP: u32 = 600;
+/// The VUI for a picture converted BT.601 limited range from the desktop's sRGB, so the
+/// phone decodes it as it was made. Unlabelled, Android assumed BT.709 and a video gamma.
+const BT601_LIMITED_SRGB: [&str; 8] = [
+    "-p", "colorspace=smpte170m", "-p", "color_range=tv", "-p", "color_primaries=bt709", "-p", "color_trc=iec61966-2-1",
+];
 
 /// The active or pending screen session (one at a time).
 pub struct Slot {
@@ -1200,13 +1207,34 @@ impl Recorder {
             .map(|d| d.filter_map(|e| e.ok()).map(|e| e.path().to_string_lossy().into_owned()).filter(|p| p.contains("renderD")).collect())
             .unwrap_or_default();
         nodes.sort();
+        // VA-API has no intra refresh, so every GOP is a full key frame (~500 KB at 3120×1440
+        // against ~3 KB frames): one a second was a burst Wi-Fi delivered late, every second.
+        // A long GOP leaves key frames to the start and to the phone's `idr` (an encoder restart).
+        let vaapi_g = format!("g={}", gop.max(VAAPI_GOP));
         for node in nodes {
-            candidates.push(("vaapi", ["-c", "h264_vaapi", "-d", &node, "-p", &b, "-p", &g].map(String::from).to_vec()));
+            candidates.push((
+                "vaapi",
+                [
+                    // The pixels' real shape, said explicitly: Intel's VPP writes BT.601 limited
+                    // range whatever `out_range` asks, and wf-recorder's own filter asks for full,
+                    // which labelled limited pixels full: grey blacks and dim whites on the phone.
+                    "-F", "scale_vaapi=format=nv12:out_range=limited:out_color_matrix=bt470bg",
+                    "-c", "h264_vaapi", "-d", &node, "-p", &b, "-p", &vaapi_g,
+                    // One frame in flight instead of two: a frame (~16 ms at 60 Hz) less behind.
+                    "-p", "async_depth=1",
+                ]
+                .into_iter()
+                .chain(BT601_LIMITED_SRGB)
+                .map(String::from)
+                .collect(),
+            ));
         }
         candidates.push((
             "x264",
             ["-c", "libx264", "-x", "yuv420p", "-p", "preset=ultrafast", "-p", "tune=zerolatency", "-p", &b, "-p", &g]
                 .into_iter()
+                // swscale's RGB→YUV is BT.601 limited too; wf-recorder labelled it full range.
+                .chain(BT601_LIMITED_SRGB)
                 .chain(if ws { ["-p", "intra-refresh=1"].to_vec() } else { Vec::new() })
                 .map(String::from)
                 .collect(),
