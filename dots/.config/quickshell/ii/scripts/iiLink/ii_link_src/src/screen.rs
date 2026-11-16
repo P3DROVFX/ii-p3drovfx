@@ -65,6 +65,15 @@ const BT601_LIMITED_SRGB: [&str; 8] = [
     "-p", "colorspace=smpte170m", "-p", "color_range=tv", "-p", "color_primaries=bt709", "-p", "color_trc=iec61966-2-1",
 ];
 
+/// CLOCK_MONOTONIC in µs: frame pts and `pong`'s `now` (the phone's System.nanoTime is
+/// the same clock on its side; the offset between the two comes from the pings).
+pub fn mono_us() -> u64 {
+    let mut t = libc::timespec { tv_sec: 0, tv_nsec: 0 };
+    // SAFETY: a valid timespec to fill.
+    unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut t) };
+    t.tv_sec as u64 * 1_000_000 + t.tv_nsec as u64 / 1000
+}
+
 /// The active or pending screen session (one at a time).
 pub struct Slot {
     sid: u64,
@@ -981,7 +990,8 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
                     let Ok(v) = serde_json::from_str::<Value>(t.as_str()) else { continue };
                     match v["t"].as_str().unwrap_or("") {
                         "ping" => {
-                            let pong = json!({"t": "pong", "id": v["id"]}).to_string();
+                            // `now`: the PC's clock for the phone's offset (encode_tag's pts).
+                            let pong = json!({"t": "pong", "id": v["id"], "now": mono_us()}).to_string();
                             if !queue.push_control(Message::text(pong)) {
                                 return WsConnEnd::Dropped;
                             }
@@ -1332,13 +1342,16 @@ impl Recorder {
 }
 
 /// Encode one FLV video tag into `[u8 kind][u64 pts µs BE][Annex-B]`.
-fn encode_tag(nal_len: &mut usize, ts: u32, data: &[u8]) -> Option<(u8, Vec<u8>)> {
+///
+/// The pts is this PC's monotonic clock as the frame leaves the encoder, not the FLV time:
+/// with `pong`'s `now` the phone maps it onto its own clock and measures every frame's
+/// latency to the screen (no B-frames, so presentation order is send order).
+fn encode_tag(nal_len: &mut usize, _ts: u32, data: &[u8]) -> Option<(u8, Vec<u8>)> {
     if data.len() < 5 || data[0] & 0x0f != 7 {
         return None;
     }
     let key = data[0] >> 4 == 1;
-    let cts = (i32::from_be_bytes([data[2], data[3], data[4], 0]) >> 8) as i64;
-    let pts_us = ((ts as i64 + cts).max(0) as u64) * 1000;
+    let pts_us = mono_us();
     let body = &data[5..];
     let (kind, annexb) = match data[1] {
         0 => match config_annexb(body) {

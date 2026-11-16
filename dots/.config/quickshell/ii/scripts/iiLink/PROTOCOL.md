@@ -320,7 +320,9 @@ and n × `[u8 id][u16 x][u16 y]` (every finger down, 0–65535 of the picture), 
 `[2][u16 n][utf-8]` and named keys `[3][u8 n][name][u8 mods]` (1 shift, 2 ctrl, 4 alt,
 8 super) for a keyboard of its own the helper makes on the first key. The PC sends
 `[u32 length][u8 kind][u64 pts µs][Annex-B H.264]`, kind 0 the SPS/PPS, 1 a frame, 2 a key
-frame. wf-recorder captures and encodes (FLV out, one tag per frame, `g=240`) every
+frame. The pts is the PC's CLOCK_MONOTONIC in µs as the frame leaves the encoder (not a
+stream-relative time), so the phone can time every frame against `pong`'s `now`.
+wf-recorder captures and encodes (FLV out, one tag per frame, `g=240`) every
 refresh (`-D`, a hardware cursor damages nothing) at the session's fps (`-r`, from the
 shell's `rate`; without it a 180 Hz screen sends 180 fps and NVENC's CBR overshoots by that
 ratio). A still screen costs ~100-byte frames. The phone has 60 s to connect; the session ends when the socket closes.
@@ -338,8 +340,10 @@ On the Wi-Fi side WebSocket `/iilink/1/screen` (link's TLS port, `transport:"ws"
 - PC → phone text (every 1 s while live):
   `{"t":"stats","bitrate":bps,"max":bps,"kbps":measured_out_kbps,"fps":frames_sent_last_s,"dropped":frames_dropped_last_s,"encoder":"nvenc"|"vaapi"|"x264"}`.
 - Phone → PC text:
-  - `{"t":"ping","id":n}` → `{"t":"pong","id":n}` through the same ordered writer queue as
-    video so RTT includes queued video.
+  - `{"t":"ping","id":n}` → `{"t":"pong","id":n,"now":µs}` through the same ordered writer
+    queue as video so RTT includes queued video. `now` is the PC's CLOCK_MONOTONIC (the
+    pts clock): the lowest-RTT pong gives the phone the offset to its own monotonic clock,
+    and each frame's send → decoded latency (the phone logs it each second, tag `iiStream`).
   - `{"t":"quality","bitrate":bps,"adaptive":bool}` → live max (clamped 1–80 Mbit/s) and
     adaptive toggle; encoder restarts only if the target bitrate changes.
   - `{"t":"idr"}` → restarts the encoder for a fresh key frame (at most once per 2 s).
