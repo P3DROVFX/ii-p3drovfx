@@ -52,7 +52,8 @@ const CONGESTION_AGE: Duration = Duration::from_millis(200);
 const CONGESTION_WINDOW: Duration = Duration::from_secs(3);
 const STEP_UP_QUIET: Duration = Duration::from_secs(10);
 const RATE_COOLDOWN: Duration = Duration::from_secs(2);
-const IDR_COOLDOWN: Duration = Duration::from_secs(2);
+/// A phone waiting for a key frame holds a frozen picture: answer again soon.
+const IDR_COOLDOWN: Duration = Duration::from_millis(500);
 /// 10 ms packets: half a second.
 const AUDIO_QUEUE: usize = 50;
 /// Dropping this long without a key frame: restart the encoder for one (the GOP is 2 s).
@@ -72,6 +73,17 @@ pub fn mono_us() -> u64 {
     // SAFETY: a valid timespec to fill.
     unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut t) };
     t.tv_sec as u64 * 1_000_000 + t.tv_nsec as u64 / 1000
+}
+
+/// One line on stderr (the shell's log, `[IiLink]`) for each event that costs the picture:
+/// an encoder restart or a lost connection, with why. Rare by design, so always on.
+fn trace(what: &str, why: &str) {
+    eprintln!("screen {what}: {why}");
+}
+
+fn conn_lost(why: &str) -> WsConnEnd {
+    trace("conn", why);
+    WsConnEnd::Dropped
 }
 
 /// The active or pending screen session (one at a time).
@@ -713,7 +725,10 @@ async fn run_ws(mut conns: mpsc::UnboundedReceiver<Ws>, p: &Params) -> &'static 
     loop {
         match run_ws_conn(ws, &mut sess, &mut conns).await {
             WsConnEnd::End(reason) => return reason,
-            WsConnEnd::Replaced(next) => ws = next,
+            WsConnEnd::Replaced(next) => {
+                trace("conn", "replaced");
+                ws = next;
+            }
             WsConnEnd::Dropped => {
                 // A finger down when Wi-Fi went would stay down on the PC until it came back.
                 let _ = sess.input_tx.send(Cmd::ScreenFrame { fingers: Vec::new() });
@@ -820,6 +835,7 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
                 match pkt {
                     None => {
                         // Unexpected encoder exit: count toward 5-in-30s limit and settle 300 ms.
+                        trace("restart", "encoder_exit");
                         if let Some(enc) = live.take() {
                             enc.stop().await;
                         }
@@ -833,14 +849,14 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
                     Some((kind, payload)) => {
                         if kind == 0 {
                             if !queue.push_video(kind, payload) {
-                                return WsConnEnd::Dropped;
+                                return conn_lost("queue_full");
                             }
                         } else if kind == 2 {
                             dropping = false;
                             dropping_since = None;
                             restarted_this_drop = false;
                             if !queue.push_video(kind, payload) {
-                                return WsConnEnd::Dropped;
+                                return conn_lost("queue_full");
                             }
                         } else {
                             let congested = queue.is_congested(sess.target_bitrate);
@@ -879,6 +895,7 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
                                         last_congestion_at = Instant::now();
                                         congestion_events.clear();
                                         sess.emit_rate();
+                                        trace("restart", "rate_down");
                                         restart_intended(
                                             sess,
                                             &mut live,
@@ -891,6 +908,7 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
                                         .await;
                                     } else if !sess.refresh && !restarted_this_drop && dropping_since.is_some_and(|t| t.elapsed() > DROP_IDR_AFTER) {
                                         restarted_this_drop = true;
+                                        trace("restart", "drop_recovery");
                                         restart_intended(
                                             sess,
                                             &mut live,
@@ -904,6 +922,7 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
                                     }
                                 } else if !sess.refresh && !restarted_this_drop && dropping_since.is_some_and(|t| t.elapsed() > DROP_IDR_AFTER) {
                                     restarted_this_drop = true;
+                                    trace("restart", "drop_recovery");
                                     restart_intended(
                                         sess,
                                         &mut live,
@@ -916,7 +935,7 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
                                     .await;
                                 }
                             } else if !queue.push_video(kind, payload) {
-                                return WsConnEnd::Dropped;
+                                return conn_lost("queue_full");
                             }
                         }
                     }
@@ -948,6 +967,7 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
                         last_rate_change = Some(Instant::now());
                         last_congestion_at = Instant::now();
                         sess.emit_rate();
+                        trace("restart", "rate_up");
                         restart_intended(
                             sess,
                             &mut live,
@@ -975,7 +995,7 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
                     })
                     .to_string();
                     if !queue.push_control(Message::text(msg)) {
-                        return WsConnEnd::Dropped;
+                        return conn_lost("queue_full");
                     }
                 } else {
                     dropped_s = 0;
@@ -993,7 +1013,7 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
                             // `now`: the PC's clock for the phone's offset (encode_tag's pts).
                             let pong = json!({"t": "pong", "id": v["id"], "now": mono_us()}).to_string();
                             if !queue.push_control(Message::text(pong)) {
-                                return WsConnEnd::Dropped;
+                                return conn_lost("queue_full");
                             }
                         }
                         "quality" => {
@@ -1001,6 +1021,7 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
                                 last_rate_change = Some(Instant::now());
                                 last_congestion_at = Instant::now();
                                 congestion_events.clear();
+                                trace("restart", "quality");
                                 restart_intended(
                                     sess,
                                     &mut live,
@@ -1018,6 +1039,7 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
                             // would only freeze it ~300 ms and send the burst refresh avoids.
                             if !sess.refresh && last_idr.is_none_or(|t| t.elapsed() >= IDR_COOLDOWN) {
                                 last_idr = Some(Instant::now());
+                                trace("restart", "idr");
                                 restart_intended(
                                     sess,
                                     &mut live,
@@ -1033,7 +1055,8 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
                         _ => {}
                     }
                 }
-                Some(Ok(Message::Close(_))) | Some(Err(_)) | None => return WsConnEnd::Dropped,
+                Some(Ok(Message::Close(_))) => return conn_lost("phone_closed"),
+                Some(Err(_)) | None => return conn_lost("read_error"),
                 Some(Ok(_)) => {}
             },
             changed = sess.output.changed() => {
@@ -1046,7 +1069,7 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
                 }
                 backoff_until = Some(tokio::time::Instant::now() + Duration::from_millis(300));
             }
-            _ = &mut writer_dead => return WsConnEnd::Dropped,
+            _ = &mut writer_dead => return conn_lost("write_failed"),
             changed = sess.audio_src.changed() => {
                 if changed.is_err() {
                     return WsConnEnd::End("stopped");
