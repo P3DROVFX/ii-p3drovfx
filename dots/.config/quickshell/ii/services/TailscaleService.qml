@@ -13,6 +13,8 @@ Singleton {
     property string backendState: "NoState"
     property string nodeName: ""
     property string tailnetName: ""
+    /// MagicDNS name of this PC ("pc.tailnet.ts.net"), without the trailing dot.
+    property string dnsName: ""
     property string tailscaleIp4: ""
     property string tailscaleIp6: ""
     property string loginUrl: ""
@@ -115,6 +117,15 @@ Singleton {
         root.errorMessage = ""
         root.enqueue("up", root.buildUpCommand(), null)
     }
+    /// Brings a logged-in but stopped Tailscale up, without the polkit prompt that
+    /// starting the daemon would need (ii tools' remote access calls it unattended).
+    function ensureUp(): void {
+        if (!root.enabled || !root.available || root.loading || root.backendState !== "Stopped")
+            return
+        root.loading = true
+        root.errorMessage = ""
+        root.enqueue("up", root.buildUpCommand(), null)
+    }
     function disconnectTailscale(): void { if (!root.available) { root.setError(Translation.tr("Tailscale is unavailable")); return } root.loading = true; root.statusText = Translation.tr("Disconnecting…"); root.errorMessage = ""; root.enqueue("down", ["tailscale", "down"], null) }
     function logout(): void { if (!root.available) { root.setError(Translation.tr("Tailscale is unavailable")); return } root.loading = true; root.errorMessage = ""; root.enqueue("logout", ["tailscale", "logout"], null) }
     function openLoginUrl(): void { if (root.loginUrl) Quickshell.execDetached(["xdg-open", root.loginUrl]); else root.setError(Translation.tr("No Tailscale login URL is available")) }
@@ -147,7 +158,7 @@ Singleton {
         root.backendState = String(data.BackendState || "NoState")
         root.active = root.backendState === "Running"
         root.loginUrl = String(data.AuthURL || "")
-        root.nodeName = ""; root.tailnetName = ""; const self = data.Self || {}; root.nodeName = String(self.HostName || ""); root.tailnetName = self.DNSName ? String(self.DNSName).split(".")[1] || "" : ""
+        root.nodeName = ""; root.tailnetName = ""; const self = data.Self || {}; root.nodeName = String(self.HostName || ""); root.dnsName = String(self.DNSName || "").replace(/\.$/, ""); root.tailnetName = self.DNSName ? String(self.DNSName).split(".")[1] || "" : ""
         if (root.loginUrl) root.loginRequired(root.loginUrl)
         root.tailscaleIp4 = ""; root.tailscaleIp6 = ""; for (const ip of (self.TailscaleIPs || [])) { if (String(ip).includes(":")) root.tailscaleIp6 = ip; else root.tailscaleIp4 = ip }
         const peersOut = []; const exits = []; let selectedExit = ""

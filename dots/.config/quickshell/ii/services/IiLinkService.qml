@@ -58,6 +58,39 @@ Singleton {
     readonly property bool phoneDataEnabled: root.opts?.phoneData?.enable ?? true
     readonly property bool dndEnabled: root.opts?.dnd?.enable ?? true
     readonly property bool wolEnabled: root.opts?.wol?.enable ?? true
+    readonly property bool tailscaleEnabled: root.opts?.tailscale?.enable ?? false
+
+    /// Where a phone can reach this PC (`hello.routes`): the LAN addresses, and the
+    /// tailnet one while remote access is on and Tailscale runs. A phone drops any
+    /// tailnet address it knew when this has none.
+    readonly property var routes: {
+        const out = root.addresses.filter(a => !root.isTailnet(a)).map(a => ({ kind: "lan", addr: String(a) }));
+        if (root.tailscaleEnabled && TailscaleService.active && TailscaleService.tailscaleIp4 !== "")
+            out.push({ kind: "tailscale", addr: TailscaleService.tailscaleIp4, dns: TailscaleService.dnsName });
+        return out;
+    }
+
+    function isTailnet(addr): bool {
+        const p = String(addr).split(".").map(Number);
+        return p.length === 4 && p[0] === 100 && p[1] >= 64 && p[1] < 128;
+    }
+
+    // Remote access reads Tailscale's state only when it can matter (the helper starting,
+    // a phone connecting, the switch turned on), never on a timer, and brings it up if
+    // it is stopped.
+    function _syncTailscale(): void {
+        if (root.tailscaleEnabled && root.running)
+            TailscaleService.refresh();
+    }
+    onTailscaleEnabledChanged: root._syncTailscale()
+    onRunningChanged: root._syncTailscale()
+    Connections {
+        target: TailscaleService
+        enabled: root.tailscaleEnabled && root.running
+        function onStatusUpdated() {
+            TailscaleService.ensureUp();
+        }
+    }
     readonly property bool perfEnabled: root.opts?.perf?.enable ?? true
     readonly property bool mediaEnabled: root.opts?.media?.enable ?? true
     // The helper turns the phone's players into MPRIS ones itself; it only needs telling.
@@ -3468,7 +3501,8 @@ Singleton {
             caps: root.capabilities,
             actions: root.allowedActions,
             // Kept by the phone with the pairing: it is needed exactly when the PC is off.
-            wake: root.wolEnabled ? root.wakeTargets : []
+            wake: root.wolEnabled ? root.wakeTargets : [],
+            routes: root.routes
         };
     }
 
@@ -3705,6 +3739,7 @@ Singleton {
             root.connections = next;
             if (wasLive)
                 root._topics(ev.dev);
+            root._syncTailscale();
             if (root.remoteEnabled)
                 root._listPresets();
             break;

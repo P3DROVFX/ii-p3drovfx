@@ -2916,6 +2916,11 @@ Singleton {
                 property JsonObject wol: JsonObject {
                     property bool enable: true
                 }
+                // Reach this PC from the phone away from home, over Tailscale: keeps
+                // Tailscale up while the link runs and tells the phone its tailnet address.
+                property JsonObject tailscale: JsonObject {
+                    property bool enable: false
+                }
                 // Do Not Disturb both ways: the shell's own (and chosen modes) silence the
                 // phone; the phone's turns on the shell's, or a mode.
                 property JsonObject dnd: JsonObject {

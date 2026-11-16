@@ -35,7 +35,7 @@ Item {
             o.media.enable, o.pcMedia.enable, o.files.enable, o.gallery.enable, o.camera.enable, o.mic.enable, o.touchpad.enable, o.draw.enable, o.present.enable, o.screen.enable,
             o.perf.enable, o.phoneData.enable, o.screenshots.enable, o.clipboard.enable,
             o.share.enable, o.notifications.enable, o.calls.enable, o.callAudio.enable, o.wallpaper.enable, o.look.enable,
-            o.deck.enable, o.wol.enable
+            o.deck.enable, o.wol.enable, o.tailscale.enable
         ];
     }
     readonly property int enabledModuleCount: moduleFlags.filter(Boolean).length
@@ -803,7 +803,7 @@ fi`]
             Layout.topMargin: 6
             symbol: "tune"
             title: Translation.tr("Control, media & sharing")
-            description: Translation.tr("Remote input, media transport, shared storage, stream deck, and Wake-on-LAN.")
+            description: Translation.tr("Remote input, media transport, shared storage, stream deck, Wake-on-LAN, and access away from home.")
 
             Item {
                 id: controlTilesBox
@@ -1046,6 +1046,26 @@ fi`]
                             : Translation.tr("No LAN adapter MAC detected right now")
                         checked: Config.options.iiTools.wol.enable
                         onToggled: value => Config.options.iiTools.wol.enable = value
+                    }
+
+                    ColorsFeatureTile {
+                        width: controlTilesBox.tileWidth
+                        height: 152
+                        symbol: "public"
+                        shapeOn: MaterialShape.Shape.Cookie9Sided
+                        shapeOff: MaterialShape.Shape.Circle
+                        title: Translation.tr("Away from home")
+                        summary: !Config.options.iiTools.tailscale.enable
+                            ? Translation.tr("Reach this PC from the phone on any network, over Tailscale")
+                            : !TailscaleService.available
+                            ? Translation.tr("Install Tailscale on this PC and log in")
+                            : TailscaleService.active
+                            ? Translation.tr("Reachable at %1").arg(TailscaleService.dnsName || TailscaleService.tailscaleIp4)
+                            : TailscaleService.backendState === "NeedsLogin"
+                            ? Translation.tr("Log in to Tailscale on this PC")
+                            : Translation.tr("Turn Tailscale on in the dashboard")
+                        checked: Config.options.iiTools.tailscale.enable
+                        onToggled: value => Config.options.iiTools.tailscale.enable = value
                     }
                 }
             }
@@ -1631,7 +1651,9 @@ fi`]
                     font.pixelSize: Appearance.font.pixelSize.smaller
                     color: Appearance.colors.colSubtext
                     text: devRow.online
-                        ? [Translation.tr("Connected · %1").arg(devRow.conn.addr)].concat(devRow.statusParts).join(" · ")
+                        ? [IiLinkService.isTailnet(devRow.conn.addr)
+                            ? Translation.tr("Connected via Tailscale · %1").arg(devRow.conn.addr)
+                            : Translation.tr("Connected · %1").arg(devRow.conn.addr)].concat(devRow.statusParts).join(" · ")
                         : Translation.tr("Last seen %1").arg(devRow.device?.lastSeen ? new Date(devRow.device.lastSeen).toLocaleString(Qt.locale(), Locale.ShortFormat) : "—")
                 }
             }
