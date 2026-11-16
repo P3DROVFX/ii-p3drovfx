@@ -33,6 +33,7 @@ use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::WebSocketStream;
 
 use crate::input::Cmd;
+use crate::udp;
 use crate::State;
 
 pub const WS_PATH: &str = "/iilink/1/screen";
@@ -58,8 +59,10 @@ const IDR_COOLDOWN: Duration = Duration::from_millis(500);
 const AUDIO_QUEUE: usize = 50;
 /// Dropping this long without a key frame: restart the encoder for one (the GOP is 2 s).
 const DROP_IDR_AFTER: Duration = Duration::from_millis(250);
-/// VA-API's key-frame interval in frames (10 s at 60 Hz): see `Recorder::start`.
-const VAAPI_GOP: u32 = 600;
+/// VA-API's key-frame interval in frames: none after the first, in practice (~2.3 h at
+/// 120 Hz). A key frame is ~500 KB against ~30 KB frames, and every periodic one was a
+/// 100 ms hitch on Wi-Fi; the phone asks (`idr`) when it needs one.
+const VAAPI_GOP: u32 = 1_000_000;
 /// The VUI for a picture converted BT.601 limited range from the desktop's sRGB, so the
 /// phone decodes it as it was made. Unlabelled, Android assumed BT.709 and a video gamma.
 const BT601_LIMITED_SRGB: [&str; 8] = [
@@ -90,13 +93,18 @@ fn conn_lost(why: &str) -> WsConnEnd {
 pub struct Slot {
     sid: u64,
     token: Option<String>,
-    conns: Option<mpsc::UnboundedSender<Ws>>,
+    conns: Option<mpsc::UnboundedSender<PhoneConn>>,
     task: tokio::task::AbortHandle,
     end: Arc<End>,
     output: watch::Sender<String>,
     /// The PC's sound for the phone: the PulseAudio source to capture, or none.
     audio: watch::Sender<Option<String>>,
+    /// Wi-Fi sessions: the UDP video's key and the phone's address (udp.rs).
+    udp_peer: Option<Arc<udp::Peer>>,
 }
+
+/// A phone's screen socket, and whether it asked for the video over UDP (its hello's `udp`).
+type PhoneConn = (Ws, bool);
 
 struct End {
     dev: String,
@@ -158,6 +166,8 @@ pub struct Params {
     /// Frames per second to cap the capture at (mirror of a fast screen), 0 for the output's own rate.
     pub rate: u32,
     pub audio: watch::Receiver<Option<String>>,
+    /// The link's UDP socket and this session's peer, for a phone that asks (Wi-Fi only).
+    pub udp: Option<(Arc<tokio::net::UdpSocket>, Arc<udp::Peer>)>,
     pub input_tx: Sender<Cmd>,
 }
 
@@ -203,7 +213,9 @@ pub fn op(state: &State, op: &Value) {
         rate: op["rate"].as_u64().unwrap_or(0).min(240) as u32,
         audio: audio_rx,
         input_tx: s.input_tx.clone(),
+        udp: None,
     };
+    let mut params = params;
     if params.output.borrow().is_empty() || params.token.len() < 16 {
         crate::emit(json!({"ev": "screenEnd", "dev": dev, "sid": sid, "reason": "bad_arg"}));
         return;
@@ -213,13 +225,15 @@ pub fn op(state: &State, op: &Value) {
 
     if op["transport"].as_str() == Some("ws") {
         let token = params.token.clone();
+        let udp_peer = s.udp.as_ref().and_then(|_| udp::Peer::new(sid as u32));
+        params.udp = s.udp.clone().zip(udp_peer.clone());
         let (conn_tx, conn_rx) = mpsc::unbounded_channel();
         let task = tokio::spawn(async move {
             let mut guard = guard;
             guard.reason = run_ws(conn_rx, &params).await;
         })
         .abort_handle();
-        s.screen = Some(Slot { sid, token: Some(token), conns: Some(conn_tx), task, end, output: out_tx, audio: audio_tx });
+        s.screen = Some(Slot { sid, token: Some(token), conns: Some(conn_tx), task, end, output: out_tx, audio: audio_tx, udp_peer });
         crate::emit(json!({"ev": "screen", "dev": dev, "sid": sid, "port": 0, "transport": "ws"}));
         return;
     }
@@ -244,20 +258,19 @@ pub fn op(state: &State, op: &Value) {
         guard.reason = run_usb(listener, &params).await;
     })
     .abort_handle();
-    s.screen = Some(Slot { sid, token: None, conns: None, task, end, output: out_tx, audio: audio_tx });
+    s.screen = Some(Slot { sid, token: None, conns: None, task, end, output: out_tx, audio: audio_tx, udp_peer: None });
     crate::emit(json!({"ev": "screen", "dev": dev, "sid": sid, "port": port}));
 }
 
 /// The phone's `/iilink/1/screen` socket: validate the hello token within 5 s, then hand
 /// it to the pending or reconnecting session.
 pub async fn serve(mut ws: Ws, state: State) {
-    let token = match timeout(HELLO_TIMEOUT, ws.next()).await {
-        Ok(Some(Ok(Message::Text(t)))) => serde_json::from_str::<Value>(t.as_str())
-            .ok()
-            .filter(|v| v["t"] == "hello")
-            .and_then(|v| v["token"].as_str().map(str::to_owned)),
+    let hello = match timeout(HELLO_TIMEOUT, ws.next()).await {
+        Ok(Some(Ok(Message::Text(t)))) => serde_json::from_str::<Value>(t.as_str()).ok().filter(|v| v["t"] == "hello"),
         _ => None,
     };
+    let wants_udp = hello.as_ref().is_some_and(|v| v["udp"].as_bool() == Some(true));
+    let token = hello.and_then(|v| v["token"].as_str().map(str::to_owned));
     let Some(token) = token else {
         let _ = ws.close(None).await;
         return;
@@ -270,7 +283,7 @@ pub async fn serve(mut ws: Ws, state: State) {
             .and_then(|slot| slot.conns.clone())
     };
     if let Some(tx) = tx {
-        let _ = tx.send(ws);
+        let _ = tx.send((ws, wants_udp));
     } else {
         let _ = ws.close(None).await;
     }
@@ -639,7 +652,7 @@ impl StartingEncoder {
 
 enum WsConnEnd {
     Dropped,
-    Replaced(Ws),
+    Replaced(PhoneConn),
     End(&'static str),
 }
 
@@ -663,6 +676,9 @@ struct WsSession {
     input_tx: Sender<Cmd>,
     audio_src: watch::Receiver<Option<String>>,
     audio: Option<Audio>,
+    /// The video over UDP, used while the phone that asked for it keeps saying hello.
+    udp: Option<udp::Sender>,
+    wants_udp: bool,
 }
 
 impl WsSession {
@@ -697,7 +713,7 @@ impl WsSession {
     }
 }
 
-async fn run_ws(mut conns: mpsc::UnboundedReceiver<Ws>, p: &Params) -> &'static str {
+async fn run_ws(mut conns: mpsc::UnboundedReceiver<PhoneConn>, p: &Params) -> &'static str {
     let Ok(Some(mut ws)) = timeout(CONNECT_TIMEOUT, conns.recv()).await else {
         return "timeout";
     };
@@ -720,6 +736,8 @@ async fn run_ws(mut conns: mpsc::UnboundedReceiver<Ws>, p: &Params) -> &'static 
         input_tx: p.input_tx.clone(),
         audio_src: p.audio.clone(),
         audio: None,
+        udp: p.udp.clone().map(|(sock, peer)| udp::Sender::new(sock, peer)),
+        wants_udp: false,
     };
 
     loop {
@@ -741,7 +759,8 @@ async fn run_ws(mut conns: mpsc::UnboundedReceiver<Ws>, p: &Params) -> &'static 
     }
 }
 
-async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedReceiver<Ws>) -> WsConnEnd {
+async fn run_ws_conn((ws, wants_udp): PhoneConn, sess: &mut WsSession, conns: &mut mpsc::UnboundedReceiver<PhoneConn>) -> WsConnEnd {
+    sess.wants_udp = wants_udp;
     limit_unsent(&ws);
     let (ws_tx, mut ws_rx) = ws.split();
     let queue = WriterQueue::new();
@@ -749,6 +768,10 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
     // A phone that reconnects needs the sound's codec header again.
     if let Some(head) = sess.audio.as_ref().and_then(|a| a.head.clone()) {
         queue.push_prio(head);
+    }
+    // The UDP video's key and port: the phone starts its hellos, and frames move there.
+    if let Some(u) = sess.udp.as_ref().filter(|_| sess.wants_udp) {
+        queue.push_control(Message::text(u.peer().offer(u.port()).to_string()));
     }
 
     let mut starting: Option<StartingEncoder> = Some(StartingEncoder::spawn(
@@ -847,6 +870,19 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
                         backoff_until = Some(tokio::time::Instant::now() + Duration::from_millis(300));
                     }
                     Some((kind, payload)) => {
+                        // UDP while the phone is there: no queue, no head-of-line blocking.
+                        if sess.wants_udp {
+                            if let Some(u) = sess.udp.as_mut() {
+                                if u.send_frame(&payload).await {
+                                    if kind == 2 {
+                                        dropping = false;
+                                        dropping_since = None;
+                                        restarted_this_drop = false;
+                                    }
+                                    continue;
+                                }
+                            }
+                        }
                         if kind == 0 {
                             if !queue.push_video(kind, payload) {
                                 return conn_lost("queue_full");
@@ -981,7 +1017,12 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
                     }
                 }
                 if sess.screen_started {
-                    let (bytes_sent, frames_sent) = queue.take_stats();
+                    let (mut bytes_sent, mut frames_sent) = queue.take_stats();
+                    if let Some(u) = sess.udp.as_mut() {
+                        let (b, f) = u.take_stats();
+                        bytes_sent += b;
+                        frames_sent += f;
+                    }
                     let dropped = std::mem::take(&mut dropped_s);
                     let kbps = (bytes_sent * 8) / 1000;
                     let msg = json!({
@@ -992,6 +1033,8 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
                         "fps": frames_sent,
                         "dropped": dropped,
                         "encoder": sess.encoder_name,
+                        // UDP parity in percent (udp.rs adapt_fec), absent on the WebSocket.
+                        "fec": sess.udp.as_ref().filter(|_| sess.wants_udp).map(|u| u.fec_pct()),
                     })
                     .to_string();
                     if !queue.push_control(Message::text(msg)) {
@@ -1032,6 +1075,12 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
                                     &mut restarted_this_drop,
                                 )
                                 .await;
+                            }
+                        }
+                        // The phone's UDP report each second: size the parity to the loss.
+                        "net" => {
+                            if let Some(u) = sess.udp.as_mut() {
+                                u.adapt_fec(v["loss"].as_f64().unwrap_or(0.0), v["lost"].as_u64().unwrap_or(0));
                             }
                         }
                         "idr" => {
@@ -1240,9 +1289,9 @@ impl Recorder {
             .map(|d| d.filter_map(|e| e.ok()).map(|e| e.path().to_string_lossy().into_owned()).filter(|p| p.contains("renderD")).collect())
             .unwrap_or_default();
         nodes.sort();
-        // VA-API has no intra refresh, so every GOP is a full key frame (~500 KB at 3120×1440
-        // against ~3 KB frames): one a second was a burst Wi-Fi delivered late, every second.
-        // A long GOP leaves key frames to the start and to the phone's `idr` (an encoder restart).
+        // VA-API has no intra refresh, so every GOP is a full key frame (~500 KB at 3120×1440):
+        // each one was a burst Wi-Fi delivered late. Key frames come at the start and on the
+        // phone's `idr` (an encoder restart) only.
         let vaapi_g = format!("g={}", gop.max(VAAPI_GOP));
         for node in nodes {
             candidates.push((
@@ -1545,5 +1594,14 @@ mod tests {
         assert!(sess.apply_quality(&json!({"t": "quality", "bitrate": 200_000_000, "adaptive": false})));
         assert_eq!(sess.max_bitrate, 80_000_000);
         assert_eq!(sess.target_bitrate, 80_000_000);
+    }
+}
+
+/// A datagram for the second screen on the link's UDP port (main.rs `discovery`): the
+/// phone's hello for the session's UDP video.
+pub fn udp_in(state: &State, pkt: &[u8], from: std::net::SocketAddr) {
+    let peer = state.lock().unwrap().screen.as_ref().and_then(|slot| slot.udp_peer.clone());
+    if let Some(peer) = peer {
+        peer.hello(pkt, from);
     }
 }

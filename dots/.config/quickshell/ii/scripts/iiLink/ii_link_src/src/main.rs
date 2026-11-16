@@ -17,6 +17,7 @@ mod icons;
 mod input;
 mod mpris;
 mod screen;
+mod udp;
 
 use std::collections::HashMap;
 use std::fs;
@@ -83,6 +84,8 @@ struct Shared {
     conns: HashMap<String, Conn>,
     conn_serial: u64,
     open_sockets: usize,
+    /// The link's UDP port (discovery; the second screen's video shares it).
+    udp: Option<Arc<UdpSocket>>,
     /// The phones' media as MPRIS players; the shell switches it (`config`).
     media: bool,
     media_tx: mpsc::UnboundedSender<mpris::Event>,
@@ -748,10 +751,15 @@ fn handle_op(state: &State, line: &str) {
 /// Answers "iilink?" broadcasts so a phone whose PC changed address finds it again.
 /// mDNS would need UDP 5353, which Fedora's default zone keeps closed; the link's own
 /// port is already open, as KDE Connect's is.
-async fn discovery(sock: UdpSocket, state: State) {
+async fn discovery(sock: Arc<UdpSocket>, state: State) {
     let mut buf = [0u8; 512];
     loop {
         let Ok((n, from)) = sock.recv_from(&mut buf).await else { continue };
+        // The second screen's datagrams (udp.rs): the phone's hellos.
+        if buf[0] == udp::MAGIC {
+            screen::udp_in(&state, &buf[..n], from);
+            continue;
+        }
         if !buf[..n].starts_with(b"iilink?") {
             continue;
         }
@@ -824,7 +832,21 @@ async fn main() {
             std::process::exit(1);
         }
     };
-    let udp = UdpSocket::bind(("0.0.0.0", port)).await.ok();
+    let udp = UdpSocket::bind(("0.0.0.0", port)).await.ok().map(|sock| {
+        // A key frame is ~500 datagrams at once: room for it rather than ENOBUFS.
+        let size: libc::c_int = 4 << 20;
+        // SAFETY: a live socket's fd and a c_int option of the right size.
+        unsafe {
+            libc::setsockopt(
+                std::os::fd::AsRawFd::as_raw_fd(&sock),
+                libc::SOL_SOCKET,
+                libc::SO_SNDBUF,
+                &size as *const libc::c_int as *const libc::c_void,
+                std::mem::size_of::<libc::c_int>() as libc::socklen_t,
+            );
+        }
+        Arc::new(sock)
+    });
 
     let peers = load_peers(&dir);
     let (media_tx, media_rx) = mpsc::unbounded_channel();
@@ -840,6 +862,7 @@ async fn main() {
         conns: HashMap::new(),
         conn_serial: 0,
         open_sockets: 0,
+        udp: udp.clone(),
         media: false,
         media_tx,
         touchpad: false,
