@@ -108,8 +108,57 @@ Singleton {
         crateName: "ii_link"
         onFinished: ok => {
             root.checkBinary();
+            // The stamp check below restarts the helper; reading now covers a missed event.
             if (ok)
-                root.restart();
+                stampFile.reload();
+        }
+    }
+
+    // ── A new binary restarts the helper ─────────────────────────────────
+    // rust-helpers.sh moves the new binary in, then writes this stamp (a source hash and
+    // the build time, so every build changes it). Builds from the update script never
+    // passed through `helperBuild`, so the old helper kept running a deleted binary: a
+    // shell newer than its helper offered the phone a Wi-Fi screen it could not serve.
+    /// The stamp on disk, "" while there is none.
+    property string _stamp: ""
+    property bool _stampRead: false
+    /// The stamp the running helper started under; "pending" when it started before the
+    /// first read (shell start), which then takes the stamp read rather than restart.
+    property string _runningStamp: ""
+
+    function _restartIfReplaced(): void {
+        if (root._runningStamp === "pending") {
+            root._runningStamp = root._stamp;
+            return;
+        }
+        if (!helper.running || root._stamp === "" || root._stamp === root._runningStamp)
+            return;
+        console.info("[IiLink] the helper binary was replaced, restarting it");
+        root._runningStamp = root._stamp;
+        root.checkBinary();
+        root.restart();
+    }
+
+    FileView {
+        id: stampFile
+        path: `${root.helperDir}/.ii_link.stamp`
+        watchChanges: true
+        printErrors: false
+        onFileChanged: stampFile.reload()
+        onLoaded: {
+            // Written with `>`: an empty read is the truncation before the write.
+            const stamp = stampFile.text().trim();
+            if (stamp === "")
+                return;
+            root._stampRead = true;
+            root._stamp = stamp;
+            root._restartIfReplaced();
+        }
+        // No stamp (a helper built by hand): the first stamp to appear is a new binary.
+        onLoadFailed: {
+            root._stampRead = true;
+            if (root._runningStamp === "pending")
+                root._runningStamp = "";
         }
     }
 
@@ -3814,9 +3863,18 @@ Singleton {
         probe.running = true;
     }
 
+    // Held until the old helper exits: cleared on the next tick, the exit came after it and
+    // read as a crash (code 15), so every restart also waited out a crash backoff.
+    property bool _restartPending: false
+
     function restart(): void {
+        if (!helper.running)
+            return;
+        root._restartPending = true;
         root._restarting = true;
-        Qt.callLater(() => root._restarting = false);
+        // A helper that never exits still comes back.
+        backoff.interval = 5000;
+        backoff.restart();
     }
 
     onPortChanged: {
@@ -3844,7 +3902,10 @@ Singleton {
     property int _failures: 0
     Timer {
         id: backoff
-        onTriggered: root._restarting = false
+        onTriggered: {
+            root._restartPending = false;
+            root._restarting = false;
+        }
     }
 
     Process {
@@ -3852,6 +3913,8 @@ Singleton {
         running: root.wanted && root.probed && root.binaryPresent && !root._restarting
         stdinEnabled: true
         command: [root.binaryPath, "--state-dir", root.stateDir, "--port", String(root.port)]
+
+        onStarted: root._runningStamp = root._stampRead ? root._stamp : "pending"
 
         stdout: SplitParser {
             onRead: data => root.handleLine(data)
@@ -3865,6 +3928,12 @@ Singleton {
             root.connections = ({});
             root.pairing = null;
             root._clearPcLyricsWatchers();
+            if (root._restartPending) {
+                root._restartPending = false;
+                backoff.stop();
+                root._restarting = false;
+                return;
+            }
             if (root._restarting || !root.wanted)
                 return;
             if (code !== 0) {

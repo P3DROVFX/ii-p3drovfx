@@ -644,6 +644,10 @@ Singleton {
         switch (ev.ev) {
         case "screen":
             root.port = Number(ev.port ?? 0);
+            // A helper built before the Wi-Fi path answers a `ws` start with a USB port and
+            // never serves the phone's socket: the phone sat on a black screen until it gave up.
+            if (root.transport === "wifi" && ev.transport !== "ws")
+                return root._fail("outdated");
             if (root.transport === "wifi" || ev.transport === "ws" || root.port <= 0) {
                 root.state = "ready";
                 root._reply({ state: "ready", transport: "wifi", token: root.token, w: root.w, h: root.h, mode: root.mode, output: root.output, orient: root.orient, screens: root._monitors().length });
