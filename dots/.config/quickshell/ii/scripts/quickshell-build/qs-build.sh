@@ -54,7 +54,7 @@ ARCH_DEPENDS=(qt6-declarative qt6-base qt6-svg qt6-wayland jemalloc libpipewire
     wayland libdrm mesa polkit pam glib2)
 ARCH_MAKEDEPENDS=(vulkan-headers spirv-tools qt6-shadertools wayland-protocols cli11
     ninja cmake git)
-FEDORA_BUILD_DEPS=(rpm-build cmake gcc-c++ ninja-build curl
+FEDORA_BUILD_DEPS=(rpm-build cmake gcc-c++ ninja-build git
     'cmake(Qt6Core)' 'cmake(Qt6Qml)' 'cmake(Qt6ShaderTools)' 'cmake(Qt6WaylandClient)'
     'pkgconfig(CLI11)' 'pkgconfig(gbm)' 'pkgconfig(glib-2.0)' 'pkgconfig(polkit-agent-1)'
     'pkgconfig(jemalloc)' 'pkgconfig(libdrm)' 'pkgconfig(libpipewire-0.3)' 'pkgconfig(pam)'
@@ -200,6 +200,27 @@ installed_stamp() {
 installed_source() {
     [[ -r "$STAMP_FILE" ]] && sed -n 's/^source //p' "$STAMP_FILE"
     return 0
+}
+
+# fetch_source_tarball <out.tar.gz> — the pinned upstream commit as the tarball the spec
+# unpacks (quickshell-<commit>/). It used to be GitHub's generated archive, fetched with
+# curl and never checked. Now git fetches exactly $QS_COMMIT: every object is verified
+# against its hash, so the tree can only be that commit (the same guarantee as Arch's
+# git+URL#commit= source), and `git archive` packs it. No checksum to keep in sync, and
+# GitHub changing how it compresses archives cannot break or alter the build.
+fetch_source_tarball() {
+    local out repo
+    out="$(realpath -m -- "$1")" || return 1 # absolute: git -C below changes directory
+    repo="$(mktemp -d "${TMPDIR:-/tmp}/$PKG-src-XXXXXX")" || return 1
+    if git -C "$repo" init -q --bare &&
+        git -C "$repo" fetch -q --depth 1 "$UPSTREAM_URL" "$QS_COMMIT" &&
+        [[ "$(git -C "$repo" rev-parse --verify -q 'FETCH_HEAD^{commit}')" == "$QS_COMMIT" ]] &&
+        git -C "$repo" archive --format=tar.gz --prefix="quickshell-$QS_COMMIT/" -o "$out" FETCH_HEAD; then
+        rm -rf "$repo"
+        return 0
+    fi
+    rm -rf "$repo" "$out"
+    return 1
 }
 
 # missing_build_deps — the packages a build would install now, one per line.
@@ -588,8 +609,7 @@ build_fedora() {
     WORK="$(mktemp -d "${TMPDIR:-/tmp}/$PKG-XXXXXX")"
     mkdir -p "$WORK"/{SOURCES,SPECS,BUILD,RPMS,SRPMS}
     step "Fetching quickshell ${QS_COMMIT:0:7}"
-    curl -fsSL --retry 3 -o "$WORK/SOURCES/quickshell-$QS_COMMIT.tar.gz" \
-        "$UPSTREAM_URL/archive/$QS_COMMIT/quickshell-$QS_COMMIT.tar.gz" || die "Download failed."
+    fetch_source_tarball "$WORK/SOURCES/quickshell-$QS_COMMIT.tar.gz" || die "Download failed."
     write_spec "$WORK/SPECS/$PKG.spec" "$WORK/SOURCES" "$crash" "$(build_stamp)" "$HERE"
 
     step "Building $PKG $QS_VERSION-$QS_RELEASE (a few minutes)"
