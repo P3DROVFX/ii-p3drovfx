@@ -366,6 +366,7 @@ Singleton {
     // The ii tools phone as the microphone (IiMicService, PipeWire source `ii-tools-mic`) needs
     // none of the above: it is the first choice whenever the connected phone offers it.
     readonly property bool iiBackend: IiMicService.usable
+    readonly property bool waitingForPhoneTap: root._backend === "iilink" && IiMicService.state === "asking"
     readonly property bool available: root.iiBackend
         || (root.pactlPresent && (root.scrcpyPresent || root.droidcamCliPresent))
 

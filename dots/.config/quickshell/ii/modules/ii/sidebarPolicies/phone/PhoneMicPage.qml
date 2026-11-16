@@ -144,13 +144,15 @@ ContentPage {
 
                 StyledText {
                     Layout.alignment: Qt.AlignVCenter
-                    text: PhoneMicService.connecting
-                        ? Translation.tr("Connecting…")
-                        : (PhoneMicService.running
-                            ? (PhoneMicService.muted ? Translation.tr("Muted") : Translation.tr("Active"))
-                            : (PhoneMicService.available
-                                ? Translation.tr("Ready")
-                                : Translation.tr("Unavailable")))
+                    text: PhoneMicService.waitingForPhoneTap
+                        ? Translation.tr("Tap the notification on the phone")
+                        : (PhoneMicService.connecting
+                            ? Translation.tr("Connecting…")
+                            : (PhoneMicService.running
+                                ? (PhoneMicService.muted ? Translation.tr("Muted") : Translation.tr("Active"))
+                                : (PhoneMicService.available
+                                    ? Translation.tr("Ready")
+                                    : Translation.tr("Unavailable"))))
                     font.pixelSize: Appearance.font.pixelSize.smaller
                     font.weight: Font.DemiBold
                     color: PhoneMicService.running
@@ -254,11 +256,13 @@ ContentPage {
                 }
                 StyledText {
                     Layout.fillWidth: true
-                    text: PhoneMicService.connecting
-                        ? Translation.tr("Connecting…")
-                        : (PhoneMicService.running
-                            ? Translation.tr("Stop microphone")
-                            : Translation.tr("Start microphone"))
+                    text: PhoneMicService.waitingForPhoneTap
+                        ? Translation.tr("Tap the notification on the phone")
+                        : (PhoneMicService.connecting
+                            ? Translation.tr("Connecting…")
+                            : (PhoneMicService.running
+                                ? Translation.tr("Stop microphone")
+                                : Translation.tr("Start microphone")))
                     font.pixelSize: Appearance.font.pixelSize.normal
                     font.weight: Font.DemiBold
                     color: PhoneMicService.running

@@ -536,6 +536,8 @@ Rectangle {
                     return Translation.tr("See the missing dependencies");
                 if (!root._deviceOnline)
                     return Translation.tr("Pair a reachable device");
+                if (PhoneMicService.waitingForPhoneTap)
+                    return Translation.tr("Tap the notification on the phone");
                 if (PhoneMicService.connecting)
                     return Translation.tr("Setting up audio routing…");
                 if (PhoneMicService.running)
