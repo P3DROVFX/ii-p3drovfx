@@ -1,5 +1,5 @@
 diff --git a/src/core/memorytrim.cpp b/src/core/memorytrim.cpp
-index ffbfa43..9205ca3 100644
+index ffbfa43..c832a90 100644
 --- a/src/core/memorytrim.cpp
 +++ b/src/core/memorytrim.cpp
 @@ -3,6 +3,7 @@
@@ -119,7 +119,7 @@ index ffbfa43..9205ca3 100644
  	qint64 gcMs = 0;
  	int trims = 0;
  };
-@@ -267,8 +288,258 @@ void onObjectRemoved(QObject* object) {
+@@ -267,8 +288,259 @@ void onObjectRemoved(QObject* object) {
  	);
  }
  
@@ -132,7 +132,7 @@ index ffbfa43..9205ca3 100644
 +// (20). A window that stops drawing right after an animation keeps its spares for as long as
 +// it stays idle; a full-screen 2880x1800 buffer is ~20 MB of GPU memory (system RAM on an iGPU).
 +//
-+// So: once a visible window of at least 8 MB per buffer has presented no frame for
++// So: once a visible window of at least 4 MiB per buffer has presented no frame for
 +// QS_IDLE_BUFFER_TRIM_DELAY_MS (2 s) and the shell has had no input for as long, it redraws its
 +// unchanged scene QS_IDLE_BUFFER_TRIM_FRAMES (22) times, QS_IDLE_BUFFER_TRIM_PACE_MS (500 ms)
 +// apart, so the spares age out and Mesa frees them. Same content, same pixels. Only after at
@@ -149,7 +149,8 @@ index ffbfa43..9205ca3 100644
 +// Frames closer than this belong to an animation, the only time a spare can be allocated.
 +constexpr qint64 BUFFER_TRIM_ANIMATION_GAP_MS = 50;
 +// A spare of a smaller window is not worth the compositor's recomposites (bar, dock, popups).
-+constexpr qint64 BUFFER_TRIM_MIN_BUFFER_BYTES = 8ll * 1024 * 1024;
++// 4 MiB, not 8: a full-screen 1920x1080 buffer is 7.9 MiB, and 8 left out every 1080p screen.
++constexpr qint64 BUFFER_TRIM_MIN_BUFFER_BYTES = 4ll * 1024 * 1024;
 +constexpr qint64 BUFFER_TRIM_MIN_INTERVAL_MS = 1000;
 +constexpr qint64 BUFFER_TRIM_MAX_INTERVAL_MS = 600000;
 +
@@ -378,7 +379,7 @@ index ffbfa43..9205ca3 100644
  void install() {
  	if (gTrimmer.load(std::memory_order_relaxed) != nullptr) return;
  	if (qEnvironmentVariableIntValue("QS_NO_IDLE_TRIM") == 1) {
-@@ -288,7 +559,7 @@ void install() {
+@@ -288,7 +560,7 @@ void install() {
  
  	// Intentionally leaked: the hook can still fire during static destruction.
  	gTrimmer.store(new Trimmer(delayMs, trimComponents), std::memory_order_release);
