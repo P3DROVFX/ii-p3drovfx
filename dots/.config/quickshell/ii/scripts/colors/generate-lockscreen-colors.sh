@@ -47,6 +47,7 @@ valid=0
 for t in "${allowed_types[@]}"; do [[ "$type_flag" == "$t" ]] && { valid=1; break; }; done
 [[ $valid -eq 0 ]] && type_flag="scheme-tonal-spot"
 [[ "$type_flag" == "auto" || "$type_flag" == "scheme-auto" ]] && type_flag="scheme-tonal-spot"
+raw_type_flag="$type_flag"
 [[ "$type_flag" == "scheme-intense" ]] && type_flag="scheme-fidelity"
 
 echo "[generate-lockscreen-colors] Generating for: $imgpath (mode=$mode_flag type=$type_flag)"
@@ -114,4 +115,10 @@ if [[ $py_status -ne 0 || ! -s "$LOCKSCREEN_COLORS.tmp" ]]; then
 fi
 
 mv "$LOCKSCREEN_COLORS.tmp" "$LOCKSCREEN_COLORS"
+if [[ "$raw_type_flag" == "scheme-intense" ]]; then
+    local _venv="${ILLOGICAL_IMPULSE_VIRTUAL_ENV:-${XDG_STATE_HOME:-$HOME/.local/state}/quickshell/.venv}"
+    local _py="python3"
+    [[ -x "$_venv/bin/python3" ]] && _py="$_venv/bin/python3"
+    "$_py" "$SCRIPT_DIR/boost_surface_chroma.py" "$LOCKSCREEN_COLORS" --mode "$mode_flag"
+fi
 echo "[generate-lockscreen-colors] Done → $LOCKSCREEN_COLORS"

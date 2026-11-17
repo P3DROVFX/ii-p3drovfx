@@ -907,7 +907,10 @@ done"
         fi
         if [[ "$type_flag" == "scheme-intense" ]]; then
             echo "[switchwall.sh] Applying intense surface boost to colors.json (mode: $mode_flag)" >&2
-            python3 "$SCRIPT_DIR/boost_surface_chroma.py" "$STATE_DIR/user/generated/colors.json" --mode "$mode_flag"
+            local _venv="${ILLOGICAL_IMPULSE_VIRTUAL_ENV:-${XDG_STATE_HOME:-$HOME/.local/state}/quickshell/.venv}"
+            local _py="python3"
+            [[ -x "$_venv/bin/python3" ]] && _py="$_venv/bin/python3"
+            "$_py" "$SCRIPT_DIR/boost_surface_chroma.py" "$STATE_DIR/user/generated/colors.json" --mode "$mode_flag"
             # The boost rewrites the surfaces; a picked surface still wins.
             apply_color_overrides_flat "$mode_flag"
         fi
