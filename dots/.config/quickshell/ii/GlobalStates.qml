@@ -1040,6 +1040,11 @@ Singleton {
     // parking away from it takes the guide off the screen it is guiding.
     property bool _editKeepWorkspace: false
 
+    // Emitted just before `editMode` turns true, so work that has to be done
+    // before the mode's entrance animation starts (the chrome compiling its
+    // surface on the first entry) runs ahead of `editProgress` moving.
+    signal editModeOpening()
+
     function openEditMode(monitor = "", keepWorkspace = false) {
         if (root.editMode)
             return;
@@ -1055,6 +1060,7 @@ Singleton {
         root.editModeMonitor = monitor !== "" ? monitor
             : (Hyprland.focusedMonitor?.name ?? Quickshell.primaryScreen?.name ?? "");
         root._editKeepWorkspace = keepWorkspace;
+        root.editModeOpening();
         root.editMode = true;
     }
 

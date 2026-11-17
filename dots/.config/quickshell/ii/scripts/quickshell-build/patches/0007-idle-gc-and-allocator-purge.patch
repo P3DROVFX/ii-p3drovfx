@@ -1,0 +1,345 @@
+diff --git a/src/core/CMakeLists.txt b/src/core/CMakeLists.txt
+index 4824965..9382669 100644
+--- a/src/core/CMakeLists.txt
++++ b/src/core/CMakeLists.txt
+@@ -43,6 +43,7 @@ qt_add_library(quickshell-core STATIC
+ 	toolsupport.cpp
+ 	streamreader.cpp
+ 	debuginfo.cpp
++	memorytrim.cpp
+ )
+ 
+ qt_add_qml_module(quickshell-core
+diff --git a/src/core/generation.cpp b/src/core/generation.cpp
+index 1569011..1444324 100644
+--- a/src/core/generation.cpp
++++ b/src/core/generation.cpp
+@@ -27,6 +27,7 @@
+ #include "imageprovider.hpp"
+ #include "incubator.hpp"
+ #include "logcat.hpp"
++#include "memorytrim.hpp"
+ #include "plugin.hpp"
+ #include "qsintercept.hpp"
+ #include "reload.hpp"
+@@ -281,6 +282,8 @@ EngineGeneration::EngineGeneration(const QDir& rootPath, QmlScanner scanner)
+ 	this->engine->addImageProvider("qsimage", new QsImageProvider());
+ 	this->engine->addImageProvider("qspixmap", new QsPixmapProvider());
+ 
++	qs::memtrim::install();
++
+ 	QsEnginePlugin::runConstructGeneration(*this);
+ }
+ 
+diff --git a/src/core/memorytrim.cpp b/src/core/memorytrim.cpp
+new file mode 100644
+index 0000000..160ba07
+--- /dev/null
++++ b/src/core/memorytrim.cpp
+@@ -0,0 +1,291 @@
++#include "memorytrim.hpp"
++#include <atomic>
++#include <chrono>
++#include <cstddef>
++#include <cstdint>
++
++#include <dlfcn.h>
++#ifdef __GLIBC__
++#include <malloc.h>
++#endif
++#include <private/qhooks_p.h>
++#include <qcoreapplication.h>
++#include <qelapsedtimer.h>
++#include <qfile.h>
++#include <qevent.h>
++#include <qlogging.h>
++#include <qloggingcategory.h>
++#include <qnamespace.h>
++#include <qobject.h>
++#include <qqmlengine.h>
++#include <qtenvironmentvariables.h>
++#include <qtimer.h>
++#include <unistd.h>
++
++#include "generation.hpp"
++#include "logcat.hpp"
++
++// Gives memory back after a panel closes, once the shell has gone quiet:
++// a full JS garbage collection, then the allocator's free pages back to the OS.
++//
++// Why: closing a panel (a Loader going inactive, a window going away) frees thousands of
++// objects, but nothing returns that memory. The JS wrappers stay until the GC next runs on
++// allocation pressure, and jemalloc only decays its dirty pages while something allocates,
++// so an idle shell keeps tens of MB of pages it no longer uses.
++//
++// Trigger: a destruction burst. Qt calls qtHookData[QHooks::RemoveQObject] (the hook
++// GammaRay uses, present in release builds) from every QObject destructor; it counts, and
++// when at least QS_IDLE_TRIM_BURST objects (default 500) die within ~2 s it arms a
++// one-shot timer on the GUI thread. Every further burst restarts it, so the trim runs
++// QS_IDLE_TRIM_DELAY_MS (default 10 s) after the last one, no closer than 60 s to the
++// previous trim, and only once the shell has had no pointer or key input for that long either
++// (an application event filter notes the time of the last input event). Panels kept loaded and
++// merely hidden free nothing and trigger nothing.
++// There is no periodic timer: an idle shell is never woken by this.
++//
++// Release: jemalloc's thread.tcache.flush + arena.<all>.purge, found with dlsym so a
++// build without jemalloc (USE_JEMALLOC=OFF) falls back to glibc's malloc_trim(0).
++//
++// QS_NO_IDLE_TRIM=1 turns it off; the quickshell.memtrim debug category logs every trim.
++
++namespace qs::memtrim {
++
++namespace {
++
++QS_LOGGING_CATEGORY(logMemTrim, "quickshell.memtrim");
++
++using MallctlFn = int (*)(const char*, void*, size_t*, void*, size_t);
++
++constexpr qint64 BURST_WINDOW_MS = 2000;
++constexpr qint64 MIN_INTERVAL_MS = 60000;
++// Lets the objects the GC handed to deleteLater() go before the pages are released.
++constexpr int RELEASE_DELAY_MS = 250;
++// MALLCTL_ARENAS_ALL
++constexpr const char* PURGE_ALL_ARENAS = "arena.4096.purge";
++
++// Written by the QObject destructor hook on any thread; approximate counting is fine.
++std::atomic<quint32> gDestroyed {0};      // NOLINT
++std::atomic<qint64> gWindowStart {0};     // NOLINT
++std::atomic<quint32> gWindowBase {0};     // NOLINT
++std::atomic<bool> gPosted {false};        // NOLINT
++std::atomic<quint32> gBurst {500};        // NOLINT
++std::atomic<QHooks::RemoveQObjectCallback> gPrevHook {nullptr}; // NOLINT
++
++qint64 steadyMs() {
++	return std::chrono::duration_cast<std::chrono::milliseconds>(
++	           std::chrono::steady_clock::now().time_since_epoch()
++	)
++	    .count();
++}
++
++// jemalloc's mallctl, but only when jemalloc is the allocator in use: `malloc` must resolve
++// into the same object. Otherwise (another allocator preloaded over a jemalloc build, or a
++// jemalloc-linked library in a build without it) a dormant jemalloc would be purged and
++// malloc_trim skipped.
++MallctlFn mallctlFn() {
++	static const auto fn = []() -> MallctlFn {
++		auto* ctl = dlsym(RTLD_DEFAULT, "mallctl");
++		auto* alloc = dlsym(RTLD_DEFAULT, "malloc");
++		Dl_info ctlInfo {};
++		Dl_info allocInfo {};
++		if (!ctl || !alloc || !dladdr(ctl, &ctlInfo) || !dladdr(alloc, &allocInfo)) return nullptr;
++		if (ctlInfo.dli_fbase != allocInfo.dli_fbase) return nullptr;
++		return reinterpret_cast<MallctlFn>(ctl);
++	}();
++	return fn;
++}
++
++size_t jeStat(const char* name) {
++	auto* mallctl = mallctlFn();
++	if (!mallctl) return 0;
++	uint64_t epoch = 1;
++	auto epochSize = sizeof(epoch);
++	mallctl("epoch", &epoch, &epochSize, &epoch, epochSize);
++	size_t value = 0;
++	auto size = sizeof(value);
++	if (mallctl(name, &value, &size, nullptr, 0) != 0) return 0;
++	return value;
++}
++
++// Resident set from /proc/self/statm (pages), in MiB.
++qint64 residentMiB() {
++	QFile f("/proc/self/statm");
++	if (!f.open(QFile::ReadOnly)) return -1;
++	const auto fields = f.readAll().split(' ');
++	if (fields.size() < 2) return -1;
++	return fields[1].toLongLong() * sysconf(_SC_PAGESIZE) / (1024 * 1024);
++}
++
++class Trimmer: public QObject {
++public:
++	explicit Trimmer(int delayMs): delayMs(delayMs) {
++		this->timer.setSingleShot(true);
++		QObject::connect(&this->timer, &QTimer::timeout, this, &Trimmer::onTimeout);
++	}
++
++	// A destruction burst (queued from the hook): wait for the shell to go quiet again.
++	void onBurst() {
++		gPosted.store(false, std::memory_order_relaxed);
++		qCDebug(logMemTrim) << "destruction burst," << gDestroyed.load(std::memory_order_relaxed)
++		                    << "QObjects destroyed so far";
++		auto wait = static_cast<qint64>(this->delayMs);
++		if (this->lastTrim.isValid()) wait = qMax(wait, MIN_INTERVAL_MS - this->lastTrim.elapsed());
++		this->timer.start(static_cast<int>(wait));
++	}
++
++private:
++	void onTimeout() {
++		if (this->lastInput.isValid() && this->lastInput.elapsed() < this->delayMs) {
++			// Someone is using the shell (pointer or keys on one of its windows): do not take a
++			// GC pause under their hands. Look again once `delay` has passed since that input;
++			// this re-arms only while input keeps coming, so an idle shell is not woken.
++			this->timer.start(static_cast<int>(this->delayMs - this->lastInput.elapsed()));
++			return;
++		}
++
++		// Started now, not after the release: the collection hands parentless JS-owned objects
++		// to deleteLater(), and that burst must not arm a second trim inside the interval.
++		this->lastTrim.start();
++
++		QElapsedTimer t;
++		t.start();
++		if (auto* generation = EngineGeneration::currentGeneration()) {
++			if (generation->engine) generation->engine->collectGarbage();
++		}
++		this->gcMs = t.elapsed();
++
++		QTimer::singleShot(RELEASE_DELAY_MS, this, &Trimmer::release);
++	}
++
++	// Installed on the application: notes the time of the last user input. A type switch and,
++	// for input events only, a monotonic clock read.
++	bool eventFilter(QObject* /*watched*/, QEvent* event) override {
++		switch (event->type()) {
++		case QEvent::KeyPress:
++		case QEvent::MouseButtonPress:
++		case QEvent::MouseMove:
++		case QEvent::Wheel:
++		case QEvent::TouchBegin:
++		case QEvent::TouchUpdate:
++		case QEvent::TabletPress:
++		case QEvent::TabletMove:
++		case QEvent::NativeGesture:
++		case QEvent::InputMethod: this->lastInput.start(); break; // IME / on-screen keyboard text
++		default: break;
++		}
++		return false;
++	}
++
++	void release() {
++		// The statistics cost a jemalloc epoch refresh and /proc reads: only when logged.
++		const bool debug = logMemTrim().isDebugEnabled();
++		const auto rssBefore = debug ? residentMiB() : 0;
++		const auto jeBefore = debug ? jeStat("stats.resident") : 0;
++
++		QElapsedTimer t;
++		t.start();
++		if (auto* mallctl = mallctlFn()) {
++			mallctl("thread.tcache.flush", nullptr, nullptr, nullptr, 0);
++			mallctl(PURGE_ALL_ARENAS, nullptr, nullptr, nullptr, 0);
++		} else {
++#ifdef __GLIBC__
++			malloc_trim(0);
++#endif
++		}
++		const auto releaseMs = t.elapsed();
++
++		++this->trims;
++
++		if (!debug) return;
++		const auto rssAfter = residentMiB();
++		const auto jeAfter = jeStat("stats.resident");
++
++		qCDebug(logMemTrim).nospace() << "trim #" << this->trims << ": gc " << this->gcMs
++		                              << " ms, release " << releaseMs << " ms, rss " << rssBefore
++		                              << " -> " << rssAfter << " MiB, jemalloc resident "
++		                              << jeBefore / (1024 * 1024) << " -> "
++		                              << jeAfter / (1024 * 1024) << " MiB";
++	}
++
++	int delayMs;
++	QTimer timer;
++	QElapsedTimer lastTrim;
++	QElapsedTimer lastInput;
++	qint64 gcMs = 0;
++	int trims = 0;
++};
++
++std::atomic<Trimmer*> gTrimmer {nullptr}; // NOLINT
++
++// Runs inside every QObject destructor, on whichever thread: a relaxed increment, and
++// a clock read once per 128 objects.
++void onObjectRemoved(QObject* object) {
++	if (auto* prev = gPrevHook.load(std::memory_order_relaxed)) prev(object);
++
++	const auto n = gDestroyed.fetch_add(1, std::memory_order_relaxed) + 1;
++	if ((n & 127) != 0) return;
++
++	const auto now = steadyMs();
++	if (now - gWindowStart.load(std::memory_order_relaxed) > BURST_WINDOW_MS) {
++		gWindowStart.store(now, std::memory_order_relaxed);
++		gWindowBase.store(n, std::memory_order_relaxed);
++		return;
++	}
++
++	if (n - gWindowBase.load(std::memory_order_relaxed) < gBurst.load(std::memory_order_relaxed)) {
++		return;
++	}
++
++	gWindowStart.store(now, std::memory_order_relaxed);
++	gWindowBase.store(n, std::memory_order_relaxed);
++
++	if (QCoreApplication::closingDown() || gPosted.exchange(true)) return;
++	QMetaObject::invokeMethod(
++	    gTrimmer.load(std::memory_order_acquire),
++	    &Trimmer::onBurst,
++	    Qt::QueuedConnection
++	);
++}
++
++} // namespace
++
++void install() {
++	if (gTrimmer.load(std::memory_order_relaxed) != nullptr) return;
++	if (qEnvironmentVariableIntValue("QS_NO_IDLE_TRIM") == 1) {
++		static bool logged = false; // install() runs again on every reload
++		if (!logged) qCInfo(logMemTrim) << "Idle memory trim disabled (QS_NO_IDLE_TRIM)";
++		logged = true;
++		return;
++	}
++
++	bool ok = false;
++	auto delayMs = qEnvironmentVariableIntValue("QS_IDLE_TRIM_DELAY_MS", &ok);
++	if (!ok || delayMs < 0) delayMs = 10000;
++	auto burst = qEnvironmentVariableIntValue("QS_IDLE_TRIM_BURST", &ok);
++	if (ok && burst > 0) gBurst.store(static_cast<quint32>(burst), std::memory_order_relaxed);
++
++	// Intentionally leaked: the hook can still fire during static destruction.
++	gTrimmer.store(new Trimmer(delayMs), std::memory_order_release);
++	QCoreApplication::instance()->installEventFilter(gTrimmer.load(std::memory_order_relaxed));
++
++	gPrevHook.store(
++	    reinterpret_cast<QHooks::RemoveQObjectCallback>(qtHookData[QHooks::RemoveQObject]),
++	    std::memory_order_relaxed
++	);
++	// qtHookData is a plain array: publish everything the hook reads before installing it.
++	std::atomic_thread_fence(std::memory_order_release);
++	qtHookData[QHooks::RemoveQObject] = reinterpret_cast<quintptr>(&onObjectRemoved);
++
++	if (auto* mallctl = mallctlFn()) {
++		unsigned narenas = 0;
++		auto size = sizeof(narenas);
++		mallctl("opt.narenas", &narenas, &size, nullptr, 0);
++		qCInfo(logMemTrim).nospace() << "Idle memory trim active (jemalloc, opt.narenas=" << narenas
++		                             << ", delay " << delayMs << " ms, burst " << gBurst.load() << ")";
++	} else {
++		qCInfo(logMemTrim).nospace() << "Idle memory trim active (malloc_trim, delay " << delayMs
++		                             << " ms, burst " << gBurst.load() << ")";
++	}
++}
++
++} // namespace qs::memtrim
+diff --git a/src/core/memorytrim.hpp b/src/core/memorytrim.hpp
+new file mode 100644
+index 0000000..94ea241
+--- /dev/null
++++ b/src/core/memorytrim.hpp
+@@ -0,0 +1,9 @@
++#pragma once
++
++namespace qs::memtrim {
++
++// Starts the idle memory trimmer (once; later calls do nothing). Call on the GUI thread
++// after the QGuiApplication exists. QS_NO_IDLE_TRIM=1 leaves it off.
++void install();
++
++} // namespace qs::memtrim

@@ -1,0 +1,435 @@
+diff --git a/src/core/memorytrim.cpp b/src/core/memorytrim.cpp
+index ffbfa43..c832a90 100644
+--- a/src/core/memorytrim.cpp
++++ b/src/core/memorytrim.cpp
+@@ -3,6 +3,7 @@
+ #include <chrono>
+ #include <cstddef>
+ #include <cstdint>
++#include <cstring>
+ 
+ #include <dlfcn.h>
+ #ifdef __GLIBC__
+@@ -12,6 +13,7 @@
+ #include <qcoreapplication.h>
+ #include <qelapsedtimer.h>
+ #include <qfile.h>
++#include <qguiapplication.h>
+ #include <qevent.h>
+ #include <qlogging.h>
+ #include <qloggingcategory.h>
+@@ -19,6 +21,13 @@
+ #include <qobject.h>
+ #include <qqmlengine.h>
+ #include <qtenvironmentvariables.h>
++#include <qquickwindow.h>
++#include <qsgrendererinterface.h>
++#include <qstring.h>
++#if QT_CONFIG(opengl)
++#include <qopenglcontext.h>
++#include <qopenglfunctions.h>
++#endif
+ #include <qtimer.h>
+ #include <unistd.h>
+ 
+@@ -123,6 +132,38 @@ qint64 residentMiB() {
+ 	return fields[1].toLongLong() * sysconf(_SC_PAGESIZE) / (1024 * 1024);
+ }
+ 
++// Installed on the application: notes the time of the last user input. A type switch and,
++// for input events only, a monotonic clock read.
++class InputWatcher: public QObject {
++public:
++	bool eventFilter(QObject* /*watched*/, QEvent* event) override {
++		switch (event->type()) {
++		case QEvent::KeyPress:
++		case QEvent::MouseButtonPress:
++		case QEvent::MouseMove:
++		case QEvent::Wheel:
++		case QEvent::TouchBegin:
++		case QEvent::TouchUpdate:
++		case QEvent::TabletPress:
++		case QEvent::TabletMove:
++		case QEvent::NativeGesture:
++		case QEvent::InputMethod: this->last.start(); break; // IME / on-screen keyboard text
++		default: break;
++		}
++		return false;
++	}
++
++	QElapsedTimer last;
++};
++
++InputWatcher* gInput = nullptr; // NOLINT
++
++void ensureInputWatcher() {
++	if (gInput != nullptr) return;
++	gInput = new InputWatcher(); // leaked with the application
++	QCoreApplication::instance()->installEventFilter(gInput);
++}
++
+ class Trimmer: public QObject {
+ public:
+ 	explicit Trimmer(int delayMs, bool trimComponents)
+@@ -144,11 +185,11 @@ public:
+ 
+ private:
+ 	void onTimeout() {
+-		if (this->lastInput.isValid() && this->lastInput.elapsed() < this->delayMs) {
++		if (const auto input = msSinceInput(); input >= 0 && input < this->delayMs) {
+ 			// Someone is using the shell (pointer or keys on one of its windows): do not take a
+ 			// GC pause under their hands. Look again once `delay` has passed since that input;
+ 			// this re-arms only while input keeps coming, so an idle shell is not woken.
+-			this->timer.start(static_cast<int>(this->delayMs - this->lastInput.elapsed()));
++			this->timer.start(static_cast<int>(this->delayMs - input));
+ 			return;
+ 		}
+ 
+@@ -166,25 +207,6 @@ private:
+ 		QTimer::singleShot(RELEASE_DELAY_MS, this, &Trimmer::release);
+ 	}
+ 
+-	// Installed on the application: notes the time of the last user input. A type switch and,
+-	// for input events only, a monotonic clock read.
+-	bool eventFilter(QObject* /*watched*/, QEvent* event) override {
+-		switch (event->type()) {
+-		case QEvent::KeyPress:
+-		case QEvent::MouseButtonPress:
+-		case QEvent::MouseMove:
+-		case QEvent::Wheel:
+-		case QEvent::TouchBegin:
+-		case QEvent::TouchUpdate:
+-		case QEvent::TabletPress:
+-		case QEvent::TabletMove:
+-		case QEvent::NativeGesture:
+-		case QEvent::InputMethod: this->lastInput.start(); break; // IME / on-screen keyboard text
+-		default: break;
+-		}
+-		return false;
+-	}
+-
+ 	void release() {
+ 		// The statistics cost a jemalloc epoch refresh and /proc reads: only when logged.
+ 		const bool debug = logMemTrim().isDebugEnabled();
+@@ -230,7 +252,6 @@ private:
+ 	bool trimComponents;
+ 	QTimer timer;
+ 	QElapsedTimer lastTrim;
+-	QElapsedTimer lastInput;
+ 	qint64 gcMs = 0;
+ 	int trims = 0;
+ };
+@@ -267,8 +288,259 @@ void onObjectRemoved(QObject* object) {
+ 	);
+ }
+ 
++// Idle buffer trim (0009).
++//
++// Mesa's EGL Wayland platform (src/egl/drivers/dri2/platform_wayland.c) keeps up to 4 colour
++// buffers per surface. When the compositor holds buffers during an animation it allocates a
++// third (or fourth); it frees such a spare only in update_buffers(), i.e. while acquiring the
++// next back buffer, once the spare's age, counted in swaps, exceeds BUFFER_TRIM_AGE_HYSTERESIS
++// (20). A window that stops drawing right after an animation keeps its spares for as long as
++// it stays idle; a full-screen 2880x1800 buffer is ~20 MB of GPU memory (system RAM on an iGPU).
++//
++// So: once a visible window of at least 4 MiB per buffer has presented no frame for
++// QS_IDLE_BUFFER_TRIM_DELAY_MS (2 s) and the shell has had no input for as long, it redraws its
++// unchanged scene QS_IDLE_BUFFER_TRIM_FRAMES (22) times, QS_IDLE_BUFFER_TRIM_PACE_MS (500 ms)
++// apart, so the spares age out and Mesa frees them. Same content, same pixels. Only after at
++// least 3 animation frames (under 50 ms apart) since the previous burst, at most once per
++// QS_IDLE_BUFFER_TRIM_INTERVAL_MS (120 s, at least 1 s) per window, doubling up to 10 min for
++// a window that keeps animating again right after, and abandoned on input. Each redraw is a
++// commit the compositor recomposites (with blur), so a burst costs about as much as 22 frames
++// of a small animation, spread over 11 s. A window that is hidden or gets no frame callbacks
++// never presents, so the burst just stops. Only with OpenGL on Mesa under Wayland (detected
++// once at the first scene-graph initialisation); elsewhere the trimmers remove themselves.
++// QS_NO_IDLE_BUFFER_TRIM=1 turns it off (QS_IDLE_BUFFER_TRIM=1 on, if the default is off).
++
++constexpr int BUFFER_TRIM_MIN_FRAMES = 3;
++// Frames closer than this belong to an animation, the only time a spare can be allocated.
++constexpr qint64 BUFFER_TRIM_ANIMATION_GAP_MS = 50;
++// A spare of a smaller window is not worth the compositor's recomposites (bar, dock, popups).
++// 4 MiB, not 8: a full-screen 1920x1080 buffer is 7.9 MiB, and 8 left out every 1080p screen.
++constexpr qint64 BUFFER_TRIM_MIN_BUFFER_BYTES = 4ll * 1024 * 1024;
++constexpr qint64 BUFFER_TRIM_MIN_INTERVAL_MS = 1000;
++constexpr qint64 BUFFER_TRIM_MAX_INTERVAL_MS = 600000;
++
++// Default on; to ship it off, make this false (QS_IDLE_BUFFER_TRIM=1 then turns it on).
++constexpr bool BUFFER_TRIM_DEFAULT_ON = true;
++
++struct BufferTrimConfig {
++	bool enabled = BUFFER_TRIM_DEFAULT_ON;
++	int delayMs = 2000;
++	int frames = 22;
++	int intervalMs = 120000;
++	int paceMs = 500;
++};
++
++const BufferTrimConfig& bufferTrimConfig() {
++	static const auto config = [] {
++		BufferTrimConfig c;
++		if (qEnvironmentVariableIntValue("QS_NO_IDLE_BUFFER_TRIM") == 1) c.enabled = false;
++		else if (qEnvironmentVariableIntValue("QS_IDLE_BUFFER_TRIM") == 1) c.enabled = true;
++		bool ok = false;
++		if (auto v = qEnvironmentVariableIntValue("QS_IDLE_BUFFER_TRIM_DELAY_MS", &ok); ok && v > 0) {
++			c.delayMs = v;
++		}
++		if (auto v = qEnvironmentVariableIntValue("QS_IDLE_BUFFER_TRIM_FRAMES", &ok); ok && v > 0) {
++			c.frames = v;
++		}
++		if (auto v = qEnvironmentVariableIntValue("QS_IDLE_BUFFER_TRIM_INTERVAL_MS", &ok); ok) {
++			c.intervalMs = static_cast<int>(qMax<qint64>(v, BUFFER_TRIM_MIN_INTERVAL_MS));
++		}
++		if (auto v = qEnvironmentVariableIntValue("QS_IDLE_BUFFER_TRIM_PACE_MS", &ok); ok && v > 0) {
++			c.paceMs = v;
++		}
++		if (c.enabled) {
++			qCInfo(logMemTrim).nospace() << "Idle buffer trim enabled (" << c.frames << " frames "
++			                             << c.paceMs << " ms apart after " << c.delayMs
++			                             << " ms idle, at most every " << c.intervalMs
++			                             << " ms per window; OpenGL on Mesa only)";
++		} else {
++			qCInfo(logMemTrim) << "Idle buffer trim disabled";
++		}
++		return c;
++	}();
++	return config;
++}
++
++// Whether the windows render through Mesa's EGL Wayland platform, the one place the 20-swap
++// rule exists: -1 not known yet, 0 no, 1 yes. Decided once, by the first window whose scene
++// graph initialises (on its render thread, with its GL context current). Under Vulkan, the
++// software renderer, X11 or another GL driver the trimmers remove themselves.
++std::atomic<int> gMesaWayland {-1}; // NOLINT
++
++void detectMesaWayland(QQuickWindow* window, bool wayland) {
++	if (gMesaWayland.load(std::memory_order_acquire) != -1) return;
++
++	auto result = 0;
++	QString what = QStringLiteral("not Wayland");
++	if (wayland) {
++		auto* renderer = window->rendererInterface();
++		const auto api = renderer ? renderer->graphicsApi() : QSGRendererInterface::Unknown;
++		what = QStringLiteral("graphics API %1").arg(static_cast<int>(api));
++#if QT_CONFIG(opengl)
++		if (api == QSGRendererInterface::OpenGL) {
++			const char* version = nullptr;
++			if (auto* context = QOpenGLContext::currentContext()) {
++				version = reinterpret_cast<const char*>(context->functions()->glGetString(GL_VERSION));
++			}
++			what = QStringLiteral("OpenGL %1").arg(QString::fromLatin1(version ? version : "(no context)"));
++			result = version && std::strstr(version, "Mesa") ? 1 : 0;
++		}
++#endif
++	}
++
++	auto expected = -1;
++	if (gMesaWayland.compare_exchange_strong(expected, result, std::memory_order_acq_rel)) {
++		qCInfo(logMemTrim).nospace() << "Idle buffer trim " << (result ? "in effect" : "not in effect")
++		                             << ": " << what;
++	}
++}
++
++class BufferTrimmer: public QObject {
++public:
++	explicit BufferTrimmer(QQuickWindow* window): QObject(window), window(window) {
++		this->paceTimer.setSingleShot(true);
++		QObject::connect(&this->paceTimer, &QTimer::timeout, window, &QQuickWindow::update);
++		this->timer.setSingleShot(true);
++		QObject::connect(&this->timer, &QTimer::timeout, this, &BufferTrimmer::onTimeout);
++
++		if (gMesaWayland.load(std::memory_order_acquire) == -1) {
++			// Direct: runs on the render thread while its GL context is current.
++			QObject::connect(
++			    window,
++			    &QQuickWindow::sceneGraphInitialized,
++			    this,
++			    [window, wayland = this->wayland]() { detectMesaWayland(window, wayland); },
++			    Qt::DirectConnection
++			);
++		}
++
++		// Emitted on the render thread with the threaded loop; handled on the GUI thread.
++		QObject::connect(
++		    window,
++		    &QQuickWindow::frameSwapped,
++		    this,
++		    &BufferTrimmer::onFrameSwapped,
++		    Qt::QueuedConnection
++		);
++	}
++
++private:
++	void onFrameSwapped() {
++		const auto& config = bufferTrimConfig();
++
++		auto mesa = gMesaWayland.load(std::memory_order_acquire);
++		if (mesa == -1) {
++			// Not every backend reports sceneGraphInitialized (the software one does not);
++			// anything but OpenGL can be decided here without a GL context.
++			auto* renderer = this->window->rendererInterface();
++			const auto api = renderer ? renderer->graphicsApi() : QSGRendererInterface::Unknown;
++			if (api != QSGRendererInterface::Unknown && api != QSGRendererInterface::OpenGL) {
++				detectMesaWayland(this->window, this->wayland);
++				mesa = gMesaWayland.load(std::memory_order_acquire);
++			}
++		}
++		if (mesa == 0) {
++			this->deleteLater(); // nothing to do on this backend: drop the per-frame work too
++			return;
++		}
++
++		if (this->burstLeft > 0) {
++			const auto input = msSinceInput();
++			if (input >= 0 && input < config.delayMs) {
++				this->burstLeft = 0; // the user is back; their own frames age the buffers anyway
++			} else if (--this->burstLeft > 0) {
++				// Paced, not back to back: a redraw requested right on the frame callback finds
++				// the compositor still holding the previous buffer and takes the spare again.
++				// A gap lets that buffer come back, so two buffers rotate and the spare only
++				// ages. 500 ms also keeps a burst at 10 frames per 5 s or fewer, under the frame
++				// counts QML watchdogs treat as busy.
++				this->paceTimer.start(config.paceMs);
++				return;
++			}
++			qCDebug(logMemTrim) << "buffer trim done for" << this->window;
++			this->framesSinceBurst = 0;
++			this->lastBurst.start();
++			return;
++		}
++
++		// Only animation frames can have needed a spare; isolated updates (a clock tick) never
++		// do, so they do not make the window eligible again.
++		if (this->lastFrame.isValid() && this->lastFrame.elapsed() < BUFFER_TRIM_ANIMATION_GAP_MS) {
++			++this->framesSinceBurst;
++		}
++		this->lastFrame.start();
++		if (!this->timer.isActive()) this->timer.start(config.delayMs);
++	}
++
++	void onTimeout() {
++		const auto& config = bufferTrimConfig();
++		if (gMesaWayland.load(std::memory_order_acquire) != 1) return;
++		if (this->framesSinceBurst < BUFFER_TRIM_MIN_FRAMES) return;
++		if (!this->window->isVisible() || !this->window->isExposed()) return;
++
++		const auto pixels = this->window->size() * this->window->devicePixelRatio();
++		if (static_cast<qint64>(pixels.width()) * pixels.height() * 4 < BUFFER_TRIM_MIN_BUFFER_BYTES) {
++			return;
++		}
++
++		// Wait for both the window and the user to be idle; each check re-arms only while
++		// frames or input keep coming.
++		auto wait = config.delayMs - this->lastFrame.elapsed();
++		if (const auto input = msSinceInput(); input >= 0) {
++			wait = qMax(wait, config.delayMs - input);
++		}
++		if (this->lastBurst.isValid()) {
++			wait = qMax(wait, this->intervalMs - this->lastBurst.elapsed());
++		}
++		if (wait > 0) {
++			this->timer.start(static_cast<int>(wait));
++			return;
++		}
++
++		// A window that animates again soon after each burst (a periodic animation, like the
++		// island's) takes its spare right back: back off, doubling the interval up to 10 min,
++		// until it stays calm for twice the interval.
++		if (this->lastBurst.isValid() && this->lastBurst.elapsed() < 2 * this->intervalMs) {
++			this->intervalMs = qMin(this->intervalMs * 2, BUFFER_TRIM_MAX_INTERVAL_MS);
++		} else {
++			this->intervalMs = config.intervalMs;
++		}
++
++		qCDebug(logMemTrim) << "buffer trim:" << config.frames << "redraws of" << this->window
++		                    << "after" << this->framesSinceBurst << "animation frames, next interval"
++		                    << this->intervalMs << "ms";
++		this->burstLeft = config.frames;
++		this->window->update();
++	}
++
++	QQuickWindow* window;
++	bool wayland = QGuiApplication::platformName().startsWith(QLatin1String("wayland"));
++	QTimer timer;
++	QTimer paceTimer;
++	QElapsedTimer lastFrame;
++	QElapsedTimer lastBurst;
++	int framesSinceBurst = 0;
++	int burstLeft = 0;
++	qint64 intervalMs = bufferTrimConfig().intervalMs;
++};
++
+ } // namespace
+ 
++qint64 msSinceInput() {
++	if (gInput == nullptr || !gInput->last.isValid()) return -1;
++	return gInput->last.elapsed();
++}
++
++void trackWindowBuffers(QQuickWindow* window) {
++	if (window == nullptr || !bufferTrimConfig().enabled) return;
++	if (gMesaWayland.load(std::memory_order_acquire) == 0) return;
++	// A reload hands the same window to the new proxy, which connects it again.
++	if (window->findChild<QObject*>("qs-buffer-trimmer", Qt::FindDirectChildrenOnly)) return;
++	ensureInputWatcher();
++	auto* trimmer = new BufferTrimmer(window); // owned by the window
++	trimmer->setObjectName("qs-buffer-trimmer");
++}
++
+ void install() {
+ 	if (gTrimmer.load(std::memory_order_relaxed) != nullptr) return;
+ 	if (qEnvironmentVariableIntValue("QS_NO_IDLE_TRIM") == 1) {
+@@ -288,7 +560,7 @@ void install() {
+ 
+ 	// Intentionally leaked: the hook can still fire during static destruction.
+ 	gTrimmer.store(new Trimmer(delayMs, trimComponents), std::memory_order_release);
+-	QCoreApplication::instance()->installEventFilter(gTrimmer.load(std::memory_order_relaxed));
++	ensureInputWatcher();
+ 
+ 	gPrevHook.store(
+ 	    reinterpret_cast<QHooks::RemoveQObjectCallback>(qtHookData[QHooks::RemoveQObject]),
+diff --git a/src/core/memorytrim.hpp b/src/core/memorytrim.hpp
+index 94ea241..e08977e 100644
+--- a/src/core/memorytrim.hpp
++++ b/src/core/memorytrim.hpp
+@@ -1,9 +1,20 @@
+ #pragma once
+ 
++#include <qtypes.h>
++
++class QQuickWindow;
++
+ namespace qs::memtrim {
+ 
+ // Starts the idle memory trimmer (once; later calls do nothing). Call on the GUI thread
+ // after the QGuiApplication exists. QS_NO_IDLE_TRIM=1 leaves it off.
+ void install();
+ 
++// Milliseconds since the last key or pointer input to any shell window, -1 if none yet.
++qint64 msSinceInput();
++
++// Idle buffer trim (see memorytrim.cpp): call for every new QQuickWindow of the shell.
++// QS_NO_IDLE_BUFFER_TRIM=1 makes it a no-op.
++void trackWindowBuffers(QQuickWindow* window);
++
+ } // namespace qs::memtrim
+diff --git a/src/window/proxywindow.cpp b/src/window/proxywindow.cpp
+index bc0181c..c9975c0 100644
+--- a/src/window/proxywindow.cpp
++++ b/src/window/proxywindow.cpp
+@@ -26,6 +26,7 @@
+ #include <qwindow.h>
+ 
+ #include "../core/generation.hpp"
++#include "../core/memorytrim.hpp"
+ #include "../core/qmlglobal.hpp"
+ #include "../core/qmlscreen.hpp"
+ #include "../core/region.hpp"
+@@ -205,6 +206,7 @@ void ProxyWindowBase::connectWindow() {
+ 	}
+ 
+ 	this->window->setProxy(this);
++	qs::memtrim::trackWindowBuffers(this->window);
+ 
+ 	// clang-format off
+ 	QObject::connect(this->window, &QWindow::visibilityChanged, this, &ProxyWindowBase::onVisibleChanged);

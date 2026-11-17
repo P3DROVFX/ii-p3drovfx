@@ -12,7 +12,9 @@
 // only batches small images; 1024x1024 holds everything up to 512 px and costs 4 MB.
 //@ pragma Env QSG_ATLAS_WIDTH=1024
 //@ pragma Env QSG_ATLAS_HEIGHT=1024
-//@ pragma Env MALLOC_CONF=dirty_decay_ms:1000,muzzy_decay_ms:1000,background_thread:true
+// No MALLOC_CONF pragma: jemalloc reads its options at the first allocation, before any pragma is
+// applied, so it never reached the shell's own allocator; it only replaced the launcher's narenas:1
+// for a crash-relaunched shell. The patched Quickshell compiles narenas:1 in (quickshell-build 0006).
 // FFmpeg's hardware decoders on NVIDIA create a CUDA context on the first sound of a session
 // (~40 MB that is never released). The shell only plays short sounds and two optional videos
 // (lock screen wallpaper, video editor preview), so software decoding is enough.
@@ -300,17 +302,21 @@ ShellRoot {
         }
     }
 
-    // Compiles Settings and every page ahead of the first open. Compiling is
-    // what made the first open of a session (and each first page visit) slow;
-    // an asynchronous component compiles off the GUI thread, and the engine
-    // keeps compiled code after a first visit anyway. No objects are created.
+    // Compiles Settings and the page it opens on ahead of the first open.
+    // Compiling is what made the first open of a session slow; an asynchronous
+    // component compiles off the GUI thread, and holding it here keeps the
+    // compiled code. No objects are created. The other pages (~150 files)
+    // compile on their first visit instead of staying resident all session.
+    // A fresh window always opens on the first registry page (currentPage 0);
+    // deep links name their own page.
     Timer {
         id: settingsWarmup
         property var components: []
         interval: 15000
         running: Config.ready && components.length === 0
         onTriggered: {
-            const urls = ["SettingsWindow.qml"].concat(SettingsPageRegistry.pages.map(page => page.component));
+            const first = SettingsPageRegistry.pages.length > 0 ? SettingsPageRegistry.pages[0].component : "";
+            const urls = first !== "" ? ["SettingsWindow.qml", first] : ["SettingsWindow.qml"];
             settingsWarmup.components = urls.map(url => Qt.createComponent(url, Component.Asynchronous));
         }
     }

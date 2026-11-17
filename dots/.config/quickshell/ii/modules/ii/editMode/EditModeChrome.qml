@@ -26,10 +26,44 @@ import qs.modules.ii.editMode
 Scope {
     id: root
 
+    // The surface and its drawer (~40 files) compile on the first entry rather
+    // than with the shell: most sessions never enter Edit Mode. They compile on
+    // `editModeOpening`, before `editMode` turns true, so the wait comes before
+    // the entrance animation (`editProgress`) starts instead of eating its first
+    // frames. Held here, so later entries find the type compiled.
+    property Component surfaceComponent: null
+    function ensureSurfaceComponent(): void {
+        if (root.surfaceComponent !== null)
+            return;
+        const component = Qt.createComponent("EditModeChromeSurface.qml");
+        // A surface that fails to compile is reported and not kept, and the mode
+        // stands down: without its chrome there is no Done button to leave by.
+        // The next entry tries again.
+        if (component.status === Component.Error) {
+            console.warn("[EditModeChrome] EditModeChromeSurface.qml failed to load:", component.errorString());
+            Qt.callLater(() => GlobalStates.closeEditMode());
+            return;
+        }
+        root.surfaceComponent = component;
+    }
+    Connections {
+        target: GlobalStates
+        function onEditModeOpening(): void {
+            root.ensureSurfaceComponent();
+        }
+    }
+    Component.onCompleted: {
+        if (GlobalStates.editMode)
+            root.ensureSurfaceComponent();
+    }
+
     Variants {
         model: Quickshell.screens
 
-        LazyLoader {
+        // A Loader by URL rather than `LazyLoader { component: EditModeChromeSurface {} }`,
+        // which compiled the whole surface with the shell (see surfaceComponent).
+        // Synchronous, as the LazyLoader was.
+        Loader {
             id: surfaceLoader
             required property var modelData
 
@@ -47,10 +81,17 @@ Scope {
             active: surfaceLoader.isEditScreen
                 && (GlobalStates.editMode || GlobalStates.editProgress > 0)
 
-            component: EditModeChromeSurface {
-                screen: surfaceLoader.modelData
-                underneath: surfaceLoader.specialShown
+            function syncSource(): void {
+                // Again after an error, so a later entry retries the load.
+                if (active && (source.toString() === "" || status === Loader.Error)) {
+                    setSource(Qt.resolvedUrl("EditModeChromeSurface.qml"), {
+                        "screen": Qt.binding(() => surfaceLoader.modelData),
+                        "underneath": Qt.binding(() => surfaceLoader.specialShown)
+                    });
+                }
             }
+            Component.onCompleted: syncSource()
+            onActiveChanged: syncSource()
         }
     }
 }

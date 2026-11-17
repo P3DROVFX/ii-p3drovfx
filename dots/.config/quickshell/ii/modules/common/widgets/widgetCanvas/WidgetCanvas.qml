@@ -13,10 +13,10 @@ MouseArea {
     property bool gridOverlayEnabled: false
     // Standard desktop alignment grid snaps to 10px regardless of monitor.
     property int alignmentGridStep: 10
-    onAlignmentGridStepChanged: dotGrid.requestPaint()
+    onAlignmentGridStepChanged: if (dotGridLoader.item) dotGridLoader.item.requestPaint()
     // Visual grid points are spaced further apart than the snap step (28px).
     property int visualGridStep: 28
-    onVisualGridStepChanged: dotGrid.requestPaint()
+    onVisualGridStepChanged: if (dotGridLoader.item) dotGridLoader.item.requestPaint()
 
     // The area the lattice belongs to, and the corner it is cut to, in canvas
     // coordinates. Edit Mode shrinks the desktop into a rounded card, and a
@@ -688,11 +688,14 @@ MouseArea {
             widget.cancelDrag();
     }
 
-    Canvas {
-        id: dotGrid
+    // The lattice. A full-screen Canvas keeps its image (window size x DPR,
+    // ~20 MB at 2880x1800) for as long as it exists, so it is built when the
+    // lattice is wanted and released once it has faded out, instead of holding
+    // that image for the rest of the session after the first drag.
+    Loader {
+        id: dotGridLoader
         anchors.fill: parent
         z: -1
-        renderTarget: Canvas.FramebufferObject
         // The lattice shows for a drag, and once the mode has fully arrived.
         // Mid-transition it stays hidden: the desktop is being shrink-scaled on
         // every one of those frames, and a full-screen FBO sampled along with it
@@ -715,86 +718,93 @@ MouseArea {
             || (root.editMode && modeSettled && widgetsCatalogueOpen)) && root.gridOverlayEnabled
         visible: wanted && opacity > 0.001
         opacity: wanted ? 0.4 : 0
-
-        readonly property bool animating: root.editProgress > 0 && root.editProgress < 1
-
-        property real dotSize: 2.6
-        onDotSizeChanged: { if (wanted && !animating) requestPaint(); }
-        readonly property color dotColor: Appearance.colors.colOnSurface
-
-        // Uniform on purpose. A radial falloff around the dragged widget was
-        // tried and reverted: it repainted this full-screen canvas on every
-        // pointer frame with a per-dot alpha, which is ~20k Qt.rgba allocations
-        // and fillStyle switches per frame — the grid could not keep up and
-        // read as simply missing. Painted once per size/step change, it costs
-        // nothing while you drag.
-
-        // The card, and how far into a row the corner has eaten. Solved per row
-        // rather than per dot: one square root a row instead of ~200 distance
-        // tests, so the corner costs nothing on top of the loop that was
-        // already here.
-        readonly property rect card: root.gridCardRect
-        readonly property real cardRadius: Math.max(0, Math.min(root.gridCardRadius, Math.min(card.width, card.height) / 2))
-
-        onPaint: {
-            if (!wanted)
-                return;
-            const ctx = getContext("2d");
-            ctx.reset();
-            ctx.fillStyle = dotGrid.dotColor;
-
-            const dotRadius = dotGrid.dotSize / 2;
-            const step = Math.max(1, root.visualGridStep);
-            const left = dotGrid.card.x;
-            const top = dotGrid.card.y;
-            const right = left + dotGrid.card.width;
-            const bottom = top + dotGrid.card.height;
-            const radius = dotGrid.cardRadius;
-            const tau = Math.PI * 2;
-            const radiusSq = radius * radius;
-
-            ctx.beginPath();
-            for (let y = 0; y <= height; y += step) {
-                if (y < top || y > bottom)
-                    continue;
-                // How deep this row sits inside the corner's band, and so how
-                // far the arc has pulled the row's ends in.
-                const depth = Math.max(0, Math.max(top + radius - y, y - (bottom - radius)));
-                if (depth > radius)
-                    continue;
-                const inset = depth > 0 ? radius - Math.sqrt(Math.max(0, radiusSq - depth * depth)) : 0;
-                const rowLeft = left + inset;
-                const rowRight = right - inset;
-                for (let x = 0; x <= width; x += step) {
-                    if (x < rowLeft || x > rowRight)
-                        continue;
-                    ctx.moveTo(x + dotRadius, y);
-                    ctx.arc(x, y, dotRadius, 0, tau);
-                }
-            }
-            ctx.fill();
-        }
-
-        onWidthChanged: { if (wanted && !animating) requestPaint(); }
-        onHeightChanged: { if (wanted && !animating) requestPaint(); }
-        onDotColorChanged: { if (wanted && !animating) requestPaint(); }
-        onCardChanged: { if (wanted && !animating) requestPaint(); }
-        // Whole pixels only: the corner grows with the shrink, and repainting a
-        // full-screen lattice on every sub-pixel step of that animation is a
-        // hitch nobody asked for.
-        property int roundedRadius: Math.round(cardRadius)
-        onRoundedRadiusChanged: { if (wanted && !animating) requestPaint(); }
-        onVisibleChanged: {
-            if (visible && !animating)
-                requestPaint();
-        }
-        onAnimatingChanged: {
-            if (!animating && wanted)
-                requestPaint();
-        }
+        active: wanted || opacity > 0.001
 
         Behavior on opacity {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        }
+
+        sourceComponent: Canvas {
+            id: dotGrid
+            anchors.fill: parent
+            renderTarget: Canvas.FramebufferObject
+
+            readonly property bool animating: root.editProgress > 0 && root.editProgress < 1
+
+            property real dotSize: 2.6
+            onDotSizeChanged: { if (dotGridLoader.wanted && !animating) requestPaint(); }
+            readonly property color dotColor: Appearance.colors.colOnSurface
+
+            // Uniform on purpose. A radial falloff around the dragged widget was
+            // tried and reverted: it repainted this full-screen canvas on every
+            // pointer frame with a per-dot alpha, which is ~20k Qt.rgba allocations
+            // and fillStyle switches per frame — the grid could not keep up and
+            // read as simply missing. Painted once per size/step change, it costs
+            // nothing while you drag.
+
+            // The card, and how far into a row the corner has eaten. Solved per row
+            // rather than per dot: one square root a row instead of ~200 distance
+            // tests, so the corner costs nothing on top of the loop that was
+            // already here.
+            readonly property rect card: root.gridCardRect
+            readonly property real cardRadius: Math.max(0, Math.min(root.gridCardRadius, Math.min(card.width, card.height) / 2))
+
+            onPaint: {
+                if (!dotGridLoader.wanted)
+                    return;
+                const ctx = getContext("2d");
+                ctx.reset();
+                ctx.fillStyle = dotGrid.dotColor;
+
+                const dotRadius = dotGrid.dotSize / 2;
+                const step = Math.max(1, root.visualGridStep);
+                const left = dotGrid.card.x;
+                const top = dotGrid.card.y;
+                const right = left + dotGrid.card.width;
+                const bottom = top + dotGrid.card.height;
+                const radius = dotGrid.cardRadius;
+                const tau = Math.PI * 2;
+                const radiusSq = radius * radius;
+
+                ctx.beginPath();
+                for (let y = 0; y <= height; y += step) {
+                    if (y < top || y > bottom)
+                        continue;
+                    // How deep this row sits inside the corner's band, and so how
+                    // far the arc has pulled the row's ends in.
+                    const depth = Math.max(0, Math.max(top + radius - y, y - (bottom - radius)));
+                    if (depth > radius)
+                        continue;
+                    const inset = depth > 0 ? radius - Math.sqrt(Math.max(0, radiusSq - depth * depth)) : 0;
+                    const rowLeft = left + inset;
+                    const rowRight = right - inset;
+                    for (let x = 0; x <= width; x += step) {
+                        if (x < rowLeft || x > rowRight)
+                            continue;
+                        ctx.moveTo(x + dotRadius, y);
+                        ctx.arc(x, y, dotRadius, 0, tau);
+                    }
+                }
+                ctx.fill();
+            }
+
+            onWidthChanged: { if (dotGridLoader.wanted && !animating) requestPaint(); }
+            onHeightChanged: { if (dotGridLoader.wanted && !animating) requestPaint(); }
+            onDotColorChanged: { if (dotGridLoader.wanted && !animating) requestPaint(); }
+            onCardChanged: { if (dotGridLoader.wanted && !animating) requestPaint(); }
+            // Whole pixels only: the corner grows with the shrink, and repainting a
+            // full-screen lattice on every sub-pixel step of that animation is a
+            // hitch nobody asked for.
+            property int roundedRadius: Math.round(cardRadius)
+            onRoundedRadiusChanged: { if (dotGridLoader.wanted && !animating) requestPaint(); }
+            onVisibleChanged: {
+                if (visible && !animating)
+                    requestPaint();
+            }
+            onAnimatingChanged: {
+                if (!animating && dotGridLoader.wanted)
+                    requestPaint();
+            }
         }
     }
 

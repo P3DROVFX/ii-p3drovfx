@@ -1,0 +1,89 @@
+diff --git a/src/core/memorytrim.cpp b/src/core/memorytrim.cpp
+index 160ba07..ffbfa43 100644
+--- a/src/core/memorytrim.cpp
++++ b/src/core/memorytrim.cpp
+@@ -46,6 +46,13 @@
+ // Release: jemalloc's thread.tcache.flush + arena.<all>.purge, found with dlsym so a
+ // build without jemalloc (USE_JEMALLOC=OFF) falls back to glibc's malloc_trim(0).
+ //
++// Component cache: after the GC, QQmlEngine::trimComponentCache() drops the compiled types
++// no live object uses any more (a closed panel's files), when QS_IDLE_TRIM_COMPONENTS=1.
++// Off by default: measured on a large config, the call itself blocked the GUI thread for
++// 34-71 ms whenever it had types to drop, the first reopen of a trimmed panel was ~10-16 ms
++// slower (its types load again: disk cache, but imports and type data are rebuilt), and the
++// settled PSS showed no measurable gain.
++//
+ // QS_NO_IDLE_TRIM=1 turns it off; the quickshell.memtrim debug category logs every trim.
+ 
+ namespace qs::memtrim {
+@@ -118,7 +125,9 @@ qint64 residentMiB() {
+ 
+ class Trimmer: public QObject {
+ public:
+-	explicit Trimmer(int delayMs): delayMs(delayMs) {
++	explicit Trimmer(int delayMs, bool trimComponents)
++	    : delayMs(delayMs)
++	    , trimComponents(trimComponents) {
+ 		this->timer.setSingleShot(true);
+ 		QObject::connect(&this->timer, &QTimer::timeout, this, &Trimmer::onTimeout);
+ 	}
+@@ -184,6 +193,15 @@ private:
+ 
+ 		QElapsedTimer t;
+ 		t.start();
++		if (this->trimComponents) {
++			// After the GC, so components only dead JS objects referenced count as unused.
++			if (auto* generation = EngineGeneration::currentGeneration()) {
++				if (generation->engine) generation->engine->trimComponentCache();
++			}
++		}
++		const auto componentsMs = t.elapsed();
++
++		t.restart();
+ 		if (auto* mallctl = mallctlFn()) {
+ 			mallctl("thread.tcache.flush", nullptr, nullptr, nullptr, 0);
+ 			mallctl(PURGE_ALL_ARENAS, nullptr, nullptr, nullptr, 0);
+@@ -201,13 +219,15 @@ private:
+ 		const auto jeAfter = jeStat("stats.resident");
+ 
+ 		qCDebug(logMemTrim).nospace() << "trim #" << this->trims << ": gc " << this->gcMs
+-		                              << " ms, release " << releaseMs << " ms, rss " << rssBefore
++		                              << " ms, components " << componentsMs << " ms, release "
++		                              << releaseMs << " ms, rss " << rssBefore
+ 		                              << " -> " << rssAfter << " MiB, jemalloc resident "
+ 		                              << jeBefore / (1024 * 1024) << " -> "
+ 		                              << jeAfter / (1024 * 1024) << " MiB";
+ 	}
+ 
+ 	int delayMs;
++	bool trimComponents;
+ 	QTimer timer;
+ 	QElapsedTimer lastTrim;
+ 	QElapsedTimer lastInput;
+@@ -264,8 +284,10 @@ void install() {
+ 	auto burst = qEnvironmentVariableIntValue("QS_IDLE_TRIM_BURST", &ok);
+ 	if (ok && burst > 0) gBurst.store(static_cast<quint32>(burst), std::memory_order_relaxed);
+ 
++	const auto trimComponents = qEnvironmentVariableIntValue("QS_IDLE_TRIM_COMPONENTS") == 1;
++
+ 	// Intentionally leaked: the hook can still fire during static destruction.
+-	gTrimmer.store(new Trimmer(delayMs), std::memory_order_release);
++	gTrimmer.store(new Trimmer(delayMs, trimComponents), std::memory_order_release);
+ 	QCoreApplication::instance()->installEventFilter(gTrimmer.load(std::memory_order_relaxed));
+ 
+ 	gPrevHook.store(
+@@ -281,10 +303,12 @@ void install() {
+ 		auto size = sizeof(narenas);
+ 		mallctl("opt.narenas", &narenas, &size, nullptr, 0);
+ 		qCInfo(logMemTrim).nospace() << "Idle memory trim active (jemalloc, opt.narenas=" << narenas
+-		                             << ", delay " << delayMs << " ms, burst " << gBurst.load() << ")";
++		                             << ", delay " << delayMs << " ms, burst " << gBurst.load()
++		                             << (trimComponents ? ", components" : "") << ")";
+ 	} else {
+ 		qCInfo(logMemTrim).nospace() << "Idle memory trim active (malloc_trim, delay " << delayMs
+-		                             << " ms, burst " << gBurst.load() << ")";
++		                             << " ms, burst " << gBurst.load()
++		                             << (trimComponents ? ", components" : "") << ")";
+ 	}
+ }
+ 

@@ -4,5 +4,7 @@
 QS_COMMIT=9b0f339b19057f4731bf3b48293307d7ef241671
 # pkgver/rpm version of that commit: <tag>.r<commits since tag>.g<short>
 QS_VERSION=0.3.2.r11.g9b0f339
-# Bump when the patches or the packaging change without a new commit.
-QS_RELEASE=2
+# The visible version. A changed patch, CMake option or recipe is rebuilt
+# without a bump (qs-build.sh compares a build stamp); bump it anyway when you
+# want the version to show the change.
+QS_RELEASE=3

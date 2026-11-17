@@ -243,7 +243,12 @@ Item {
             height: Math.round(cardBackground.height * Math.max(0, Math.min(1, root.level)))
             clip: true
 
+            // Only on screen. The level changes with every resource sample, and
+            // an animation started anywhere has every shell window draw a
+            // frame: a hidden card (the island's retained dashboard) made all
+            // of them redraw every sample. Hidden, the level is set at once.
             Behavior on height {
+                enabled: fillWindow.visible
                 NumberAnimation {
                     duration: Appearance.animation.elementMoveFast.duration
                     easing.type: Appearance.animation.elementMoveFast.type
