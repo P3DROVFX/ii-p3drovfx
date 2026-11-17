@@ -112,6 +112,9 @@ fn nonce(direction: u32, counter: u64) -> Nonce {
 }
 
 /// One session's frames out over UDP.
+/// The least parity (% of a block's shards) for key frames and codec configs.
+const KEY_FEC_PCT: usize = 40;
+
 pub struct Sender {
     sock: Arc<UdpSocket>,
     peer: Arc<Peer>,
@@ -169,6 +172,11 @@ impl Sender {
             return false;
         }
         self.frame = self.frame.wrapping_add(1);
+        // A key frame or codec config (any kind but 1): everything after it needs it, it is
+        // ~10x a frame (more packets for a burst to hit), and losing one means asking again
+        // and waiting a cooldown (a 240 ms freeze measured). They come only at the start and
+        // on request, so the extra parity costs little.
+        let pct = if payload.first() == Some(&1) { self.fec_pct } else { self.fec_pct.max(KEY_FEC_PCT) };
         let started = Instant::now();
         let mut sent_bytes = 0u64;
         let mut in_burst = 0usize;
@@ -177,8 +185,8 @@ impl Sender {
             let k = data.len().div_ceil(SHARD).max(1);
             // Most frames are a shard or two: one parity shard can't outlast a burst, and a
             // few more cost ~1 KB each. The floor follows the loss the parity follows.
-            let floor = 1 + usize::from(self.fec_pct >= 25) + usize::from(self.fec_pct >= 45);
-            let m = (k * self.fec_pct).div_ceil(100).max(floor).min(255 - k);
+            let floor = 1 + usize::from(pct >= 25) + usize::from(pct >= 45);
+            let m = (k * pct).div_ceil(100).max(floor).min(255 - k);
             let mut shards: Vec<Vec<u8>> = (0..k + m)
                 .map(|i| {
                     let mut s = vec![0u8; SHARD];
