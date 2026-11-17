@@ -1,8 +1,9 @@
 # wf-recorder-ii
 
-`ii-wf-recorder`: wf-recorder with four patches, for ii link's second screen (the phone as a
-monitor, `scripts/iiLink/ii_link_src/src/screen.rs`). It is installed beside the
-distribution's `wf-recorder`, which the shell's screen recorder keeps using.
+`ii-wf-recorder`: wf-recorder with five patches, for ii link's second screen (the phone as a
+monitor, `scripts/iiLink/ii_link_src/src/screen.rs`) and the shell's screen recorder
+(`scripts/videos/record.sh`, which falls back to the distribution's `wf-recorder`). It is
+installed beside that one.
 
 | Patch | What it does |
 |---|---|
@@ -10,8 +11,9 @@ distribution's `wf-recorder`, which the shell's screen recorder keeps using.
 | `0002-ffmpeg9-supported-config.patch` | FFmpeg 9 removed `AVCodec`'s `pix_fmts`, `sample_fmts` and `ch_layouts`; this reads them through `avcodec_get_supported_config()` (FFmpeg ≥ 7.1) and keeps the fields for older FFmpeg. Upstream v0.6.0 doesn't build against FFmpeg 9 without it. |
 | `0003-ii-control-pipelined-capture.patch` | With `--ii-control`, the next screencopy request goes out a millisecond after the compositor should have committed the frame in flight (from the output's measured frame period), not once that frame's copy is ready. Hyprland copies pending requests right after a commit and says ready when the GPU is done, later still while the encoder shares the GPU: asked for only then, the next request missed the next frame's render whenever a copy ran late, which skipped 3–6 % of frames at 120 Hz (Intel Arc 140V; ~1 % with the patch) and more under load. A request early enough to share a commit gives a copy of the same frame, which is not encoded. |
 | `0004-ii-control-rate-cap-in-capture.patch` | With `--ii-control`, `-r N` keeps the frames due on N's schedule (by their commit times) and drops the rest before the encoder, instead of adding FFmpeg's fps filter, which holds every frame until the next one arrives: capture → encoded at 60 fps of a 120 Hz output went from 21 to 11 ms. |
+| `0005-capture-output-not-region.patch` | Without `-g`, the whole output is captured as an output, not as a region of itself (with or without `--ii-control`). Hyprland 0.57 keeps a region session's box in physical pixels and compares it with the logical box asked for, so on a scaled output it never found its session again: a new session and timer per frame, freed only when the output goes, walked by every surface it draws. Its CPU climbed from ~10 to ~100 % within minutes (the phone screen fell from 120 to 30 fps; a plain recording of the laptop screen at 1.5 took it from 6 to 26 % in 45 s); now flat at ~10 %. A `-g` region still hits the bug. |
 
-All four apply, in order, to upstream wf-recorder at the commit in `revision` (tag v0.6.0).
+All five apply, in order, to upstream wf-recorder at the commit in `revision` (tag v0.6.0).
 
 ## Install
 

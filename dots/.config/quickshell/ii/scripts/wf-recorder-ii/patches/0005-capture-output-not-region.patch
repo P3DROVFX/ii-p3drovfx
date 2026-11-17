@@ -1,0 +1,77 @@
+From d391c6607431ff4d10b21d50b540e74e7c3e570e Mon Sep 17 00:00:00 2001
+From: Scrimas <isma.ph@proton.me>
+Date: Tue, 17 Nov 2026 10:03:28 +0100
+Subject: [PATCH] Capture the output as an output, not as a region of itself
+
+Without -g, wf-recorder captured the whole output as a region of itself. Hyprland 0.57 keeps
+a region session's box in physical pixels and compares it with the logical box asked for,
+so on a scaled output it never found the session again: a new session and timer for every
+frame, freed only when the output goes, which every surface it draws walks. At scale 1.5
+its CPU went from ~10 to ~100 % within minutes and everything slowed down (the phone
+screen fell from 120 to 30 fps; a plain recording of the laptop screen took it from 6 to
+26 % in 45 s). Now the whole output is captured as an output (Hyprland matches those by
+monitor), with or without --ii-control: flat ~10 %. A -g region still hits the bug.
+---
+ src/main.cpp | 30 +++++++++++++++---------------
+ 1 file changed, 15 insertions(+), 15 deletions(-)
+
+diff --git a/src/main.cpp b/src/main.cpp
+index c00781b..4dc1d9b 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -1081,10 +1081,20 @@ capture_region selected_region{};
+ wf_recorder_output *chosen_output = nullptr;
+ zwlr_screencopy_frame_v1 *frame = NULL;
+ 
++// -g given: a region of the output. Without it, selected_region is the whole output, but
++// it is captured as an output (see capture_frame).
++static bool region_given = false;
++
+ static zwlr_screencopy_frame_v1 *capture_frame()
+ {
+-    /* Capture the whole output if the user hasn't provided a good geometry */
+-    if (!selected_region.is_selected())
++    /*
++     * The whole output unless -g asked for a region. As a region, Hyprland (0.57) never
++     * found its capture session again on a scaled output (it keeps the box in physical
++     * pixels and compares it with the logical one asked for): a new session and timer for
++     * every frame, never freed while the client stays, which every surface it draws walks.
++     * Its CPU climbed from ~10 to ~100 % within minutes at scale 1.5, slowing everything.
++     */
++    if (!region_given || !selected_region.is_selected())
+         return zwlr_screencopy_manager_v1_capture_output(screencopy_manager, 1, chosen_output->output);
+     return zwlr_screencopy_manager_v1_capture_output_region(
+         screencopy_manager, 1, chosen_output->output,
+@@ -1277,19 +1287,8 @@ void request_next_frame()
+         zwlr_screencopy_frame_v1_destroy(frame);
+     }
+ 
+-    /* Capture the whole output if the user hasn't provided a good geometry */
+-    if (!selected_region.is_selected())
+-    {
+-        frame = zwlr_screencopy_manager_v1_capture_output(
+-            screencopy_manager, 1, chosen_output->output);
+-    } else
+-    {
+-        frame = zwlr_screencopy_manager_v1_capture_output_region(
+-            screencopy_manager, 1, chosen_output->output,
+-            selected_region.x - chosen_output->x,
+-            selected_region.y - chosen_output->y,
+-            selected_region.width, selected_region.height);
+-    }
++    // The whole output as an output unless -g was given (capture_frame says why).
++    frame = capture_frame();
+ 
+     zwlr_screencopy_frame_v1_add_listener(frame, &frame_listener, NULL);
+ }
+@@ -1404,6 +1403,7 @@ int main(int argc, char *argv[])
+                 break;
+ 
+             case 'g':
++                region_given = true;
+                 selected_region.set_from_string(optarg);
+                 break;
+ 
+-- 
+2.56.0
+
