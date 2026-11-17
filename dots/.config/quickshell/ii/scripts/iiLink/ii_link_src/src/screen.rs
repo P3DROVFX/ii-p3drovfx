@@ -53,6 +53,12 @@ const CONGESTION_AGE: Duration = Duration::from_millis(200);
 const CONGESTION_WINDOW: Duration = Duration::from_secs(3);
 const STEP_UP_QUIET: Duration = Duration::from_secs(10);
 const RATE_COOLDOWN: Duration = Duration::from_secs(2);
+/// Over UDP: a second with this many frames parity couldn't rebuild is congestion (single
+/// losses are Wi-Fi's own, which a lower bitrate doesn't cure).
+const UDP_CONGESTED_LOST: u64 = 3;
+/// Over UDP the bitrate steps back up only after this long without congestion: each change
+/// restarts a VA-API encoder (a frozen picture), and UDP has no queue to show room early.
+const UDP_STEP_UP_QUIET: Duration = Duration::from_secs(30);
 /// A phone waiting for a key frame holds a frozen picture: answer again soon.
 const IDR_COOLDOWN: Duration = Duration::from_millis(500);
 /// 10 ms packets: half a second.
@@ -1030,9 +1036,10 @@ async fn run_ws_conn((ws, wants_udp): PhoneConn, sess: &mut WsSession, conns: &m
                 ));
             }
             _ = stats_tick.tick() => {
+                let quiet = if sess.wants_udp && sess.udp.is_some() { UDP_STEP_UP_QUIET } else { STEP_UP_QUIET };
                 if sess.adaptive
                     && sess.target_bitrate < sess.max_bitrate
-                    && last_congestion_at.elapsed() >= STEP_UP_QUIET
+                    && last_congestion_at.elapsed() >= quiet
                     && last_rate_change.is_none_or(|t| t.elapsed() >= RATE_COOLDOWN)
                 {
                     let next_rate = (((sess.target_bitrate as f64) * 1.25).round() as u64).min(sess.max_bitrate);
@@ -1129,8 +1136,39 @@ async fn run_ws_conn((ws, wants_udp): PhoneConn, sess: &mut WsSession, conns: &m
                         }
                         // The phone's UDP report each second: size the parity to the loss.
                         "net" => {
+                            let lost = v["lost"].as_u64().unwrap_or(0);
                             if let Some(u) = sess.udp.as_mut() {
-                                u.adapt_fec(v["loss"].as_f64().unwrap_or(0.0), v["lost"].as_u64().unwrap_or(0));
+                                u.adapt_fec(v["loss"].as_f64().unwrap_or(0.0), lost);
+                            }
+                            // UDP has no queue to back up: frames the parity couldn't save are the
+                            // congestion signal. Two such seconds within the window lower the rate
+                            // like a congested WebSocket queue does.
+                            if sess.adaptive && sess.wants_udp && lost >= UDP_CONGESTED_LOST {
+                                last_congestion_at = Instant::now();
+                                congestion_events.retain(|t| t.elapsed() < CONGESTION_WINDOW);
+                                congestion_events.push(Instant::now());
+                                let floor = sess.max_bitrate.min(FLOOR_BITRATE);
+                                let next_rate = ((sess.target_bitrate as f64) * 0.7).round().max(floor as f64) as u64;
+                                if congestion_events.len() >= 2
+                                    && next_rate < sess.target_bitrate
+                                    && last_rate_change.is_none_or(|t| t.elapsed() >= RATE_COOLDOWN)
+                                {
+                                    sess.target_bitrate = next_rate;
+                                    last_rate_change = Some(Instant::now());
+                                    congestion_events.clear();
+                                    sess.emit_rate();
+                                    restart_intended(
+                                        "rate_down",
+                                        sess,
+                                        &mut live,
+                                        &mut starting,
+                                        &mut backoff_until,
+                                        &mut dropping,
+                                        &mut dropping_since,
+                                        &mut restarted_this_drop,
+                                    )
+                                    .await;
+                                }
                             }
                         }
                         "idr" => {
@@ -1792,6 +1830,9 @@ mod tests {
             input_tx: in_tx,
             audio_src: watch::channel(None).1,
             audio: None,
+            udp: None,
+            wants_udp: false,
+            hevc: false,
         };
         // Same settings -> no target change
         assert!(!sess.apply_quality(&json!({"t": "quality", "bitrate": 16_000_000, "adaptive": true})));

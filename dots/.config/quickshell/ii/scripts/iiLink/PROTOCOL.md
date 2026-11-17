@@ -352,7 +352,10 @@ On the Wi-Fi side WebSocket `/iilink/1/screen` (link's TLS port, `transport:"ws"
     adaptive toggle; encoder restarts only if the target bitrate changes.
   - `{"t":"idr"}` → restarts the encoder for a fresh key frame (at most once per 500 ms).
   - `{"t":"net","loss":pct,"lost":frames}` (UDP sessions, every 1 s) → the parity follows
-    (below).
+    (below). With adaptive on, two seconds within 3 s that each lost ≥ 3 frames the parity
+    couldn't rebuild lower the bitrate ×0.7 (UDP has no queue to back up, so this is its
+    congestion signal); it steps back up after 30 s without (10 s on the WebSocket), as
+    each change restarts a VA-API encoder.
 
 Video over UDP (`screenUdp` in the shell's caps; udp.rs on the PC, ScreenUdp.kt on the
 phone). A hello with `"udp":true` makes the PC send `{"t":"udp","port":p,"key":base64,"sid":n}`
