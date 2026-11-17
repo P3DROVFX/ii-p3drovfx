@@ -1,6 +1,7 @@
 import qs
 import qs.services
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
 import QtQuick
 import QtQuick.Layouts
@@ -13,6 +14,8 @@ Scope {
 
     readonly property bool notifIsLeft: (Config.options.notifications.position ?? "top_right").endsWith("left")
     readonly property bool notifIsRight: (Config.options.notifications.position ?? "top_right").endsWith("right")
+    readonly property bool popupOnLeftSide: BarPlacement.vertical ? !BarPlacement.bottom : root.notifIsRight
+    readonly property bool popupOnRightSide: BarPlacement.vertical ? BarPlacement.bottom : root.notifIsLeft
 
     LazyLoader {
         id: popupLoader
@@ -21,14 +24,16 @@ Scope {
         component: PanelWindow {
             id: popupWindow
             color: "transparent"
-            visible: true
-            screen: {
-                const focused = Quickshell.Hyprland?.focusedMonitor?.name
-                if (focused) {
-                    const s = Quickshell.screens.find(s => s.name === focused)
-                    if (s) return s
-                }
-                return Quickshell.screens[0]
+            visible: Quickshell.screens.length > 0
+            screen: Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? Quickshell.screens[0] ?? null
+
+            readonly property real sidebarPush: {
+                const screenName = popupWindow.screen?.name ?? "";
+                if (root.popupOnLeftSide && screenName === GlobalStates.effectiveLeftMonitor)
+                    return GlobalStates.animatedLeftSidebarWidth;
+                if (root.popupOnRightSide && screenName === GlobalStates.effectiveRightMonitor)
+                    return GlobalStates.animatedRightSidebarWidth;
+                return 0;
             }
 
             WlrLayershell.namespace: "quickshell:videoEditorPopup"
@@ -36,37 +41,81 @@ Scope {
             exclusionMode: ExclusionMode.Ignore
             exclusiveZone: 0
 
+            readonly property bool anchoredTop: BarPlacement.vertical || (!BarPlacement.vertical && !BarPlacement.bottom)
+            readonly property bool anchoredLeft: BarPlacement.vertical ? !BarPlacement.bottom : root.notifIsRight
+
             anchors {
-                top: !BarPlacement.vertical && !BarPlacement.bottom
-                bottom: !BarPlacement.vertical && BarPlacement.bottom
-                left: BarPlacement.vertical ? (BarPlacement.bottom ? false : true) : root.notifIsRight
-                right: BarPlacement.vertical ? (BarPlacement.bottom ? true : false) : root.notifIsLeft
+                top: popupWindow.anchoredTop
+                bottom: !popupWindow.anchoredTop
+                left: popupWindow.anchoredLeft
+                right: !popupWindow.anchoredLeft
             }
 
+            readonly property int frameThickness: Config.options.appearance.fakeScreenRounding === 3 ? Config.options.appearance.wrappedFrameThickness : 0
+            readonly property int topFrameThickness: (BarPlacement.vertical || BarPlacement.bottom) ? frameThickness : 0
+            readonly property int bottomFrameThickness: (BarPlacement.vertical || !BarPlacement.bottom) ? frameThickness : 0
+            readonly property int leftFrameThickness: (!BarPlacement.vertical || BarPlacement.bottom) ? frameThickness : 0
+            readonly property int rightFrameThickness: (!BarPlacement.vertical || !BarPlacement.bottom) ? frameThickness : 0
+            readonly property int barGaps: (BarInteraction.cornerStyle !== 0) ? Appearance.sizes.hyprlandGapsOut : 0
+
             margins {
-                top: BarPlacement.vertical ? 0 : Appearance.sizes.barHeight
-                bottom: BarPlacement.vertical ? 0 : Appearance.sizes.barHeight
-                left: BarPlacement.vertical ? Appearance.sizes.verticalBarWidth : (root.notifIsRight ? Appearance.sizes.hyprlandGapsOut + 4 : 0)
-                right: BarPlacement.vertical ? Appearance.sizes.verticalBarWidth : (root.notifIsLeft ? Appearance.sizes.hyprlandGapsOut + 4 : 0)
+                top: {
+                    if (BarPlacement.vertical)
+                        return topFrameThickness;
+                    return BarPlacement.bottom ? 0 : Appearance.sizes.barHeight + topFrameThickness;
+                }
+                bottom: {
+                    if (BarPlacement.vertical)
+                        return bottomFrameThickness;
+                    return BarPlacement.bottom ? Appearance.sizes.barHeight + bottomFrameThickness : 0;
+                }
+                left: {
+                    if (BarPlacement.vertical)
+                        return (BarPlacement.bottom ? leftFrameThickness : Appearance.sizes.verticalBarWindowWidth + leftFrameThickness) + popupWindow.sidebarPush;
+                    if (root.notifIsRight)
+                        return barGaps + 4 + leftFrameThickness + popupWindow.sidebarPush;
+                    return leftFrameThickness + popupWindow.sidebarPush;
+                }
+                right: {
+                    if (BarPlacement.vertical)
+                        return (BarPlacement.bottom ? Appearance.sizes.verticalBarWindowWidth + rightFrameThickness : rightFrameThickness) + popupWindow.sidebarPush;
+                    if (root.notifIsLeft)
+                        return barGaps + 4 + rightFrameThickness + popupWindow.sidebarPush;
+                    return rightFrameThickness + popupWindow.sidebarPush;
+                }
             }
 
             implicitWidth: popupContent.implicitWidth
             implicitHeight: popupContent.implicitHeight
 
             mask: Region {
-                item: popupContent.contentBackground
+                item: popupContent.staticMaskTarget
             }
 
             VideoEditorPopupContent {
                 id: popupContent
+                videoPath: GlobalStates.videoEditorPath
+                transformOriginEdge: popupWindow.anchoredTop
+                    ? (popupWindow.anchoredLeft ? Item.TopLeft : Item.TopRight)
+                    : (popupWindow.anchoredLeft ? Item.BottomLeft : Item.BottomRight)
                 onDismissed: GlobalStates.videoEditorPopupOpen = false
                 onEditRequested: {
-                    GlobalStates.videoEditorPopupOpen = false
+                    GlobalStates.videoEditorPopupOpen = false;
                     if (Config.options.screenRecord.openInLosslessCut) {
-                        GlobalStates.launchLosslessCut(GlobalStates.videoEditorPath)
+                        GlobalStates.launchLosslessCut(GlobalStates.videoEditorPath);
                     } else {
-                        GlobalStates.videoEditorOpen = true
+                        GlobalStates.videoEditorOpen = true;
                     }
+                }
+                onOpenFolderRequested: {
+                    const cleanPath = FileUtils.trimFileProtocol(GlobalStates.videoEditorPath || "");
+                    const lastSlash = cleanPath.lastIndexOf("/");
+                    const folder = lastSlash > 0
+                        ? cleanPath.slice(0, lastSlash)
+                        : (Config.options.screenRecord?.savePath || FileUtils.trimFileProtocol(Directories.videos));
+                    GlobalStates.videoEditorPopupOpen = false;
+                    if (folder)
+                        Quickshell.execDetached(["xdg-open", folder]);
                 }
             }
         }
@@ -75,14 +124,12 @@ Scope {
     Connections {
         target: GlobalStates
         function onDashboardPanelOpenChanged() {
-            if (GlobalStates.dashboardPanelOpen) {
+            if (GlobalStates.dashboardPanelOpen)
                 GlobalStates.videoEditorPopupOpen = false;
-            }
         }
         function onPoliciesPanelOpenChanged() {
-            if (GlobalStates.policiesPanelOpen) {
+            if (GlobalStates.policiesPanelOpen)
                 GlobalStates.videoEditorPopupOpen = false;
-            }
         }
     }
 }
