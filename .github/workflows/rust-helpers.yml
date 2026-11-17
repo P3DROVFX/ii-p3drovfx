@@ -1,0 +1,94 @@
+# Prebuilt Rust helpers (scripts/rust-helpers.sh, PREBUILT): one GitHub release per
+# source hash, so the updater and Settings download exactly the build of the sources
+# they have, and nobody needs a Rust toolchain to update the shell.
+#
+# Tag <prefix>-<first 16 hex of the source hash>; assets <name>-x86_64 and
+# <name>-aarch64 (static musl, any distro) and SHA256SUMS. The hash is computed the
+# way rust-helpers.sh computes it (Cargo.toml and src/, relative names), so a fork
+# with other sources simply finds no release and builds locally.
+name: Rust helpers
+
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - "dots/.config/quickshell/ii/scripts/iiLink/ii_link_src/**"
+      - ".github/workflows/rust-helpers.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rust-helpers-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ii_link:
+    runs-on: ubuntu-latest
+    env:
+      NAME: ii_link
+      PREFIX: ii-link
+      SRC: dots/.config/quickshell/ii/scripts/iiLink/ii_link_src
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Source hash
+        id: hash
+        run: |
+          cd "$SRC"
+          hash="$(find Cargo.toml src -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)"
+          echo "hash=$hash" >> "$GITHUB_OUTPUT"
+          echo "tag=$PREFIX-${hash:0:16}" >> "$GITHUB_OUTPUT"
+
+      - name: Already published?
+        id: exists
+        run: |
+          if gh release view "${{ steps.hash.outputs.tag }}" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "yes=1" >> "$GITHUB_OUTPUT"
+            echo "Release ${{ steps.hash.outputs.tag }} exists: these sources are built already."
+          fi
+
+      - name: Toolchain
+        if: steps.exists.outputs.yes != '1'
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
+          # Zig as the C compiler and linker for both musl targets (ring has C in it).
+          pip install --user cargo-zigbuild
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Build
+        if: steps.exists.outputs.yes != '1'
+        run: |
+          cd "$SRC"
+          mkdir -p "$GITHUB_WORKSPACE/out"
+          for pair in x86_64:x86_64-unknown-linux-musl aarch64:aarch64-unknown-linux-musl; do
+            arch="${pair%%:*}" target="${pair#*:}"
+            cargo zigbuild --release --target "$target"
+            cp "target/$target/release/$NAME" "$GITHUB_WORKSPACE/out/$NAME-$arch"
+          done
+          cd "$GITHUB_WORKSPACE/out"
+          sha256sum "$NAME"-* > SHA256SUMS
+          cat SHA256SUMS
+          file "$NAME"-*
+
+      - name: Smoke test (x86_64)
+        if: steps.exists.outputs.yes != '1'
+        run: |
+          state="$(mktemp -d)"
+          # Starts, binds, announces itself, and exits when stdin closes.
+          out="$(timeout 10 "$GITHUB_WORKSPACE/out/$NAME-x86_64" --state-dir "$state" --port 47999 --name ci < /dev/null || true)"
+          echo "$out" | grep -q '"ev":"ready"'
+
+      - name: Publish
+        if: steps.exists.outputs.yes != '1'
+        run: |
+          gh release create "${{ steps.hash.outputs.tag }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "$NAME ${{ steps.hash.outputs.tag }}" \
+            --notes "Prebuilt $NAME for the sources with hash ${{ steps.hash.outputs.hash }} (commit $GITHUB_SHA). Downloaded by scripts/rust-helpers.sh; not a shell release." \
+            --prerelease --latest=false \
+            "$GITHUB_WORKSPACE/out/$NAME-x86_64" "$GITHUB_WORKSPACE/out/$NAME-aarch64" "$GITHUB_WORKSPACE/out/SHA256SUMS"

@@ -1511,6 +1511,9 @@ fetch_source_locked() {
 # should be watching a dead panel while cargo runs.
 
 HELPERS_TO_BUILD=()
+# The ones the CI publishes prebuilt (rust-helpers.sh prebuilt): downloaded without a
+# question, built only when the download fails and cargo is here.
+HELPERS_TO_FETCH=()
 
 # The exception to the `missing` rule below. The others are features to opt into,
 # and compiling one nobody asked for would be a surprise; the tray watcher is a
@@ -1532,26 +1535,36 @@ offered_when_missing() {
 plan_helper_rebuild() {
     local stage="$1" script="$1/scripts/rust-helpers.sh"
     HELPERS_TO_BUILD=()
+    HELPERS_TO_FETCH=()
     # A fork without the script, or an older one. Nothing to say about it.
     [[ -f "$script" ]] || return 0
 
-    local -a names=() reasons=()
+    local -a names=() reasons=() prebuilt=()
     local name state
+    mapfile -t prebuilt < <(bash "$script" prebuilt 2>>"$LOG_FILE")
+    local reason
     while read -r name state; do
         case "$state" in
-        stale) reasons+=("behind its sources") ;;
-        unknown) reasons+=("build not recorded") ;;
+        stale) reason="behind its sources" ;;
+        unknown) reason="build not recorded" ;;
         # `missing` is left alone on purpose: a helper nobody ever compiled is
         # one nobody asked for, and compiling it here would be a surprise. The
         # list above is what that rule does not apply to.
         missing)
             offered_when_missing "$name" || continue
-            reasons+=("not built yet")
+            reason="not built yet"
             ;;
         *) continue ;;
         esac
+        # A download, not a compile: nothing to ask.
+        if printf '%s\n' "${prebuilt[@]}" | grep -qx "$name"; then
+            HELPERS_TO_FETCH+=("$name")
+            continue
+        fi
         names+=("$name")
+        reasons+=("$reason")
     done < <(bash "$script" status 2>>"$LOG_FILE")
+    ((${#HELPERS_TO_FETCH[@]} > 0)) && ui_note "Prebuilt helpers to update: ${HELPERS_TO_FETCH[*]} (downloaded after the swap)."
     ((${#names[@]} > 0)) || return 0
 
     ui_frame_open "Helpers"
@@ -1647,8 +1660,22 @@ offer_crash_access() {
 # run_helper_rebuild <target_dir> — builds what plan_helper_rebuild collected.
 run_helper_rebuild() {
     local target="$1" script="$1/scripts/rust-helpers.sh"
-    ((${#HELPERS_TO_BUILD[@]} > 0)) || return 0
     [[ -f "$script" ]] || return 0
+    # Prebuilt first: a download of the CI's build of these exact sources. One that
+    # cannot be had (offline, a fork, no release yet) is built here when cargo can.
+    local fetched
+    for fetched in "${HELPERS_TO_FETCH[@]}"; do
+        ui_step "Downloading $fetched"
+        if bash "$script" fetch "$fetched" >>"$LOG_FILE" 2>&1; then
+            ui_ok "$fetched" "updated (prebuilt)"
+        elif have cargo; then
+            ui_note "No prebuilt $fetched for these sources; building it here."
+            HELPERS_TO_BUILD+=("$fetched")
+        else
+            ui_fail "$fetched" "download failed — Settings → ii tools can retry or rebuild"
+        fi
+    done
+    ((${#HELPERS_TO_BUILD[@]} > 0)) || return 0
 
     local name dir lock total done_units crate rc built=0 failed=0
     for name in "${HELPERS_TO_BUILD[@]}"; do

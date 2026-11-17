@@ -229,6 +229,54 @@ QtObject {
         Qt.callLater(() => buildProcess.running = true);
     }
 
+    // ── The CI's prebuilt (rust-helpers.sh fetch) ───────────────────────────
+    /**
+     * Helpers the CI publishes (`rust-helpers.sh prebuilt`) can be downloaded instead
+     * of compiled: the build of exactly the sources on disk, checked against the
+     * release's SHA256SUMS. No toolchain needed; compiling stays as the fallback.
+     */
+    property bool prebuilt: false
+    property bool fetching: false
+    /// "" until a download is attempted, then "ok" or "failed".
+    property string fetchResult: ""
+    property string fetchOutput: ""
+
+    readonly property Process _prebuiltCheck: Process {
+        command: [Directories.rustHelpersScriptPath, "prebuilt"]
+        stdout: StdioCollector {
+            onStreamFinished: root.prebuilt = text.split("\n").map(s => s.trim()).includes(root.crateName)
+        }
+        Component.onCompleted: running = true
+    }
+
+    readonly property Process _fetchProcess: Process {
+        id: fetchProcess
+        command: [Directories.rustHelpersScriptPath, "fetch", root.crateName]
+        stderr: StdioCollector {
+            id: fetchErr
+        }
+        onExited: code => {
+            root.fetching = false;
+            root.fetchResult = code === 0 ? "ok" : "failed";
+            root.fetchOutput = code === 0 ? "" : fetchErr.text.trim().split("\n").slice(-2).join(" ");
+            if (code !== 0)
+                console.warn(`[${root.label}] download failed: ${root.fetchOutput}`);
+            root.refreshState();
+            root.finished(code === 0);
+        }
+    }
+
+    /// Downloads the prebuilt helper for the current sources.
+    function fetch() {
+        if (root.fetching || root.building || !root.prebuilt)
+            return;
+        root.fetching = true;
+        root.fetchResult = "";
+        root.fetchOutput = "";
+        fetchProcess.running = false;
+        Qt.callLater(() => fetchProcess.running = true);
+    }
+
     /// One line describing where the build has got to, or "" when nothing is running.
     readonly property string progressText: {
         if (!root.building)

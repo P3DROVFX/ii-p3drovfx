@@ -265,23 +265,8 @@ Item {
             title: Translation.tr("Paired phones")
             description: Translation.tr("Manage the local link helper binary and pair an Android device over LAN.")
 
-            TabletHelperSetupRow {
+            HelperCard {
                 Layout.fillWidth: true
-                visible: IiLinkService.probed && !IiLinkService.binaryPresent
-                symbol: "lan"
-                title: Translation.tr("Link helper")
-                description: IiLinkService.helperBuild.cargoAvailable
-                    ? Translation.tr("Small native daemon maintaining the TLS bridge. Build once.")
-                    : Translation.tr("Requires the Rust toolchain (cargo) to build.")
-                built: IiLinkService.binaryPresent
-                building: IiLinkService.helperBuild.building
-                failed: IiLinkService.helperBuild.buildResult === "failed"
-                failureText: IiLinkService.helperBuild.buildOutput
-                progressText: IiLinkService.helperBuild.currentUnit
-                unitsCompiled: IiLinkService.helperBuild.unitsCompiled
-                elapsedSeconds: IiLinkService.helperBuild.elapsedSeconds
-                progress: IiLinkService.helperBuild.progress
-                onBuildRequested: IiLinkService.helperBuild.build()
             }
 
             PairBanner {
@@ -1502,7 +1487,7 @@ fi`]
                     font.pixelSize: Appearance.font.pixelSize.small
                     color: Appearance.colors.colOnLayer1
                     text: IiLinkService.running ? Translation.tr("running · pid %1").arg(IiLinkService.helperPid)
-                        : (IiLinkService.binaryPresent ? Translation.tr("standby") : Translation.tr("not built"))
+                        : (IiLinkService.binaryPresent ? Translation.tr("standby") : Translation.tr("not installed"))
                 }
             }
 
@@ -1867,6 +1852,124 @@ fi`]
                 onClicked: IiLinkService.unpair(devRow.device.id)
             }
         }
+    }
+
+    // The link helper, always shown: whether it matches its sources, and the two ways to
+    // fix it when it does not (the CI's prebuilt, or a compile here). The shell downloads
+    // it by itself when it is missing or stale; this is for when that did not work.
+    component HelperCard: Rectangle {
+        id: helperCard
+        readonly property var hb: IiLinkService.helperBuild
+        readonly property bool busy: helperCard.hb.building || helperCard.hb.fetching
+        readonly property bool good: IiLinkService.binaryPresent && helperCard.hb.state === "ok"
+        readonly property string statusText: {
+            if (helperCard.hb.fetching)
+                return Translation.tr("Downloading the prebuilt helper…");
+            if (helperCard.hb.building)
+                return Translation.tr("Compiling · %1 · %2 s").arg(helperCard.hb.progressText).arg(helperCard.hb.elapsedSeconds);
+            if (helperCard.hb.fetchResult === "failed" && helperCard.hb.buildResult !== "ok")
+                return Translation.tr("Download failed: %1").arg(helperCard.hb.fetchOutput || Translation.tr("no connection"));
+            if (helperCard.hb.buildResult === "failed")
+                return Translation.tr("Build failed: %1").arg(helperCard.hb.failureSummary(2));
+            if (!IiLinkService.binaryPresent)
+                return Translation.tr("Not installed");
+            switch (helperCard.hb.state) {
+            case "ok":
+                return Translation.tr("Up to date with its sources");
+            case "stale":
+                return Translation.tr("Older than its sources: download or rebuild it to get the fixes");
+            case "unknown":
+                return Translation.tr("Installed, but not recorded from which sources");
+            }
+            return "";
+        }
+
+        implicitHeight: helperLayout.implicitHeight + 28
+        radius: Appearance.rounding.large
+        color: Appearance.colors.colLayer1
+
+        ColumnLayout {
+            id: helperLayout
+            anchors.fill: parent
+            anchors.margins: 14
+            spacing: 10
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 14
+
+                MaterialShapeWrappedMaterialSymbol {
+                    shape: helperCard.good ? MaterialShape.Shape.Cookie7Sided : MaterialShape.Shape.Circle
+                    implicitSize: 44
+                    padding: 7
+                    iconSize: 20
+                    text: helperCard.good ? "lan" : "build"
+                    fill: helperCard.good ? 1 : 0
+                    color: helperCard.good ? Appearance.colors.colPrimary : Appearance.colors.colLayer2
+                    colSymbol: helperCard.good ? Appearance.colors.colOnPrimary : Appearance.colors.colSubtext
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+                    StyledText {
+                        text: Translation.tr("Link helper")
+                        font.pixelSize: Appearance.font.pixelSize.normal
+                        font.variableAxes: Appearance.font.variableAxes.title
+                        color: Appearance.colors.colOnLayer1
+                    }
+                    StyledText {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        color: (helperCard.hb.fetchResult === "failed" || helperCard.hb.buildResult === "failed") && !helperCard.busy
+                            ? Appearance.colors.colError : Appearance.colors.colSubtext
+                        text: helperCard.statusText
+                    }
+                }
+            }
+
+            StyledProgressBar {
+                Layout.fillWidth: true
+                visible: helperCard.hb.building
+                value: helperCard.hb.progress
+            }
+
+            RowLayout {
+                spacing: 8
+                RippleButtonWithIcon {
+                    visible: helperCard.hb.prebuilt
+                    enabled: !helperCard.busy
+                    materialIcon: "download"
+                    mainText: Translation.tr("Download")
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: Appearance.colors.colSecondaryContainer
+                    colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                    colText: Appearance.colors.colOnSecondaryContainer
+                    onClicked: helperCard.hb.fetch()
+                }
+                RippleButtonWithIcon {
+                    enabled: !helperCard.busy && helperCard.hb.cargoAvailable
+                    materialIcon: "construction"
+                    mainText: Translation.tr("Rebuild")
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: Appearance.colors.colLayer2
+                    colBackgroundHover: Appearance.colors.colLayer2Hover
+                    colText: Appearance.colors.colOnLayer2
+                    onClicked: helperCard.hb.build()
+                }
+                StyledText {
+                    Layout.fillWidth: true
+                    visible: !helperCard.hb.cargoAvailable
+                    wrapMode: Text.WordWrap
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: Appearance.colors.colSubtext
+                    text: Translation.tr("Rebuilding needs Rust (cargo)")
+                }
+            }
+        }
+
+        Component.onCompleted: helperCard.hb.refreshState()
     }
 
     component PcRow: Rectangle {

@@ -72,7 +72,8 @@ __pycache__/
 /dots/.config/quickshell/ii/scripts/health/health_watch_src/target/
 /dots/.config/quickshell/ii/scripts/health/health_watch_src/Cargo.lock
 
-# Compiled binary — build it from ii_link_src/ instead (see scripts/iiLink/PROTOCOL.md)
+# Compiled binary — never committed: the CI publishes it per source hash
+# (.github/workflows/rust-helpers.yml) and rust-helpers.sh fetches it; or build it from ii_link_src/.
 /dots/.config/quickshell/ii/scripts/iiLink/ii_link
 /dots/.config/quickshell/ii/scripts/iiLink/ii_link_src/target/
 /dots/.config/quickshell/ii/scripts/iiLink/ii_link_src/Cargo.lock

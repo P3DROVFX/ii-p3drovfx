@@ -143,11 +143,37 @@ Singleton {
         sourceDir: `${root.helperDir}/ii_link_src`
         crateName: "ii_link"
         onFinished: ok => {
+            // A download that failed (offline, a fork, no release yet) falls back to a
+            // compile when cargo is here, once.
+            if (!ok && root.helperBuild.fetchResult === "failed" && root._autoInstalling && root.helperBuild.cargoAvailable) {
+                root._autoInstalling = false;
+                root.helperBuild.build();
+                return;
+            }
+            root._autoInstalling = false;
             root.checkBinary();
             // The stamp check below restarts the helper; reading now covers a missed event.
             if (ok)
                 stampFile.reload();
         }
+    }
+
+    // ── Kept current by itself ───────────────────────────────────────────
+    // Whenever the link is wanted and the helper is missing or older than its sources
+    // (an update, a pull), the shell downloads the CI's build of these sources, and
+    // builds it here only if that cannot be had. Once per shell start: a failure stays
+    // on screen (Settings → ii tools → Helper) with Download and Rebuild buttons.
+    property bool _autoInstalled: false
+    property bool _autoInstalling: false
+    readonly property bool _helperNeedsInstall: root.enabled && root.wanted && root.probed
+        && root.helperBuild.prebuilt && (!root.binaryPresent || root.helperBuild.outdated)
+    on_HelperNeedsInstallChanged: {
+        if (!root._helperNeedsInstall || root._autoInstalled || root.helperBuild.building || root.helperBuild.fetching)
+            return;
+        root._autoInstalled = true;
+        root._autoInstalling = true;
+        console.info("[IiLink] the helper is missing or older than its sources: downloading it");
+        root.helperBuild.fetch();
     }
 
     // ── A new binary restarts the helper ─────────────────────────────────
@@ -4502,6 +4528,9 @@ Singleton {
                 return;
             if (code !== 0) {
                 console.warn(`[IiLink] helper exited with code ${code}`);
+                // A binary that is gone (deleted, an update without it) shows the Build card
+                // instead of being restarted forever.
+                root.checkBinary();
                 root._failures += 1;
                 root._restarting = true;
                 backoff.interval = Math.min(300000, 2000 * Math.pow(2, Math.min(7, root._failures)));
