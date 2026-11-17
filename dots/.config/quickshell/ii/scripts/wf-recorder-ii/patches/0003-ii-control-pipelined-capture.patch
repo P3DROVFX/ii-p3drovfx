@@ -1,0 +1,426 @@
+From 29a1a1eb7e1c12e7db790f846bb48b8644bb419a Mon Sep 17 00:00:00 2001
+From: Scrimas <isma.ph@proton.me>
+Date: Tue, 17 Nov 2026 01:44:05 +0100
+Subject: [PATCH] ii-control: ask for the next frame before the last one's copy
+ is ready
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+With --ii-control the capture keeps up to two screencopy frames requested: the next one
+goes out a millisecond after the compositor should have committed (and copied) the one in
+flight, from the output's measured frame period, instead of once that copy says ready.
+
+Hyprland copies every pending request right after a commit and says ready when the GPU
+is done, a few ms later, and later still while the encoder shares the GPU. Asked for only
+then, the next request missed the next frame's render whenever a copy ran late: a
+skipped frame, 3-6 % of them at 120 Hz on an Intel Arc 140V, more under load. Now ~1 %,
+and capture → encoded is ~1 ms shorter. A request that lands before the commit after all
+gets a copy of the same frame (stamped µs apart), which is not encoded.
+
+Each screencopy frame carries its buffer as listener data; without --ii-control nothing
+changes. The encoder thread also polls for frames every 200 µs instead of 1 ms.
+---
+ src/buffer-pool.hpp |  22 ++++
+ src/main.cpp        | 248 +++++++++++++++++++++++++++++++++++++++++---
+ 2 files changed, 255 insertions(+), 15 deletions(-)
+
+diff --git a/src/buffer-pool.hpp b/src/buffer-pool.hpp
+index f78e5df..a902eb3 100644
+--- a/src/buffer-pool.hpp
++++ b/src/buffer-pool.hpp
+@@ -64,6 +64,28 @@ public:
+         return *bufs[encode_idx];
+     }
+ 
++    // The buffer after the capture buffer in the ring, for a capture asked for before the
++    // current one is done. Grows the ring (as next_capture() does) when that one is still
++    // the encoder's; null when it can't.
++    T* peek_next_capture()
++    {
++        std::lock_guard<std::mutex> lock(mutex);
++        size_t next = (capture_idx + 1) % bufs_size;
++        if (bufs[next]->ready_capture())
++            return bufs[next];
++        if (bufs_size >= N)
++            return nullptr;
++        // A new buffer goes in right after the capture one; the rest move up.
++        size_t pos = capture_idx + 1;
++        for (size_t i = bufs_size; i > pos; --i)
++            bufs[i] = bufs[i - 1];
++        bufs[pos] = new T;
++        if (encode_idx >= pos)
++            encode_idx++;
++        bufs_size++;
++        return bufs[pos];
++    }
++
+     // Signal that the current capture buffer has been successfully obtained
+     // from the compositor and select the next buffer to capture in.
+     T& next_capture()
+diff --git a/src/main.cpp b/src/main.cpp
+index 6baa29a..9997c20 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -20,6 +20,12 @@
+ #include <gbm.h>
+ #include <fcntl.h>
+ #include <xf86drm.h>
++#include <poll.h>
++#include <time.h>
++#include <deque>
++#include <functional>
++#include <algorithm>
++#include <vector>
+ 
+ #include "frame-writer.hpp"
+ #include "buffer-pool.hpp"
+@@ -193,6 +199,14 @@ struct wf_buffer : public buffer_pool_buf
+     bool y_invert;
+ 
+     timespec presented;
++
++    // --ii-control's pipelined capture: this buffer's own screencopy frame (the listener's
++    // data), its state, and when it was asked for (CLOCK_MONOTONIC µs).
++    zwlr_screencopy_frame_v1 *ii_frame = nullptr;
++    bool ii_done = false, ii_failed = false;
++    // Not to encode: a copy of a frame already captured, or a failed copy.
++    bool ii_skip = false;
++    uint64_t ii_req_us = 0;
+     uint64_t base_usec;
+ };
+ 
+@@ -220,6 +234,15 @@ buffer_pool<wf_buffer, 16> buffers;
+ 
+ bool buffer_copy_done = false;
+ 
++// --ii-control captures with up to two frames requested at once (see ii_capture_loop): each
++// screencopy frame carries its buffer as listener data. Without it (data NULL) there is one
++// frame at a time, in buffers.capture().
++static bool ii_pipelined = false;
++static wf_buffer& frame_buf(void *data)
++{
++    return data ? *(wf_buffer*)data : buffers.capture();
++}
++
+ static int backingfile(off_t size)
+ {
+     char name[] = "/tmp/wf-recorder-shared-XXXXXX";
+@@ -296,14 +319,14 @@ static uint32_t wl_shm_to_drm_format(uint32_t format)
+     }
+ }
+ 
+-static void frame_handle_buffer(void *, struct zwlr_screencopy_frame_v1 *frame, uint32_t format,
++static void frame_handle_buffer(void *data, struct zwlr_screencopy_frame_v1 *frame, uint32_t format,
+     uint32_t width, uint32_t height, uint32_t stride)
+ {
+     if (use_dmabuf) {
+         return;
+     }
+ 
+-    auto& buffer = buffers.capture();
++    auto& buffer = frame_buf(data);
+     auto old_format = buffer.format;
+     buffer.format = (wl_shm_format)format;
+     buffer.drm_format = wl_shm_to_drm_format(format);
+@@ -335,26 +358,32 @@ static void frame_handle_buffer(void *, struct zwlr_screencopy_frame_v1 *frame,
+     }
+ }
+ 
+-static void frame_handle_flags(void*, struct zwlr_screencopy_frame_v1 *, uint32_t flags) {
+-    buffers.capture().y_invert = flags & ZWLR_SCREENCOPY_FRAME_V1_FLAGS_Y_INVERT;
++static void frame_handle_flags(void *data, struct zwlr_screencopy_frame_v1 *, uint32_t flags) {
++    frame_buf(data).y_invert = flags & ZWLR_SCREENCOPY_FRAME_V1_FLAGS_Y_INVERT;
+ }
+ 
+ int32_t frame_failed_cnt = 0;
+ 
+-static void frame_handle_ready(void *, struct zwlr_screencopy_frame_v1 *,
++static void frame_handle_ready(void *data, struct zwlr_screencopy_frame_v1 *,
+     uint32_t tv_sec_hi, uint32_t tv_sec_low, uint32_t tv_nsec) {
+ 
+-    auto& buffer = buffers.capture();
+-    buffer_copy_done = true;
++    auto& buffer = frame_buf(data);
++    if (data)
++        buffer.ii_done = true;
++    else
++        buffer_copy_done = true;
+     buffer.presented.tv_sec = ((1ll * tv_sec_hi) << 32ll) | tv_sec_low;
+     buffer.presented.tv_nsec = tv_nsec;
+     frame_failed_cnt = 0;
+ }
+ 
+-static void frame_handle_failed(void *, struct zwlr_screencopy_frame_v1 *) {
++static void frame_handle_failed(void *data, struct zwlr_screencopy_frame_v1 *) {
+     std::cerr << "Failed to copy frame, retrying..." << std::endl;
+     ++frame_failed_cnt;
+-    request_next_frame();
++    if (data)
++        frame_buf(data).ii_failed = true; // ii_capture_loop asks again
++    else
++        request_next_frame();
+     if (frame_failed_cnt > MAX_FRAME_FAILURES)
+     {
+         std::cerr << "Failed to copy frame too many times, exiting!" << std::endl;
+@@ -370,10 +399,10 @@ static void frame_handle_damage(void *, struct zwlr_screencopy_frame_v1 *,
+ static void dmabuf_created(void *data, struct zwp_linux_buffer_params_v1 *,
+     struct wl_buffer *wl_buffer) {
+ 
+-    auto& buffer = buffers.capture();
++    auto& buffer = ii_pipelined ? *(wf_buffer*)data : buffers.capture();
+     buffer.wl_buffer = wl_buffer;
+ 
+-    zwlr_screencopy_frame_v1 *frame = (zwlr_screencopy_frame_v1*) data;
++    zwlr_screencopy_frame_v1 *frame = ii_pipelined ? buffer.ii_frame : (zwlr_screencopy_frame_v1*) data;
+ 
+     if (use_damage) {
+         zwlr_screencopy_frame_v1_copy_with_damage(frame, buffer.wl_buffer);
+@@ -403,14 +432,14 @@ static wl_shm_format drm_to_wl_shm_format(uint32_t format)
+     }
+ }
+ 
+-static void frame_handle_linux_dmabuf(void *, struct zwlr_screencopy_frame_v1 *frame,
++static void frame_handle_linux_dmabuf(void *data, struct zwlr_screencopy_frame_v1 *frame,
+     uint32_t format, uint32_t width, uint32_t height)
+ {
+     if (!use_dmabuf) {
+         return;
+     }
+ 
+-    auto& buffer = buffers.capture();
++    auto& buffer = frame_buf(data);
+ 
+     auto old_format = buffer.format;
+     buffer.format = drm_to_wl_shm_format(format);
+@@ -454,7 +483,8 @@ static void frame_handle_linux_dmabuf(void *, struct zwlr_screencopy_frame_v1 *f
+             gbm_bo_get_stride(buffer.bo),
+             mod >> 32, mod & 0xffffffff);
+ 
+-        zwp_linux_buffer_params_v1_add_listener(buffer.params, &params_listener, frame);
++        zwp_linux_buffer_params_v1_add_listener(buffer.params, &params_listener,
++            ii_pipelined ? (void*)&buffer : (void*)frame);
+         zwp_linux_buffer_params_v1_create(buffer.params, buffer.width,
+             buffer.height, format, 0);
+     } else {
+@@ -650,14 +680,20 @@ static void write_loop(FrameWriterParams params)
+     while(!exit_main_loop)
+     {
+         // wait for frame to become available
++        // --ii-control polls 5x as often: up to a millisecond's wait per frame, otherwise.
+         while(buffers.encode().ready_encode() != true && !exit_main_loop) {
+-            std::this_thread::sleep_for(std::chrono::microseconds(1000));
++            std::this_thread::sleep_for(std::chrono::microseconds(ii_pipelined ? 200 : 1000));
+         }
+         if (exit_main_loop) {
+             break;
+         }
+ 
+         auto& buffer = buffers.encode();
++        if (buffer.ii_skip)
++        {
++            buffers.next_encode();
++            continue;
++        }
+ 
+         frame_writer_pending_mutex.lock();
+         frame_writer_mutex.lock();
+@@ -1045,6 +1081,176 @@ capture_region selected_region{};
+ wf_recorder_output *chosen_output = nullptr;
+ zwlr_screencopy_frame_v1 *frame = NULL;
+ 
++static zwlr_screencopy_frame_v1 *capture_frame()
++{
++    /* Capture the whole output if the user hasn't provided a good geometry */
++    if (!selected_region.is_selected())
++        return zwlr_screencopy_manager_v1_capture_output(screencopy_manager, 1, chosen_output->output);
++    return zwlr_screencopy_manager_v1_capture_output_region(
++        screencopy_manager, 1, chosen_output->output,
++        selected_region.x - chosen_output->x,
++        selected_region.y - chosen_output->y,
++        selected_region.width, selected_region.height);
++}
++
++static uint64_t ii_now_us()
++{
++    timespec t;
++    clock_gettime(CLOCK_MONOTONIC, &t);
++    return t.tv_sec * 1000000ull + t.tv_nsec / 1000;
++}
++
++/* Wayland events for at most timeout_us (< 0: until one comes). -1 when the display is gone. */
++static int dispatch_timeout(int64_t timeout_us)
++{
++    while (wl_display_prepare_read(display) != 0)
++    {
++        if (wl_display_dispatch_pending(display) < 0)
++            return -1;
++    }
++    if (wl_display_flush(display) < 0 && errno != EAGAIN)
++    {
++        wl_display_cancel_read(display);
++        return -1;
++    }
++    pollfd pfd{wl_display_get_fd(display), POLLIN, 0};
++    timespec ts{(time_t)(timeout_us / 1000000), (long)(timeout_us % 1000000) * 1000};
++    int r = ppoll(&pfd, 1, timeout_us < 0 ? nullptr : &ts, nullptr);
++    if (r > 0)
++    {
++        if (wl_display_read_events(display) < 0)
++            return -1;
++    } else
++    {
++        wl_display_cancel_read(display);
++    }
++    return wl_display_dispatch_pending(display);
++}
++
++/*
++ * --ii-control's capture: the next frame is asked for just after the compositor should have
++ * copied the one in flight, not once that copy is ready.
++ *
++ * The compositor copies every pending request right after it commits a frame and says
++ * ready when the GPU is done, a few ms later, and later still while the encoder shares the
++ * GPU. Asked for only then (one frame at a time), the next request came after the next frame
++ * had started rendering whenever that copy ran late: the frame was skipped, a 2-frame gap on
++ * the phone (4 % of frames at 120 Hz here, more under load). So the next request goes out
++ * II_LEAD_US after the in-flight one's predicted commit, from the output's measured frame
++ * period: at most two in flight. Asked too early, both come from the same commit: the copy
++ * with the same timestamp is not encoded.
++ */
++static const uint64_t II_LEAD_US = 1000;
++static const uint64_t II_SLACK_US = 1000;
++
++static bool ii_capture_loop(const std::function<void()>& first_frame)
++{
++    std::deque<wf_buffer*> inflight;
++    uint64_t last_ts = 0;
++    std::vector<uint64_t> deltas;   // the last frame-to-frame times, for the period
++    uint64_t period = 0;
++    bool started = false;
++
++    auto issue = [&](wf_buffer *b) {
++        b->ii_done = b->ii_failed = b->ii_skip = false;
++        b->ii_req_us = ii_now_us();
++        b->ii_frame = capture_frame();
++        zwlr_screencopy_frame_v1_add_listener(b->ii_frame, &frame_listener, b);
++        inflight.push_back(b);
++    };
++
++    while (!exit_main_loop)
++    {
++        int64_t timeout = 100000;
++        if (inflight.empty())
++        {
++            if (buffers.capture().ready_capture())
++                issue(&buffers.capture());
++            else
++                timeout = 500; // the encoder is behind: wait for a free buffer
++        } else if (inflight.size() == 1 && last_ts && period)
++        {
++            // Predicted commit of the one in flight: the first frame after its request. Asked
++            // for within II_SLACK_US after a commit, it may have made that commit's render or
++            // the next: guess the earlier. Too early costs a copy of the same frame (dropped),
++            // too late a skipped frame.
++            uint64_t req = inflight.front()->ii_req_us;
++            uint64_t n = req > last_ts + II_SLACK_US ? (req - last_ts - II_SLACK_US) / period + 1 : 1;
++            uint64_t at = last_ts + n * period + II_LEAD_US;
++            uint64_t now = ii_now_us();
++            if (now >= at)
++            {
++                wf_buffer *next = buffers.peek_next_capture();
++                if (next && next != inflight.front())
++                    issue(next);
++            } else
++            {
++                timeout = at - now;
++            }
++        }
++
++        if (dispatch_timeout(timeout) < 0)
++            return false;
++
++        // In order: the ring's next buffer is always the oldest in flight.
++        while (!inflight.empty() && (inflight.front()->ii_done || inflight.front()->ii_failed))
++        {
++            wf_buffer *b = inflight.front();
++            inflight.pop_front();
++            zwlr_screencopy_frame_v1_destroy(b->ii_frame);
++            b->ii_frame = nullptr;
++            if (&buffers.capture() != b)
++            {
++                std::cerr << "ii: capture ring out of order" << std::endl;
++                return false;
++            }
++            if (b->ii_failed)
++            {
++                if (frame_failed_cnt > MAX_FRAME_FAILURES)
++                {
++                    std::cerr << "Failed to copy frame too many times, exiting!" << std::endl;
++                    return false;
++                }
++                b->ii_skip = true;
++            } else
++            {
++                b->base_usec = timespec_to_usec(b->presented);
++                // Copied in the same commit as the last one (each copy is stamped as it starts,
++                // so the two differ by µs): not a new picture.
++                if (last_ts && b->base_usec < last_ts + std::max<uint64_t>(period / 2, 1000))
++                {
++                    b->ii_skip = true;
++                } else
++                {
++                    if (last_ts && b->base_usec - last_ts > 1000)
++                    {
++                        deltas.push_back(b->base_usec - last_ts);
++                        if (deltas.size() > 31)
++                            deltas.erase(deltas.begin());
++                        std::vector<uint64_t> s = deltas;
++                        std::nth_element(s.begin(), s.begin() + s.size() / 2, s.end());
++                        period = s[s.size() / 2];
++                    }
++                    last_ts = b->base_usec;
++                }
++            }
++            // The first frame starts the encoder: it can't be a skipped one.
++            if (!started && !b->ii_skip)
++            {
++                first_frame();
++                started = true;
++            }
++            if (!started)
++            {
++                // Nothing encodes yet: reuse this buffer rather than queue it.
++                continue;
++            }
++            buffers.next_capture();
++        }
++    }
++    return true;
++}
++
+ void request_next_frame()
+ {
+     if (frame != NULL)
+@@ -1423,6 +1629,18 @@ int main(int argc, char *argv[])
+     if (ii_control)
+         std::thread(ii_control_reader).detach();
+ 
++    ii_pipelined = ii_control;
++    if (ii_pipelined)
++    {
++        ii_capture_loop([&] () {
++            writer_thread = std::thread([=] () {
++                write_loop(params);
++            });
++            spawned_thread = true;
++        });
++        exit_main_loop = true;
++    }
++
+     while(!exit_main_loop)
+     {
+         // wait for a free buffer
+-- 
+2.56.0
+

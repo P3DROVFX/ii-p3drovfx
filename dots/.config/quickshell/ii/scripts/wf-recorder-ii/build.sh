@@ -42,11 +42,15 @@ trap 'rm -rf "$work"' EXIT
 git -C "$work" init -q src
 git -C "$work/src" fetch -q --depth 1 https://github.com/ammen99/wf-recorder "$WFR_COMMIT"
 git -C "$work/src" checkout -q FETCH_HEAD
-git -C "$work/src" apply "$here"/patches/*.patch
+# One at a time, in name order: later patches build on earlier ones (a single `git apply`
+# of all of them checks each against the bare tree).
+for p in "$here"/patches/*.patch; do
+    git -C "$work/src" apply "$p" || { echo "build.sh: $(basename "$p") does not apply" >&2; exit 1; }
+done
 # Audio is off: the second screen streams the PC's sound itself (screen.rs Audio).
 log="$work/build.log"
 meson setup "$work/build" "$work/src" --buildtype=release -Dpulse=disabled -Dpipewire=disabled >"$log" 2>&1 &&
-    ninja -C "$work/build" >>"$log" 2>&1 || { rg -m5 -B2 -A3 "error:" "$log" >&2 || tail -n 30 "$log" >&2; echo "build.sh: build failed" >&2; exit 1; }
+    ninja -C "$work/build" >>"$log" 2>&1 || { grep -m5 -B2 -A3 "error:" "$log" >&2 || tail -n 30 "$log" >&2; echo "build.sh: build failed" >&2; exit 1; }
 mkdir -p "$dest/bin"
 install -m 755 "$work/build/wf-recorder" "$bin.new"
 mv -f "$bin.new" "$bin"

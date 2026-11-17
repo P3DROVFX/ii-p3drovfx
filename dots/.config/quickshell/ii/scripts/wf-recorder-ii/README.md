@@ -1,6 +1,6 @@
 # wf-recorder-ii
 
-`ii-wf-recorder`: wf-recorder with two patches, for ii link's second screen (the phone as a
+`ii-wf-recorder`: wf-recorder with four patches, for ii link's second screen (the phone as a
 monitor, `scripts/iiLink/ii_link_src/src/screen.rs`). It is installed beside the
 distribution's `wf-recorder`, which the shell's screen recorder keeps using.
 
@@ -8,8 +8,10 @@ distribution's `wf-recorder`, which the shell's screen recorder keeps using.
 |---|---|
 | `0001-ii-control.patch` | `--ii-control` reads commands on stdin: `idr` makes the next frame a key frame (an IDR with VA-API, and with NVENC and x264 given `forced-idr=1`), `bitrate <bit/s>` sets the encoder's bitrate (NVENC and x264 reconfigure; VA-API keeps its rate). Neither restarts the encoder, which with the stock binary cost the phone a ~240 ms frozen picture each time. It also prints the first frame's capture time (`ii-base-usec=N` on stderr, the compositor's CLOCK_MONOTONIC presentation time), which times every frame from capture. `--ii-rate N` gives the encoder its frame rate without `-r`'s fps filter, which holds every frame back one frame (~7 ms at 120 Hz); without either, the time base is 1/1e6 and VA-API budgets the bitrate over a million frames a second (measured: 1.1 of 30 Mbit/s). |
 | `0002-ffmpeg9-supported-config.patch` | FFmpeg 9 removed `AVCodec`'s `pix_fmts`, `sample_fmts` and `ch_layouts`; this reads them through `avcodec_get_supported_config()` (FFmpeg ≥ 7.1) and keeps the fields for older FFmpeg. Upstream v0.6.0 doesn't build against FFmpeg 9 without it. |
+| `0003-ii-control-pipelined-capture.patch` | With `--ii-control`, the next screencopy request goes out a millisecond after the compositor should have committed the frame in flight (from the output's measured frame period), not once that frame's copy is ready. Hyprland copies pending requests right after a commit and says ready when the GPU is done, later still while the encoder shares the GPU: asked for only then, the next request missed the next frame's render whenever a copy ran late, which skipped 3–6 % of frames at 120 Hz (Intel Arc 140V; ~1 % with the patch) and more under load. A request early enough to share a commit gives a copy of the same frame, which is not encoded. |
+| `0004-ii-control-rate-cap-in-capture.patch` | With `--ii-control`, `-r N` keeps the frames due on N's schedule (by their commit times) and drops the rest before the encoder, instead of adding FFmpeg's fps filter, which holds every frame until the next one arrives: capture → encoded at 60 fps of a 120 Hz output went from 21 to 11 ms. |
 
-Both apply to upstream wf-recorder at the commit in `revision` (tag v0.6.0).
+All four apply, in order, to upstream wf-recorder at the commit in `revision` (tag v0.6.0).
 
 ## Install
 
