@@ -323,7 +323,7 @@ QtObject {
     }
 
     function calendarEvents(args: var): var {
-        if (!CalendarService.khalAvailable)
+        if (!CalendarService.eventsAvailable)
             return { available: false, events: [] };
 
         const now = new Date();
@@ -358,7 +358,7 @@ QtObject {
     }
 
     function nextCalendarEvent(): var {
-        if (!CalendarService.khalAvailable)
+        if (!CalendarService.eventsAvailable)
             return { available: false, event: null };
 
         const now = Date.now();

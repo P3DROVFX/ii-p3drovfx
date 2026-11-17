@@ -159,6 +159,40 @@ announces `status` and, with the contacts permission, `contacts`.
 | phone → shell | `{"t":"contacts","hash","list":[contact]}` | Only when `hash` differs. `contact` is the shape the shell's vCard reader gives (`id, displayName, givenName, familyName, organization, phones[{value,normalized,type}], emails[{value,type}], birthday{year,month,day}`) plus `photo`, the photo's hash or `""`. |
 | shell → phone | `{"t":"get","what":"photos","keys":["<photo>",…]}` | The photos the PC lacks; each comes as a file, purpose `contactPhoto`, name `<photo>.jpg`, kept in `<state>/contacts/`. |
 
+## Calendar
+
+The phone's calendars (whatever the Android calendar provider holds: Google, Samsung,
+Outlook, local) for the Timetable. The phone announces `calendar` with the calendar
+permission and `calendarWrite` when it also lets the PC edit (edit permission and its
+*Let the PC edit events* switch). Nothing runs on the phone until a PC asks; it keeps each
+PC's window while that link is up and watches the provider only then.
+
+| Direction | Message | |
+| --- | --- | --- |
+| shell → phone | `{"t":"get","what":"calendar","from":"YYYY-MM-DD","to":"YYYY-MM-DD","have":"<hash>"}` | On connect (with `have` empty, so the list always comes once per connection) and when the Timetable's window grows (`CalendarService.rangeStart/End`, debounced). The phone caps the window at 500 days. |
+| phone → shell | `{"t":"calendar","hash","from","to","write":bool,"calendars":[calendar],"events":[instance],"series":{"<event>":details}}` | Only when `hash` differs, then again on every change in the provider (coalesced 1.5 s; 250 ms after an edit from the PC), to every PC whose list changed. Kept in `<state>/calendar.json`, shown read-only while the phone is away. |
+| shell → phone | `{"t":"calendarEdit","id":n,"op":"create","calendar":"<id>","fields":fields}` | Needs `calendarWrite` and a writable calendar. |
+| shell → phone | `{"t":"calendarEdit","id":n,"op":"update","event":"<event>","begin":ms,"scope":"all"\|"this"\|"future","fields":fields}` | `begin` is the instance's own start: `this` writes a provider exception for it, `future` ends the series before it and starts a new one there, `all` shifts the series by as much as that instance moved. |
+| shell → phone | `{"t":"calendarEdit","id":n,"op":"delete","event":"<event>","begin":ms,"scope":…}` | `this` cancels the instance (exception with status cancelled), `future` ends the series before it. |
+| phone → shell | `{"t":"calendarResult","id":n,"ok":bool,"error"?}` | `error`: `readOnly`, `permission`, `disabled`, `event` (gone), `calendar`, or the provider's message. The shell fails a pending edit itself after 15 s (`timeout`) or when the phone disconnects (`offline`). |
+
+- `calendar`: `{id, name, account, provider: "google"|"samsung"|"outlook"|"local"|<type>, color: "#RRGGBB", writable, visible}`
+  (`visible` is the phone's own visibility, the shell's default for showing it; calendars
+  the phone does not sync, or that the user keeps on the phone in ii tools → Calendar,
+  never appear).
+- `instance`: `{event, calendar, title, allDay, begin, color, recurring?, declined?}` plus,
+  all day, `start`/`end` dates (end exclusive) or, timed, `end` in epoch ms. Cancelled
+  instances are left out.
+- `details` (once per event): `{uid, description, location, organizer, status, timezone,
+  recurrence: {freq, interval, byDay, until, count}|null, exdates: [ISO], alarms: [{minutesBefore, action}]}`,
+  the shapes `ics.py read` gives. `uid` is the iCalendar UID, which is how khal (CalDAV)
+  knows the same event: Google hides it from apps, so the phone rebuilds it from the
+  event id (`<id>@google.com`, or base32hex-decoded when the id starts with `_`, as for
+  events the shell created with `ii-…@local`).
+- `fields`: `summary, description, location, status, allDay, start, end` (local ISO,
+  dates when all day, end exclusive), `recurrence`, `alarms`, `exdates`, `uid` (create
+  only; the account may keep it). Links, categories and colour tokens are khal-only.
+
 ## Phone usage (screen time)
 
 Needs `usage` in the shell's `caps` (`iiTools.usage.enable`, off by default) and `usage` in the phone's `caps` (enabled in the app with `PACKAGE_USAGE_STATS` granted).

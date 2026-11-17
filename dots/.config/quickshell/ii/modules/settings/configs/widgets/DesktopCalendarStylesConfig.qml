@@ -143,7 +143,7 @@ ContentPage {
 
                     MaterialShapeWrappedMaterialSymbol {
                         shape: MaterialShape.Shape.Cookie9Sided
-                        text: CalendarService.khalAvailable ? "event_available" : "event_busy"
+                        text: CalendarService.eventsAvailable ? "event_available" : "event_busy"
                         iconSize: 26
                         padding: 14
                         color: Appearance.colors.colPrimaryContainer
@@ -163,7 +163,7 @@ ContentPage {
 
                     StyledText {
                         Layout.fillWidth: true
-                        text: CalendarService.khalAvailable
+                        text: CalendarService.eventsAvailable
                             ? Translation.tr("Events come from khal.")
                             : Translation.tr("khal is not set up, so the widgets show dates without events.")
                         color: Appearance.colors.colSubtext

@@ -36,7 +36,7 @@ Item {
         return [
             o.remote.enable, o.audio.enable, o.liveUpdates.enable, o.pcLive.enable,
             o.media.enable, o.pcMedia.enable, o.files.enable, o.gallery.enable, o.camera.enable, o.mic.enable, o.touchpad.enable, o.draw.enable, o.present.enable, o.screen.enable,
-            o.perf.enable, o.phoneData.enable, o.screenshots.enable, o.clipboard.enable,
+            o.perf.enable, o.phoneData.enable, o.calendar.enable, o.screenshots.enable, o.clipboard.enable,
             o.share.enable, o.notifications.enable, o.calls.enable, o.callAudio.enable, o.wallpaper.enable, o.look.enable,
             o.deck.enable, o.wol.enable, o.tailscale.enable
         ];
@@ -492,6 +492,18 @@ fi`]
                     ColorsFeatureTile {
                         width: syncTilesBox.tileWidth
                         height: 152
+                        symbol: "event_available"
+                        shapeOn: MaterialShape.Shape.Clover8Leaf
+                        shapeOff: MaterialShape.Shape.Circle
+                        title: Translation.tr("Phone calendar")
+                        summary: Translation.tr("Google, Samsung and Outlook events in the Timetable")
+                        checked: Config.options.iiTools.calendar.enable
+                        onToggled: value => Config.options.iiTools.calendar.enable = value
+                    }
+
+                    ColorsFeatureTile {
+                        width: syncTilesBox.tileWidth
+                        height: 152
                         symbol: "screenshot_region"
                         shapeOn: MaterialShape.Shape.Pill
                         shapeOff: MaterialShape.Shape.Circle
@@ -784,6 +796,11 @@ fi`]
                     }
                 }
             }
+        }
+
+        // ── Phone calendar ──────────────────────────────────────────────
+        PhoneCalendarSettings {
+            Layout.topMargin: 6
         }
 
         // ── Control, media & sharing (12 tiles via explicit-height Flow) ─

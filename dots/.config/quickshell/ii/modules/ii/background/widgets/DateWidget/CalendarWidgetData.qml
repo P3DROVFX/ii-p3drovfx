@@ -85,7 +85,7 @@ QtObject {
     }
 
     function eventsFor(date) {
-        if (!CalendarService.khalAvailable)
+        if (!CalendarService.eventsAvailable)
             return [];
         return CalendarService.eventsForDay(date) ?? [];
     }

@@ -17,7 +17,15 @@ Singleton {
 
     readonly property string homePath: String(StandardPaths.standardLocations(StandardPaths.HomeLocation)[0]).replace("file://", "")
     property bool khalAvailable: false
-    property var events: []
+    // What khal lists. `events` is these merged with the phone's calendar (ii tools),
+    // without the copies both sources have (see "Phone calendar" below).
+    property var khalEvents: []
+    readonly property var _merged: root._dedupe(root.khalEvents, root.phoneEvents)
+    readonly property var events: root._merged.events
+    /// Something gives events: khal, or the phone over ii link.
+    readonly property bool eventsAvailable: root.khalAvailable || root.phoneCalendarActive
+    /// Somewhere a new event can go: khal, or a phone calendar open for writing.
+    readonly property bool canCreate: root.khalAvailable || root.phoneCalendars.some(calendar => calendar.readOnly !== true)
     // New events are rendered from this local projection before khal finishes
     // indexing their ICS file. The canonical event replaces it on the next
     // successful list response, keyed by the UID generated here.
@@ -32,7 +40,9 @@ Singleton {
     readonly property string vdirsyncerReauthPath: Directories.scriptPath + "/calendar/vdirsyncer_reauth.py"
     property bool googleAuthRequired: false
     property bool reauthenticatingGoogle: false
-    property list<var> calendars: []
+    // khal's calendars (ics.py) and, after them, the phone calendars the user shows.
+    property list<var> khalCalendars: []
+    readonly property var calendars: root.khalCalendars.concat(root.phoneCalendars.filter(calendar => calendar.shown))
     property string defaultCalendar: ""
     property list<var> calendarRequestQueue: []
     property var calendarCurrentRequest: null
@@ -435,7 +445,7 @@ Singleton {
                         });
                     }
                 }
-                root.events = events;
+                root.khalEvents = events;
                 root.optimisticEvents = root.optimisticEvents.filter(optimistic => !events.some(saved => String(saved?.uid ?? "") === String(optimistic?.uid ?? "")));
             }
         }
@@ -600,6 +610,22 @@ Singleton {
         function sync() {
             root.requestWritableCalendarSyncs();
         }
+        // What the phone's calendar adds, for checks from a terminal.
+        function phoneStatus(): string {
+            return JSON.stringify({
+                enabled: root.phoneEnabled,
+                active: root.phoneCalendarActive,
+                live: root.phoneLive,
+                writable: root.phoneCalendars.filter(calendar => !calendar.readOnly).length,
+                calendars: root.phoneCalendars.map(calendar => calendar.name + (calendar.shown ? "" : " (hidden)")),
+                phoneEvents: root.phoneEvents.length,
+                khalEvents: root.khalEvents.length,
+                events: root.events.length,
+                duplicatesHidden: root.duplicatesHidden,
+                defaultCalendar: root.defaultCalendar,
+                lastError: root.phoneMutationError
+            });
+        }
         function onGoogleAuthComplete() {
             root.googleAuthRequired = false;
             root.reauthenticatingGoogle = false;
@@ -621,6 +647,9 @@ Singleton {
     // A single helper process is serialized because khal owns one SQLite
     // index. Every event field stays JSON data on stdin, never a shell string.
     function enqueueCalendarRequest(payload, callback = null) {
+        // khal-shaped requests (the AI's, say) for a phone event or calendar go to the phone.
+        if (root.routePhoneRequest(payload, callback))
+            return;
         const queue = root.calendarRequestQueue.slice();
         queue.push({ payload: payload, callback: callback });
         root.calendarRequestQueue = queue;
@@ -669,18 +698,33 @@ Singleton {
         root.enqueueCalendarRequest({ op: "calendars" }, reply => {
             if (!reply?.ok)
                 return;
-            root.calendars = reply.calendars ?? [];
-            const persisted = String(Config.options.calendar.timetable.defaultCalendar ?? "").trim();
-            const khalDefault = String(reply.defaultCalendar ?? "").trim();
-            if (!root.setDefaultCalendar(persisted, false)
-                    && !root.setDefaultCalendar(khalDefault, false)) {
-                const writable = root.calendars.find(calendar => calendar.readOnly !== true);
-                root.defaultCalendar = writable?.name ?? "";
-            }
+            root.khalCalendars = reply.calendars ?? [];
+            root.khalDefaultCalendar = String(reply.defaultCalendar ?? "").trim();
+            root.ensureDefaultCalendar();
             if (!interval.running)
                 interval.running = true;
             root.loadEvents();
         });
+    }
+
+    property string khalDefaultCalendar: ""
+    readonly property string persistedDefaultCalendar: Config.ready ? String(Config.options.calendar.timetable.defaultCalendar ?? "") : ""
+    onPersistedDefaultCalendarChanged: root.ensureDefaultCalendar()
+
+    // The persisted choice, then khal's own default, then the first writable calendar:
+    // khal's, else the phone's primary account calendar (one that syncs somewhere, not
+    // the phone-only "My calendar"). A choice that is gone for now (phone away) is kept.
+    function ensureDefaultCalendar() {
+        const persisted = String(Config.options.calendar.timetable.defaultCalendar ?? "").trim();
+        if (root.setDefaultCalendar(persisted, false) || root.setDefaultCalendar(root.khalDefaultCalendar, false))
+            return;
+        if (root.writableCalendar(root.defaultCalendar))
+            return;
+        const rank = calendar => calendar.source !== "phone" ? 0
+            : (calendar.primary && calendar.provider !== "local" ? 1 : (calendar.provider !== "local" ? 2 : 3));
+        const writable = root.calendars.filter(calendar => calendar.readOnly !== true)
+            .sort((a, b) => rank(a) - rank(b))[0];
+        root.defaultCalendar = writable?.name ?? "";
     }
 
     function isCalendarReadOnly(name) {
@@ -744,6 +788,12 @@ Singleton {
     function removeEventByUid(uid, calendar = "") {
         if (!uid)
             return;
+        if (root.isPhoneUid(uid)) {
+            const event = root.phoneEvents.find(item => item.uid === String(uid));
+            if (event)
+                root.deleteEventWithScope(event, "all");
+            return;
+        }
         root.enqueueCalendarRequest({ op: "deleteSeries", uid: String(uid), calendar: String(calendar ?? "") });
     }
 
@@ -754,8 +804,15 @@ Singleton {
     }
 
     function readEvent(uid, callback) {
-        if (uid)
-            root.enqueueCalendarRequest({ op: "read", uid: String(uid) }, callback);
+        if (!uid)
+            return;
+        if (root.isPhoneUid(uid)) {
+            const reply = root.phoneEventDetails(uid);
+            if (typeof callback === "function")
+                Qt.callLater(() => callback(reply));
+            return;
+        }
+        root.enqueueCalendarRequest({ op: "read", uid: String(uid) }, callback);
     }
 
     function eventDetailsForUid(uid) {
@@ -765,6 +822,12 @@ Singleton {
     function expandEvent(uid, from, to, callback) {
         if (!uid || !from || !to)
             return;
+        if (root.isPhoneUid(uid)) {
+            const occurrences = root.phoneOccurrences(uid, from, to);
+            if (typeof callback === "function")
+                Qt.callLater(() => callback({ ok: true, occurrences: occurrences }));
+            return;
+        }
         const format = date => date instanceof Date
             ? Qt.formatDateTime(date, "yyyy-MM-ddTHH:mm:ss")
             : String(date);
@@ -779,6 +842,10 @@ Singleton {
     function saveEventFields(event, fields, scope = "all") {
         if (!event?.uid)
             return;
+        if (event.source === "phone") {
+            root.phoneEdit({ op: "update", event: event.phoneEvent, begin: event.phoneBegin, scope: scope, fields: root.phoneFields(fields) });
+            return;
+        }
         const payload = { uid: String(event.uid) };
         for (const key in fields)
             payload[key] = fields[key];
@@ -796,6 +863,25 @@ Singleton {
         const payload = Object.assign({}, fields);
         payload.uid = root.newEventUid();
         root.setDefaultCalendar(target);
+        const phoneCalendar = root.phoneCalendars.find(item => item.name === target);
+        if (phoneCalendar) {
+            if (phoneCalendar.readOnly) {
+                if (typeof callback === "function")
+                    callback({ ok: false, error: Translation.tr("This phone calendar is read-only.") });
+                return false;
+            }
+            const optimistic = root.optimisticEvent(target, payload);
+            optimistic.source = "phone";
+            optimistic.readOnly = true;
+            root.addOptimisticEvent(optimistic);
+            root.phoneEdit({ op: "create", calendar: phoneCalendar.phoneId, fields: root.phoneFields(payload) }, reply => {
+                if (!reply?.ok)
+                    root.removeOptimisticEvent(payload.uid);
+                if (typeof callback === "function")
+                    callback(reply);
+            });
+            return true;
+        }
         root.addOptimisticEvent(root.optimisticEvent(target, payload));
         root.enqueueCalendarRequest({ op: "save", calendar: target, event: payload }, reply => {
             if (!reply?.ok)
@@ -807,7 +893,7 @@ Singleton {
     }
 
     function setCalendarColor(calendar, color) {
-        if (!calendar)
+        if (!calendar || root.phoneCalendars.some(item => item.name === String(calendar)))
             return;
         root.enqueueCalendarRequest({ op: "setCalendarColor", calendar: String(calendar), color: String(color ?? "") });
     }
@@ -815,6 +901,10 @@ Singleton {
     function deleteEventWithScope(event, scope = "all") {
         if (!event?.uid)
             return;
+        if (event.source === "phone") {
+            root.phoneEdit({ op: "delete", event: event.phoneEvent, begin: event.phoneBegin, scope: scope });
+            return;
+        }
         const recurrenceId = root.recurrenceIdForEvent(event);
         const request = scope === "this"
             ? { op: "deleteOccurrence", uid: String(event.uid), calendar: event.calendar ?? "", recurrenceId: recurrenceId }
@@ -832,7 +922,13 @@ Singleton {
      * override for the dragged date and "future" splits the series instead.
      */
     function moveEvent(event, newDate, scope = "all") {
-        if (!root.khalAvailable || !event?.uid || !newDate)
+        if (!event?.uid || !newDate)
+            return;
+        if (event.source === "phone") {
+            root.movePhoneEvent(event, newDate, scope);
+            return;
+        }
+        if (!root.khalAvailable)
             return;
         const allDay = root.isAllDayEvent(event);
         const oldStart = event.startDate;
@@ -898,4 +994,373 @@ Singleton {
         return true;
     }
 
+
+    // ------------------------------------------------------------------
+    // Phone calendar (ii tools)
+    // ------------------------------------------------------------------
+    // IiLinkService hands over what the phone sent (`calendar`, PROTOCOL.md): its
+    // calendars, the instances in the window this service asked for, and per-event
+    // details. They become the same DTOs khal's events are, with `source: "phone"`,
+    // and are written back over the link (`calendarEdit`). With no phone, all of this
+    // is empty and costs nothing.
+
+    readonly property var phoneOptions: Config.options.iiTools.calendar
+    readonly property bool phoneEnabled: Config.ready && (root.phoneOptions?.enable ?? true)
+    /// { calendars, events, series, write, hash, from, to, at } from the phone, or null.
+    property var phoneFeed: null
+    /// The feed is from a phone that is connected now (else it is the cached copy).
+    property bool phoneLive: false
+    readonly property bool phoneCalendarActive: root.phoneEnabled && root.phoneFeed !== null
+    /// How many of the phone's events were hidden as copies of khal's (or the reverse).
+    readonly property int duplicatesHidden: root._merged.hidden
+
+    function isPhoneUid(uid) {
+        return String(uid ?? "").startsWith("phone:");
+    }
+
+    function setPhoneFeed(feed, live) {
+        root.phoneFeed = feed ?? null;
+        root.phoneLive = live === true;
+        // A create shows from its projection until the phone's list carries it.
+        if (root.phoneLive)
+            root.optimisticEvents = root.optimisticEvents.filter(event => event.source !== "phone");
+        root.ensureDefaultCalendar();
+    }
+
+    function phoneCalendarShown(calendar) {
+        const id = String(calendar?.id ?? "");
+        if ((root.phoneOptions?.hidden ?? []).includes(id))
+            return false;
+        if ((root.phoneOptions?.shown ?? []).includes(id))
+            return true;
+        // Never chosen: as the phone itself shows it.
+        return calendar?.visible !== false;
+    }
+
+    function setPhoneCalendarShown(id, shown) {
+        const key = String(id);
+        const hidden = Array.from(root.phoneOptions.hidden ?? []).filter(item => item !== key);
+        const visible = Array.from(root.phoneOptions.shown ?? []).filter(item => item !== key);
+        if (shown)
+            visible.push(key);
+        else
+            hidden.push(key);
+        root.phoneOptions.hidden = hidden;
+        root.phoneOptions.shown = visible;
+    }
+
+    readonly property var phoneCalendars: {
+        const feed = root.phoneFeed;
+        if (!root.phoneEnabled || !feed || !Array.isArray(feed.calendars))
+            return [];
+        const writes = feed.write === true && root.phoneLive && (root.phoneOptions?.write ?? true);
+        const label = calendar => String(calendar.name || calendar.account || calendar.id);
+        const counts = {};
+        for (const calendar of feed.calendars)
+            counts[label(calendar)] = (counts[label(calendar)] ?? 0) + 1;
+        const taken = new Set(root.khalCalendars.map(calendar => String(calendar.name)));
+        return feed.calendars.map(calendar => {
+            let name = label(calendar);
+            // Two accounts with a "Calendar" each, or a khal calendar of the same name.
+            if (counts[name] > 1 && calendar.account)
+                name += " · " + String(calendar.account);
+            if (taken.has(name))
+                name += " · " + Translation.tr("phone");
+            return {
+                name: name,
+                displayName: label(calendar),
+                color: "",
+                phoneColor: String(calendar.color ?? ""),
+                readOnly: !(writes && calendar.writable === true),
+                source: "phone",
+                phoneId: String(calendar.id),
+                account: String(calendar.account ?? ""),
+                provider: String(calendar.provider ?? ""),
+                visible: calendar.visible !== false,
+                primary: calendar.primary === true,
+                shown: root.phoneCalendarShown(calendar)
+            };
+        });
+    }
+
+    function _phoneDate(value, allDay) {
+        if (allDay)
+            return root.localDateFromIso(String(value));
+        return new Date(Number(value));
+    }
+
+    function _startOfDay(date) {
+        return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    }
+
+    // Every instance as khal lists it: one entry per day it covers.
+    readonly property var phoneEvents: {
+        const feed = root.phoneFeed;
+        const calendars = root.phoneCalendars;
+        if (!feed || calendars.length === 0 || !Array.isArray(feed.events))
+            return [];
+        const byId = {};
+        for (const calendar of calendars)
+            byId[calendar.phoneId] = calendar;
+        const series = feed.series ?? {};
+        const useColors = root.phoneOptions?.colors ?? true;
+        const hideDeclined = root.phoneOptions?.hideDeclined ?? true;
+        const palette = root.eventColors;
+        const out = [];
+        let colorIndex = 0;
+        for (const item of feed.events) {
+            const calendar = byId[String(item.calendar)];
+            if (!calendar || !calendar.shown || (hideDeclined && item.declined === true))
+                continue;
+            const allDay = item.allDay === true;
+            const start = root._phoneDate(allDay ? item.start : item.begin, allDay);
+            let end = root._phoneDate(allDay ? item.end : item.end, allDay);
+            if (!start || isNaN(start.getTime()))
+                continue;
+            if (!end || isNaN(end.getTime()) || end < start)
+                end = start;
+            const details = series[String(item.event)] ?? {};
+            const base = {
+                content: String(item.title ?? ""),
+                color: useColors && item.color ? String(item.color) : palette[colorIndex++ % palette.length],
+                description: String(details.description ?? ""),
+                calendar: calendar.name,
+                readOnly: calendar.readOnly,
+                uid: "phone:" + String(item.event),
+                url: "",
+                location: String(details.location ?? ""),
+                categories: [],
+                colorToken: "",
+                repeatSymbol: item.recurring === true ? "↻" : "",
+                status: String(details.status ?? "CONFIRMED"),
+                organizer: String(details.organizer ?? ""),
+                allDay: allDay,
+                calendarColor: "",
+                source: "phone",
+                phoneEvent: String(item.event),
+                phoneBegin: Number(item.begin),
+                phoneCalendar: calendar.phoneId,
+                icalUid: String(details.uid ?? ""),
+                spanStart: start,
+                spanEnd: end
+            };
+            // All day: one entry per date, the end being exclusive. Timed: cut at midnight.
+            let day = root._startOfDay(start);
+            const lastDay = allDay ? new Date(end.getFullYear(), end.getMonth(), end.getDate() - 1) : root._startOfDay(end);
+            let guard = 0;
+            do {
+                const next = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1);
+                const piece = Object.assign({}, base);
+                if (allDay) {
+                    piece.startDate = day;
+                    piece.endDate = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59);
+                } else {
+                    piece.startDate = start > day ? start : day;
+                    piece.endDate = end < next ? end : new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59);
+                    // An event ending at midnight does not spill into the next day.
+                    if (piece.startDate >= piece.endDate && day > root._startOfDay(start))
+                        break;
+                }
+                out.push(piece);
+                day = next;
+            } while (day <= lastDay && ++guard < 62);
+        }
+        return out;
+    }
+
+    function _occurrenceTime(event) {
+        if (!event?.startDate)
+            return "";
+        return root.isAllDayEvent(event)
+            ? root.dayKey(event.startDate)
+            : Qt.formatDateTime(event.startDate, "yyyy-MM-ddTHH:mm");
+    }
+
+    // Two sources hold the same event when its UID and start agree, or, for accounts
+    // that hide the UID from the phone, its title and start.
+    function _eventKeys(event) {
+        const when = root._occurrenceTime(event);
+        const keys = [];
+        const uid = String(event?.icalUid ?? (event?.source === "phone" ? "" : event?.uid ?? "")).trim();
+        if (uid && !root.isPhoneUid(uid))
+            keys.push("u:" + uid.toLowerCase() + "|" + when);
+        const title = String(event?.content ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+        if (title)
+            keys.push("f:" + title + "|" + when);
+        return keys;
+    }
+
+    function _dedupe(khal, phone) {
+        const khalList = khal ?? [];
+        const phoneList = phone ?? [];
+        if (phoneList.length === 0 || khalList.length === 0 || !(root.phoneOptions?.dedupe ?? true))
+            return { events: khalList.concat(phoneList), hidden: 0 };
+        const preferPhone = (root.phoneOptions?.prefer ?? "khal") === "phone";
+        const kept = preferPhone ? phoneList : khalList;
+        const other = preferPhone ? khalList : phoneList;
+        const seen = new Set();
+        for (const event of kept)
+            for (const key of root._eventKeys(event))
+                seen.add(key);
+        const rest = other.filter(event => !root._eventKeys(event).some(key => seen.has(key)));
+        return { events: kept.concat(rest), hidden: other.length - rest.length };
+    }
+
+    function _isoLocal(date, allDay) {
+        if (!date)
+            return "";
+        return allDay ? Qt.formatDate(date, "yyyy-MM-dd") : Qt.formatDateTime(date, "yyyy-MM-ddTHH:mm:ss");
+    }
+
+    // The same reply `ics.py read` gives, from what the phone already sent.
+    function phoneEventDetails(uid) {
+        const event = root.phoneEvents.find(item => item.uid === String(uid));
+        if (!event)
+            return { ok: false, error: Translation.tr("The phone no longer has this event.") };
+        const details = root.phoneFeed?.series?.[event.phoneEvent] ?? {};
+        return {
+            ok: true,
+            event: {
+                uid: event.uid,
+                calendar: event.calendar,
+                summary: event.content,
+                description: event.description,
+                location: event.location,
+                url: "",
+                allDay: event.allDay,
+                start: root._isoLocal(event.spanStart, event.allDay),
+                end: root._isoLocal(event.spanEnd, event.allDay),
+                timezone: String(details.timezone ?? ""),
+                status: event.status,
+                categories: [],
+                color: "",
+                recurrence: details.recurrence ?? null,
+                exdates: Array.isArray(details.exdates) ? details.exdates : [],
+                alarms: Array.isArray(details.alarms) ? details.alarms : [],
+                organizer: event.organizer,
+                attendees: [],
+                readOnly: event.readOnly
+            }
+        };
+    }
+
+    function phoneOccurrences(uid, from, to) {
+        const seen = new Set();
+        const out = [];
+        for (const event of root.phoneEvents) {
+            if (event.uid !== String(uid) || event.spanStart < from || event.spanStart > to || seen.has(event.phoneBegin))
+                continue;
+            seen.add(event.phoneBegin);
+            const start = root._isoLocal(event.spanStart, event.allDay);
+            out.push({ start: start, end: root._isoLocal(event.spanEnd, event.allDay), recurrenceId: start });
+        }
+        return out.sort((a, b) => a.start.localeCompare(b.start));
+    }
+
+    // The editor's fields as the phone takes them: no categories, links or colour tokens.
+    function phoneFields(fields) {
+        const out = {};
+        for (const key of ["summary", "description", "location", "status", "allDay", "start", "end", "recurrence", "alarms", "exdates", "uid"]) {
+            if (fields && key in fields && fields[key] !== undefined)
+                out[key] = fields[key];
+        }
+        return out;
+    }
+
+    property string phoneMutationError: ""
+
+    function phoneErrorText(code) {
+        switch (String(code ?? "")) {
+        case "offline":
+            return Translation.tr("The phone isn't connected.");
+        case "timeout":
+            return Translation.tr("The phone didn't answer.");
+        case "readOnly":
+            return Translation.tr("This phone calendar is read-only.");
+        case "permission":
+            return Translation.tr("The phone hasn't allowed edits: grant Edit calendar in ii tools.");
+        case "disabled":
+            return Translation.tr("The phone stopped sharing its calendar.");
+        case "event":
+            return Translation.tr("The phone no longer has this event.");
+        default:
+            return Translation.tr("The phone couldn't save the change (%1).").arg(String(code ?? ""));
+        }
+    }
+
+    function phoneEdit(request, callback = null) {
+        if (!root.phoneLive || root.phoneFeed?.write !== true || !(root.phoneOptions?.write ?? true)) {
+            const reply = { ok: false, error: Translation.tr("The phone calendar can't be edited right now.") };
+            root.phoneMutationError = reply.error;
+            if (typeof callback === "function")
+                callback(reply);
+            return false;
+        }
+        IiLinkService.calendarEdit(request, raw => {
+            const reply = raw?.ok ? raw : { ok: false, error: root.phoneErrorText(raw?.error) };
+            root.phoneMutationError = reply.ok ? "" : reply.error;
+            if (!reply?.ok)
+                console.warn("[CalendarService] Phone calendar edit failed:", root.phoneMutationError);
+            if (typeof callback === "function")
+                callback(reply);
+        });
+        return true;
+    }
+
+    // Moving a day or an instance that was cut at midnight moves the whole span.
+    function movePhoneEvent(event, newDate, scope) {
+        const allDay = event.allDay === true;
+        const shift = Math.round((root._startOfDay(newDate) - root._startOfDay(event.startDate)) / 86400000);
+        const start = new Date(event.spanStart);
+        const end = new Date(event.spanEnd);
+        start.setDate(start.getDate() + shift);
+        end.setDate(end.getDate() + shift);
+        root.saveEventFields(event, {
+            allDay: allDay,
+            start: root._isoLocal(start, allDay),
+            end: root._isoLocal(end, allDay)
+        }, scope);
+    }
+
+
+    // A khal-shaped request (`ics.py` ops) aimed at the phone, carried out there.
+    // Returns false when it is not the phone's.
+    function routePhoneRequest(payload, callback) {
+        const op = String(payload?.op ?? "");
+        const uid = String(payload?.uid ?? payload?.event?.uid ?? "");
+        const phoneCalendar = root.phoneCalendars.find(item => item.name === String(payload?.calendar ?? ""));
+        if (!root.isPhoneUid(uid) && !(op === "save" && phoneCalendar))
+            return false;
+        const done = reply => {
+            if (typeof callback === "function")
+                callback(reply);
+        };
+        if (op === "read") {
+            Qt.callLater(() => done(root.phoneEventDetails(uid)));
+            return true;
+        }
+        if (op === "save" && !root.isPhoneUid(uid)) {
+            const fields = Object.assign({}, payload.event ?? {});
+            delete fields.uid;
+            root.createEventFields(phoneCalendar.name, fields, done);
+            return true;
+        }
+        const occurrences = root.phoneEvents.filter(item => item.uid === uid);
+        const target = occurrences.find(item => {
+            const id = root.recurrenceIdForEvent({ startDate: item.spanStart, endDate: item.spanEnd, allDay: item.allDay });
+            return payload.recurrenceId && id === String(payload.recurrenceId);
+        }) ?? occurrences[0];
+        if (!target) {
+            Qt.callLater(() => done({ ok: false, error: Translation.tr("The phone no longer has this event.") }));
+            return true;
+        }
+        const scope = ({ overrideOccurrence: "this", deleteOccurrence: "this", splitSeries: "future", truncateSeries: "future" })[op] ?? "all";
+        if (op === "save" || op === "overrideOccurrence" || op === "splitSeries")
+            root.phoneEdit({ op: "update", event: target.phoneEvent, begin: target.phoneBegin, scope: scope, fields: root.phoneFields(payload.event ?? payload.fields ?? {}) }, done);
+        else if (op === "deleteSeries" || op === "deleteOccurrence" || op === "truncateSeries")
+            root.phoneEdit({ op: "delete", event: target.phoneEvent, begin: target.phoneBegin, scope: scope }, done);
+        else
+            Qt.callLater(() => done({ ok: false, error: Translation.tr("Phone calendars don't support this.") }));
+        return true;
+    }
 }

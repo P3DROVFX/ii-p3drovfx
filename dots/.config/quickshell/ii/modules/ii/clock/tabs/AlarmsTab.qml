@@ -36,7 +36,7 @@ Item {
     readonly property real tileWidth: Math.floor((root.contentWidth - root.gridGap * (root.columns - 1)) / root.columns)
     readonly property real tileHeight: Math.round(Math.max(210, Math.min(280, root.tileLayoutWidth * 0.82)))
     readonly property int heroSpan: Math.min(2, root.columns)
-    readonly property bool showTimetable: (Config.options.clockApp?.showTimetableEvents ?? true) && CalendarService.khalAvailable
+    readonly property bool showTimetable: (Config.options.clockApp?.showTimetableEvents ?? true) && CalendarService.eventsAvailable
 
     readonly property int alarmCount: AlarmService.alarms.length
     readonly property var next: AlarmService.nextAlarm(root.now)

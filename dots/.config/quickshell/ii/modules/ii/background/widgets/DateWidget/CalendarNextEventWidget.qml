@@ -51,7 +51,7 @@ AbstractBackgroundWidget {
 
     // Every event that has not ended yet, soonest first
     readonly property var upcomingEvents: {
-        if (!CalendarService.khalAvailable || !CalendarService.events) return [];
+        if (!CalendarService.eventsAvailable || !CalendarService.events) return [];
         const now = root.currDate ? root.currDate.getTime() : Date.now();
         const list = CalendarService.events.filter(evt => root.effectiveEnd(evt) > now);
         list.sort((a, b) => a.startDate - b.startDate);

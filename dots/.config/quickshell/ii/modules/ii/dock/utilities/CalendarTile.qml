@@ -96,7 +96,7 @@ UtilityTile {
             TileText {
                 Layout.fillWidth: true
                 text: tile.nextItem ? tile.nextItem.event.content
-                    : CalendarService.khalAvailable ? Translation.tr("Free") : Translation.tr("No calendar")
+                    : CalendarService.eventsAvailable ? Translation.tr("Free") : Translation.tr("No calendar")
                 color: tile.contentColor
                 font.family: Appearance.font.family.title
                 font.variableAxes: Appearance.font.variableAxes.titleRounded
@@ -106,7 +106,7 @@ UtilityTile {
             TileCaption {
                 Layout.fillWidth: true
                 text: tile.nextItem ? tile.whenText(tile.nextItem)
-                    : CalendarService.khalAvailable ? Translation.tr("Nothing else this week") : Translation.tr("Connect one in Settings")
+                    : CalendarService.eventsAvailable ? Translation.tr("Nothing else this week") : Translation.tr("Connect one in Settings")
                 color: tile.captionColor
                 font.pixelSize: tile.captionSize
             }

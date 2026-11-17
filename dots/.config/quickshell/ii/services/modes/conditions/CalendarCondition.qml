@@ -25,6 +25,6 @@ ModeCondition {
         });
     }
 
-    satisfied: CalendarService.khalAvailable && root.current.length > 0
-    reason: root.current[0]?.content ?? (CalendarService.khalAvailable ? "" : "khal not installed")
+    satisfied: CalendarService.eventsAvailable && root.current.length > 0
+    reason: root.current[0]?.content ?? (CalendarService.eventsAvailable ? "" : "khal not installed")
 }

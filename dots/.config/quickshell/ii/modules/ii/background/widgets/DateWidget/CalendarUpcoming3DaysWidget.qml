@@ -35,7 +35,7 @@ AbstractBackgroundWidget {
 
     // Statically helper function for date filtering
     function getEventsForDate(targetDate) {
-        if (!CalendarService.khalAvailable || !CalendarService.events) return [];
+        if (!CalendarService.eventsAvailable || !CalendarService.events) return [];
         let list = [];
         let currentDay = targetDate.getDate();
         let currentMonth = targetDate.getMonth();

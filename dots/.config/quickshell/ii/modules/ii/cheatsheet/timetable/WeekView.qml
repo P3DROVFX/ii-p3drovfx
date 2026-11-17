@@ -478,7 +478,7 @@ Item {
     }
 
     function startCreate(date) {
-        if (!CalendarService.khalAvailable)
+        if (!CalendarService.canCreate)
             return;
         eventSidebar.sportsListOnly = false;
         eventSidebar.startCreate(date);
@@ -1252,7 +1252,7 @@ Item {
                 colBackgroundHover: Appearance.colors.colPrimaryHover
                 colRipple: Appearance.colors.colPrimaryActive
                 colOnBackground: Appearance.colors.colOnPrimary
-                enabled: CalendarService.khalAvailable
+                enabled: CalendarService.canCreate
                 onClicked: root.startCreate(root.viewingCurrentWeek ? DateTime.clock.date : root.viewWeekStart)
 
                 contentItem: TaskShortcutContent {
@@ -1266,7 +1266,7 @@ Item {
 
                 StyledToolTip {
                     extraVisibleCondition: newEventButton.hovered
-                    text: (CalendarService.khalAvailable ? Translation.tr("New event") : Translation.tr("Calendar service unavailable")) + " (Ctrl+N)"
+                    text: (CalendarService.canCreate ? Translation.tr("New event") : Translation.tr("Calendar service unavailable")) + " (Ctrl+N)"
                 }
             }
         }

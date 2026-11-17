@@ -7,7 +7,8 @@ import qs.modules.common.widgets
 import qs.services
 
 // Health card for the Timetable calendar engine (khal + vdirsyncer).
-// Shows one of three states: disabled, khal unavailable (error) or ready.
+// Shows one of three states: disabled, khal unavailable (error) or ready; without
+// khal, the phone's calendar (ii tools) counts as ready.
 Rectangle {
     id: root
 
@@ -19,17 +20,21 @@ Rectangle {
         if (!root.timetableEnabled)
             return Translation.tr("Timetable disabled");
         if (!CalendarService.khalAvailable)
-            return Translation.tr("khal unavailable");
+            return CalendarService.phoneCalendarActive ? Translation.tr("Phone calendar") : Translation.tr("khal unavailable");
         if (CalendarService.googleAuthRequired)
             return Translation.tr("Auth required");
         if (CalendarService.calendars.length === 0)
             return Translation.tr("No calendars found");
         return Translation.tr("Ready");
     }
-    readonly property bool healthy: root.timetableEnabled && CalendarService.khalAvailable && !CalendarService.googleAuthRequired && CalendarService.calendars.length > 0
+    readonly property bool healthy: root.timetableEnabled && (CalendarService.khalAvailable
+        ? !CalendarService.googleAuthRequired && CalendarService.calendars.length > 0
+        : CalendarService.phoneCalendarActive)
     readonly property string detail: {
         if (!root.timetableEnabled)
             return Translation.tr("Enable the Timetable switch in Cheatsheet settings to use the calendar.");
+        if (!CalendarService.khalAvailable && CalendarService.phoneCalendarActive)
+            return Translation.tr("Events come from the phone through ii tools (%1 calendar(s)). khal and vdirsyncer are optional.").arg(String(CalendarService.phoneCalendars.filter(calendar => calendar.shown).length));
         if (!CalendarService.khalAvailable)
             return Translation.tr("Install and configure khal and vdirsyncer, then run a recheck.");
         if (CalendarService.googleAuthRequired)

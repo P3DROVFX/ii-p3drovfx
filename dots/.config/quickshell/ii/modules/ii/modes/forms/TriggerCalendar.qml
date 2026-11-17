@@ -33,7 +33,7 @@ ColumnLayout {
     }
 
     FormHint {
-        text: CalendarService.khalAvailable
+        text: CalendarService.eventsAvailable
             ? Translation.tr("Holds from the event's start to its end; also matches the calendar's name.")
             : Translation.tr("Needs khal, which the calendar widget reads events from.")
     }

@@ -223,6 +223,9 @@ Singleton {
                 const eventKey = root._occurrenceKey(event);
                 if (seen.has(eventKey) || !event.startDate || event.startDate < now || event.startDate > end)
                     continue;
+                // The phone already reminds its own events; the PC does too only if asked.
+                if (event.source === "phone" && !(Config.options.iiTools.calendar.notify ?? false))
+                    continue;
                 seen.add(eventKey);
                 events.push(event);
             }
@@ -261,7 +264,7 @@ Singleton {
             return;
         root._prune(now);
         root._checkSnoozes(now);
-        if (!CalendarService.khalAvailable)
+        if (!CalendarService.eventsAvailable)
             return;
         root._checkDailySummary(now);
         for (const event of root._eventsInNextDay(now)) {

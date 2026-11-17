@@ -3012,6 +3012,21 @@ Singleton {
                 property JsonObject phoneData: JsonObject {
                     property bool enable: true
                 }
+                // The phone's calendars (Google, Samsung, Outlook…) in the Timetable, beside or
+                // instead of khal. `hidden`/`shown` are phone calendar ids the user chose; one
+                // never chosen follows the phone's own visibility. `prefer` is the source kept
+                // when khal and the phone hold the same event ("khal" | "phone").
+                property JsonObject calendar: JsonObject {
+                    property bool enable: true
+                    property bool write: true
+                    property bool dedupe: true
+                    property string prefer: "khal"
+                    property bool colors: true
+                    property bool hideDeclined: true
+                    property bool notify: false
+                    property list<string> hidden: []
+                    property list<string> shown: []
+                }
                 // Screenshots both ways: the PC's go to the phone's gallery (queued until
                 // it connects), the phone's land in Pictures/Screenshots/Phone with the
                 // screenshot preview.

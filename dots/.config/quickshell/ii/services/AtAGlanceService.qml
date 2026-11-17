@@ -33,7 +33,7 @@ Singleton {
     readonly property date now: DateTime.clock.date
     readonly property var todayEvents: {
         refreshVersion;
-        if (!(options.enableCalendar ?? true) || !CalendarService.khalAvailable || !CalendarService.events)
+        if (!(options.enableCalendar ?? true) || !CalendarService.eventsAvailable || !CalendarService.events)
             return [];
         return CalendarService.events.filter(event => {
             const date = new Date(event.startDate);

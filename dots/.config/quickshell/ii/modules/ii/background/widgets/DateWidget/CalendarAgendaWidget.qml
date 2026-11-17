@@ -32,7 +32,7 @@ AbstractBackgroundWidget {
     readonly property int currYear: currDate.getFullYear()
 
     readonly property var todayEvents: {
-        if (!CalendarService.khalAvailable || !CalendarService.events) return [];
+        if (!CalendarService.eventsAvailable || !CalendarService.events) return [];
         let list = [];
         let today = root.currDate;
         if (!today) today = new Date();
@@ -64,7 +64,7 @@ AbstractBackgroundWidget {
             let d = new Date(monday);
             d.setDate(monday.getDate() + i);
             let hasEvts = false;
-            if (CalendarService.khalAvailable && CalendarService.events) {
+            if (CalendarService.eventsAvailable && CalendarService.events) {
                 for (let j = 0; j < CalendarService.events.length; j++) {
                     let evt = CalendarService.events[j];
                     let taskDate = new Date(evt.startDate);

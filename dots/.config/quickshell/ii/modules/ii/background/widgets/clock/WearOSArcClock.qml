@@ -126,7 +126,7 @@ Item {
                 const currentMonth = today.getMonth();
                 const currentYear = today.getFullYear();
                 let todayEvts = [];
-                if (CalendarService.khalAvailable && CalendarService.events) {
+                if (CalendarService.eventsAvailable && CalendarService.events) {
                     for (let i = 0; i < CalendarService.events.length; i++) {
                         let evt = CalendarService.events[i];
                         let taskDate = new Date(evt.startDate);

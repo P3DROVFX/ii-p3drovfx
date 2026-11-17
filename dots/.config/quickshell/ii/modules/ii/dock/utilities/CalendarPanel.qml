@@ -148,7 +148,7 @@ ColumnLayout {
         color: ClockStyle.colField
         StyledText {
             anchors.centerIn: parent
-            text: CalendarService.khalAvailable ? Translation.tr("Nothing on today") : Translation.tr("No calendar connected")
+            text: CalendarService.eventsAvailable ? Translation.tr("Nothing on today") : Translation.tr("No calendar connected")
             color: ClockStyle.colOnSurfaceVariant
             font.pixelSize: ClockStyle.textNormal
         }

@@ -44,7 +44,7 @@ Item {
         ? root.noticeText
         : (root.selectedEvent
         ? String(root.selectedEvent.content ?? root.selectedEvent.title ?? "") + " · " + String(root.selectedEvent.calendar ?? "")
-        : (root.calendarSource === "khal" && !CalendarService.khalAvailable
+        : (root.calendarSource === "khal" && !CalendarService.eventsAvailable
             ? Translation.tr("Calendar is not configured")
             : Translation.tr("%1 events").arg(String(root.rows.length))))
 
@@ -140,7 +140,7 @@ Item {
         const prefersGoogle = root.calendarSource === "google" || root.calendarSource === "both";
         const created = prefersGoogle && GoogleCalendarService.available
             ? GoogleCalendarService.createEvent(Config.options.search.modules.calendar.defaultCalendarId || "primary", fields)
-            : (CalendarService.khalAvailable
+            : (CalendarService.canCreate
                 ? CalendarService.createEventFields("", fields, reply => {
                     root.noticeText = reply?.ok
                         ? Translation.tr("Event created")

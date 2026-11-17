@@ -1896,6 +1896,163 @@ Singleton {
         }
     }
 
+    // ── Phone calendar ──────────────────────────────────────────────────
+    // The phone's calendars for the Timetable (CalendarService merges them with khal's).
+    // Asked for on connect and whenever the Timetable's window grows, with the version
+    // this PC has; the phone answers only when it changed and pushes each change after.
+    // The last list is kept on disk, so the events stay while the phone is away
+    // (read-only until it is back).
+
+    readonly property bool calendarEnabled: root.opts?.calendar?.enable ?? true
+    readonly property string calendarDev: {
+        if (!root.calendarEnabled)
+            return "";
+        for (const id of Object.keys(root.connections)) {
+            if ((root.phoneCaps[id] ?? []).includes("calendar"))
+                return id;
+        }
+        return "";
+    }
+    /// The phone offers its calendar and lets this PC edit it.
+    readonly property bool calendarWritable: root.calendarDev !== "" && (root.phoneCaps[root.calendarDev] ?? []).includes("calendarWrite")
+    /// When the phone's list last arrived (ms), 0 if never this session.
+    property real calendarAt: 0
+    property int _calendarSeq: 1
+    property var _calendarCallbacks: ({})
+
+    FileView {
+        id: calendarFile
+        path: root.calendarEnabled && root.enabled ? `${root.stateDir}/calendar.json` : ""
+        printErrors: false
+        onLoaded: {
+            if (CalendarService.phoneFeed !== null)
+                return;
+            try {
+                const cached = JSON.parse(calendarFile.text());
+                if (cached && Array.isArray(cached.events))
+                    CalendarService.setPhoneFeed(cached, false);
+            } catch (e) {}
+        }
+    }
+
+    onCalendarEnabledChanged: {
+        if (!root.calendarEnabled)
+            CalendarService.setPhoneFeed(null, false);
+    }
+    onCalendarDevChanged: {
+        // A new connection gets the whole list: `have` stays empty until it arrives.
+        root.phoneLiveFeed = false;
+        if (root.calendarDev !== "") {
+            root._askCalendar();
+        } else if (CalendarService.phoneFeed !== null) {
+            // Away: the cached list stays, read-only.
+            CalendarService.setPhoneFeed(CalendarService.phoneFeed, false);
+            root._failCalendarEdits("offline");
+        }
+    }
+
+    function _askCalendar(): void {
+        if (root.calendarDev === "")
+            return;
+        const feed = CalendarService.phoneFeed;
+        root.sendTo(root.calendarDev, {
+            t: "get",
+            what: "calendar",
+            from: Qt.formatDate(CalendarService.rangeStart, "yyyy-MM-dd"),
+            to: Qt.formatDate(CalendarService.rangeEnd, "yyyy-MM-dd"),
+            have: root.phoneLiveFeed ? String(feed?.hash ?? "") : ""
+        });
+    }
+    /// The feed came over this connection (not from the disk cache).
+    property bool phoneLiveFeed: false
+
+    // The Timetable reached a month outside the window: ask again, once it settles.
+    Connections {
+        target: root.calendarDev !== "" ? CalendarService : null
+        function onRangeStartChanged() { calendarAskTimer.restart(); }
+        function onRangeEndChanged() { calendarAskTimer.restart(); }
+    }
+    Timer {
+        id: calendarAskTimer
+        interval: 400
+        onTriggered: root._askCalendar()
+    }
+
+    function _calendar(dev, m): void {
+        const feed = {
+            calendars: Array.isArray(m.calendars) ? m.calendars : [],
+            events: Array.isArray(m.events) ? m.events : [],
+            series: (m.series && typeof m.series === "object") ? m.series : {},
+            write: m.write === true,
+            hash: String(m.hash ?? ""),
+            from: String(m.from ?? ""),
+            to: String(m.to ?? ""),
+            at: Date.now()
+        };
+        root.phoneLiveFeed = true;
+        root.calendarAt = feed.at;
+        CalendarService.setPhoneFeed(feed, true);
+        calendarFile.setText(JSON.stringify(feed));
+    }
+
+    /// Sends one edit (`calendarEdit`: create / update / delete); `callback(reply)` gets `{ ok, error }`.
+    function calendarEdit(request, callback): void {
+        if (root.calendarDev === "" || !root.calendarWritable) {
+            if (typeof callback === "function")
+                callback({ ok: false, error: "offline" });
+            return;
+        }
+        const id = root._calendarSeq++;
+        const callbacks = Object.assign({}, root._calendarCallbacks);
+        callbacks[id] = { callback: callback, at: Date.now() };
+        root._calendarCallbacks = callbacks;
+        root.sendTo(root.calendarDev, Object.assign({ t: "calendarEdit", id: id }, request));
+        calendarEditTimeout.restart();
+    }
+
+    function _calendarResult(m): void {
+        const id = Number(m.id);
+        const entry = root._calendarCallbacks[id];
+        if (!entry)
+            return;
+        const callbacks = Object.assign({}, root._calendarCallbacks);
+        delete callbacks[id];
+        root._calendarCallbacks = callbacks;
+        if (typeof entry.callback === "function")
+            entry.callback({ ok: m.ok === true, error: String(m.error ?? "") });
+    }
+
+    function _failCalendarEdits(reason): void {
+        const pending = root._calendarCallbacks;
+        root._calendarCallbacks = ({});
+        for (const id of Object.keys(pending)) {
+            if (typeof pending[id].callback === "function")
+                pending[id].callback({ ok: false, error: reason });
+        }
+    }
+
+    // An edit the phone never answered (it went away mid-way) fails after 15 s.
+    Timer {
+        id: calendarEditTimeout
+        interval: 15000
+        onTriggered: {
+            const now = Date.now();
+            const pending = root._calendarCallbacks;
+            const kept = {};
+            for (const id of Object.keys(pending)) {
+                if (now - pending[id].at >= 15000) {
+                    if (typeof pending[id].callback === "function")
+                        pending[id].callback({ ok: false, error: "timeout" });
+                } else {
+                    kept[id] = pending[id];
+                }
+            }
+            root._calendarCallbacks = kept;
+            if (Object.keys(kept).length > 0)
+                calendarEditTimeout.restart();
+        }
+    }
+
     // ── Phone usage (screen time) ───────────────────────────────────────
     // Kept in `${stateDir}/phone_usage/<YYYY-MM-DD>.json`, 60 days retained, read lazily
     // by AppStats and BedtimeService only while `iiTools.usage.enable` is on.
@@ -4113,6 +4270,13 @@ Singleton {
         case "contacts":
             if (root.phoneDataEnabled && dev === root.dataDev)
                 root._contacts(dev, m);
+            return;
+        case "calendar":
+            if (dev === root.calendarDev)
+                root._calendar(dev, m);
+            return;
+        case "calendarResult":
+            root._calendarResult(m);
             return;
         case "files":
             root._filesReply(dev, m);
