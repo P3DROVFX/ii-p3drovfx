@@ -25,12 +25,14 @@ MouseArea {
     cursorShape: Qt.PointingHandCursor
     hoverEnabled: true
 
-    // A phone entry is only a thumbnail here: its file starts coming over when the pointer
-    // lingers or presses, and the drag begins once it is on this PC.
-    readonly property bool hasPhone: area.paths.some(p => FileShelf.isPhone(p))
+    // A phone's or another PC's entry is only a thumbnail here: its file starts coming over
+    // when the pointer lingers (phone) or presses, and the drag begins once it is on this PC.
+    readonly property bool hasPhone: area.paths.some(p => FileShelf.isRemote(p))
+    // Only the phone's photos on hover: another PC's file may be large, so it waits for a press.
+    readonly property bool hoverFetch: area.paths.some(p => FileShelf.isPhone(p))
     Timer {
         interval: 180
-        running: area.hasPhone && area.containsMouse
+        running: area.hoverFetch && area.containsMouse
         onTriggered: area.paths.forEach(p => FileShelf.prepare(p))
     }
 

@@ -16,6 +16,7 @@ mod gallery;
 mod icons;
 mod input;
 mod mpris;
+mod pclink;
 mod screen;
 
 use std::collections::HashMap;
@@ -96,6 +97,19 @@ struct Shared {
     /// The phone being a webcam here (one at a time): armed, then streaming.
     camera: Option<camera::Slot>,
     mic: Option<mic::Slot>,
+    /// Other PCs linked to this one (pclink.rs), their sockets, and an open pairing.
+    pcs: Vec<pclink::PcPeer>,
+    pc_conns: HashMap<String, Conn>,
+    pc_pairing: Option<pclink::PcPairing>,
+    /// The shell's switch (`config.pcLink`); off until it says.
+    pc_enabled: bool,
+    /// Bumped to retire the dial loops; they sleep on [pc_wake].
+    pc_gen: u64,
+    pc_wake: Arc<tokio::sync::Notify>,
+    /// The PCs a dial loop runs for, by the generation it runs under.
+    pc_dialing: HashMap<String, u64>,
+    /// Each linked PC's file lane: bounded, so a large file is read only as fast as it leaves.
+    pc_files: HashMap<String, pclink::FileLane>,
 }
 
 type State = Arc<Mutex<Shared>>;
@@ -373,11 +387,17 @@ async fn serve(stream: TcpStream, addr: SocketAddr, acceptor: TlsAcceptor, state
     }
     let (mut sink, mut stream) = ws.split();
 
-    let hello: Option<Hello> = match timeout(HANDSHAKE_TIMEOUT, stream.next()).await {
+    let first: Option<Value> = match timeout(HANDSHAKE_TIMEOUT, stream.next()).await {
         Ok(Some(Ok(Message::Text(text)))) => serde_json::from_str(text.as_str()).ok(),
         _ => None,
     };
-    let Some(hello) = hello else { return };
+    let Some(first) = first else { return };
+    // Another PC (pclink.rs), not a phone.
+    if first["t"].as_str().is_some_and(|t| t.starts_with("pc")) {
+        pclink::accept(sink, stream, first, addr, state).await;
+        return;
+    }
+    let Ok(hello) = serde_json::from_value::<Hello>(first) else { return };
     let (dev, reply) = match authenticate(&state, &hello) {
         Ok(ok) => ok,
         Err(code) => {
@@ -705,8 +725,17 @@ fn handle_op(state: &State, line: &str) {
                 emit(json!({"ev": if ok { "fileSent" } else { "fileSendFailed" }, "dev": dev, "id": id}));
             });
         }
+        "pcPairOpen" | "pcPairJoin" | "pcSend" | "pcUnpair" | "pcSendFile" | "pcShelf" | "pcWake" | "pcDiscover" | "pcPairClose" => pclink::op(state, &op),
+        // The phone asks this PC to wake another on its LAN (it is away, or on Tailscale).
+        "wake" => {
+            let targets: Vec<Value> = op["targets"].as_array().cloned().unwrap_or_default();
+            emit(json!({"ev": "woke", "ok": pclink::wake(&targets)}));
+        }
         // Settings the shell holds: for now, whether the phones' media become MPRIS players.
         "config" => {
+            if let Some(on) = op["pcLink"].as_bool() {
+                pclink::set_enabled(state, on);
+            }
             let mut s = state.lock().unwrap();
             if let Some(on) = op["present"].as_bool() {
                 s.present = on;
@@ -827,6 +856,7 @@ async fn main() {
     let udp = UdpSocket::bind(("0.0.0.0", port)).await.ok();
 
     let peers = load_peers(&dir);
+    let pcs = pclink::load(&dir);
     let (media_tx, media_rx) = mpsc::unbounded_channel();
     tokio::spawn(mpris::run(media_rx, dir.join("media")));
     let state: State = Arc::new(Mutex::new(Shared {
@@ -848,10 +878,19 @@ async fn main() {
         screen: None,
         camera: None,
         mic: None,
+        pcs,
+        pc_conns: HashMap::new(),
+        pc_pairing: None,
+        pc_enabled: false,
+        pc_gen: 0,
+        pc_wake: pclink::notifier(),
+        pc_dialing: HashMap::new(),
+        pc_files: HashMap::new(),
     }));
 
     emit(json!({"ev": "ready", "port": port, "fp": fingerprint, "name": name, "addrs": addresses(), "wake": wake_targets(), "discovery": udp.is_some()}));
     emit(peers_event(&state.lock().unwrap().peers));
+    emit(pclink::peers_event(&state.lock().unwrap().pcs));
 
     if let Some(sock) = udp {
         tokio::spawn(discovery(sock, state.clone()));

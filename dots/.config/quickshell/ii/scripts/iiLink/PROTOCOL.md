@@ -503,6 +503,61 @@ Actions in `iilink/1`, all toggles:
 Adding a message never needs a version bump: unknown `t` values are ignored on both
 sides. Changing the meaning of an existing one does: that is `iilink/2`, on a new path.
 
+## PC link (PC ↔ PC)
+
+Two shells talk directly, helper to helper, on the same port and path: the PC that dials
+sends `pcPair` or `pcAuth` as its first frame instead of a phone's `pair`/`auth`. The
+phone only introduces them, once; after that it is not needed.
+
+**Introduction (phone ↔ both shells):**
+
+| Direction | Message | Meaning |
+| --- | --- | --- |
+| phone → shell B | `{"t":"pcPairOpen","id":N}` | Open a PC pairing window (2 min, one-time secret). |
+| shell B → phone | `{"t":"pcPairInfo","id":N,"secret","fp","port","name","hosts":[…]}` or `{"t":"pcPairInfo","id":N,"err":"disabled"}` | What A needs to dial B. |
+| phone → shell A | `{"t":"pcPairJoin","id":M,"fp","port","secret","name","hosts":[…]}` | Dial B and pair. `hosts`: where the phone reaches B first, then B's own list and tailnet. |
+| shell A → phone | `{"t":"pcPairResult","id":M,"ok":true,"name"}` or `{"ok":false,"code":"unreachable\|certificate\|protocol\|bad_secret\|expired\|not_pairing\|disabled\|same_pc"}` | The outcome. |
+
+`hello` carries `pcLinks: [fp…]` (the PCs already linked) and the cap `pcLink` while
+*Settings → ii tools → Other PCs → Link with other PCs* is on.
+
+**Between the helpers:**
+
+| Direction | Frame | Meaning |
+| --- | --- | --- |
+| A → B (first) | `{"t":"pcPair","secret","name","fp","port","hosts","id","token"}` | `id`/`token`: the credential B will dial A with (A keeps its hash). |
+| B → A | `{"t":"pcPaired","id","token","name","fp","port","hosts"}` | The credential A will dial B with. |
+| either (first) | `{"t":"pcAuth","id","token"}` → `{"t":"pcAuthOk","name"}` or `{"t":"authErr","code"}` | Later sessions. Only the PC with the lower fingerprint dials back (backoff 2 s → 5 min, asleep while connected); an `unknown_device`/`bad_token` answer makes it forget the other. |
+| both | `{"t":"pcHello","name","port","hosts"}` | On every session: name and addresses kept current. |
+| both | `{"t":"pcUnpaired"}` | The other side unlinked: forget it. |
+| both | `{"t":"clip","text"}` / `{"t":"clip","mime":"image/png","data":"<base64>"}` | Universal clipboard. The receiving helper writes an image to `<state>/pcclip/` and hands the shell the path. |
+
+| both | `{"t":"shelf","items":[{id,name,image,video,thumb:"<base64 jpeg>"}]}` | The shelf, newest first (24 at most), on every change and on connect. `id` is the MD5 of the path. The receiving helper writes thumbnails to `<state>/pcshelf/<fp>/thumbs/` and hands the shell `thumbPath`. |
+| both | `{"t":"shelfGet","id"}` → `file` (purpose `shelf`) or `{"t":"shelfGone","id"}` | A shelf file, only when the other PC drags or opens it. |
+| both | `{"t":"file","id","purpose":"shelf\|put","name","size"}` + binary frames | A file: written to `<state>/pcshelf/<fp>/<purpose>/<id>/<name>` (the name stripped of folders), progress as `pcFileProgress`, then `pcMsg {t:"file",id,purpose,name,path}` or `{t:"fileFailed"}`. `put` (dropped on *Send to <PC>*) moves to Downloads and onto the shelf. Up to 4 GiB, read from disk only as fast as the socket drains (a bounded lane, messages first). |
+| both | `{"t":"mediaHandoff","url","position","title","app"}` | Continue a web page playing on the other PC (the player's *Continue on* button, or `qs ipc call iiLink continueOnPc`). |
+
+`pcHello` also carries `wake` (the LAN adapters), kept as the peer's `wake`, so either PC can
+wake the other (`pcWake`). A phone asks any connected PC to wake another with
+`{"t":"wakeFor","targets":[{mac,broadcast}]}` (cap `wakeRelay`), which is what makes Wake work
+from away over Tailscale.
+
+**Without the phone:** `pcPairOpen {code:true}` makes the secret a 6-digit code; one wrong
+`pcPair` closes the window (`pcPairClosed`). `pcDiscover` broadcasts `iilink?` on the link's
+port and answers `pcFound {list:[{fp,name,port,addr}]}`; both screens show the first 8 hex of
+the fingerprint so a stranger answering the broadcast is caught.
+
+The dialer pings every 60 s; a socket silent for 200 s is dropped. Each PC pins the other's
+certificate fingerprint from the introduction. Credentials live in `<state>/pcs.json` (0600).
+
+**Helper ↔ shell:** ops `pcPairOpen {req}`, `pcPairJoin {req,fp,hosts,port,secret,name}`,
+`pcSend {pc: fp|"*", m}`, `pcUnpair {pc}`, `pcSendFile {pc,path,id,purpose,name?}`, `pcShelf {items}`,
+`pcWake {pc}`, `wake {targets}`, `pcDiscover`, `pcPairClose`, `config {pcLink: bool}` (off until the shell says);
+events `pcPeers {list:[{fp,name,hosts,pairedAt,lastSeen}]}`, `pcConnected {pc,name}`,
+`pcDisconnected {pc}`, `pcPairOpen {req,secret,fp,port,name,hosts | err}`,
+`pcPaired {pc,name,req?}`, `pcPairFailed {req,code}`, `pcMsg {pc,m}`, `pcFileProgress {pc,id,p}`,
+`pcFileSent {pc,id,ok}`, `pcPairClosed {reason}`, `pcFound {list}`, `pcWoke {pc,ok}`, `woke {ok}`.
+
 ## Helper ↔ shell (stdin/stdout NDJSON)
 
 | Helper → shell | |

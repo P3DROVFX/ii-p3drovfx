@@ -283,6 +283,18 @@ Item { // Player instance
                             downAction: () => root.player?.next()
                         }
 
+                        // Media handoff between linked PCs: the page continues there, here it pauses.
+                        TrackChangeButton {
+                            readonly property string pc: IiLinkService.handoffPc
+                            visible: pc !== "" && IiLinkService.playerUrl(root.player) !== ""
+                            iconName: "devices"
+                            buttonSize: 18
+                            downAction: () => IiLinkService.continueOnLinkedPc(root.player, pc)
+                            StyledToolTip {
+                                text: Translation.tr("Continue on %1").arg(IiLinkService._pcName(parent.pc))
+                            }
+                        }
+
                         TrackChangeButton {
                             visible: root.showPinButton
                             iconName: "keep"

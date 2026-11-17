@@ -2921,6 +2921,12 @@ Singleton {
                 property JsonObject tailscale: JsonObject {
                     property bool enable: false
                 }
+                // Other PCs linked to this one, straight from helper to helper (paired once
+                // through the phone): the copied text and images go to them.
+                property JsonObject pcLink: JsonObject {
+                    property bool enable: true
+                    property bool clipboard: true
+                }
                 // Do Not Disturb both ways: the shell's own (and chosen modes) silence the
                 // phone; the phone's turns on the shell's, or a mode.
                 property JsonObject dnd: JsonObject {

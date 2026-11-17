@@ -59,6 +59,9 @@ Singleton {
     readonly property bool dndEnabled: root.opts?.dnd?.enable ?? true
     readonly property bool wolEnabled: root.opts?.wol?.enable ?? true
     readonly property bool tailscaleEnabled: root.opts?.tailscale?.enable ?? false
+    readonly property bool pcLinkEnabled: root.opts?.pcLink?.enable ?? true
+    readonly property bool pcClipEnabled: root.pcLinkEnabled && (root.opts?.pcLink?.clipboard ?? true)
+    onPcLinkEnabledChanged: root.send({ op: "config", pcLink: root.pcLinkEnabled })
 
     /// Where a phone can reach this PC (`hello.routes`): the LAN addresses, and the
     /// tailnet one while remote access is on and Tailscale runs. A phone drops any
@@ -210,6 +213,435 @@ Singleton {
         onLoadFailed: root.peers = []
     }
 
+    // ── Linked PCs (PC link), also known without running the helper ─────
+    /// [{ fp, name, hosts, pairedAt, lastSeen }]
+    property var pcPeers: []
+    /// fp → { name, since } for the linked PCs connected right now.
+    property var pcConnections: ({})
+    readonly property bool hasPcPeers: root.pcPeers.length > 0
+    readonly property bool pcConnected: Object.keys(root.pcConnections).length > 0
+
+    FileView {
+        id: pcsFile
+        path: `${root.stateDir}/pcs.json`
+        watchChanges: true
+        printErrors: false
+        onFileChanged: pcsFile.reload()
+        onLoaded: root._setPcPeers(pcsFile.text())
+        onLoadFailed: root.pcPeers = []
+    }
+
+    function _setPcPeers(text): void {
+        try {
+            const list = JSON.parse(text);
+            root.pcPeers = Array.isArray(list) ? list.map(p => ({
+                fp: String(p.fp ?? ""), name: String(p.name ?? ""), hosts: p.hosts ?? [],
+                pairedAt: Number(p.pairedAt ?? 0), lastSeen: Number(p.lastSeen ?? 0), canWake: (p.wake ?? []).length > 0
+            })) : [];
+        } catch (e) {
+            root.pcPeers = [];
+        }
+    }
+
+    function unpairPc(fp): void {
+        root.send({ op: "pcUnpair", pc: String(fp) });
+    }
+
+    // ── Linking without the phone: a 6-digit code ───────────────────────
+    /// This PC's open code: { code, check, expires } or null.
+    property var localPair: null
+    /// Other PCs found on the LAN: [{ fp, name, port, addr, check }].
+    property var pcFound: []
+    property bool pcDiscovering: false
+    /// "" | "working" | "ok" | an error code, for the code typed here.
+    property string localJoin: ""
+
+    /// What both screens show, so a stranger on the LAN answering the broadcast is caught.
+    function fpCheck(fp): string {
+        const s = String(fp ?? "").toUpperCase();
+        return s.length >= 8 ? `${s.slice(0, 4)} ${s.slice(4, 8)}` : "";
+    }
+
+    function _pcLocal(op): void {
+        const req = ++root._pcReqSerial;
+        const next = Object.assign({}, root._pcReqs);
+        next[req] = { dev: "local", id: 0 };
+        root._pcReqs = next;
+        root.send(Object.assign({ req: req }, op));
+    }
+
+    function openPcCode(): void {
+        root.localPair = null;
+        root._pcLocal({ op: "pcPairOpen", code: true });
+    }
+
+    function closePcCode(): void {
+        root.send({ op: "pcPairClose" });
+        root.localPair = null;
+    }
+
+    function discoverPcs(): void {
+        root.pcDiscovering = true;
+        root.localJoin = "";
+        root.send({ op: "pcDiscover" });
+    }
+
+    function joinPcByCode(found, code): void {
+        const c = String(code ?? "").replace(/\D/g, "");
+        if (!found || c.length !== 6)
+            return;
+        root.localJoin = "working";
+        root._pcLocal({ op: "pcPairJoin", fp: found.fp, hosts: [found.addr], port: Number(found.port ?? 0), secret: c, name: String(found.name ?? "") });
+    }
+
+    /// Wake-on-LAN for a linked PC that is off, from the adapters it last told about.
+    function wakePc(fp): void {
+        root.send({ op: "pcWake", pc: String(fp) });
+    }
+
+    /// Phone requests waiting on the helper (`req` → { dev, id }).
+    property var _pcReqs: ({})
+    property int _pcReqSerial: 0
+
+    function _pcRequest(dev, m, op): void {
+        const id = Number(m.id ?? 0);
+        const reply = m.t === "pcPairOpen" ? "pcPairInfo" : "pcPairResult";
+        if (!root.pcLinkEnabled) {
+            root.sendTo(dev, reply === "pcPairInfo" ? { t: reply, id: id, err: "disabled" } : { t: reply, id: id, ok: false, code: "disabled" });
+            return;
+        }
+        const req = ++root._pcReqSerial;
+        const next = Object.assign({}, root._pcReqs);
+        next[req] = { dev: String(dev), id: id };
+        root._pcReqs = next;
+        root.send(Object.assign({ req: req }, op));
+    }
+
+    function _pcTakeReq(req): var {
+        const r = root._pcReqs[req] ?? null;
+        if (r) {
+            const next = Object.assign({}, root._pcReqs);
+            delete next[req];
+            root._pcReqs = next;
+        }
+        return r;
+    }
+
+    function _pcName(fp): string {
+        return root.pcConnections[fp]?.name || root.pcPeers.find(p => p.fp === fp)?.name || Translation.tr("the other PC");
+    }
+
+    function _handlePcEvent(ev): void {
+        switch (ev.ev) {
+        case "pcPeers":
+            root.pcPeers = (ev.list ?? []).map(p => ({ fp: String(p.fp), name: String(p.name ?? ""), hosts: p.hosts ?? [], pairedAt: Number(p.pairedAt ?? 0), lastSeen: Number(p.lastSeen ?? 0), canWake: p.canWake === true }));
+            break;
+        case "pcConnected": {
+            const next = Object.assign({}, root.pcConnections);
+            next[ev.pc] = { name: String(ev.name ?? ""), since: Date.now() };
+            root.pcConnections = next;
+            break;
+        }
+        case "pcDisconnected": {
+            const next = Object.assign({}, root.pcConnections);
+            delete next[ev.pc];
+            root.pcConnections = next;
+            const prog = Object.assign({}, root.pcShelfProgress);
+            for (const k of Object.keys(prog))
+                if (k.startsWith(`${ev.pc}:`))
+                    delete prog[k];
+            root.pcShelfProgress = prog;
+            root.pcShelfRevision++;
+            break;
+        }
+        case "pcPairOpen": {
+            const r = root._pcTakeReq(ev.req);
+            if (!r)
+                break;
+            if (r.dev === "local") {
+                root.localPair = ev.err ? null : { code: String(ev.secret), check: root.fpCheck(ev.fp), expires: Date.now() + 120000 };
+                break;
+            }
+            root.sendTo(r.dev, ev.err ? { t: "pcPairInfo", id: r.id, err: String(ev.err) }
+                : { t: "pcPairInfo", id: r.id, secret: ev.secret, fp: ev.fp, port: ev.port, name: ev.name, hosts: ev.hosts ?? [] });
+            break;
+        }
+        case "pcPaired": {
+            const r = ev.req !== undefined ? root._pcTakeReq(ev.req) : null;
+            if (r && r.dev === "local")
+                root.localJoin = "ok";
+            else if (r)
+                root.sendTo(r.dev, { t: "pcPairResult", id: r.id, ok: true, name: String(ev.name ?? "") });
+            else
+                root.localPair = null;
+            Notifications.publishInternalNotification({
+                appName: "ii tools",
+                appIcon: "computer",
+                summary: Translation.tr("Linked with %1").arg(String(ev.name ?? "") || Translation.tr("another PC")),
+                body: root.pcClipEnabled ? Translation.tr("What you copy here now reaches it too.") : ""
+            });
+            break;
+        }
+        case "pcPairFailed": {
+            const r = root._pcTakeReq(ev.req);
+            if (r && r.dev === "local")
+                root.localJoin = String(ev.code ?? "failed");
+            else if (r)
+                root.sendTo(r.dev, { t: "pcPairResult", id: r.id, ok: false, code: String(ev.code ?? "failed") });
+            break;
+        }
+        case "pcPairClosed":
+            root.localPair = null;
+            break;
+        case "pcFound":
+            root.pcDiscovering = false;
+            root.pcFound = (ev.list ?? []).map(f => ({ fp: String(f.fp), name: String(f.name ?? ""), port: Number(f.port ?? 0), addr: String(f.addr ?? ""), check: root.fpCheck(f.fp) }))
+                .filter(f => !root.pcPeers.some(p => p.fp === f.fp));
+            break;
+        case "pcMsg":
+            root._handlePcMessage(String(ev.pc), ev.m ?? {});
+            break;
+        case "pcFileProgress": {
+            const key = `${ev.pc}:${ev.id}`;
+            if (root.pcShelfProgress[key] !== undefined) {
+                const next = Object.assign({}, root.pcShelfProgress);
+                next[key] = Number(ev.p ?? 0);
+                root.pcShelfProgress = next;
+                root.pcShelfRevision++;
+            }
+            break;
+        }
+        }
+    }
+
+    function _handlePcMessage(fp, m): void {
+        switch (m.t) {
+        case "shelf":
+            root._setPcShelf(fp, m.items ?? []);
+            return;
+        case "shelfGet":
+            root._serveShelf(fp, String(m.id ?? ""));
+            return;
+        case "mediaHandoff":
+            root._receiveMediaHandoff(fp, m);
+            return;
+        case "shelfGone":
+        case "fileFailed":
+            root._pcFileDone(fp, String(m.id ?? ""), "");
+            return;
+        case "file":
+            if (m.purpose === "put")
+                root._receivePut(fp, String(m.name ?? ""), String(m.path ?? ""));
+            else
+                root._pcFileDone(fp, String(m.id ?? ""), String(m.path ?? ""));
+            return;
+        }
+        if (m.t !== "clip" || !root.pcClipEnabled)
+            return;
+        if (m.path) {
+            // An image the helper already wrote out: onto this clipboard as PNG, then gone.
+            Cliphist.markInternalCopy();
+            Quickshell.execDetached([`${Directories.scriptPath}/clipboard/copy_image_to_clipboard.py`, "--delete", String(m.path)]);
+            root._announcePcClip(fp, Translation.tr("An image"));
+        } else if (typeof m.text === "string" && m.text.length > 0) {
+            Cliphist.markInternalCopy();
+            Quickshell.clipboardText = m.text;
+            root._announcePcClip(fp, m.text.replace(/\s+/g, " ").trim().slice(0, 160));
+        }
+    }
+
+    // ── Shared shelf (PC link, stage 2) ─────────────────────────────────
+    // This PC's shelf goes to the linked PCs as names and thumbnails; a file travels only
+    // when the other PC drags or opens it (`shelfGet`). Theirs show here the same way.
+
+    /// fp → [{ id, name, image, video, thumbPath }] as the linked PC last sent it.
+    property var pcShelves: ({})
+    /// "fp:id" → the copy here, once fetched.
+    property var pcShelfLocal: ({})
+    /// "fp:id" → 0..1 while it is on its way.
+    property var pcShelfProgress: ({})
+    /// Bumps when any of the three change, for bindings on FileShelf's functions.
+    property int pcShelfRevision: 0
+    readonly property string shelfThumbDir: `${FileUtils.trimFileProtocol(Directories.cache)}/iilink/shelfthumbs`
+    readonly property int _shelfMax: 24
+
+    function _setPcShelf(fp, items): void {
+        const next = Object.assign({}, root.pcShelves);
+        next[fp] = items.map(it => ({ id: String(it.id ?? ""), name: String(it.name ?? ""), image: it.image === true, video: it.video === true,
+            thumbPath: it.thumbPath ? `file://${it.thumbPath}?${Date.now()}` : "" })).filter(it => it.id !== "");
+        root.pcShelves = next;
+        root.pcShelfRevision++;
+    }
+
+    function shelfId(path): string {
+        return Qt.md5(String(path));
+    }
+
+    /// Asks [fp] for its shelf item [id] (once while it is on its way).
+    function pcShelfGet(fp, id): void {
+        const key = `${fp}:${id}`;
+        if (root.pcShelfLocal[key] || root.pcShelfProgress[key] !== undefined || !root.pcConnections[fp])
+            return;
+        const next = Object.assign({}, root.pcShelfProgress);
+        next[key] = 0;
+        root.pcShelfProgress = next;
+        root.pcShelfRevision++;
+        root.send({ op: "pcSend", pc: fp, m: { t: "shelfGet", id: id } });
+    }
+
+    function _pcFileDone(fp, id, path): void {
+        const key = `${fp}:${id}`;
+        const prog = Object.assign({}, root.pcShelfProgress);
+        delete prog[key];
+        root.pcShelfProgress = prog;
+        if (path !== "") {
+            const local = Object.assign({}, root.pcShelfLocal);
+            local[key] = path;
+            root.pcShelfLocal = local;
+        }
+        root.pcShelfRevision++;
+    }
+
+    /// The other PC wants one of this shelf's files.
+    function _serveShelf(fp, id): void {
+        const path = FileShelf.items.find(p => root.shelfId(p) === id);
+        if (!path) {
+            root.send({ op: "pcSend", pc: fp, m: { t: "shelfGone", id: id } });
+            return;
+        }
+        root.send({ op: "pcSendFile", pc: fp, path: FileUtils.trimFileProtocol(String(path)), id: id, purpose: "shelf", name: FileShelf.name(path) });
+    }
+
+    /// Files dropped on "Send to <PC>": they land in that PC's Downloads and on its shelf.
+    function sendToPc(fp, paths): void {
+        for (const raw of Array.from(paths ?? [])) {
+            const path = decodeURIComponent(FileUtils.trimFileProtocol(String(raw)));
+            if (path === "" || FileShelf.isPhone(path) || FileShelf.isPc(path))
+                continue;
+            root.send({ op: "pcSendFile", pc: fp, path: path, id: Qt.md5(path + Date.now()).slice(0, 16), purpose: "put" });
+        }
+    }
+
+    property var _putQueue: []
+    function _receivePut(fp, name, path): void {
+        if (path === "")
+            return;
+        root._putQueue.push({ fp: fp, name: name, path: path });
+        root._nextPut();
+    }
+    function _nextPut(): void {
+        if (putMove.running || root._putQueue.length === 0)
+            return;
+        const next = root._putQueue.shift();
+        putMove.pending = next;
+        const dir = FileUtils.trimFileProtocol(Directories.downloads) || `${FileUtils.trimFileProtocol(Directories.home)}/Downloads`;
+        // "name (1).ext" when it is taken: never overwrite.
+        putMove.command = ["sh", "-c", 'mkdir -p -- "$1" && n="$2" && b="${n%.*}" && e="${n##*.}" && [ "$b" = "$n" ] && e="" ; d="$1/$n"; i=1; while [ -e "$d" ]; do if [ -n "$e" ]; then d="$1/$b ($i).$e"; else d="$1/$n ($i)"; fi; i=$((i+1)); done; mv -f -- "$3" "$d" && rmdir -- "$(dirname -- "$3")" 2>/dev/null; printf "%s" "$d"', "sh", dir, next.name, next.path];
+        putMove.running = true;
+    }
+    Process {
+        id: putMove
+        property var pending: null
+        stdout: StdioCollector {
+            id: putMoveOut
+        }
+        onExited: code => {
+            const p = putMove.pending;
+            const dest = putMoveOut.text.trim();
+            if (code === 0 && dest !== "" && p) {
+                FileShelf.add([dest]);
+                Notifications.publishInternalNotification({
+                    appName: "ii tools",
+                    appIcon: "folder-download",
+                    summary: Translation.tr("Received from %1").arg(root._pcName(p.fp)),
+                    body: p.name
+                });
+            }
+            putMove.pending = null;
+            Qt.callLater(root._nextPut);
+        }
+    }
+
+    // Publishing this shelf: on any change and when a PC connects, debounced; images get a
+    // small thumbnail once (cached by id), rendered one at a time.
+    property var _shelfThumbs: ({})
+    property var _thumbQueue: []
+    readonly property var _shelfKey: root.pcLinkEnabled && root.pcConnected ? JSON.stringify(FileShelf.items) + Object.keys(root.pcConnections).join(",") : ""
+    on_ShelfKeyChanged: if (root._shelfKey !== "") shelfPublish.restart()
+    Timer {
+        id: shelfPublish
+        interval: 400
+        onTriggered: root._publishShelf()
+    }
+
+    function _publishShelf(): void {
+        if (!root.pcConnected)
+            return;
+        const local = FileShelf.items.slice().reverse().slice(0, root._shelfMax);
+        const items = local.map(path => {
+            const id = root.shelfId(path);
+            const image = FileShelf.isImage(path);
+            if (image && root._shelfThumbs[id] === undefined)
+                root._queueThumb(id, path);
+            return { id: id, name: FileShelf.name(path), image: image, video: /\.(mp4|mkv|webm|mov|avi)$/i.test(String(path)),
+                thumb: root._shelfThumbs[id] || "" };
+        });
+        root.send({ op: "pcShelf", pc: "*", items: items });
+    }
+
+    function _queueThumb(id, path): void {
+        root._shelfThumbs[id] = "";
+        root._thumbQueue.push({ id: id, path: FileUtils.trimFileProtocol(String(path)) });
+        root._nextThumb();
+    }
+    function _nextThumb(): void {
+        if (shelfThumb.running || root._thumbQueue.length === 0)
+            return;
+        const next = root._thumbQueue.shift();
+        shelfThumb.pending = next;
+        shelfThumb.command = ["sh", "-c", 'mkdir -p -- "$1" && magick "$2[0]" -auto-orient -thumbnail "192x192^" -gravity center -extent 192x192 -quality 78 "$1/$3.jpg"', "sh", root.shelfThumbDir, next.path, next.id];
+        shelfThumb.running = true;
+    }
+    Process {
+        id: shelfThumb
+        property var pending: null
+        onExited: code => {
+            const p = shelfThumb.pending;
+            if (p && code === 0) {
+                const next = Object.assign({}, root._shelfThumbs);
+                next[p.id] = `${root.shelfThumbDir}/${p.id}.jpg`;
+                root._shelfThumbs = next;
+                if (root._thumbQueue.length === 0)
+                    shelfPublish.restart();
+            }
+            shelfThumb.pending = null;
+            Qt.callLater(root._nextThumb);
+        }
+    }
+
+    function _announcePcClip(fp, body): void {
+        Notifications.publishInternalNotification({
+            appName: "ii tools",
+            appIcon: "edit-paste",
+            summary: Translation.tr("Copied from %1").arg(root._pcName(fp)),
+            body: body
+        });
+    }
+
+    // Copied here → the linked PCs, as it happens (never on a timer, nothing on connect:
+    // an old copy turning up on the other PC would only overwrite what it has).
+    property string _pcClipSent: ""
+    Connections {
+        target: root.pcClipEnabled && root.pcConnected ? Cliphist : null
+        function onEntryAdded(entry) {
+            const key = Cliphist.entryKey(entry);
+            if (key === "" || key === root._pcClipSent)
+                return;
+            root._pcClipSent = key;
+            root._enqueueClipDecode("pc:*", key, Cliphist.entryIsImage(entry), 0);
+        }
+    }
+
     function _setPeers(text): void {
         try {
             const list = JSON.parse(text);
@@ -265,6 +697,8 @@ Singleton {
         .concat(root.notifsEnabled ? ["notifs", "notifFilter"] : [])
         .concat(root.shareEnabled ? ["share"] : [])
         .concat(root.clipEnabled ? ["clip"] : [])
+        .concat(root.pcLinkEnabled ? ["pcLink"] : [])
+        .concat(["wakeRelay"])
         .concat(root.clipHistoryEnabled ? ["clipHistory"] : [])
         .concat(root.shotsEnabled ? ["shots"] : [])
         .concat(root.phoneDataEnabled ? ["phoneData"] : [])
@@ -1835,6 +2269,44 @@ Singleton {
         if (player.isPlaying)
             player.pause();
         return true;
+    }
+
+    /// The linked PC media hands off to: the most recently connected one.
+    readonly property string handoffPc: {
+        if (!root.pcLinkEnabled)
+            return "";
+        let best = "";
+        for (const [fp, c] of Object.entries(root.pcConnections))
+            if (best === "" || c.since > root.pcConnections[best].since)
+                best = fp;
+        return best;
+    }
+
+    /// Media handoff, PC to PC: the page opens on [fp] at the same point, and pauses here.
+    function continueOnLinkedPc(player, fp): bool {
+        const url = root.playerUrl(player);
+        if (url === "" || !root.pcConnections[fp])
+            return false;
+        root.send({ op: "pcSend", pc: fp, m: {
+            t: "mediaHandoff", url: url, title: player.trackTitle ?? "", app: player.identity ?? "",
+            position: Math.round(MprisController.trackPositionOf(player) * 1000)
+        } });
+        if (player.isPlaying)
+            player.pause();
+        return true;
+    }
+
+    function _receiveMediaHandoff(fp, m): void {
+        const url = String(m.url ?? "");
+        if (!/^https?:\/\//.test(url) || !root.pcMediaEnabled)
+            return;
+        Quickshell.execDetached(["xdg-open", root.urlAt(url, Number(m.position ?? 0) / 1000)]);
+        Notifications.publishInternalNotification({
+            appName: "ii tools",
+            appIcon: "multimedia-player",
+            summary: Translation.tr("Continuing from %1").arg(root._pcName(fp)),
+            body: String(m.title ?? "")
+        });
     }
 
     // Locking the PC while a web page plays offers the phone to continue it at the same
@@ -3483,7 +3955,11 @@ Singleton {
 
     /// Sends `message` to one phone, or to every connected one with dev "*".
     function sendTo(dev, message): void {
-        root.send({ op: "send", dev: String(dev), m: message });
+        // "pc:<fp>" or "pc:*": the linked PCs (the clipboard decode queue serves both).
+        if (String(dev).startsWith("pc:"))
+            root.send({ op: "pcSend", pc: String(dev).slice(3), m: message });
+        else
+            root.send({ op: "send", dev: String(dev), m: message });
     }
 
     function send(obj): void {
@@ -3502,7 +3978,9 @@ Singleton {
             actions: root.allowedActions,
             // Kept by the phone with the pairing: it is needed exactly when the PC is off.
             wake: root.wolEnabled ? root.wakeTargets : [],
-            routes: root.routes
+            routes: root.routes,
+            // The PCs this one is linked with, so the phone offers to link only the others.
+            pcLinks: root.pcPeers.map(p => p.fp)
         };
     }
 
@@ -3518,6 +3996,22 @@ Singleton {
 
     function _handleMessage(dev, m): void {
         switch (m.t) {
+        // The phone, away or on Tailscale, asks this PC to wake another one on its LAN.
+        case "wakeFor": {
+            const targets = (Array.isArray(m.targets) ? m.targets : []).slice(0, 8)
+                .filter(t => /^([0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}$/.test(String(t?.mac ?? "")))
+                .map(t => ({ mac: String(t.mac), broadcast: String(t.broadcast ?? "") }));
+            if (targets.length > 0)
+                root.send({ op: "wake", targets: targets });
+            return;
+        }
+        // The phone introduces two PCs: this one opens a window, the other joins it.
+        case "pcPairOpen":
+            root._pcRequest(dev, m, { op: "pcPairOpen" });
+            return;
+        case "pcPairJoin":
+            root._pcRequest(dev, m, { op: "pcPairJoin", fp: String(m.fp ?? ""), hosts: m.hosts ?? [], port: Number(m.port ?? 0), secret: String(m.secret ?? ""), name: String(m.name ?? "") });
+            return;
         case "cmd": {
             const id = Number(m.id ?? 0);
             const action = String(m.a ?? "");
@@ -3708,13 +4202,26 @@ Singleton {
             root.hostName = String(ev.name ?? "");
             root.addresses = ev.addrs ?? [];
             root.wakeTargets = ev.wake ?? [];
-            root.send({ op: "config", media: root.mediaEnabled, touchpad: root.touchpadEnabled, present: root.presentEnabled });
+            root.send({ op: "config", media: root.mediaEnabled, touchpad: root.touchpadEnabled, present: root.presentEnabled, pcLink: root.pcLinkEnabled });
             root.discovery = ev.discovery === true;
             if (root.pairingRequested && !root.pairing)
                 root.send({ op: "pair" });
             break;
         case "peers":
             root._setPeers(JSON.stringify(ev.list ?? []));
+            break;
+        case "pcPeers":
+        case "pcConnected":
+        case "pcDisconnected":
+        case "pcPairOpen":
+        case "pcPaired":
+        case "pcPairFailed":
+        case "pcMsg":
+        case "pcFileProgress":
+        case "pcFileSent":
+        case "pcPairClosed":
+        case "pcFound":
+            root._handlePcEvent(ev);
             break;
         case "pairing":
             root.pairing = { url: String(ev.url ?? ""), qr: ev.qr ?? [], expires: Number(ev.expires ?? 0) };
@@ -3845,6 +4352,28 @@ Singleton {
         function unpair(id: string): void {
             root.unpair(id);
         }
+        /// Sends files to a linked PC (`pc`: a fingerprint, a name, or "" for the only one
+        /// connected). Paths separated by newlines, for a file manager's "Send to" action.
+        function sendToPc(paths: string, pc: string): string {
+            const ids = Object.keys(root.pcConnections);
+            const want = String(pc ?? "").trim().toLowerCase();
+            const fp = want === "" ? (ids.length === 1 ? ids[0] : "")
+                : ids.find(id => id.startsWith(want) || String(root.pcConnections[id]?.name ?? "").toLowerCase() === want) ?? "";
+            if (fp === "")
+                return ids.length === 0 ? "no_pc" : "which_pc";
+            const list = String(paths ?? "").split("\n").map(p => p.trim()).filter(p => p !== "");
+            root.sendToPc(fp, list);
+            return `sent ${list.length} to ${root._pcName(fp)}`;
+        }
+        /// Continues what plays here (a web page) on the linked PC most recently connected.
+        function continueOnPc(): string {
+            const p = root.pcMediaPlayer ?? MprisController.activePlayer;
+            return p && root.continueOnLinkedPc(p, root.handoffPc) ? "ok" : "unavailable";
+        }
+        /// The linked PCs: name, fingerprint and whether each is connected.
+        function pcs(): string {
+            return JSON.stringify(root.pcPeers.map(p => ({ name: p.name, fp: p.fp, connected: root.pcConnections[p.fp] !== undefined })));
+        }
         /// The notifications mirrored over the link: app, title and actions, newest last.
         /// Opens the first connected phone's storage in the file manager.
         function browseFiles(): string {
@@ -3872,7 +4401,7 @@ Singleton {
     }
 
     // ── Process ─────────────────────────────────────────────────────────
-    readonly property bool wanted: root.enabled && (root.hasPeers || root.pairingRequested || root._linger)
+    readonly property bool wanted: root.enabled && (root.hasPeers || (root.pcLinkEnabled && root.hasPcPeers) || root.pairingRequested || root._linger)
 
     // Unpairing the last phone: stay up a moment so the phone hears "unpaired" before
     // the socket goes away with the process.

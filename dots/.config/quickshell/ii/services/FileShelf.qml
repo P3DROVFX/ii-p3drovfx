@@ -59,11 +59,64 @@ Singleton {
         .filter(it => !root._hiddenPhone[String(it.id)])
         .slice(0, root.phoneLimit)
         .map(it => "phone:" + it.id)
-    // What a per-file view lists: the phone's recents, then the shelf's files, newest first.
-    readonly property var entries: root.phoneEntries.concat(root.items.slice().reverse())
+    // ── Linked PCs' shelves ──────────────────────────────────────────────
+    // Each linked PC that is connected lends its shelf as `pc:<fp>:<id>` entries: name and
+    // thumbnail only, the file comes over when dragged or opened (IiLinkService.pcShelfGet).
+    readonly property bool pcEnabled: IiLinkService.pcLinkEnabled
+    property var _hiddenPc: ({})
+    readonly property var pcEntries: {
+        void IiLinkService.pcShelfRevision;
+        if (!root.pcEnabled)
+            return [];
+        const out = [];
+        for (const fp of Object.keys(IiLinkService.pcConnections)) {
+            for (const it of IiLinkService.pcShelves[fp] ?? []) {
+                const key = `pc:${fp}:${it.id}`;
+                if (!root._hiddenPc[key])
+                    out.push(key);
+            }
+        }
+        return out;
+    }
+
+    function isPc(path) {
+        return String(path).startsWith("pc:");
+    }
+
+    /** A phone's or another PC's entry: not a file on this PC (yet). */
+    function isRemote(path) {
+        return root.isPhone(path) || root.isPc(path);
+    }
+
+    function pcItem(path) {
+        if (!root.isPc(path))
+            return null;
+        void IiLinkService.pcShelfRevision;
+        const parts = String(path).split(":");
+        return (IiLinkService.pcShelves[parts[1]] ?? []).find(it => it.id === parts[2]) ?? null;
+    }
+
+    function _pcKey(path) {
+        return String(path).slice(3);
+    }
+
+    /** The linked PC an entry comes from, for a label. */
+    function pcName(path) {
+        const fp = String(path).split(":")[1] ?? "";
+        return IiLinkService.pcConnections[fp]?.name ?? "";
+    }
+
+    /** Files dropped on "Send to <PC>". */
+    function sendToPc(fp, urls) {
+        IiLinkService.sendToPc(fp, urls);
+    }
+
+    // What a per-file view lists: the phone's recents, the linked PCs' shelves, then this
+    // shelf's files, newest first.
+    readonly property var entries: root.phoneEntries.concat(root.pcEntries, root.items.slice().reverse())
     readonly property int entryCount: root.entries.length
     // Bumps when a thumbnail or an original lands, for bindings on thumbUrl() and ready().
-    readonly property int phoneRevision: PhoneGalleryService.thumbRevision + Object.keys(PhoneGalleryService.fullPaths).length
+    readonly property int phoneRevision: PhoneGalleryService.thumbRevision + Object.keys(PhoneGalleryService.fullPaths).length + IiLinkService.pcShelfRevision
 
     function isPhone(path) {
         return String(path).startsWith("phone:");
@@ -74,16 +127,23 @@ Singleton {
     }
 
     function name(path) {
+        const pc = root.pcItem(path);
+        if (pc)
+            return pc.name;
         const item = root.phoneItem(path);
         return item ? String(item.name ?? "") : UtilityFiles.baseName(String(path));
     }
 
     function isImage(path) {
+        if (root.isPc(path))
+            return root.pcItem(path)?.image === true;
         return root.isPhone(path) ? root.phoneItem(path) !== null : UtilityFiles.isImage(String(path));
     }
 
     function thumbUrl(path) {
         void root.phoneRevision;
+        if (root.isPc(path))
+            return root.pcItem(path)?.thumbPath ?? "";
         const item = root.phoneItem(path);
         return item ? PhoneGalleryService.thumbPath(item.id) : "";
     }
@@ -93,6 +153,18 @@ Singleton {
         const out = [];
         let waiting = false;
         for (const path of Array.from(paths ?? [])) {
+            if (root.isPc(path)) {
+                const key = root._pcKey(path);
+                const local = IiLinkService.pcShelfLocal[key] ?? "";
+                if (local === "") {
+                    waiting = true;
+                    const parts = key.split(":");
+                    IiLinkService.pcShelfGet(parts[0], parts[1]);
+                } else {
+                    out.push(local);
+                }
+                continue;
+            }
             if (!root.isPhone(path)) {
                 out.push(String(path));
                 continue;
@@ -111,6 +183,11 @@ Singleton {
     }
 
     function prepare(path) {
+        if (root.isPc(path)) {
+            const parts = root._pcKey(path).split(":");
+            IiLinkService.pcShelfGet(parts[0], parts[1]);
+            return;
+        }
         const item = root.phoneItem(path);
         if (item)
             PhoneGalleryService.prepare(item);
@@ -119,6 +196,8 @@ Singleton {
     /** 0..1 while a phone entry is being brought over, -1 otherwise. */
     function progress(path) {
         void root.phoneRevision;
+        if (root.isPc(path))
+            return IiLinkService.pcShelfProgress[root._pcKey(path)] ?? -1;
         const item = root.phoneItem(path);
         return item ? PhoneGalleryService.prepareProgress(item) : -1;
     }
@@ -163,7 +242,20 @@ Singleton {
         }
     }
 
+    Connections {
+        target: IiLinkService
+        function onPcShelfLocalChanged() {
+            root._openArrived();
+        }
+    }
+
     function remove(path) {
+        if (root.isPc(path)) {
+            const next = Object.assign({}, root._hiddenPc);
+            next[String(path)] = true;
+            root._hiddenPc = next;
+            return;
+        }
         if (root.isPhone(path)) {
             const next = Object.assign({}, root._hiddenPhone);
             next[String(path).slice(6)] = true;

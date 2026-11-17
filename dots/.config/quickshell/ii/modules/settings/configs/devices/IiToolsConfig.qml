@@ -25,6 +25,9 @@ Item {
     signal goBack()
     property alias contentY: page.contentY
     property bool notifAppsExpanded: false
+    /// Linking without the phone: "" | "show" | "enter", and the PC picked to enter a code for.
+    property string pcCodeMode: ""
+    property var pcCodeTarget: null
     property string notifAppsQuery: ""
 
     readonly property bool isSelected: KdeConnectService.activePhoneService === "iiTools"
@@ -1205,6 +1208,202 @@ fi`]
             }
         }
 
+        // ── Other PCs (PC link) ─────────────────────────────────────────
+        AppSettingsSection {
+            Layout.topMargin: 6
+            symbol: "devices"
+            title: Translation.tr("Other PCs")
+            description: Translation.tr("PCs linked straight to this one, without the phone in between. Link them once from the ii tools app: Your PCs → Link.")
+
+            AppToggleRow {
+                symbol: "lan"
+                title: Translation.tr("Link with other PCs")
+                description: Translation.tr("Accept and keep links with other PCs that run ii tools")
+                checked: Config.options.iiTools.pcLink.enable
+                onToggled: value => Config.options.iiTools.pcLink.enable = value
+            }
+
+            AppToggleRow {
+                visible: Config.options.iiTools.pcLink.enable
+                symbol: "content_paste_go"
+                title: Translation.tr("Universal clipboard")
+                description: Translation.tr("Text and images copied here reach the linked PCs, and theirs reach this one")
+                checked: Config.options.iiTools.pcLink.clipboard
+                onToggled: value => Config.options.iiTools.pcLink.clipboard = value
+            }
+
+            StyledText {
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+                visible: Config.options.iiTools.pcLink.enable && IiLinkService.pcPeers.length === 0
+                wrapMode: Text.WordWrap
+                font.pixelSize: Appearance.font.pixelSize.small
+                color: Appearance.colors.colSubtext
+                text: Translation.tr("No PC linked yet. Pair the phone with both PCs, then tap Link in the app's PC list.")
+            }
+
+            // Without the phone: one PC shows a code, the other finds it on the LAN and types it.
+            RowLayout {
+                Layout.topMargin: 4
+                visible: Config.options.iiTools.pcLink.enable && IiLinkService.running
+                spacing: 8
+                RippleButtonWithIcon {
+                    materialIcon: "pin"
+                    mainText: Translation.tr("Show a code")
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: Appearance.colors.colSecondaryContainer
+                    colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                    colText: Appearance.colors.colOnSecondaryContainer
+                    onClicked: {
+                        root.pcCodeMode = "show";
+                        IiLinkService.openPcCode();
+                    }
+                }
+                RippleButtonWithIcon {
+                    materialIcon: "keyboard"
+                    mainText: Translation.tr("Enter a code")
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: Appearance.colors.colSecondaryContainer
+                    colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                    colText: Appearance.colors.colOnSecondaryContainer
+                    onClicked: {
+                        root.pcCodeMode = "enter";
+                        root.pcCodeTarget = null;
+                        IiLinkService.discoverPcs();
+                    }
+                }
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                visible: root.pcCodeMode === "show" && Config.options.iiTools.pcLink.enable
+                implicitHeight: showCol.implicitHeight + 32
+                radius: Appearance.rounding.large
+                color: Appearance.colors.colLayer1
+                ColumnLayout {
+                    id: showCol
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    spacing: 6
+                    StyledText {
+                        text: IiLinkService.localPair ? IiLinkService.localPair.code.replace(/(\d{3})(\d{3})/, "$1 $2") : "—"
+                        font.pixelSize: Appearance.font.pixelSize.huge * 1.6
+                        font.family: Appearance.font.family.monospace
+                        color: Appearance.colors.colOnLayer1
+                    }
+                    StyledText {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        color: Appearance.colors.colSubtext
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        text: IiLinkService.localPair
+                            ? Translation.tr("On the other PC: Settings → ii tools → Other PCs → Enter a code. Check that it shows this PC with %1. The code lasts 2 minutes and one wrong try cancels it.").arg(IiLinkService.localPair.check)
+                            : Translation.tr("The code expired or was used.")
+                    }
+                    RippleButtonWithIcon {
+                        materialIcon: "close"
+                        mainText: Translation.tr("Done")
+                        buttonRadius: Appearance.rounding.full
+                        colBackground: Appearance.colors.colLayer2
+                        colBackgroundHover: Appearance.colors.colLayer2Hover
+                        colText: Appearance.colors.colOnLayer2
+                        onClicked: {
+                            IiLinkService.closePcCode();
+                            root.pcCodeMode = "";
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                visible: root.pcCodeMode === "enter" && Config.options.iiTools.pcLink.enable
+                implicitHeight: enterCol.implicitHeight + 32
+                radius: Appearance.rounding.large
+                color: Appearance.colors.colLayer1
+                ColumnLayout {
+                    id: enterCol
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    spacing: 8
+                    StyledText {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        color: Appearance.colors.colSubtext
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        text: IiLinkService.pcDiscovering ? Translation.tr("Looking for PCs on this network…")
+                            : IiLinkService.pcFound.length === 0 ? Translation.tr("No other PC with ii tools answered on this network.")
+                            : Translation.tr("Pick the PC that shows the code (its check is under its name):")
+                    }
+                    Repeater {
+                        model: IiLinkService.pcFound
+                        delegate: RippleButtonWithIcon {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            materialIcon: root.pcCodeTarget?.fp === modelData.fp ? "radio_button_checked" : "computer"
+                            mainText: `${modelData.name || modelData.addr} · ${modelData.check}`
+                            buttonRadius: Appearance.rounding.normal
+                            colBackground: root.pcCodeTarget?.fp === modelData.fp ? Appearance.colors.colSecondaryContainer : Appearance.colors.colLayer2
+                            colBackgroundHover: Appearance.colors.colLayer2Hover
+                            colText: Appearance.colors.colOnLayer2
+                            onClicked: root.pcCodeTarget = modelData
+                        }
+                    }
+                    RowLayout {
+                        visible: root.pcCodeTarget !== null
+                        spacing: 8
+                        MaterialTextField {
+                            id: codeField
+                            Layout.fillWidth: true
+                            placeholderText: Translation.tr("6-digit code")
+                            inputMethodHints: Qt.ImhDigitsOnly
+                            onAccepted: IiLinkService.joinPcByCode(root.pcCodeTarget, text)
+                        }
+                        RippleButtonWithIcon {
+                            materialIcon: "link"
+                            mainText: Translation.tr("Link PC")
+                            enabled: IiLinkService.localJoin !== "working"
+                            buttonRadius: Appearance.rounding.full
+                            colBackground: Appearance.colors.colPrimary
+                            colBackgroundHover: Appearance.colors.colPrimaryHover
+                            colText: Appearance.colors.colOnPrimary
+                            onClicked: IiLinkService.joinPcByCode(root.pcCodeTarget, codeField.text)
+                        }
+                    }
+                    StyledText {
+                        Layout.fillWidth: true
+                        visible: IiLinkService.localJoin !== ""
+                        wrapMode: Text.WordWrap
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        color: IiLinkService.localJoin === "ok" ? Appearance.colors.colPrimary : IiLinkService.localJoin === "working" ? Appearance.colors.colSubtext : Appearance.colors.colError
+                        text: IiLinkService.localJoin === "ok" ? Translation.tr("Linked.")
+                            : IiLinkService.localJoin === "working" ? Translation.tr("Linking…")
+                            : IiLinkService.localJoin === "bad_secret" ? Translation.tr("Wrong code. Show a new one on the other PC.")
+                            : Translation.tr("Could not link (%1).").arg(IiLinkService.localJoin)
+                    }
+                    RippleButtonWithIcon {
+                        materialIcon: "refresh"
+                        mainText: Translation.tr("Search again")
+                        buttonRadius: Appearance.rounding.full
+                        colBackground: Appearance.colors.colLayer2
+                        colBackgroundHover: Appearance.colors.colLayer2Hover
+                        colText: Appearance.colors.colOnLayer2
+                        onClicked: IiLinkService.discoverPcs()
+                    }
+                }
+            }
+
+            Repeater {
+                model: Config.options.iiTools.pcLink.enable ? IiLinkService.pcPeers : []
+
+                delegate: PcRow {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    pc: modelData
+                }
+            }
+        }
+
         // ── Do Not Disturb ──────────────────────────────────────────────
         AppSettingsSection {
             Layout.topMargin: 6
@@ -1666,6 +1865,86 @@ fi`]
                 colBackgroundHover: Appearance.colors.colLayer2Hover
                 colText: Appearance.colors.colOnLayer2
                 onClicked: IiLinkService.unpair(devRow.device.id)
+            }
+        }
+    }
+
+    component PcRow: Rectangle {
+        id: pcRow
+        property var pc
+        readonly property bool online: IiLinkService.pcConnections[pcRow.pc?.fp ?? ""] !== undefined
+
+        implicitHeight: pcRowLayout.implicitHeight + 28
+        radius: Appearance.rounding.large
+        color: Appearance.colors.colLayer1
+
+        Rectangle {
+            anchors.fill: parent
+            radius: parent.radius
+            visible: pcRow.online
+            color: ColorUtils.applyAlpha(Appearance.colors.colPrimary, 0.08)
+        }
+
+        RowLayout {
+            id: pcRowLayout
+            anchors.fill: parent
+            anchors.margins: 14
+            spacing: 14
+
+            MaterialShapeWrappedMaterialSymbol {
+                shape: pcRow.online ? MaterialShape.Shape.Cookie7Sided : MaterialShape.Shape.Circle
+                implicitSize: 44
+                padding: 7
+                iconSize: 20
+                text: "computer"
+                fill: pcRow.online ? 1 : 0
+                color: pcRow.online ? Appearance.colors.colPrimary : Appearance.colors.colLayer2
+                colSymbol: pcRow.online ? Appearance.colors.colOnPrimary : Appearance.colors.colSubtext
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 2
+                StyledText {
+                    Layout.fillWidth: true
+                    elide: Text.ElideRight
+                    text: pcRow.pc?.name || Translation.tr("PC")
+                    font.pixelSize: Appearance.font.pixelSize.normal
+                    font.variableAxes: Appearance.font.variableAxes.title
+                    color: Appearance.colors.colOnLayer1
+                }
+                StyledText {
+                    Layout.fillWidth: true
+                    elide: Text.ElideRight
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: Appearance.colors.colSubtext
+                    text: pcRow.online
+                        ? Translation.tr("Connected")
+                        : Translation.tr("Last seen %1").arg(pcRow.pc?.lastSeen ? new Date(pcRow.pc.lastSeen).toLocaleString(Qt.locale(), Locale.ShortFormat) : "—")
+                }
+            }
+
+            RippleButtonWithIcon {
+                visible: !pcRow.online && (pcRow.pc?.canWake ?? false)
+                enabled: IiLinkService.running
+                materialIcon: "power_settings_new"
+                mainText: Translation.tr("Wake")
+                buttonRadius: Appearance.rounding.full
+                colBackground: Appearance.colors.colSecondaryContainer
+                colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                colText: Appearance.colors.colOnSecondaryContainer
+                onClicked: IiLinkService.wakePc(pcRow.pc.fp)
+            }
+
+            RippleButtonWithIcon {
+                materialIcon: "link_off"
+                mainText: Translation.tr("Unlink")
+                enabled: IiLinkService.running
+                buttonRadius: Appearance.rounding.full
+                colBackground: Appearance.colors.colLayer2
+                colBackgroundHover: Appearance.colors.colLayer2Hover
+                colText: Appearance.colors.colOnLayer2
+                onClicked: IiLinkService.unpairPc(pcRow.pc.fp)
             }
         }
     }
