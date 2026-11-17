@@ -1,0 +1,172 @@
+From 18ed7405edbbdda6944f3ab331012ef6be68379e Mon Sep 17 00:00:00 2001
+From: Scrimas <isma.ph@proton.me>
+Date: Tue, 17 Nov 2026 01:14:30 +0100
+Subject: [PATCH] ii-control: key frames and bitrate on stdin, capture base,
+ encoder frame rate
+
+For a caller streaming the output live (ii link's second screen):
+--ii-control reads commands on stdin, one per line: "idr" makes the next frame
+a key frame (an IDR with VA-API, and with NVENC and x264 given forced-idr=1),
+"bitrate <bit/s>" sets the encoder's bitrate on the next frame (NVENC and x264
+reconfigure; VA-API keeps its rate). Neither restarts the encoder. It also
+prints the first frame's capture time on the compositor's presentation clock
+("ii-base-usec=N" on stderr); the muxer's times are relative to it.
+
+--ii-rate N gives the encoder its frame rate without -r's fps filter, which
+holds every frame back one frame. Without either, time_base is 1/1e6 and
+VA-API budgets the bitrate over a million frames a second.
+---
+ src/frame-writer.cpp | 24 +++++++++++++++++++++++-
+ src/frame-writer.hpp | 10 ++++++++++
+ src/main.cpp         | 40 ++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 73 insertions(+), 1 deletion(-)
+
+diff --git a/src/frame-writer.cpp b/src/frame-writer.cpp
+index ad526f8..db0a407 100644
+--- a/src/frame-writer.cpp
++++ b/src/frame-writer.cpp
+@@ -438,7 +438,7 @@ void FrameWriter::init_video_filters(const AVCodec *codec)
+     this->videoCodecCtx->height = filter_output->h;
+     this->videoCodecCtx->pix_fmt = (AVPixelFormat)filter_output->format;
+     this->videoCodecCtx->time_base = filter_output->time_base;
+-    this->videoCodecCtx->framerate = AVRational{1,0};
++    this->videoCodecCtx->framerate = params.ii_rate > 0 ? AVRational{params.ii_rate, 1} : AVRational{1,0};
+     this->videoCodecCtx->sample_aspect_ratio = filter_output->sample_aspect_ratio;
+ 
+     this->hw_frame_context = av_buffersink_get_hw_frames_ctx(
+@@ -806,6 +806,28 @@ bool FrameWriter::push_frame(AVFrame *frame, int64_t usec)
+ 
+         filtered_frame->pict_type = AV_PICTURE_TYPE_NONE;
+ 
++        // --ii-control: a key frame on request (an IDR with VA-API, and with NVENC and x264
++        // given forced-idr=1), without restarting the encoder, and a live bitrate (NVENC and
++        // x264 reconfigure for it; an encoder that doesn't keeps its rate).
++        if (params.ii_force_key && params.ii_force_key->exchange(false))
++        {
++            filtered_frame->pict_type = AV_PICTURE_TYPE_I;
++#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(58, 7, 100)
++            filtered_frame->flags |= AV_FRAME_FLAG_KEY;
++#else
++            filtered_frame->key_frame = 1;
++#endif
++        }
++        if (params.ii_bitrate)
++        {
++            int64_t rate = params.ii_bitrate->exchange(0);
++            if (rate > 0)
++            {
++                videoCodecCtx->bit_rate = rate;
++                videoCodecCtx->rc_max_rate = rate;
++            }
++        }
++
+         // So we have a frame. Encode it!
+         AVPacket *pkt = av_packet_alloc();
+         pkt->data = NULL;
+diff --git a/src/frame-writer.hpp b/src/frame-writer.hpp
+index a1dce90..5074615 100644
+--- a/src/frame-writer.hpp
++++ b/src/frame-writer.hpp
+@@ -78,6 +78,16 @@ struct FrameWriterParams
+     int bframes;
+ 
+     std::atomic<bool>& write_aborted_flag;
++
++    // --ii-control (main.cpp reads them from stdin): make the next frame a key frame, and a
++    // new target bitrate in bit/s (0 = no change). Applied to the next frame encoded.
++    std::atomic<bool>* ii_force_key = nullptr;
++    std::atomic<int64_t>* ii_bitrate = nullptr;
++    // --ii-rate: the encoder's frame rate for its rate control, without -r's fps filter
++    // (which holds every frame back one frame). Without either, time_base is 1/1e6 and
++    // VA-API budgets the bitrate over a million frames a second.
++    int ii_rate = 0;
++
+     FrameWriterParams(std::atomic<bool>& flag): write_aborted_flag(flag) {}
+ };
+ 
+diff --git a/src/main.cpp b/src/main.cpp
+index 8ff65f9..6baa29a 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -198,6 +198,24 @@ struct wf_buffer : public buffer_pool_buf
+ 
+ std::atomic<bool> exit_main_loop{false};
+ 
++// --ii-control: commands on stdin, one per line ("idr", "bitrate <bit/s>"), for a caller that
++// streams the output (ii link's second screen) and must not restart the encoder for either.
++static bool ii_control = false;
++static std::atomic<bool> ii_force_key{false};
++static std::atomic<int64_t> ii_bitrate{0};
++
++static void ii_control_reader()
++{
++    std::string line;
++    while (std::getline(std::cin, line))
++    {
++        if (line == "idr")
++            ii_force_key = true;
++        else if (line.rfind("bitrate ", 0) == 0)
++            ii_bitrate = std::atoll(line.c_str() + 8);
++    }
++}
++
+ buffer_pool<wf_buffer, 16> buffers;
+ 
+ bool buffer_copy_done = false;
+@@ -685,6 +703,13 @@ static void write_loop(FrameWriterParams params)
+         } else {
+             sync_timestamp = 0;
+             first_frame_ts = buffer.base_usec;
++            // --ii-control: the first frame's capture time on the compositor's presentation
++            // clock (CLOCK_MONOTONIC): the muxer's times are relative to it, in ms.
++            if (ii_control)
++            {
++                fprintf(stderr, "ii-base-usec=%llu\n", (unsigned long long)buffer.base_usec);
++                fflush(stderr);
++            }
+         }
+ 
+         bool do_cont = false;
+@@ -1085,6 +1110,8 @@ static void list_available_outputs()
+ int main(int argc, char *argv[])
+ {
+     FrameWriterParams params = FrameWriterParams(exit_main_loop);
++    params.ii_force_key = &ii_force_key;
++    params.ii_bitrate = &ii_bitrate;
+     params.file = "recording." + std::string(DEFAULT_CONTAINER_FORMAT);
+     params.codec = DEFAULT_CODEC;
+     params.pix_fmt = DEFAULT_PIX_FMT;
+@@ -1125,6 +1152,8 @@ int main(int argc, char *argv[])
+         { "no-damage",         no_argument,       NULL, 'D' },
+         { "overwrite",         no_argument,       NULL, 'y' },
+         { "list-output",       no_argument,       NULL, 'L' },
++        { "ii-control",        no_argument,       NULL, 0x1000 },
++        { "ii-rate",           required_argument, NULL, 0x1001 },
+         { 0,                   0,                 NULL,  0  }
+     };
+ 
+@@ -1219,6 +1248,14 @@ int main(int argc, char *argv[])
+                 use_damage = false;
+                 break;
+ 
++            case 0x1000:
++                ii_control = true;
++                break;
++
++            case 0x1001:
++                params.ii_rate = atoi(optarg);
++                break;
++
+             case 'P':
+                 parse_codec_opts(params.audio_codec_options, optarg);
+                 break;
+@@ -1383,6 +1420,9 @@ int main(int argc, char *argv[])
+         signal(signo, handle_graceful_termination);
+     }
+ 
++    if (ii_control)
++        std::thread(ii_control_reader).detach();
++
+     while(!exit_main_loop)
+     {
+         // wait for a free buffer

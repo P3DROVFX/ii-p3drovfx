@@ -320,8 +320,11 @@ and n × `[u8 id][u16 x][u16 y]` (every finger down, 0–65535 of the picture), 
 `[2][u16 n][utf-8]` and named keys `[3][u8 n][name][u8 mods]` (1 shift, 2 ctrl, 4 alt,
 8 super) for a keyboard of its own the helper makes on the first key. The PC sends
 `[u32 length][u8 kind][u64 pts µs][Annex-B H.264]`, kind 0 the SPS/PPS, 1 a frame, 2 a key
-frame. The pts is the PC's CLOCK_MONOTONIC in µs as the frame leaves the encoder (not a
-stream-relative time), so the phone can time every frame against `pong`'s `now`.
+frame, 10 an HEVC config (VPS/SPS/PPS: the phone switches decoder there; the start's
+`codec:"hevc"` asks for it, H.264 stays the fallback). The pts is the PC's CLOCK_MONOTONIC
+in µs: each frame's capture time with `ii-wf-recorder` (scripts/wf-recorder-ii: key frames
+on `idr` without a restart, its `--ii-rate` instead of `-r`'s fps filter), else the send
+time, so the phone can time every frame against `pong`'s `now`.
 wf-recorder captures and encodes (FLV out, one tag per frame, `g=240`) every
 refresh (`-D`, a hardware cursor damages nothing) at the session's fps (`-r`, from the
 shell's `rate`; without it a 180 Hz screen sends 180 fps and NVENC's CBR overshoots by that
@@ -338,7 +341,8 @@ On the Wi-Fi side WebSocket `/iilink/1/screen` (link's TLS port, `transport:"ws"
   the `u32` length).
 - Phone → PC binary: the same `[1]`/`[2]`/`[3]` input frames as USB, one per WS message.
 - PC → phone text (every 1 s while live):
-  `{"t":"stats","bitrate":bps,"max":bps,"kbps":measured_out_kbps,"fps":frames_sent_last_s,"dropped":frames_dropped_last_s,"encoder":"nvenc"|"vaapi"|"x264","fec":pct|null}`.
+  `{"t":"stats","bitrate":bps,"max":bps,"kbps":measured_out_kbps,"fps":frames_sent_last_s,"dropped":frames_dropped_last_s,"encoder":"nvenc"|"vaapi"|"x264","fec":pct|null,"cap":ms|null,"capmax":ms|null}`
+  (`cap`/`capmax`: capture → send, mean and max over the second, with ii-wf-recorder).
 - Phone → PC text:
   - `{"t":"ping","id":n}` → `{"t":"pong","id":n,"now":µs}` through the same ordered writer
     queue as video so RTT includes queued video. `now` is the PC's CLOCK_MONOTONIC (the

@@ -1,0 +1,33 @@
+# wf-recorder-ii
+
+`ii-wf-recorder`: wf-recorder with two patches, for ii link's second screen (the phone as a
+monitor, `scripts/iiLink/ii_link_src/src/screen.rs`). It is installed beside the
+distribution's `wf-recorder`, which the shell's screen recorder keeps using.
+
+| Patch | What it does |
+|---|---|
+| `0001-ii-control.patch` | `--ii-control` reads commands on stdin: `idr` makes the next frame a key frame (an IDR with VA-API, and with NVENC and x264 given `forced-idr=1`), `bitrate <bit/s>` sets the encoder's bitrate (NVENC and x264 reconfigure; VA-API keeps its rate). Neither restarts the encoder, which with the stock binary cost the phone a ~240 ms frozen picture each time. It also prints the first frame's capture time (`ii-base-usec=N` on stderr, the compositor's CLOCK_MONOTONIC presentation time), which times every frame from capture. `--ii-rate N` gives the encoder its frame rate without `-r`'s fps filter, which holds every frame back one frame (~7 ms at 120 Hz); without either, the time base is 1/1e6 and VA-API budgets the bitrate over a million frames a second (measured: 1.1 of 30 Mbit/s). |
+| `0002-ffmpeg9-supported-config.patch` | FFmpeg 9 removed `AVCodec`'s `pix_fmts`, `sample_fmts` and `ch_layouts`; this reads them through `avcodec_get_supported_config()` (FFmpeg ≥ 7.1) and keeps the fields for older FFmpeg. Upstream v0.6.0 doesn't build against FFmpeg 9 without it. |
+
+Both apply to upstream wf-recorder at the commit in `revision` (tag v0.6.0).
+
+## Install
+
+| System | How |
+|---|---|
+| NixOS (the Dendritic flake) | `pkgs/ii-wf-recorder`, on PATH as `ii-wf-recorder` |
+| Arch, Fedora, anything else | `./build.sh install`: builds it into `${XDG_DATA_HOME:-~/.local/share}/ii-wf-recorder/bin/` (`status`, `remove`) |
+
+`build.sh` needs git, meson, ninja, a C++ compiler and the dev files of wayland,
+wayland-protocols, FFmpeg, libdrm and gbm (the list is at the top of the script). Audio is
+built out: the second screen streams the PC's sound itself.
+
+ii link looks for `ii-wf-recorder` on PATH, then where `build.sh` installs it, and falls back
+to the stock `wf-recorder` (key frames and bitrate changes then restart the encoder).
+
+## Moving to a new wf-recorder
+
+1. In a clone, `git checkout <tag>` and `git apply --check patches/*.patch`.
+2. Update `WFR_COMMIT` and `WFR_VERSION` in `revision`, and the flake's copy of `patches/`.
+3. `./build.sh install`, start a second-screen session, and check the shell's log shows
+   `screen key: idr` (not `screen restart: idr`) after a dropped frame.

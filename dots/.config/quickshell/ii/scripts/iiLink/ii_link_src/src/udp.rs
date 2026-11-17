@@ -175,7 +175,10 @@ impl Sender {
         for b in 0..blocks {
             let data = &payload[b * per_block..len.min((b + 1) * per_block)];
             let k = data.len().div_ceil(SHARD).max(1);
-            let m = (k * self.fec_pct).div_ceil(100).max(1).min(255 - k);
+            // Most frames are a shard or two: one parity shard can't outlast a burst, and a
+            // few more cost ~1 KB each. The floor follows the loss the parity follows.
+            let floor = 1 + usize::from(self.fec_pct >= 25) + usize::from(self.fec_pct >= 45);
+            let m = (k * self.fec_pct).div_ceil(100).max(floor).min(255 - k);
             let mut shards: Vec<Vec<u8>> = (0..k + m)
                 .map(|i| {
                     let mut s = vec![0u8; SHARD];

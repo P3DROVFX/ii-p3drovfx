@@ -60,6 +60,8 @@ Singleton {
     property string side: "right"
     property string orient: "landscape"
     property int bitrateMbps: 16
+    /// The stream's codec the phone asked for: "hevc" (its default) or "h264" (older apps).
+    property string codec: "h264"
     /// Current target bitrate (Mbps) reported by adaptive rate control, or 0 when idle.
     property real liveBitrate: 0
     /// The extended output's place in the layout, "XxY", once worked out.
@@ -335,6 +337,7 @@ Singleton {
         root.scale = [1, 1.25, 1.5, 2].includes(Number(m.scale)) ? Number(m.scale) : 1.5;
         root.side = ["left", "right", "above", "below"].includes(String(m.side)) ? String(m.side) : "right";
         root.bitrateMbps = Math.max(2, Math.min(60, Math.round(Number(m.bitrate ?? 16))));
+        root.codec = String(m.codec ?? "") === "hevc" ? "hevc" : "h264";
         root.liveBitrate = root.bitrateMbps;
         root._adaptive = m.adaptive !== false;
         root._wantTransport = wantTransport;
@@ -577,6 +580,13 @@ Singleton {
         return `${p.x}x${p.y}`;
     }
 
+    /// The captured output's refresh rate (Hz), 0 when unknown.
+    function _outputRefresh(): real {
+        const info = (HyprlandData.monitors ?? []).find(m => m.name === root.output)
+            ?? Hyprland.monitors.values.find(m => m.name === root.output)?.lastIpcObject;
+        return Number(info?.refreshRate ?? 0);
+    }
+
     Process {
         id: hyprSetup
         onExited: code => {
@@ -593,13 +603,18 @@ Singleton {
                 w: root.w,
                 h: root.h,
                 bitrate: root.bitrateMbps * 1000000,
-                // The capture's frame rate, always: without it wf-recorder sends every refresh
-                // (180 on a fast screen) and NVENC's CBR overshoots the bitrate by that ratio.
-                rate: root.fps
+                // A cap on the capture's rate only for a screen faster than the stream (a 180 Hz
+                // one mirrored: without it NVENC's CBR overshoots by that ratio). At or under the
+                // screen's own rate (always for extend: the output runs at fps) the cap is
+                // wf-recorder's fps filter, which held every frame back one frame (~7 ms at 120).
+                rate: root._outputRefresh() > root.fps + 1 ? root.fps : 0,
+                // The encoder's frame rate for its rate control (ii-wf-recorder's --ii-rate,
+                // stock wf-recorder's -r): without one, VA-API starved the bitrate (1.1 of 30 Mbit/s).
+                fps: root.fps,
+                codec: root.codec
             };
             if (root.transport === "wifi") {
                 op.transport = "ws";
-                op.fps = root.fps;
                 op.adaptive = root._adaptive;
             }
             IiLinkService.send(op);
