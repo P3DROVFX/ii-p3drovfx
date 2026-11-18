@@ -61,12 +61,41 @@ Item {
         color: root.artDominantColor
     }
 
-    readonly property color artTextColor: Appearance.colors.colOnSurface
-    readonly property color artSubtextColor: Appearance.colors.colOnSurfaceVariant
+    /**
+     * The text sits on the cover, so its colour follows the cover.
+     *
+     * A fixed onSurface read fine on dark art and vanished on a white one. The
+     * quantizer's single colour is the cover's average; seen through the backdrop's
+     * dark wash it is roughly what the text sits on, and the readable one of the
+     * scheme's two on-colours is picked against it (opaque m3 colours: colLayer0
+     * carries alpha and contrastRatio ignores it). `scrimColor` then pushes the
+     * cover further away from the text, so mid-grey art cannot sit near both.
+     */
+    readonly property bool hasArt: root.artSource !== ""
+    readonly property color artAverage: colorQuantizer.colors.length > 0
+        ? colorQuantizer.colors[0] : Appearance.m3colors.m3surfaceContainer
+    readonly property color textBackdrop: root.hasArt
+        ? ColorUtils.mix(root.artAverage, "#000000", root.playing ? 0.85 : 0.72)
+        : Appearance.m3colors.m3surfaceContainer
+    readonly property color artTextColor: ColorUtils.mostReadable(root.textBackdrop,
+        [Appearance.m3colors.m3onSurface, Appearance.m3colors.m3inverseOnSurface])
+    readonly property bool lightText: ColorUtils.relativeLuminance(root.artTextColor) > 0.35
+    readonly property color artSubtextColor: ColorUtils.transparentize(root.artTextColor, 0.22)
+    readonly property color scrimColor: root.lightText ? "#000000" : "#ffffff"
+    // Translucent overlays on the controls follow the text's side of the contrast.
+    readonly property color overlayTint: root.lightText ? Qt.rgba(1, 1, 1, 1) : Qt.rgba(0, 0, 0, 1)
+
+    /**
+     * Lyrics belong to one player. LyricsService follows the active one, so every
+     * other popup in the column (a browser tab next to the music app) printed the
+     * active player's lines - and its current line in place of its own title.
+     */
+    readonly property bool showLyrics: !!root.player && LyricsService.activePlayer === root.player
+        && LyricsService.hasSyncedLines
 
 
     readonly property string displaySongText: {
-        if (LyricsService.hasSyncedLines && LyricsService.statusText !== "") {
+        if (root.showLyrics && LyricsService.statusText !== "") {
             return LyricsService.statusText;
         }
         return root.trackTitle;
@@ -185,6 +214,24 @@ Item {
             function onPostTrackChanged(): void { artwork.requestArt(true); }
         }
 
+        // Pushes the cover away from the text colour picked for it: dark under light
+        // text, light under dark text. Strongest behind the title, thin at the edges.
+        Rectangle {
+            anchors.fill: parent
+            visible: root.hasArt
+            radius: mainBg.radius
+            opacity: root.lightText ? 0.18 : 0.38
+            gradient: Gradient {
+                orientation: Gradient.Horizontal
+                GradientStop { position: 0.0; color: root.scrimColor }
+                GradientStop { position: 0.7; color: ColorUtils.transparentize(root.scrimColor, 0.35) }
+                GradientStop { position: 1.0; color: ColorUtils.transparentize(root.scrimColor, 0.7) }
+            }
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+        }
+
         ColumnLayout {
             anchors.fill: parent
             anchors.leftMargin: 14
@@ -221,7 +268,7 @@ Item {
                             anchors.centerIn: parent
                             text: "music_note"
                             iconSize: Appearance.font.pixelSize.smallest
-                            color: Appearance.colors.colOnSurface
+                            color: root.artTextColor
                         }
                     }
                 }
@@ -236,8 +283,8 @@ Item {
                     implicitHeight: root.showPinButton ? 22 : 0
                     Layout.alignment: Qt.AlignTop
                     colBackground: "transparent"
-                    colBackgroundHover: Qt.rgba(1, 1, 1, 0.1)
-                    colRipple: Qt.rgba(1, 1, 1, 0.15)
+                    colBackgroundHover: ColorUtils.transparentize(root.overlayTint, 0.9)
+                    colRipple: ColorUtils.transparentize(root.overlayTint, 0.85)
                     buttonRadius: Appearance.rounding.full
 
                     contentItem: MaterialSymbol {
@@ -246,7 +293,7 @@ Item {
                         fill: GlobalStates.mediaControlsPinned ? 1 : 0
                         color: GlobalStates.mediaControlsPinned
                             ? (root.useDynamicColors ? root.blendedColors.colPrimary : Appearance.colors.colPrimary)
-                            : Appearance.colors.colOnSurfaceVariant
+                            : root.artSubtextColor
                         horizontalAlignment: Text.AlignHCenter
                     }
                     onClicked: GlobalStates.mediaControlsPinned = !GlobalStates.mediaControlsPinned
@@ -316,18 +363,18 @@ Item {
                             width: parent.width
                             spacing: 0
                             y: lyricsContainer.baseY - lyricsContainer.rowHeight - lyricsContainer.scrollOffset
-                            visible: LyricsService.hasSyncedLines
+                            visible: root.showLyrics
 
                             readonly property int rowHeight: Math.floor(parent.height / 2.5)
                             readonly property real baseY: (parent.height - rowHeight) / 2
-                            readonly property int targetCurrentIndex: LyricsService.hasSyncedLines ? LyricsService.currentIndex : -1
+                            readonly property int targetCurrentIndex: root.showLyrics ? LyricsService.currentIndex : -1
                             property int lastIndex: -1
                             property bool isMovingForward: true
                             property real scrollOffset: 0
                             readonly property real animProgress: rowHeight > 0 ? Math.abs(scrollOffset) / rowHeight : 0
 
                             onTargetCurrentIndexChanged: {
-                                if (targetCurrentIndex !== lastIndex && LyricsService.hasSyncedLines) {
+                                if (targetCurrentIndex !== lastIndex && root.showLyrics) {
                                     isMovingForward = targetCurrentIndex > lastIndex;
                                     lastIndex = targetCurrentIndex;
                                     scrollAnim.stop();
@@ -352,7 +399,7 @@ Item {
                                     required property int index
                                     property int lineOffset: index - 1
                                     property int actualIndex: lyricsContainer.targetCurrentIndex + lineOffset
-                                    property bool isValidLine: LyricsService.hasSyncedLines && actualIndex >= 0 && actualIndex < LyricsService.syncedLines.length
+                                    property bool isValidLine: root.showLyrics && actualIndex >= 0 && actualIndex < LyricsService.syncedLines.length
 
                                     width: parent.width
                                     height: lyricsContainer.rowHeight
@@ -398,7 +445,7 @@ Item {
                         }
 
                         StyledText {
-                            visible: !LyricsService.hasSyncedLines
+                            visible: !root.showLyrics
                             anchors.fill: parent
                             font.family: Appearance.font.family.main
                             font.pixelSize: Appearance.font.pixelSize.large
@@ -470,7 +517,7 @@ Item {
                     implicitHeight: 24
                     buttonRadius: 12
                     colBackground: "transparent"
-                    colBackgroundHover: Qt.rgba(1, 1, 1, 0.1)
+                    colBackgroundHover: ColorUtils.transparentize(root.overlayTint, 0.9)
                     colRipple: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
 
                     onClicked: {
@@ -490,9 +537,9 @@ Item {
                             fill: 1
                             color: {
                                 if (!root.player || !root.player.canGoPrevious) {
-                                    return Appearance.colors.colOnSurfaceVariant;
+                                    return root.artSubtextColor;
                                 }
-                                return Appearance.colors.colOnSurface;
+                                return root.artTextColor;
                             }
                             opacity: root.player && root.player.canGoPrevious ? 1.0 : 0.4
                         }
@@ -513,7 +560,7 @@ Item {
                             configuration: StyledSlider.Configuration.Wavy
                             animateWave: root.playing && root.visible
                             highlightColor: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
-                            trackColor: Qt.rgba(1, 1, 1, 0.2)
+                            trackColor: ColorUtils.transparentize(root.overlayTint, 0.8)
                             handleColor: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
                             value: MprisController.trackProgressOf(root.player)
                             // Nothing to seek to while the player publishes no length.
@@ -539,7 +586,7 @@ Item {
                             wavy: root.player ? root.playing : false
                             animateWave: root.playing && root.visible
                             highlightColor: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
-                            trackColor: Qt.rgba(1, 1, 1, 0.2)
+                            trackColor: ColorUtils.transparentize(root.overlayTint, 0.8)
                             value: MprisController.trackProgressOf(root.player)
                         }
                     }
@@ -551,7 +598,7 @@ Item {
                     implicitHeight: 24
                     buttonRadius: 12
                     colBackground: "transparent"
-                    colBackgroundHover: Qt.rgba(1, 1, 1, 0.1)
+                    colBackgroundHover: ColorUtils.transparentize(root.overlayTint, 0.9)
                     colRipple: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
 
                     onClicked: {
@@ -571,9 +618,9 @@ Item {
                             fill: 1
                             color: {
                                 if (!root.player || !root.player.canGoNext) {
-                                    return Appearance.colors.colOnSurfaceVariant;
+                                    return root.artSubtextColor;
                                 }
-                                return Appearance.colors.colOnSurface;
+                                return root.artTextColor;
                             }
                             opacity: root.player && root.player.canGoNext ? 1.0 : 0.4
                         }

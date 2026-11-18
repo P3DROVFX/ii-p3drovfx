@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Effects
-import Qt5Compat.GraphicalEffects
 import qs.modules.common
 
 // Existing AndroidMediaPopup artwork, vignette and shading palette. The tile
@@ -9,57 +8,81 @@ Item {
     id: root
     property string artSource: ""
     property bool playing: false
-    readonly property bool artReady: artBlurredUnderlay.status === Image.Ready
-        && artExpanded.status === Image.Ready
-    readonly property real artVignetteBlur: playing ? 50 : 90
-        Item {
-            anchors.fill: parent
+    readonly property bool artReady: artImage.status === Image.Ready
+    // Strong-level blur: wider while paused, so the cover recedes behind the controls.
+    readonly property real edgeBlur: playing ? 0.7 : 1.0
+    // Room past the visible box for the blur to read real pixels, not transparency:
+    // without it the strongest blur - the edges - fades into a dark fringe.
+    readonly property real bleed: 40
+    // The visible box inside each bled level, in that level's coordinates.
+    readonly property rect visibleRect: Qt.rect(root.bleed, root.bleed, Math.max(1, root.width), Math.max(1, root.height))
 
-            Image {
-                id: artBlurredUnderlay
-                anchors.fill: parent
-                source: root.artSource
-                asynchronous: true
-                fillMode: Image.PreserveAspectCrop
-                visible: root.artSource !== ""
-                layer.enabled: root.artVignetteBlur > 0
-                layer.effect: MultiEffect {
-                    blurEnabled: root.artVignetteBlur > 0
-                    blurMax: 128
-                    blur: root.artVignetteBlur / 128
-                }
-            }
+    // The cover, sharp in the middle and blurred progressively towards every edge,
+    // in one shader pass over three levels of the same picture. It replaced a
+    // RadialGradient OpacityMask fading a sharp copy over a blurred one, which
+    // only reached the edges as an ellipse and ghosted the picture in between.
+    Item {
+        anchors.fill: parent
+        visible: root.artSource !== ""
 
-            // The vignette is declared inline as the mask, never as a scene item:
-            // a visible maskSource paints its black centre under the 0.85 art.
-            Item {
-                id: artHost
-                anchors.fill: parent
-                layer.enabled: true
-                layer.effect: OpacityMask {
-                    maskSource: RadialGradient {
-                        width: artHost.width
-                        height: artHost.height
-                        gradient: Gradient {
-                            GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 1) }
-                            GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0) }
-                        }
-                        horizontalRadius: width * 0.65
-                        verticalRadius: height * 0.65
-                    }
-                }
-
-                Image {
-                    id: artExpanded
-                    anchors.fill: parent
-                    source: root.artSource
-                    asynchronous: true
-                    fillMode: Image.PreserveAspectCrop
-                    opacity: 0.85
-                    visible: root.artSource !== ""
-                }
+        Image {
+            id: artImage
+            x: -root.bleed
+            y: -root.bleed
+            width: root.width + 2 * root.bleed
+            height: root.height + 2 * root.bleed
+            source: root.artSource
+            asynchronous: true
+            fillMode: Image.PreserveAspectCrop
+        }
+        MultiEffect {
+            id: mediumLevel
+            anchors.fill: artImage
+            source: artImage
+            autoPaddingEnabled: false
+            blurEnabled: true
+            blurMax: 64
+            blur: 0.35 * root.edgeBlur
+        }
+        MultiEffect {
+            id: strongLevel
+            anchors.fill: artImage
+            source: artImage
+            autoPaddingEnabled: false
+            blurEnabled: true
+            blurMax: 64
+            blur: root.edgeBlur
+            Behavior on blur {
+                NumberAnimation { duration: 400; easing.type: Easing.OutCubic }
             }
         }
+
+        // The three levels are only ever sampled: inline, parentless sources that
+        // hide their items from the scene (a visible level would paint under the
+        // effect, see the media popup "shadow" entry in DOC.md).
+        ShaderEffect {
+            anchors.fill: parent
+            property var source: ShaderEffectSource {
+                sourceItem: artImage
+                sourceRect: root.visibleRect
+                hideSource: true
+            }
+            property var mediumBlur: ShaderEffectSource {
+                sourceItem: mediumLevel
+                sourceRect: root.visibleRect
+                hideSource: true
+            }
+            property var strongBlur: ShaderEffectSource {
+                sourceItem: strongLevel
+                sourceRect: root.visibleRect
+                hideSource: true
+            }
+            readonly property real itemWidth: width
+            readonly property real itemHeight: height
+            readonly property real band: Math.min(width, height) * 0.42
+            fragmentShader: Qt.resolvedUrl("shaders/radialEdgeBlur.frag.qsb")
+        }
+    }
 
         // The wash only exists to keep controls legible over cover art. With no
         // artwork it painted a black veil over the tile's own surface, which is
