@@ -1,0 +1,77 @@
+From 0b21205999f30eb948549104aa1391d9aee24e34 Mon Sep 17 00:00:00 2001
+From: Scrimas <isma.ph@proton.me>
+Date: Tue, 17 Nov 2026 01:46:51 +0100
+Subject: [PATCH] ii-control: -r caps the rate in the capture, without the fps
+ filter
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+With --ii-control, -r N no longer adds FFmpeg's fps filter: the capture keeps the frames
+due on N's schedule (by their commit times) and drops the others before the encoder. The
+filter holds every frame until the next one arrives, a whole frame of delay: capture →
+encoded at 60 fps of a 120 Hz output went from 21 to 11 ms. Kept frames are evenly spaced
+where the rates divide (60 of 120: 16.7 ms); 90 of 120 alternates as the filter did.
+---
+ src/main.cpp | 24 ++++++++++++++++++++++++
+ 1 file changed, 24 insertions(+)
+
+diff --git a/src/main.cpp b/src/main.cpp
+index 9997c20..c00781b 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -1143,6 +1143,11 @@ static int dispatch_timeout(int64_t timeout_us)
+ static const uint64_t II_LEAD_US = 1000;
+ static const uint64_t II_SLACK_US = 1000;
+ 
++// -r with --ii-control: the capture keeps frames on the rate's schedule and drops the rest
++// before the encoder, instead of the fps filter, which holds every frame until the next one
++// comes (a frame's time: 21 ms capture → encoded at 60 of 120 Hz, against 8 uncapped).
++static int ii_cap_rate = 0;
++
+ static bool ii_capture_loop(const std::function<void()>& first_frame)
+ {
+     std::deque<wf_buffer*> inflight;
+@@ -1150,6 +1155,7 @@ static bool ii_capture_loop(const std::function<void()>& first_frame)
+     std::vector<uint64_t> deltas;   // the last frame-to-frame times, for the period
+     uint64_t period = 0;
+     bool started = false;
++    uint64_t due = 0; // -r: when the next frame to keep is due
+ 
+     auto issue = [&](wf_buffer *b) {
+         b->ii_done = b->ii_failed = b->ii_skip = false;
+@@ -1232,6 +1238,19 @@ static bool ii_capture_loop(const std::function<void()>& first_frame)
+                         period = s[s.size() / 2];
+                     }
+                     last_ts = b->base_usec;
++                    if (ii_cap_rate > 0)
++                    {
++                        // Kept when within half an output frame of its due time; a schedule
++                        // fallen a frame behind starts again from this one.
++                        uint64_t every = 1000000 / ii_cap_rate;
++                        uint64_t half = (period ? period : every) / 2;
++                        if (!due || b->base_usec + half >= due + every)
++                            due = b->base_usec;
++                        if (b->base_usec + half >= due)
++                            due += every;
++                        else
++                            b->ii_skip = true;
++                    }
+                 }
+             }
+             // The first frame starts the encoder: it can't be a skipped one.
+@@ -1630,6 +1649,11 @@ int main(int argc, char *argv[])
+         std::thread(ii_control_reader).detach();
+ 
+     ii_pipelined = ii_control;
++    if (ii_pipelined && params.framerate > 0)
++    {
++        ii_cap_rate = params.framerate;
++        params.framerate = 0;
++    }
+     if (ii_pipelined)
+     {
+         ii_capture_loop([&] () {
+-- 
+2.56.0
+

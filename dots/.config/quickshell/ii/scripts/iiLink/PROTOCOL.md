@@ -354,7 +354,12 @@ and n × `[u8 id][u16 x][u16 y]` (every finger down, 0–65535 of the picture), 
 `[2][u16 n][utf-8]` and named keys `[3][u8 n][name][u8 mods]` (1 shift, 2 ctrl, 4 alt,
 8 super) for a keyboard of its own the helper makes on the first key. The PC sends
 `[u32 length][u8 kind][u64 pts µs][Annex-B H.264]`, kind 0 the SPS/PPS, 1 a frame, 2 a key
-frame. wf-recorder captures and encodes (FLV out, one tag per frame, `g=240`) every
+frame, 10 an HEVC config (VPS/SPS/PPS: the phone switches decoder there; the start's
+`codec:"hevc"` asks for it, H.264 stays the fallback). The pts is the PC's CLOCK_MONOTONIC
+in µs: each frame's capture time with `ii-wf-recorder` (scripts/wf-recorder-ii: key frames
+on `idr` without a restart, its `--ii-rate` instead of `-r`'s fps filter), else the send
+time, so the phone can time every frame against `pong`'s `now`.
+wf-recorder captures and encodes (FLV out, one tag per frame, `g=240`) every
 refresh (`-D`, a hardware cursor damages nothing) at the session's fps (`-r`, from the
 shell's `rate`; without it a 180 Hz screen sends 180 fps and NVENC's CBR overshoots by that
 ratio). A still screen costs ~100-byte frames. The phone has 60 s to connect; the session ends when the socket closes.
@@ -370,13 +375,37 @@ On the Wi-Fi side WebSocket `/iilink/1/screen` (link's TLS port, `transport:"ws"
   the `u32` length).
 - Phone → PC binary: the same `[1]`/`[2]`/`[3]` input frames as USB, one per WS message.
 - PC → phone text (every 1 s while live):
-  `{"t":"stats","bitrate":bps,"max":bps,"kbps":measured_out_kbps,"fps":frames_sent_last_s,"dropped":frames_dropped_last_s,"encoder":"nvenc"|"vaapi"|"x264"}`.
+  `{"t":"stats","bitrate":bps,"max":bps,"kbps":measured_out_kbps,"fps":frames_sent_last_s,"dropped":frames_dropped_last_s,"encoder":"nvenc"|"vaapi"|"x264","fec":pct|null,"cap":ms|null,"capmax":ms|null}`
+  (`cap`/`capmax`: capture → send, mean and max over the second, with ii-wf-recorder).
 - Phone → PC text:
-  - `{"t":"ping","id":n}` → `{"t":"pong","id":n}` through the same ordered writer queue as
-    video so RTT includes queued video.
+  - `{"t":"ping","id":n}` → `{"t":"pong","id":n,"now":µs}` through the same ordered writer
+    queue as video so RTT includes queued video. `now` is the PC's CLOCK_MONOTONIC (the
+    pts clock): the lowest-RTT pong gives the phone the offset to its own monotonic clock,
+    and each frame's send → decoded latency (the phone logs it each second, tag `iiStream`).
   - `{"t":"quality","bitrate":bps,"adaptive":bool}` → live max (clamped 1–80 Mbit/s) and
     adaptive toggle; encoder restarts only if the target bitrate changes.
-  - `{"t":"idr"}` → restarts the encoder for a fresh key frame (at most once per 2 s).
+  - `{"t":"idr"}` → restarts the encoder for a fresh key frame (at most once per 500 ms).
+  - `{"t":"net","loss":pct,"lost":frames}` (UDP sessions, every 1 s) → the parity follows
+    (below). With adaptive on, two seconds within 3 s that each lost ≥ 3 frames the parity
+    couldn't rebuild lower the bitrate ×0.7 (UDP has no queue to back up, so this is its
+    congestion signal); it steps back up after 30 s without (10 s on the WebSocket), as
+    each change restarts a VA-API encoder.
+
+Video over UDP (`screenUdp` in the shell's caps; udp.rs on the PC, ScreenUdp.kt on the
+phone). A hello with `"udp":true` makes the PC send `{"t":"udp","port":p,"key":base64,"sid":n}`
+over the socket: a fresh AES-256-GCM key for the session, the link's own UDP port (the one
+discovery answers on; first byte `0xA7` tells the two apart). The phone then sends a sealed
+hello every 500 ms (`[0xA7][2][u64 counter]` + sealed `u32 sid` + tag, nonce `[u32 1][counter]`);
+the PC sends video to the address of the newest valid one and goes back to the WebSocket
+when none came for 3 s (or never: UDP blocked). Each frame (the WebSocket's payload as is)
+is cut into 1100-byte shards, blocks of up to 128 with Reed–Solomon parity (GF(2^8),
+reed-solomon-erasure's matrix), each shard one datagram: `[0xA7][1][u64 counter][u32 frame]
+[u32 frame_len][u8 block][u8 blocks][u8 shard][u8 k][u8 m][0]` (associated data) + the sealed
+shard + tag, nonce `[u32 0][counter]`. Large frames are paced to 200 Mbit/s. The phone rebuilds
+a block from any k of its k + m shards, hands frames out in order, and gives up on one a later
+frame overtook 30 ms ago (then holds the picture and asks for a key frame). Parity starts at
+20%, then 3× the reported loss over a 10% floor (+10 after a lost frame, at most 60%), raised
+at once and lowered 2 points a second; `stats` carries it as `fec`.
 - Low latency and adaptive bitrate: packets pass through a bounded non-blocking queue.
   Congestion (oldest queued packet > 200 ms or more than 200 ms of the target bitrate queued) drops
   non-key frames (`kind == 1`, counted in `dropped`) until the next key frame or encoder

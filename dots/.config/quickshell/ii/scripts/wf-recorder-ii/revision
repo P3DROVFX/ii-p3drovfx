@@ -1,0 +1,4 @@
+# Upstream wf-recorder the patches in ./patches apply to (tag v0.6.0).
+# Bump together: a new tag must take every patch with `git apply --check`.
+WFR_COMMIT=ca103be2473db0983baf74e17b291385c3c79d79
+WFR_VERSION=0.6.0

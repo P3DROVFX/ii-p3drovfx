@@ -14,6 +14,40 @@ SERVICE_PATH=".screenRecord.service"
 STATE_FILE="$HOME/.local/state/quickshell/states.json"
 STATE_JSON_PATH=".screenRecord.active"
 
+# The recorder: ii-wf-recorder where it is installed (scripts/wf-recorder-ii), else the
+# stock one. Its patch 0005 captures a whole output as an output: captured as a region of
+# itself, Hyprland 0.57 adds a capture session per frame on a scaled output and slows down
+# more every minute (6 → 26 % CPU in 45 s of recording at scale 1.5). Area (--geometry)
+# recordings are regions either way and still hit that.
+REC_BIN=wf-recorder
+if command -v ii-wf-recorder > /dev/null 2>&1; then
+    REC_BIN=ii-wf-recorder
+elif [[ -x "${XDG_DATA_HOME:-$HOME/.local/share}/ii-wf-recorder/bin/ii-wf-recorder" ]]; then
+    REC_BIN="${XDG_DATA_HOME:-$HOME/.local/share}/ii-wf-recorder/bin/ii-wf-recorder"
+fi
+# The recording's recorder, by pid: the phone screen's encoder is an ii-wf-recorder too
+# (and a plain `pkill wf-recorder` matched it), so pausing or stopping a recording must
+# only signal this one.
+REC_PID_FILE="${XDG_RUNTIME_DIR:-/tmp}/ii-screen-record.pid"
+rec_pid() {
+    local pid comm
+    pid="$(cat "$REC_PID_FILE" 2>/dev/null)"
+    comm="$(cat "/proc/$pid/comm" 2>/dev/null)"
+    if [[ -n "$pid" && ( "$comm" == "wf-recorder" || "$comm" == "ii-wf-recorder" ) ]]; then
+        echo "$pid"
+        return 0
+    fi
+    # A recording started before the pid file existed: the stock binary, matched exactly.
+    pgrep -x wf-recorder | head -n 1 | grep .
+}
+# Runs the recorder in the background with its pid on file, and waits for it.
+run_recorder() {
+    "$REC_BIN" "$@" &
+    echo $! > "$REC_PID_FILE"
+    wait $!
+    rm -f "$REC_PID_FILE"
+}
+
 CUSTOM_PATH=$(jq -r "$JSON_PATH" "$CONFIG_FILE" 2>/dev/null)
 REC_SERVICE=$(jq -r "$SERVICE_PATH" "$CONFIG_FILE" 2>/dev/null)
 if [[ -z "$REC_SERVICE" || "$REC_SERVICE" == "null" ]]; then
@@ -339,15 +373,15 @@ toggle_pause() {
     # pause that still flips the state file leaves the UI lying about the recording.
     if [[ "$REC_SERVICE" == "obs" ]] && { pgrep -x "obs" > /dev/null || pgrep -f "com.obsproject.Studio" > /dev/null; }; then
         python3 "$SCRIPT_DIR/obs_pause.py" 2>/dev/null || return
-    elif pgrep -x wf-recorder > /dev/null; then
+    elif rec_pid=$(rec_pid); then
         # wf-recorder has no pause feature and installs no SIGUSR1 handler, so the
         # default action applies: SIGUSR1 terminates it. That is why pausing used to
         # end the recording. Suspending the process instead keeps the encoder and the
         # output file alive; the paused span shows up as a still frame in the video.
         if [[ "$target_paused" == "true" ]]; then
-            pkill -STOP -x wf-recorder || return
+            kill -STOP "$rec_pid" || return
         else
-            pkill -CONT -x wf-recorder || return
+            kill -CONT "$rec_pid" || return
         fi
     else
         return
@@ -432,13 +466,13 @@ if [[ "$REC_SERVICE" == "obs" ]]; then
     fi
 fi
 
-if pgrep wf-recorder > /dev/null; then
+if rec_pid=$(rec_pid); then
     notify-send "Recording Stopped" "Stopped" -a 'Recorder' &
     updatestate false
     # A paused recorder is SIGSTOPped: it cannot run its shutdown handler (and would
     # never flush the file) until it is resumed, so always continue it before killing.
-    pkill -CONT -x wf-recorder 2>/dev/null
-    pkill wf-recorder &
+    kill -CONT "$rec_pid" 2>/dev/null
+    kill "$rec_pid" &
     exit 0
 fi
 
@@ -665,7 +699,7 @@ else
 
         notify-send "Starting recording" "$FILENAME" -a 'Recorder' & disown
         updatestate true
-        wf-recorder -o "$MONITOR" "${CODEC_OPTS[@]}" -f "$FILENAME" "${AUDIO_ARGS[@]}"
+        run_recorder -o "$MONITOR" "${CODEC_OPTS[@]}" -f "$FILENAME" "${AUDIO_ARGS[@]}"
     else
         # If a manual region was provided via --region, use it; otherwise run slurp as before.
         if [[ -n "$MANUAL_REGION" ]]; then
@@ -699,7 +733,7 @@ else
         # global xdg-output coordinates. Forcing the focused output here makes
         # selections on another monitor invalid and silently records the full
         # output instead.
-        wf-recorder "${CODEC_OPTS[@]}" -f "$FILENAME" --geometry "$geometry" "${AUDIO_ARGS[@]}"
+        run_recorder "${CODEC_OPTS[@]}" -f "$FILENAME" --geometry "$geometry" "${AUDIO_ARGS[@]}"
     fi
 
     # Post recording action (launch video editor)

@@ -33,6 +33,7 @@ use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::WebSocketStream;
 
 use crate::input::Cmd;
+use crate::udp;
 use crate::State;
 
 pub const WS_PATH: &str = "/iilink/1/screen";
@@ -52,30 +53,64 @@ const CONGESTION_AGE: Duration = Duration::from_millis(200);
 const CONGESTION_WINDOW: Duration = Duration::from_secs(3);
 const STEP_UP_QUIET: Duration = Duration::from_secs(10);
 const RATE_COOLDOWN: Duration = Duration::from_secs(2);
-const IDR_COOLDOWN: Duration = Duration::from_secs(2);
+/// Over UDP: a second with this many frames parity couldn't rebuild is congestion (single
+/// losses are Wi-Fi's own, which a lower bitrate doesn't cure).
+const UDP_CONGESTED_LOST: u64 = 3;
+/// Over UDP the bitrate steps back up only after this long without congestion: each change
+/// restarts a VA-API encoder (a frozen picture), and UDP has no queue to show room early.
+const UDP_STEP_UP_QUIET: Duration = Duration::from_secs(30);
+/// A phone waiting for a key frame holds a frozen picture: answer again soon.
+const IDR_COOLDOWN: Duration = Duration::from_millis(500);
 /// 10 ms packets: half a second.
 const AUDIO_QUEUE: usize = 50;
 /// Dropping this long without a key frame: restart the encoder for one (the GOP is 2 s).
 const DROP_IDR_AFTER: Duration = Duration::from_millis(250);
-/// VA-API's key-frame interval in frames (10 s at 60 Hz): see `Recorder::start`.
-const VAAPI_GOP: u32 = 600;
+/// VA-API's key-frame interval in frames: none after the first, in practice (~2.3 h at
+/// 120 Hz). A key frame is ~500 KB against ~30 KB frames, and every periodic one was a
+/// 100 ms hitch on Wi-Fi; the phone asks (`idr`) when it needs one.
+const VAAPI_GOP: u32 = 1_000_000;
 /// The VUI for a picture converted BT.601 limited range from the desktop's sRGB, so the
 /// phone decodes it as it was made. Unlabelled, Android assumed BT.709 and a video gamma.
 const BT601_LIMITED_SRGB: [&str; 8] = [
     "-p", "colorspace=smpte170m", "-p", "color_range=tv", "-p", "color_primaries=bt709", "-p", "color_trc=iec61966-2-1",
 ];
 
+/// CLOCK_MONOTONIC in µs: frame pts and `pong`'s `now` (the phone's System.nanoTime is
+/// the same clock on its side; the offset between the two comes from the pings).
+pub fn mono_us() -> u64 {
+    let mut t = libc::timespec { tv_sec: 0, tv_nsec: 0 };
+    // SAFETY: a valid timespec to fill.
+    unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut t) };
+    t.tv_sec as u64 * 1_000_000 + t.tv_nsec as u64 / 1000
+}
+
+/// One line on stderr (the shell's log, `[IiLink]`) for each event that costs the picture:
+/// an encoder restart or a lost connection, with why. Rare by design, so always on.
+fn trace(what: &str, why: &str) {
+    eprintln!("screen {what}: {why}");
+}
+
+fn conn_lost(why: &str) -> WsConnEnd {
+    trace("conn", why);
+    WsConnEnd::Dropped
+}
+
 /// The active or pending screen session (one at a time).
 pub struct Slot {
     sid: u64,
     token: Option<String>,
-    conns: Option<mpsc::UnboundedSender<Ws>>,
+    conns: Option<mpsc::UnboundedSender<PhoneConn>>,
     task: tokio::task::AbortHandle,
     end: Arc<End>,
     output: watch::Sender<String>,
     /// The PC's sound for the phone: the PulseAudio source to capture, or none.
     audio: watch::Sender<Option<String>>,
+    /// Wi-Fi sessions: the UDP video's key and the phone's address (udp.rs).
+    udp_peer: Option<Arc<udp::Peer>>,
 }
+
+/// A phone's screen socket, and whether it asked for the video over UDP (its hello's `udp`).
+type PhoneConn = (Ws, bool);
 
 struct End {
     dev: String,
@@ -137,6 +172,10 @@ pub struct Params {
     /// Frames per second to cap the capture at (mirror of a fast screen), 0 for the output's own rate.
     pub rate: u32,
     pub audio: watch::Receiver<Option<String>>,
+    /// The phone asked for HEVC (`codec`), H.264 still the fallback.
+    pub hevc: bool,
+    /// The link's UDP socket and this session's peer, for a phone that asks (Wi-Fi only).
+    pub udp: Option<(Arc<tokio::net::UdpSocket>, Arc<udp::Peer>)>,
     pub input_tx: Sender<Cmd>,
 }
 
@@ -182,7 +221,10 @@ pub fn op(state: &State, op: &Value) {
         rate: op["rate"].as_u64().unwrap_or(0).min(240) as u32,
         audio: audio_rx,
         input_tx: s.input_tx.clone(),
+        udp: None,
+        hevc: op["codec"].as_str() == Some("hevc"),
     };
+    let mut params = params;
     if params.output.borrow().is_empty() || params.token.len() < 16 {
         crate::emit(json!({"ev": "screenEnd", "dev": dev, "sid": sid, "reason": "bad_arg"}));
         return;
@@ -192,13 +234,15 @@ pub fn op(state: &State, op: &Value) {
 
     if op["transport"].as_str() == Some("ws") {
         let token = params.token.clone();
+        let udp_peer = s.udp.as_ref().and_then(|_| udp::Peer::new(sid as u32));
+        params.udp = s.udp.clone().zip(udp_peer.clone());
         let (conn_tx, conn_rx) = mpsc::unbounded_channel();
         let task = tokio::spawn(async move {
             let mut guard = guard;
             guard.reason = run_ws(conn_rx, &params).await;
         })
         .abort_handle();
-        s.screen = Some(Slot { sid, token: Some(token), conns: Some(conn_tx), task, end, output: out_tx, audio: audio_tx });
+        s.screen = Some(Slot { sid, token: Some(token), conns: Some(conn_tx), task, end, output: out_tx, audio: audio_tx, udp_peer });
         crate::emit(json!({"ev": "screen", "dev": dev, "sid": sid, "port": 0, "transport": "ws"}));
         return;
     }
@@ -223,20 +267,19 @@ pub fn op(state: &State, op: &Value) {
         guard.reason = run_usb(listener, &params).await;
     })
     .abort_handle();
-    s.screen = Some(Slot { sid, token: None, conns: None, task, end, output: out_tx, audio: audio_tx });
+    s.screen = Some(Slot { sid, token: None, conns: None, task, end, output: out_tx, audio: audio_tx, udp_peer: None });
     crate::emit(json!({"ev": "screen", "dev": dev, "sid": sid, "port": port}));
 }
 
 /// The phone's `/iilink/1/screen` socket: validate the hello token within 5 s, then hand
 /// it to the pending or reconnecting session.
 pub async fn serve(mut ws: Ws, state: State) {
-    let token = match timeout(HELLO_TIMEOUT, ws.next()).await {
-        Ok(Some(Ok(Message::Text(t)))) => serde_json::from_str::<Value>(t.as_str())
-            .ok()
-            .filter(|v| v["t"] == "hello")
-            .and_then(|v| v["token"].as_str().map(str::to_owned)),
+    let hello = match timeout(HELLO_TIMEOUT, ws.next()).await {
+        Ok(Some(Ok(Message::Text(t)))) => serde_json::from_str::<Value>(t.as_str()).ok().filter(|v| v["t"] == "hello"),
         _ => None,
     };
+    let wants_udp = hello.as_ref().is_some_and(|v| v["udp"].as_bool() == Some(true));
+    let token = hello.and_then(|v| v["token"].as_str().map(str::to_owned));
     let Some(token) = token else {
         let _ = ws.close(None).await;
         return;
@@ -249,7 +292,7 @@ pub async fn serve(mut ws: Ws, state: State) {
             .and_then(|slot| slot.conns.clone())
     };
     if let Some(tx) = tx {
-        let _ = tx.send(ws);
+        let _ = tx.send((ws, wants_udp));
     } else {
         let _ = ws.close(None).await;
     }
@@ -273,7 +316,7 @@ async fn run_usb(listener: TcpListener, p: &Params) -> &'static str {
     drop(listener);
 
     let out_name = p.output.borrow().clone();
-    let Some(mut rec) = Recorder::start(&out_name, p.bitrate, 240, p.rate, false).await else { return "encoder" };
+    let Some(mut rec) = Recorder::start(&out_name, p.bitrate, 240, p.rate, p.fps, false, p.hevc).await else { return "encoder" };
     crate::emit(json!({"ev": "screenLive", "dev": p.dev, "sid": p.sid, "encoder": rec.encoder}));
     let _ = p.input_tx.send(Cmd::ScreenStart { w: p.w, h: p.h });
 
@@ -310,7 +353,7 @@ async fn run_usb(listener: TcpListener, p: &Params) -> &'static str {
             _ = tokio::time::sleep(Duration::from_millis(300)) => {}
         }
         let out_name = output.borrow().clone();
-        rec = match Recorder::start(&out_name, p.bitrate, 240, p.rate, false).await {
+        rec = match Recorder::start(&out_name, p.bitrate, 240, p.rate, p.fps, false, p.hevc).await {
             Some(r) => r,
             None => return "encoder_exit",
         };
@@ -589,10 +632,22 @@ fn spawn_writer(ws_tx: futures_util::stream::SplitSink<Ws, Message>, queue: Arc<
 struct LiveEncoder {
     packets: mpsc::Receiver<(u8, Vec<u8>)>,
     child: Child,
+    encoder: &'static str,
+    /// The patched wf-recorder's stdin (`--ii-control`): key frames and bitrate without a restart.
+    control: Option<tokio::process::ChildStdin>,
     _reader: AbortOnDrop,
+    _stderr: Option<AbortOnDrop>,
 }
 
 impl LiveEncoder {
+    /// One `--ii-control` line; false without control or when the encoder is gone.
+    async fn command(&mut self, line: &str) -> bool {
+        match self.control.as_mut() {
+            Some(c) => c.write_all(line.as_bytes()).await.is_ok() && c.flush().await.is_ok(),
+            None => false,
+        }
+    }
+
     async fn stop(mut self) {
         // Abort reader task first so stdout closes, then reap child before starting another.
         drop(self._reader);
@@ -606,10 +661,11 @@ struct StartingEncoder {
 }
 
 impl StartingEncoder {
-    fn spawn(output: String, bitrate: u64, gop: u32, rate: u32) -> Self {
+    fn spawn(output: String, bitrate: u64, gop: u32, rate: u32, hevc: bool) -> Self {
         let (tx, rx) = oneshot::channel();
         let task = tokio::spawn(async move {
-            let rec = Recorder::start(&output, bitrate, gop, rate, true).await;
+            // gop is the session's fps (run_ws).
+            let rec = Recorder::start(&output, bitrate, gop, rate, gop, true, hevc).await;
             let _ = tx.send(rec);
         });
         Self { rx, _task: AbortOnDrop(task.abort_handle()) }
@@ -618,7 +674,7 @@ impl StartingEncoder {
 
 enum WsConnEnd {
     Dropped,
-    Replaced(Ws),
+    Replaced(PhoneConn),
     End(&'static str),
 }
 
@@ -642,6 +698,10 @@ struct WsSession {
     input_tx: Sender<Cmd>,
     audio_src: watch::Receiver<Option<String>>,
     audio: Option<Audio>,
+    /// The video over UDP, used while the phone that asked for it keeps saying hello.
+    udp: Option<udp::Sender>,
+    wants_udp: bool,
+    hevc: bool,
 }
 
 impl WsSession {
@@ -676,7 +736,7 @@ impl WsSession {
     }
 }
 
-async fn run_ws(mut conns: mpsc::UnboundedReceiver<Ws>, p: &Params) -> &'static str {
+async fn run_ws(mut conns: mpsc::UnboundedReceiver<PhoneConn>, p: &Params) -> &'static str {
     let Ok(Some(mut ws)) = timeout(CONNECT_TIMEOUT, conns.recv()).await else {
         return "timeout";
     };
@@ -699,12 +759,18 @@ async fn run_ws(mut conns: mpsc::UnboundedReceiver<Ws>, p: &Params) -> &'static 
         input_tx: p.input_tx.clone(),
         audio_src: p.audio.clone(),
         audio: None,
+        udp: p.udp.clone().map(|(sock, peer)| udp::Sender::new(sock, peer)),
+        wants_udp: false,
+        hevc: p.hevc,
     };
 
     loop {
         match run_ws_conn(ws, &mut sess, &mut conns).await {
             WsConnEnd::End(reason) => return reason,
-            WsConnEnd::Replaced(next) => ws = next,
+            WsConnEnd::Replaced(next) => {
+                trace("conn", "replaced");
+                ws = next;
+            }
             WsConnEnd::Dropped => {
                 // A finger down when Wi-Fi went would stay down on the PC until it came back.
                 let _ = sess.input_tx.send(Cmd::ScreenFrame { fingers: Vec::new() });
@@ -717,7 +783,8 @@ async fn run_ws(mut conns: mpsc::UnboundedReceiver<Ws>, p: &Params) -> &'static 
     }
 }
 
-async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedReceiver<Ws>) -> WsConnEnd {
+async fn run_ws_conn((ws, wants_udp): PhoneConn, sess: &mut WsSession, conns: &mut mpsc::UnboundedReceiver<PhoneConn>) -> WsConnEnd {
+    sess.wants_udp = wants_udp;
     limit_unsent(&ws);
     let (ws_tx, mut ws_rx) = ws.split();
     let queue = WriterQueue::new();
@@ -726,12 +793,17 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
     if let Some(head) = sess.audio.as_ref().and_then(|a| a.head.clone()) {
         queue.push_prio(head);
     }
+    // The UDP video's key and port: the phone starts its hellos, and frames move there.
+    if let Some(u) = sess.udp.as_ref().filter(|_| sess.wants_udp) {
+        queue.push_control(Message::text(u.peer().offer(u.port()).to_string()));
+    }
 
     let mut starting: Option<StartingEncoder> = Some(StartingEncoder::spawn(
         sess.output.borrow().clone(),
         sess.target_bitrate,
         sess.gop,
         sess.rate,
+        sess.hevc,
     ));
     let mut live: Option<LiveEncoder> = None;
     let mut backoff_until: Option<tokio::time::Instant> = None;
@@ -753,6 +825,7 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
 
     // Helper to trigger an intended encoder restart without counting toward crash limits.
     async fn restart_intended(
+        why: &'static str,
         sess: &WsSession,
         live: &mut Option<LiveEncoder>,
         starting: &mut Option<StartingEncoder>,
@@ -761,6 +834,22 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
         dropping_since: &mut Option<Instant>,
         restarted_this_drop: &mut bool,
     ) {
+        // The patched wf-recorder answers without a restart: a key frame on the next frame,
+        // and a new bitrate where the encoder reconfigures (NVENC, x264; not VA-API).
+        if let Some(enc) = live.as_mut() {
+            let line = match why {
+                "idr" | "drop_recovery" => Some("idr\n".to_string()),
+                "rate_up" | "rate_down" | "quality" if enc.encoder != "vaapi" => Some(format!("bitrate {}\n", sess.target_bitrate)),
+                _ => None,
+            };
+            if let Some(line) = line {
+                if enc.command(&line).await {
+                    trace(if line == "idr\n" { "key" } else { "bitrate" }, why);
+                    return;
+                }
+            }
+        }
+        trace("restart", why);
         *dropping = false;
         *dropping_since = None;
         *restarted_this_drop = false;
@@ -774,6 +863,7 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
             sess.target_bitrate,
             sess.gop,
             sess.rate,
+            sess.hevc,
         ));
     }
 
@@ -811,6 +901,7 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
                 match pkt {
                     None => {
                         // Unexpected encoder exit: count toward 5-in-30s limit and settle 300 ms.
+                        trace("restart", "encoder_exit");
                         if let Some(enc) = live.take() {
                             enc.stop().await;
                         }
@@ -822,16 +913,29 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
                         backoff_until = Some(tokio::time::Instant::now() + Duration::from_millis(300));
                     }
                     Some((kind, payload)) => {
+                        // UDP while the phone is there: no queue, no head-of-line blocking.
+                        if sess.wants_udp {
+                            if let Some(u) = sess.udp.as_mut() {
+                                if u.send_frame(&payload).await {
+                                    if kind == 2 {
+                                        dropping = false;
+                                        dropping_since = None;
+                                        restarted_this_drop = false;
+                                    }
+                                    continue;
+                                }
+                            }
+                        }
                         if kind == 0 {
                             if !queue.push_video(kind, payload) {
-                                return WsConnEnd::Dropped;
+                                return conn_lost("queue_full");
                             }
                         } else if kind == 2 {
                             dropping = false;
                             dropping_since = None;
                             restarted_this_drop = false;
                             if !queue.push_video(kind, payload) {
-                                return WsConnEnd::Dropped;
+                                return conn_lost("queue_full");
                             }
                         } else {
                             let congested = queue.is_congested(sess.target_bitrate);
@@ -871,6 +975,7 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
                                         congestion_events.clear();
                                         sess.emit_rate();
                                         restart_intended(
+                                            "rate_down",
                                             sess,
                                             &mut live,
                                             &mut starting,
@@ -883,6 +988,7 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
                                     } else if !sess.refresh && !restarted_this_drop && dropping_since.is_some_and(|t| t.elapsed() > DROP_IDR_AFTER) {
                                         restarted_this_drop = true;
                                         restart_intended(
+                                            "drop_recovery",
                                             sess,
                                             &mut live,
                                             &mut starting,
@@ -896,6 +1002,7 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
                                 } else if !sess.refresh && !restarted_this_drop && dropping_since.is_some_and(|t| t.elapsed() > DROP_IDR_AFTER) {
                                     restarted_this_drop = true;
                                     restart_intended(
+                                        "drop_recovery",
                                         sess,
                                         &mut live,
                                         &mut starting,
@@ -907,7 +1014,7 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
                                     .await;
                                 }
                             } else if !queue.push_video(kind, payload) {
-                                return WsConnEnd::Dropped;
+                                return conn_lost("queue_full");
                             }
                         }
                     }
@@ -925,12 +1032,14 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
                     sess.target_bitrate,
                     sess.gop,
                     sess.rate,
+                    sess.hevc,
                 ));
             }
             _ = stats_tick.tick() => {
+                let quiet = if sess.wants_udp && sess.udp.is_some() { UDP_STEP_UP_QUIET } else { STEP_UP_QUIET };
                 if sess.adaptive
                     && sess.target_bitrate < sess.max_bitrate
-                    && last_congestion_at.elapsed() >= STEP_UP_QUIET
+                    && last_congestion_at.elapsed() >= quiet
                     && last_rate_change.is_none_or(|t| t.elapsed() >= RATE_COOLDOWN)
                 {
                     let next_rate = (((sess.target_bitrate as f64) * 1.25).round() as u64).min(sess.max_bitrate);
@@ -940,6 +1049,7 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
                         last_congestion_at = Instant::now();
                         sess.emit_rate();
                         restart_intended(
+                            "rate_up",
                             sess,
                             &mut live,
                             &mut starting,
@@ -952,7 +1062,20 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
                     }
                 }
                 if sess.screen_started {
-                    let (bytes_sent, frames_sent) = queue.take_stats();
+                    let (cap_mean, cap_max) = match CAPTURE_LAG.lock() {
+                        Ok(mut l) => {
+                            let r = if l.1 > 0 { (Some(l.0 / l.1 / 1000), Some(l.2 / 1000)) } else { (None, None) };
+                            *l = (0, 0, 0);
+                            r
+                        }
+                        Err(_) => (None, None),
+                    };
+                    let (mut bytes_sent, mut frames_sent) = queue.take_stats();
+                    if let Some(u) = sess.udp.as_mut() {
+                        let (b, f) = u.take_stats();
+                        bytes_sent += b;
+                        frames_sent += f;
+                    }
                     let dropped = std::mem::take(&mut dropped_s);
                     let kbps = (bytes_sent * 8) / 1000;
                     let msg = json!({
@@ -963,10 +1086,16 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
                         "fps": frames_sent,
                         "dropped": dropped,
                         "encoder": sess.encoder_name,
+                        // Capture → send (ms, mean and max over the second): the PC's share
+                        // of the phone's capture → decoded latency (patched wf-recorder only).
+                        "cap": cap_mean,
+                        "capmax": cap_max,
+                        // UDP parity in percent (udp.rs adapt_fec), absent on the WebSocket.
+                        "fec": sess.udp.as_ref().filter(|_| sess.wants_udp).map(|u| u.fec_pct()),
                     })
                     .to_string();
                     if !queue.push_control(Message::text(msg)) {
-                        return WsConnEnd::Dropped;
+                        return conn_lost("queue_full");
                     }
                 } else {
                     dropped_s = 0;
@@ -981,9 +1110,10 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
                     let Ok(v) = serde_json::from_str::<Value>(t.as_str()) else { continue };
                     match v["t"].as_str().unwrap_or("") {
                         "ping" => {
-                            let pong = json!({"t": "pong", "id": v["id"]}).to_string();
+                            // `now`: the PC's clock for the phone's offset (encode_tag's pts).
+                            let pong = json!({"t": "pong", "id": v["id"], "now": mono_us()}).to_string();
                             if !queue.push_control(Message::text(pong)) {
-                                return WsConnEnd::Dropped;
+                                return conn_lost("queue_full");
                             }
                         }
                         "quality" => {
@@ -992,6 +1122,7 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
                                 last_congestion_at = Instant::now();
                                 congestion_events.clear();
                                 restart_intended(
+                                    "quality",
                                     sess,
                                     &mut live,
                                     &mut starting,
@@ -1003,12 +1134,50 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
                                 .await;
                             }
                         }
+                        // The phone's UDP report each second: size the parity to the loss.
+                        "net" => {
+                            let lost = v["lost"].as_u64().unwrap_or(0);
+                            if let Some(u) = sess.udp.as_mut() {
+                                u.adapt_fec(v["loss"].as_f64().unwrap_or(0.0), lost);
+                            }
+                            // UDP has no queue to back up: frames the parity couldn't save are the
+                            // congestion signal. Two such seconds within the window lower the rate
+                            // like a congested WebSocket queue does.
+                            if sess.adaptive && sess.wants_udp && lost >= UDP_CONGESTED_LOST {
+                                last_congestion_at = Instant::now();
+                                congestion_events.retain(|t| t.elapsed() < CONGESTION_WINDOW);
+                                congestion_events.push(Instant::now());
+                                let floor = sess.max_bitrate.min(FLOOR_BITRATE);
+                                let next_rate = ((sess.target_bitrate as f64) * 0.7).round().max(floor as f64) as u64;
+                                if congestion_events.len() >= 2
+                                    && next_rate < sess.target_bitrate
+                                    && last_rate_change.is_none_or(|t| t.elapsed() >= RATE_COOLDOWN)
+                                {
+                                    sess.target_bitrate = next_rate;
+                                    last_rate_change = Some(Instant::now());
+                                    congestion_events.clear();
+                                    sess.emit_rate();
+                                    restart_intended(
+                                        "rate_down",
+                                        sess,
+                                        &mut live,
+                                        &mut starting,
+                                        &mut backoff_until,
+                                        &mut dropping,
+                                        &mut dropping_since,
+                                        &mut restarted_this_drop,
+                                    )
+                                    .await;
+                                }
+                            }
+                        }
                         "idr" => {
                             // A refreshing encoder heals the phone's picture by itself: a restart
                             // would only freeze it ~300 ms and send the burst refresh avoids.
                             if !sess.refresh && last_idr.is_none_or(|t| t.elapsed() >= IDR_COOLDOWN) {
                                 last_idr = Some(Instant::now());
                                 restart_intended(
+                                    "idr",
                                     sess,
                                     &mut live,
                                     &mut starting,
@@ -1023,7 +1192,8 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
                         _ => {}
                     }
                 }
-                Some(Ok(Message::Close(_))) | Some(Err(_)) | None => return WsConnEnd::Dropped,
+                Some(Ok(Message::Close(_))) => return conn_lost("phone_closed"),
+                Some(Err(_)) | None => return conn_lost("read_error"),
                 Some(Ok(_)) => {}
             },
             changed = sess.output.changed() => {
@@ -1036,7 +1206,7 @@ async fn run_ws_conn(ws: Ws, sess: &mut WsSession, conns: &mut mpsc::UnboundedRe
                 }
                 backoff_until = Some(tokio::time::Instant::now() + Duration::from_millis(300));
             }
-            _ = &mut writer_dead => return WsConnEnd::Dropped,
+            _ = &mut writer_dead => return conn_lost("write_failed"),
             changed = sess.audio_src.changed() => {
                 if changed.is_err() {
                     return WsConnEnd::End("stopped");
@@ -1184,54 +1354,122 @@ struct Recorder {
     /// The video tag that proved the encoder works, sent before the rest.
     first: Option<(u32, Vec<u8>)>,
     nal_len: usize,
+    control: Option<tokio::process::ChildStdin>,
+    /// The first frame's capture time (µs, CLOCK_MONOTONIC) from the patched binary's stderr:
+    /// FLV times are ms after it. 0 = unknown (stock wf-recorder): frames are timed at send.
+    base: Arc<std::sync::atomic::AtomicU64>,
+    stderr: Option<AbortOnDrop>,
+}
+
+/// The patched wf-recorder (`ii-wf-recorder`, the fork's scripts/wf-recorder-ii): on PATH
+/// (NixOS, the flake's package) or where its build script puts it (Arch, Fedora); else the
+/// stock one, whose key frames and bitrate changes cost a restart.
+fn recorder_bin() -> (std::path::PathBuf, bool) {
+    use std::os::unix::fs::PermissionsExt;
+    let exec = |p: &std::path::Path| std::fs::metadata(p).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0);
+    if let Some(path) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&path) {
+            let p = dir.join("ii-wf-recorder");
+            if exec(&p) {
+                return (p, true);
+            }
+        }
+    }
+    let data = std::env::var_os("XDG_DATA_HOME")
+        .map(std::path::PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".local/share")));
+    if let Some(p) = data.map(|d| d.join("ii-wf-recorder/bin/ii-wf-recorder")).filter(|p| exec(p)) {
+        return (p, true);
+    }
+    ("wf-recorder".into(), false)
+}
+
+fn render_nodes() -> Vec<String> {
+    let mut nodes: Vec<String> = std::fs::read_dir("/dev/dri")
+        .map(|d| d.filter_map(|e| e.ok()).map(|e| e.path().to_string_lossy().into_owned()).filter(|p| p.contains("renderD")).collect())
+        .unwrap_or_default();
+    nodes.sort();
+    nodes
+}
+
+/// One VA-API encoder's wf-recorder args (h264_vaapi or hevc_vaapi).
+///
+/// VA-API has no intra refresh, so every GOP is a full key frame (~500 KB at 3120×1440): each
+/// one was a burst Wi-Fi delivered late. Key frames come at the start and on request only.
+fn vaapi_args(codec: &str, node: &str, b: &str, gop: u32) -> Vec<String> {
+    let g = format!("g={}", gop.max(VAAPI_GOP));
+    [
+        // The pixels' real shape, said explicitly: Intel's VPP writes BT.601 limited range
+        // whatever `out_range` asks, and wf-recorder's own filter asks for full, which
+        // labelled limited pixels full: grey blacks and dim whites on the phone.
+        "-F", "scale_vaapi=format=nv12:out_range=limited:out_color_matrix=bt470bg",
+        "-c", codec, "-d", node, "-p", b, "-p", &g,
+        // One frame in flight instead of two: a frame less behind (measured 38 → 20 ms).
+        "-p", "async_depth=1",
+    ]
+    .into_iter()
+    .chain(BT601_LIMITED_SRGB)
+    .map(String::from)
+    .collect()
+}
+
+/// Capture → send per frame (µs) since the last stats line: sum, count, max.
+static CAPTURE_LAG: Mutex<(u64, u64, u64)> = Mutex::new((0, 0, 0));
+
+/// A frame's pts: its capture time when the patched binary gave the base (and the capture →
+/// send time is counted), else the send time.
+fn frame_pts(base: &std::sync::atomic::AtomicU64, ts_ms: u32) -> u64 {
+    let b = base.load(Ordering::Relaxed);
+    let now = mono_us();
+    if b == 0 {
+        return now;
+    }
+    let pts = b + ts_ms as u64 * 1000;
+    let lag = now.saturating_sub(pts);
+    if let Ok(mut l) = CAPTURE_LAG.lock() {
+        l.0 += lag;
+        l.1 += 1;
+        l.2 = l.2.max(lag);
+    }
+    pts
 }
 
 impl Recorder {
     /// The first encoder that produces a picture within a few seconds.
-    async fn start(output: &str, bitrate: u64, gop: u32, rate: u32, ws: bool) -> Option<Recorder> {
+    /// `rate` caps the capture (a screen faster than the stream), 0 for none; `fps` is the
+    /// stream's rate, which the encoder's rate control needs either way.
+    async fn start(output: &str, bitrate: u64, gop: u32, rate: u32, fps: u32, ws: bool, hevc: bool) -> Option<Recorder> {
         let b = format!("b={bitrate}");
         let g = format!("g={gop}");
         let mut nvenc_args = vec![
             "-c", "h264_nvenc", "-p", "preset=p1", "-p", "tune=ull", "-p", "zerolatency=1", "-p", "rc=cbr", "-p", &b, "-p", &g,
+            // A requested key frame (ii-control's idr) as an IDR, not a plain I frame.
+            "-p", "forced-idr=1",
         ];
         if ws {
             // Intra refresh: no key frame after the first. A key frame is ~10× a frame (350 KB at
             // 8 Mbit/s): a burst Wi-Fi delivers late every GOP, which was the periodic stutter.
             nvenc_args.extend(["-p", "delay=0", "-p", "intra-refresh=1"]);
         }
-        let mut candidates: Vec<(&'static str, Vec<String>)> = vec![(
-            "nvenc",
-            nvenc_args.into_iter().map(String::from).collect(),
-        )];
-        let mut nodes: Vec<String> = std::fs::read_dir("/dev/dri")
-            .map(|d| d.filter_map(|e| e.ok()).map(|e| e.path().to_string_lossy().into_owned()).filter(|p| p.contains("renderD")).collect())
-            .unwrap_or_default();
-        nodes.sort();
-        // VA-API has no intra refresh, so every GOP is a full key frame (~500 KB at 3120×1440
-        // against ~3 KB frames): one a second was a burst Wi-Fi delivered late, every second.
-        // A long GOP leaves key frames to the start and to the phone's `idr` (an encoder restart).
-        let vaapi_g = format!("g={}", gop.max(VAAPI_GOP));
-        for node in nodes {
-            candidates.push((
-                "vaapi",
-                [
-                    // The pixels' real shape, said explicitly: Intel's VPP writes BT.601 limited
-                    // range whatever `out_range` asks, and wf-recorder's own filter asks for full,
-                    // which labelled limited pixels full: grey blacks and dim whites on the phone.
-                    "-F", "scale_vaapi=format=nv12:out_range=limited:out_color_matrix=bt470bg",
-                    "-c", "h264_vaapi", "-d", &node, "-p", &b, "-p", &vaapi_g,
-                    // One frame in flight instead of two: a frame (~16 ms at 60 Hz) less behind.
-                    "-p", "async_depth=1",
-                ]
-                .into_iter()
-                .chain(BT601_LIMITED_SRGB)
-                .map(String::from)
-                .collect(),
-            ));
+        let mut candidates: Vec<(&'static str, Vec<String>)> = Vec::new();
+        let nodes_for_hevc: Vec<String> = render_nodes();
+        // HEVC first when the phone asked for it (better picture at the same bitrate, as fast
+        // to encode here); H.264 is the fallback either way. No libx265: too slow for this.
+        if hevc {
+            let hevc_nvenc: Vec<String> = nvenc_args.iter().map(|a| if *a == "h264_nvenc" { "hevc_nvenc" } else { a }).map(String::from).collect();
+            candidates.push(("nvenc", hevc_nvenc));
+            for node in &nodes_for_hevc {
+                candidates.push(("vaapi", vaapi_args("hevc_vaapi", node, &b, gop)));
+            }
+        }
+        candidates.push(("nvenc", nvenc_args.into_iter().map(String::from).collect()));
+        for node in &nodes_for_hevc {
+            candidates.push(("vaapi", vaapi_args("h264_vaapi", node, &b, gop)));
         }
         candidates.push((
             "x264",
-            ["-c", "libx264", "-x", "yuv420p", "-p", "preset=ultrafast", "-p", "tune=zerolatency", "-p", &b, "-p", &g]
+            // crf=-1: wf-recorder sets crf=20 for x264, which ignored the bitrate entirely.
+            ["-c", "libx264", "-x", "yuv420p", "-p", "preset=ultrafast", "-p", "tune=zerolatency", "-p", &b, "-p", &g, "-p", "crf=-1", "-p", "forced-idr=1"]
                 .into_iter()
                 // swscale's RGB→YUV is BT.601 limited too; wf-recorder labelled it full range.
                 .chain(BT601_LIMITED_SRGB)
@@ -1239,25 +1477,52 @@ impl Recorder {
                 .map(String::from)
                 .collect(),
         ));
+        let (bin, patched) = recorder_bin();
         for (name, args) in candidates {
-            let Ok(mut child) = Command::new("wf-recorder")
+            let Ok(mut child) = Command::new(&bin)
+                .args(if patched { vec!["--ii-control"] } else { Vec::new() })
                 .args(["-o", output, "-b", "0", "-m", "flv", "-f", "/dev/stdout", "-y"])
                 // Every refresh, not only damaged ones: a hardware cursor moves without
                 // damaging the output, so a damage-driven capture froze while only the mouse
                 // moved, and a still headless output gave no first frame (5 s per encoder tried).
                 // A still screen costs ~100-byte frames, which also keep the phone's radio awake.
                 .arg("-D")
-                .args(if rate > 0 { vec!["-r".to_string(), rate.to_string()] } else { Vec::new() })
+                // The rate control needs the frame rate: the patched binary takes it as is
+                // (--ii-rate); the stock one only through -r, whose fps filter costs a frame.
+                // Without either, VA-API budgeted the bitrate over a million frames a second.
+                .args(match (patched, rate) {
+                    (true, 0) => vec!["--ii-rate".to_string(), fps.to_string()],
+                    (true, r) => vec!["--ii-rate".to_string(), fps.to_string(), "-r".to_string(), r.to_string()],
+                    (false, 0) => vec!["-r".to_string(), fps.to_string()],
+                    (false, r) => vec!["-r".to_string(), r.to_string()],
+                })
                 .args(&args)
-                .stdin(Stdio::null())
+                .stdin(if patched { Stdio::piped() } else { Stdio::null() })
                 .stdout(Stdio::piped())
-                .stderr(Stdio::null())
+                .stderr(if patched { Stdio::piped() } else { Stdio::null() })
                 .kill_on_drop(true)
                 .spawn()
             else {
                 return None;
             };
             let Some(mut out) = child.stdout.take() else { continue };
+            let control = child.stdin.take();
+            let base = Arc::new(std::sync::atomic::AtomicU64::new(0));
+            let stderr = child.stderr.take().map(|err| {
+                let base = base.clone();
+                AbortOnDrop(
+                    tokio::spawn(async move {
+                        use tokio::io::AsyncBufReadExt;
+                        let mut lines = BufReader::new(err).lines();
+                        while let Ok(Some(l)) = lines.next_line().await {
+                            if let Some(v) = l.strip_prefix("ii-base-usec=").and_then(|v| v.trim().parse().ok()) {
+                                base.store(v, Ordering::Relaxed);
+                            }
+                        }
+                    })
+                    .abort_handle(),
+                )
+            });
             let first = timeout(Duration::from_secs(5), async {
                 let mut header = [0u8; 13];
                 out.read_exact(&mut header).await?;
@@ -1273,19 +1538,26 @@ impl Recorder {
             })
             .await;
             if let Ok(Ok(first)) = first {
+                // The base is printed as the first frame is captured: on stderr, just before.
+                for _ in 0..20 {
+                    if !patched || base.load(Ordering::Relaxed) != 0 {
+                        break;
+                    }
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                }
                 let refresh = ws && name != "vaapi";
-                return Some(Recorder { child, out, encoder: name, refresh, first: Some(first), nal_len: 4 });
+                return Some(Recorder { child, out, encoder: name, refresh, first: Some(first), nal_len: 4, control, base, stderr });
             }
         }
         None
     }
 
     fn into_live(self) -> LiveEncoder {
-        let Recorder { child, mut out, mut first, mut nal_len, .. } = self;
+        let Recorder { child, mut out, mut first, mut nal_len, encoder, control, base, stderr, .. } = self;
         let (tx, rx) = mpsc::channel(8);
         let task = tokio::spawn(async move {
             if let Some((ts, data)) = first.take() {
-                if let Some(pkt) = encode_tag(&mut nal_len, ts, &data) {
+                if let Some(pkt) = encode_tag(&mut nal_len, frame_pts(&base, ts), &data) {
                     if tx.send(pkt).await.is_err() {
                         return;
                     }
@@ -1294,7 +1566,7 @@ impl Recorder {
             loop {
                 let Ok((kind, ts, data)) = read_tag(&mut out).await else { break };
                 if kind == 9 {
-                    if let Some(pkt) = encode_tag(&mut nal_len, ts, &data) {
+                    if let Some(pkt) = encode_tag(&mut nal_len, frame_pts(&base, ts), &data) {
                         if tx.send(pkt).await.is_err() {
                             break;
                         }
@@ -1302,7 +1574,7 @@ impl Recorder {
                 }
             }
         });
-        LiveEncoder { packets: rx, child, _reader: AbortOnDrop(task.abort_handle()) }
+        LiveEncoder { packets: rx, child, encoder, control, _reader: AbortOnDrop(task.abort_handle()), _stderr: stderr }
     }
 
     async fn pump<W: AsyncWriteExt + Unpin>(&mut self, wr: &mut W) -> Pump {
@@ -1321,7 +1593,8 @@ impl Recorder {
 
     /// One FLV video tag as a USB packet (`[u32 length]` + WS payload).
     async fn forward<W: AsyncWriteExt + Unpin>(&mut self, ts: u32, data: &[u8], wr: &mut W) -> std::io::Result<()> {
-        let Some((_, payload)) = encode_tag(&mut self.nal_len, ts, data) else {
+        let pts = frame_pts(&self.base, ts);
+        let Some((_, payload)) = encode_tag(&mut self.nal_len, pts, data) else {
             return Ok(());
         };
         let mut pkt = Vec::with_capacity(4 + payload.len());
@@ -1332,13 +1605,23 @@ impl Recorder {
 }
 
 /// Encode one FLV video tag into `[u8 kind][u64 pts µs BE][Annex-B]`.
-fn encode_tag(nal_len: &mut usize, ts: u32, data: &[u8]) -> Option<(u8, Vec<u8>)> {
+///
+/// `pts_us` is on this PC's CLOCK_MONOTONIC ([`frame_pts`]): the capture time with the
+/// patched wf-recorder, else the send time. With `pong`'s `now` the phone maps it onto its
+/// own clock and times every frame (no B-frames, so presentation order is send order).
+///
+/// HEVC comes as enhanced FLV (FFmpeg ≥ 6.1): the first byte has the ex-header bit, the
+/// frame type and a packet type, then the FourCC `hvc1`. Its codec config goes out as kind
+/// [`KIND_HEVC_CONFIG`], so the phone switches decoder at exactly that frame, whichever way
+/// (UDP or the WebSocket) it came.
+fn encode_tag(nal_len: &mut usize, pts_us: u64, data: &[u8]) -> Option<(u8, Vec<u8>)> {
+    if data.first().is_some_and(|b| b & 0x80 != 0) {
+        return encode_ex_tag(nal_len, pts_us, data);
+    }
     if data.len() < 5 || data[0] & 0x0f != 7 {
         return None;
     }
     let key = data[0] >> 4 == 1;
-    let cts = (i32::from_be_bytes([data[2], data[3], data[4], 0]) >> 8) as i64;
-    let pts_us = ((ts as i64 + cts).max(0) as u64) * 1000;
     let body = &data[5..];
     let (kind, annexb) = match data[1] {
         0 => match config_annexb(body) {
@@ -1379,6 +1662,59 @@ async fn read_tag<R: AsyncRead + Unpin>(out: &mut R) -> std::io::Result<(u8, u32
 const START: [u8; 4] = [0, 0, 0, 1];
 
 /// The AVCDecoderConfigurationRecord's SPS and PPS, and its NAL length size.
+/// The phone's packet kind for an HEVC codec config (VPS/SPS/PPS, Annex-B); 0 is H.264's.
+const KIND_HEVC_CONFIG: u8 = 10;
+
+/// An enhanced-FLV video tag (HEVC): `[1 ex|3 frame type|4 packet type][fourcc]…`.
+fn encode_ex_tag(nal_len: &mut usize, pts_us: u64, data: &[u8]) -> Option<(u8, Vec<u8>)> {
+    if data.len() < 5 || &data[1..5] != b"hvc1" {
+        return None;
+    }
+    let key = (data[0] >> 4) & 0x07 == 1;
+    let body = &data[5..];
+    let (kind, annexb) = match data[0] & 0x0f {
+        // SequenceStart: the HEVCDecoderConfigurationRecord.
+        0 => {
+            let (len, bytes) = hvcc_annexb(body)?;
+            *nal_len = len;
+            (KIND_HEVC_CONFIG, bytes)
+        }
+        // CodedFrames: a 24-bit composition offset (0 without B-frames), then the NAL units.
+        1 => (if key { 2 } else { 1 }, nalus_annexb(body.get(3..)?, *nal_len)),
+        // CodedFramesX: the NAL units, no offset.
+        3 => (if key { 2 } else { 1 }, nalus_annexb(body, *nal_len)),
+        _ => return None,
+    };
+    if annexb.is_empty() {
+        return None;
+    }
+    let mut pkt = Vec::with_capacity(9 + annexb.len());
+    pkt.push(kind);
+    pkt.extend_from_slice(&pts_us.to_be_bytes());
+    pkt.extend_from_slice(&annexb);
+    Some((kind, pkt))
+}
+
+/// HEVCDecoderConfigurationRecord → its NAL units (VPS, SPS, PPS…) with start codes, and
+/// the length size of the frames' NAL units. The arrays start at byte 23.
+fn hvcc_annexb(rec: &[u8]) -> Option<(usize, Vec<u8>)> {
+    let len = (*rec.get(21)? & 3) as usize + 1;
+    let arrays = *rec.get(22)? as usize;
+    let mut out = Vec::new();
+    let mut i = 23;
+    for _ in 0..arrays {
+        let count = u16::from_be_bytes([*rec.get(i + 1)?, *rec.get(i + 2)?]) as usize;
+        i += 3;
+        for _ in 0..count {
+            let n = u16::from_be_bytes([*rec.get(i)?, *rec.get(i + 1)?]) as usize;
+            out.extend_from_slice(&START);
+            out.extend_from_slice(rec.get(i + 2..i + 2 + n)?);
+            i += 2 + n;
+        }
+    }
+    Some((len, out))
+}
+
 fn config_annexb(rec: &[u8]) -> Option<(usize, Vec<u8>)> {
     let len = (*rec.get(4)? & 3) as usize + 1;
     let mut out = Vec::new();
@@ -1494,6 +1830,9 @@ mod tests {
             input_tx: in_tx,
             audio_src: watch::channel(None).1,
             audio: None,
+            udp: None,
+            wants_udp: false,
+            hevc: false,
         };
         // Same settings -> no target change
         assert!(!sess.apply_quality(&json!({"t": "quality", "bitrate": 16_000_000, "adaptive": true})));
@@ -1509,5 +1848,14 @@ mod tests {
         assert!(sess.apply_quality(&json!({"t": "quality", "bitrate": 200_000_000, "adaptive": false})));
         assert_eq!(sess.max_bitrate, 80_000_000);
         assert_eq!(sess.target_bitrate, 80_000_000);
+    }
+}
+
+/// A datagram for the second screen on the link's UDP port (main.rs `discovery`): the
+/// phone's hello for the session's UDP video.
+pub fn udp_in(state: &State, pkt: &[u8], from: std::net::SocketAddr) {
+    let peer = state.lock().unwrap().screen.as_ref().and_then(|slot| slot.udp_peer.clone());
+    if let Some(peer) = peer {
+        peer.hello(pkt, from);
     }
 }
