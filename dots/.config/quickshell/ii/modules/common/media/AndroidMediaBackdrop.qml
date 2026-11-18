@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Effects
+import QtQuick.Window
 import qs.modules.common
 
 // Existing AndroidMediaPopup artwork, vignette and shading palette. The tile
@@ -60,27 +61,36 @@ Item {
         // The three levels are only ever sampled: inline, parentless sources that
         // hide their items from the scene (a visible level would paint under the
         // effect, see the media popup "shadow" entry in DOC.md).
-        ShaderEffect {
+        //
+        // Parentless, those sources never hear that their window is gone, and keep
+        // the levels pinned to it: the next window's forceUpdate() then crashed in
+        // addToDirtyList (the media popups are windows that come and go). The
+        // Loader ties the effect to the window, so it dies with it.
+        Loader {
             anchors.fill: parent
-            property var source: ShaderEffectSource {
-                sourceItem: artImage
-                sourceRect: root.visibleRect
-                hideSource: true
+            active: artImage.Window.window !== null
+            sourceComponent: ShaderEffect {
+                anchors.fill: parent
+                property var source: ShaderEffectSource {
+                    sourceItem: artImage
+                    sourceRect: root.visibleRect
+                    hideSource: true
+                }
+                property var mediumBlur: ShaderEffectSource {
+                    sourceItem: mediumLevel
+                    sourceRect: root.visibleRect
+                    hideSource: true
+                }
+                property var strongBlur: ShaderEffectSource {
+                    sourceItem: strongLevel
+                    sourceRect: root.visibleRect
+                    hideSource: true
+                }
+                readonly property real itemWidth: width
+                readonly property real itemHeight: height
+                readonly property real band: Math.min(width, height) * 0.42
+                fragmentShader: Qt.resolvedUrl("shaders/radialEdgeBlur.frag.qsb")
             }
-            property var mediumBlur: ShaderEffectSource {
-                sourceItem: mediumLevel
-                sourceRect: root.visibleRect
-                hideSource: true
-            }
-            property var strongBlur: ShaderEffectSource {
-                sourceItem: strongLevel
-                sourceRect: root.visibleRect
-                hideSource: true
-            }
-            readonly property real itemWidth: width
-            readonly property real itemHeight: height
-            readonly property real band: Math.min(width, height) * 0.42
-            fragmentShader: Qt.resolvedUrl("shaders/radialEdgeBlur.frag.qsb")
         }
     }
 
