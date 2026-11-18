@@ -82,6 +82,10 @@ Singleton {
         "policies",
         "workSafety",
         "interactions.touchpadGestures",
+        // RAM-for-latency trade-offs (presets_helper.py LOCAL_PREFERENCE_PATHS).
+        "dynamicIsland.behavior.keepDashboardLoaded",
+        "sidebar.keepRightSidebarLoaded",
+        "sidebar.keepLeftSidebarLoaded",
         // Downloaded models are this machine's (presets_helper.py PERSONAL_PATHS).
         "background.depthEffect",
         // Monitor bindings.

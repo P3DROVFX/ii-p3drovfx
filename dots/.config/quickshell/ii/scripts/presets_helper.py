@@ -218,6 +218,12 @@ LOCAL_PREFERENCE_PATHS = (
     # What each touchpad swipe does is a habit of the hand, and a list written for
     # another laptop's touchpad. A theme that rebinds it is a theme nobody can use.
     "interactions.touchpadGestures",
+    # RAM-for-latency trade-offs sized to the author's machine. An author who
+    # turned one off to save memory handed every importer a cold dashboard whose
+    # tiles incubate one by one on the first open.
+    "dynamicIsland.behavior.keepDashboardLoaded",
+    "sidebar.keepRightSidebarLoaded",
+    "sidebar.keepLeftSidebarLoaded",
 ) + SEARCH_LOCAL_PREFERENCE_PATHS
 
 # Daily limits and the usage tracker they count from. A limit on someone else's
