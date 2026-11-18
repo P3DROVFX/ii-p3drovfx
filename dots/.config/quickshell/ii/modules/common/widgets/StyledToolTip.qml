@@ -13,6 +13,8 @@ ToolTip {
     // some overlay is open. Bar widgets, which are hovered with nothing else on
     // screen, opt out of that gate.
     property bool requireOverlay: true
+    /** Widest the bubble's text may run before wrapping; 0 keeps it on one line. */
+    property real maxTextWidth: 0
 
     readonly property bool sidebarOpen: !GlobalStates || GlobalStates.sidebarRightOpen || GlobalStates.sidebarLeftOpen || GlobalStates.settingsOpen || GlobalStates.osdVolumeOpen || GlobalStates.wallpaperSelectorOpen || GlobalStates.cheatsheetOpen || GlobalStates.notesAppOpen || GlobalStates.clockAppOpen || GlobalStates.healthAppOpen || GlobalStates.sessionOpen || GlobalStates.usageOpen || GlobalStates.overviewOpen || GlobalStates.modesOpen || GlobalStates.editMode || GlobalStates.islandDashboardOpen || GlobalStates.overlayOpen
     readonly property bool parentHovered: {
@@ -73,6 +75,7 @@ ToolTip {
             shown: root.visible && contentLoader.revealed
             horizontalPadding: root.horizontalPadding
             verticalPadding: root.verticalPadding
+            maxTextWidth: root.maxTextWidth
         }
     }
 }

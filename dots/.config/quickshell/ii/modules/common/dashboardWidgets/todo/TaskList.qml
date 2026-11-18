@@ -299,6 +299,8 @@ Item {
                             StyledToolTip {
                                 extraVisibleCondition: titleHover.hovered && todoContentText.truncated
                                 text: todoContentText.text
+                                // Never wider than the list it explains (the sidebar's width).
+                                maxTextWidth: Math.max(80, taskListRoot.width - 40)
                             }
                         }
                         Rectangle {
@@ -450,6 +452,7 @@ Item {
                         StyledToolTip {
                             extraVisibleCondition: descriptionHover.hovered && descriptionText.truncated
                             text: todoItemRectangle.notes
+                            maxTextWidth: Math.max(80, taskListRoot.width - 40)
                         }
                     }
 
