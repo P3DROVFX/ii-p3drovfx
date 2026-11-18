@@ -294,6 +294,15 @@ ColumnLayout {
             }
 
             ConfigSwitch {
+                buttonIcon: "calendar_today"
+                text: Translation.tr("Date")
+                visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
+                checked: !Config.options.bar.floatingNotch.disableDate
+                onCheckedChanged: Config.options.bar.floatingNotch.disableDate = !checked
+                StyledToolTip { text: Translation.tr("Today's date beside the clock, in the date format chosen in Language & time") }
+            }
+
+            ConfigSwitch {
                 buttonIcon: "headset_mic"
                 text: Translation.tr("Discord voice")
                 visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)

@@ -362,6 +362,16 @@ ContentPage {
         }
 
         ConfigSwitch {
+            buttonIcon: "calendar_today"
+            text: Translation.tr("Show the day name")
+            checked: Config.options.bar.clock.showDayName ?? true
+            onCheckedChanged: {
+                Config.options.bar.clock.showDayName = checked;
+            }
+            StyledToolTip { text: Translation.tr("Drop the weekday (Mon, Monday) from the date next to the clock") }
+        }
+
+        ConfigSwitch {
             buttonIcon: "sync"
             text: Translation.tr("Swap secondary component with the primary")
             checked: Config.options.bar.clock.swapPrimaryWithSecondary

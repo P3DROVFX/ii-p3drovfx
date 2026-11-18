@@ -24,6 +24,15 @@ Singleton {
     property string dayNameShort: Qt.locale().toString(clock.date, "ddd")
     property string date: Qt.locale().toString(clock.date, Config.options?.time.dateWithYearFormat ?? "dd/MM/yyyy")
     property string longDate: Qt.locale().toString(clock.date, Config.options?.time.dateFormat ?? "dddd, dd/MM")
+    /// The same date without the weekday: the day-name tokens go, and so do the
+    /// separators they leave dangling ("MM/dd, ddd" -> "MM/dd", "dddd, dd/MM" -> "dd/MM").
+    property string longDateNoDayName: {
+        const format = (Config.options?.time.dateFormat ?? "dddd, dd/MM")
+            .replace(/d{3,4}/g, "")
+            .replace(/^[\s,.\-\/]+|[\s,.\-\/]+$/g, "")
+            .replace(/([,.])\s*[,.]/g, "$1");
+        return Qt.locale().toString(clock.date, format.length > 0 ? format : "dd/MM");
+    }
     property string collapsedCalendarFormat: Qt.locale().toString(clock.date, "dddd, MMMM dd")
 
     // ── Date parts ────────────────────────────────────────────────────────────

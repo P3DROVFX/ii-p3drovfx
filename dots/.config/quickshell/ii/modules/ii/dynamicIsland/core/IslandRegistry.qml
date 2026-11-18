@@ -360,6 +360,19 @@ Singleton {
             content: {}
         },
         {
+            id: "date",
+            tier: "live",
+            icon: "calendar_today",
+            label: "Date",
+            preferredSide: "right",
+            canDetach: false,          // a side glance; it never leaves the resting face
+            settleMs: 0,
+            compact: { width: 100, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },   // no expanded face
+            content: {}
+        },
+        {
             // Ringing takes the centre ahead of every other interrupt; a call in progress
             // sits beside the clock; a missed call is said once. See PhoneCallSource.
             id: "phoneCall",

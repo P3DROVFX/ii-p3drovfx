@@ -24,7 +24,7 @@ Item {
         // Live and ambient.
         ai, media, timer, recording, dictation, localSend, shelf, progress, songRec, teleprompter,
         // Side glances.
-        earbuds, btPhone, weather, batteryGlance, reminderSoon, privacy, discordVoice, phoneMirror, phoneLink, sports, phoneLive,
+        earbuds, btPhone, weather, batteryGlance, dateGlance, reminderSoon, privacy, discordVoice, phoneMirror, phoneLink, sports, phoneLive,
         // Announcements.
         health, phoneMirrorError, phoneKeyboard, workspaces, clipboard, battery, wifi, bluetooth, keyboard, mode, update, vpn, systemTray,
         easyEffects
@@ -61,6 +61,7 @@ Item {
     readonly property BluetoothPhoneSource btPhone: BluetoothPhoneSource {}
     readonly property WeatherSource weather: WeatherSource {}
     readonly property BatteryGlanceSource batteryGlance: BatteryGlanceSource {}
+    readonly property DateGlanceSource dateGlance: DateGlanceSource {}
     readonly property PrivacySource privacy: PrivacySource {}
     readonly property DiscordVoiceSource discordVoice: DiscordVoiceSource {}
     readonly property PhoneMirrorSource phoneMirror: PhoneMirrorSource {}

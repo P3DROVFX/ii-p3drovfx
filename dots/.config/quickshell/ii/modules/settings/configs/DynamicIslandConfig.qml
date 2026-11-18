@@ -255,6 +255,8 @@ Item {
                 ids.push("weather");
             if (dynamicIslandConfigRoot.fn.disableBatteryGlance !== true)
                 ids.push("batteryGlance");
+            if (dynamicIslandConfigRoot.fn.disableDate !== true)
+                ids.push("date");
             return ids;
         }
         islandOn: dynamicIslandConfigRoot.islandOn

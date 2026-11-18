@@ -1720,7 +1720,7 @@ Singleton {
                 "osd": "Osd", "recording": "Recording", "dictation": "Dictation",
                 "timer": "Timer", "clipboard": "Clipboard", "localSend": "LocalSend",
                 "progress": "Progress", "battery": "Battery", "ai": "AiStatus",
-                "earbuds": "Earbuds", "weather": "Weather", "batteryGlance": "BatteryGlance"
+                "earbuds": "Earbuds", "weather": "Weather", "batteryGlance": "BatteryGlance", "date": "Date"
             };
             island.widgets = island.widgets ?? {};
             for (const id in widgetKeys) {
@@ -5518,6 +5518,11 @@ Singleton {
                         property string side: "right"
                         property int notchHeight: 36
                     }
+                    property JsonObject date: JsonObject {
+                        property bool enable: false
+                        property string side: "right"
+                        property int notchHeight: 36
+                    }
                     property JsonObject systemTray: JsonObject {
                         property bool enable: false
                         property string side: "right"
@@ -5576,6 +5581,8 @@ Singleton {
                     property bool showPrimary: true
                     property bool showSecondary: true
                     property bool swapPrimaryWithSecondary: false
+                    // false drops the weekday (ddd/dddd) from the date the clock shows.
+                    property bool showDayName: true
                 }
                 property JsonObject styles: JsonObject {
                     property string activeWindow: "default"
@@ -5724,6 +5731,7 @@ Singleton {
                     property bool disableEarbuds: true
                     property bool disableWeather: true
                     property bool disableBatteryGlance: true
+                    property bool disableDate: true
                     property bool disableAiStatus: false
                     property bool disableMode: false
                     property bool disableUpdate: false

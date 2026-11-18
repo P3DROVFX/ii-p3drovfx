@@ -46,7 +46,7 @@ Item {
                     visible: root.showDate
                     font.pixelSize: Appearance.font.pixelSize.small
                     color: root.colText
-                    text: DateTime.longDate
+                    text: (Config.options.bar.clock.showDayName ?? true) ? DateTime.longDate : DateTime.longDateNoDayName
                 }
 
                 // LocalSend files attached chip
@@ -133,7 +133,7 @@ Item {
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.verticalCenterOffset: 1
                         color: Config.options.bar.clock.swapPrimaryWithSecondary ? Appearance.colors.colOnPrimary : Appearance.colors.colPrimary
-                        text: DateTime.longDate
+                        text: (Config.options.bar.clock.showDayName ?? true) ? DateTime.longDate : DateTime.longDateNoDayName
                         font.pixelSize: Config.options.bar.clock.swapPrimaryWithSecondary ? Appearance.font.pixelSize.smallie : Appearance.font.pixelSize.small
                     }
                 }

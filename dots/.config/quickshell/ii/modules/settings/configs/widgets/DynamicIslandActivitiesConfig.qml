@@ -245,7 +245,7 @@ Item {
                     }
                     activityId: root.stageId
                     presentation: root.stagePresentation
-                    restSideIds: ["weather", "batteryGlance"].filter(id => root.fn[Catalog.byId(id).key] !== true)
+                    restSideIds: ["weather", "batteryGlance", "date"].filter(id => root.fn[Catalog.byId(id).key] !== true)
                     activityOn: !root.stageEntry || root.isOn(root.stageEntry)
                     islandOn: root.islandOn
 
@@ -394,8 +394,10 @@ Item {
                                         return Translation.tr("Point at an activity below to try it on the island; press it to keep it here.");
                                     return Translation.tr(root.stageEntry.tip);
                                 }
-                                wrapMode: Text.WordWrap
-                                maximumLineCount: 3
+                                // One line, whatever the description: the card must not change
+                                // height as the pointer moves from one activity to the next.
+                                wrapMode: Text.NoWrap
+                                maximumLineCount: 1
                                 elide: Text.ElideRight
                                 font.pixelSize: Appearance.font.pixelSize.small
                                 color: Appearance.colors.colSubtext

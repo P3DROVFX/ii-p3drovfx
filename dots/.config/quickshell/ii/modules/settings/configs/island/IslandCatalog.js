@@ -82,6 +82,8 @@ const activities = [
       label: "Weather", tip: "The weather icon and temperature beside the clock, kept fresh on the service's fetch interval" },
     { id: "batteryGlance", key: "disableBatteryGlance", group: "glance", icon: "battery_android_full", shape: "Pill",
       label: "Battery level", tip: "The laptop battery beside the clock, with a bolt while it charges. Separate from the charging announcement" },
+    { id: "date", key: "disableDate", group: "glance", icon: "calendar_today", shape: "Cookie9Sided",
+      label: "Date", tip: "Today's date beside the clock, in the date format chosen in Language & time" },
     { id: "discordVoice", key: "disableDiscordVoice", group: "glance", icon: "headset_mic", shape: "Ghostish",
       label: "Discord voice", tip: "Name the channel when you join a Discord call, then show who is talking and whether you are muted. Click it to mute. Only starts watching once Discord or Vesktop has opened a window" },
     { id: "phoneLink", key: "disablePhoneLink", group: "glance", icon: "phonelink", shape: "ClamShell",
