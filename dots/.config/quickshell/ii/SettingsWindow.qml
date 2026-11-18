@@ -655,9 +655,14 @@ FloatingWindow {
     }
 
     title: "illogical-impulse Settings"
-    implicitWidth: 1100
-    implicitHeight: 750
-    minimumSize: Qt.size(750, 500)
+    // Clamped to the screen: on a 1366x768 laptop the fixed 750 px height (and minimum)
+    // ran past the bottom edge.
+    readonly property real screenWidth: root.screen?.width ?? 1920
+    readonly property real screenHeight: root.screen?.height ?? 1080
+    implicitWidth: Math.min(1100, Math.round(root.screenWidth * 0.92))
+    implicitHeight: Math.min(750, Math.round(root.screenHeight * 0.88))
+    minimumSize: Qt.size(Math.min(750, Math.round(root.screenWidth * 0.9)),
+        Math.min(500, Math.round(root.screenHeight * 0.75)))
     color: "transparent"
 
     Connections {

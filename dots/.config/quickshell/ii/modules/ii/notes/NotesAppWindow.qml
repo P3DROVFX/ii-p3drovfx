@@ -6,6 +6,7 @@ import Quickshell
 import qs
 import qs.services
 import qs.modules.common
+import qs.modules.common.widgets
 
 /**
  * The notes app as an ordinary application window.
@@ -35,8 +36,12 @@ FloatingWindow {
 
     // Large by default. This is a document window: two panes of chrome and a page to
     // write on do not fit in the size a dialog gets.
-    implicitWidth: Math.max(root.state.width, Math.round((root.screen?.width ?? 1920) * 0.72))
-    implicitHeight: Math.max(root.state.height, Math.round((root.screen?.height ?? 1080) * 0.78))
+    // Never past the screen: a size remembered on a bigger monitor (or a preset's) used to
+    // open the window running off a laptop's edges.
+    implicitWidth: Math.min(Math.round((root.screen?.width ?? 1920) * 0.95),
+        Math.max(root.state.width, Math.round((root.screen?.width ?? 1920) * 0.72)))
+    implicitHeight: Math.min(Math.round((root.screen?.height ?? 1080) * 0.9),
+        Math.max(root.state.height, Math.round((root.screen?.height ?? 1080) * 0.78)))
     minimumSize: Qt.size(720, 480)
 
     color: Appearance.colors.colLayer0
@@ -56,11 +61,18 @@ FloatingWindow {
         NotesService.flush();
     }
 
-    NotesAppContent {
-        id: content
+    // Zoomed to fit a desktop smaller than the 1920x1080 design; see ScreenFitScale.
+    ScreenFitScale {
         anchors.fill: parent
         focus: true
+        screen: root.screen
 
-        onCloseRequested: root.closeRequested()
+        NotesAppContent {
+            id: content
+            anchors.fill: parent
+            focus: true
+
+            onCloseRequested: root.closeRequested()
+        }
     }
 }

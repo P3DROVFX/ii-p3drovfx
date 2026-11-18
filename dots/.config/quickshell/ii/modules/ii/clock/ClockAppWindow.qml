@@ -6,6 +6,7 @@ import Quickshell
 import qs
 import qs.services
 import qs.modules.common
+import qs.modules.common.widgets
 import qs.modules.ii.clock.components
 
 /**
@@ -39,9 +40,16 @@ FloatingWindow {
             GlobalStates.clockAppOpen = false;
     }
 
-    ClockAppContent {
+    // Zoomed to fit a desktop smaller than the 1920x1080 design; see ScreenFitScale.
+    ScreenFitScale {
         anchors.fill: parent
         focus: true
-        onCloseRequested: root.closeRequested()
+        screen: root.screen
+
+        ClockAppContent {
+            anchors.fill: parent
+            focus: true
+            onCloseRequested: root.closeRequested()
+        }
     }
 }

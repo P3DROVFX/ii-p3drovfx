@@ -19,9 +19,13 @@ FloatingWindow {
     // that is loaded and everything Edit Mode is doing carry straight through.
     visible: GlobalStates.welcomeOpen && !GlobalStates.welcomeCollapsed
     title: WelcomePageRegistry.titleFor(flow.currentPageId) + " · Welcome"
-    implicitWidth: 1080
-    implicitHeight: 780
-    minimumSize: Qt.size(900, 640)
+    // Clamped to the screen, so a small laptop gets the whole guide on it.
+    readonly property real screenWidth: root.screen?.width ?? 1920
+    readonly property real screenHeight: root.screen?.height ?? 1080
+    implicitWidth: Math.min(1080, Math.round(root.screenWidth * 0.92))
+    implicitHeight: Math.min(780, Math.round(root.screenHeight * 0.88))
+    minimumSize: Qt.size(Math.min(900, Math.round(root.screenWidth * 0.85)),
+        Math.min(640, Math.round(root.screenHeight * 0.8)))
     color: "transparent"
 
     Rectangle {
