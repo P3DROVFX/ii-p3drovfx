@@ -52,6 +52,14 @@ Singleton {
     readonly property list<var> outputAppNodes: root.appNodes(true)
     readonly property list<var> inputAppNodes: root.appNodes(false)
     readonly property list<var> outputDevices: root.devices(true)
+    /**
+     * The outputs worth offering in a picker: without the sinks whose port is
+     * reported unplugged - the HDMI/DisplayPort outputs of a GPU with no screen
+     * on them. The default sink always stays, whatever its port says. Modes and
+     * EasyEffects keep `outputDevices`, so they can still target such an output.
+     */
+    readonly property list<var> selectableOutputDevices: root.outputDevices.filter(node =>
+        !root.unavailableSinkNames.includes(node.name) || node.id === root.sink?.id)
     readonly property list<var> inputDevices: root.devices(false)
 
     // Signals
@@ -165,6 +173,138 @@ Singleton {
             root.value = sink.audio.volume;
             root.muted = sink.audio.muted;
         }
+        root.watchBluetoothDeparture();
+    }
+
+    // ── Bluetooth fallback ───────────────────────────────────────────────────
+    // When the default Bluetooth sink goes away WirePlumber falls back to the
+    // highest priority.session, and a USB microphone's jack sink outranks the
+    // laptop speaker - the sound went into the microphone. The shell picks the
+    // replacement instead (scripts/audio/fallback-sink.py): another Bluetooth
+    // sink, else a sink with a real output. Setting the default by hand would
+    // stop WirePlumber switching back when the headset returns, so that is done
+    // here too, as long as the fallback is still what plays.
+    readonly property string fallbackSinkScript: `${Directories.scriptPath}/audio/fallback-sink.py`
+    property string lastSinkName: ""
+    property string departedBluetoothSink: ""
+    property int fallbackAttempts: 0
+    property string autoFallbackFrom: ""
+    property string autoFallbackTo: ""
+
+    function sinkNodeByName(name) {
+        return Pipewire.nodes.values.find(n => n.name === name && n.isSink && !n.isStream && n.audio) ?? null;
+    }
+
+    function watchBluetoothDeparture() {
+        const name = root.sink?.name ?? "";
+        if (name === "")
+            return; // The default is briefly null between two sinks.
+        const previous = root.lastSinkName;
+        root.lastSinkName = name;
+        if (root.autoFallbackTo !== "" && name !== root.autoFallbackTo && name !== root.autoFallbackFrom) {
+            // Chosen by hand since: no switching back behind the user's back.
+            root.autoFallbackFrom = "";
+            root.autoFallbackTo = "";
+        }
+        if (previous.startsWith("bluez_output.") && name !== previous) {
+            root.departedBluetoothSink = previous;
+            root.fallbackAttempts = 0;
+            fallbackDelay.restart();
+        }
+    }
+
+    Timer {
+        id: fallbackDelay
+        interval: 700
+        onTriggered: {
+            const departed = root.departedBluetoothSink;
+            // Still there: a hand-picked switch (or a virtual sink taking over), not a disconnect.
+            if (departed === "" || root.sinkNodeByName(departed) || fallbackProc.running)
+                return;
+            fallbackProc.command = [root.analogOutputPython, root.fallbackSinkScript, departed];
+            fallbackProc.running = true;
+        }
+    }
+
+    Process {
+        id: fallbackProc
+        stdout: StdioCollector { id: fallbackResult }
+        onExited: exitCode => {
+            const departed = root.departedBluetoothSink;
+            if (exitCode === 3 && ++root.fallbackAttempts < 5) {
+                // The headset's card is still there: a profile switch, or the
+                // disconnect has not landed yet. Ask again shortly.
+                fallbackDelay.restart();
+                return;
+            }
+            root.departedBluetoothSink = "";
+            const chosen = exitCode === 0 ? fallbackResult.text.trim() : "";
+            if (chosen === "" || chosen === (root.sink?.name ?? ""))
+                return;
+            const node = root.sinkNodeByName(chosen);
+            if (node)
+                Pipewire.preferredDefaultAudioSink = node;
+            else
+                Quickshell.execDetached(["pactl", "set-default-sink", chosen]);
+            root.autoFallbackFrom = departed;
+            root.autoFallbackTo = chosen;
+        }
+    }
+
+    // Port availability is not on the PipeWire node, so pactl is asked; once per
+    // change of the sink list, and whenever a picker opens (refreshSinkAvailability),
+    // since plugging a screen in flips a port without adding a node.
+    property list<string> unavailableSinkNames: []
+
+    function refreshSinkAvailability() {
+        if (sinkAvailabilityProc.running)
+            sinkAvailabilityDebounce.restart();
+        else
+            sinkAvailabilityProc.running = true;
+    }
+
+    Timer {
+        id: sinkAvailabilityDebounce
+        interval: 400
+        onTriggered: root.refreshSinkAvailability()
+    }
+
+    Process {
+        id: sinkAvailabilityProc
+        command: ["pactl", "-f", "json", "list", "sinks"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    const unavailable = [];
+                    for (const sink of JSON.parse(text || "[]")) {
+                        const ports = sink.ports ?? [];
+                        if (ports.length === 0)
+                            continue;
+                        const active = ports.find(port => port.name === sink.active_port);
+                        if ((active && active.availability === "not available")
+                                || ports.every(port => port.availability === "not available"))
+                            unavailable.push(sink.name);
+                    }
+                    if (JSON.stringify(unavailable) !== JSON.stringify(root.unavailableSinkNames))
+                        root.unavailableSinkNames = unavailable;
+                } catch (e) {
+                    console.warn("[Audio] could not read sink availability:", e);
+                }
+            }
+        }
+    }
+
+    onOutputDevicesChanged: {
+        sinkAvailabilityDebounce.restart();
+        if (root.autoFallbackFrom === "")
+            return;
+        const back = root.sinkNodeByName(root.autoFallbackFrom);
+        if (!back)
+            return;
+        if ((root.sink?.name ?? "") === root.autoFallbackTo)
+            Pipewire.preferredDefaultAudioSink = back;
+        root.autoFallbackFrom = "";
+        root.autoFallbackTo = "";
     }
 
     Component.onCompleted: {
@@ -172,6 +312,8 @@ Singleton {
             root.value = sink.audio.volume;
             root.muted = sink.audio.muted;
         }
+        root.lastSinkName = sink?.name ?? "";
+        root.refreshSinkAvailability();
         multiOutputProc.command = [multiOutputProc.script, "status"];
         multiOutputProc.running = true;
     }

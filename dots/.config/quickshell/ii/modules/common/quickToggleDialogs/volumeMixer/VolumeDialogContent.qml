@@ -31,11 +31,20 @@ StyledFlickable {
 
     // Where a single app can be sent: every output device, plus the combined
     // sink while multi-output is on (one app on both headphones, the rest on one)
+    // Unplugged outputs (an HDMI port with no screen) are left out of the choice.
+    readonly property var multiOutputNode: Audio.multiOutputActive
+        ? Pipewire.nodes.values.find(n => n.name === Audio.multiOutputSinkName) ?? null : null
     readonly property var routeTargets: {
         if (!isSink) return [];
-        const combined = Audio.multiOutputActive ? Pipewire.nodes.values.find(n => n.name === Audio.multiOutputSinkName) : null;
-        return combined ? [combined, ...Audio.outputDevices] : Audio.outputDevices;
+        return root.multiOutputNode ? [root.multiOutputNode, ...Audio.selectableOutputDevices] : Audio.selectableOutputDevices;
     }
+    // Links are read off every output, offered or not: an app still playing on
+    // an unplugged one keeps showing where it is.
+    readonly property var trackedTargets: {
+        if (!isSink) return [];
+        return root.multiOutputNode ? [root.multiOutputNode, ...Audio.outputDevices] : Audio.outputDevices;
+    }
+
 
     // Where each app plays now, read off the links (a move shows up only once
     // PipeWire relinks the stream, so the chips never lie). A stream's own
@@ -43,7 +52,7 @@ StyledFlickable {
     property var streamTargets: ({})
     Instantiator {
         id: targetLinkTrackers
-        model: root.routeTargets
+        model: root.trackedTargets
         delegate: PwNodeLinkTracker {
             required property var modelData
             node: modelData
@@ -106,11 +115,14 @@ StyledFlickable {
         onExited: {
             root.unavailableDevices = root.tempUnavailableDevices;
             root.tempUnavailableDevices = [];
+            // A screen plugged in since flips a port without touching the node list.
+            if (root.isSink)
+                Audio.refreshSinkAvailability();
         }
     }
     required property bool isSink
     readonly property list<var> appPwNodes: isSink ? Audio.outputAppNodes : Audio.inputAppNodes
-    readonly property list<var> devices: isSink ? Audio.outputDevices : Audio.inputDevices
+    readonly property list<var> devices: isSink ? Audio.selectableOutputDevices : Audio.inputDevices
     property var analogAlternates: []
     property bool analogSwitchFailed: false
     readonly property bool outputSwitching: isSink && Audio.analogOutputSwitching
@@ -790,7 +802,9 @@ StyledFlickable {
         property bool routing: false
 
         readonly property real rowHeight: 56
-        implicitHeight: rowHeight + (routing && canRoute ? routeChooser.implicitHeight + 8 : 0)
+        readonly property bool showRouteNotice: routing && canRoute && EasyEffects.running
+        implicitHeight: rowHeight + (showRouteNotice ? routeNotice.implicitHeight + 8 : 0)
+        onCanRouteChanged: if (!canRoute) routing = false
         height: implicitHeight
         Behavior on implicitHeight {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
@@ -813,281 +827,407 @@ StyledFlickable {
         readonly property real bottomLeftRadius: isDragged ? rFull : (isPrevDragged ? rFull : (isLast ? rOuter : rInner))
         readonly property real bottomRightRadius: isDragged ? rFull : (isPrevDragged ? rFull : (isLast ? rOuter : rInner))
 
-        Rectangle {
-            id: mainRect
+        // Choosing where the app plays slides the row aside, the same two pages as a
+        // Bluetooth device's actions: the volume row, then back + the outputs in a line.
+        Flickable {
+            id: routeSlide
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
             height: progEntry.rowHeight
-            
-            topLeftRadius: progEntry.topLeftRadius
-            topRightRadius: progEntry.topRightRadius
-            bottomLeftRadius: progEntry.bottomLeftRadius
-            bottomRightRadius: progEntry.bottomRightRadius
-            
-            color: ColorUtils.transparentize(Appearance.colors.colSecondaryContainer, 0.35)
+            contentWidth: routeSlide.width * 2 + 8
+            contentHeight: routeSlide.height
+            interactive: false
+            clip: true
+            contentX: progEntry.routing && progEntry.canRoute ? routeSlide.width + 8 : 0
 
-            Behavior on topLeftRadius { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
-            Behavior on topRightRadius { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
-            Behavior on bottomLeftRadius { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
-            Behavior on bottomRightRadius { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
-
-            layer.enabled: true
-            layer.samples: 8
-            layer.smooth: true
-            layer.effect: OpacityMask {
-                maskSource: Rectangle {
-                    width: mainRect.width
-                    height: mainRect.height
-                    topLeftRadius: mainRect.topLeftRadius
-                    topRightRadius: mainRect.topRightRadius
-                    bottomLeftRadius: mainRect.bottomLeftRadius
-                    bottomRightRadius: mainRect.bottomRightRadius
+            Behavior on contentX {
+                NumberAnimation {
+                    duration: 400
+                    easing.type: Easing.OutExpo
                 }
             }
 
-            Rectangle {
-                id: fillRect
-                anchors.left: parent.left
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                // Fill follows the card's dynamic radius (same system as mainRect), not a
-                // hardcoded full pill — see the "Progress fill" pattern in AGENTS.md.
-                topLeftRadius: progEntry.topLeftRadius
-                topRightRadius: progEntry.topRightRadius
-                bottomLeftRadius: progEntry.bottomLeftRadius
-                bottomRightRadius: progEntry.bottomRightRadius
+            Row {
+                height: routeSlide.height
+                spacing: 8
 
-                Behavior on topLeftRadius { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
-                Behavior on topRightRadius { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
-                Behavior on bottomLeftRadius { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
-                Behavior on bottomRightRadius { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
+                Rectangle {
+                    id: mainRect
+                    width: routeSlide.width
+                    height: progEntry.rowHeight
+            
+                    topLeftRadius: progEntry.topLeftRadius
+                    topRightRadius: progEntry.topRightRadius
+                    bottomLeftRadius: progEntry.bottomLeftRadius
+                    bottomRightRadius: progEntry.bottomRightRadius
+            
+                    color: ColorUtils.transparentize(Appearance.colors.colSecondaryContainer, 0.35)
 
-                property real displayVol: progEntry.node?.audio?.volume ?? 0
-                Behavior on displayVol {
-                    enabled: !progMouseArea.pressed
-                    NumberAnimation {
-                        duration: 200
-                        easing.type: Easing.OutQuad
-                    }
-                }
+                    Behavior on topLeftRadius { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
+                    Behavior on topRightRadius { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
+                    Behavior on bottomLeftRadius { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
+                    Behavior on bottomRightRadius { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
 
-                width: mainRect.width * Math.min(1.0, displayVol)
-                color: progEntry.node?.audio?.muted ? Appearance.colors.colSubtext : Appearance.colors.colSecondaryContainer
-
-                Behavior on width {
-                    enabled: !progMouseArea.pressed
-                    NumberAnimation {
-                        duration: 200
-                        easing.type: Easing.OutQuad
-                    }
-                }
-                Behavior on color {
-                    ColorAnimation {
-                        duration: 200
-                    }
-                }
-            }
-
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 16
-                anchors.rightMargin: 16
-                spacing: 12
-
-                MouseArea {
-                    id: iconMouseArea
-                    Layout.preferredWidth: 24
-                    Layout.preferredHeight: 24
-                    Layout.alignment: Qt.AlignVCenter
-                    cursorShape: Qt.PointingHandCursor
-
-                    onClicked: {
-                        if (progEntry.node && progEntry.node.audio) {
-                            progEntry.node.audio.muted = !progEntry.node.audio.muted;
+                    layer.enabled: true
+                    layer.samples: 8
+                    layer.smooth: true
+                    layer.effect: OpacityMask {
+                        maskSource: Rectangle {
+                            width: mainRect.width
+                            height: mainRect.height
+                            topLeftRadius: mainRect.topLeftRadius
+                            topRightRadius: mainRect.topRightRadius
+                            bottomLeftRadius: mainRect.bottomLeftRadius
+                            bottomRightRadius: mainRect.bottomRightRadius
                         }
                     }
 
-                    Item {
-                        anchors.fill: parent
+                    Rectangle {
+                        id: fillRect
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        // Fill follows the card's dynamic radius (same system as mainRect), not a
+                        // hardcoded full pill — see the "Progress fill" pattern in AGENTS.md.
+                        topLeftRadius: progEntry.topLeftRadius
+                        topRightRadius: progEntry.topRightRadius
+                        bottomLeftRadius: progEntry.bottomLeftRadius
+                        bottomRightRadius: progEntry.bottomRightRadius
 
-                        StyledImage {
-                            id: appIcon
-                            anchors.fill: parent
-                            visible: source !== ""
-                            source: {
+                        Behavior on topLeftRadius { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
+                        Behavior on topRightRadius { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
+                        Behavior on bottomLeftRadius { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
+                        Behavior on bottomRightRadius { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
+
+                        property real displayVol: progEntry.node?.audio?.volume ?? 0
+                        Behavior on displayVol {
+                            enabled: !progMouseArea.pressed
+                            NumberAnimation {
+                                duration: 200
+                                easing.type: Easing.OutQuad
+                            }
+                        }
+
+                        width: mainRect.width * Math.min(1.0, displayVol)
+                        color: progEntry.node?.audio?.muted ? Appearance.colors.colSubtext : Appearance.colors.colSecondaryContainer
+
+                        Behavior on width {
+                            enabled: !progMouseArea.pressed
+                            NumberAnimation {
+                                duration: 200
+                                easing.type: Easing.OutQuad
+                            }
+                        }
+                        Behavior on color {
+                            ColorAnimation {
+                                duration: 200
+                            }
+                        }
+                    }
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+
+                        MouseArea {
+                            id: iconMouseArea
+                            Layout.preferredWidth: 24
+                            Layout.preferredHeight: 24
+                            Layout.alignment: Qt.AlignVCenter
+                            cursorShape: Qt.PointingHandCursor
+
+                            onClicked: {
+                                if (progEntry.node && progEntry.node.audio) {
+                                    progEntry.node.audio.muted = !progEntry.node.audio.muted;
+                                }
+                            }
+
+                            Item {
+                                anchors.fill: parent
+
+                                StyledImage {
+                                    id: appIcon
+                                    anchors.fill: parent
+                                    visible: source !== ""
+                                    source: {
+                                        if (!progEntry.node)
+                                            return "";
+                                        const _ = TaskbarApps.iconThemeRevision;
+                                        let icon;
+                                        icon = AppSearch.guessIcon(progEntry.node.properties["application.icon-name"] ?? "");
+                                        if (AppSearch.iconExists(icon))
+                                            return Quickshell.iconPath(icon, "image-missing");
+                                        icon = AppSearch.guessIcon(progEntry.node.properties["node.name"] ?? "");
+                                        if (AppSearch.iconExists(icon))
+                                            return Quickshell.iconPath(icon, "image-missing");
+                                        return "";
+                                    }
+                                }
+
+                                MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    visible: appIcon.source === ""
+                                    text: progEntry.isSink ? "widgets" : "mic"
+                                    iconSize: 20
+                                    color: Appearance.colors.colOnSecondaryContainer
+                                }
+
+                                Rectangle {
+                                    anchors.fill: parent
+                                    color: "#80000000"
+                                    visible: progEntry.node?.audio?.muted ?? false
+                                    radius: 4
+
+                                    MaterialSymbol {
+                                        anchors.centerIn: parent
+                                        text: progEntry.isSink ? "volume_off" : "mic_off"
+                                        iconSize: 14
+                                        color: "white"
+                                    }
+                                }
+                            }
+                        }
+
+                        StyledText {
+                            id: appNameText
+                            Layout.fillWidth: true
+                            elide: Text.ElideRight
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            color: progEntry.node?.audio?.muted ? Appearance.colors.colSubtext : Appearance.colors.colOnSecondaryContainer
+                            text: {
                                 if (!progEntry.node)
                                     return "";
-                                const _ = TaskbarApps.iconThemeRevision;
-                                let icon;
-                                icon = AppSearch.guessIcon(progEntry.node.properties["application.icon-name"] ?? "");
-                                if (AppSearch.iconExists(icon))
-                                    return Quickshell.iconPath(icon, "image-missing");
-                                icon = AppSearch.guessIcon(progEntry.node.properties["node.name"] ?? "");
-                                if (AppSearch.iconExists(icon))
-                                    return Quickshell.iconPath(icon, "image-missing");
-                                return "";
+                                const app = Audio.appNodeDisplayName(progEntry.node);
+                                const media = progEntry.node.properties["media.name"];
+                                return media !== undefined ? `${app} • ${media}` : app;
                             }
+                            opacity: progMouseArea.pressed ? 0.0 : 1.0
+                            Behavior on opacity {
+                                NumberAnimation {
+                                    duration: 150
+                                }
+                            }
+                        }
+
+                        RippleButton {
+                            id: routeButton
+                            visible: progEntry.canRoute
+                            Layout.alignment: Qt.AlignVCenter
+                            Layout.maximumWidth: 132
+                            implicitHeight: 32
+                            implicitWidth: routeRow.implicitWidth + 20
+                            buttonRadius: Appearance.rounding.full
+                            toggled: progEntry.routing
+                            colBackground: ColorUtils.transparentize(Appearance.colors.colSurfaceContainerHighest, 0.25)
+                            colBackgroundHover: Appearance.colors.colSurfaceContainerHighest
+                            colBackgroundToggled: Appearance.colors.colPrimary
+                            colBackgroundToggledHover: Appearance.colors.colPrimaryHover
+                            opacity: progMouseArea.pressed ? 0.0 : 1.0
+                            onClicked: progEntry.routing = !progEntry.routing
+
+                            contentItem: RowLayout {
+                                id: routeRow
+                                anchors.centerIn: parent
+                                width: Math.min(implicitWidth, routeButton.width - 20)
+                                spacing: 4
+
+                                MaterialSymbol {
+                                    text: Audio.outputDeviceIcon(progEntry.outputTarget)
+                                    iconSize: Appearance.font.pixelSize.large
+                                    color: routeButton.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                                }
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    elide: Text.ElideRight
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                    color: routeButton.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                                    text: progEntry.outputTarget ? Audio.friendlyDeviceName(progEntry.outputTarget) : Translation.tr("Output")
+                                }
+                            }
+
+                            StyledToolTip {
+                                text: Translation.tr("Choose where this app plays")
+                            }
+                        }
+                    }
+
+                    StyledText {
+                        id: percentageText
+                        anchors.verticalCenter: parent.verticalCenter
+                        x: {
+                            let insideX = fillRect.width - width - 12;
+                            let minSafeX = 16 + 24 + 12;
+                            if (insideX < minSafeX) {
+                                return mainRect.width - width - 16;
+                            }
+                            return insideX;
+                        }
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        font.bold: true
+                        color: Appearance.colors.colOnSecondaryContainer
+                        text: Math.round((progEntry.node?.audio?.volume ?? 0) * 100) + "%"
+                        opacity: progMouseArea.pressed ? 1.0 : 0.0
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: 150
+                            }
+                        }
+                    }
+
+                    MouseArea {
+                        id: progMouseArea
+                        anchors.fill: parent
+                        z: -1
+                        cursorShape: Qt.PointingHandCursor
+
+                        onPressed: mouse => {
+                            root.interactive = false;
+                            updateVolume(mouse.x);
+                        }
+
+                        onReleased: {
+                            root.interactive = true;
+                        }
+
+                        onCanceled: {
+                            root.interactive = true;
+                        }
+
+                        onPositionChanged: mouse => {
+                            updateVolume(mouse.x);
+                        }
+
+                        function updateVolume(mouseX) {
+                            let percentage = Math.max(0, Math.min(1.0, mouseX / mainRect.width));
+                            if (progEntry.node && progEntry.node.audio) {
+                                progEntry.node.audio.volume = percentage;
+                            }
+                        }
+                    }
+
+                    Connections {
+                        target: progMouseArea
+                        function onPressedChanged() {
+                            if (progMouseArea.pressed) {
+                                if (progEntry.isSink) {
+                                    root.activePlaybackDragIndex = progEntry.index;
+                                } else {
+                                    root.activeRecordingDragIndex = progEntry.index;
+                                }
+                            } else {
+                                if (progEntry.isSink) {
+                                    if (root.activePlaybackDragIndex === progEntry.index) {
+                                        root.activePlaybackDragIndex = -1;
+                                    }
+                                } else {
+                                    if (root.activeRecordingDragIndex === progEntry.index) {
+                                        root.activeRecordingDragIndex = -1;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // PAGE 2: back, then every output this app can be sent to
+                RowLayout {
+                    width: routeSlide.width
+                    height: routeSlide.height
+                    spacing: 8
+
+                    Rectangle {
+                        Layout.preferredWidth: 56
+                        Layout.fillHeight: true
+                        radius: progEntry.rFull
+                        color: routeBackMouse.containsPress ? Appearance.colors.colSurfaceContainerHighestActive
+                            : routeBackMouse.containsMouse ? Appearance.colors.colSurfaceContainerHighestHover
+                            : Appearance.colors.colSurfaceContainerHighest
+
+                        Behavior on color {
+                            ColorAnimation { duration: 150 }
+                        }
+
+                        MouseArea {
+                            id: routeBackMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: progEntry.routing = false
                         }
 
                         MaterialSymbol {
                             anchors.centerIn: parent
-                            visible: appIcon.source === ""
-                            text: progEntry.isSink ? "widgets" : "mic"
-                            iconSize: 20
-                            color: Appearance.colors.colOnSecondaryContainer
+                            text: "arrow_forward"
+                            iconSize: 24
+                            color: Appearance.colors.colOnSurface
+                        }
+                    }
+
+                    ListView {
+                        id: routeTargetList
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        orientation: ListView.Horizontal
+                        spacing: 8
+                        clip: true
+                        boundsBehavior: Flickable.StopAtBounds
+                        model: ScriptModel {
+                            values: root.routeTargets
                         }
 
-                        Rectangle {
-                            anchors.fill: parent
-                            color: "#80000000"
-                            visible: progEntry.node?.audio?.muted ?? false
-                            radius: 4
+                        delegate: Rectangle {
+                            id: targetPill
+                            required property var modelData
+                            readonly property bool chosen: progEntry.outputTarget?.id === targetPill.modelData.id
+                            width: Math.max(56, targetRow.implicitWidth + 32)
+                            height: routeTargetList.height
+                            radius: progEntry.rFull
+                            color: targetPill.chosen
+                                ? (targetMouse.containsPress ? Appearance.colors.colPrimaryActive
+                                    : targetMouse.containsMouse ? Appearance.colors.colPrimaryHover
+                                    : Appearance.colors.colPrimary)
+                                : (targetMouse.containsPress ? Appearance.colors.colSurfaceContainerHighestActive
+                                    : targetMouse.containsMouse ? Appearance.colors.colSurfaceContainerHighestHover
+                                    : Appearance.colors.colSurfaceContainerHighest)
 
-                            MaterialSymbol {
+                            Behavior on color {
+                                ColorAnimation { duration: 150 }
+                            }
+
+                            MouseArea {
+                                id: targetMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    if (!targetPill.chosen)
+                                        Audio.routeStream(progEntry.node, targetPill.modelData);
+                                    progEntry.routing = false;
+                                }
+                            }
+
+                            RowLayout {
+                                id: targetRow
                                 anchors.centerIn: parent
-                                text: progEntry.isSink ? "volume_off" : "mic_off"
-                                iconSize: 14
-                                color: "white"
-                            }
-                        }
-                    }
-                }
+                                spacing: 6
 
-                StyledText {
-                    id: appNameText
-                    Layout.fillWidth: true
-                    elide: Text.ElideRight
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    color: progEntry.node?.audio?.muted ? Appearance.colors.colSubtext : Appearance.colors.colOnSecondaryContainer
-                    text: {
-                        if (!progEntry.node)
-                            return "";
-                        const app = Audio.appNodeDisplayName(progEntry.node);
-                        const media = progEntry.node.properties["media.name"];
-                        return media !== undefined ? `${app} • ${media}` : app;
-                    }
-                    opacity: progMouseArea.pressed ? 0.0 : 1.0
-                    Behavior on opacity {
-                        NumberAnimation {
-                            duration: 150
-                        }
-                    }
-                }
+                                MaterialSymbol {
+                                    text: Audio.outputDeviceIcon(targetPill.modelData)
+                                    iconSize: 18
+                                    color: targetPill.chosen ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                                }
 
-                RippleButton {
-                    id: routeButton
-                    visible: progEntry.canRoute
-                    Layout.alignment: Qt.AlignVCenter
-                    Layout.maximumWidth: 132
-                    implicitHeight: 32
-                    implicitWidth: routeRow.implicitWidth + 20
-                    buttonRadius: Appearance.rounding.full
-                    toggled: progEntry.routing
-                    colBackground: ColorUtils.transparentize(Appearance.colors.colSurfaceContainerHighest, 0.25)
-                    colBackgroundHover: Appearance.colors.colSurfaceContainerHighest
-                    colBackgroundToggled: Appearance.colors.colPrimary
-                    colBackgroundToggledHover: Appearance.colors.colPrimaryHover
-                    opacity: progMouseArea.pressed ? 0.0 : 1.0
-                    onClicked: progEntry.routing = !progEntry.routing
-
-                    contentItem: RowLayout {
-                        id: routeRow
-                        anchors.centerIn: parent
-                        width: Math.min(implicitWidth, routeButton.width - 20)
-                        spacing: 4
-
-                        MaterialSymbol {
-                            text: Audio.outputDeviceIcon(progEntry.outputTarget)
-                            iconSize: Appearance.font.pixelSize.large
-                            color: routeButton.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
-                        }
-                        StyledText {
-                            Layout.fillWidth: true
-                            elide: Text.ElideRight
-                            font.pixelSize: Appearance.font.pixelSize.smaller
-                            color: routeButton.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
-                            text: progEntry.outputTarget ? Audio.friendlyDeviceName(progEntry.outputTarget) : Translation.tr("Output")
-                        }
-                    }
-
-                    StyledToolTip {
-                        text: Translation.tr("Choose where this app plays")
-                    }
-                }
-            }
-
-            StyledText {
-                id: percentageText
-                anchors.verticalCenter: parent.verticalCenter
-                x: {
-                    let insideX = fillRect.width - width - 12;
-                    let minSafeX = 16 + 24 + 12;
-                    if (insideX < minSafeX) {
-                        return mainRect.width - width - 16;
-                    }
-                    return insideX;
-                }
-                font.pixelSize: Appearance.font.pixelSize.small
-                font.bold: true
-                color: Appearance.colors.colOnSecondaryContainer
-                text: Math.round((progEntry.node?.audio?.volume ?? 0) * 100) + "%"
-                opacity: progMouseArea.pressed ? 1.0 : 0.0
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: 150
-                    }
-                }
-            }
-
-            MouseArea {
-                id: progMouseArea
-                anchors.fill: parent
-                z: -1
-                cursorShape: Qt.PointingHandCursor
-
-                onPressed: mouse => {
-                    root.interactive = false;
-                    updateVolume(mouse.x);
-                }
-
-                onReleased: {
-                    root.interactive = true;
-                }
-
-                onCanceled: {
-                    root.interactive = true;
-                }
-
-                onPositionChanged: mouse => {
-                    updateVolume(mouse.x);
-                }
-
-                function updateVolume(mouseX) {
-                    let percentage = Math.max(0, Math.min(1.0, mouseX / mainRect.width));
-                    if (progEntry.node && progEntry.node.audio) {
-                        progEntry.node.audio.volume = percentage;
-                    }
-                }
-            }
-
-            Connections {
-                target: progMouseArea
-                function onPressedChanged() {
-                    if (progMouseArea.pressed) {
-                        if (progEntry.isSink) {
-                            root.activePlaybackDragIndex = progEntry.index;
-                        } else {
-                            root.activeRecordingDragIndex = progEntry.index;
-                        }
-                    } else {
-                        if (progEntry.isSink) {
-                            if (root.activePlaybackDragIndex === progEntry.index) {
-                                root.activePlaybackDragIndex = -1;
-                            }
-                        } else {
-                            if (root.activeRecordingDragIndex === progEntry.index) {
-                                root.activeRecordingDragIndex = -1;
+                                StyledText {
+                                    Layout.maximumWidth: 150
+                                    text: Audio.friendlyDeviceName(targetPill.modelData)
+                                    font.pixelSize: Appearance.font.pixelSize.small
+                                    font.bold: true
+                                    color: targetPill.chosen ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                                    elide: Text.ElideRight
+                                }
                             }
                         }
                     }
@@ -1095,48 +1235,20 @@ StyledFlickable {
             }
         }
 
-        // A Column, not a ColumnLayout: a layout hidden while closed never placed
-        // the notice on reopening (both children stayed at y 0)
-        Column {
-            id: routeChooser
+        // EasyEffects processing every app pulls a moved stream straight back
+        // into its sink. The shell never changes EasyEffects; it only says so.
+        NoticeBox {
+            id: routeNotice
             anchors.left: parent.left
             anchors.right: parent.right
-            anchors.top: mainRect.bottom
+            anchors.top: routeSlide.bottom
             anchors.topMargin: 8
-            spacing: 6
             visible: opacity > 0
-            opacity: progEntry.routing && progEntry.canRoute ? 1 : 0
+            opacity: progEntry.showRouteNotice ? 1 : 0
+            materialIcon: "graphic_eq"
+            text: Translation.tr("If the choice doesn’t stick, EasyEffects is pulling the app back: close it or turn off its “Process all output streams”.")
             Behavior on opacity {
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-            }
-
-            Flow {
-                width: parent.width
-                spacing: 4
-
-                Repeater {
-                    model: ScriptModel {
-                        values: root.routeTargets
-                    }
-                    delegate: SelectionGroupButton {
-                        required property var modelData
-                        leftmost: true
-                        rightmost: true
-                        buttonIcon: Audio.outputDeviceIcon(modelData)
-                        buttonText: Audio.friendlyDeviceName(modelData)
-                        toggled: progEntry.outputTarget?.id === modelData.id
-                        onClicked: Audio.routeStream(progEntry.node, modelData)
-                    }
-                }
-            }
-
-            // EasyEffects processing every app pulls a moved stream straight back
-            // into its sink. The shell never changes EasyEffects; it only says so.
-            NoticeBox {
-                width: parent.width
-                visible: EasyEffects.running
-                materialIcon: "graphic_eq"
-                text: Translation.tr("If the choice doesn’t stick, EasyEffects is pulling the app back: close it or turn off its “Process all output streams”.")
             }
         }
     }

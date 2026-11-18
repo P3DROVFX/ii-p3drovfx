@@ -26,7 +26,7 @@ StyledPopup {
                 spacing: 8
 
                 Repeater {
-                    model: Audio.outputDevices
+                    model: Audio.selectableOutputDevices
                     delegate: OsdDeviceOutputItem {
                         required property var modelData
                         node: modelData

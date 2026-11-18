@@ -90,7 +90,7 @@ Item {
 
         Repeater {
             model: ScriptModel {
-                values: root.output ? Audio.outputDevices : Audio.inputDevices
+                values: root.output ? Audio.selectableOutputDevices : Audio.inputDevices
             }
             delegate: WChoiceButton {
                 required property var modelData
