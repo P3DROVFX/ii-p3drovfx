@@ -123,6 +123,20 @@ Item {
         }
         spacing: ClockStyle.gapSmall
 
+        // The language sheet's page is the translucent sidebar surface: with shell
+        // transparency on, the tab under it would show through the list. Fade the tab
+        // out as the sheet rises (opacity 0 is skipped by the scene graph, and the
+        // items keep their focus for when the sheet goes back).
+        opacity: root.showLanguageSelector ? 0 : 1
+        Behavior on opacity {
+            enabled: !ClockStyle.reducedMotion
+            NumberAnimation {
+                duration: ClockStyle.motionEnter.duration
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+            }
+        }
+
         // ── Language bar ────────────────────────────────────────────────
         RowLayout {
             id: languageBar
@@ -255,6 +269,9 @@ Item {
         visible: root.showLanguageSelector
         z: 9999
         sourceComponent: TranslatorLanguageSheet {
+            // No page of its own: the sidebar's surface is already behind it (the tab
+            // fades out), and a square translucent page would draw over its rounded corners.
+            colPage: "transparent"
             forTarget: root.languageSelectorTarget
             current: root.languageSelectorTarget ? TranslatorService.targetLanguage : TranslatorService.sourceLanguage
             detected: session.detected
