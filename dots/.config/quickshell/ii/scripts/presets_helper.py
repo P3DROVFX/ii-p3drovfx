@@ -1229,20 +1229,121 @@ def reset_monitor_bindings(data):
         notifications['monitor']['enable'] = False
         notifications['monitor']['name'] = ''
 
-def detect_display_resolution():
+def detect_monitor_sizes():
+    """Each connected monitor's logical size, by connector name.
+
+    Logical, not physical: widget coordinates live in the shell's screen space,
+    which is the mode divided by the monitor's scale (and turned for a rotated
+    one). A 1920x1080 panel at 1.25 is a 1536x864 desktop to every widget.
+    Empty when Hyprland cannot be asked (tests, a TTY).
+    """
     try:
         import subprocess
         out = subprocess.check_output(['hyprctl', 'monitors', '-j'], timeout=1, stderr=subprocess.DEVNULL)
         monitors = json.loads(out.decode('utf-8'))
-        if isinstance(monitors, list) and monitors:
-            focused = next((m for m in monitors if m.get('focused')), monitors[0])
-            w = focused.get('width')
-            h = focused.get('height')
-            if isinstance(w, (int, float)) and isinstance(h, (int, float)) and w > 0 and h > 0:
-                return {'width': int(w), 'height': int(h)}
     except Exception:
-        pass
+        return {}
+    sizes = {}
+    if not isinstance(monitors, list):
+        return sizes
+    for monitor in monitors:
+        if not isinstance(monitor, dict):
+            continue
+        name = monitor.get('name')
+        w, h = monitor.get('width'), monitor.get('height')
+        scale = monitor.get('scale') or 1
+        if not isinstance(name, str) or not all(isinstance(v, (int, float)) and v > 0 for v in (w, h, scale)):
+            continue
+        lw, lh = int(round(w / scale)), int(round(h / scale))
+        if int(monitor.get('transform') or 0) % 2 == 1:
+            lw, lh = lh, lw
+        sizes[name] = {'width': lw, 'height': lh, 'focused': bool(monitor.get('focused'))}
+    return sizes
+
+
+def detect_display_resolution(monitor_sizes=None):
+    sizes = detect_monitor_sizes() if monitor_sizes is None else monitor_sizes
+    if sizes:
+        focused = next((m for m in sizes.values() if m.get('focused')), next(iter(sizes.values())))
+        return {'width': focused['width'], 'height': focused['height']}
     return {'width': 1920, 'height': 1080}
+
+
+def stamp_widget_forks(data, monitor_sizes):
+    """Record the screen each per-monitor placement was laid out on.
+
+    A fork is keyed by connector name, and connector names repeat across
+    machines: an author's eDP-1 fork lands on every importer's eDP-1, whatever
+    its resolution, and a 1920x1080 layout on a 1536x864 laptop piles up. The
+    stamp is what lets merge() (and WidgetPlacement.resolve) map it over.
+    """
+    background = data.get('background')
+    if not isinstance(background, dict) or not monitor_sizes:
+        return
+    for entry in background.get('activeWidgets') or []:
+        if not isinstance(entry, dict):
+            continue
+        for key in ('positions', 'lockPositions'):
+            forks = entry.get(key)
+            if not isinstance(forks, dict):
+                continue
+            for name, forked in forks.items():
+                size = monitor_sizes.get(name)
+                if isinstance(forked, dict) and size and 'refWidth' not in forked:
+                    forked['refWidth'] = size['width']
+                    forked['refHeight'] = size['height']
+
+
+def localize_widget_placements(merged, preset, monitor_sizes):
+    """Map a preset's per-monitor widget placements onto the importer's screens.
+
+    Positions follow each axis; sizes follow the smaller factor, so the layout
+    keeps its proportions. A fork without a stamp (presets published before
+    stamp_widget_forks) is taken to be in the preset's referenceResolution.
+    Forks for screens the importer does not have keep their stamp: the shell
+    adapts them at runtime when it falls back to one.
+    """
+    preset_background = preset.get('background') if isinstance(preset, dict) else None
+    background = merged.get('background')
+    if (not monitor_sizes or not isinstance(preset_background, dict)
+            or not isinstance(preset_background.get('activeWidgets'), list)
+            or not isinstance(background, dict)):
+        return
+    ref = preset_background.get('referenceResolution')
+    ref = ref if isinstance(ref, dict) else {}
+    default_w = ref.get('width') or 1920
+    default_h = ref.get('height') or 1080
+    for entry in background.get('activeWidgets') or []:
+        if not isinstance(entry, dict):
+            continue
+        entry_scale = entry.get('scale', 1.0)
+        desktop_forks = entry.get('positions') if isinstance(entry.get('positions'), dict) else {}
+        for key in ('positions', 'lockPositions'):
+            forks = entry.get(key)
+            if not isinstance(forks, dict):
+                continue
+            for name, forked in forks.items():
+                size = monitor_sizes.get(name)
+                if not isinstance(forked, dict) or not size:
+                    continue
+                ref_w = forked.pop('refWidth', None) or default_w
+                ref_h = forked.pop('refHeight', None) or default_h
+                if not all(isinstance(v, (int, float)) and v > 0 for v in (ref_w, ref_h)):
+                    continue
+                if (ref_w, ref_h) == (size['width'], size['height']):
+                    continue
+                fx, fy = size['width'] / ref_w, size['height'] / ref_h
+                for axis, factor in (('x', fx), ('y', fy)):
+                    if isinstance(forked.get(axis), (int, float)):
+                        forked[axis] = int(round(forked[axis] * factor))
+                if isinstance(forked.get('scale'), (int, float)):
+                    forked['scale'] = round(forked['scale'] * min(fx, fy), 4)
+                elif key == 'positions' or name not in desktop_forks:
+                    # Without one of its own the fork shows entry.scale (or, on
+                    # the lock screen, this monitor's desktop fork, mapped above).
+                    if isinstance(entry_scale, (int, float)):
+                        forked['scale'] = round(entry_scale * min(fx, fy), 4)
+
 
 def normalize_active_widgets(data):
     background = data.get('background')
@@ -1266,6 +1367,10 @@ def normalize_active_widgets(data):
                     entry['y'] = forked['y']
                 if 'scale' in forked:
                     entry['scale'] = forked['scale']
+                # The legacy values now carry that monitor's coordinates.
+                if 'refWidth' in forked and 'refHeight' in forked:
+                    entry['refWidth'] = forked['refWidth']
+                    entry['refHeight'] = forked['refHeight']
 
         lock_positions = entry.get('lockPositions')
         if isinstance(lock_positions, dict) and lock_positions:
@@ -1316,8 +1421,10 @@ def sanitize_data(data, home_dir, snapshot=False):
         background.pop('videoPlaybackPath', None)
 
     if 'background' in data and isinstance(data['background'], dict):
+        monitor_sizes = detect_monitor_sizes()
         if 'referenceResolution' not in data['background']:
-            data['background']['referenceResolution'] = detect_display_resolution()
+            data['background']['referenceResolution'] = detect_display_resolution(monitor_sizes)
+        stamp_widget_forks(data, monitor_sizes)
         normalize_active_widgets(data)
 
     return data
@@ -1405,6 +1512,7 @@ def merge(preset_path, config_path, out_path, presets_dir=None, preset_name=None
     resolve_asset_paths(merged, current, presets_dir, preset_name)
     apply_monitor_wallpapers(merged, preset, current, presets_dir, preset_name)
     resolve_photo_assets(merged, preset, current, presets_dir, preset_name)
+    localize_widget_placements(merged, preset, detect_monitor_sizes())
     carry_video_frame_time(merged, preset, current)
     # A screen-sized copy of the importer's previous video, not of this one;
     # switchwall publishes the right one when it switches.

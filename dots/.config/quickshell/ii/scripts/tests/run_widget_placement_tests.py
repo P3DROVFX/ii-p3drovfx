@@ -22,7 +22,12 @@ def main():
         # Quickshell's plugin is executable-only. Substitute its object base,
         # as in run_widget_tint_smoke.py; all placement functions stay unchanged.
         source = (ROOT / 'modules/common/functions/WidgetPlacement.qml').read_text()
-        source = source.replace('import Quickshell\n', 'import QtQuick\n').replace('Singleton {', 'QtObject {')
+        # No Config and no screens here either: resolve() falls back to the
+        # 1920x1080 reference and to the screen size each test passes in.
+        source = (source.replace('import qs.modules.common\n', '')
+                  .replace('Quickshell.screens', '[]')
+                  .replace('import Quickshell\n', 'import QtQuick\n')
+                  .replace('Singleton {', 'QtObject {'))
         (module / 'WidgetPlacement.qml').write_text(source)
         (module / 'qmldir').write_text(
             'module qs.modules.common.functions\nsingleton WidgetPlacement 1.0 WidgetPlacement.qml\n'

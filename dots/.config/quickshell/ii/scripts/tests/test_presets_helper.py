@@ -989,6 +989,53 @@ class TestPresetMerge(unittest.TestCase):
         self.assertEqual(merged["search"]["positionStyle"], "center")
 
 
+class TestWidgetPlacementsFollowScreens(unittest.TestCase):
+    """A preset's per-monitor widget layout is mapped onto the importer's screens."""
+
+    def preset(self, fork):
+        return {"background": {
+            "referenceResolution": {"width": 1920, "height": 1080},
+            "activeWidgets": [{"id": "clock_1", "x": 1000, "y": 500, "scale": 1.5,
+                               "positions": {"eDP-1": fork}}]}}
+
+    def test_unstamped_fork_maps_from_reference(self):
+        preset = self.preset({"x": 1000, "y": 500, "scale": 1.5})
+        merged = copy.deepcopy(preset)
+        presets_helper.localize_widget_placements(
+            merged, preset, {"eDP-1": {"width": 1536, "height": 864}})
+        fork = merged["background"]["activeWidgets"][0]["positions"]["eDP-1"]
+        self.assertEqual((fork["x"], fork["y"]), (800, 400))
+        self.assertAlmostEqual(fork["scale"], 1.2)
+
+    def test_stamp_wins_and_is_dropped(self):
+        preset = self.preset({"x": 1280, "y": 720, "refWidth": 2560, "refHeight": 1440})
+        merged = copy.deepcopy(preset)
+        presets_helper.localize_widget_placements(
+            merged, preset, {"eDP-1": {"width": 1280, "height": 720}})
+        fork = merged["background"]["activeWidgets"][0]["positions"]["eDP-1"]
+        self.assertEqual((fork["x"], fork["y"]), (640, 360))
+        # No scale of its own: it showed entry.scale, mapped the same way.
+        self.assertAlmostEqual(fork["scale"], 0.75)
+        self.assertNotIn("refWidth", fork)
+
+    def test_same_screen_and_unknown_screen_untouched(self):
+        preset = self.preset({"x": 1000, "y": 500, "scale": 1.5, "refWidth": 1920, "refHeight": 1080})
+        merged = copy.deepcopy(preset)
+        presets_helper.localize_widget_placements(merged, preset, {"DP-1": {"width": 1366, "height": 768}})
+        fork = merged["background"]["activeWidgets"][0]["positions"]["eDP-1"]
+        # A screen the importer lacks keeps its stamp for the shell's fallback.
+        self.assertEqual(fork["refWidth"], 1920)
+        presets_helper.localize_widget_placements(merged, preset, {"eDP-1": {"width": 1920, "height": 1080}})
+        self.assertEqual((fork["x"], fork["scale"]), (1000, 1.5))
+        self.assertNotIn("refWidth", fork)
+
+    def test_export_stamps_forks_with_logical_size(self):
+        data = self.preset({"x": 10, "y": 20})
+        presets_helper.stamp_widget_forks(data, {"eDP-1": {"width": 1536, "height": 864}})
+        fork = data["background"]["activeWidgets"][0]["positions"]["eDP-1"]
+        self.assertEqual((fork["refWidth"], fork["refHeight"]), (1536, 864))
+
+
 class TestScreenAndVideoWallpapers(unittest.TestCase):
     """Per-screen wallpapers travel with a preset; video wallpapers keep their frame."""
 

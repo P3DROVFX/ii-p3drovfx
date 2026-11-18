@@ -64,4 +64,33 @@ TestCase {
         compare(locked.x, 800);
         compare(locked.y, 800);
     }
+
+    // Size follows the resolution with the position, by the smaller factor, so a
+    // layout drawn on 1920x1080 keeps its proportions instead of piling up.
+    function test_foreignDesktopAdaptsSize() {
+        const widget = entry();
+        const desktop = WidgetPlacement.resolve(widget, "DP-2", false, 1536, 864);
+        compare(desktop.x, 968);
+        compare(desktop.y, 552);
+        fuzzyCompare(desktop.scale, 1.0, 0.0001);
+    }
+
+    // A local fork is this screen's own layout and is never adapted...
+    function test_localForkIsNotAdapted() {
+        const widget = entry();
+        const desktop = WidgetPlacement.resolve(widget, "eDP-1", false, 1536, 864);
+        compare(desktop.x, 1210);
+        fuzzyCompare(desktop.scale, 1.25, 0.0001);
+    }
+
+    // ...unless a preset stamped it with its author's screen.
+    function test_stampedForkAdapts() {
+        const widget = entry();
+        widget.positions["eDP-1"].refWidth = 1920;
+        widget.positions["eDP-1"].refHeight = 1080;
+        const desktop = WidgetPlacement.resolve(widget, "eDP-1", false, 1536, 864);
+        compare(desktop.x, 968);
+        compare(desktop.y, 552);
+        fuzzyCompare(desktop.scale, 1.0, 0.0001);
+    }
 }

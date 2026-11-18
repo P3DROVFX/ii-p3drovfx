@@ -69,39 +69,74 @@ Singleton {
         return null;
     }
 
+    // The logical size of a connected screen, or null. Writers only know the
+    // monitor's name; without its size a fork seeded from resolve() skipped the
+    // resolution adaptation and the widget jumped on its first move.
+    function _screenSize(monitorName) {
+        if (!monitorName)
+            return null;
+        const screen = Quickshell.screens.find(s => s.name === monitorName);
+        return screen && screen.width > 0 && screen.height > 0
+            ? { "width": screen.width, "height": screen.height } : null;
+    }
+
+    function _configReference() {
+        const ref = (typeof Config !== "undefined" && Config.options && Config.options.background)
+            ? Config.options.background.referenceResolution : null;
+        return { "width": Number(ref?.width || 1920), "height": Number(ref?.height || 1080) };
+    }
+
     // What `entry` shows on `monitorName`: {x, y, scale, forked}. Never null.
     // With `lock`, the lock screen's placement: its own fork when there is
     // one, the desktop's placement otherwise.
+    //
+    // Coordinates written for another resolution - legacy values, another
+    // monitor's fork, or a fork a preset stamped with its author's screen
+    // (refWidth/refHeight) - are mapped onto this screen. Position follows each
+    // axis; size follows the smaller factor, so a layout drawn on 1920x1080
+    // keeps its proportions on a 1366x768 laptop instead of keeping its pixel
+    // sizes and piling up as the positions close in around it.
     function resolve(entry, monitorName, lock = false, screenW = 0, screenH = 0) {
         if (!entry)
             return { "x": 0, "y": 0, "scale": 1.0, "forked": false };
+        if (!(screenW > 0 && screenH > 0)) {
+            const size = root._screenSize(monitorName);
+            if (size) {
+                screenW = size.width;
+                screenH = size.height;
+            }
+        }
         lock = lock && root.ownsLockPlacement(entry);
         const localDesktop = root.fork(entry, monitorName, false);
         const localLock = lock ? root.fork(entry, monitorName, true) : null;
         const hasLocalFork = (lock ? localLock : localDesktop) !== null;
-
         const desktop = localDesktop ?? root.fallbackFork(entry, false);
         const lockFork = lock ? (localLock ?? root.fallbackFork(entry, true)) : null;
         const src = lockFork ?? desktop ?? entry;
         const base = desktop ?? entry;
-
         let rawX = Number(src.x ?? base.x ?? entry.x ?? 0);
         let rawY = Number(src.y ?? base.y ?? entry.y ?? 0);
         let rawScale = Number(src.scale ?? base.scale ?? entry.scale ?? 1.0);
-
         // A lock without its own placement can inherit this monitor's desktop
         // coordinates. They are already local, even though hasLocalFork is false.
-        // Only legacy or other-monitor coordinates need resolution adaptation.
+        // Only legacy or other-monitor coordinates need resolution adaptation,
+        // plus a local fork that still carries a preset author's screen size.
         const inheritsLocalDesktop = lock && lockFork === null && localDesktop !== null;
-        if (!hasLocalFork && !inheritsLocalDesktop && screenW > 0 && screenH > 0) {
-            const refW = Number(entry.refWidth || (typeof Config !== "undefined" && Config.options && Config.options.background && Config.options.background.referenceResolution ? Config.options.background.referenceResolution.width : 0) || 1920);
-            const refH = Number(entry.refHeight || (typeof Config !== "undefined" && Config.options && Config.options.background && Config.options.background.referenceResolution ? Config.options.background.referenceResolution.height : 0) || 1080);
-            if (refW > 0 && refH > 0 && (screenW !== refW || screenH !== refH)) {
-                rawX = Math.round(rawX * (screenW / refW));
-                rawY = Math.round(rawY * (screenH / refH));
-            }
+        const local = hasLocalFork || inheritsLocalDesktop;
+        let refW = Number(src.refWidth || 0);
+        let refH = Number(src.refHeight || 0);
+        if (!local && !(refW > 0 && refH > 0)) {
+            const ref = root._configReference();
+            refW = Number(entry.refWidth || ref.width);
+            refH = Number(entry.refHeight || ref.height);
         }
-
+        if (screenW > 0 && screenH > 0 && refW > 0 && refH > 0 && (screenW !== refW || screenH !== refH)) {
+            const fx = screenW / refW;
+            const fy = screenH / refH;
+            rawX = Math.round(rawX * fx);
+            rawY = Math.round(rawY * fy);
+            rawScale = rawScale * Math.min(fx, fy);
+        }
         return {
             "x": rawX,
             "y": rawY,
@@ -200,11 +235,29 @@ Singleton {
         if (!forked || typeof forked !== "object") {
             const current = root.resolve(entry, monitorName, lock);
             forked = { "x": current.x, "y": current.y };
-            if (entry.scale !== undefined)
+            // The adapted size too, or the fork would fall back to the
+            // unadapted entry.scale and the widget would grow on its first move.
+            if (entry.scale !== undefined || current.scale !== 1)
                 forked.scale = current.scale;
             entry[key][monitorName] = forked;
         }
         return forked;
+    }
+
+    // A fork still in a preset author's coordinates becomes this screen's
+    // before anything is written into it: a move would otherwise land local
+    // x/y next to the author's scale and stamp, mixing two resolutions.
+    function _localizeFork(entry, monitorName, lock) {
+        const forked = root.fork(entry, monitorName, lock);
+        if (!forked || !(Number(forked.refWidth) > 0))
+            return;
+        const shown = root.resolve(entry, monitorName, lock);
+        forked.x = shown.x;
+        forked.y = shown.y;
+        if (forked.scale !== undefined || entry.scale !== undefined || shown.scale !== 1)
+            forked.scale = shown.scale;
+        delete forked.refWidth;
+        delete forked.refHeight;
     }
 
     // Writers mutate `entry` in place; callers pass a clone. Without a monitor
@@ -213,6 +266,7 @@ Singleton {
     function setPosition(entry, monitorName, x, y, lock = false) {
         if (!entry)
             return;
+        root._localizeFork(entry, monitorName, lock);
         if (!lock) {
             entry.x = x;
             entry.y = y;
@@ -227,6 +281,7 @@ Singleton {
     function setScale(entry, monitorName, scale, lock = false) {
         if (!entry)
             return;
+        root._localizeFork(entry, monitorName, lock);
         if (!lock) {
             entry.scale = scale;
         }
@@ -248,7 +303,8 @@ Singleton {
             return;
         const desktop = root.resolve(entry, monitorName, false);
         const forked = { "x": desktop.x, "y": desktop.y };
-        if (entry.scale !== undefined || root.fork(entry, monitorName, false)?.scale !== undefined)
+        if (entry.scale !== undefined || root.fork(entry, monitorName, false)?.scale !== undefined
+                || desktop.scale !== 1)
             forked.scale = desktop.scale;
         if (!entry.lockPositions || typeof entry.lockPositions !== "object")
             entry.lockPositions = {};
