@@ -1,0 +1,19 @@
+# Kinetic lyrics beat shake: a kick detector, not a visualizer. 60 fps and almost no
+# smoothing keep the attack of each hit; bars 0-1 (30-76 Hz) carry the kick drum,
+# bar 2 and up the bass line, which must not trigger hits.
+[general]
+framerate = 60
+autosens = 1
+bars = 12
+lower_cutoff_freq = 30
+higher_cutoff_freq = 8000
+
+[output]
+method = raw
+raw_target = /dev/stdout
+data_format = ascii
+channels = mono
+mono_option = average
+
+[smoothing]
+noise_reduction = 10

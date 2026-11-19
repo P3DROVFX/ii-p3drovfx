@@ -294,6 +294,13 @@ Item {
                     checked: Config.options.background.mediaMode.kineticFisheye ?? false
                     onToggled: checked => Config.options.background.mediaMode.kineticFisheye = checked
                 }
+                // Works on every song: without kinetic lyrics the artwork takes the hits.
+                SwitchRow {
+                    symbol: "graphic_eq"
+                    label: Translation.tr("Beat shake")
+                    checked: Config.options.background.mediaMode.kineticBeatShake ?? false
+                    onToggled: checked => Config.options.background.mediaMode.kineticBeatShake = checked
+                }
                 RowLayout {
                     Layout.fillWidth: true
                     visible: root.context.showLyricsPanel

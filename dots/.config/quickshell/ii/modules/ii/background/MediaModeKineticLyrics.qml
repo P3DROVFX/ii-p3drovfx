@@ -1,6 +1,8 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Quickshell.Io
 import qs.modules.common
+import qs.modules.common.functions
 import qs.services
 
 // Kinetic typography for word-timed lyrics (BetterLyrics, lrcmux or NetEase), Immersive only.
@@ -40,6 +42,17 @@ Item {
     property real bottomInset: 0
     // Barrel lens over the whole type layer, 0 for none.
     property real fisheye: 0
+    // Phonk-edit camera hits on the beat (MediaModeBeatShake). The Immersive frontend
+    // passes its shared engine; standalone (previews) the block owns one.
+    property bool beatShake: false
+    property MediaModeBeatShake beat: ownBeat
+    MediaModeBeatShake {
+        id: ownBeat
+        listening: root.beat === ownBeat && root.beatShake && root.visible && root.playing
+        swaying: listening
+        viewWidth: root.width
+        viewHeight: root.height
+    }
 
     // Overridable for previews; normally the lyrics service.
     property var lines: LyricsService.syncedLines
@@ -61,6 +74,15 @@ Item {
     // lacks are dropped; a missing wdth is approximated with a horizontal scale.
     readonly property var _families: Qt.fontFamilies()
     readonly property bool hasRobotoFlex: _families.indexOf("Roboto Flex") >= 0
+    // QML's JS engine does not honour \p{…} inside character classes (/[\p{L}]/u
+    // matches nothing), so letters are told apart by case or by script range.
+    function isLetter(ch) {
+        return ch.toLowerCase() !== ch.toUpperCase()
+            || /[0-9ªºƻǀ-ǃʔ぀-ヿ㐀-䶿一-鿿가-힯豈-﫿]/.test(ch);
+    }
+    function lettersOf(text, keep) {
+        return Array.from(text).filter(ch => root.isLetter(ch) || (keep ?? "").includes(ch)).join("");
+    }
     function scriptOf(text) {
         if (/[぀-ヿㇰ-ㇿ]/.test(text))
             return "ja";
@@ -70,7 +92,7 @@ Item {
             return "zh";
         if (/[Ͱ-Ͽἀ-῿Ѐ-ԯᲀ-᲏ⷠ-ⷿꙀ-ꚟ]/.test(text))
             return "cyrillic";
-        if (/[^\u0000-ɏ̀-ͯḀ-ỿ -⁯₠-⃏\s]/.test(text.replace(/[\p{P}\p{S}\p{N}]/gu, "")))
+        if (/[^\u0000-ɏ̀-ͯḀ-ỿ]/.test(root.lettersOf(text)))
             return "other";
         return "latin";
     }
@@ -151,7 +173,7 @@ Item {
     // while "who" is. `_songPace` is the median seconds per syllable of the whole song.
     property real _songPace: 0.25
     function syllables(word) {
-        const bare = word.text.toLowerCase().replace(/[^\p{L}]/gu, "");
+        const bare = root.lettersOf(word.text.toLowerCase());
         if (root.isCjk(word.script))
             return Math.max(1, bare.length);
         const groups = (bare.length > 3 ? bare.replace(/e$/, "") : bare)
@@ -195,7 +217,7 @@ Item {
     function isFiller(word) {
         if (word.held || root.isCjk(word.script))
             return false;
-        const bare = word.text.toLowerCase().replace(/[^\p{L}\p{N}']/gu, "");
+        const bare = root.lettersOf(word.text.toLowerCase(), "'");
         return bare.length <= 2 || root.fillerWords.indexOf(bare) >= 0;
     }
 
@@ -262,6 +284,19 @@ Item {
                          "script": script };
                 words.push(open);
             }
+            if (found >= 0)
+                open.textEnd = cursor;
+        }
+        // Punctuation directs the word: spans often leave it out, so it is read from the
+        // line text right after the word as well as from the word's own tail.
+        for (const word of words) {
+            let tail = "";
+            for (let k = word.text.length - 1; k >= 0 && !root.isLetter(word.text[k]); k--)
+                tail = word.text[k] + tail;
+            for (let k = word.textEnd ?? text.length; k < text.length && !/\s/.test(text[k]) && !root.isLetter(text[k]); k++)
+                tail += text[k];
+            word.mark = /\.\.|…/.test(tail) ? "..." : (/[!！]/.test(tail) ? "!" : (/[?？]/.test(tail) ? "?"
+                      : (/[,，、;；]/.test(tail) ? "," : "")));
         }
         return words;
     }
@@ -288,7 +323,8 @@ Item {
             if (i > 0)
                 x += space;
             shown.push({ "text": text, "face": face, "x": x, "advance": m.advance, "begin": word.begin,
-                         "end": word.end, "accent": word.accent ?? false, "reveal": word.reveal ?? "pop" });
+                         "end": word.end, "accent": word.accent ?? false, "reveal": word.reveal ?? "pop",
+                         "mark": word.mark ?? "" });
             x += m.advance;
             top = Math.min(top, m.top);
             bottom = Math.max(bottom, m.bottom);
@@ -320,10 +356,11 @@ Item {
             if (!root.isFiller(word) && word.text.length >= keyLength && (!key || word.text.length > key.text.length))
                 key = word;
         }
-        // A held word outranks a merely long one.
+        // A held word outranks a shouted one ("!"), which outranks a merely long one.
         const heldKey = words.filter(w => w.held).sort((a, b) => (b.end - b.begin) - (a.end - a.begin))[0];
-        if (heldKey)
-            key = heldKey;
+        const shoutKey = words.find(w => w.mark === "!" && !root.isFiller(w));
+        if (heldKey || shoutKey)
+            key = heldKey ?? shoutKey;
         if (key)
             key.key = true;
         // Two inks: the key word and about a third of the other content words take the
@@ -334,6 +371,13 @@ Item {
             // How the word lands: slam in, rise out of its own baseline, or slide in.
             const r = root.hash(lineIndex * 191 + i * 7 + 1);
             word.reveal = r < 0.4 ? "pop" : (r < 0.75 ? "rise" : "slide");
+            // "!" slams in hard and takes the accent; "..." fades in over the word.
+            if (word.mark === "!") {
+                word.reveal = "slam";
+                word.accent = true;
+            } else if (word.mark === "...") {
+                word.reveal = "fade";
+            }
         }
 
         // Sung words per second. Fast lines (rap, patter) are set as mosaics and framed
@@ -424,7 +468,7 @@ Item {
                 i++;
                 continue;
             }
-            const big = word.key || word.held || (!small(word) && root.hash(lineIndex * 23 + i) < 0.45);
+            const big = word.key || word.held || word.mark === "!" || (!small(word) && root.hash(lineIndex * 23 + i) < 0.45);
             const cap = big ? unit : (small(word) ? unit * 0.42 : unit * 0.62);
             const piece = root.makePiece([word], style, 0, 0, cap);
             items.push({ "pieces": [piece], "width": piece.width, "stack": false });
@@ -660,25 +704,77 @@ Item {
         const fit = Math.min(root.width * 0.8 / placement.width, viewHeight * 0.8 / placement.height);
         let x = placement.x, y = placement.y, zoom = fit;
         const word = block ? block.focusWord(root.clock) : null;
+        const mark = word?.modelData.mark ?? "";
+        if (word !== root._focusWord) {
+            root._focusWord = word;
+            // "!": a kick into the word and a short shake, as it lands.
+            if (mark === "!") {
+                root._vZoom += 1.4;
+                root.beat.punchWord();
+            }
+        }
+        let roll = placement.rotation;
         if (word) {
             const p = word.mapToItem(world, word.width / 2, word.height / 2);
             // Lean towards the word being sung and push in on it. How hard depends on
             // the line's pace: a slow line is framed word by word, a fast one (several
             // words a second) mostly whole, so the camera does not whip between words.
             const pace = placement.layout.pace ?? 2;
-            const tight = Math.max(0.25, Math.min(1, (4.2 - pace) / 2.6));
+            let tight = Math.max(0.25, Math.min(1, (4.2 - pace) / 2.6));
+            // "...": the camera eases off and drifts back while the word trails away.
+            if (mark === "...")
+                tight *= 0.5;
             x += (p.x - x) * 0.7 * tight;
             y += (p.y - y) * 0.7 * tight;
             const close = Math.min(root.width * 0.62 / Math.max(word.width, 1),
                                    viewHeight * 0.36 / Math.max(word.height, 1));
             zoom = Math.max(fit, Math.min(fit * 2.4, fit + (close - fit) * 0.65 * tight));
+            if (mark === "...")
+                zoom *= 0.86;
+            // "?": the frame tilts while the question hangs.
+            if (mark === "?")
+                roll += (root.hash(Math.round(word.begin * 1000)) < 0.5 ? -1 : 1) * 7;
+            // ",": push in close and travel along the whole word, through the pause.
+            if (mark === ",") {
+                const tracked = root.trackWord(word, block, viewHeight, fit);
+                if (tracked)
+                    return { "x": tracked.x, "y": tracked.y, "zoom": tracked.zoom, "rotation": roll };
+            }
         }
         // No pull-back at the end of a line or stanza: the camera stays on the last
         // word until the next line starts (the stanza overview was rejected).
-        const target = { "x": x, "y": y, "zoom": zoom, "rotation": placement.rotation };
+        const target = { "x": x, "y": y, "zoom": zoom, "rotation": roll };
         if (word)
             root.keepInFrame(target, word);
         return target;
+    }
+
+    property Item _focusWord: null
+
+    // A comma word: zoom in until it fills about half the view's height, then move the
+    // centre from its first letters to its last over the time until the next word
+    // (the comma's pause). A word that fits the frame at that zoom is not tracked.
+    function trackWord(word, block, viewHeight, fit) {
+        const zoom = Math.min(viewHeight * 0.5 / Math.max(1, word.height), fit * 3.5);
+        const left = word.mapToItem(world, 0, word.height / 2);
+        const right = word.mapToItem(world, word.width, word.height / 2);
+        const length = Math.hypot(right.x - left.x, right.y - left.y);
+        const half = (root.width / 2 - Math.min(root.width, root.height) * 0.06) / zoom;
+        if (length <= half * 2 * 0.9)
+            return null;
+        let next = Infinity;
+        for (const item of block.wordItems) {
+            if (item.begin > word.begin + 0.01)
+                next = Math.min(next, item.begin);
+        }
+        if (next === Infinity)
+            next = root.lines[root.currentIndex + 1]?.time ?? (word.end + 1);
+        const span = Math.max(0.4, Math.min(2.5, next - word.begin));
+        const t = Math.max(0, Math.min(1, (root.clock - word.begin) / span));
+        const u = t * t * (3 - 2 * t);
+        const dx = (right.x - left.x) / length, dy = (right.y - left.y) / length;
+        const along = half + (length - 2 * half) * u;
+        return { "x": left.x + dx * along, "y": left.y + dy * along, "zoom": zoom };
     }
 
     // The lean towards the word only shifts the centre part of the way, so on a tall
@@ -778,6 +874,7 @@ Item {
         running: root.visible && root.lines.length > 0 && (root.playing || !root.settled || root.snapCamera)
         onTriggered: {
             root.clock = root.estimatedPosition();
+            // A driving beat speeds the handheld wobble up.
             root.wobble += frameTime;
             root.stepCamera(Math.min(frameTime, 1 / 30));
         }
@@ -790,37 +887,53 @@ Item {
         layer.enabled: true
         layer.smooth: true
         layer.effect: ShaderEffect {
-            property vector2d velocity: root.streak
-            property real zoomRate: root.zoomStreak
+            property vector2d velocity: {
+                const x = root.streak.x + root.beat.shakeStreak.x, y = root.streak.y + root.beat.shakeStreak.y;
+                const length = Math.hypot(x, y);
+                return length > 0.06 ? Qt.vector2d(x * 0.06 / length, y * 0.06 / length) : Qt.vector2d(x, y);
+            }
+            property real zoomRate: Math.max(-0.1, Math.min(0.1, root.zoomStreak + root.beat.shakeZoomStreak))
             property vector2d shadowOffset: Qt.vector2d(0.004, 0.009)
             property vector2d texel: Qt.vector2d(1 / Math.max(1, stage.width), 1 / Math.max(1, stage.height))
             property real shadowBlur: 16
             property color shadowColor: root.shadowColor
             property real fisheye: root.fisheye
             property real aspect: stage.width / Math.max(1, stage.height)
+            property real glow: root.beat.beatGlow
+            property vector2d split: root.beat.beatSplit
+            property real turbulence: root.beat.beatTurbulence
+            property real turbSeed: root.beat.turbSeed
+            // The camera moves on `world`; no move or mirror in the shader here.
+            property vector2d shakeOffset: Qt.vector2d(0, 0)
+            property real shakeRoll: 0
+            property real shakeZoom: 1
+            property real mirror: 0
             fragmentShader: Qt.resolvedUrl("shaders/kineticCamera.frag.qsb")
         }
 
         Item {
             id: world
             // A slow handheld drift on top of the springs.
-            readonly property real driftX: Math.sin(root.wobble * 0.7) * 6 + Math.sin(root.wobble * 1.9) * 2
-            readonly property real driftY: Math.cos(root.wobble * 0.53) * 5
+            // A driving beat (beat shake) widens it.
+            readonly property real driftGain: 1
+            readonly property real driftX: (Math.sin(root.wobble * 0.7) * 6 + Math.sin(root.wobble * 1.9) * 2) * driftGain
+            readonly property real driftY: Math.cos(root.wobble * 0.53) * 5 * driftGain
             transform: [
                 Translate {
                     x: -root.camX
                     y: -root.camY
                 },
                 Scale {
-                    xScale: root.camZoom
-                    yScale: root.camZoom
+                    xScale: root.camZoom * (1 + root.beat.beatPunch) * (1 + root.beat.shakeZoom) * (1 + root.beat.swayZoom)
+                    yScale: xScale
                 },
                 Rotation {
-                    angle: -root.camRoll + Math.sin(root.wobble * 0.37) * 0.6
+                    angle: -root.camRoll + Math.sin(root.wobble * 0.37) * 0.6 * world.driftGain
+                           + root.beat.beatRoll + root.beat.shakeRoll + root.beat.swayRoll
                 },
                 Translate {
-                    x: root.viewCenterX + world.driftX
-                    y: root.viewCenterY + world.driftY
+                    x: root.viewCenterX + world.driftX + root.beat.shakeX + root.beat.swayX
+                    y: root.viewCenterY + world.driftY + root.beat.shakeY + root.beat.swayY
                 }
             ]
 
@@ -902,6 +1015,8 @@ Item {
         readonly property real begin: modelData.begin
         readonly property real end: modelData.end
         readonly property string reveal: modelData.reveal
+        // Slams in from larger: "pop", or "slam" for a "!" word.
+        readonly property bool slams: reveal === "pop" || reveal === "slam"
         readonly property bool revealed: root.clock >= begin - 0.03
         property real pop: revealed ? 1 : 0
 
@@ -934,9 +1049,11 @@ Item {
             property: "pop"
             to: 1
             // Fast words land faster, so a rap line is not a pile of half-finished pops.
-            duration: Math.max(200, Math.min(word.reveal === "pop" ? 420 : 520, (word.end - word.begin) * 1000 * 1.2))
-            easing.type: word.reveal === "pop" ? Easing.OutBack : Easing.OutCubic
-            easing.overshoot: 1.6
+            // A "..." word fades in over (most of) its own length.
+            duration: word.reveal === "fade" ? Math.max(450, Math.min(1100, (word.end - word.begin) * 1000))
+                : Math.max(200, Math.min(word.slams ? 420 : 520, (word.end - word.begin) * 1000 * 1.2))
+            easing.type: word.slams ? Easing.OutBack : (word.reveal === "fade" ? Easing.InOutSine : Easing.OutCubic)
+            easing.overshoot: word.reveal === "slam" ? 2.4 : 1.6
         }
 
         // A rising word comes up out of its own baseline: the window clips it, with
@@ -955,12 +1072,12 @@ Item {
                 width: word.width
                 height: word.height
                 // Nothing shows before it is sung.
-                opacity: word.revealed ? Math.min(1, word.pop * (word.reveal === "pop" ? 2.5 : 1.6)) : 0
+                opacity: word.revealed ? Math.min(1, word.pop * (word.slams ? 2.5 : (word.reveal === "fade" ? 1 : 1.6))) : 0
                 transform: [
                     Scale {
                         origin.x: word.width / 2
                         origin.y: word.height / 2
-                        xScale: word.reveal === "pop" && word.revealed ? 1.22 - 0.22 * word.pop : 1
+                        xScale: word.slams && word.revealed ? (word.reveal === "slam" ? 1.6 - 0.6 * word.pop : 1.22 - 0.22 * word.pop) : 1
                         yScale: xScale
                     },
                     Translate {
