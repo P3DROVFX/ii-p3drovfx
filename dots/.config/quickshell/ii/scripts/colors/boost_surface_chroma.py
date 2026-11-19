@@ -9,7 +9,8 @@ try:
     from materialyoucolor.hct import Hct
     from materialyoucolor.utils.color_utils import rgba_from_argb, argb_from_rgb
 except (ModuleNotFoundError, ImportError):
-    venv = os.environ.get("ILLOGICAL_IMPULSE_VIRTUAL_ENV") or os.path.expanduser("~/.local/state/quickshell/.venv")
+    venv = os.environ.get("ILLOGICAL_IMPULSE_VIRTUAL_ENV") or "~/.local/state/quickshell/.venv"
+    venv = os.path.expanduser(os.path.expandvars(venv))
     venv_python = os.path.join(venv, "bin", "python3")
     if os.path.exists(venv_python) and sys.executable != venv_python:
         os.execv(venv_python, [venv_python] + sys.argv)

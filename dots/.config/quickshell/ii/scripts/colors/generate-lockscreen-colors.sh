@@ -116,8 +116,9 @@ fi
 
 mv "$LOCKSCREEN_COLORS.tmp" "$LOCKSCREEN_COLORS"
 if [[ "$raw_type_flag" == "scheme-intense" ]]; then
-    local _venv="${ILLOGICAL_IMPULSE_VIRTUAL_ENV:-${XDG_STATE_HOME:-$HOME/.local/state}/quickshell/.venv}"
-    local _py="python3"
+    _venv="${ILLOGICAL_IMPULSE_VIRTUAL_ENV:-${XDG_STATE_HOME:-$HOME/.local/state}/quickshell/.venv}"
+    _venv="${_venv/#\~/$HOME}"
+    _py="python3"
     [[ -x "$_venv/bin/python3" ]] && _py="$_venv/bin/python3"
     "$_py" "$SCRIPT_DIR/boost_surface_chroma.py" "$LOCKSCREEN_COLORS" --mode "$mode_flag"
 fi
