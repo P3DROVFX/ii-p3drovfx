@@ -30,6 +30,21 @@ Item {
             easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
         }
     }
+    // Kinetic lyrics fill the whole screen, so the horizontal dissolve made for the
+    // lyrics column only darkens one side for nothing. With `radialBlur` the cover is
+    // laid out as if the panels were hidden and dissolves radially into its own blur
+    // (shaders/radialArtBlur.frag).
+    property bool radialBlur: false
+    property real radialAmount: radialBlur ? 1 : 0
+    Behavior on radialAmount {
+        NumberAnimation {
+            duration: Appearance.animation.elementMove.duration
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+        }
+    }
+    // The panel progress the cover's geometry follows.
+    readonly property real layoutPanel: panelProgress * (1 - radialAmount)
     property bool videoActive: false
     property color tint: Appearance.colors.colPrimary
     property color shade: Appearance.m3colors.m3scrim
@@ -300,7 +315,8 @@ Item {
             x: sharp.x
             width: sharp.width
             height: sharp.height
-            opacity: root.artOpacity
+            opacity: root.artOpacity * (1 - root.radialAmount)
+            visible: opacity > 0.001
             layer.enabled: true
             layer.effect: OpacityMask {
                 maskSource: alignedBlurMask
@@ -405,7 +421,7 @@ Item {
         }
         Item {
             id: edgeField
-            readonly property real amount: (1 - root.coverProgress) * root.panelProgress
+            readonly property real amount: (1 - root.coverProgress) * root.layoutPanel
             // Starts halfway into the cover and is fully in well past its edge.
             readonly property real solidEdge: sharp.x + sharp.width + root.width * 0.16
             readonly property real solidAt: width > 0 ? Math.min(1, Math.max(0, (solidEdge - x) / width)) : 1
@@ -433,7 +449,7 @@ Item {
         Image {
             id: sharp
             readonly property real sideSize: root.height
-            readonly property real sideX: Math.max(0, (root.width - sideSize) / 2) * (1 - root.panelProgress)
+            readonly property real sideX: Math.max(0, (root.width - sideSize) / 2) * (1 - root.layoutPanel)
             x: sideX * (1 - root.coverProgress)
             width: sideSize + (root.width - sideSize) * root.coverProgress
             height: root.height
@@ -447,10 +463,10 @@ Item {
             id: revealMask
             // Fade positions in the sharp image's own 0..1 width.
             readonly property real sideAmount: 1 - root.coverProgress
-            readonly property real leftSolid: sideAmount * (1 - root.panelProgress) * 0.12
-            readonly property real rightSolid: 1 - sideAmount * (0.14 + 0.36 * root.panelProgress) - root.coverProgress
-                                               * root.panelProgress * 0.58
-            readonly property real rightClear: Math.max(rightSolid, 1 - root.coverProgress * root.panelProgress * 0.3)
+            readonly property real leftSolid: sideAmount * (1 - root.layoutPanel) * 0.12
+            readonly property real rightSolid: 1 - sideAmount * (0.14 + 0.36 * root.layoutPanel) - root.coverProgress
+                                               * root.layoutPanel * 0.58
+            readonly property real rightClear: Math.max(rightSolid, 1 - root.coverProgress * root.layoutPanel * 0.3)
             // Staggered dissolves: the sharp cover is gone at 65% of the span, while its
             // aligned blur only starts leaving at 30% and reaches zero at the very end,
             // so neither layer ever ends on a hard edge.
@@ -537,9 +553,29 @@ Item {
             x: sharp.x
             width: sharp.width
             height: sharp.height
-            opacity: root.artOpacity
+            opacity: root.artOpacity * (1 - root.radialAmount)
+            visible: opacity > 0.001
             source: sharp
             maskSource: revealMask
+        }
+        // Kinetic lyrics: the same sharp cover and aligned blurs, mixed radially.
+        ShaderEffect {
+            x: sharp.x
+            width: sharp.width
+            height: sharp.height
+            opacity: root.artOpacity * root.radialAmount
+            visible: opacity > 0.001
+            property var sharpSource: sharp
+            property var blurSource: alignedTexture
+            property var blurSoftSource: alignedTextureSoft
+            // A screen-filling cover keeps a wider sharp core than the square one.
+            property real inner: 0.2 + 0.15 * root.coverProgress
+            property real outer: 1.05 + 0.3 * root.coverProgress
+            property real edgeFade: 1 - root.coverProgress
+            property real soft: root.coverProgress
+            property vector2d sharpScale: Qt.vector2d(sharp.width / Math.max(1, sharp.paintedWidth),
+                                                      sharp.height / Math.max(1, sharp.paintedHeight))
+            fragmentShader: Qt.resolvedUrl("shaders/radialArtBlur.frag.qsb")
         }
     }
 

@@ -52,6 +52,46 @@ Item {
     readonly property real referenceSize: 100
     readonly property string fontFamily: Appearance.font.family.title
 
+    // Scripts ------------------------------------------------------------------
+    // The title font (Google Sans Flex) only covers Latin. Anything else would fall
+    // back glyph by glyph inside Qt, with the flex axes (ROND above all) forced onto a
+    // font that lacks them, and measured with the wrong metrics. So each line picks one
+    // face for all its words: Roboto Flex for Greek/Cyrillic when installed (every axis
+    // but ROND), Noto Sans CJK for CJK (wght only), Noto Sans otherwise. Axes a face
+    // lacks are dropped; a missing wdth is approximated with a horizontal scale.
+    readonly property var _families: Qt.fontFamilies()
+    readonly property bool hasRobotoFlex: _families.indexOf("Roboto Flex") >= 0
+    function scriptOf(text) {
+        if (/[぀-ヿㇰ-ㇿ]/.test(text))
+            return "ja";
+        if (/[ᄀ-ᇿ㄰-㆏가-힯]/.test(text))
+            return "ko";
+        if (/[㐀-䶿一-鿿豈-﫿]/.test(text))
+            return "zh";
+        if (/[Ͱ-Ͽἀ-῿Ѐ-ԯᲀ-᲏ⷠ-ⷿꙀ-ꚟ]/.test(text))
+            return "cyrillic";
+        if (/[^\u0000-ɏ̀-ͯḀ-ỿ -⁯₠-⃏\s]/.test(text.replace(/[\p{P}\p{S}\p{N}]/gu, "")))
+            return "other";
+        return "latin";
+    }
+    function isCjk(script) {
+        return script === "ja" || script === "ko" || script === "zh";
+    }
+    function faceFor(script, axes) {
+        if (script === "latin")
+            return { "family": root.fontFamily, "axes": axes, "weight": 0, "italic": false, "stretch": 1 };
+        const synthetic = { "weight": 0, "italic": false, "stretch": 0.62 + 0.38 * (axes.wdth / 100) };
+        if (script === "cyrillic" && root.hasRobotoFlex)
+            return { "family": "Roboto Flex", "axes": { "wght": Math.max(100, axes.wght), "wdth": axes.wdth,
+                     "slnt": axes.slnt, "opsz": axes.opsz }, "weight": 0, "italic": false, "stretch": 1 };
+        if (root.isCjk(script))
+            return Object.assign(synthetic, { "axes": { "wght": Math.max(100, Math.min(900, axes.wght)) },
+                "family": script === "ja" ? "Noto Sans CJK JP" : (script === "ko" ? "Noto Sans CJK KR" : "Noto Sans CJK SC") });
+        // Static fallback: weight picks the nearest instance, slant becomes oblique.
+        return Object.assign(synthetic, { "family": "Noto Sans", "axes": ({}),
+            "weight": Math.max(100, Math.min(900, Math.round(axes.wght / 100) * 100)), "italic": axes.slnt < 0 });
+    }
+
     // Clock --------------------------------------------------------------------
     // MPRIS positions arrive rarely; between them the clock runs on its own and
     // each fresh position nudges it instead of snapping, so the camera never jerks.
@@ -106,8 +146,36 @@ Item {
     // Column composition: one word turned on its side along the block's left edge.
     readonly property real sideWidth: blockWidth * 0.22
     readonly property real sideGap: blockWidth * 0.04
-    // A word sung at least this long (and well above the line's typical word) is held.
-    readonly property real heldSeconds: 0.85
+    // Held words are measured against the song's own pace, per syllable: a 1 s word
+    // is held in a rap verse but not in a ballad, and "everything" over 1 s is not held
+    // while "who" is. `_songPace` is the median seconds per syllable of the whole song.
+    property real _songPace: 0.25
+    function syllables(word) {
+        const bare = word.text.toLowerCase().replace(/[^\p{L}]/gu, "");
+        if (root.isCjk(word.script))
+            return Math.max(1, bare.length);
+        const groups = (bare.length > 3 ? bare.replace(/e$/, "") : bare)
+            .match(/[aeiouyàáâãäåæèéêëìíîïòóôõöøùúûüýÿąęıœăạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹαεηιουωάέήίόύώаеёиоуыэюяіїє]+/g);
+        return Math.max(1, groups ? groups.length : 1);
+    }
+    function isHeld(word) {
+        const d = word.end - word.begin;
+        const perSyllable = d / root.syllables(word);
+        return (d >= 0.55 && perSyllable >= Math.max(0.42, root._songPace * 2.2))
+            || (d >= 1.6 && perSyllable >= root._songPace * 1.5);
+    }
+    function measurePace() {
+        const paces = [];
+        for (const line of root.lines) {
+            for (const word of root.lineWords(line)) {
+                const d = word.end - word.begin;
+                if (d > 0.02 && d < 4)
+                    paces.push(d / root.syllables(word));
+            }
+        }
+        paces.sort((a, b) => a - b);
+        root._songPace = paces.length >= 8 ? paces[Math.floor(paces.length / 2)] : 0.25;
+    }
     // Lines closer together than this belong to one stanza; a stanza is one composition
     // the camera pulls back to show whole once it has been sung.
     readonly property real stanzaGapSeconds: 2.2
@@ -121,8 +189,13 @@ Item {
         return (x >>> 0) / 4294967296;
     }
 
-    function isFiller(text) {
-        const bare = text.toLowerCase().replace(/[^\p{L}\p{N}']/gu, "");
+    // Filler rides small (whisper rows, thin scatter, stacked pairs). A held word never
+    // does, whatever its length: "oh" sung for two seconds is the loudest thing in the
+    // line. CJK has no word-length signal, so it has no filler.
+    function isFiller(word) {
+        if (word.held || root.isCjk(word.script))
+            return false;
+        const bare = word.text.toLowerCase().replace(/[^\p{L}\p{N}']/gu, "");
         return bare.length <= 2 || root.fillerWords.indexOf(bare) >= 0;
     }
 
@@ -131,25 +204,27 @@ Item {
     }
 
     // Measuring: one TextMetrics, retargeted synchronously, results cached per face.
-    property var _measureAxes: ({})
+    property var _measureFace: ({ "family": root.fontFamily, "axes": ({}), "weight": 0, "italic": false, "stretch": 1 })
     property string _measureText: ""
     property var _measureCache: ({})
     TextMetrics {
         id: measurer
-        font.family: root.fontFamily
+        font.family: root._measureFace.family
         font.pixelSize: root.referenceSize
-        font.variableAxes: root._measureAxes
+        font.variableAxes: root._measureFace.axes
+        font.weight: root._measureFace.weight > 0 ? root._measureFace.weight : Font.Normal
+        font.italic: root._measureFace.italic
         text: root._measureText
     }
-    function measure(text, axes) {
-        const key = JSON.stringify(axes) + "|" + text;
+    function measure(text, face) {
+        const key = JSON.stringify(face) + "|" + text;
         const cached = root._measureCache[key];
         if (cached)
             return cached;
-        root._measureAxes = axes;
+        root._measureFace = face;
         root._measureText = text;
         const rect = measurer.tightBoundingRect;
-        const result = { "advance": measurer.advanceWidth, "top": rect.y, "bottom": rect.y + rect.height };
+        const result = { "advance": measurer.advanceWidth * face.stretch, "top": rect.y, "bottom": rect.y + rect.height };
         if (result.advance > 0)
             root._measureCache[key] = result;
         return result;
@@ -162,6 +237,8 @@ Item {
     function lineWords(line) {
         const text = line?.text ?? "";
         const words = [];
+        const script = root.scriptOf(text);
+        const cjk = root.isCjk(script);
         let open = null;
         let cursor = 0;
         for (const span of (line?.words ?? [])) {
@@ -171,8 +248,9 @@ Item {
             const begin = span.begin ?? span.startTime ?? 0;
             const end = span.end ?? span.endTime ?? begin + 0.3;
             const found = text.indexOf(spanText, cursor);
-            const joined = open && (found >= 0 ? !/\s/.test(text.slice(cursor, found))
-                                               : (open.trailingSpace ?? " ").length === 0);
+            // CJK is written without spaces: every span (a character or a phrase) is a word.
+            const joined = open && !cjk && (found >= 0 ? !/\s/.test(text.slice(cursor, found))
+                                                      : (open.trailingSpace ?? " ").length === 0);
             if (found >= 0)
                 cursor = found + spanText.length;
             if (joined) {
@@ -180,7 +258,8 @@ Item {
                 open.end = Math.max(open.end, end);
                 open.trailingSpace = span.trailingSpace;
             } else {
-                open = { "text": spanText, "begin": begin, "end": end, "trailingSpace": span.trailingSpace };
+                open = { "text": spanText, "begin": begin, "end": end, "trailingSpace": span.trailingSpace,
+                         "script": script };
                 words.push(open);
             }
         }
@@ -193,26 +272,30 @@ Item {
     // one size share a baseline and descenders hang below it; otherwise by its own
     // ink, fitted into `length` × `thickness`.
     function makePiece(words, style, length, thickness, fixedCap) {
-        const base = root.rowStyles[style];
-        const space = root.measure(" ", base).advance;
+        const script = words[0]?.script ?? "latin";
+        const axes = root.rowStyles[style];
+        const base = root.faceFor(script, axes);
+        // Held words are set at the widest width, in the row's own weight.
+        const wide = root.faceFor(script, Object.assign({}, axes, { "wdth": 151 }));
+        const space = root.isCjk(script) ? 0 : root.measure(" ", base).advance;
         let x = 0, top = 0, bottom = 0;
         const shown = [];
         for (let i = 0; i < words.length; i++) {
             const word = words[i];
-            // Held words are set at the widest width, in the row's own weight.
-            const axes = word.held && style !== "whisper" ? Object.assign({}, base, { "wdth": 151 }) : base;
+            const face = word.held && style !== "whisper" ? wide : base;
             const text = root.caseFor(style, word.text);
-            const m = root.measure(text, axes);
+            const m = root.measure(text, face);
             if (i > 0)
                 x += space;
-            shown.push({ "text": text, "axes": axes, "x": x, "advance": m.advance, "begin": word.begin,
+            shown.push({ "text": text, "face": face, "x": x, "advance": m.advance, "begin": word.begin,
                          "end": word.end, "accent": word.accent ?? false, "reveal": word.reveal ?? "pop" });
             x += m.advance;
             top = Math.min(top, m.top);
             bottom = Math.max(bottom, m.bottom);
         }
         if (fixedCap > 0) {
-            const cap = root.measure("H", base);
+            // CJK ideographs fill the em box, well above a Latin cap height.
+            const cap = root.measure(root.isCjk(script) ? "\u56fd" : "H", base);
             const fit = fixedCap / Math.max(1, cap.bottom - cap.top);
             return { "words": shown, "style": style, "capTop": cap.top, "fit": fit, "width": x * fit,
                      "height": fixedCap, "x": 0, "y": 0, "rotation": 0 };
@@ -229,32 +312,46 @@ Item {
             return { "pieces": [], "width": root.blockWidth, "height": root.blockWidth * 0.2 };
 
         // Held words, and the key word (the longest one that is not filler).
-        const durations = words.map(w => w.end - w.begin).sort((a, b) => a - b);
-        const typical = durations[Math.floor(durations.length / 2)];
+        for (const word of words)
+            word.held = root.isHeld(word);
         let key = null;
+        const keyLength = root.isCjk(words[0].script) ? 2 : 4;
         for (const word of words) {
-            word.held = word.end - word.begin >= Math.max(root.heldSeconds, typical * 1.8);
-            if (!root.isFiller(word.text) && word.text.length >= 4 && (!key || word.text.length > key.text.length))
+            if (!root.isFiller(word) && word.text.length >= keyLength && (!key || word.text.length > key.text.length))
                 key = word;
         }
+        // A held word outranks a merely long one.
+        const heldKey = words.filter(w => w.held).sort((a, b) => (b.end - b.begin) - (a.end - a.begin))[0];
+        if (heldKey)
+            key = heldKey;
         if (key)
             key.key = true;
         // Two inks: the key word and about a third of the other content words take the
         // accent, never two filler words in a row.
         for (let i = 0; i < words.length; i++) {
             const word = words[i];
-            word.accent = word.key || (!root.isFiller(word.text) && root.hash(lineIndex * 71 + i) < 0.32);
+            word.accent = word.key || (!root.isFiller(word) && root.hash(lineIndex * 71 + i) < 0.32);
             // How the word lands: slam in, rise out of its own baseline, or slide in.
             const r = root.hash(lineIndex * 191 + i * 7 + 1);
             word.reveal = r < 0.4 ? "pop" : (r < 0.75 ? "rise" : "slide");
         }
 
+        // Sung words per second. Fast lines (rap, patter) are set as mosaics and framed
+        // whole; slow, sparse lines get the scatter and column compositions and a camera
+        // that pushes in on each word.
+        const span = Math.max(0.3, words[words.length - 1].end - words[0].begin);
+        const pace = words.length / span;
+        const fast = pace >= 3.2;
         const pick = root.hash(lineIndex * 389 + 5);
-        if (words.length >= 2 && words.length <= 5 && pick > 0.85)
-            return root.layoutScatter(lineIndex, words);
-        if (pick < 0.62)
-            return root.layoutMosaic(lineIndex, words);
-        return root.layoutStack(lineIndex, words, (pick - 0.62) / 0.23);
+        let layout;
+        if (!fast && words.length >= 2 && words.length <= 5 && pick > (pace < 1.6 ? 0.7 : 0.85))
+            layout = root.layoutScatter(lineIndex, words);
+        else if (pick < (fast ? 0.85 : 0.62))
+            layout = root.layoutMosaic(lineIndex, words);
+        else
+            layout = root.layoutStack(lineIndex, words, fast ? 1 : (pick - 0.62) / 0.23);
+        layout.pace = pace;
+        return layout;
     }
 
     // Stacked rows, sometimes with the first word as a column on the left.
@@ -262,7 +359,7 @@ Item {
         const rows = [];
         let row = null;
         for (const word of words) {
-            const filler = root.isFiller(word.text);
+            const filler = root.isFiller(word);
             const chars = row ? row.words.reduce((n, w) => n + w.text.length + 1, 0) : 0;
             if (row && row.open && chars + word.text.length <= 14) {
                 row.words.push(word);
@@ -316,7 +413,7 @@ Item {
     function layoutMosaic(lineIndex, words) {
         const unit = 100; // provisional row height; every row is scaled to the block width
         const style = root.hash(lineIndex * 43 + 9) < 0.65 ? "bold" : "heavy";
-        const small = w => root.isFiller(w.text) || w.text.length <= 3;
+        const small = w => !w.held && (root.isFiller(w) || w.text.length <= (root.isCjk(w.script) ? 1 : 3));
         const items = [];
         for (let i = 0; i < words.length; i++) {
             const word = words[i];
@@ -383,7 +480,7 @@ Item {
         let cycle = Math.floor(root.hash(lineIndex * 61 + 3) * 3);
         for (let i = 0; i < words.length; i++) {
             const word = words[i];
-            const filler = root.isFiller(word.text);
+            const filler = root.isFiller(word);
             const style = filler ? "thin" : (word.key ? "wide" : ["heavy", "condensed", "heavy"][cycle++ % 3]);
             const cap = root.blockWidth * (word.key ? 0.3 : (filler ? 0.1 : 0.18)) * (0.85 + 0.3 * root.hash(lineIndex * 13 + i));
             const piece = root.makePiece([word], style, root.blockWidth * 0.95, 0, cap);
@@ -431,11 +528,11 @@ Item {
     // World placement of every line, walked from the first one. A block's position
     // is its centre; `rotation` is its roll in degrees. Lines of one stanza pack into
     // one wide composition (two masonry columns: each line goes under the shorter
-    // one), so the overview fills a landscape screen; the path only turns between
-    // stanzas.
+    // one); the path only turns between stanzas.
     property var placements: []
     property var stanzas: []
     function rebuild() {
+        root.measurePace();
         const result = [];
         const stanzas = [];
         let x = 0, y = 0, rotation = 0, previous = null, stanza = null;
@@ -498,28 +595,6 @@ Item {
                           "layout": layout, "stanza": stanzas.length - 1 });
             previous = layout;
         }
-        // Each stanza's bounds, in its own (unrotated) frame, for the overview shot.
-        for (const st of stanzas) {
-            const first = result[st.start];
-            const a = -first.rotation * Math.PI / 180;
-            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-            for (let i = st.start; i <= st.end; i++) {
-                const p = result[i];
-                const lx = (p.x - first.x) * Math.cos(a) - (p.y - first.y) * Math.sin(a);
-                const ly = (p.x - first.x) * Math.sin(a) + (p.y - first.y) * Math.cos(a);
-                minX = Math.min(minX, lx - p.width / 2);
-                maxX = Math.max(maxX, lx + p.width / 2);
-                minY = Math.min(minY, ly - p.height / 2);
-                maxY = Math.max(maxY, ly + p.height / 2);
-            }
-            const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
-            const b = first.rotation * Math.PI / 180;
-            st.x = first.x + cx * Math.cos(b) - cy * Math.sin(b);
-            st.y = first.y + cx * Math.sin(b) + cy * Math.cos(b);
-            st.width = maxX - minX;
-            st.height = maxY - minY;
-            st.rotation = first.rotation;
-        }
         root.stanzas = stanzas;
         root.placements = result;
     }
@@ -568,7 +643,6 @@ Item {
     property real _vZoom: 0
     property real _vRoll: 0
     property bool snapCamera: true
-    property bool overview: false
     property real wobble: 0
     // Screen-space streak for the shader.
     property vector2d streak: Qt.vector2d(0, 0)
@@ -585,32 +659,64 @@ Item {
         const viewHeight = root.height - root.bottomInset * 0.35;
         const fit = Math.min(root.width * 0.8 / placement.width, viewHeight * 0.8 / placement.height);
         let x = placement.x, y = placement.y, zoom = fit;
-        const line = root.lines[root.currentIndex];
         const word = block ? block.focusWord(root.clock) : null;
         if (word) {
             const p = word.mapToItem(world, word.width / 2, word.height / 2);
-            // Tight framing: lean hard towards the word being sung and push in until
-            // it fills a good part of the frame. The rest of the block crops out.
-            x += (p.x - x) * 0.7;
-            y += (p.y - y) * 0.7;
+            // Lean towards the word being sung and push in on it. How hard depends on
+            // the line's pace: a slow line is framed word by word, a fast one (several
+            // words a second) mostly whole, so the camera does not whip between words.
+            const pace = placement.layout.pace ?? 2;
+            const tight = Math.max(0.25, Math.min(1, (4.2 - pace) / 2.6));
+            x += (p.x - x) * 0.7 * tight;
+            y += (p.y - y) * 0.7 * tight;
             const close = Math.min(root.width * 0.62 / Math.max(word.width, 1),
                                    viewHeight * 0.36 / Math.max(word.height, 1));
-            zoom = Math.max(fit, Math.min(fit * 2.4, fit + (close - fit) * 0.65));
+            zoom = Math.max(fit, Math.min(fit * 2.4, fit + (close - fit) * 0.65 * tight));
         }
-        // End of a stanza with a breath before the next line: pull back and show the
-        // whole composition.
-        const st = root.stanzas[placement.stanza];
-        const next = root.lines[root.currentIndex + 1];
-        const end = line?.endTime || 0;
-        root.overview = st && st.end > st.start && root.currentIndex === st.end && end > 0
-            && root.clock >= end - 0.15 && (!next || next.time - root.clock > 0.7);
-        if (root.overview)
-            return { "x": st.x, "y": st.y, "rotation": st.rotation,
-                     "zoom": Math.min(root.width * 0.86 / st.width, viewHeight * 0.82 / st.height) };
-        // Long pause after the line: pull back and let it breathe.
-        if (end > 0 && root.clock > end + 1.2)
-            zoom = fit * 0.82;
-        return { "x": x, "y": y, "zoom": zoom, "rotation": placement.rotation };
+        // No pull-back at the end of a line or stanza: the camera stays on the last
+        // word until the next line starts (the stanza overview was rejected).
+        const target = { "x": x, "y": y, "zoom": zoom, "rotation": placement.rotation };
+        if (word)
+            root.keepInFrame(target, word);
+        return target;
+    }
+
+    // The lean towards the word only shifts the centre part of the way, so on a tall
+    // block pushed in hard, a word at its top edge (the first words of a stanza) left
+    // the frame. Measure the word's corners in the camera's frame, zoom out until it
+    // fits inside a margin, then slide the centre just enough to bring it in.
+    function keepInFrame(target, word) {
+        const a = target.rotation * Math.PI / 180;
+        const c = Math.cos(a), s = Math.sin(a);
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        for (const [cx, cy] of [[0, 0], [word.width, 0], [0, word.height], [word.width, word.height]]) {
+            const q = word.mapToItem(world, cx, cy);
+            const dx = q.x - target.x, dy = q.y - target.y;
+            // World → camera frame: undo the roll.
+            const lx = dx * c + dy * s;
+            const ly = -dx * s + dy * c;
+            minX = Math.min(minX, lx);
+            maxX = Math.max(maxX, lx);
+            minY = Math.min(minY, ly);
+            maxY = Math.max(maxY, ly);
+        }
+        const margin = Math.min(root.width, root.height) * 0.06;
+        const left = root.viewCenterX - margin, right = root.width - root.viewCenterX - margin;
+        const up = root.viewCenterY - margin, down = root.height - root.viewCenterY - margin;
+        target.zoom = Math.min(target.zoom, (left + right) / Math.max(1, maxX - minX),
+                               (up + down) / Math.max(1, maxY - minY));
+        let sx = 0, sy = 0;
+        if (minX < -left / target.zoom)
+            sx = minX + left / target.zoom;
+        else if (maxX > right / target.zoom)
+            sx = maxX - right / target.zoom;
+        if (minY < -up / target.zoom)
+            sy = minY + up / target.zoom;
+        else if (maxY > down / target.zoom)
+            sy = maxY - down / target.zoom;
+        // Camera frame → world.
+        target.x += sx * c - sy * s;
+        target.y += sx * s + sy * c;
     }
 
     function stepCamera(dt) {
@@ -739,7 +845,7 @@ Item {
         rotation: placement?.rotation ?? 0
         readonly property bool sameStanza: placement?.stanza === root.currentStanza
         // Earlier lines of the stanza stay as part of the composition; older stanzas fade.
-        opacity: !past ? 1 : (sameStanza ? (root.overview ? 1 : 0.6) : 0.14)
+        opacity: !past ? 1 : (sameStanza ? 0.6 : 0.14)
         Behavior on opacity {
             NumberAnimation {
                 duration: 600
@@ -827,7 +933,8 @@ Item {
             target: word
             property: "pop"
             to: 1
-            duration: word.reveal === "pop" ? 420 : 520
+            // Fast words land faster, so a rap line is not a pile of half-finished pops.
+            duration: Math.max(200, Math.min(word.reveal === "pop" ? 420 : 520, (word.end - word.begin) * 1000 * 1.2))
             easing.type: word.reveal === "pop" ? Easing.OutBack : Easing.OutCubic
             easing.overshoot: 1.6
         }
@@ -867,9 +974,14 @@ Item {
                     text: word.modelData.text
                     color: ink
                     renderType: Text.CurveRendering
-                    font.family: root.fontFamily
+                    font.family: word.modelData.face.family
                     font.pixelSize: root.referenceSize
-                    font.variableAxes: word.modelData.axes
+                    font.variableAxes: word.modelData.face.axes
+                    font.weight: word.modelData.face.weight > 0 ? word.modelData.face.weight : Font.Normal
+                    font.italic: word.modelData.face.italic
+                    transform: Scale {
+                        xScale: word.modelData.face.stretch
+                    }
                     transformOrigin: Item.TopLeft
                     scale: word.piece.fit
                     // Put the piece's cap top on the piece's top edge.

@@ -298,6 +298,7 @@ Item {
             layout: root.artLayout
             panelProgress: root.panelProgress
             panelWashShown: !root.kineticShown
+            radialBlur: root.kineticShown
             videoActive: root.context.videoActive
             tint: root.tint
             fieldColor: root.fieldColor
