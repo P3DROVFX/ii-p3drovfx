@@ -12,6 +12,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import qs
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
@@ -41,7 +42,7 @@ Rectangle {
     readonly property real expandedHeight: Math.min(440, Math.max(282, (panelLoader.item?.contentHeight ?? 0) + 20))
     readonly property real collapsedHeight: collapsedRow.implicitHeight + 16
     readonly property bool collapsed: Persistent.states.sidebar.policies.phone.peripherals.collapsed
-    readonly property int selectedTab: Math.max(0, Math.min(2, Persistent.states.sidebar.policies.phone.peripherals.tab))
+    readonly property int selectedTab: Math.max(0, Math.min(root.tabs.length - 1, Persistent.states.sidebar.policies.phone.peripherals.tab))
     implicitHeight: visible ? (collapsed ? collapsedHeight : expandedHeight) : 0
 
     Behavior on implicitHeight {
@@ -82,13 +83,40 @@ Rectangle {
         : !root._deviceOnline ? "offline"
         : PhoneMicService.connecting ? "connecting"
         : PhoneMicService.running ? "active" : "ready"
-    readonly property var featureStates: [root.mirrorState, root.webcamState, root.micState]
+    // Stats only with an ii tools that reports the phone's load: an older app (or none)
+    // announces nothing, and the tab is not there at all.
+    readonly property bool statsAvailable: IiLinkService.phonePerfAvailable
+    readonly property string statsState: IiLinkService.phonePerfDev !== "" ? "ready" : "offline"
+    readonly property var featureStates: [root.mirrorState, root.webcamState, root.micState, root.statsState]
 
     readonly property var tabs: [
         { "name": Translation.tr("Mirror"), "icon": "smart_display" },
         { "name": Translation.tr("Webcam"), "icon": "videocam" },
         { "name": Translation.tr("Mic"), "icon": "mic" }
-    ]
+    ].concat(root.statsAvailable ? [{ "name": Translation.tr("Stats"), "icon": "monitoring" }] : [])
+
+    /// The Phone tab is on screen with no sub-page over it (set by Phone.qml).
+    property bool pageShown: true
+    // The phone samples its load only while the Stats panel can be seen.
+    readonly property bool statsWatching: root.statsAvailable && root.visible && !root.collapsed && root.pageShown
+        && GlobalStates.policiesPanelOpen && panelArea.shownTab === 3
+    property bool _statsWatched: false
+    onStatsWatchingChanged: {
+        if (root.statsWatching === root._statsWatched)
+            return;
+        root._statsWatched = root.statsWatching;
+        IiLinkService.watchPhonePerf(root.statsWatching);
+    }
+    Component.onCompleted: {
+        if (root.statsWatching) {
+            root._statsWatched = true;
+            IiLinkService.watchPhonePerf(true);
+        }
+    }
+    Component.onDestruction: {
+        if (root._statsWatched)
+            IiLinkService.watchPhonePerf(false);
+    }
 
     // ─── Install guide popup state ─────────────────────────
     property bool _installGuideVisible: false
@@ -298,7 +326,7 @@ Rectangle {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 height: parent.height
-                sourceComponent: [mirrorPanel, webcamPanel, micPanel][panelArea.shownTab]
+                sourceComponent: [mirrorPanel, webcamPanel, micPanel, statsPanel][Math.min(panelArea.shownTab, root.tabs.length - 1)]
             }
 
             Connections {
@@ -593,6 +621,11 @@ Rectangle {
                   } }
             ] : []
         }
+    }
+
+    Component {
+        id: statsPanel
+        PhoneStatsPanel {}
     }
 
     // ─── Components ─────────────────────────────────────────

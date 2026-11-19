@@ -1169,6 +1169,8 @@ Item {
             PhoneFooter {
                 id: phoneFooter
                 Layout.fillWidth: true
+                // The sidebar's Loader holding this tab says whether it is the current one.
+                pageShown: (root.parent?.isCurrent ?? true) && root.activeSubPage.toString() === ""
                 onRequestOpenSubPage: (url) => root.openSubPage(url)
             }
         }

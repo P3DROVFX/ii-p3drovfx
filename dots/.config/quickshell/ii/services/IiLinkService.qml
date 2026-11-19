@@ -1872,6 +1872,137 @@ Singleton {
             PhoneAlarmService.fromLink(m.alarm);
     }
 
+    // ── Phone performance (`phonePerf`) ─────────────────────────────────
+    // The reverse of `perf`: the phone's own load for the Phone tab's Stats panel. The
+    // phone samples (every 2 s) only while a panel here watches; an app from before
+    // announces no `phonePerf`, and one that announces it but stays silent is taken as
+    // old too, so the Stats tab never shows empty.
+
+    /// The connected phone that reports its load; "" when none (no ii tools, or an old one).
+    readonly property string phonePerfDev: {
+        if (!root.phoneDataEnabled)
+            return "";
+        for (const id of Object.keys(root.connections)) {
+            if ((root.phoneCaps[id] ?? []).includes("phonePerf") && !root._phonePerfSilent[id])
+                return id;
+        }
+        return "";
+    }
+    /// The Stats tab shows: a phone that reports its load is (or was, this session) here.
+    readonly property bool phonePerfAvailable: root.phonePerfDev !== "" || (root.phoneDataEnabled && root.phonePerf !== null)
+    /// The last sample: { dev, name, device, uptime, ram, storage, thermal, battery, net, cpu, at }, or null.
+    property var phonePerf: null
+    /// The last 30 samples of RAM in use (0–1), oldest first, for the memory graph.
+    property list<real> phonePerfRam: []
+    /// dev id → true when it announced `phonePerf` but never answered a watch.
+    property var _phonePerfSilent: ({})
+    property int _phonePerfWatchers: 0
+    property string _phonePerfSubDev: ""
+
+    /// A panel showing the phone's load appears (true) or goes (false).
+    function watchPhonePerf(on: bool): void {
+        root._phonePerfWatchers = Math.max(0, root._phonePerfWatchers + (on ? 1 : -1));
+        root._syncPhonePerfSub();
+    }
+    onPhonePerfDevChanged: root._syncPhonePerfSub()
+
+    function _syncPhonePerfSub(): void {
+        const want = root._phonePerfWatchers > 0 ? root.phonePerfDev : "";
+        if (want === root._phonePerfSubDev)
+            return;
+        if (root._phonePerfSubDev !== "" && root.connections[root._phonePerfSubDev] !== undefined)
+            root.sendTo(root._phonePerfSubDev, { t: "sub", what: "phonePerf", on: false });
+        root._phonePerfSubDev = want;
+        if (want !== "") {
+            root.sendTo(want, { t: "sub", what: "phonePerf", on: true });
+            phonePerfSilence.dev = want;
+            phonePerfSilence.retried = false;
+            phonePerfSilence.restart();
+        } else {
+            phonePerfSilence.stop();
+        }
+    }
+
+    // A watch sent while the phone was still connecting can be lost: ask once more
+    // before taking the app for an old one.
+    Timer {
+        id: phonePerfSilence
+        property string dev: ""
+        property bool retried: false
+        interval: 8000
+        onTriggered: {
+            if (root._phonePerfSubDev !== dev || (root.phonePerf?.dev === dev && Date.now() - root.phonePerf.at < interval))
+                return;
+            if (!retried) {
+                retried = true;
+                root.sendTo(dev, { t: "sub", what: "phonePerf", on: true });
+                restart();
+                return;
+            }
+            const silent = Object.assign({}, root._phonePerfSilent);
+            silent[dev] = true;
+            root._phonePerfSilent = silent;
+        }
+    }
+
+    /// What the phone reads as the shell user through Shizuku (optional): CPU use, sensor
+    /// temperatures, GPU use, the busiest processes, battery health and storage by type.
+    function _phonePerfShell(sh): var {
+        if (!sh || typeof sh !== "object")
+            return null;
+        const num = v => (typeof v === "number" && isFinite(v)) ? v : null;
+        const temps = {};
+        for (const k of ["cpu", "gpu", "ram", "modem", "npu", "skin"]) {
+            const v = num(sh.temps?.[k]) ?? (k === "skin" ? num(sh.hal?.skin) : null);
+            if (v !== null)
+                temps[k] = v;
+        }
+        if (num(sh.hal?.usb) !== null)
+            temps.usb = sh.hal.usb;
+        const storage = {};
+        for (const k of ["apps", "appData", "photos", "videos", "audio", "downloads", "system", "other"]) {
+            if (num(sh.storage?.[k]) !== null)
+                storage[k] = sh.storage[k];
+        }
+        return {
+            cpu: sh.cpu && num(sh.cpu.usage) !== null ? { usage: sh.cpu.usage, cores: Array.isArray(sh.cpu.cores) ? sh.cpu.cores.map(Number) : [] } : null,
+            temps: temps,
+            gpu: num(sh.gpu),
+            procs: Array.isArray(sh.procs) ? sh.procs.slice(0, 4).map(p => ({
+                name: String(p.label || p.name || ""),
+                cpu: num(p.cpu) ?? 0,
+                rssKb: num(p.rssKb) ?? 0
+            })).filter(p => p.name.length > 0) : [],
+            health: num(sh.health),
+            storage: Object.keys(storage).length > 0 ? storage : (root.phonePerf?.shell?.storage ?? null)
+        };
+    }
+
+    function _phonePerfSample(dev, m): void {
+        const num = v => (typeof v === "number" && isFinite(v)) ? v : null;
+        const ram = m.ram ?? null;
+        const sample = {
+            dev: dev,
+            name: String(root.connections[dev]?.name ?? ""),
+            device: m.device ?? null,
+            uptime: num(m.uptime),
+            ram: ram && num(ram.total) > 0 ? { total: ram.total, avail: num(ram.avail) ?? 0, low: ram.low === true } : null,
+            storage: m.storage && num(m.storage.total) > 0 ? { total: m.storage.total, free: num(m.storage.free) ?? 0 } : (root.phonePerf?.storage ?? null),
+            thermal: m.thermal ? { status: num(m.thermal.status) ?? 0, headroom: num(m.thermal.headroom) } : null,
+            battery: m.battery ? { level: num(m.battery.level), charging: m.battery.charging === true, temp: num(m.battery.temp), mv: num(m.battery.mv), ma: num(m.battery.ma) } : null,
+            net: m.net ? { rx: num(m.net.rx) ?? 0, tx: num(m.net.tx) ?? 0 } : null,
+            cpu: m.cpu ? { cores: num(m.cpu.cores) ?? 0, freq: Array.isArray(m.cpu.freq) ? m.cpu.freq.map(Number) : [], max: Array.isArray(m.cpu.max) ? m.cpu.max.map(Number) : [] } : null,
+            shell: root._phonePerfShell(m.shell),
+            at: Date.now()
+        };
+        root.phonePerf = sample;
+        if (sample.ram) {
+            const next = root.phonePerfRam.slice(-29);
+            next.push(1 - sample.ram.avail / sample.ram.total);
+            root.phonePerfRam = next;
+        }
+    }
+
     function _contacts(dev, m): void {
         const list = Array.isArray(m.list) ? m.list : [];
         contactsFile.setText(JSON.stringify({ hash: String(m.hash ?? ""), list: list }));
@@ -4267,6 +4398,10 @@ Singleton {
             if (root.phoneDataEnabled)
                 root._status(m);
             return;
+        case "phonePerf":
+            if (root.phoneDataEnabled && dev === root._phonePerfSubDev)
+                root._phonePerfSample(dev, m);
+            return;
         case "contacts":
             if (root.phoneDataEnabled && dev === root.dataDev)
                 root._contacts(dev, m);
@@ -4319,6 +4454,15 @@ Singleton {
             }
             if (!next[dev].includes("pcLyrics"))
                 root._releasePcLyricsDev(dev);
+            // A phone that (re)announces itself gets a fresh chance, and an open Stats
+            // panel asks it again.
+            if (root._phonePerfSilent[dev]) {
+                const silent = Object.assign({}, root._phonePerfSilent);
+                delete silent[dev];
+                root._phonePerfSilent = silent;
+            }
+            if (dev === root._phonePerfSubDev && next[dev].includes("phonePerf"))
+                root.sendTo(dev, { t: "sub", what: "phonePerf", on: true });
             return;
         }
         case "notifs":
@@ -4573,6 +4717,12 @@ Singleton {
         function notifications(): string {
             return JSON.stringify(root.linkNotifications.map(n => ({ app: n.app, title: n.title, text: n.text, actions: n.actions.length, image: n.image !== "", avatar: n.avatar !== "" })));
         }
+        /// Watches the phone's load from the terminal ("on" / "off"), as the Stats panel does.
+        function phonePerf(on: string): string {
+            root.watchPhonePerf(on === "on");
+            return root.phonePerfDev === "" ? "no phone reports its load" : `watching ${root.phonePerfDev}: ${root._phonePerfWatchers}`;
+        }
+
         function status(): string {
             return JSON.stringify({
                 enabled: root.enabled,
@@ -4585,6 +4735,7 @@ Singleton {
                 lives: root.linkLives.length,
                 mirrorsNotifications: root.mirrorsNotifications,
                 phoneStatus: root.phoneStatus,
+                phonePerf: { dev: root.phonePerfDev, watchers: root._phonePerfWatchers, last: root.phonePerf },
                 error: root.lastError
             });
         }

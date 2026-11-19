@@ -219,6 +219,25 @@ The shell stores each day in `<state>/phone_usage/<date>.json`, keeps 60 days, a
 | phone → shell | `{"t":"sub","what":"perf","on":bool}` | caps `perf`. On while the phone's panel is on screen (sent again after a reconnect); a sampler runs only then. |
 | shell → phone | `{"t":"perf","cpu":{name,usage,temp,clock,…},"gpu":{name,usage,temp,power,state,vramUsed,vramTotal,…},"ram":{used,total,…},"fps":{active,fps,frametime,…},"gamemode":bool}` | Once a second: the performance HUD's sampler (`perf_monitor.py`), frame rate from MangoHud. |
 
+## Phone performance
+
+The reverse of the performance panel: the phone's own load for the Stats tab of the
+Phone tab's bottom group. The phone announces `phonePerf` in its `caps` (while it
+shares its data); without it the tab does not exist.
+
+| Direction | Message | |
+| --- | --- | --- |
+| shell → phone | `{"t":"sub","what":"phonePerf","on":bool}` | On while the Stats panel is on screen; sent again when the phone re-announces its caps, and once more if 8 s pass without a sample (a phone silent after that is taken for an old app until it reconnects). |
+| phone → shell | `{"t":"phonePerf","device":{model,maker,android},"uptime":ms,"ram":{total,avail,low},"storage":{total,free}\|null,"thermal":{status,headroom\|null},"battery":{level,charging,temp,mv,ma\|null}\|null,"net":{rx,tx}\|null,"cpu":{cores,freq?:[MHz],max?:[MHz]}}` | Every 2 s to each PC that watches, and only then; stops on `on:false` or when the link drops. `thermal.status` is `PowerManager`'s 0–6; `headroom` is `getThermalHeadroom(0)` (1.0 = the throttle point). `net` is bytes per second. `ma` is the battery current (positive charging on most phones). `cpu.freq` is absent where cpufreq is closed to apps. Storage is read every 30 s. |
+
+With [Shizuku](https://shizuku.rikka.app/) running and allowed on the phone, `phonePerf` also
+carries `"shell":{"cpu":{usage,cores:[0–1]},"temps":{cpu?,gpu?,ram?,modem?,npu?,skin?},"gpu"?:0–1,"procs"?:[{name,label?,cpu,rssKb}],"health"?:%,"storage"?:{apps,appData,photos,videos,audio,downloads,system,other},"hal"?:{skin?,usb?}}`:
+what only the shell user reads. `cpu` is use since the last sample; `temps` the hottest
+zone of each group in °C; `procs` the busiest processes over ~10 s (`cpu` as a share of the
+whole phone, `label` the app's name); `health`, `storage` and `hal` (the thermal HAL's
+named sensors) refresh about once a minute. Absent without Shizuku: the shell shows what it
+has.
+
 ## The Phone tab's actions
 
 KdeConnectService lists the paired phone as a device, `iitools:<id>`, and sends its
