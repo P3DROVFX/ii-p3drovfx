@@ -5298,6 +5298,10 @@ Singleton {
                     // it waits so the hold is visible. Off: a hover opens it.
                     property bool holdToReveal: false
                     property int holdToRevealMs: 700
+                    // Click to open the dashboard: hovering still opens an activity's
+                    // expanded card, but the dashboard only opens on a left click and
+                    // stays until a click lands outside it. Overrides hold to reveal.
+                    property bool clickToOpenDashboard: false
                     // Keep the dashboard's quick-toggle grid resident. Off: the grid
                     // is built on open and released after the closing fade. On: built
                     // once and kept, so openings are instant at the price of the

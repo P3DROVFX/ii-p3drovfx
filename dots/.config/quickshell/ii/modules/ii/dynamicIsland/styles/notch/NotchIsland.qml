@@ -283,6 +283,12 @@ Scope {
      * it off.
      */
     readonly property bool holdToReveal: IslandPolicy.holdToReveal && !root.clickToExpand
+        && !root.clickOpensDashboard
+    /**
+     * The dashboard only opens on a left click; see IslandPolicy.clickToOpenDashboard.
+     * Click to expand already makes every expansion a click, so it takes precedence.
+     */
+    readonly property bool clickOpensDashboard: IslandPolicy.clickToOpenDashboard && !root.clickToExpand
     readonly property int holdRevealMs: IslandPolicy.holdToRevealMs
     /**
      * How much bigger the island gets by the end of the hold. A face that expands in
@@ -545,6 +551,9 @@ Scope {
         // The island's own pointer only: a bubble expands itself, never the island.
         hovered: containerHover.hovered && root.pointerOnBody
         blocked: root.explicitSurfaceActive || root.expandSuppressed || root.faceClosedUnderPointer
+            // Click to open the dashboard: a hover only expands a face that has an
+            // expanded card; over anything else it would have been the dashboard.
+            || (root.clickOpensDashboard && !root.hasExpanded)
             // A face made of buttons: the pointer is there to press one.
             || IslandRegistry.isInteractive(root.pagedId)
         // `velocity.length` is a *method* on the vector, not a number: assigning it
@@ -2718,6 +2727,20 @@ Scope {
                 }
             }
 
+            // Click to open the dashboard: a left click anywhere on the body that is not
+            // already an expanded card (that one has its own handler below) opens it. It
+            // stays until a click lands outside, like a dashboard asked for over IPC.
+            TapHandler {
+                acceptedButtons: Qt.LeftButton
+                enabled: root.clickOpensDashboard && !root.dashboardActive && !root.inBodyExpanded
+                    && !root.explicitSurfaceActive && !root.expandSuppressed && !root.faceClosedUnderPointer
+                    && !IslandRegistry.isInteractive(root.pagedId) && root.pointerOnBody
+                onTapped: {
+                    if (!notchContent.faceControlHovered)
+                        root.openDashboard();
+                }
+            }
+
             // A hovered card opens the dashboard on a click; its buttons take their own.
             // The handler sees their clicks as well (it only watches the press), so a
             // click on one is skipped here.
@@ -2726,8 +2749,12 @@ Scope {
                 enabled: !root.clickToExpand && root.inBodyExpanded && !root.dashboardActive
                     && IslandRegistry.bodyClickOpensDashboard(root.pagedId) && root.pointerOnBody
                 onTapped: {
-                    if (!notchContent.faceControlHovered)
-                        root.dashboardClicked = true;
+                    if (notchContent.faceControlHovered)
+                        return;
+                    root.dashboardClicked = true;
+                    // Click to open the dashboard: hold it past the pointer leaving.
+                    if (root.clickOpensDashboard)
+                        root.openDashboard();
                 }
             }
 

@@ -819,8 +819,24 @@ Item {
                     }
 
                     ConfigSwitch {
+                        buttonIcon: "left_click"
+                        text: Translation.tr("Click to open dashboard")
+                        checked: Config.options.dynamicIsland.behavior.clickToOpenDashboard
+                        onCheckedChanged: {
+                            if (checked === Config.options.dynamicIsland.behavior.clickToOpenDashboard)
+                                return;
+                            Config.options.dynamicIsland.behavior.clickToOpenDashboard = checked;
+                        }
+
+                        StyledToolTip {
+                            text: Translation.tr("Hovering never opens the dashboard; a left click on the island does, and a click outside closes it. Activity cards still expand on hover.")
+                        }
+                    }
+
+                    ConfigSwitch {
                         buttonIcon: "touch_app"
                         text: Translation.tr("Hold to reveal")
+                        visible: !Config.options.dynamicIsland.behavior.clickToOpenDashboard
                         checked: Config.options.dynamicIsland.behavior.holdToReveal
                         onCheckedChanged: {
                             if (checked === Config.options.dynamicIsland.behavior.holdToReveal)
@@ -837,6 +853,7 @@ Item {
                         icon: "timer"
                         text: Translation.tr("Hold time (ms)")
                         visible: Config.options.dynamicIsland.behavior.holdToReveal
+                            && !Config.options.dynamicIsland.behavior.clickToOpenDashboard
                         value: Config.options.dynamicIsland.behavior.holdToRevealMs
                         from: 200
                         to: 3000
