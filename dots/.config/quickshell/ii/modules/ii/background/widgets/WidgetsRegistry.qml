@@ -1232,7 +1232,7 @@ Singleton {
             "category": "Utility",
             "qmlPath": Qt.resolvedUrl("utility/AtAGlanceWidget.qml"),
             "icon": "dashboard",
-            "description": Translation.tr("Android-inspired context widget combining media, calendar, sports, and current weather."),
+            "description": Translation.tr("Smartspacer-style At a Glance: ordered Targets and Complications with requirements, paging, pinning and an expanded view."),
             "configPage": "widgets/DesktopAtAGlanceConfig.qml"
         },
         {

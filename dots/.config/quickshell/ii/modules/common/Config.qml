@@ -4235,22 +4235,37 @@ Singleton {
                         property real y: 100
                         property int widgetSize: 100
                         property int widthCells: 3
-                        property bool dualColumnMode: false
-                        property list<string> servicePriority: ["media", "calendar", "sports", "todo", "email", "localsend", "kdeconnect", "fallback"]
-                        property bool enableMedia: true
-                        property bool enableCalendar: true
-                        property bool enableSports: true
-                        property bool enableTodo: true
-                        property bool enableEmail: true
-                        property bool enableLocalSend: true
-                        property bool enableKdeConnect: true
-                        property bool enableWeather: true
-                        property int calendarWindowMinutes: 60
-                        property int sportsWindowHours: 12
-                        property bool showLocation: true
-                        property bool showServiceLabel: false
-                        property bool showSeparators: true
-                        property bool animateContent: true
+                        // Smartspacer model: ordered Targets (pages) and Complications
+                        // (chips), each with settings and All/Any requirements.
+                        property list<var> targets: [
+                            { "id": "t-glance", "type": "glance", "enabled": true, "showOnDesktop": true, "showOnLock": true, "disableSubComplication": false, "requireAll": [], "requireAny": [], "settings": { "hidden": [], "sportsWindowHours": 12 } },
+                            { "id": "t-calendar", "type": "calendar", "enabled": true, "showOnDesktop": true, "showOnLock": true, "disableSubComplication": false, "requireAll": [], "requireAny": [], "settings": { "showAllDay": false, "showLocation": true, "showUnconfirmed": true, "preEventMinutes": 60, "postEventMinutes": -1, "dismissedEvents": [] } },
+                            { "id": "t-music", "type": "music", "enabled": true, "showOnDesktop": true, "showOnLock": true, "disableSubComplication": false, "requireAll": [], "requireAny": [], "settings": { "showAlbumArt": true, "showWhenPaused": false, "dismissedApps": [] } },
+                            { "id": "t-date", "type": "date", "enabled": true, "showOnDesktop": true, "showOnLock": true, "disableSubComplication": false, "requireAll": [], "requireAny": [], "settings": { "dateFormat": "" } }
+                        ]
+                        property list<var> complications: [
+                            { "id": "c-weather", "type": "weather", "enabled": true, "showOnDesktop": true, "showOnLock": true, "requireAll": [], "requireAny": [], "settings": { "showCondition": false } },
+                            { "id": "c-alarm", "type": "alarm", "enabled": true, "showOnDesktop": true, "showOnLock": true, "requireAll": [], "requireAny": [], "settings": { "hoursAhead": 12, "includePhone": true } }
+                        ]
+                        property string layout: "horizontal" // "horizontal" (paged), "vertical" (list)
+                        property bool singlePage: false
+                        property bool showPageControls: true
+                        property string pageControlStyle: "dots" // "dots", "arrows"
+                        property bool invisibleControls: false
+                        property bool animateChanges: true
+                        property bool extraPadding: false
+                        property string tintColour: "automatic" // "automatic", "white", "black"
+                        property bool materialYouStyle: false
+                        property bool textShadow: true
+                        property string complicationOnDate: "always" // "always", "weather", "never"
+                        property string pinMode: "none" // "none", "position", "target"
+                        property int pinPosition: 1
+                        property string pinTargetId: ""
+                        property string whenUnavailable: "date" // "date", "first", "hide"
+                        property string hideSensitive: "none" // "none", "contents", "target"
+                        property bool expandedEnabled: true
+                        property string expandedOpenMode: "expanded" // "never", "expanded", "always"
+                        property bool complicationsFirst: false
                     }
                     property JsonObject weather: JsonObject {
                         property bool enable: false

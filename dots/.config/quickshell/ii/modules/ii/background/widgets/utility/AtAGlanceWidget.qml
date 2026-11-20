@@ -1,17 +1,19 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Layouts
-import Qt5Compat.GraphicalEffects
-import Quickshell
-import Quickshell.Io
+import QtQuick.Effects
 import qs
 import qs.services
 import qs.modules.common
-import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.modules.ii.background.widgets
 
+/*
+ * At a Glance, after Smartspacer's widget: pages of Targets with their
+ * Complications, paged horizontally (dots or arrows), stacked vertically, or
+ * opened into an Expanded view with every target and complication. The data
+ * lives in AtAGlanceService; this file only draws and routes taps.
+ */
 AbstractBackgroundWidget {
     id: root
 
@@ -31,337 +33,500 @@ AbstractBackgroundWidget {
     }
 
     readonly property var options: Config.options.background.widgets.at_a_glance
-    readonly property int widthCells: Math.max(2, Math.min(4, options.widthCells ?? 3))
-    readonly property real contentScale: (options.widgetSize ?? 100) / 100.0
-    readonly property bool dualColumn: (options.dualColumnMode ?? false) && targetsList.length > 1
+    readonly property real contentScale: (root.options.widgetSize ?? 100) / 100.0
+    readonly property int widthCells: Math.max(2, Math.min(4, root.options.widthCells ?? 3))
+    readonly property bool vertical: (root.options.layout ?? "horizontal") === "vertical"
+    readonly property bool materialYou: root.options.materialYouStyle ?? false
+    readonly property bool animate: root.options.animateChanges ?? true
+    property bool expanded: false
 
-    implicitWidth:  (dualColumn ? 480 : (widthCells === 2 ? 250 : (widthCells === 4 ? 450 : 350))) * contentScale
-    implicitHeight: 76 * contentScale
-
-    readonly property var targetsList: AtAGlanceService.activeTargetsList
-    property int selectedTargetIndex: 0
-
-    onTargetsListChanged: {
-        if (selectedTargetIndex >= targetsList.length)
-            selectedTargetIndex = 0;
+    // "Automatic (Wallpaper Based)" tint reads the wallpaper under the widget.
+    needsColText: !root.materialYou && (root.options.tintColour ?? "automatic") === "automatic"
+    // Settings previews never sample the wallpaper; the theme's mode is the
+    // closest guess of how light it is.
+    Binding {
+        when: root.isPreview
+        root.dominantColor: Appearance.m3colors.darkmode ? Qt.rgba(0.1, 0.1, 0.1, 1) : Qt.rgba(0.9, 0.9, 0.9, 1)
     }
 
-    readonly property string currentServiceKey: targetsList[selectedTargetIndex] || "fallback"
-    readonly property var currentData: AtAGlanceService.getTargetData(currentServiceKey)
+    // ── Design metrics (units) ─────────────────────────────────────────────────
+    readonly property real cellWidth: 120
+    readonly property real pagePadding: (root.options.extraPadding ?? false) ? 16 : 6
+    readonly property real cardPadding: 16
+    readonly property real pageHeight: 72
+    readonly property real dotsHeight: 12
+    readonly property real arrowSize: 26
+    readonly property real expandedMinWidth: 380
 
-    readonly property string dualServiceKey: targetsList[(selectedTargetIndex + 1) % targetsList.length] || "fallback"
-    readonly property var dualData: AtAGlanceService.getTargetData(dualServiceKey)
+    readonly property real designWidth: root.expanded ? Math.max(root.expandedMinWidth, root.widthCells * root.cellWidth)
+        : root.widthCells * root.cellWidth + root.pagePadding * 2
+    readonly property real designHeight: root.expanded ? expandedColumn.implicitHeight + root.cardPadding * 2
+        : root.vertical ? Math.max(root.pageHeight, verticalColumn.implicitHeight) + root.pagePadding * 2
+        : root.pageHeight + (root.reserveDots ? root.dotsHeight : 0) + root.pagePadding * 2
 
-    Behavior on implicitWidth {
-        NumberAnimation { duration: 250; easing.type: Easing.OutCubic }
-    }
+    implicitWidth: root.designWidth * root.contentScale
+    implicitHeight: root.designHeight * root.contentScale
 
-    function triggerAction(serviceName) {
-        if (serviceName === "media") {
-            if (AtAGlanceService.player) AtAGlanceService.player.togglePlaying();
-        } else if (serviceName === "calendar") {
-            calendarIpc.running = true;
-        } else if (serviceName === "todo") {
-            todoIpc.running = true;
-        } else if (serviceName === "email") {
-            emailIpc.running = true;
-        } else if (serviceName === "fallback") {
-            Weather.getData(true);
+    // ── Colours ────────────────────────────────────────────────────────────────
+    readonly property bool cardShown: root.materialYou || root.expanded
+    readonly property color colTitle: {
+        if (root.cardShown)
+            return WidgetColorScheme.textColorOnBg;
+        switch (root.options.tintColour ?? "automatic") {
+        case "white": return Qt.rgba(1, 1, 1, 1);
+        case "black": return Qt.rgba(0, 0, 0, 1);
         }
+        return root.colText;
+    }
+    readonly property color colSubtitle: root.cardShown ? WidgetColorScheme.subtextColorOnBg : Qt.alpha(root.colTitle, 0.9)
+    readonly property color colAccent: root.cardShown ? WidgetColorScheme.accentColor : root.colTitle
+    readonly property color colButton: root.cardShown ? WidgetColorScheme.accentColor : Qt.alpha(root.colTitle, 0.18)
+    readonly property color colOnButton: root.cardShown ? WidgetColorScheme.onAccentColor : root.colTitle
+
+    // ── Pages ──────────────────────────────────────────────────────────────────
+    readonly property var pages: AtAGlanceService.shownPages
+    readonly property int pageCount: root.pages.length
+    property string currentKey: ""
+    property int currentIndex: 0
+    readonly property var currentPage: root.pages[root.currentIndex] ?? null
+    readonly property bool controlsAllowed: !root.vertical && (root.options.showPageControls ?? true)
+        && !(root.options.singlePage ?? false) && (root.options.pinMode ?? "none") === "none"
+    readonly property bool reserveDots: root.controlsAllowed && (root.options.pageControlStyle ?? "dots") === "dots"
+
+    // Keep the page the user is on when the list changes under it.
+    onPagesChanged: {
+        const i = root.pages.findIndex(p => p.key === root.currentKey);
+        if (i >= 0)
+            root.currentIndex = i;
+        else
+            root.currentIndex = Math.max(0, Math.min(root.currentIndex, root.pageCount - 1));
+        root.currentKey = root.pages[root.currentIndex]?.key ?? "";
     }
 
-    function handleDroppedFiles(urls) {
-        const paths = [];
-        for (let i = 0; i < urls.length; i++) {
-            let path = String(urls[i]);
-            if (path.startsWith("file://")) path = path.substring(7);
-            paths.push(decodeURIComponent(path));
+    function goTo(index) {
+        if (root.pageCount === 0)
+            return;
+        // Smartspacer's controls loop back to the first page.
+        root.currentIndex = ((index % root.pageCount) + root.pageCount) % root.pageCount;
+        root.currentKey = root.pages[root.currentIndex]?.key ?? "";
+    }
+
+    // ── Taps ───────────────────────────────────────────────────────────────────
+    // A left click that did not become a move (same contract as
+    // ExpressiveCardWidget): no MouseArea over the content, so it stays draggable.
+    property bool _movedSincePress: false
+    onIsDraggingChanged: {
+        if (root.isDragging)
+            root._movedSincePress = true;
+        else
+            Qt.callLater(() => root._movedSincePress = false);
+    }
+
+    onClicked: mouse => {
+        if (mouse.button !== Qt.LeftButton || root._movedSincePress || root.isPreview || root.editModeActive)
+            return;
+        const target = root.pageDelegateAt(mouse.x, mouse.y);
+        if (!target)
+            return;
+        const p = target.mapFromItem(root, mouse.x, mouse.y);
+        const hit = target.actionAt(p.x, p.y);
+        if (hit.complication) {
+            AtAGlanceService.runAction(hit.action);
+            return;
         }
-        if (paths.length === 0) return;
+        root.activatePage(target.page);
+    }
 
-        if (LocalSend.available) {
-            LocalSend.sendFiles(paths);
-        } else if (KdeConnectService.available && KdeConnectService.activeDevice) {
-            for (let j = 0; j < paths.length; j++) {
-                KdeConnectService.shareFile(KdeConnectService.activeDeviceId, paths[j]);
-            }
+    function activatePage(page) {
+        if (!page)
+            return;
+        const mode = root.options.expandedOpenMode ?? "expanded";
+        const canExpand = !root.expanded && (root.options.expandedEnabled ?? true);
+        if (canExpand && (page.openExpanded || mode === "always" || (mode === "expanded" && page.expandedOptions))) {
+            root.expanded = true;
+            return;
         }
+        AtAGlanceService.runAction(page.action);
     }
 
-    Process {
-        id: calendarIpc
-        command: ["qs", "ipc", "-c", "ii", "call", "cheatsheet", "toggle"]
+    function pageDelegateAt(x, y) {
+        const candidates = [];
+        if (root.expanded) {
+            for (let i = 0; i < expandedRepeater.count; i++)
+                candidates.push(expandedRepeater.itemAt(i)?.pageItem);
+        } else if (root.vertical) {
+            for (let i = 0; i < verticalRepeater.count; i++)
+                candidates.push(verticalRepeater.itemAt(i));
+        } else {
+            candidates.push(pagedRepeater.itemAt(root.currentIndex));
+        }
+        for (const c of candidates) {
+            if (!c)
+                continue;
+            const p = c.mapFromItem(root, x, y);
+            if (p.x >= 0 && p.y >= 0 && p.x <= c.width && p.y <= c.height)
+                return c;
+        }
+        return null;
     }
 
-    Process {
-        id: todoIpc
-        command: ["qs", "ipc", "-c", "ii", "call", "sidebarDashboard", "openTab", "todo"]
-    }
+    Component.onCompleted: if (root.isPreview) AtAGlanceService.previewViewers++
+    Component.onDestruction: if (root.isPreview) AtAGlanceService.previewViewers--
 
-    Process {
-        id: emailIpc
-        command: ["qs", "ipc", "-c", "ii", "call", "cheatsheet", "toggle"]
+    // Leave the expanded view when the screen locks or the widget is edited.
+    Connections {
+        target: GlobalStates
+        function onScreenLockedChanged() { root.expanded = false; }
     }
+    onEditModeActiveChanged: if (root.editModeActive) root.expanded = false
 
+    // ── Drawing ────────────────────────────────────────────────────────────────
     Item {
-        id: container
-        anchors.fill: parent
+        id: box
+        anchors.centerIn: parent
+        width: root.designWidth
+        height: root.designHeight
+        scale: root.contentScale
 
-        // ── DropArea for File Drag-and-Drop ──────────────────────────────────
-        DropArea {
-            id: dropArea
-            anchors.fill: parent
-            keys: ["text/uri-list"]
-
-            Rectangle {
-                anchors.fill: parent
-                color: Qt.rgba(1, 1, 1, 0.12)
-                radius: Appearance.rounding.normal
-                visible: dropArea.containsDrag
-                border.width: 0
-
-                StyledText {
-                    anchors.centerIn: parent
-                    text: Translation.tr("Drop files to share via LocalSend or your phone")
-                    color: Appearance.colors.colOnLayer0
-                    font.pixelSize: Math.round(14 * root.contentScale)
-                    font.weight: Font.Bold
-                }
-            }
-
-            onDropped: drop => {
-                if (drop.hasUrls) {
-                    root.handleDroppedFiles(drop.urls);
-                }
-            }
+        HoverHandler {
+            id: hover
         }
 
-        // ── Transparent Background Click & Drag Handler ─────────────────────────
-        MouseArea {
-            id: dragAndClickHandler
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            propagateComposedEvents: true
-
-            property real pressX: 0
-            property real pressY: 0
-
-            onPressed: mouse => {
-                pressX = mouse.x;
-                pressY = mouse.y;
-                mouse.accepted = false; // Pass press event to AbstractBackgroundWidget so desktop drag works!
-            }
-
-            onClicked: mouse => {
-                const dx = Math.abs(mouse.x - pressX);
-                const dy = Math.abs(mouse.y - pressY);
-                if (dx < 6 && dy < 6) {
-                    root.triggerAction(root.currentServiceKey);
-                }
-            }
+        WheelHandler {
+            enabled: !root.vertical && !root.expanded && root.controlsAllowed && root.pageCount > 1
+            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+            onWheel: event => root.goTo(root.currentIndex + (event.angleDelta.y < 0 || event.angleDelta.x < 0 ? 1 : -1))
         }
 
-        RowLayout {
+        StyledRectangularShadow {
+            target: card
+            visible: card.visible && (Config.options.background.widgets.enableShadows ?? true)
+        }
+
+        Rectangle {
+            id: card
             anchors.fill: parent
-            anchors.leftMargin: 8 * root.contentScale
-            anchors.rightMargin: 8 * root.contentScale
-            anchors.topMargin: 4 * root.contentScale
-            anchors.bottomMargin: 4 * root.contentScale
-            spacing: 16 * root.contentScale
+            visible: root.cardShown
+            radius: Appearance.rounding.large
+            color: WidgetColorScheme.tintBackground(WidgetColorScheme.cardBgColor)
+        }
 
-            // ── COLUMN 1 (Primary Target) ───────────────────────────────────
-            RowLayout {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                spacing: 12 * root.contentScale
+        // Text over the wallpaper gets Smartspacer's "Text Shadow".
+        Item {
+            id: content
+            anchors.fill: parent
+            layer.enabled: !root.cardShown && (root.options.textShadow ?? true)
+            layer.effect: MultiEffect {
+                shadowEnabled: true
+                shadowColor: Appearance.colors.colShadow
+                shadowBlur: 0.45
+                shadowVerticalOffset: 1
+                shadowHorizontalOffset: 0
+                autoPaddingEnabled: true
+            }
 
-                // Media Cover Art Thumbnail (Rounded Corners)
+            // ── Horizontal (paged) ─────────────────────────────────────────────
+            Item {
+                id: pager
+                visible: !root.vertical && !root.expanded
+                x: root.pagePadding
+                y: root.pagePadding
+                width: parent.width - root.pagePadding * 2 - (arrows.visible ? arrows.width + 6 : 0)
+                height: root.pageHeight
+                clip: true
+
                 Item {
-                    id: coverArtBox1
-                    visible: root.currentData.service === "media" && root.currentData.artUrl !== ""
-                    implicitWidth:  46 * root.contentScale
-                    implicitHeight: 46 * root.contentScale
-                    Layout.alignment: Qt.AlignVCenter
+                    id: strip
+                    height: parent.height
+                    x: -root.currentIndex * pager.width
+                    Behavior on x {
+                        enabled: root.animate
+                        animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                    }
 
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: Appearance.rounding.normal
-                        color: Qt.rgba(0, 0, 0, 0.3)
-                        clip: true
+                    // Bound by count so a minute tick updates pages in place
+                    // instead of rebuilding them.
+                    Repeater {
+                        id: pagedRepeater
+                        model: pager.visible ? root.pageCount : 0
+                        delegate: AtAGlancePage {
+                            required property int index
+                            x: index * pager.width
+                            width: pager.width
+                            height: pager.height
+                            page: root.pages[index] ?? null
+                            interactive: !root.isPreview
+                            colTitle: root.colTitle
+                            colSubtitle: root.colSubtitle
+                            colAccent: root.colAccent
+                            colButton: root.colButton
+                            colOnButton: root.colOnButton
+                            opacity: index === root.currentIndex ? 1 : 0
+                            Behavior on opacity {
+                                enabled: root.animate
+                                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                            }
+                            onButtonActivated: action => AtAGlanceService.runAction(action)
+                        }
+                    }
+                }
+            }
 
-                        Image {
+            // Page dots: tap one to go there.
+            Row {
+                id: dots
+                visible: pager.visible && root.reserveDots && root.pageCount > 1
+                opacity: (root.options.invisibleControls ?? false) ? 0 : 1
+                x: root.pagePadding
+                y: root.pagePadding + root.pageHeight + (root.dotsHeight - height) / 2
+                spacing: 6
+                Repeater {
+                    model: dots.visible ? root.pageCount : 0
+                    delegate: Rectangle {
+                        id: dot
+                        required property int index
+                        readonly property bool current: dot.index === root.currentIndex
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: dot.current ? 16 : 6
+                        height: 6
+                        radius: 3
+                        color: Qt.alpha(root.colTitle, dot.current ? 1 : 0.45)
+                        Behavior on width {
+                            enabled: root.animate
+                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                        }
+                        MouseArea {
                             anchors.fill: parent
-                            source: root.currentData.artUrl
-                            fillMode: Image.PreserveAspectCrop
-                            mipmap: true
+                            anchors.margins: -4
+                            cursorShape: Qt.PointingHandCursor
+                            enabled: !root.isPreview
+                            onClicked: root.goTo(dot.index)
                         }
                     }
                 }
+            }
 
-                // Text Content
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    Layout.alignment: Qt.AlignVCenter
-                    spacing: 2 * root.contentScale
-
-                    // Line 1: Headline
-                    Text {
-                        Layout.fillWidth: true
-                        text: root.currentData.title
-                        color: Appearance.colors.colOnLayer0
-                        font.family: Appearance.font.family.main
-                        font.pixelSize: Math.round(19 * root.contentScale)
-                        font.weight: Font.Bold
-                        elide: Text.ElideRight
+            // Page arrows on the right.
+            Column {
+                id: arrows
+                visible: pager.visible && root.controlsAllowed && (root.options.pageControlStyle ?? "dots") === "arrows" && root.pageCount > 1
+                opacity: (root.options.invisibleControls ?? false) ? 0 : 1
+                anchors.right: parent.right
+                anchors.rightMargin: root.pagePadding
+                anchors.verticalCenter: pager.verticalCenter
+                spacing: 2
+                Repeater {
+                    model: arrows.visible ? ["keyboard_arrow_up", "keyboard_arrow_down"] : []
+                    delegate: RippleButton {
+                        id: arrow
+                        required property string modelData
+                        required property int index
+                        implicitWidth: root.arrowSize
+                        implicitHeight: root.arrowSize
+                        buttonRadius: root.arrowSize / 2
+                        colBackground: "transparent"
+                        colBackgroundHover: Qt.alpha(root.colTitle, 0.12)
+                        colRipple: Qt.alpha(root.colTitle, 0.24)
+                        onClicked: if (!root.isPreview) root.goTo(root.currentIndex + (arrow.index === 0 ? -1 : 1))
+                        contentItem: MaterialSymbol {
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                            text: arrow.modelData
+                            iconSize: 20
+                            color: root.colTitle
+                        }
                     }
+                }
+            }
 
-                    // Line 2: Subtitle / Icon
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 6 * root.contentScale
+            // Dismiss, revealed on hover, for pages that allow it.
+            RippleButton {
+                id: dismissButton
+                visible: pager.visible && hover.hovered && !root.isPreview && (root.currentPage?.dismiss ?? null) !== null
+                anchors.top: parent.top
+                anchors.right: arrows.visible ? arrows.left : parent.right
+                anchors.margins: 2
+                implicitWidth: 24
+                implicitHeight: 24
+                buttonRadius: 12
+                colBackground: Qt.alpha(root.colTitle, 0.14)
+                colBackgroundHover: Qt.alpha(root.colTitle, 0.24)
+                colRipple: Qt.alpha(root.colTitle, 0.32)
+                onClicked: AtAGlanceService.dismiss(root.currentPage)
+                contentItem: MaterialSymbol {
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    text: "close"
+                    iconSize: 16
+                    color: root.colTitle
+                }
+                StyledToolTip {
+                    text: Translation.tr("Dismiss")
+                }
+            }
 
-                        Item {
-                            implicitWidth:  18 * root.contentScale
-                            implicitHeight: 18 * root.contentScale
-                            Layout.alignment: Qt.AlignVCenter
+            // ── Vertical (list) ────────────────────────────────────────────────
+            Column {
+                id: verticalColumn
+                visible: root.vertical && !root.expanded
+                x: root.pagePadding
+                y: root.pagePadding
+                width: parent.width - root.pagePadding * 2
+                spacing: 2
+                Repeater {
+                    id: verticalRepeater
+                    model: verticalColumn.visible ? root.pageCount : 0
+                    delegate: AtAGlancePage {
+                        required property int index
+                        width: verticalColumn.width
+                        height: root.pageHeight
+                        page: root.pages[index] ?? null
+                        interactive: !root.isPreview
+                        colTitle: root.colTitle
+                        colSubtitle: root.colSubtitle
+                        colAccent: root.colAccent
+                        colButton: root.colButton
+                        colOnButton: root.colOnButton
+                        onButtonActivated: action => AtAGlanceService.runAction(action)
+                    }
+                }
+            }
+        }
 
+        // ── Expanded ───────────────────────────────────────────────────────────
+        Column {
+            id: expandedColumn
+            visible: root.expanded
+            x: root.cardPadding
+            y: root.cardPadding
+            width: parent.width - root.cardPadding * 2
+            spacing: 10
+
+            Item {
+                width: parent.width
+                height: 32
+                StyledText {
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: Translation.tr("At a Glance")
+                    color: root.colTitle
+                    font.pixelSize: Appearance.font.pixelSize.larger
+                    font.family: Appearance.font.family.title
+                }
+                RippleButton {
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    implicitWidth: 32
+                    implicitHeight: 32
+                    buttonRadius: 16
+                    colBackground: WidgetColorScheme.innerShapeColor
+                    colBackgroundHover: Qt.alpha(root.colTitle, 0.16)
+                    colRipple: Qt.alpha(root.colTitle, 0.24)
+                    onClicked: root.expanded = false
+                    contentItem: MaterialSymbol {
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        text: "close"
+                        iconSize: 18
+                        color: root.colTitle
+                    }
+                }
+            }
+
+            // Complications grid; "Complications First" puts it above the targets.
+            Loader {
+                width: parent.width
+                active: root.expanded && (root.options.complicationsFirst ?? false)
+                visible: active
+                sourceComponent: complicationGridComponent
+            }
+
+            Repeater {
+                id: expandedRepeater
+                model: root.expanded ? AtAGlanceService.pages.length : 0
+                delegate: Rectangle {
+                    id: expandedPage
+                    required property int index
+                    property alias pageItem: pageItem
+                    width: expandedColumn.width
+                    height: root.pageHeight + 8
+                    radius: Appearance.rounding.normal
+                    color: WidgetColorScheme.innerShapeColor
+                    AtAGlancePage {
+                        id: pageItem
+                        anchors.fill: parent
+                        anchors.leftMargin: 14
+                        anchors.rightMargin: 14
+                        page: AtAGlanceService.pages[expandedPage.index] ?? null
+                        interactive: !root.isPreview
+                        colTitle: root.colTitle
+                        colSubtitle: root.colSubtitle
+                        colAccent: root.colAccent
+                        colButton: root.colButton
+                        colOnButton: root.colOnButton
+                        onButtonActivated: action => AtAGlanceService.runAction(action)
+                    }
+                }
+            }
+
+            Loader {
+                width: parent.width
+                active: root.expanded && !(root.options.complicationsFirst ?? false)
+                visible: active
+                sourceComponent: complicationGridComponent
+            }
+        }
+    }
+
+    Component {
+        id: complicationGridComponent
+        Flow {
+            visible: AtAGlanceService.complications.length > 0
+            spacing: 8
+            Repeater {
+                model: root.expanded ? AtAGlanceService.complications.length : 0
+                delegate: RippleButton {
+                    id: chip
+                    required property int index
+                    readonly property var entry: AtAGlanceService.complications[chip.index] ?? null
+                    visible: chip.entry !== null && String(chip.entry.text ?? "") !== ""
+                    implicitHeight: 36
+                    implicitWidth: chipRow.implicitWidth + 24
+                    buttonRadius: 18
+                    colBackground: WidgetColorScheme.innerShapeColor
+                    colBackgroundHover: Qt.alpha(root.colTitle, 0.16)
+                    colRipple: Qt.alpha(root.colTitle, 0.24)
+                    onClicked: AtAGlanceService.runAction(chip.entry?.action ?? null)
+                    contentItem: Item {
+                        Row {
+                            id: chipRow
+                            anchors.centerIn: parent
+                            spacing: 6
                             Image {
-                                anchors.fill: parent
-                                visible: root.currentData.service === "fallback" && AtAGlanceService.weatherAvailable
-                                source: WeatherIcons.getWeatherIcon(AtAGlanceService.weatherCode, false)
+                                anchors.verticalCenter: parent.verticalCenter
+                                visible: String(chip.entry?.iconImage ?? "") !== ""
+                                source: chip.entry?.iconImage ?? ""
+                                width: 20
+                                height: 20
+                                sourceSize: Qt.size(40, 40)
                                 fillMode: Image.PreserveAspectFit
-                                mipmap: true
+                                asynchronous: true
                             }
-
                             MaterialSymbol {
-                                anchors.centerIn: parent
-                                visible: !(root.currentData.service === "fallback" && AtAGlanceService.weatherAvailable)
-                                text: root.currentData.icon
-                                iconSize: Math.round(16 * root.contentScale)
-                                color: Appearance.colors.colOnLayer0
+                                anchors.verticalCenter: parent.verticalCenter
+                                visible: String(chip.entry?.iconImage ?? "") === ""
+                                text: chip.entry?.icon ?? ""
+                                iconSize: 18
+                                fill: 1
+                                color: root.colAccent
+                            }
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: chip.entry?.text ?? ""
+                                color: root.colTitle
+                                font.pixelSize: Appearance.font.pixelSize.normal
                             }
                         }
-
-                        Text {
-                            Layout.fillWidth: true
-                            text: root.currentData.subtitle
-                            color: Appearance.colors.colOnLayer0
-                            font.family: Appearance.font.family.main
-                            font.pixelSize: Math.round(15 * root.contentScale)
-                            font.weight: Font.DemiBold
-                            elide: Text.ElideRight
-                            opacity: 0.90
-                        }
-                    }
-                }
-            }
-
-            // ── COLUMN 2 (Secondary Target in Dual-Column Mode) ──────────────
-            RowLayout {
-                visible: root.dualColumn
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                spacing: 12 * root.contentScale
-
-                // Divider line between columns
-                Rectangle {
-                    implicitWidth: 1
-                    implicitHeight: 36 * root.contentScale
-                    color: Appearance.colors.colOnLayer0
-                    opacity: 0.25
-                    Layout.alignment: Qt.AlignVCenter
-                }
-
-                // Text Content Column 2
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    Layout.alignment: Qt.AlignVCenter
-                    spacing: 2 * root.contentScale
-
-                    Text {
-                        Layout.fillWidth: true
-                        text: root.dualData.title
-                        color: Appearance.colors.colOnLayer0
-                        font.family: Appearance.font.family.main
-                        font.pixelSize: Math.round(19 * root.contentScale)
-                        font.weight: Font.Bold
-                        elide: Text.ElideRight
-                    }
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 6 * root.contentScale
-
-                        MaterialSymbol {
-                            text: root.dualData.icon
-                            iconSize: Math.round(16 * root.contentScale)
-                            color: Appearance.colors.colOnLayer0
-                        }
-
-                        Text {
-                            Layout.fillWidth: true
-                            text: root.dualData.subtitle
-                            color: Appearance.colors.colOnLayer0
-                            font.family: Appearance.font.family.main
-                            font.pixelSize: Math.round(15 * root.contentScale)
-                            font.weight: Font.DemiBold
-                            elide: Text.ElideRight
-                            opacity: 0.90
-                        }
-                    }
-                }
-            }
-
-            // ── Manual Target Switcher Buttons (Bottom Right) ─────────────────
-            RowLayout {
-                Layout.alignment: Qt.AlignRight | Qt.AlignBottom
-                spacing: 2 * root.contentScale
-                visible: root.targetsList.length > 1
-
-                RippleButton {
-                    implicitWidth:  24 * root.contentScale
-                    implicitHeight: 24 * root.contentScale
-                    topLeftRadius:    Appearance.rounding.full
-                    topRightRadius:   Appearance.rounding.full
-                    bottomLeftRadius: Appearance.rounding.full
-                    bottomRightRadius:Appearance.rounding.full
-                    colBackground:      "transparent"
-                    colBackgroundHover: Qt.rgba(1, 1, 1, 0.12)
-                    colRipple:          Qt.rgba(1, 1, 1, 0.24)
-
-                    MaterialSymbol {
-                        anchors.centerIn: parent
-                        text: "chevron_left"
-                        iconSize: Math.round(16 * root.contentScale)
-                        color: Appearance.colors.colOnLayer0
-                    }
-
-                    onClicked: {
-                        root.selectedTargetIndex = (root.selectedTargetIndex - 1 + root.targetsList.length) % root.targetsList.length;
-                    }
-                }
-
-                RippleButton {
-                    implicitWidth:  24 * root.contentScale
-                    implicitHeight: 24 * root.contentScale
-                    topLeftRadius:    Appearance.rounding.full
-                    topRightRadius:   Appearance.rounding.full
-                    bottomLeftRadius: Appearance.rounding.full
-                    bottomRightRadius:Appearance.rounding.full
-                    colBackground:      "transparent"
-                    colBackgroundHover: Qt.rgba(1, 1, 1, 0.12)
-                    colRipple:          Qt.rgba(1, 1, 1, 0.24)
-
-                    MaterialSymbol {
-                        anchors.centerIn: parent
-                        text: "chevron_right"
-                        iconSize: Math.round(16 * root.contentScale)
-                        color: Appearance.colors.colOnLayer0
-                    }
-
-                    onClicked: {
-                        root.selectedTargetIndex = (root.selectedTargetIndex + 1) % root.targetsList.length;
                     }
                 }
             }

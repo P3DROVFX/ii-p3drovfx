@@ -32,3 +32,5 @@ WidgetPlacementNote 1.0 WidgetPlacementNote.qml
 WidgetPreviewSlot 1.0 WidgetPreviewSlot.qml
 WidgetPreviewStage 1.0 WidgetPreviewStage.qml
 WidgetSizeSlider 1.0 WidgetSizeSlider.qml
+AtAGlanceItemCard 1.0 AtAGlanceItemCard.qml
+AtAGlanceRequirementRow 1.0 AtAGlanceRequirementRow.qml
