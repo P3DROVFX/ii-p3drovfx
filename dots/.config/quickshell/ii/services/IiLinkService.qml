@@ -742,7 +742,7 @@ Singleton {
         .concat(root.cameraEnabled ? ["camera"] : [])
         .concat(root.micEnabled ? ["mic"] : [])
         .concat(root.usageEnabled ? ["usage"] : [])
-        .concat(["mirrorRadio"])
+        .concat(["mirrorRadio", "quiet", "have"])
 
     /// True while at least one wireless scrcpy session is active on the shell.
     property bool mirrorActive: false
@@ -2706,6 +2706,8 @@ Singleton {
         if (root.pcMediaDev === "" || root._pcArt === "" || root._pcArt === root._pcArtSent)
             return;
         root._pcArtSent = root._pcArt;
+        if (root._phoneHas(root.pcMediaDev, "pcMediaArt", root._pcArt))
+            return;
         root.send({ op: "sendFile", dev: root.pcMediaDev, id: 700000 + root._fileSerial++, path: root._pcArtPath,
             name: root._pcArt, purpose: "pcMediaArt" });
     }
@@ -2923,6 +2925,12 @@ Singleton {
     function _makeLook(): void {
         if (root.lookDev === "" || root._lookName === "" || root._lookName === root._lookSent || lookProc.running)
             return;
+        // The phone kept this one from an earlier connection: only the topic.
+        if (root._phoneHas(root.lookDev, "look", root._lookName)) {
+            root._lookSent = root._lookName;
+            root.sendTo(root.lookDev, { t: "look", wall: root._lookName });
+            return;
+        }
         const out = `${root.lookDir}/${root._lookName}.jpg`;
         const video = /\.(mp4|mkv|webm|mov|avi|gif)$/i.test(root._wallPath);
         // Made once per wallpaper and kept; older ones go.
@@ -2981,6 +2989,10 @@ Singleton {
     function _makeWallSync(): void {
         if (root.wallSyncDev === "" || root._lookName === "" || root._lookName === root._wallSyncSent || wallSyncProc.running)
             return;
+        if (root._phoneHas(root.wallSyncDev, "wallSync", root._lookName)) {
+            root._wallSyncSent = root._lookName;
+            return;
+        }
         const out = `${root.wallSyncDir}/${root._lookName}.jpg`;
         wallSyncProc.out = out;
         wallSyncProc.name = root._lookName;
@@ -4269,11 +4281,76 @@ Singleton {
 
     /// Sends `message` to one phone, or to every connected one with dev "*".
     function sendTo(dev, message): void {
+        const d = String(dev);
         // "pc:<fp>" or "pc:*": the linked PCs (the clipboard decode queue serves both).
-        if (String(dev).startsWith("pc:"))
-            root.send({ op: "pcSend", pc: String(dev).slice(3), m: message });
-        else
-            root.send({ op: "send", dev: String(dev), m: message });
+        if (d.startsWith("pc:")) {
+            root.send({ op: "pcSend", pc: d.slice(3), m: message });
+            return;
+        }
+        if (root._holdable(message)) {
+            if (d === "*") {
+                const ids = Object.keys(root.connections);
+                if (ids.some(id => root._quietDevs[id])) {
+                    for (const id of ids) {
+                        if (root._quietDevs[id])
+                            root._hold(id, message);
+                        else
+                            root.send({ op: "send", dev: id, m: message });
+                    }
+                    return;
+                }
+            } else if (root._quietDevs[d]) {
+                root._hold(d, message);
+                return;
+            }
+        }
+        root.send({ op: "send", dev: d, m: message });
+    }
+
+    // ── Quiet phones ────────────────────────────────────────────────────
+    // A phone whose screen is off (`{"t":"quiet","on":true}`) is not woken for what only
+    // its screen shows: the latest of each such topic waits and goes out when it lights
+    // up again. Calls, notifications, live activity, the PC media (the lock screen and AOD
+    // show it), answers and actions still go at once.
+    readonly property var _quietTopics: ["workspaces", "modes", "presets", "audio", "deck", "state", "clip", "look", "display", "focus"]
+    /// dev id -> true while that phone's screen is off
+    property var _quietDevs: ({})
+    /// dev id -> { topic: latest message } held for it
+    property var _held: ({})
+
+    function _holdable(message): bool {
+        // An answer to a request (`clipPull`) is never held: the phone is waiting for it.
+        return root._quietTopics.includes(message?.t ?? "") && !(Number(message?.id ?? 0) > 0);
+    }
+
+    function _hold(dev, message): void {
+        const held = root._held[dev] ?? {};
+        delete held[message.t];
+        held[message.t] = message;
+        root._held[dev] = held;
+    }
+
+    function _setQuiet(dev, on): void {
+        if (on) {
+            root._quietDevs[dev] = true;
+            return;
+        }
+        delete root._quietDevs[dev];
+        const held = root._held[dev] ?? {};
+        delete root._held[dev];
+        for (const t of Object.keys(held))
+            root.send({ op: "send", dev: dev, m: held[t] });
+    }
+
+    // ── Files a phone already has ───────────────────────────────────────
+    // A phone lists in `caps.have` the images it keeps ({look, wallSync, pcMediaArt}: names),
+    // so a reconnect does not send them again.
+    /// dev id -> { kind: [names] }
+    property var phoneHave: ({})
+
+    function _phoneHas(dev, kind, name): bool {
+        const list = root.phoneHave[dev]?.[kind];
+        return Array.isArray(list) && list.includes(name);
     }
 
     function send(obj): void {
@@ -4363,6 +4440,9 @@ Singleton {
         case "ping":
             root.sendTo(dev, { t: "pong", id: Number(m.id ?? 0) });
             return;
+        case "quiet":
+            root._setQuiet(dev, m.on === true);
+            return;
         case "sub":
             if (m.what === "perf")
                 root._perfDev = m.on === true ? dev : (root._perfDev === dev ? "" : root._perfDev);
@@ -4439,6 +4519,10 @@ Singleton {
                 root._savePhoneUsage(dev, m);
             return;
         case "caps": {
+            // Before the caps: assigning them wakes the senders that read it.
+            const have = Object.assign({}, root.phoneHave);
+            have[dev] = (m.have && typeof m.have === "object") ? m.have : {};
+            root.phoneHave = have;
             const next = Object.assign({}, root.phoneCaps);
             next[dev] = Array.isArray(m.caps) ? m.caps.map(String) : [];
             root.phoneCaps = next;
@@ -4589,6 +4673,11 @@ Singleton {
             const next = Object.assign({}, root.connections);
             delete next[ev.dev];
             root.connections = next;
+            delete root._quietDevs[ev.dev];
+            delete root._held[ev.dev];
+            const had = Object.assign({}, root.phoneHave);
+            delete had[ev.dev];
+            root.phoneHave = had;
             const caps = Object.assign({}, root.phoneCaps);
             delete caps[ev.dev];
             root.phoneCaps = caps;
@@ -4724,6 +4813,9 @@ Singleton {
         }
 
         function status(): string {
+            const held = {};
+            for (const d of Object.keys(root._held))
+                held[d] = Object.keys(root._held[d]);
             return JSON.stringify({
                 enabled: root.enabled,
                 running: root.running,
@@ -4736,6 +4828,10 @@ Singleton {
                 mirrorsNotifications: root.mirrorsNotifications,
                 phoneStatus: root.phoneStatus,
                 phonePerf: { dev: root.phonePerfDev, watchers: root._phonePerfWatchers, last: root.phonePerf },
+                // Phones with the screen off, and the topics held for each until it comes on.
+                quiet: Object.keys(root._quietDevs),
+                held: held,
+                have: root.phoneHave,
                 error: root.lastError
             });
         }
