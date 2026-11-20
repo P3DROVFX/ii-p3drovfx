@@ -335,8 +335,10 @@ Scope {
         panelUrl: Qt.resolvedUrl("../modules/ii/reminderAlertPopup/ReminderAlertPopup.qml")
     }
     PanelUrlLoader {
-        // The daily-limits block screen; the service names what it covers.
-        extraCondition: (Config.options.screenTime?.enable ?? true) && ScreenTimeLimits.activeBlock !== null
+        // The daily-limits block screen; the service names what it covers. Mode
+        // blocks (Modes & Routines) show with daily limits switched off too.
+        extraCondition: ScreenTimeLimits.activeBlock !== null
+            && ((Config.options.screenTime?.enable ?? true) || ScreenTimeLimits.activeBlock.ruleId.startsWith("m:"))
         panelUrl: Qt.resolvedUrl("../modules/ii/screenTimeOverlay/ScreenTimeOverlay.qml")
     }
     PanelUrlLoader {

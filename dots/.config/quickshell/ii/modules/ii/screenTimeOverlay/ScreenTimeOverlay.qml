@@ -31,29 +31,42 @@ Scope {
             id: window
 
             readonly property var block: root.block ?? ({})
-            readonly property string blockId: root.block ? root.block.ruleId + "|" + root.block.key : ""
+            readonly property string blockId: root.block ? root.block.ruleId + "|" + root.block.key + "|" + (root.block.address ?? "") : ""
             readonly property var rule: window.block.rule ?? null
             readonly property string kind: window.block.kind ?? "limit"
             readonly property bool isSchedule: window.kind === "schedule"
             readonly property bool isTotal: window.kind === "total"
+            // Put up by a running mode: no budget, no daily figures.
+            readonly property bool isSite: window.kind === "site"
+            readonly property bool isModeBlock: window.kind === "mode" || window.isSite
+            readonly property bool calm: window.isSchedule || window.isModeBlock
+            readonly property string siteName: String(window.block.site ?? "").replace(/^\/(.*)\/$/, "$1")
             readonly property string appKey: window.block.key ?? ""
             readonly property string appName: window.appKey.length > 0 ? AppStats.displayName(window.appKey) : ""
             readonly property bool strict: window.rule?.strict === true && ScreenTimeLimits.hasPin
-            readonly property real used: window.isSchedule ? 0 : ScreenTimeLimits.usedFor(window.rule)
-            readonly property real budget: window.isSchedule ? 0 : ScreenTimeLimits.budgetFor(window.rule)
+            readonly property real used: window.calm ? 0 : ScreenTimeLimits.usedFor(window.rule)
+            readonly property real budget: window.calm ? 0 : ScreenTimeLimits.budgetFor(window.rule)
+            // A site block never closes the browser on its own.
+            readonly property int autoCloseSeconds: window.isSite ? 0 : ScreenTimeLimits.autoCloseSeconds
 
-            readonly property color colHero: window.isSchedule ? Appearance.colors.colTertiaryContainer : Appearance.colors.colErrorContainer
-            readonly property color colOnHero: window.isSchedule ? Appearance.colors.colOnTertiaryContainer : Appearance.colors.colOnErrorContainer
-            readonly property color colAccent: window.isSchedule ? Appearance.colors.colTertiary : Appearance.colors.colError
-            readonly property color colOnAccent: window.isSchedule ? Appearance.colors.colOnTertiary : Appearance.colors.colOnError
+            readonly property color colHero: window.calm ? Appearance.colors.colTertiaryContainer : Appearance.colors.colErrorContainer
+            readonly property color colOnHero: window.calm ? Appearance.colors.colOnTertiaryContainer : Appearance.colors.colOnErrorContainer
+            readonly property color colAccent: window.calm ? Appearance.colors.colTertiary : Appearance.colors.colError
+            readonly property color colOnAccent: window.calm ? Appearance.colors.colOnTertiary : Appearance.colors.colOnError
 
             /// The extra-time choice waiting on the PIN, or 0.
             property int pendingMinutes: 0
             property bool pinWrong: false
-            property int secondsLeft: ScreenTimeLimits.autoCloseSeconds
+            property int secondsLeft: window.autoCloseSeconds
             property bool shown: false
 
-            readonly property var grants: window.isSchedule
+            readonly property var grants: window.isModeBlock
+                ? [
+                    { minutes: 5, label: Translation.tr("5 min"), symbol: "timer" },
+                    { minutes: 15, label: Translation.tr("15 min"), symbol: "more_time" },
+                    { minutes: -1, label: Translation.tr("End %1").arg(window.rule?.name ?? Translation.tr("mode")), symbol: "stop_circle" }
+                ]
+                : window.isSchedule
                 ? [
                     { minutes: 15, label: Translation.tr("15 min"), symbol: "timer" },
                     { minutes: 60, label: Translation.tr("1 hour"), symbol: "hourglass_top" },
@@ -66,12 +79,20 @@ Scope {
                 ]
 
             function titleText(): string {
+                if (window.isSite)
+                    return Translation.tr("%1 is blocked").arg(window.siteName);
+                if (window.isModeBlock)
+                    return Translation.tr("%1 is on").arg(window.rule?.name ?? Translation.tr("Focus mode"));
                 if (window.isSchedule)
                     return Translation.tr("%1 is on").arg(String(window.rule?.name ?? "").length > 0 ? window.rule.name : Translation.tr("Focus time"));
                 return window.isTotal ? Translation.tr("Screen time is up") : Translation.tr("Time's up");
             }
 
             function bodyText(): string {
+                if (window.isSite)
+                    return Translation.tr("%1 keeps this site away while it's on. Close the tab to carry on.").arg(window.rule?.name ?? Translation.tr("This mode"));
+                if (window.isModeBlock)
+                    return Translation.tr("%1 is paused until the mode ends.").arg(window.appName);
                 if (window.isSchedule)
                     return Translation.tr("%1 is paused until %2.").arg(window.appName).arg(window.rule?.end ?? "");
                 if (window.isTotal)
@@ -102,7 +123,7 @@ Scope {
             onBlockIdChanged: {
                 window.pendingMinutes = 0;
                 window.pinWrong = false;
-                window.secondsLeft = ScreenTimeLimits.autoCloseSeconds;
+                window.secondsLeft = window.autoCloseSeconds;
             }
 
             screen: Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? Quickshell.screens[0] ?? null
@@ -126,7 +147,7 @@ Scope {
             Timer {
                 interval: 1000
                 repeat: true
-                running: ScreenTimeLimits.autoCloseSeconds > 0 && window.blockId.length > 0 && window.pendingMinutes === 0
+                running: window.autoCloseSeconds > 0 && window.blockId.length > 0 && window.pendingMinutes === 0
                 onTriggered: {
                     window.secondsLeft -= 1;
                     if (window.secondsLeft <= 0)
@@ -209,8 +230,8 @@ Scope {
 
                                 ClockProgressRing {
                                     anchors.fill: parent
-                                    visible: ScreenTimeLimits.autoCloseSeconds > 0
-                                    value: ScreenTimeLimits.autoCloseSeconds > 0 ? window.secondsLeft / ScreenTimeLimits.autoCloseSeconds : 0
+                                    visible: window.autoCloseSeconds > 0
+                                    value: window.autoCloseSeconds > 0 ? window.secondsLeft / window.autoCloseSeconds : 0
                                     tickDuration: 1000
                                     thickness: 8
                                     wavy: window.pendingMinutes === 0
@@ -250,7 +271,7 @@ Scope {
                                     anchors.right: parent.right
                                     anchors.bottom: parent.bottom
                                     anchors.margins: 6
-                                    text: window.isSchedule ? "bedtime" : "hourglass_bottom"
+                                    text: window.isSite ? "public_off" : (window.isModeBlock ? "self_improvement" : (window.isSchedule ? "bedtime" : "hourglass_bottom"))
                                     iconSize: 18
                                     padding: 8
                                     shape: MaterialShape.Shape.Cookie7Sided
@@ -283,12 +304,12 @@ Scope {
 
                             // Today's figures in the clock's condensed digits.
                             RowLayout {
-                                visible: !window.isSchedule
+                                visible: !window.calm
                                 Layout.alignment: Qt.AlignHCenter
                                 spacing: 10
 
                                 Repeater {
-                                    model: window.isSchedule ? [] : [
+                                    model: window.calm ? [] : [
                                         { value: ScreenTimeLimits.formatSeconds(window.used), label: Translation.tr("used today") },
                                         { value: ScreenTimeLimits.formatSeconds(window.budget), label: Translation.tr("allowed") },
                                         { value: String(ScreenTimeLimits.dayState.ignores ?? 0), label: Translation.tr("extensions") }
@@ -328,7 +349,7 @@ Scope {
                             }
 
                             StyledText {
-                                visible: ScreenTimeLimits.autoCloseSeconds > 0
+                                visible: window.autoCloseSeconds > 0
                                 Layout.fillWidth: true
                                 horizontalAlignment: Text.AlignHCenter
                                 text: window.pendingMinutes !== 0 ? Translation.tr("Countdown paused")
@@ -353,9 +374,10 @@ Scope {
                             solid: true
                             colContent: window.colAccent
                             colSolidContent: window.colOnAccent
-                            symbol: "close"
-                            label: window.appName.length > 0 ? Translation.tr("Close %1").arg(window.appName) : Translation.tr("Close app")
-                            onClicked: ScreenTimeLimits.closeApp(window.appKey)
+                            symbol: window.isSite ? "tab_close" : "close"
+                            label: window.isSite ? Translation.tr("Close tab")
+                                : (window.appName.length > 0 ? Translation.tr("Close %1").arg(window.appName) : Translation.tr("Close app"))
+                            onClicked: window.isSite ? ScreenTimeLimits.closeTab(window.block.address) : ScreenTimeLimits.closeApp(window.appKey)
                         }
 
                         LimitsTintButton {
@@ -372,7 +394,7 @@ Scope {
                     StyledText {
                         Layout.leftMargin: 12
                         Layout.topMargin: 4
-                        text: window.isSchedule ? Translation.tr("Need it now?") : Translation.tr("Need more time?")
+                        text: window.calm ? Translation.tr("Need it now?") : Translation.tr("Need more time?")
                         font.pixelSize: Appearance.font.pixelSize.smaller
                         font.weight: Font.Bold
                         color: Appearance.colors.colOnSurfaceVariant
@@ -459,7 +481,8 @@ Scope {
                         Layout.fillWidth: true
                         Layout.bottomMargin: 4
                         horizontalAlignment: Text.AlignHCenter
-                        text: Translation.tr("Daily limits · change them in App usage")
+                        text: window.isModeBlock ? Translation.tr("%1 · change it in Modes & Routines").arg(window.rule?.name ?? "")
+                            : Translation.tr("Daily limits · change them in App usage")
                         font.pixelSize: Appearance.font.pixelSize.smallest
                         color: Appearance.colors.colSubtext
                     }

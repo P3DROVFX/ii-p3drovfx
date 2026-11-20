@@ -6,6 +6,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.functions
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Wayland
 import QtQuick
@@ -27,6 +28,10 @@ import QtQuick
  * block screen (modules/ii/screenTimeOverlay) opens over it. Its choices come back here:
  * close the app, lock the screen, or take more time. What happened today — ignores,
  * extra time, warnings sent — lives in Persistent as one document reset at midnight.
+ *
+ * Modes & Routines add a fourth kind while one of them runs (`setModeRule`): apps or
+ * browser sites blocked for as long as the mode is on. Those live in memory only, are
+ * not counted against any budget, and keep working with daily limits switched off.
  */
 Singleton {
     id: root
@@ -42,7 +47,7 @@ Singleton {
     readonly property bool hasRules: root.limits.some(l => l.enabled !== false) || root.schedules.some(s => s.enabled !== false)
     /// Counting and enforcing. The page asks for counting too while it is open, so the
     /// hero figure moves even before the first rule exists.
-    readonly property bool active: root.enabled && (root.hasRules || root.watchers > 0)
+    readonly property bool active: (root.enabled && (root.hasRules || root.watchers > 0)) || root.hasModeRules
     /// Open pages that want live figures (see `watch`).
     property int watchers: 0
 
@@ -499,7 +504,8 @@ Singleton {
     }
 
     function evaluate(): void {
-        if (!root.enabled || !root.hasRules || root.paused) {
+        const dailyOn = root.enabled && root.hasRules && !root.paused;
+        if (!dailyOn && !root.hasModeRules) {
             root.activeBlock = null;
             return;
         }
@@ -512,7 +518,7 @@ Singleton {
         const candidates = [];
         let changes = [];
 
-        for (const limit of root.limits) {
+        for (const limit of (dailyOn ? root.limits : [])) {
             if (!root.appliesOn(limit, day))
                 continue;
             const id = limit.id;
@@ -556,7 +562,7 @@ Singleton {
                 candidates.push({ ruleId: id, kind: limit.kind === "total" ? "total" : "limit", key: k, rule: limit });
         }
 
-        for (const s of root.schedules) {
+        for (const s of (dailyOn ? root.schedules : [])) {
             if (!root.scheduleActiveAt(s, t))
                 continue;
             const id = "s:" + s.id;
@@ -569,17 +575,21 @@ Singleton {
                 candidates.push({ ruleId: id, kind: "schedule", key: k, rule: s });
         }
 
+        root.modeCandidates(open, t, candidates);
+
         if (changes.length > 0)
             root.commitDay(d => changes.forEach(apply => apply(d)));
 
-        const pick = candidates.find(c => c.key === focused) ?? candidates[0] ?? null;
+        const focusedAddress = root.focusedAddress();
+        const pick = candidates.find(c => c.address && c.address === focusedAddress)
+            ?? candidates.find(c => c.key === focused) ?? candidates[0] ?? null;
         const current = root.activeBlock;
         if (!pick) {
             root.activeBlock = null;
-        } else if (!current || current.ruleId !== pick.ruleId || current.key !== pick.key) {
+        } else if (!current || !root.sameBlock(current, pick)) {
             // Hold on to what is on screen while it is still blocked, rather than
             // jumping to whichever app took focus behind the overlay.
-            const stillBlocked = current && candidates.some(c => c.ruleId === current.ruleId && c.key === current.key);
+            const stillBlocked = current && candidates.some(c => root.sameBlock(c, current));
             root.activeBlock = stillBlocked ? current : pick;
         } else {
             root.activeBlock = Object.assign({}, current, { rule: pick.rule });
@@ -624,6 +634,8 @@ Singleton {
         const rule = root.ruleById(ruleId);
         if (rule?.strict && !root.checkPin(pin ?? ""))
             return false;
+        if (ruleId.startsWith("m:"))
+            return root.liftModeRule(ruleId, rule, minutes);
         const isSchedule = ruleId.startsWith("s:");
         root.commitDay(day => {
             day.ignores = (day.ignores ?? 0) + 1;
@@ -678,9 +690,160 @@ Singleton {
     }
 
     function ruleById(ruleId: string) {
+        if (ruleId.startsWith("m:"))
+            return root.modeRules.find(r => "m:" + r.id === ruleId) ?? null;
         if (ruleId.startsWith("s:"))
             return root.schedules.find(s => "s:" + s.id === ruleId) ?? null;
         return root.limits.find(l => l.id === ruleId) ?? null;
+    }
+
+    // ── Mode blocks ─────────────────────────────────────────────────────
+    /// Blocks put up by a running mode or routine, in memory only:
+    /// { id, owner, ownerKind, name, kind: "apps" | "sites", apps, allowOnly, allow, sites, strict }.
+    property var modeRules: []
+    readonly property bool hasModeRules: root.modeRules.length > 0
+    /// "m:<id>" → epoch ms until which that mode block is lifted.
+    property var modeLifted: ({})
+
+    // Browsers whose window title names the page; PWAs ("chrome-<id>-Default") count.
+    readonly property var browserClassPattern: /^(zen|.*firefox|librewolf|floorp|waterfox|mullvad|tor|.*chrom|brave|vivaldi|microsoft-edge|opera|org\.gnome\.epiphany|.*qutebrowser|.*falkon)/i
+    // " — Mozilla Firefox", " - Google Chrome" and friends, private-window variants included.
+    readonly property var browserSuffixPattern: /\s+[—–-]\s+(mozilla firefox|firefox|google chrome|chromium|brave|zen browser|zen|vivaldi|microsoft\s?edge|librewolf|floorp|waterfox|opera|mullvad browser|tor browser|qutebrowser|falkon|web)(\s+private browsing)?$/i
+
+    function setModeRule(rule): void {
+        const list = root.modeRules.filter(r => r.id !== rule.id);
+        list.push(rule);
+        root.modeRules = list;
+        root.evaluate();
+    }
+
+    function clearModeRule(id: string): void {
+        if (!root.modeRules.some(r => r.id === id))
+            return;
+        root.modeRules = root.modeRules.filter(r => r.id !== id);
+        const lifted = Object.assign({}, root.modeLifted);
+        delete lifted["m:" + id];
+        root.modeLifted = lifted;
+        root.evaluate();
+    }
+
+    function isBrowserClass(cls: string): bool {
+        return root.browserClassPattern.test(cls);
+    }
+
+    function pageTitle(title: string): string {
+        return String(title ?? "").replace(root.browserSuffixPattern, "").trim();
+    }
+
+    // The site a page title belongs to, as the pattern that matched, or "".
+    function siteMatch(title: string, patterns, allow): string {
+        const page = root.pageTitle(title);
+        if (!page.length)
+            return "";
+        const hit = list => (list ?? []).find(p => root.titleHas(page, String(p))) ?? "";
+        return hit(allow).length > 0 ? "" : hit(patterns);
+    }
+
+    function titleHas(page: string, pattern: string): bool {
+        const p = pattern.trim();
+        if (!p.length)
+            return false;
+        if (p.length > 2 && p.startsWith("/") && p.endsWith("/")) {
+            try {
+                return new RegExp(p.slice(1, -1), "i").test(page);
+            } catch (e) {
+                return false;
+            }
+        }
+        const lower = p.toLowerCase();
+        // "(3) Instagram", "Home / X", "Feed | LinkedIn": the site is one segment.
+        const segments = page.split(/\s+[|—–\/•·:-]\s+/).map(seg => seg.replace(/^\(\d+\+?\)\s*/, "").trim().toLowerCase());
+        if (segments.includes(lower))
+            return true;
+        if (lower.length < 4)
+            return false;
+        const escaped = lower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        return new RegExp("(^|[^\\p{L}\\p{N}])" + escaped + "($|[^\\p{L}\\p{N}])", "iu").test(page);
+    }
+
+    function focusedAddress(): string {
+        const address = ToplevelManager.activeToplevel?.HyprlandToplevel?.address ?? "";
+        return address.length > 0 ? "0x" + address : "";
+    }
+
+    function sameBlock(a, b): bool {
+        return a.ruleId === b.ruleId && a.key === b.key && (a.address ?? "") === (b.address ?? "");
+    }
+
+    function modeCandidates(open, t: real, candidates): void {
+        for (const r of root.modeRules) {
+            const id = "m:" + r.id;
+            if ((root.modeLifted[id] ?? 0) > t)
+                continue;
+            // A mode that ended without undoing its actions still takes its blocks along.
+            if (r.ownerKind === "mode" && Modes.activeModeId !== r.owner)
+                continue;
+            if (r.kind === "sites") {
+                for (const w of HyprlandData.windowList) {
+                    const cls = w?.class ?? "";
+                    const address = w?.address ?? "";
+                    if (!root.isBrowserClass(cls) || (root.closingKeys["@" + address] ?? 0) > t)
+                        continue;
+                    const site = root.siteMatch(w.title, r.sites, r.allow);
+                    if (site.length > 0)
+                        candidates.push({ ruleId: id, kind: "site", key: cls, address: address, site: site, rule: r });
+                }
+                continue;
+            }
+            const keys = r.allowOnly
+                ? open.filter(k => !(r.allow ?? []).includes(k) && !root.alwaysAllowed.includes(k))
+                : open.filter(k => (r.apps ?? []).includes(k));
+            for (const k of keys)
+                candidates.push({ ruleId: id, kind: "mode", key: k, rule: r });
+        }
+    }
+
+    // `minutes` > 0 lifts the block that long; < 0 ends the mode that put it up.
+    function liftModeRule(ruleId: string, rule, minutes: int): bool {
+        if (minutes < 0) {
+            root.activeBlock = null;
+            if (rule?.ownerKind === "mode" && Modes.activeModeId === rule.owner)
+                Modes.deactivate("manual");
+            else if (rule)
+                root.clearModeRule(rule.id);
+            return true;
+        }
+        const lifted = Object.assign({}, root.modeLifted);
+        lifted[ruleId] = Date.now() + minutes * 60000;
+        root.modeLifted = lifted;
+        root.activeBlock = null;
+        root.evaluate();
+        liftRecheck.interval = Math.max(1000, minutes * 60000 + 500);
+        liftRecheck.restart();
+        return true;
+    }
+
+    /// Closes the blocked tab: the browser gets focus back and a Ctrl+W.
+    function closeTab(address: string): void {
+        const closing = Object.assign({}, root.closingKeys);
+        closing["@" + address] = Date.now() + 2500;
+        root.closingKeys = closing;
+        root.activeBlock = null;
+        Hyprland.dispatch(`hl.dsp.focus({ window = "address:${address}" })`);
+        tabCloser.restart();
+        closingRecheck.restart();
+    }
+
+    // Waits for the overlay to drop the keyboard and the browser to take focus.
+    Timer {
+        id: tabCloser
+        interval: 220
+        onTriggered: Quickshell.execDetached(["wtype", "-M", "ctrl", "w", "-m", "ctrl"])
+    }
+
+    Timer {
+        id: liftRecheck
+        onTriggered: root.evaluate()
     }
 
     // ── Wiring ──────────────────────────────────────────────────────────
@@ -724,6 +887,7 @@ Singleton {
     // beats waiting out the timer.
     onFocusedKeyChanged: if (root.active) root.tick()
     onHasRulesChanged: root.evaluate()
+    onHasModeRulesChanged: root.evaluate()
 
     Connections {
         target: Persistent
