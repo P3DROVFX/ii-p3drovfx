@@ -6,6 +6,7 @@ import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Services.Pipewire
+import Quickshell.Services.UPower
 import Quickshell.Wayland
 import qs
 import qs.modules.common
@@ -3453,12 +3454,68 @@ Singleton {
         running: perfSampler.active && perfSampler.ready
         onTriggered: root.sendTo(root._perfDev, {
             t: "perf",
-            cpu: Object.assign({ name: perfSampler.cpuModel }, perfSampler.cpu),
+            // `power` with MangoHud's own reading when sysfs has none, as the HUD shows it
+            cpu: Object.assign({ name: perfSampler.cpuModel }, perfSampler.cpu, { power: perfSampler.cpuPower }),
             ram: perfSampler.ram,
-            gpu: Object.assign({ name: perfSampler.selectedGpu?.name ?? "" }, perfSampler.gpu),
+            gpu: Object.assign({ name: perfSampler.selectedGpu?.name ?? "" }, perfSampler.gpu, { power: perfSampler.gpuPower }),
             fps: perfSampler.fps,
-            gamemode: perfSampler.gamemode !== null && (perfSampler.gamemode?.length ?? 0) > 0
+            net: perfSampler.net,
+            gamemode: perfSampler.gamemode !== null && (perfSampler.gamemode?.length ?? 0) > 0,
+            battery: root._perfBattery(),
+            game: root._perfGame(),
+            hud: root._perfHud
         })
+    }
+
+    // The phone draws the game overlay's HUD (Settings › Game overlay › Performance), so it
+    // gets the HUD's own choices: which rows, the style, the palette and the thresholds.
+    readonly property var _perfHudKeys: ["showFps", "showFpsAverage", "showFpsLow1", "showFpsLow01",
+        "showFrametime", "showFrametimeGraph", "showFpsCap", "showStutter", "showCpu", "showCpuUsage",
+        "showCpuTemp", "showCpuClock", "showCpuPower", "showRam", "showSwap", "showGpu", "showGpuUsage",
+        "showGpuTemp", "showGpuClock", "showGpuMemClock", "showGpuPower", "showGpuFan", "showVram",
+        "showBattery", "showBatteryEnergy", "showBatteryPower", "showBatteryTime", "showNetwork",
+        "showNetDown", "showNetUp", "showNetJitter", "showNetLoss", "showDetails", "showProcess",
+        "showResolution", "showDriver", "showSessionTime", "showPowerProfile", "showGameMode", "showClock"]
+    readonly property var _perfHud: {
+        const c = Config.options.overlay.perfMonitor;
+        const show = {};
+        for (const key of root._perfHudKeys)
+            show[key] = c[key] === true;
+        return {
+            style: c.style, palette: c.palette, title: c.title, uppercase: c.uppercase,
+            icons: c.showIcons, fpsTarget: c.fpsTarget, colorFps: c.colorCodeFps,
+            hotTemp: c.hotTemp, window: c.statsWindow, cpuName: c.cpuName, gpuName: c.gpuName,
+            show: show
+        };
+    }
+    function _perfBattery() {
+        if (!Battery.available)
+            return null;
+        return {
+            percent: Battery.percentage, charging: Battery.isCharging,
+            energy: Battery.device?.energy ?? 0, rate: Battery.energyRate,
+            timeLeft: Battery.isCharging ? Battery.timeToFull : Battery.timeToEmpty
+        };
+    }
+    // The focused game names itself better than MangoHud's process ("java" for Minecraft).
+    function _perfGame() {
+        const w = GameDetector.focusedWindow;
+        let name = GameDetector.gameFocused && w ? String(w.title || w["class"] || "").trim() : "";
+        if (name.length > 32)
+            name = name.slice(0, 31) + "…";
+        let resolution = "";
+        if (w?.size && (perfSampler.fpsActive || GameDetector.gameFocused)) {
+            const scale = HyprlandData.monitors.find(m => m.id === w.monitor)?.scale ?? 1;
+            resolution = `${Math.round(w.size[0] * scale)}×${Math.round(w.size[1] * scale)}`;
+        }
+        const info = perfSampler.selectedGpu;
+        const profile = PowerProfiles.profile === PowerProfile.PowerSaver ? "saver"
+            : PowerProfiles.profile === PowerProfile.Performance ? "performance" : "balanced";
+        return {
+            name: name, resolution: resolution, running: GameDetector.gameRunning,
+            driverVersion: info?.driverVersion ? String(info.driverVersion) : "",
+            driver: info?.driver ?? "", profile: profile
+        };
     }
 
     // ── The phone as a KDE Connect-like device ──────────────────────────
