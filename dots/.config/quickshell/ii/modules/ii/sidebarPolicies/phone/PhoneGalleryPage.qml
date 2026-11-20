@@ -358,7 +358,7 @@ Rectangle {
                 colBackgroundActive: Appearance.colors.colLayer3Active ?? Appearance.colors.colLayer3Hover
                 onClicked: root.viewerActive ? PhoneGalleryService.closeViewer() : root.goBack()
 
-                contentItem: MaterialSymbol {
+                contentItem: AnimatedMaterialSymbol {
                     anchors.centerIn: parent
                     text: root.viewerActive ? "grid_view" : "arrow_back"
                     iconSize: 20

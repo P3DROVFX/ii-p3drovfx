@@ -241,7 +241,7 @@ Item {
 
     // -- shared field vocabulary (EventSidebar recipe) --
 
-    component FormCaption: StyledText {
+    component FormCaption: AnimatedStyledText {
         font.pixelSize: Appearance.font.pixelSize.smallest
         animateChange: true
         font.weight: Font.Bold

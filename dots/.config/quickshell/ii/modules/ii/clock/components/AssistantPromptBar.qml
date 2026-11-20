@@ -241,7 +241,7 @@ Item {
 
                         // The verdict, printed on the pill itself: what was created,
                         // what the model said instead, or what broke.
-                        StyledText {
+                        AnimatedStyledText {
                             anchors {
                                 left: parent.left
                                 right: parent.right
@@ -296,7 +296,7 @@ Item {
                         root.trySend();
                 }
 
-                contentItem: MaterialSymbol {
+                contentItem: AnimatedMaterialSymbol {
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                     text: root.running ? "stop"

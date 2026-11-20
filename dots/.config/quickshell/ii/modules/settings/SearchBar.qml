@@ -161,7 +161,7 @@ RowLayout {
         readonly property bool _showCount: root.lastSearchIndex !== -1 && root.resultsCount > 0
         text: isHoveredAndHasText ? "close" : (_showCount ? "" : "search")
 
-        StyledText {
+        AnimatedStyledText {
             id: resultCountText
             visible: searchIconShape._showCount && !searchIconShape.isHoveredAndHasText
             animateChange: true

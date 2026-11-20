@@ -57,7 +57,7 @@ MouseArea {
             }
         }
 
-        StyledText {
+        AnimatedStyledText {
             text: String(root.portCount)
             font.pixelSize: root.vertical ? Appearance.font.pixelSize.smaller : Appearance.font.pixelSize.small
             font.weight: Font.Bold

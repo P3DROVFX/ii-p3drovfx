@@ -491,7 +491,7 @@ Item {
                                                 elide: Text.ElideRight
                                             }
                                         }
-                                        MaterialSymbol {
+                                        AnimatedMaterialSymbol {
                                             Layout.alignment: Qt.AlignVCenter
                                             text: modelData?.reachable
                                                 ? "radio_button_unchecked"
@@ -594,7 +594,7 @@ Item {
                                             elide: Text.ElideRight
                                         }
                                     }
-                                    MaterialSymbol {
+                                    AnimatedMaterialSymbol {
                                         Layout.alignment: Qt.AlignVCenter
                                         text: modelData?.id === KdeConnectService.activeDeviceId
                                             ? "check_circle"

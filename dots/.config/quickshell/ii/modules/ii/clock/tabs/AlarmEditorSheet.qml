@@ -238,7 +238,7 @@ ClockSheet {
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 0
 
-                    StyledText {
+                    AnimatedStyledText {
                         text: root.timeParts.hours + ":" + root.timeParts.minutes
                         font.family: ClockStyle.fontMain
                         font.variableAxes: ClockStyle.axesDigitsBold

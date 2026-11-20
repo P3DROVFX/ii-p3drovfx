@@ -91,7 +91,7 @@ Item {
             }
             spacing: 12
 
-            MaterialSymbol {
+            AnimatedMaterialSymbol {
                 anchors.verticalCenter: parent.verticalCenter
                 iconSize: 22
                 color: Appearance.colors.colOnPrimary

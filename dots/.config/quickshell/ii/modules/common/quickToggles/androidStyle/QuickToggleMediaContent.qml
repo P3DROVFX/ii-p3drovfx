@@ -292,7 +292,7 @@ ClippingRectangle {
             directionX: root.tile.resizeDirectionX
             directionY: root.tile.resizeDirectionY
             travel: root.tile.scaled(12)
-            StyledText {
+            AnimatedStyledText {
                 anchors.fill: parent
                 text: LyricsService.statusText
                 color: Appearance.colors.colOnSurface

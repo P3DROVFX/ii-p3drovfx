@@ -57,18 +57,65 @@ Button {
     readonly property bool prevIsPressed: useDynamicRadius && (groupPosition?.previousPressed ?? false)
     readonly property bool nextIsPressed: useDynamicRadius && (groupPosition?.nextPressed ?? false)
 
+    // The group position and the animated corners of a dynamic-radius button,
+    // built together and only for those buttons: four radius Behaviors on every
+    // button cost ~7 KB each, and almost none of them ever has a dynamic radius.
+    property QtObject dynamicRadius: null
     function ensureGroupPosition() {
-        if (root.useDynamicRadius && !root.groupPosition)
-            root.groupPosition = groupPositionComponent.createObject(root, { item: root });
+        if (root.useDynamicRadius && !root.dynamicRadius) {
+            root.dynamicRadius = dynamicRadiusComponent.createObject(root);
+            root.groupPosition = root.dynamicRadius.position;
+        }
     }
 
     onUseDynamicRadiusChanged: root.ensureGroupPosition()
     Component.onCompleted: root.ensureGroupPosition()
 
     Component {
-        id: groupPositionComponent
-        GroupPosition {
-            enabled: root.useDynamicRadius
+        id: dynamicRadiusComponent
+        QtObject {
+            id: motion
+            readonly property GroupPosition position: GroupPosition {
+                item: root
+                enabled: root.useDynamicRadius
+            }
+            readonly property bool animate: root.animationsEnabled && root.useDynamicRadius && root.groupSettled
+            property real topLeft: (root.isPressed || root.prevIsPressed) ? root.rFull : (root.isFirst ? Appearance?.rounding?.large ?? 23 : Appearance?.rounding?.verysmall ?? 4)
+            property real topRight: (root.isPressed || root.prevIsPressed) ? root.rFull : (root.isHorizontalLayout ? (root.isLast ? Appearance?.rounding?.large ?? 23 : Appearance?.rounding?.verysmall ?? 4) : (root.isFirst ? Appearance?.rounding?.large ?? 23 : Appearance?.rounding?.verysmall ?? 4))
+            property real bottomLeft: (root.isPressed || root.nextIsPressed) ? root.rFull : (root.isHorizontalLayout ? (root.isFirst ? Appearance?.rounding?.large ?? 23 : Appearance?.rounding?.verysmall ?? 4) : (root.isLast ? Appearance?.rounding?.large ?? 23 : Appearance?.rounding?.verysmall ?? 4))
+            property real bottomRight: (root.isPressed || root.nextIsPressed) ? root.rFull : (root.isLast ? Appearance?.rounding?.large ?? 23 : Appearance?.rounding?.verysmall ?? 4)
+            Behavior on topLeft {
+                enabled: motion.animate
+                NumberAnimation {
+                    duration: Appearance.animation.elementMoveFast.duration
+                    easing.type: Appearance.animation.elementMoveFast.type
+                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                }
+            }
+            Behavior on topRight {
+                enabled: motion.animate
+                NumberAnimation {
+                    duration: Appearance.animation.elementMoveFast.duration
+                    easing.type: Appearance.animation.elementMoveFast.type
+                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                }
+            }
+            Behavior on bottomLeft {
+                enabled: motion.animate
+                NumberAnimation {
+                    duration: Appearance.animation.elementMoveFast.duration
+                    easing.type: Appearance.animation.elementMoveFast.type
+                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                }
+            }
+            Behavior on bottomRight {
+                enabled: motion.animate
+                NumberAnimation {
+                    duration: Appearance.animation.elementMoveFast.duration
+                    easing.type: Appearance.animation.elementMoveFast.type
+                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                }
+            }
         }
     }
 
@@ -88,43 +135,10 @@ Button {
 
     readonly property real rFull: useDynamicRadius ? (Appearance?.rounding?.scale === 0 ? 0 : Math.min(height / 2, Appearance?.rounding?.large ?? 23)) : buttonEffectiveRadius
 
-    property real topLeftRadius: useDynamicRadius ? ((isPressed || prevIsPressed) ? rFull : (isFirst ? Appearance?.rounding?.large ?? 23 : Appearance?.rounding?.verysmall ?? 4)) : buttonEffectiveRadius
-    property real topRightRadius: useDynamicRadius ? ((isPressed || prevIsPressed) ? rFull : (isHorizontalLayout ? (isLast ? Appearance?.rounding?.large ?? 23 : Appearance?.rounding?.verysmall ?? 4) : (isFirst ? Appearance?.rounding?.large ?? 23 : Appearance?.rounding?.verysmall ?? 4))) : buttonEffectiveRadius
-    property real bottomLeftRadius: useDynamicRadius ? ((isPressed || nextIsPressed) ? rFull : (isHorizontalLayout ? (isFirst ? Appearance?.rounding?.large ?? 23 : Appearance?.rounding?.verysmall ?? 4) : (isLast ? Appearance?.rounding?.large ?? 23 : Appearance?.rounding?.verysmall ?? 4))) : buttonEffectiveRadius
-    property real bottomRightRadius: useDynamicRadius ? ((isPressed || nextIsPressed) ? rFull : (isLast ? Appearance?.rounding?.large ?? 23 : Appearance?.rounding?.verysmall ?? 4)) : buttonEffectiveRadius
-
-    Behavior on topLeftRadius {
-        enabled: root.animationsEnabled && root.useDynamicRadius && root.groupSettled
-        NumberAnimation {
-            duration: Appearance.animation.elementMoveFast.duration
-            easing.type: Appearance.animation.elementMoveFast.type
-            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-        }
-    }
-    Behavior on topRightRadius {
-        enabled: root.animationsEnabled && root.useDynamicRadius && root.groupSettled
-        NumberAnimation {
-            duration: Appearance.animation.elementMoveFast.duration
-            easing.type: Appearance.animation.elementMoveFast.type
-            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-        }
-    }
-    Behavior on bottomLeftRadius {
-        enabled: root.animationsEnabled && root.useDynamicRadius && root.groupSettled
-        NumberAnimation {
-            duration: Appearance.animation.elementMoveFast.duration
-            easing.type: Appearance.animation.elementMoveFast.type
-            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-        }
-    }
-    Behavior on bottomRightRadius {
-        enabled: root.animationsEnabled && root.useDynamicRadius && root.groupSettled
-        NumberAnimation {
-            duration: Appearance.animation.elementMoveFast.duration
-            easing.type: Appearance.animation.elementMoveFast.type
-            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-        }
-    }
+    property real topLeftRadius: useDynamicRadius && dynamicRadius ? dynamicRadius.topLeft : buttonEffectiveRadius
+    property real topRightRadius: useDynamicRadius && dynamicRadius ? dynamicRadius.topRight : buttonEffectiveRadius
+    property real bottomLeftRadius: useDynamicRadius && dynamicRadius ? dynamicRadius.bottomLeft : buttonEffectiveRadius
+    property real bottomRightRadius: useDynamicRadius && dynamicRadius ? dynamicRadius.bottomRight : buttonEffectiveRadius
 
     property color colBackground: ColorUtils.transparentize(Appearance?.colors.colLayer1Hover, 1) || "transparent"
     property color colBackgroundHover: Appearance?.colors.colLayer1Hover ?? "#E5DFED"
@@ -163,20 +177,27 @@ Button {
         }
     }
 
+    // Everything the ripple needs (the growing gradient, its two animations and
+    // the rounded-corner mask) is built on the first press: ~28 KB per button,
+    // and most buttons are never pressed.
     property bool rippleEverStarted: false
 
     function startRipple(x, y) {
         if (!root.animationsEnabled)
             return;
         root.rippleEverStarted = true;
+        const layer = rippleLoader.item;
+        if (!layer)
+            return;
         const stateY = buttonBackground.y;
-        rippleAnim.x = x;
-        rippleAnim.y = y - stateY;
         const dist = (ox, oy) => ox * ox + oy * oy;
         const stateEndY = stateY + buttonBackground.height;
-        rippleAnim.radius = Math.sqrt(Math.max(dist(0, stateY), dist(0, stateEndY), dist(width, stateY), dist(width, stateEndY)));
-        rippleFadeAnim.complete();
-        rippleAnim.restart();
+        layer.start(x, y - stateY, Math.sqrt(Math.max(dist(0, stateY), dist(0, stateEndY), dist(width, stateY), dist(width, stateEndY))));
+    }
+
+    function fadeRipple() {
+        if (rippleLoader.item)
+            rippleLoader.item.fade();
     }
 
     component RippleAnim: NumberAnimation {
@@ -263,7 +284,7 @@ Button {
                 if (root.altAction)
                     root.altAction();
                 if (root.rippleEnabled && root.animationsEnabled)
-                    rippleFadeAnim.restart();
+                    root.fadeRipple();
                 return;
             }
             if (root.releaseAction)
@@ -271,7 +292,7 @@ Button {
             root.click();
             if (!root.rippleEnabled || !root.animationsEnabled)
                 return;
-            rippleFadeAnim.restart();
+            root.fadeRipple();
         }
         // A finger has no right button. Everywhere the desktop shell says "right-click to
         // configure" — a quick toggle's settings dialog, most of all — a touch-first family
@@ -307,45 +328,7 @@ Button {
                 root.canceledAction(event);
             if (!root.rippleEnabled)
                 return;
-            rippleFadeAnim.restart();
-        }
-    }
-
-    RippleAnim {
-        id: rippleFadeAnim
-        duration: rippleDuration * 2
-        target: ripple
-        property: "opacity"
-        to: 0
-    }
-
-    SequentialAnimation {
-        id: rippleAnim
-        property real x
-        property real y
-        property real radius
-        PropertyAction {
-            target: ripple
-            property: "x"
-            value: rippleAnim.x
-        }
-        PropertyAction {
-            target: ripple
-            property: "y"
-            value: rippleAnim.y
-        }
-        PropertyAction {
-            target: ripple
-            property: "opacity"
-            value: 1
-        }
-        ParallelAnimation {
-            RippleAnim {
-                target: ripple
-                properties: "implicitWidth,implicitHeight"
-                from: 0
-                to: rippleAnim.radius * 2
-            }
+            root.fadeRipple();
         }
     }
 
@@ -357,8 +340,8 @@ Button {
         bottomRightRadius: root.bottomRightRadius
         implicitHeight: 30
         color: root.buttonColor
-        // The layer below no longer runs permanently, so the corners are drawn
-        // by the rectangle itself most of the time.
+        // The corners are drawn by the rectangle itself; only the ripple, once it
+        // exists, goes through a rounded mask (see rippleLoader).
         antialiasing: true
         border.width: root.borderWidth
         border.color: root.borderColor
@@ -366,60 +349,112 @@ Button {
             enabled: root.animationsEnabled
             animation: Appearance?.animation.elementMoveFast.colorAnimation.createObject(this)
         }
-        // The mask exists only to clip the ripple to the rounded corners, so
-        // the layer is worth its cost only while a ripple is actually painted.
-        layer.enabled: root.animationsEnabled && root.rippleEnabled && ripple.rippling
-        layer.samples: 8
-        layer.smooth: true
-        layer.effect: OpacityMask {
-            maskSource: Rectangle {
-                width: buttonBackground.width
-                height: buttonBackground.height
-                topLeftRadius: root.topLeftRadius
-                topRightRadius: root.topRightRadius
-                bottomLeftRadius: root.bottomLeftRadius
-                bottomRightRadius: root.bottomRightRadius
-                antialiasing: true
-            }
-        }
-        Item {
-            id: ripple
-            width: ripple.implicitWidth
-            height: ripple.implicitHeight
-            opacity: 0
-            visible: root.animationsEnabled && ripple.rippling
-            readonly property bool rippling: opacity > 0 && width > 0 && height > 0
-            property real implicitWidth: 0
-            property real implicitHeight: 0
-            Behavior on opacity {
-                enabled: root.animationsEnabled
-                animation: Appearance?.animation.elementMoveFast.colorAnimation.createObject(this)
-            }
-            // Built on the first press instead of with the button: a settings
-            // page holds hundreds of these and most are never clicked.
-            Loader {
-                anchors.fill: parent
-                active: root.rippleEverStarted
-                sourceComponent: RadialGradient {
-                    gradient: Gradient {
-                        GradientStop {
-                            position: 0.0
-                            color: root.rippleColor
-                        }
-                        GradientStop {
-                            position: 0.3
-                            color: root.rippleColor
-                        }
-                        GradientStop {
-                            position: 0.5
-                            color: Qt.rgba(root.rippleColor.r, root.rippleColor.g, root.rippleColor.b, 0)
-                        }
+        Loader {
+            id: rippleLoader
+            anchors.fill: parent
+            active: root.rippleEverStarted
+            sourceComponent: Item {
+                id: rippleLayer
+
+                function start(x, y, radius) {
+                    rippleFadeAnim.complete();
+                    rippleAnim.x = x;
+                    rippleAnim.y = y;
+                    rippleAnim.radius = radius;
+                    rippleAnim.restart();
+                }
+                function fade() {
+                    rippleFadeAnim.restart();
+                }
+
+                // The mask only clips the ripple to the rounded corners, so the layer
+                // runs only while a ripple is actually painted.
+                layer.enabled: root.animationsEnabled && root.rippleEnabled && ripple.rippling
+                layer.samples: 8
+                layer.smooth: true
+                layer.effect: OpacityMask {
+                    maskSource: Rectangle {
+                        width: rippleLayer.width
+                        height: rippleLayer.height
+                        topLeftRadius: root.topLeftRadius
+                        topRightRadius: root.topRightRadius
+                        bottomLeftRadius: root.bottomLeftRadius
+                        bottomRightRadius: root.bottomRightRadius
+                        antialiasing: true
                     }
                 }
-            }
-            transform: Translate {
-                x: -ripple.width / 2
-                y: -ripple.height / 2
+
+                RippleAnim {
+                    id: rippleFadeAnim
+                    duration: rippleDuration * 2
+                    target: ripple
+                    property: "opacity"
+                    to: 0
+                }
+
+                SequentialAnimation {
+                    id: rippleAnim
+                    property real x
+                    property real y
+                    property real radius
+                    PropertyAction {
+                        target: ripple
+                        property: "x"
+                        value: rippleAnim.x
+                    }
+                    PropertyAction {
+                        target: ripple
+                        property: "y"
+                        value: rippleAnim.y
+                    }
+                    PropertyAction {
+                        target: ripple
+                        property: "opacity"
+                        value: 1
+                    }
+                    RippleAnim {
+                        target: ripple
+                        properties: "implicitWidth,implicitHeight"
+                        from: 0
+                        to: rippleAnim.radius * 2
+                    }
+                }
+
+                Item {
+                    id: ripple
+                    width: ripple.implicitWidth
+                    height: ripple.implicitHeight
+                    opacity: 0
+                    visible: root.animationsEnabled && ripple.rippling
+                    readonly property bool rippling: opacity > 0 && width > 0 && height > 0
+                    property real implicitWidth: 0
+                    property real implicitHeight: 0
+                    Behavior on opacity {
+                        enabled: root.animationsEnabled
+                        animation: Appearance?.animation.elementMoveFast.colorAnimation.createObject(this)
+                    }
+                    RadialGradient {
+                        anchors.fill: parent
+                        gradient: Gradient {
+                            GradientStop {
+                                position: 0.0
+                                color: root.rippleColor
+                            }
+                            GradientStop {
+                                position: 0.3
+                                color: root.rippleColor
+                            }
+                            GradientStop {
+                                position: 0.5
+                                color: Qt.rgba(root.rippleColor.r, root.rippleColor.g, root.rippleColor.b, 0)
+                            }
+                        }
+                    }
+                    transform: Translate {
+                        x: -ripple.width / 2
+                        y: -ripple.height / 2
+                    }
+                }
             }
         }
     }

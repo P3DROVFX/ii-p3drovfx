@@ -31,7 +31,7 @@ RippleButton {
     colRipple: root.running ? root.colRunningActive : root.colIdleActive
 
     contentItem: Item {
-        MaterialSymbol {
+        AnimatedMaterialSymbol {
             anchors.centerIn: parent
             text: root.running ? "pause" : "play_arrow"
             iconSize: root.size * 0.42

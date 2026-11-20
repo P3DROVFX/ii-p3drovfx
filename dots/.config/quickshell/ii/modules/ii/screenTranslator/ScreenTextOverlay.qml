@@ -86,7 +86,7 @@ Item {
                 implicitSize: 100 * root.scaleFactor
                 scale: 1 + ((1 - loadingOverlay.opacity) * 0.5) * root.scaleFactor
             }
-            StyledText {
+            AnimatedStyledText {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: {
                     if (cloudVision.state == GCloudApi.State.Preparing)

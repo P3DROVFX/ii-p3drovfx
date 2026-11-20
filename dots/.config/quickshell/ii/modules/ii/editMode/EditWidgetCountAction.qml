@@ -65,7 +65,7 @@ Item {
         }
     }
 
-    StyledText {
+    AnimatedStyledText {
         anchors.left: minusSlot.right
         anchors.verticalCenter: parent.verticalCenter
         width: root.countWidth

@@ -42,7 +42,7 @@ RippleButton {
                 text: input ? Translation.tr("Input") : Translation.tr("Output")
                 color: Appearance.colors.colOnLayer2
             }
-            StyledText {
+            AnimatedStyledText {
                 Layout.fillWidth: true
                 elide: Text.ElideRight
                 font.pixelSize: Appearance.font.pixelSize.smaller

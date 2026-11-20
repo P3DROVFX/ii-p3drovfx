@@ -73,7 +73,7 @@ MouseArea {
                     color: Appearance.colors.colOnLayer1
                 }
 
-                StyledText {
+                AnimatedStyledText {
                     text: root.abbreviateLayoutCode(HyprlandXkb.currentLayoutCode).replace(/\n/g, ' ')
                     font.pixelSize: Appearance.font.pixelSize.small
                     font.family: Appearance.font.family.title
@@ -125,7 +125,7 @@ MouseArea {
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.verticalCenterOffset: 1
 
-                        StyledText {
+                        AnimatedStyledText {
                             id: keyboardText
                             anchors.centerIn: parent
                             color: Config.options.bar.keyboardLayout.swapPrimaryWithSecondary

@@ -663,7 +663,7 @@ Item {
                     Layout.fillWidth: true
                     spacing: -2
 
-                    StyledText {
+                    AnimatedStyledText {
                         Layout.fillWidth: true
                         text: Qt.formatDate(root.viewAnchorDate, "MMMM")
                         font.family: Appearance.font.family.title

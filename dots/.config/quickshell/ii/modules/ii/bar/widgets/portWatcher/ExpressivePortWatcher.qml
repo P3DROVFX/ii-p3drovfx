@@ -78,7 +78,7 @@ MouseArea {
             animation: Appearance.animation.barResize.numberAnimation.createObject(this)
         }
 
-        StyledText {
+        AnimatedStyledText {
             id: countText
 
             anchors.left: parent.left
@@ -148,7 +148,7 @@ MouseArea {
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
         }
 
-        StyledText {
+        AnimatedStyledText {
             id: countTextVertical
 
             anchors.top: parent.top

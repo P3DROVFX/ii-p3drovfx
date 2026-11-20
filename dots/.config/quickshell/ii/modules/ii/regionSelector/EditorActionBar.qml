@@ -69,7 +69,7 @@ Toolbar {
                 anchors.centerIn: parent
                 spacing: 8
 
-                MaterialSymbol {
+                AnimatedMaterialSymbol {
                     anchors.verticalCenter: parent.verticalCenter
                     iconSize: 20
                     text: ab.symbolName
@@ -107,7 +107,7 @@ Toolbar {
         colRippleToggled: Appearance.colors.colSecondaryContainerActive
 
         contentItem: Item {
-            MaterialSymbol {
+            AnimatedMaterialSymbol {
                 anchors.centerIn: parent
                 iconSize: 22
                 text: ia.symbolName

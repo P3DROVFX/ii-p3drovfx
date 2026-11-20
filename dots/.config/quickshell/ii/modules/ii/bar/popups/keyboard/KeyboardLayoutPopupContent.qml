@@ -130,7 +130,7 @@ ColumnLayout {
             }
             spacing: 18
 
-            StyledText {
+            AnimatedStyledText {
                 Layout.alignment: Qt.AlignVCenter
                 Layout.maximumWidth: 170
                 text: content.activeCode.toUpperCase() || "—"
@@ -188,7 +188,7 @@ ColumnLayout {
                             color: Appearance.colors.colOnPrimary
                         }
                     }
-                    StyledText {
+                    AnimatedStyledText {
                         visible: content.activeSignature.length > 0
                         text: content.activeSignature
                         font.pixelSize: Appearance.font.pixelSize.smaller

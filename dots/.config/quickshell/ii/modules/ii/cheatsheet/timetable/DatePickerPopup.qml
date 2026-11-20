@@ -177,7 +177,7 @@ Item {
                     }
                 }
 
-                StyledText {
+                AnimatedStyledText {
                     anchors.centerIn: parent
                     text: Qt.formatDate(new Date(root.viewYear, root.viewMonth, 1), "MMMM yyyy")
                     font.pixelSize: Appearance.font.pixelSize.large

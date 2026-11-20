@@ -219,7 +219,7 @@ ClockSheet {
                         }
                     }
 
-                    StyledText {
+                    AnimatedStyledText {
                         Layout.fillHeight: true
                         verticalAlignment: Text.AlignVCenter
                         text: timeTile.modelData.key === "start" ? root.draftStart : root.draftEnd

@@ -124,7 +124,7 @@ Item {
 
             contentItem: RowLayout {
                 spacing: 6
-                MaterialSymbol {
+                AnimatedMaterialSymbol {
                     Layout.alignment: Qt.AlignVCenter
                     text: root._deviceIconName
                     iconSize: Appearance.font.pixelSize.normal
@@ -143,7 +143,7 @@ Item {
                     font.weight: Font.DemiBold
                     color: Appearance.colors.colOnLayer3
                 }
-                MaterialSymbol {
+                AnimatedMaterialSymbol {
                     Layout.alignment: Qt.AlignVCenter
                     text: "expand_more"
                     iconSize: Appearance.font.pixelSize.normal

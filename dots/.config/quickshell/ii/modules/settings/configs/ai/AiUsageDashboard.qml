@@ -236,7 +236,7 @@ GridLayout {
                 }
             }
 
-            StyledText {
+            AnimatedStyledText {
                 Layout.fillWidth: true
                 text: AiUsage.formatTokens(grid.periodTokens)
                 color: Appearance.colors.colOnPrimaryContainer
@@ -353,7 +353,7 @@ GridLayout {
                 }
             }
 
-            StyledText {
+            AnimatedStyledText {
                 Layout.fillWidth: true
                 text: AiUsage.formatTokens(grid.tokensTotal)
                 color: Appearance.colors.colOnLayer2
@@ -501,7 +501,7 @@ GridLayout {
                 }
             }
 
-            StyledText {
+            AnimatedStyledText {
                 Layout.fillWidth: true
                 text: String(grid.periodRequests)
                 color: Appearance.colors.colOnSecondaryContainer

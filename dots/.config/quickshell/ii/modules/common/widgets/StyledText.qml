@@ -3,6 +3,9 @@ import QtQuick
 
 Text {
     id: root
+    // The value-change slide lives in AnimatedStyledText / AnimatedMaterialSymbol.
+    // These stay declared so a plain text still accepts them (and simply does not
+    // animate) instead of failing to load.
     property bool animateChange: false
     property real animationDistanceX: 0
     property real animationDistanceY: 6
@@ -23,90 +26,4 @@ Text {
     }
     color: Appearance?.m3colors.m3onBackground ?? "black"
     linkColor: Appearance?.m3colors.m3primary
-
-    transform: Translate {
-        id: textTranslate
-    }
-
-    component Anim: NumberAnimation {
-        duration: 300 / 2
-        easing.type: Easing.BezierSpline
-        easing.bezierCurve: Appearance?.animation.elementMoveFast.bezierCurve ?? Easing.Linear
-    }
-
-    // Most texts never animate; building this set of 13 animations per text
-    // only once animateChange is on keeps every plain label light. Behavior
-    // accepts its animation once, and `enabled` handles turning it off again.
-    property Animation textChangeAnimation: null
-    function ensureTextChangeAnimation() {
-        if (root.animateChange && !root.textChangeAnimation)
-            root.textChangeAnimation = textChangeAnimationComponent.createObject(root);
-    }
-    onAnimateChangeChanged: root.ensureTextChangeAnimation()
-    Component.onCompleted: root.ensureTextChangeAnimation()
-
-    Behavior on text {
-        id: textAnimationBehavior
-        enabled: root.animateChange && root.textChangeAnimation !== null
-        animation: root.textChangeAnimation
-    }
-
-    Component {
-        id: textChangeAnimationComponent
-
-        SequentialAnimation {
-            alwaysRunToEnd: true
-            ParallelAnimation {
-                Anim {
-                    target: textTranslate
-                    property: "x"
-                    to: -root.animationDistanceX
-                    easing.type: Easing.InSine
-                }
-                Anim {
-                    target: textTranslate
-                    property: "y"
-                    to: -root.animationDistanceY
-                    easing.type: Easing.InSine
-                }
-                Anim {
-                    target: root
-                    property: "opacity"
-                    to: 0
-                    easing.type: Easing.InSine
-                }
-            }
-            PropertyAction {} // Tie the text update to this point (we don't want it to happen during the first slide+fade)
-            PropertyAction {
-                target: textTranslate
-                property: "x"
-                value: root.animationDistanceX
-            }
-            PropertyAction {
-                target: textTranslate
-                property: "y"
-                value: root.animationDistanceY
-            }
-            ParallelAnimation {
-                Anim {
-                    target: textTranslate
-                    property: "x"
-                    to: 0
-                    easing.type: Easing.OutSine
-                }
-                Anim {
-                    target: textTranslate
-                    property: "y"
-                    to: 0
-                    easing.type: Easing.OutSine
-                }
-                Anim {
-                    target: root
-                    property: "opacity"
-                    to: 1
-                    easing.type: Easing.OutSine
-                }
-            }
-        }
-    }
 }

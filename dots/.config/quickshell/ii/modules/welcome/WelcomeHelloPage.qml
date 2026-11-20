@@ -250,7 +250,7 @@ Item {
 
         Item { Layout.fillHeight: true }
 
-        StyledText {
+        AnimatedStyledText {
             Layout.fillWidth: true
             text: root.greetings[root.greetingIndex]
             color: Appearance.colors.colOnLayer0

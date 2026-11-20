@@ -3,7 +3,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 
-StyledText {
+AnimatedStyledText {
     Component.onCompleted: {
         LyricsService.initiliazeLyrics()
     }

@@ -122,7 +122,7 @@ ComboBox {
                 }
             }
 
-            StyledText {
+            AnimatedStyledText {
                 Layout.fillWidth: true
                 visible: !root.iconOnly
                 Layout.alignment: Qt.AlignVCenter

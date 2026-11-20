@@ -39,8 +39,8 @@ MaterialShape {
     // offset the shape no longer has.
     //
     // The counter-rotation lives on this holder rather than on the symbol,
-    // because StyledText already owns its `transform` list for the text-change
-    // animation and assigning another would drop it.
+    // because the text-change animation installs its own Translate in the
+    // symbol's `transform` list.
     Item {
         id: glyphHolder
         anchors.fill: parent
@@ -51,7 +51,7 @@ MaterialShape {
             angle: -root.rotation
         }
 
-        MaterialSymbol {
+        AnimatedMaterialSymbol {
             id: symbol
             anchors.centerIn: parent
             color: root.colSymbol

@@ -339,7 +339,7 @@ Item {
     Component {
         id: textComponent
 
-        StyledText {
+        AnimatedStyledText {
             id: textValue
             text: AiPlanUsage.percentText(root.quota)
             font.pixelSize: root.vertical

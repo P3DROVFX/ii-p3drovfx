@@ -106,7 +106,7 @@ ContentPage {
                 anchors.centerIn: parent
                 spacing: 5
 
-                MaterialSymbol {
+                AnimatedMaterialSymbol {
                     Layout.alignment: Qt.AlignVCenter
                     text: "smart_display"
                     iconSize: 16

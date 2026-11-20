@@ -510,7 +510,7 @@ Item {
                         colRipple: ColorUtils.transparentize(
                             Appearance.colors.colOnPrimaryContainer, 0.60)
                         opacity: 0
-                        contentItem: MaterialSymbol {
+                        contentItem: AnimatedMaterialSymbol {
                             anchors.centerIn: parent
                             text: chip.modelData?.icon ?? ""
                             iconSize: 18

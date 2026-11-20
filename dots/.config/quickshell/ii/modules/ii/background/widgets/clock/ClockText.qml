@@ -3,7 +3,7 @@ import qs.modules.common.widgets
 import QtQuick
 import QtQuick.Layouts
 
-StyledText {
+AnimatedStyledText {
     Layout.fillWidth: true
     font {
         family: Appearance.font.family.expressive

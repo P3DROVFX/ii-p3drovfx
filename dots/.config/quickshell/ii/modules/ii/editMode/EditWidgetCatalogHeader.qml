@@ -69,7 +69,7 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 2
 
-                StyledText {
+                AnimatedStyledText {
                     id: placedText
                     animateChange: true
                     text: `${root.placedKinds}`

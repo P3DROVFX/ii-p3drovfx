@@ -69,7 +69,7 @@ MouseArea {
                     color: Appearance.colors.colOnLayer1
                 }
 
-                StyledText {
+                AnimatedStyledText {
                     Layout.fillWidth: true
                     horizontalAlignment: Text.AlignHCenter
                     text: root.abbreviateLayoutCode(HyprlandXkb.currentLayoutCode)
@@ -111,7 +111,7 @@ MouseArea {
 
                 Component {
                     id: keyboardLayout
-                    StyledText {
+                    AnimatedStyledText {
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: root.abbreviateLayoutCode(HyprlandXkb.currentLayoutCode).replace(/\n/g, ' ')
                         font.pixelSize: Appearance.font.pixelSize.small

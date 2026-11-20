@@ -21,7 +21,7 @@ Loader {
         implicitWidth: root.vertical ? null : layoutCodeText.implicitWidth
         implicitHeight: root.vertical ? layoutCodeText.implicitHeight : null
 
-        StyledText {
+        AnimatedStyledText {
             id: layoutCodeText
             anchors.centerIn: parent
             horizontalAlignment: Text.AlignHCenter

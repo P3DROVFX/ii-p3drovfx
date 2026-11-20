@@ -135,7 +135,7 @@ ContentPage {
                 anchors.centerIn: parent
                 spacing: 5
 
-                MaterialSymbol {
+                AnimatedMaterialSymbol {
                     Layout.alignment: Qt.AlignVCenter
                     text: PhoneCameraService.connecting ? "sync"
                         : (PhoneCameraService.running ? "videocam" : "videocam_off")
@@ -469,7 +469,7 @@ ContentPage {
                 opacity: enabled ? 1.0 : 0.5
                 contentItem: RowLayout {
                     spacing: 6
-                    MaterialSymbol {
+                    AnimatedMaterialSymbol {
                         Layout.alignment: Qt.AlignVCenter
                         text: "cameraswitch"
                         iconSize: 20
@@ -500,7 +500,7 @@ ContentPage {
                 opacity: enabled ? 1.0 : 0.5
                 contentItem: RowLayout {
                     spacing: 6
-                    MaterialSymbol {
+                    AnimatedMaterialSymbol {
                         Layout.alignment: Qt.AlignVCenter
                         text: "flip"
                         iconSize: 20
@@ -534,7 +534,7 @@ ContentPage {
                 opacity: enabled ? 1.0 : 0.5
                 contentItem: RowLayout {
                     spacing: 6
-                    MaterialSymbol {
+                    AnimatedMaterialSymbol {
                         Layout.alignment: Qt.AlignVCenter
                         text: "open_in_new"
                         iconSize: 20

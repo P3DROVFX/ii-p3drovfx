@@ -177,7 +177,7 @@ Rectangle {
         spacing: 2
         property color colText: Battery.isLowAndUnplugged ? Appearance.colors.colError : Appearance.colors.colOnSurface
 
-        MaterialSymbol {
+        AnimatedMaterialSymbol {
             anchors.verticalCenter: parent.verticalCenter
             fill: 1
             text: Battery.isCharging ? "bolt" : "battery_android_full"

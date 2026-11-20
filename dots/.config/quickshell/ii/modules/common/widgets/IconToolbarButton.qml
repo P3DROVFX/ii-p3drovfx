@@ -13,7 +13,7 @@ ToolbarButton {
     property bool iconFill: toggled
     property real iconSize: Appearance.font.pixelSize.huge
 
-    contentItem: MaterialSymbol {
+    contentItem: AnimatedMaterialSymbol {
         anchors.centerIn: parent
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter

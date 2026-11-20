@@ -1023,7 +1023,7 @@ Item {
                     anchors.rightMargin: 12
                     spacing: -2
 
-                    StyledText {
+                    AnimatedStyledText {
                         width: parent.width
                         text: root.weekRangeLabel(root.compactNav)
                         font.family: Appearance.font.family.title

@@ -597,7 +597,7 @@ Item {
                                     colBackgroundHover: Appearance.colors.colPrimaryContainerHover
                                     enabled: root.replyDraft.length > 0
                                     opacity: enabled ? 1.0 : 0.5
-                                    contentItem: MaterialSymbol {
+                                    contentItem: AnimatedMaterialSymbol {
                                         iconSize: Appearance.font.pixelSize.normal
                                         color: Appearance.colors.colOnPrimaryContainer
                                         text: root.replyJustSent ? "check" : "send"

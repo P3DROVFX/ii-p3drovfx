@@ -70,7 +70,7 @@ MouseArea {
                     iconSize: 18
                     color: root.containsMouse ? widgetPalette.colBackgroundHover : widgetPalette.colBackground
                 }
-                StyledText {
+                AnimatedStyledText {
                     text: root.abbreviateLayoutCode(HyprlandXkb.currentLayoutCode)
                     font.pixelSize: Appearance.font.pixelSize.small
                     font.weight: Font.Black
@@ -99,7 +99,7 @@ MouseArea {
                         color: widgetPalette.colOnBackground
                     }
                 }
-                StyledText {
+                AnimatedStyledText {
                     Layout.alignment: Qt.AlignHCenter
                     text: root.abbreviateLayoutCode(HyprlandXkb.currentLayoutCode)
                     font.pixelSize: 10

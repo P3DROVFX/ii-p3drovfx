@@ -502,7 +502,7 @@ Toolbar {
         }
 
         contentItem: Item {
-            MaterialSymbol {
+            AnimatedMaterialSymbol {
                 anchors.centerIn: parent
                 iconSize: 22
                 text: tb.symbol

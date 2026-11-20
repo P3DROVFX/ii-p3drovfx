@@ -182,7 +182,7 @@ Item { // Player instance
                 Layout.preferredHeight: background.height - root.contentMargins * 2
                 spacing: root.compactMode ? 1 : 2
 
-                StyledText {
+                AnimatedStyledText {
                     id: trackTitle
                     Layout.fillWidth: true
                     font.pixelSize: root.compactMode ? Appearance.font.pixelSize.small : Appearance.font.pixelSize.large
@@ -193,7 +193,7 @@ Item { // Player instance
                     animationDistanceX: 6
                     animationDistanceY: 0
                 }
-                StyledText {
+                AnimatedStyledText {
                     id: trackArtist
                     Layout.fillWidth: true
                     font.pixelSize: root.compactMode ? Appearance.font.pixelSize.smallest : Appearance.font.pixelSize.smaller

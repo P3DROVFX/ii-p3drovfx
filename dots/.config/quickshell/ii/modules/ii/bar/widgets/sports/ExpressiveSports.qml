@@ -237,7 +237,7 @@ MouseArea {
             radius: Appearance.rounding.full
             color: root.containsMouse ? palette.colBackgroundHover : palette.colBackground
             
-            StyledText {
+            AnimatedStyledText {
                 id: statusText
                 anchors.centerIn: parent
                 // If game state is "in" (active), show score. Otherwise show full status (time/date)
@@ -295,7 +295,7 @@ MouseArea {
                     cache: false
                 }
             }
-            StyledText {
+            AnimatedStyledText {
                 Layout.alignment: Qt.AlignHCenter
                 text: root.displayGame ? root.displayGame.home.score : ""
                 font.pixelSize: 12
@@ -313,7 +313,7 @@ MouseArea {
             implicitHeight: 20 // Fixed height is probably okay here for vertical flow
             radius: Appearance.rounding.full
             color: root.containsMouse ? palette.colBackgroundHover : palette.colBackground
-            StyledText {
+            AnimatedStyledText {
                 anchors.centerIn: parent
                 text: root.displayGame ? (root.displayGame.state === "in" ? root.displayGame.status : root.displayGame.status.split(" ")[0]) : ""
                 font.pixelSize: 8
@@ -327,7 +327,7 @@ MouseArea {
         ColumnLayout {
             spacing: 2
             Layout.alignment: Qt.AlignHCenter
-            StyledText {
+            AnimatedStyledText {
                 Layout.alignment: Qt.AlignHCenter
                 text: root.displayGame ? root.displayGame.away.score : ""
                 font.pixelSize: 12

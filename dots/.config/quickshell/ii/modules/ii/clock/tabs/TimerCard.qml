@@ -86,7 +86,7 @@ Rectangle {
                 anchors.centerIn: parent
                 spacing: 6
 
-                MaterialSymbol {
+                AnimatedMaterialSymbol {
                     visible: control.symbol.length > 0
                     text: control.symbol
                     iconSize: ClockStyle.iconNormal

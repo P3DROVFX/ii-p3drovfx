@@ -35,7 +35,7 @@ Item { // Model indicator
             }
         }
         
-        StyledText {
+        AnimatedStyledText {
             id: providerName
             font.pixelSize: Appearance.font.pixelSize.smaller
             color: Appearance.m3colors.m3onSurface

@@ -120,7 +120,7 @@ Rectangle {
         colRipple: ColorUtils.mix(big.colFill, big.colInk, 0.76)
 
         contentItem: Item {
-            MaterialSymbol {
+            AnimatedMaterialSymbol {
                 anchors.centerIn: parent
                 text: big.running ? "stop" : "play_arrow"
                 iconSize: Math.round(big.size * 0.42)

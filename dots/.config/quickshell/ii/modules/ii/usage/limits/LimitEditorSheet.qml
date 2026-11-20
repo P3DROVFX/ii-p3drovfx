@@ -195,7 +195,7 @@ ClockSheet {
                 Layout.fillHeight: true
                 spacing: ClockStyle.gapSmall
 
-                StyledText {
+                AnimatedStyledText {
                     Layout.fillWidth: true
                     text: Math.floor(root.draftMinutes / 60) + ":" + String(root.draftMinutes % 60).padStart(2, "0")
                     font.family: ClockStyle.fontMain

@@ -126,7 +126,7 @@ Item {
                         }
                     }
 
-                    StyledText {
+                    AnimatedStyledText {
                         Layout.alignment: Qt.AlignVCenter
                         visible: root.showLabel || root.minimal || root.loading
                         text: root.label
@@ -355,7 +355,7 @@ Item {
                         color: root.hovering ? theme.colBackground : theme.colOnBackgroundVariant
                     }
 
-                    StyledText {
+                    AnimatedStyledText {
                         id: ribbonLabel
                         anchors.verticalCenter: parent.verticalCenter
                         visible: root.showLabel

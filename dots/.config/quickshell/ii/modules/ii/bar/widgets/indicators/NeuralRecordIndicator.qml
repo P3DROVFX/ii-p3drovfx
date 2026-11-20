@@ -376,7 +376,7 @@ Item {
                         }
                     }
 
-                    StyledText {
+                    AnimatedStyledText {
                         Layout.alignment: Qt.AlignVCenter
                         text: root.label
                         animateChange: !Appearance.reducedMotion

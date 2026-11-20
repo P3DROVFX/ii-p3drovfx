@@ -119,7 +119,7 @@ ContentPage {
                 anchors.centerIn: parent
                 spacing: 5
 
-                MaterialSymbol {
+                AnimatedMaterialSymbol {
                     Layout.alignment: Qt.AlignVCenter
                     text: PhoneMicService.connecting ? "sync"
                         : (PhoneMicService.running
@@ -306,7 +306,7 @@ ContentPage {
 
             contentItem: RowLayout {
                 spacing: 8
-                MaterialSymbol {
+                AnimatedMaterialSymbol {
                     Layout.alignment: Qt.AlignVCenter
                     text: PhoneMicService.muted ? "mic_off" : "mic"
                     iconSize: 22

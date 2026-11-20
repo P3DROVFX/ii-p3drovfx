@@ -155,7 +155,7 @@ Item {
             }
         }
 
-        StyledText {
+        AnimatedStyledText {
             Layout.alignment: Qt.AlignVCenter
             text: root.line
             font.pixelSize: Appearance.font.pixelSize.smaller

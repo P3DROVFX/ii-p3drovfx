@@ -219,7 +219,7 @@ Item {
         opacity: enabled ? 1.0 : 0.4
         scale: 1.0
 
-        contentItem: MaterialSymbol {
+        contentItem: AnimatedMaterialSymbol {
             anchors.centerIn: parent
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter

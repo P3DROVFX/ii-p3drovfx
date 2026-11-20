@@ -239,7 +239,7 @@ Item {
                 cache: false
             }
 
-            StyledText {
+            AnimatedStyledText {
                 id: homeScoreText
                 Layout.alignment: Qt.AlignVCenter
                 visible: root.displayGame?.state !== "pre"
@@ -261,7 +261,7 @@ Item {
                     animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
                 }
 
-                StyledText {
+                AnimatedStyledText {
                     id: statusText
                     anchors.centerIn: parent
                     text: root.displayStatus
@@ -272,7 +272,7 @@ Item {
                 }
             }
 
-            StyledText {
+            AnimatedStyledText {
                 id: awayScoreText
                 Layout.alignment: Qt.AlignVCenter
                 visible: root.displayGame?.state !== "pre"

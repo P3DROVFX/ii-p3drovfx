@@ -28,6 +28,7 @@ for name in ("DeferredTimePicker.qml", "DeferredDatePicker.qml",
 put('qs/modules/common/widgets/StyledText.qml',
     'import QtQuick\nText { property bool animateChange: false; property real animationDistanceX: 0; '
     'property real animationDistanceY: 0; property bool tintText: false; font.pixelSize: 14; color: "white" }')
+put('qs/modules/common/widgets/AnimatedStyledText.qml', 'import QtQuick\nStyledText {}')
 put('qs/modules/common/widgets/MaterialSymbol.qml',
     'import QtQuick\nText { property real iconSize: 16; property real fill: 0; font.pixelSize: iconSize }')
 put('qs/modules/common/widgets/RippleButton.qml', '''import QtQuick

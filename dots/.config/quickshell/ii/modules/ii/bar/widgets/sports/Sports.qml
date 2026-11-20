@@ -250,7 +250,7 @@ MouseArea {
                 implicitWidth: homeScoreText.implicitWidth
                 implicitHeight: homeScoreText.implicitHeight
 
-                StyledText {
+                AnimatedStyledText {
                     id: homeScoreText
                     anchors.centerIn: parent
                     text: root.displayGame ? root.displayGame.home.score : ""
@@ -276,7 +276,7 @@ MouseArea {
                     return Appearance.colors.colLayer3;
                 }
 
-                StyledText {
+                AnimatedStyledText {
                     id: statusText
                     anchors.centerIn: parent
                     text: root.displayGame ? root.displayGame.status : ""
@@ -298,7 +298,7 @@ MouseArea {
                 implicitWidth: awayScoreText.implicitWidth
                 implicitHeight: awayScoreText.implicitHeight
 
-                StyledText {
+                AnimatedStyledText {
                     id: awayScoreText
                     anchors.centerIn: parent
                     text: root.displayGame ? root.displayGame.away.score : ""
@@ -356,7 +356,7 @@ MouseArea {
                     mipmap: true
                     cache: false
                 }
-                StyledText {
+                AnimatedStyledText {
                     id: homeScoreTextVert
                     Layout.alignment: Qt.AlignHCenter
                     text: root.displayGame ? root.displayGame.home.score : ""
@@ -383,7 +383,7 @@ MouseArea {
                     return Appearance.colors.colLayer3;
                 }
 
-                StyledText {
+                AnimatedStyledText {
                     id: statusTextVert
                     anchors.centerIn: parent
                     // Splitting status to only take the first word when not active ("in") so that date/time string fits perfectly
@@ -403,7 +403,7 @@ MouseArea {
             ColumnLayout {
                 spacing: 2
                 Layout.alignment: Qt.AlignHCenter
-                StyledText {
+                AnimatedStyledText {
                     id: awayScoreTextVert
                     Layout.alignment: Qt.AlignHCenter
                     text: root.displayGame ? root.displayGame.away.score : ""

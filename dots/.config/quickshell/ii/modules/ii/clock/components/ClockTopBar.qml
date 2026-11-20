@@ -54,7 +54,7 @@ Item {
             Layout.leftMargin: ClockStyle.gapTiny
             spacing: 0
 
-            StyledText {
+            AnimatedStyledText {
                 Layout.fillWidth: true
                 text: root.title
                 elide: Text.ElideRight

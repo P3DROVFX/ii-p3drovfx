@@ -474,7 +474,7 @@ Rectangle {
                                     colBackground: "transparent"
                                     colBackgroundHover: Appearance.colors.colLayer3Hover
 
-                                    contentItem: MaterialSymbol {
+                                    contentItem: AnimatedMaterialSymbol {
                                         anchors.centerIn: parent
                                         text: PhoneContactsService.isFavorite(modelData.id) ? "star" : "star_outline"
                                         iconSize: 18

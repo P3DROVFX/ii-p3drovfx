@@ -572,7 +572,7 @@ Rectangle {
                                 colBackground: "transparent"
                                 colBackgroundHover: Appearance.colors.colLayer3Hover
 
-                                contentItem: MaterialSymbol {
+                                contentItem: AnimatedMaterialSymbol {
                                     anchors.centerIn: parent
                                     text: PhoneScrcpyService.isAppFavorite(modelData.package) ? "star" : "star_outline"
                                     iconSize: 18

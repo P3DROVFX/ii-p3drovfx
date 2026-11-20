@@ -224,7 +224,7 @@ Item {
                     RowLayout {
                         spacing: ClockStyle.gapSmall
 
-                        StyledText {
+                        AnimatedStyledText {
                             text: {
                                 const parts = ClockFormat.alarmParts(root.opts?.time ?? "23:30");
                                 return parts.hours + ":" + parts.minutes;

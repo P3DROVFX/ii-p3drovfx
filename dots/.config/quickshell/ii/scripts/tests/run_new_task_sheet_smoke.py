@@ -18,6 +18,7 @@ source=re.sub(r'MaterialShape\.Shape\.\w+','0',source)
 put('qs/modules/common/dashboardWidgets/todo/NewTaskSheet.qml',source)
 
 put('qs/modules/common/widgets/StyledText.qml','import QtQuick\nText { font.pixelSize: 16; color: "white" }')
+put('qs/modules/common/widgets/AnimatedStyledText.qml','import QtQuick\nStyledText { property bool animateChange: false; property real animationDistanceX: 0; property real animationDistanceY: 0 }')
 put('qs/modules/common/widgets/StyledTextInput.qml','import QtQuick\nTextInput { color: "white"; font.pixelSize: 16 }')
 put('qs/modules/common/widgets/StyledTextArea.qml','import QtQuick.Controls\nTextArea { color: "white"; font.pixelSize: 16 }')
 put('qs/modules/common/widgets/StyledFlickable.qml','import QtQuick\nFlickable {}')

@@ -91,7 +91,7 @@ Item {
                 anchors.centerIn: parent
                 spacing: ClockStyle.gapSmall
 
-                MaterialSymbol {
+                AnimatedMaterialSymbol {
                     text: root.phaseIcon
                     iconSize: ClockStyle.iconNormal
                     fill: 1
@@ -99,7 +99,7 @@ Item {
                     animateChange: !ClockStyle.reducedMotion
                 }
 
-                StyledText {
+                AnimatedStyledText {
                     text: root.phaseLabel
                     font.family: ClockStyle.fontTitle
                     font.variableAxes: ClockStyle.axesTitle
