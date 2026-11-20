@@ -39,6 +39,18 @@ Item {
         y: (1 - root.progress) * 32
     }
 
+    // `enabled: false` on the covered content does not stop hover in this Qt:
+    // its HoverHandlers and tooltips kept reacting through the sheet. An item
+    // that takes hover (and stray presses) over the whole host stops delivery
+    // there; the page's own controls sit above it and still get theirs.
+    MouseArea {
+        anchors.fill: parent
+        enabled: root.visible
+        hoverEnabled: true
+        acceptedButtons: Qt.AllButtons
+        onWheel: wheel => wheel.accepted = true
+    }
+
     Loader {
         id: loader
         anchors.fill: parent

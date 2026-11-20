@@ -86,7 +86,8 @@ Rectangle {
                 StyledText {
                     Layout.fillWidth: true
                     text: row.title
-                    wrapMode: Text.WordWrap
+                    // Long unbroken names (calendar ids, emails) break anywhere.
+                    wrapMode: Text.Wrap
                     font.pixelSize: Appearance.font.pixelSize.normal
                     color: Appearance.colors.colOnLayer1
                 }
@@ -94,7 +95,8 @@ Rectangle {
                     Layout.fillWidth: true
                     visible: row.description.length > 0
                     text: row.description
-                    wrapMode: Text.WordWrap
+                    // Long unbroken names (calendar ids, emails) break anywhere.
+                    wrapMode: Text.Wrap
                     font.pixelSize: Appearance.font.pixelSize.smaller
                     color: Appearance.colors.colSubtext
                 }
