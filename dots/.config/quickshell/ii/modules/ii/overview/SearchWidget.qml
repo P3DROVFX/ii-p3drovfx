@@ -1056,7 +1056,7 @@ Item {
     property string resultCategoryId: "all"
     readonly property var resultCategoryDefinitions: [
         { id: "all", label: Translation.tr("All"), icon: "category", sections: [] },
-        { id: "apps", label: Translation.tr("Apps"), icon: "apps", sections: ["apps"] },
+        { id: "apps", label: Translation.tr("Apps"), icon: "apps", sections: ["apps", "phoneApps"] },
         { id: "controls", label: Translation.tr("Controls"), icon: "tune", sections: ["controls"] },
         { id: "tools", label: Translation.tr("Tools"), icon: "widgets", sections: ["tools", "actions"] },
         { id: "content", label: Translation.tr("Content"), icon: "article", sections: ["quicklinks", "textSnippets", "files", "siteTabs", "siteFavorites", "siteSuggestions"] },
@@ -1148,6 +1148,8 @@ Item {
             return "best";
         if (item?.isAlias === true)
             return "aliases";
+        if (key.startsWith("phoneapp:"))
+            return "phoneApps";
         if (key.startsWith("app:"))
             return "apps";
         // The shell's own windows (Clock, Modes & Routines…) are apps to whoever searches for them.

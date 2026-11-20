@@ -753,8 +753,11 @@ RippleButton {
                                 // would cost tens of megabytes per row.
                                 sourceSize.width: 64
                                 sourceSize.height: 64
+                                // Not `visible ? …`: the parent stays hidden until the
+                                // image is Ready, so reading effective visibility
+                                // here never let the load start.
                                 visible: root.iconType === LauncherSearchResult.IconType.Image
-                                source: visible ? root.iconName : ""
+                                source: root.iconType === LauncherSearchResult.IconType.Image ? root.iconName : ""
                                 fillMode: Image.PreserveAspectCrop
                                 asynchronous: true
                                 cache: true

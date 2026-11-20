@@ -1122,7 +1122,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 33
+    readonly property int currentConfigVersion: 34
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -1892,6 +1892,25 @@ Singleton {
             if (sc && sc.bitRate === "8M") {
                 sc.bitRate = "20M";
                 console.log("[Config] Migrated phone.scrcpy.bitRate 8M -> 20M");
+            }
+        }
+
+        // v33 -> v34: Android apps of the connected phone became a result group.
+        // A saved order is authoritative, so without this the group would stay
+        // hidden for every upgraded user. It sits between the PC's own apps and
+        // tools and the sites, never above the desktop programs.
+        if (from < 34) {
+            const sectionOrder = raw.search?.sectionOrder;
+            if (Array.isArray(sectionOrder) && sectionOrder.length > 0
+                    && !sectionOrder.some(entry => String(entry?.id ?? entry) === "phoneApps")) {
+                const ids = sectionOrder.map(entry => String(entry?.id ?? entry));
+                const after = Math.max(ids.indexOf("apps"), ids.indexOf("tools"));
+                const sitesIndex = ids.indexOf("sites");
+                const insertAt = after >= 0 ? after + 1 : (sitesIndex >= 0 ? sitesIndex : sectionOrder.length);
+                sectionOrder.splice(insertAt, 0, {
+                    "id": "phoneApps"
+                });
+                console.log("[Config] Added Phone apps search result group");
             }
         }
 
@@ -7694,6 +7713,12 @@ Singleton {
                     // on every query, so they also fix a *partly* wrong query.
                     property bool keyboardLayouts: true
                 }
+                // Android apps of the connected phone, opened in a scrcpy app
+                // window. Rows only exist while ADB reaches the phone.
+                property JsonObject phoneApps: JsonObject {
+                    property bool enable: true
+                    property int maxResults: 5
+                }
                 property JsonObject browserSites: JsonObject {
                     property bool enable: true
                     property string profilePath: ""
@@ -7742,6 +7767,9 @@ Singleton {
                     },
                     {
                         "id": "tools"
+                    },
+                    {
+                        "id": "phoneApps"
                     },
                     {
                         "id": "sites"

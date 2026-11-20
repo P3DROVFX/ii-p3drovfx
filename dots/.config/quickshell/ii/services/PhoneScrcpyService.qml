@@ -231,6 +231,49 @@ Singleton {
         root.launchMirror()
     }
 
+    /** Opens `packageName` inside the regular mirror window — the one the
+     *  dock and the Phone sidebar open, with the floating toolbar — rather
+     *  than in a bare App Mode window. The app is started on the phone once
+     *  the mirror is up, so the auto-unlock swipe never lands on it. */
+    property string _pendingMirrorApp: ""
+
+    function openAppInMirror(packageName: string): void {
+        if (!packageName) return
+        if (root.mirrorRunning) {
+            root._startAppOnPhone(packageName)
+            root.focusMirror()
+            return
+        }
+        root._pendingMirrorApp = packageName
+        root.openMirrorWindow()
+    }
+
+    function _startAppOnPhone(packageName: string): void {
+        KdeConnectService.withAdbTarget(args => {
+            const proc = phoneAppStarter.createObject(root, {
+                "packageName": packageName,
+                "command": ["adb"].concat(args).concat(["shell", "monkey", "-p", packageName,
+                    "-c", "android.intent.category.LAUNCHER", "1"])
+            })
+            proc.running = true
+        })
+    }
+
+    Component {
+        id: phoneAppStarter
+        Process {
+            property string packageName: ""
+            stdout: StdioCollector {}
+            onExited: (code, status) => {
+                // monkey exits 0 even for an unknown package; it says so on stdout.
+                const out = String(stdout.text || "")
+                if (code !== 0 || /No activities found|aborted/i.test(out))
+                    KdeConnectService.dispatchActionFeedback(Translation.tr("Could not open %1 on the phone").arg(root._appLabel(packageName)), false)
+                destroy()
+            }
+        }
+    }
+
     /** Ends every mirror of the phone screen at once — the window, the
      *  sidebar's embedded session kept warm behind it, and a legacy window
      *  KdeConnectService opened. Stopping one used to leave the others
@@ -259,6 +302,7 @@ Singleton {
                 : Translation.tr("Phone mirroring failed")
         const text = root.friendlyError(reason)
         if (sessionId === "mirror") {
+            root._pendingMirrorApp = ""
             root.mirrorLaunching = false
             root.mirrorLaunchError = text
         }
@@ -638,12 +682,12 @@ Singleton {
             root._send(root._launchPayload(sessionId, "app", targetArgs, extraArgs))
 
             // Record in recents
-            let recents = (Persistent.states?.phone?.scrcpy?.recentPackages || []).slice()
+            let recents = (Persistent.states?.sidebar?.policies?.phone?.scrcpy?.recentPackages || []).slice()
             const idx = recents.indexOf(packageName)
             if (idx >= 0) recents.splice(idx, 1)
             recents.unshift(packageName)
             if (recents.length > 20) recents = recents.slice(0, 20)
-            Persistent.states.phone.scrcpy.recentPackages = recents
+            Persistent.states.sidebar.policies.phone.scrcpy.recentPackages = recents
 
             KdeConnectService.dispatchActionFeedback(Translation.tr("Launching %1…").arg(packageName.split(".").pop()), true)
         })
@@ -964,6 +1008,25 @@ Singleton {
         proc.running = true
     }
 
+    Timer {
+        id: serverRetryTimer
+        property var pending: []
+        interval: 800
+        onTriggered: {
+            const queued = pending
+            pending = []
+            for (const sid of queued) {
+                const meta = root._sessionMeta[sid]
+                if (!meta) continue
+                KdeConnectService.withAdbTarget(args => {
+                    if (root._sessionMeta[sid] !== meta) return
+                    meta.targetArgs = args
+                    root._send(root._launchPayload(sid, meta.type, args, meta.args))
+                })
+            }
+        }
+    }
+
     function _reprobeAndFallbackH264(sid, meta): void {
         root._prepareNetworkLaunch(meta.targetArgs, _ => {
             // Runtime launch with h265 already failed with an encoder error; pin
@@ -1157,6 +1220,10 @@ Singleton {
                     } else if (ev === "started") {
                         const sid = msg.id
                         if (sid === "mirror") {
+                            if (root._pendingMirrorApp) {
+                                root._startAppOnPhone(root._pendingMirrorApp)
+                                root._pendingMirrorApp = ""
+                            }
                             root.mirrorRunning = true
                             root.mirrorLaunching = false
                             root.mirrorElapsedMs = 0
@@ -1221,6 +1288,21 @@ Singleton {
                             else if (sid === root.embedSessionId) root.embedRunning = false
                             else if (sid === root.recordSessionId) root.recordingRunning = false
                             root._reprobeAndFallbackH264(sid, meta)
+                            return
+                        }
+                        // "Server connection failed"/"could not push" on launch is
+                        // usually transient (a wireless port re-rolled, a push racing
+                        // another scrcpy). Retry once on a freshly resolved target
+                        // before telling the user to reconnect.
+                        const serverError = /server connection failed|could not push/i.test(msg.error || "")
+                        if (!asked && msg.code !== 0 && msg.code !== 2 && meta && serverError && !meta.serverRetryTried) {
+                            meta.serverRetryTried = true
+                            root.sessions = (root.sessions || []).filter(s => s.id !== sid)
+                            if (sid === "mirror") { root.mirrorRunning = false; root.mirrorLaunching = true }
+                            else if (sid === root.embedSessionId) { root.embedRunning = false; root.embedLaunching = true }
+                            else if (sid === root.recordSessionId) { root.recordingRunning = false; root.recordingLaunching = true }
+                            serverRetryTimer.pending = serverRetryTimer.pending.concat([sid])
+                            serverRetryTimer.restart()
                             return
                         }
                         const resuming = root._maybeResume(sid, msg.code)

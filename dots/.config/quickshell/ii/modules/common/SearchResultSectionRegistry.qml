@@ -59,6 +59,13 @@ Singleton {
             icon: "widgets"
         },
         {
+            // Android apps of the connected phone, opened through scrcpy. Below
+            // the PC's own programs and tools, above sites.
+            id: "phoneApps",
+            title: qsTr("Phone apps"),
+            icon: "smartphone"
+        },
+        {
             id: "sites",
             title: qsTr("Sites"),
             icon: "public"

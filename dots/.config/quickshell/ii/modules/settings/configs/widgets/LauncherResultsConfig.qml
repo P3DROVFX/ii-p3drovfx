@@ -83,6 +83,36 @@ Item {
         }
 
         ContentSection {
+            icon: "smartphone"
+            title: Translation.tr("Phone apps")
+            tooltip: Translation.tr("Android apps of the connected phone, opened in their own scrcpy window.")
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Appearance.sizes.elevationMargin / 2
+
+                ConfigSwitch {
+                    buttonIcon: "smartphone"
+                    text: Translation.tr("Show phone apps")
+                    description: Translation.tr("While the phone is reachable over ADB (USB first, Wi-Fi otherwise), its apps appear as results and open mirrored in a floating window. Where they rank is set by the Phone apps group below.")
+                    checked: Config.options.search.phoneApps.enable
+                    onCheckedChanged: Config.options.search.phoneApps.enable = checked
+                }
+
+                ConfigSpinBox {
+                    icon: "format_list_numbered"
+                    text: Translation.tr("Phone apps shown")
+                    value: Config.options.search.phoneApps.maxResults
+                    from: 1
+                    to: 15
+                    stepSize: 1
+                    enabled: Config.options.search.phoneApps.enable
+                    onValueChanged: Config.options.search.phoneApps.maxResults = value
+                }
+            }
+        }
+
+        ContentSection {
             id: resultPrioritySection
             icon: "low_priority"
             title: Translation.tr("Result priority")

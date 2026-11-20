@@ -15981,5 +15981,14 @@
     "GHz": "GHz",
     "%1 GHz": "%1 GHz",
     "average": "média",
-    "GPU %1%": "GPU %1%"
+    "GPU %1%": "GPU %1%",
+    "Phone apps": "Apps do celular",
+    "Phone app": "App do celular",
+    "Android app on %1": "App Android em %1",
+    "Android app": "App Android",
+    "Android apps of the connected phone, opened in their own scrcpy window.": "Apps Android do celular conectado, abertos na própria janela do scrcpy.",
+    "Show phone apps": "Mostrar apps do celular",
+    "While the phone is reachable over ADB (USB first, Wi-Fi otherwise), its apps appear as results and open mirrored in a floating window. Where they rank is set by the Phone apps group below.": "Enquanto o celular estiver acessível por ADB (USB primeiro, senão Wi-Fi), os apps dele aparecem nos resultados e abrem espelhados numa janela flutuante. A posição deles é definida pelo grupo Apps do celular abaixo.",
+    "Phone apps shown": "Apps do celular exibidos",
+    "Could not open %1 on the phone": "Não foi possível abrir %1 no celular"
 }

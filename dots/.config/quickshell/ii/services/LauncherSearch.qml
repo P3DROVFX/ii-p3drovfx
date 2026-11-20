@@ -1376,6 +1376,81 @@ Singleton {
         });
     }
 
+    // Phone services are lazy singletons: nothing here touches them until a
+    // query has passed the config gates, so a shell without a phone never
+    // creates them from Search.
+    property bool _phoneAppsWatched: false
+    Connections {
+        target: root._phoneAppsWatched ? PhoneScrcpyService : null
+        function onAppsChanged() {
+            if (root.query.length > 0)
+                root._scheduleResultsUpdate();
+        }
+    }
+    Connections {
+        target: root._phoneAppsWatched ? KdeConnectService : null
+        function onAdbReachableChanged() {
+            if (root.query.length > 0)
+                root._scheduleResultsUpdate();
+        }
+    }
+
+    function phoneAppMatches(queryText: string): var {
+        if (!(Config.options.search.phoneApps?.enable ?? true) || Config.options.policies.phone === 0)
+            return [];
+        const query = String(queryText ?? "").trim().toLocaleLowerCase();
+        if (query.length < 2)
+            return [];
+        root._phoneAppsWatched = true;
+        if (!KdeConnectService.serviceEnabled || !KdeConnectService.adbReachable || !PhoneScrcpyService.appModeSupported)
+            return [];
+        const apps = PhoneScrcpyService.apps ?? [];
+        if (apps.length === 0) {
+            // The list normally arrives when ADB comes up; ask once if it has not.
+            if (!PhoneScrcpyService.appsLoading && PhoneScrcpyService.appsError === "")
+                PhoneScrcpyService.refreshApps();
+            return [];
+        }
+        const ranked = [];
+        for (const app of apps) {
+            const name = String(app?.name ?? "").toLocaleLowerCase();
+            const pkg = String(app?.package ?? "").toLocaleLowerCase();
+            if (!pkg)
+                continue;
+            let rank = -1;
+            if (name.startsWith(query))
+                rank = 0;
+            else if (name.split(/[\s._-]+/).some(word => word.startsWith(query)))
+                rank = 1;
+            else if (name.includes(query))
+                rank = 2;
+            else if (pkg.split(".").pop().startsWith(query))
+                rank = 3;
+            if (rank >= 0)
+                ranked.push({ app, rank });
+        }
+        ranked.sort((a, b) => a.rank - b.rank || String(a.app.name).localeCompare(String(b.app.name)));
+        const limit = Math.max(0, Config.options.search.phoneApps?.maxResults ?? 5);
+        return ranked.slice(0, limit).map(entry => entry.app);
+    }
+
+    function createPhoneAppResult(app: var): var {
+        const pkg = String(app.package);
+        const iconPath = PhoneAppIconService.iconFor(pkg);
+        const device = KdeConnectService.activeDeviceDisplayName;
+        return resultComp.createObject(null, {
+            key: "phoneapp:" + pkg,
+            name: String(app.name || pkg),
+            type: Translation.tr("Phone app"),
+            comment: device ? Translation.tr("Android app on %1").arg(device) : Translation.tr("Android app"),
+            verb: Translation.tr("Open"),
+            iconName: iconPath ? "file://" + iconPath : "android",
+            iconType: iconPath ? LauncherSearchResult.IconType.Image : LauncherSearchResult.IconType.Material,
+            fallbackIconName: "android",
+            execute: () => PhoneScrcpyService.openAppInMirror(pkg)
+        });
+    }
+
     function fallbackResults() {
         if (!Config.options.search.fallbacks.enable)
             return [];
@@ -3433,6 +3508,9 @@ Singleton {
 
         const appQuery = StringUtils.cleanPrefix(root.query, Config.options.search.prefix.app);
         const appResultObjects = root.matchApplications(appQuery).slice(0, 60).map(entry => root.createAppResultObject(entry));
+        const phoneAppResultObjects = queryHasPrefix
+            ? []
+            : root.phoneAppMatches(root.query).map(app => root.createPhoneAppResult(app));
         const browserSiteSearchActive = !queryHasPrefix;
         const browserSiteResultObjects = browserSiteSearchActive
             ? BrowserSites.matchSites(root.query).map(site => root.createBrowserSiteResult(site))
@@ -3628,6 +3706,9 @@ Singleton {
 
         //////////////// Apps //////////////////
         result = result.concat(appResultObjects);
+
+        //////////////// Phone apps //////////////////
+        result = result.concat(phoneAppResultObjects);
 
         //////////////// Sites //////////////////
         result = result.concat(browserSiteResultObjects);
