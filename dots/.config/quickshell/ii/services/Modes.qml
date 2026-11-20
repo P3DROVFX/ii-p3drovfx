@@ -324,14 +324,14 @@ Singleton {
     // a user-edited preset keeps its edits.
     function seedPresets() {
         const have = root.modes.map(m => m.id);
-        const missing = ModeSchema.presets().filter(p => have.indexOf(p.id) === -1);
+        const missing = ModeSchema.presetsSince(0).filter(p => have.indexOf(p.id) === -1);
         if (missing.length)
             root.saveModes(root.modes.concat(missing));
         return missing.map(p => p.id);
     }
 
     function resetPreset(id) {
-        const preset = ModeSchema.presets().find(p => p.id === id);
+        const preset = ModeSchema.presetsSince(0).find(p => p.id === id);
         if (!preset)
             return false;
         root.upsertMode(preset);
@@ -1174,6 +1174,15 @@ Singleton {
         if (!Config.options.modes.presetsSeeded) {
             root.seedPresets();
             Config.options.modes.presetsSeeded = true;
+            Config.options.modes.presetsRevision = ModeSchema.PRESETS_REVISION;
+        } else if (Config.options.modes.presetsRevision < ModeSchema.PRESETS_REVISION) {
+            // Presets shipped after this user was seeded arrive once; one they
+            // delete afterwards stays deleted.
+            const have = root.modes.map(m => m.id);
+            const added = ModeSchema.presetsSince(Config.options.modes.presetsRevision).filter(p => have.indexOf(p.id) === -1);
+            if (added.length)
+                root.saveModes(root.modes.concat(added));
+            Config.options.modes.presetsRevision = ModeSchema.PRESETS_REVISION;
         }
         // Read the definitions straight from Config: the `modes` / `routines`
         // bindings are not guaranteed to have re-evaluated before this runs.

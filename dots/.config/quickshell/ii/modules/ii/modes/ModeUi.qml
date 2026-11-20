@@ -152,6 +152,7 @@ Singleton {
         hyprland: [MaterialShape.Shape.Gem, MaterialShape.Shape.Pentagon],
         advanced: [MaterialShape.Shape.PixelTriangle, MaterialShape.Shape.Triangle],
         tools: [MaterialShape.Shape.Burst, MaterialShape.Shape.Boom],
+        focus: [MaterialShape.Shape.Flower, MaterialShape.Shape.Clover4Leaf],
         flow: [MaterialShape.Shape.Arrow, MaterialShape.Shape.Triangle]
     })
 
@@ -730,6 +731,16 @@ Singleton {
             return { kind: "ping", message: "" };
         case "phoneControl":
             return root.phoneControlDefault("dnd");
+        case "blockApps":
+            return { apps: ModeSchema.DEFAULT_BLOCKED_APPS.slice(), allowOnly: false, allow: [], strict: false };
+        case "blockSites":
+            return { sites: ModeSchema.DEFAULT_BLOCKED_SITES.slice(), allow: [], strict: false };
+        case "mediaGuard":
+            return { allowPlayers: ModeSchema.DEFAULT_ALLOWED_PLAYERS.slice(), allowTitles: [] };
+        case "ambientSound":
+            return ModeSchema.ambientSoundValue(ModeSchema.DEFAULT_AMBIENT_SOUND, "browser");
+        case "browserExtension":
+            return ModeSchema.focusExtensionValue("leechblock");
         case "none":
             return null;
         }
@@ -938,6 +949,23 @@ Singleton {
             const title = String(obj?.title ?? v ?? "");
             return obj?.body ? `${title} · ${obj.body}` : title;
         }
+        case "blockApps": {
+            if (obj?.allowOnly)
+                return Translation.tr("Every app except %1").arg(root.listText(obj?.allow) || Translation.tr("none"));
+            return root.listText((obj?.apps ?? []).map(k => AppStats.displayName(k) || k), 3);
+        }
+        case "blockSites":
+            return root.listText(obj?.sites, 3);
+        case "mediaGuard": {
+            const players = ModeSchema.stringList(obj?.allowPlayers);
+            return players.length ? Translation.tr("Allows %1").arg(root.listText(players, 2)) : Translation.tr("Only the ambient sound");
+        }
+        case "ambientSound": {
+            const name = String(obj?.label || obj?.title || obj?.url || "");
+            return obj?.player === "audio" ? Translation.tr("%1 · audio only").arg(name) : name;
+        }
+        case "browserExtension":
+            return String(obj?.name ?? "");
         case "mode": {
             const name = Modes.modeById(obj?.id)?.name ?? obj?.id ?? "";
             return (obj?.action === "stop" ? Translation.tr("Stop %1") : Translation.tr("Start %1")).arg(name);

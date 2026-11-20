@@ -3605,6 +3605,9 @@ Singleton {
                 property bool overlayEnabled: true
                 // Presets are added once; deleting one afterwards sticks.
                 property bool presetsSeeded: false
+                // ModeSchema.PRESETS_REVISION this user last received; presets
+                // added after it are seeded once (1 = the original set).
+                property int presetsRevision: 1
                 // "auto" shows the start/end banner in the island or, without
                 // a notch, as a top-centre popup; "off" shows nothing.
                 property string flash: "auto"

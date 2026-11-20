@@ -387,6 +387,35 @@ QtObject {
         return req;
     }
 
+    // ---- focus: the blocks and guards a mode puts up are keyed by the action's
+    // own content, so revert finds them without remembering anything.
+    function focusKey(action) {
+        return Qt.md5(`${action?.type ?? ""}|${JSON.stringify(action?.value ?? null)}`).slice(0, 12);
+    }
+
+    // Who put the action up: the owner being applied, else (re-apply after a
+    // reload) the active mode.
+    function focusOwner() {
+        const o = root.engine?.applyingOwner;
+        if (o)
+            return { id: o.id, kind: o.kind, name: o.name };
+        const id = root.engine?.activeModeId ?? "";
+        return { id: id, kind: "mode", name: root.engine?.modeById(id)?.name ?? Translation.tr("Focus mode") };
+    }
+
+    function focusList(v) {
+        return ModeSchema.stringList(v).map(t => t.trim()).filter(t => t.length > 0);
+    }
+
+    function ambientRequest(v) {
+        const obj = root.asObject(v);
+        const url = String(obj.url ?? "").trim();
+        return {
+            url: url, title: String(obj.title ?? "").trim(), player: obj.player === "audio" ? "audio" : "browser",
+            label: String(obj.label ?? "")
+        };
+    }
+
     // ---------------------------------------------------------------- registry
 
     readonly property var registry: ({
@@ -1208,6 +1237,103 @@ QtObject {
             }
         },
 
+        // ------------------------------------------------- focus
+        blockApps: {
+            id: "blockApps", category: "focus", label: "Block apps", icon: "app_blocking",
+            editor: "blockApps", volatile: true,
+            // value: { apps: [class], allowOnly: bool, allow: [class], strict: bool }
+            // The block screen covers these apps while the mode is on (allowOnly:
+            // every app except `allow`). In memory only, gone with the mode.
+            available: () => true,
+            apply: (v, action) => {
+                const obj = root.asObject(v);
+                const owner = root.focusOwner();
+                const apps = root.focusList(obj.apps);
+                const allow = root.focusList(obj.allow);
+                if (!obj.allowOnly && !apps.length)
+                    throw new Error("no apps to block");
+                ScreenTimeLimits.setModeRule({
+                    id: root.focusKey(action), owner: owner.id, ownerKind: owner.kind, name: owner.name,
+                    kind: "apps", apps: apps, allowOnly: obj.allowOnly === true, allow: allow, strict: obj.strict === true
+                });
+            },
+            revert: (was, action) => { ScreenTimeLimits.clearModeRule(root.focusKey(action)); }
+        },
+        blockSites: {
+            id: "blockSites", category: "focus", label: "Block sites", icon: "public_off",
+            editor: "blockSites", volatile: true,
+            // value: { sites: [name | /regex/], allow: [...], strict: bool }, matched
+            // against browser window titles.
+            available: () => true,
+            apply: (v, action) => {
+                const obj = root.asObject(v);
+                const owner = root.focusOwner();
+                const sites = root.focusList(obj.sites);
+                if (!sites.length)
+                    throw new Error("no sites to block");
+                ScreenTimeLimits.setModeRule({
+                    id: root.focusKey(action), owner: owner.id, ownerKind: owner.kind, name: owner.name,
+                    kind: "sites", sites: sites, allow: root.focusList(obj.allow), strict: obj.strict === true
+                });
+            },
+            revert: (was, action) => { ScreenTimeLimits.clearModeRule(root.focusKey(action)); }
+        },
+        mediaGuard: {
+            id: "mediaGuard", category: "focus", label: "Media guard", icon: "music_off",
+            editor: "mediaGuard", volatile: true,
+            // value: { allowPlayers: [identity], allowTitles: [track title] }. Anything
+            // else that plays is paused; the mode's ambient sound is always allowed.
+            available: () => true,
+            apply: (v, action) => {
+                const obj = root.asObject(v);
+                FocusTools.setGuard(root.focusKey(action), {
+                    name: root.focusOwner().name,
+                    allowPlayers: root.focusList(obj.allowPlayers), allowTitles: root.focusList(obj.allowTitles)
+                });
+            },
+            revert: (was, action) => { FocusTools.clearGuard(root.focusKey(action)); }
+        },
+        ambientSound: {
+            id: "ambientSound", category: "focus", label: "Ambient sound", icon: "spa",
+            editor: "ambientSound", volatile: false,
+            // value: { id, label, url, title, player: "browser" | "audio" }. Browser:
+            // the default browser opens the URL (paused at the end). Audio: mpv + yt-dlp
+            // play it in the background (stopped at the end).
+            available: () => true,
+            apply: (v, action) => {
+                const req = root.ambientRequest(v);
+                if (!/^https?:\/\//i.test(req.url))
+                    throw new Error("not a URL");
+                FocusTools.setAmbientTitle(root.focusKey(action), req.title);
+                if (req.player === "audio")
+                    FocusTools.startAmbientAudio(req.url, req.title || req.label);
+                else
+                    FocusTools.openAmbient(req.url);
+            },
+            revert: (was, action) => {
+                const req = root.ambientRequest(action?.value);
+                if (req.player === "audio")
+                    FocusTools.stopAmbientAudio();
+                else
+                    FocusTools.pauseAmbientTab(req.title);
+                FocusTools.setAmbientTitle(root.focusKey(action), "");
+            }
+        },
+        browserExtension: {
+            id: "browserExtension", category: "focus", label: "Browser extension", icon: "extension",
+            editor: "browserExtension", volatile: false, repeatable: true,
+            // value: { id, name, page, note, firefoxId, chromeId, firefoxUrl, chromeUrl }.
+            // The shell cannot switch an extension on: a notification offers to open
+            // its page (or the store page when the default browser lacks it).
+            available: () => true,
+            apply: v => {
+                const obj = root.asObject(v);
+                if (!root.nonEmpty(obj.firefoxId) && !root.nonEmpty(obj.chromeId))
+                    throw new Error("no extension id");
+                FocusTools.promptExtension(obj, root.focusOwner().name);
+            }
+        },
+
         // ------------------------------------------------- radios
         wifi: {
             id: "wifi", category: "radios", label: "Wi-Fi", icon: "wifi",
@@ -1432,6 +1558,7 @@ QtObject {
         input: { label: "Input", icon: "keyboard" },
         apps: { label: "Apps", icon: "apps" },
         tools: { label: "Tools", icon: "handyman" },
+        focus: { label: "Focus", icon: "self_improvement" },
         radios: { label: "Connectivity", icon: "settings_input_antenna" },
         flow: { label: "Timing", icon: "hourglass_top" },
         advanced: { label: "Advanced", icon: "code" }

@@ -837,8 +837,136 @@ function presets() {
                 { type: "brightness", value: 50 }
             ],
             end: { revert: true, strict: false, autoOffMin: 0, notify: true }
+        },
+        {
+            id: "study", name: "Study", icon: "menu_book", since: 2,
+            color: "", preset: true, auto: false, match: "any",
+            triggers: [],
+            actions: [
+                // No "media: pause": the guard pauses what is not allowed and, unlike
+                // it, is not re-applied over the ambient sound after a shell reload.
+                { type: "dnd", value: true },
+                { type: "blockApps", value: { apps: DEFAULT_BLOCKED_APPS.slice(), allowOnly: false, allow: [], strict: false } },
+                { type: "blockSites", value: { sites: DEFAULT_BLOCKED_SITES.slice(), allow: [], strict: false } },
+                { type: "mediaGuard", value: { allowPlayers: DEFAULT_ALLOWED_PLAYERS.slice(), allowTitles: [] } },
+                { type: "browserExtension", value: focusExtensionValue("leechblock") },
+                { type: "ambientSound", value: ambientSoundValue(DEFAULT_AMBIENT_SOUND, "browser") },
+                { type: "pomodoro", value: "start" }
+            ],
+            end: { revert: true, strict: false, autoOffMin: 0, notify: true }
         }
     ];
+}
+
+// Bumped when a preset is added after release. Users who were already seeded
+// get the presets whose `since` is above the revision they saw, once.
+var PRESETS_REVISION = 2;
+
+// Presets added after `revision`, without the bookkeeping field.
+function presetsSince(revision) {
+    return presets().filter(function (p) { return (p.since || 1) > revision; })
+        .map(function (p) { var c = clone(p); delete c.since; return c; });
+}
+
+// ---------------------------------------------------------------- focus
+
+// Window classes the Study preset blocks out of the box.
+var DEFAULT_BLOCKED_APPS = ["discord", "vesktop", "steam", "org.telegram.desktop", "org.vinegarhq.Sober"];
+
+// Site names matched against browser window titles. A plain word matches a
+// title segment ("Home / X") or, from four letters, a whole word anywhere;
+// /…/ is a case-insensitive regular expression.
+var DEFAULT_BLOCKED_SITES = ["Instagram", "TikTok", "Facebook", "Reddit", "X", "Twitch", "Netflix"];
+
+// MPRIS players (identity or desktop entry, substring) the media guard leaves alone.
+var DEFAULT_ALLOWED_PLAYERS = ["Spotify", "YouTube Music", "Cider", "Tidal", "Deezer"];
+
+// Ambient tracks offered by the ambientSound editor. Every one is an existing
+// YouTube video or live stream: nothing is stored or redistributed here.
+// `title` is the track title MPRIS reports, so the media guard can tell the
+// ambient sound from a distraction playing in the same browser.
+var DEFAULT_AMBIENT_SOUND = "delta-tremolo";
+var AMBIENT_SOUNDS = [
+    { id: "delta-tremolo", group: "binaural", label: "Delta waves", icon: "graphic_eq",
+      title: "Delta Wave with Full Tremolo", url: "https://music.youtube.com/watch?v=yCASmyTcceA" },
+    { id: "alpha-binaural", group: "binaural", label: "Alpha waves", icon: "graphic_eq",
+      title: "Focus Music: Binaural Beats Alpha Waves", url: "https://www.youtube.com/watch?v=LXsfShblX-8" },
+    { id: "gamma-40hz", group: "binaural", label: "40 Hz gamma", icon: "graphic_eq",
+      title: "40Hz Binaural Gamma Waves", url: "https://www.youtube.com/watch?v=FtukH_bCDHg" },
+    { id: "rain", group: "nature", label: "Rain", icon: "rainy",
+      title: "10 Hours of Rain Sound Relaxation", url: "https://www.youtube.com/watch?v=8plwv25NYRo" },
+    { id: "ocean", group: "nature", label: "Ocean waves", icon: "waves",
+      title: "Ocean Waves Relaxation 10 Hours", url: "https://www.youtube.com/watch?v=WHPEKLQID4U" },
+    { id: "forest", group: "nature", label: "Forest", icon: "forest",
+      title: "Forest Sounds | Woodland Ambience, Bird Song", url: "https://www.youtube.com/watch?v=xNN7iTA57jM" },
+    { id: "fireplace", group: "nature", label: "Fireplace", icon: "fireplace",
+      title: "Fireplace 10 Hours", url: "https://www.youtube.com/watch?v=cdKop6aixVE" },
+    { id: "brown-noise", group: "noise", label: "Brown noise", icon: "blur_on",
+      title: "Deep Layered Brown Noise", url: "https://www.youtube.com/watch?v=GrwTSN2Saak" },
+    { id: "white-noise", group: "noise", label: "White noise", icon: "blur_on",
+      title: "White Noise Black Screen", url: "https://www.youtube.com/watch?v=nMfPqeZjc2c" },
+    { id: "cafe", group: "music", label: "Coffee shop", icon: "local_cafe",
+      title: "Cozy Fall Coffee Shop Ambience", url: "https://www.youtube.com/watch?v=VMAPTo7RVCo" },
+    { id: "lofi", group: "music", label: "Lofi radio", icon: "headphones",
+      title: "lofi hip hop radio", url: "https://www.youtube.com/watch?v=rFZHOHl-L8A" },
+    { id: "jazz-lofi", group: "music", label: "Jazz lofi radio", icon: "piano",
+      title: "jazz lofi radio", url: "https://www.youtube.com/watch?v=E2vONfzoyRI" },
+    { id: "synthwave", group: "music", label: "Synthwave radio", icon: "nightlife",
+      title: "synthwave radio", url: "https://www.youtube.com/watch?v=4xDzrJKXOOY" }
+];
+
+var AMBIENT_GROUPS = ["binaural", "nature", "noise", "music"];
+
+function ambientSoundById(id) {
+    for (var i = 0; i < AMBIENT_SOUNDS.length; ++i) {
+        if (AMBIENT_SOUNDS[i].id === id)
+            return AMBIENT_SOUNDS[i];
+    }
+    return null;
+}
+
+// The stored value of an ambientSound action: the catalog entry is copied in,
+// so a catalog change never moves what a user already picked.
+function ambientSoundValue(id, player) {
+    var s = ambientSoundById(id);
+    return {
+        id: s ? s.id : "custom", label: s ? s.label : "", url: s ? s.url : "",
+        title: s ? s.title : "", player: player === "audio" ? "audio" : "browser"
+    };
+}
+
+// Browser extensions a mode can ask for. The shell cannot switch one on: it
+// checks the default browser has it and offers a button that opens `page`
+// (or the store page when missing). `page` empty = the extension is always on.
+var FOCUS_EXTENSIONS = [
+    { id: "leechblock", name: "LeechBlock NG", page: "lockdown.html",
+      note: "Blocks sites on schedules; the button opens its Lockdown page.",
+      firefoxId: "leechblockng@proginosko.com", chromeId: "blaaajhemilngeeffpbfkdjjoefldkok",
+      firefoxUrl: "https://addons.mozilla.org/firefox/addon/leechblock-ng/",
+      chromeUrl: "https://chromewebstore.google.com/detail/blaaajhemilngeeffpbfkdjjoefldkok" },
+    { id: "unhook", name: "Unhook", page: "",
+      note: "Hides YouTube recommendations, Shorts and comments. Always on.",
+      firefoxId: "myallychou@gmail.com", chromeId: "khncfooichmfjbepaaaebmommgaepoid",
+      firefoxUrl: "https://addons.mozilla.org/firefox/addon/youtube-recommended-videos/",
+      chromeUrl: "https://chromewebstore.google.com/detail/khncfooichmfjbepaaaebmommgaepoid" },
+    { id: "news-feed-eradicator", name: "News Feed Eradicator", page: "",
+      note: "Replaces social media feeds with a quote. Always on.",
+      firefoxId: "@news-feed-eradicator", chromeId: "fjcldmjmjhkklehbacihaiopjklihlgg",
+      firefoxUrl: "https://addons.mozilla.org/firefox/addon/news-feed-eradicator/",
+      chromeUrl: "https://chromewebstore.google.com/detail/fjcldmjmjhkklehbacihaiopjklihlgg" }
+];
+
+function focusExtensionById(id) {
+    for (var i = 0; i < FOCUS_EXTENSIONS.length; ++i) {
+        if (FOCUS_EXTENSIONS[i].id === id)
+            return FOCUS_EXTENSIONS[i];
+    }
+    return null;
+}
+
+function focusExtensionValue(id) {
+    var e = focusExtensionById(id);
+    return e ? clone(e) : { id: "custom", name: "", page: "", note: "", firefoxId: "", chromeId: "", firefoxUrl: "", chromeUrl: "" };
 }
 
 // Ready-made routines offered in the editor's Templates group (Samsung's
