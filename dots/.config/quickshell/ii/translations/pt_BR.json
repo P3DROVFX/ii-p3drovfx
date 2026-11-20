@@ -15990,5 +15990,13 @@
     "Show phone apps": "Mostrar apps do celular",
     "While the phone is reachable over ADB (USB first, Wi-Fi otherwise), its apps appear as results and open mirrored in a floating window. Where they rank is set by the Phone apps group below.": "Enquanto o celular estiver acessível por ADB (USB primeiro, senão Wi-Fi), os apps dele aparecem nos resultados e abrem espelhados numa janela flutuante. A posição deles é definida pelo grupo Apps do celular abaixo.",
     "Phone apps shown": "Apps do celular exibidos",
-    "Could not open %1 on the phone": "Não foi possível abrir %1 no celular"
+    "Could not open %1 on the phone": "Não foi possível abrir %1 no celular",
+    "Mode · active": "Modo · ativo",
+    "Active · %1": "Ativo · %1",
+    "Active now": "Ativo agora",
+    "Routine · running": "Rotina · em execução",
+    "Routine": "Rotina",
+    "Running now": "Em execução",
+    "Runs until stopped": "Roda até ser parada",
+    "Runs once": "Roda uma vez"
 }

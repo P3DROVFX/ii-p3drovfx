@@ -1298,22 +1298,78 @@ Singleton {
         return root.createToolResult(entry);
     }
 
+    // A row's switch follows the mode/routine it stands for: toggling one from
+    // Search (the overview stays open) or a trigger firing redraws the rows.
+    Connections {
+        target: root.query.length > 0 && Config.options.modes.enable ? Modes : null
+        function onModeStarted() { root._scheduleResultsUpdate(); }
+        function onModeEnded() { root._scheduleResultsUpdate(); }
+        function onRoutineStarted() { root._scheduleResultsUpdate(); }
+        function onRoutineEnded() { root._scheduleResultsUpdate(); }
+    }
+
+    // "mode"/"modo"/"routine"/"rotina" (and plurals) list every entry of that
+    // kind; anything else matches names. Active ones come first.
+    function _modeKeywordHit(query: string, words: var): bool {
+        return words.some(word => word.startsWith(query) || query.startsWith(word));
+    }
+
     function modeMatches(queryText: string): var {
         if (!Config.options.modes.enable)
             return [];
         const query = String(queryText ?? "").trim().toLocaleLowerCase();
         if (query.length < 2)
             return [];
-        return Array.from(Modes.modes ?? []).filter(mode => [mode?.name, mode?.id, mode?.description].join(" ").toLocaleLowerCase().includes(query));
+        const listAll = query.length >= 3 && root._modeKeywordHit(query, ["modes", "modos", "mode", "modo"]);
+        return Array.from(Modes.modes ?? [])
+            .filter(mode => listAll || [mode?.name, mode?.id, mode?.description].join(" ").toLocaleLowerCase().includes(query))
+            .sort((a, b) => (Modes.activeModeId === b?.id) - (Modes.activeModeId === a?.id));
     }
 
     function createModeResult(mode: var): var {
-        const active = Modes.activeModeId === String(mode?.id ?? "");
+        const id = String(mode?.id ?? "");
+        const active = Modes.activeModeId === id;
+        const description = String(mode?.description ?? "");
         return resultComp.createObject(null, {
-            key: "mode:" + String(mode?.id ?? ""), name: String(mode?.name ?? ""), type: Translation.tr("Mode"),
-            verb: active ? Translation.tr("Turn off") : Translation.tr("Activate"), iconName: String(mode?.icon ?? "routine"),
-            iconType: LauncherSearchResult.IconType.Material, comment: String(mode?.description ?? ""), keepOverviewOpen: true,
-            execute: () => Modes.toggle(String(mode?.id ?? ""))
+            key: "mode:" + id, name: String(mode?.name ?? ""),
+            type: active ? Translation.tr("Mode · active") : Translation.tr("Mode"),
+            verb: active ? Translation.tr("Turn off") : Translation.tr("Activate"),
+            iconName: String(mode?.icon ?? "routine"), iconType: LauncherSearchResult.IconType.Material,
+            comment: active
+                ? (description.length > 0 ? Translation.tr("Active · %1").arg(description) : Translation.tr("Active now"))
+                : description,
+            keepOverviewOpen: true, controlKind: "switch", controlValue: active,
+            execute: () => Modes.toggle(id)
+        });
+    }
+
+    function routineMatches(queryText: string): var {
+        if (!Config.options.modes.enable)
+            return [];
+        const query = String(queryText ?? "").trim().toLocaleLowerCase();
+        if (query.length < 2)
+            return [];
+        const listAll = query.length >= 3 && root._modeKeywordHit(query, ["routines", "rotinas", "routine", "rotina"]);
+        return Array.from(Modes.routines ?? [])
+            .filter(routine => listAll || [routine?.name, routine?.id].join(" ").toLocaleLowerCase().includes(query))
+            .sort((a, b) => Modes.isRoutineRunning(b?.id) - Modes.isRoutineRunning(a?.id));
+    }
+
+    function createRoutineResult(routine: var): var {
+        const id = String(routine?.id ?? "");
+        // A `while` routine holds a state until stopped: it gets a switch. A
+        // `once` routine just runs its actions, so it is a plain "Run" row.
+        const holds = routine?.kind !== "once";
+        const running = holds && Modes.isRoutineRunning(id);
+        return resultComp.createObject(null, {
+            key: "routine:" + id, name: String(routine?.name ?? id),
+            type: running ? Translation.tr("Routine · running") : Translation.tr("Routine"),
+            verb: running ? Translation.tr("Stop") : Translation.tr("Run"),
+            iconName: String(routine?.icon ?? "bolt"), iconType: LauncherSearchResult.IconType.Material,
+            comment: running ? Translation.tr("Running now")
+                : (holds ? Translation.tr("Runs until stopped") : Translation.tr("Runs once")),
+            keepOverviewOpen: holds, controlKind: holds ? "switch" : "", controlValue: running,
+            execute: () => holds ? Modes.toggleRoutine(id) : Modes.runRoutine(id, "manual")
         });
     }
 
@@ -3862,6 +3918,8 @@ Singleton {
         ////////// Modes & routines ////////////
         for (const mode of root.modeMatches(root.query))
             result.push(root.createModeResult(mode));
+        for (const routine of root.routineMatches(root.query))
+            result.push(root.createRoutineResult(routine));
 
         ////////// Bluetooth devices ///////////
         for (const device of root.bluetoothMatches(root.query))

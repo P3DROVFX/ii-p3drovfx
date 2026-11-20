@@ -1166,7 +1166,7 @@ Item {
             return "media";
         if (/^(setting:|panel:settings$|shortcut:openSettings$)/.test(key))
             return "settings";
-        if (/^(qtoggle:|bluetooth-device:|sys:|mode:)/.test(key))
+        if (/^(qtoggle:|bluetooth-device:|sys:|mode:|routine:)/.test(key))
             return "controls";
         if (/^(panel:|keybind:|cheatsheet:|shortcut:)/.test(key))
             return "tools";
