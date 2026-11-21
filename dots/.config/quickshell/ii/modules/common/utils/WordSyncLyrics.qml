@@ -126,7 +126,20 @@ Item {
             return [];
         const out = [];
         for (const l of json.lines) {
-            const words = (l.words ?? []).map(w => root.makeWord(String(w.text ?? ""), w.start / 1000, w.end / 1000));
+            // Some sources (KuGou through lrcmux) send each space as a word of its own
+            // ({ text: " " }). makeWord drops blank words, so hand the space to the word
+            // before it; dropped with it, "Bitch I'm in the jungle" read as one word.
+            const words = [];
+            for (const w of (l.words ?? [])) {
+                const raw = String(w.text ?? "");
+                if (!raw.trim()) {
+                    const previous = words[words.length - 1];
+                    if (previous)
+                        previous.trailingSpace += raw;
+                    continue;
+                }
+                words.push(root.makeWord(raw, w.start / 1000, w.end / 1000));
+            }
             const line = root.makeLine(l.start / 1000, (l.end ?? 0) / 1000, words);
             if (line)
                 out.push(line);
@@ -213,10 +226,21 @@ Item {
         }
     }
 
+    // lrcmux entries cached before the space fix: Latin lines of several words with no
+    // space anywhere ("BitchI'minthejungle"). Dropped, so the song is fetched again.
+    function gluedLines(lines) {
+        return root.source === "lrcmux" && (lines ?? []).some(l => (l.words?.length ?? 0) >= 3
+            && /[A-Za-z]{2}/.test(l.text ?? "") && !/\s/.test(l.text ?? ""));
+    }
+
     function applyCached() {
         const cached = root._cache[root.fetchKey];
         if (!cached)
             return false;
+        if (root.gluedLines(cached.lines)) {
+            delete root._cache[root.fetchKey];
+            return false;
+        }
         root.lines = cached.lines ?? [];
         root.plainLyricsText = root.lines.map(l => l.text).join("\n");
         root.loadedKey = root.fetchKey;
