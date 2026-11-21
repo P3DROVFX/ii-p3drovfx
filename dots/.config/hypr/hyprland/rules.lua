@@ -16,10 +16,10 @@ hl.window_rule({match = {class = "^()$", title = "^()$" },                   no_
 hl.window_rule({match = {title = "^(Open File)(.*)$" },                      center = true})
 -- The notes app is a real toplevel, not a layer surface: it belongs to a workspace
 -- and a click elsewhere must not dismiss it. Floated and centred so it opens as a
--- document window rather than taking over the tile layout.
+-- document window rather than taking over the tile layout. No size rule: the window
+-- sizes itself to the screen (NotesAppWindow), and a fixed one overflowed small screens.
 hl.window_rule({match = {title = "^(ii Notes)$" },                           float = true})
 hl.window_rule({match = {title = "^(ii Notes)$" },                           center = true})
-hl.window_rule({match = {title = "^(ii Notes)$" },                           size = "1500 940"})
 -- The clock app, like the notes app: a real toplevel that floats, centred. Usage, Modes
 -- and EasyEffects are built from the clock's parts and open at its size, so the
 -- whole-app windows read as one family.

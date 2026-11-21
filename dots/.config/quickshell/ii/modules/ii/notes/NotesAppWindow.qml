@@ -36,13 +36,18 @@ FloatingWindow {
 
     // Large by default. This is a document window: two panes of chrome and a page to
     // write on do not fit in the size a dialog gets.
-    // Never past the screen: a size remembered on a bigger monitor (or a preset's) used to
-    // open the window running off a laptop's edges.
-    implicitWidth: Math.min(Math.round((root.screen?.width ?? 1920) * 0.95),
-        Math.max(root.state.width, Math.round((root.screen?.width ?? 1920) * 0.72)))
-    implicitHeight: Math.min(Math.round((root.screen?.height ?? 1080) * 0.9),
-        Math.max(root.state.height, Math.round((root.screen?.height ?? 1080) * 0.78)))
-    minimumSize: Qt.size(720, 480)
+    // The remembered size is in design pixels (1920x1080) and follows the screen the way
+    // the zoomed content does, so the window keeps the same proportion on every monitor
+    // instead of 1500x940 nearly filling a laptop. Capped below the screen either way, and
+    // the size is the QML's alone: the Hyprland rule used to force 1500x940 over it.
+    readonly property real screenWidth: root.screen?.width ?? 1920
+    readonly property real screenHeight: root.screen?.height ?? 1080
+    implicitWidth: Math.round(Math.min(root.screenWidth * 0.85,
+        root.state.width * root.screenWidth / 1920))
+    implicitHeight: Math.round(Math.min(root.screenHeight * 0.85,
+        root.state.height * root.screenHeight / 1080))
+    minimumSize: Qt.size(Math.min(720, Math.round(root.screenWidth * 0.6)),
+        Math.min(480, Math.round(root.screenHeight * 0.6)))
 
     color: Appearance.colors.colLayer0
     visible: GlobalStates.notesAppOpen && !GlobalStates.screenLocked
