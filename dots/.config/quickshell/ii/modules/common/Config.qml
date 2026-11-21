@@ -2961,6 +2961,14 @@ Singleton {
                 property JsonObject pcLive: JsonObject {
                     property bool enable: true
                 }
+                // Focus and timers: control pomodoro, timers, stopwatch and alarms from the phone.
+                property JsonObject focus: JsonObject {
+                    property bool enable: true
+                }
+                // Voice & meeting console: Discord call controls, speaking roster, and active sensors.
+                property JsonObject voice: JsonObject {
+                    property bool enable: true
+                }
                 // What plays on the PC as a media player on the phone (lock screen,
                 // Quick Settings), controlling the shell's active player.
                 property JsonObject pcMedia: JsonObject {

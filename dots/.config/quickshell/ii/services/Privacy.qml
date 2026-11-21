@@ -56,7 +56,9 @@ Singleton {
 
     readonly property bool islandWidgetPresent: IslandPolicy.enabled && IslandPolicy.widgetEnabled("privacy")
 
-    readonly property bool needed: root.enabled && root.watchedKinds.length > 0 && (root.barWidgetPresent || root.islandWidgetPresent)
+    property bool externalWanted: false
+
+    readonly property bool needed: (root.enabled && root.watchedKinds.length > 0 && (root.barWidgetPresent || root.islandWidgetPresent)) || root.externalWanted
 
     readonly property var watchedKinds: {
         const cfg = root._cfg;
@@ -71,6 +73,8 @@ Singleton {
             kinds.push("location");
         return kinds;
     }
+
+    readonly property var effectiveKinds: root.watchedKinds.length > 0 ? root.watchedKinds : ["camera", "microphone", "screen"]
 
     // Kinds in a fixed order, so the pill never reshuffles its icons just
     // because the probe happened to list a stream first this time.
@@ -202,7 +206,7 @@ Singleton {
             "--interval",
             String(root.pollInterval),
             "--kinds",
-            root.watchedKinds.join(",")
+            root.effectiveKinds.join(",")
         ]))
 
         // process-lifecycle: restart-safe -- capped backoff; no running binding,

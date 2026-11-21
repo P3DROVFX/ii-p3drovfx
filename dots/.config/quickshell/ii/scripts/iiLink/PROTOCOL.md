@@ -80,8 +80,8 @@ After `authOk` every frame is a JSON object with a `t` field:
 | phone → shell | `media` gains `"url":"https://…"` | Only when the phone's app gives the track a web page (an http(s) `METADATA_KEY_MEDIA_URI`/`MEDIA_ID`, or a Spotify track/episode URI turned into its open.spotify.com page). The helper publishes it as `xesam:url` on the phone's MPRIS player; the phone tab's media card then shows *Continue on PC*, which opens the page at the playing position (`IiLinkService.continueOnPc`) and pauses the phone. |
 | phone → shell | `{"t":"get","what":"wallpaper"}` → file, purpose `wallSave` | Cap `wallSave` (shell, with `iiTools.wallSync.enable`). The app's *Save the PC's wallpaper* button: the same 3840 px JPEG as `wallSync`, uncropped, filed by the phone in Pictures/ii tools so the user can crop or move it. `{"t":"err","code":"unavailable"}` when it cannot be made. |
 | shell → phone | `{"t":"display","monitor","brightness":0–1\|-1,"floor","night":bool,"temp":K,"auto":bool}` | cap `display` (with `remote`). The focused monitor's brightness (`Brightness`: backlight or DDC/CI; -1 when it cannot be read; `floor` is the lowest the shell allows) and the night light. Pushed whole on change (≤ 16/s) only after `sub display`, which the phone sends while the remote screen is open. Commands: `cmd brightness` (arg 0–1), `cmd night` (arg bool, a manual toggle like the quick toggle), `cmd nightTemp` (arg 1200–6500 K, writes `light.night.colorTemperature`). |
-| phone → shell | `{"t":"caps","caps":["calls"],"have":{"look":["<md5>"],"wallSync":["<md5>"],"pcMediaArt":["<md5>"]}}` | What this phone does for the PC. Sent on connect and when it changes. `have` (shell cap `have`) lists the images the phone kept from earlier connections: the shell sends only the topic for those, not the file again (a reconnect used to cost the 3840 px wallpaper each time). Older phones send no `have` and get every file. |
-| phone → shell | `{"t":"quiet","on":bool}` | Shell cap `quiet`. The phone's screen went off (`true`) or on (`false`); also sent right after `hello` when it connects with the screen off. While quiet, the shell holds `workspaces`, `modes`, `presets`, `audio`, `deck`, `state`, `clip`, `look`, `display` and `focus` (an answer with an `id` excepted), keeps only the latest of each, and sends them when the screen comes on. Everything else (calls, notifications, `pcLive`, `pcMedia`, `act`, answers, files) goes at once. Cleared when the phone disconnects. |
+| phone → shell | `{"t":"caps","caps":["calls"],"have":{"look":["<md5>"],"wallSync":["<md5>"],"pcMediaArt":["<md5>"],"voiceAvatar":["<id>_<hash>"]}}` | What this phone does for the PC. Sent on connect and when it changes. `have` (shell cap `have`) lists the images the phone kept from earlier connections: the shell sends only the topic for those, not the file again (a reconnect used to cost the 3840 px wallpaper each time). Older phones send no `have` and get every file. |
+| phone → shell | `{"t":"quiet","on":bool}` | Shell cap `quiet`. The phone's screen went off (`true`) or on (`false`); also sent right after `hello` when it connects with the screen off. While quiet, the shell holds `workspaces`, `modes`, `presets`, `audio`, `deck`, `state`, `clip`, `look`, `display`, `focus` and `voiceSummary` (an answer with an `id` excepted), keeps only the latest of each, and sends them when the screen comes on. Everything else (calls, notifications, `pcLive`, `pcMedia`, `act`, answers, files) goes at once. Cleared when the phone disconnects. |
 | phone → shell | `{"t":"call","state":"idle"\|"ringing"\|"talking","name":"…"}` | The phone's call state; `name` is the caller as the dialer's notification shows it. The app opens the link itself when a call rings, even in the background, and keeps it until 10 s after the call. |
 | shell → phone | `{"t":"phone","a":"answer"\|"end"\|"silence"\|"dial","arg":"<number>"}` | cap `calls` on both sides. No reply: the next `call` is the answer. |
 | shell → phone | `{"t":"clip","text":"…"}` / `{"t":"clip","mime":"image/png","data":"<base64>"}` | cap `clip` on both sides. What was just copied on the PC (images up to 5 MiB), and the latest copy when a phone connects. |
@@ -210,8 +210,35 @@ The shell stores each day in `<state>/phone_usage/<date>.json`, keeps 60 days, a
 | Direction | Message | |
 | --- | --- | --- |
 | both | `{"t":"dnd","on":bool}` | caps `dnd`. The phone reports its own changes (not those the PC asked for) and its state on connect; the shell tells the phone only when what it should be changes (the shell's DND, or a mode chosen in Settings), never again, so turning the phone's off by hand sticks. |
-| shell → phone | `{"t":"pcLive","items":[item]}` | caps `pcLive`. Pushed whole on change, at most twice a second. `item` is `{id, kind: "record"\|"timer"\|"stopwatch"\|"alarm"\|"progress", title, text?, start?, end?, paused?, remaining?, total?, progress?, actions?: [{id, label}]}`; times are epoch ms, so the phone counts by itself. |
-| phone → shell | `cmd` `live` with `{id, action}` | A button: `rec` `stop`, `pomodoro` `pause`/`resume`, a countdown's id `pause`/`resume`, `alarm` `snooze`/`stop`. |
+| shell → phone | `{"t":"pcLive","items":[item]}` | caps `pcLive`. Pushed whole on change, at most twice a second. `item` is `{id, kind: "record"\|"timer"\|"stopwatch"\|"alarm"\|"progress", title, text?, start?, end?, paused?, remaining?, total?, progress?, phase?, cycle?, cycles?, elapsedMs?, laps?, actions?: [{id, label}]}`; times are epoch ms, so the phone counts by itself. Pomodoro (`id: "pomodoro"`) adds `phase` (`"focus"\|"break"\|"longBreak"`), `cycle` (0-based) and `cycles`; stopwatch adds `laps` (cumulative ms) and, while paused, `elapsedMs`. |
+| phone → shell | `cmd` `live` with `{id, action}` | A button: `rec` `stop`, `pomodoro` `pause`/`resume`, `stopwatch` `pause`/`resume`, a countdown's id `pause`/`resume`, `alarm` `snooze`/`stop`. |
+
+## Focus and timers
+
+Needs `focus` in the shell's `caps` (Settings → ii tools → Focus & timers, `iiTools.focus.enable`). Live state rides on `pcLive`; presets and pomodoro settings are requested only while the phone screen is open.
+
+| Direction | Message | |
+| --- | --- | --- |
+| phone → shell | `{"t":"get","what":"timers"}` → `{"t":"timers","presets":[seconds,…],"pomodoro":{"focus":s,"breakTime":s,"longBreak":s,"cycles":N}}` | Saved timer presets and pomodoro durations from the clock app, requested when the Focus screen opens. |
+| phone → shell | `cmd` `focus`, arg `{"a":"pomodoro","op":"start"\|"pause"\|"resume"\|"toggle"\|"reset"\|"skip"}` | Controls `TimerService` pomodoro directly and flushes `pcLive`. |
+| phone → shell | `cmd` `focus`, arg `{"a":"timerStart","seconds":N,"label"?:str}` | Starts a new countdown timer (1–604800 s). |
+| phone → shell | `cmd` `focus`, arg `{"a":"timer","id":"<id>","op":"pause"\|"resume"\|"toggle"\|"reset"\|"extend"\|"remove","seconds"?:N}` | Controls one countdown (`extend` defaults to 60 s). `not_found` if gone. |
+| phone → shell | `cmd` `focus`, arg `{"a":"stopwatch","op":"start"\|"pause"\|"resume"\|"toggle"\|"reset"\|"lap"}` | Controls the stopwatch and records laps. |
+| phone → shell | `cmd` `focus`, arg `{"a":"alarm","op":"stop"\|"dismiss"\|"snooze","minutes"?:N}` | Stops or snoozes `AlarmService.ringingAlarm`. |
+
+## Voice and meeting console
+
+Needs `voice` in the shell's `caps` (Settings → ii tools → Voice console, `iiTools.voice.enable`). A tiny `voiceSummary` rides while connected for the home card; the full roster, `Privacy` sensor list, avatars, join/leave events, and speaking updates are active only while the phone subscribes (`sub voice`).
+
+| Direction | Message | |
+| --- | --- | --- |
+| shell → phone | `{"t":"voiceSummary","inCall":bool,"channel":"…","mute":bool,"deaf":bool}` | Pushed on change while connected (`quiet`-holdable), for the home card without waking `Privacy` or fetching avatars. |
+| phone → shell | `{"t":"sub","what":"voice","on":bool}` / `{"t":"unsub","what":"voice"}` | On while the Voice screen is visible; enables `Privacy.externalWanted` and pushes `voice`, `voiceSpeak` and missing avatars. |
+| shell → phone | `{"t":"voice","channel":{"id","name"}\|null,"since":ms,"status","backend","self":{"id","mute","deaf","mode","pttShortcut","video","canMode","canUserVoice","canVideo"},"users":[{"id","name","avatar","mute","deaf","volume","localMute"}],"privacy":[{"kind","app"}]}` | Pushed whole only on change (40 ms coalesced; omits `speaking` so speaking bursts do not resend the roster). `canVideo` is `false` when the backend cannot toggle video (official Discord RPC has no video control; Vesktop companion does not advertise `"video"`). |
+| shell → phone | `{"t":"voiceSpeak","ids":["<userId>",…]}` | Currently speaking user ids, coalesced to ~10/s while subscribed and in a call. |
+| shell → phone | `{"t":"voiceEvent","kind":"join"\|"leave","id","name"}` | Transient join/leave notice for the current channel (initial room snapshot excluded). |
+| shell → phone | `sendFile` purpose `voiceAvatar`, name `<id>_<hash>` | Discord avatar PNG (`128px`), cached in `~/.cache/quickshell/iilink/voiceavatars/` and sent once per image unless listed in `caps.have.voiceAvatar`. |
+| phone → shell | `cmd` `voice`, arg `{"a":"mute"\|"deaf"\|"mode"\|"userVolume"\|"userMute"\|"video"\|"connect"\|"authorize",…}` | `mute`/`deaf`: optional `on` bool (toggles if omitted); `mode`: `"VOICE_ACTIVITY"`\|`"PUSH_TO_TALK"` (toggles if omitted); `userVolume`: `{id, vol}` (0–200); `userMute`: `{id, mute}`; `video`: returns `unsupported` while `canVideo` is `false`. |
 
 ## Performance panel
 

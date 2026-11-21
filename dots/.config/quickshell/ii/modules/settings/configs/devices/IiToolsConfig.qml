@@ -34,7 +34,7 @@ Item {
     readonly property var moduleFlags: {
         const o = Config.options.iiTools;
         return [
-            o.remote.enable, o.audio.enable, o.liveUpdates.enable, o.pcLive.enable,
+            o.remote.enable, o.audio.enable, o.liveUpdates.enable, o.pcLive.enable, o.focus.enable, o.voice.enable,
             o.media.enable, o.pcMedia.enable, o.files.enable, o.gallery.enable, o.camera.enable, o.mic.enable, o.touchpad.enable, o.draw.enable, o.present.enable, o.screen.enable,
             o.perf.enable, o.phoneData.enable, o.calendar.enable, o.screenshots.enable, o.clipboard.enable,
             o.share.enable, o.notifications.enable, o.calls.enable, o.callAudio.enable, o.wallpaper.enable, o.look.enable,
@@ -977,6 +977,30 @@ fi`]
                         summary: Translation.tr("Stream CPU, GPU, RAM, and FPS while panel is open")
                         checked: Config.options.iiTools.perf.enable
                         onToggled: value => Config.options.iiTools.perf.enable = value
+                    }
+
+                    ColorsFeatureTile {
+                        width: controlTilesBox.tileWidth
+                        height: 152
+                        symbol: "hourglass_top"
+                        shapeOn: MaterialShape.Shape.Flower
+                        shapeOff: MaterialShape.Shape.Circle
+                        title: Translation.tr("Focus & timers")
+                        summary: Translation.tr("Control pomodoro, timers, stopwatch, and ringing alarms from phone")
+                        checked: Config.options.iiTools.focus.enable
+                        onToggled: value => Config.options.iiTools.focus.enable = value
+                    }
+
+                    ColorsFeatureTile {
+                        width: controlTilesBox.tileWidth
+                        height: 152
+                        symbol: "record_voice_over"
+                        shapeOn: MaterialShape.Shape.Cookie7Sided
+                        shapeOff: MaterialShape.Shape.Circle
+                        title: Translation.tr("Voice console")
+                        summary: Translation.tr("Discord call controls, speaking roster, and active mic/camera sensors")
+                        checked: Config.options.iiTools.voice.enable
+                        onToggled: value => Config.options.iiTools.voice.enable = value
                     }
 
                     ColorsFeatureTile {
