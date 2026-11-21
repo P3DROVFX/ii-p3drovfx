@@ -588,6 +588,34 @@ itself refuses with `err`: `bad_arg` (no size, or an invalid gallery name), `too
 unfinished file, and so does the connection closing. One file at a time per phone (the
 phone serializes uploads).
 
+### Fast lane
+
+The phone's *Faster* transfers (cap `fileLane` on both sides; the shell always has it, the
+phone while the setting is on): a file of at least 1 MiB moves on a TLS socket of its own
+instead of the WebSocket, at the network's speed and up to 16 GiB (lane.rs, FileLane.kt).
+
+- The lane connects to the link's TCP port and writes `IIL1` in the clear (a TLS
+  ClientHello starts with `0x16`, so the helper tells the two apart by the first byte), then
+  TLS under the same pinned certificate, then the 32-byte token. After that the bytes of
+  the file as they are, in order, nothing else; TCP resends what is lost. A token is good
+  once, for 15 s. No byte for 20 s ends the lane.
+- A file from the phone ends with one byte back once it is on disk (`0` landed, `1`
+  failed; the outcome itself comes over the WebSocket). The phone closes only after it:
+  closing with the server's TLS session ticket unread makes its kernel reset the socket,
+  and the reset discards whatever the helper had not read yet.
+- **Phone → PC:** the header carries `"lane":true`. The helper starts the file as usual
+  (`fileStart`, the 16 GiB limit instead of 64 MiB; never for `galleryThumb`) and answers
+  `{"t":"lane","id":N,"token":"<64 hex>"}`; the phone sends the bytes down the lane, and
+  everything else (`fileProgress`, `file`, the shell's `ok`/`err`) is as above. A phone
+  that cannot reach the lane sends the header again without `lane` (up to 64 MiB), which
+  withdraws the offer. An offer not taken in 15 s is dropped with `err` `timeout`.
+- **PC → phone:** for a phone with `fileLane` in its `caps`, `sendFile` of a file of at
+  least 1 MiB sends the header with `"lane":"<token>"` and no binary frames; the phone pulls
+  the bytes over the lane, and `fileSent` follows once they are written. A phone that
+  cannot reach it answers `{"t":"lane","id":N,"err":"connect"}` and gets the file over the
+  WebSocket (up to 64 MiB), else `fileSendFailed`. The phone answers `ok`/`err` as before,
+  `too_large` too when its storage cannot hold the file.
+
 | `purpose` | Needs | The shell |
 | --- | --- | --- |
 | `share` | `iiTools.share.enable` | moves it to `~/Downloads` under its own name (`name (1).ext` when taken, mode 0644), then `target` `downloads` says so in a notification (Open / Show in folder), `shelf` adds it to the FileShelf, `ai` (images only) attaches it to the AI chat and opens it. |

@@ -15,7 +15,7 @@ use serde_json::{json, Value};
 use crate::gallery;
 
 /// Large enough for any photo or screenshot, small enough that a stray upload
-/// cannot fill the disk.
+/// cannot fill the disk. A file on its own lane may be larger ([`crate::lane::MAX_SIZE`]).
 pub const MAX_SIZE: u64 = 64 << 20;
 
 enum Kind {
@@ -77,14 +77,14 @@ fn clean_name(raw: &str) -> String {
     if cleaned.is_empty() { "file".to_string() } else { cleaned }
 }
 
-pub fn start(dir: &Path, dev: &str, header: &Value) -> Result<Incoming, Value> {
+pub fn start(dir: &Path, dev: &str, header: &Value, max: u64) -> Result<Incoming, Value> {
     let id = header["id"].as_u64().unwrap_or(0);
     let fail = |code: &str| json!({"t": "err", "id": id, "code": code});
     let size = header["size"].as_u64().unwrap_or(0);
     if size == 0 {
         return Err(fail("bad_arg"));
     }
-    if size > MAX_SIZE {
+    if size > max {
         return Err(fail("too_large"));
     }
     let purpose = header["purpose"].as_str().unwrap_or("");
@@ -218,13 +218,13 @@ mod tests {
         let dev = "0123456789ab";
 
         // Bad gallery filenames are rejected with bad_arg.
-        let bad_thumb = start(&state_dir, dev, &json!({"id": 1, "name": "42.png", "size": 4, "purpose": "galleryThumb"}));
+        let bad_thumb = start(&state_dir, dev, &json!({"id": 1, "name": "42.png", "size": 4, "purpose": "galleryThumb"}), MAX_SIZE);
         assert_eq!(bad_thumb.err(), Some(json!({"t": "err", "id": 1, "code": "bad_arg"})));
-        let bad_full = start(&state_dir, dev, &json!({"id": 2, "name": "../42.jpg", "size": 4, "purpose": "galleryFull"}));
+        let bad_full = start(&state_dir, dev, &json!({"id": 2, "name": "../42.jpg", "size": 4, "purpose": "galleryFull"}), MAX_SIZE);
         assert_eq!(bad_full.err(), Some(json!({"t": "err", "id": 2, "code": "bad_arg"})));
 
         // Valid galleryThumb writes to cache/quickshell/phone_gallery/<dev>/thumbs/<name> via .part.
-        let mut inc = start(&state_dir, dev, &json!({"id": 7, "name": "42.jpg", "size": 4, "purpose": "galleryThumb"})).unwrap();
+        let mut inc = start(&state_dir, dev, &json!({"id": 7, "name": "42.jpg", "size": 4, "purpose": "galleryThumb"}), MAX_SIZE).unwrap();
         assert!(inc.started(dev).is_none());
         assert!(inc.aborted(dev).is_none());
         assert!(matches!(inc.write(b"ab", dev), Step::More));
@@ -242,7 +242,7 @@ mod tests {
         assert_eq!(fs::metadata(thumb_file.parent().unwrap()).unwrap().permissions().mode() & 0o777, 0o700);
 
         // Valid galleryFull emits galleryFile on completion and galleryAbort when broken.
-        let mut full = start(&state_dir, dev, &json!({"id": 8, "name": "99.webp", "size": 3, "purpose": "galleryFull"})).unwrap();
+        let mut full = start(&state_dir, dev, &json!({"id": 8, "name": "99.webp", "size": 3, "purpose": "galleryFull"}), MAX_SIZE).unwrap();
         assert!(full.started(dev).is_none());
         assert_eq!(full.aborted(dev), Some(json!({"ev": "galleryAbort", "dev": dev, "id": 99})));
         match full.write(b"xyz", dev) {

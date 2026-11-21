@@ -754,7 +754,7 @@ Singleton {
         .concat(root.cameraEnabled ? ["camera"] : [])
         .concat(root.micEnabled ? ["mic"] : [])
         .concat(root.usageEnabled ? ["usage"] : [])
-        .concat(["mirrorRadio", "quiet", "have"])
+        .concat(["mirrorRadio", "quiet", "have", "fileLane"])
 
     /// True while at least one wireless scrcpy session is active on the shell.
     property bool mirrorActive: false

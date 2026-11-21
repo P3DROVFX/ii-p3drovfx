@@ -15,12 +15,13 @@ mod files;
 mod gallery;
 mod icons;
 mod input;
+mod lane;
 mod mpris;
 mod pclink;
 mod screen;
 mod udp;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::Write;
 use std::net::{IpAddr, SocketAddr};
@@ -113,6 +114,10 @@ struct Shared {
     pc_dialing: HashMap<String, u64>,
     /// Each linked PC's file lane: bounded, so a large file is read only as fast as it leaves.
     pc_files: HashMap<String, pclink::FileLane>,
+    /// Files waiting for their lane (lane.rs), by token.
+    lanes: HashMap<[u8; 32], lane::Job>,
+    /// Phones that take files over a lane (cap `fileLane` in their `caps`).
+    lane_phones: HashSet<String>,
 }
 
 type State = Arc<Mutex<Shared>>;
@@ -485,7 +490,20 @@ async fn serve(stream: TcpStream, addr: SocketAddr, acceptor: TlsAcceptor, state
                                     emit(ev);
                                 }
                             }
-                            match files::start(&dir, &dev, &m) {
+                            // Sent again without a lane: the phone could not open the one it was offered.
+                            let id = m["id"].as_u64().unwrap_or(0);
+                            lane::withdraw_up(&state, &dev, id);
+                            let wants_lane = m["lane"] == true && m["purpose"] != "galleryThumb"
+                                && m["size"].as_u64().is_some_and(|n| n >= lane::MIN_SIZE);
+                            let max = if wants_lane { lane::MAX_SIZE } else { files::MAX_SIZE };
+                            match files::start(&dir, &dev, &m, max) {
+                                Ok(inc) if wants_lane => {
+                                    if let Some(ev) = inc.started(&dev) {
+                                        emit(ev);
+                                    }
+                                    let token = lane::offer(&state, lane::Job::Up { dev: dev.clone(), inc, tx: tx.clone() });
+                                    let _ = tx.send(Message::text(json!({"t": "lane", "id": id, "token": token}).to_string()));
+                                }
                                 Ok(inc) => {
                                     if let Some(ev) = inc.started(&dev) {
                                         emit(ev);
@@ -554,7 +572,21 @@ async fn serve(stream: TcpStream, addr: SocketAddr, acceptor: TlsAcceptor, state
                             }
                             emit(json!({"ev": "msg", "dev": dev, "m": m}));
                         }
-                        Ok(m) if m.is_object() => emit(json!({"ev": "msg", "dev": dev, "m": m})),
+                        // The phone could not reach the lane offered for one of our files: the link's socket then.
+                        Ok(m) if m["t"] == "lane" => {
+                            let id = m["id"].as_u64().unwrap_or(0);
+                            if let Some(lane::Job::Down { path, size, delete, purpose, name, .. }) = lane::take_down(&state, &dev, id) {
+                                send_file_ws(dev.clone(), tx.clone(), id, path, size, purpose, name, delete);
+                            }
+                        }
+                        Ok(m) if m.is_object() => {
+                            if m["t"] == "caps" {
+                                let lanes = m["caps"].as_array().is_some_and(|c| c.iter().any(|v| v == "fileLane"));
+                                let mut s = state.lock().unwrap();
+                                if lanes { s.lane_phones.insert(dev.clone()); } else { s.lane_phones.remove(&dev); }
+                            }
+                            emit(json!({"ev": "msg", "dev": dev, "m": m}));
+                        }
                         _ => {}
                     },
                     Some(Ok(Message::Binary(data))) => {
@@ -596,6 +628,7 @@ async fn serve(stream: TcpStream, addr: SocketAddr, acceptor: TlsAcceptor, state
     }
 
     writer.abort();
+    lane::drop_dev(&state, &dev);
     if let Some(inc) = incoming.take() {
         inc.discard();
         if let Some(ev) = inc.aborted(&dev) {
@@ -613,8 +646,34 @@ async fn serve(stream: TcpStream, addr: SocketAddr, acceptor: TlsAcceptor, state
         let _ = s.media_tx.send(mpris::Event::DevGone { dev: dev.clone() });
         let _ = s.input_tx.send(input::Cmd::Stop { dev: dev.clone() });
         s.conns.remove(&dev);
+        s.lane_phones.remove(&dev);
         emit(json!({"ev": "disconnected", "dev": dev}));
     }
+}
+
+/// A file for a phone over the link's own socket: a `file` header, then the bytes as
+/// binary frames, read and queued off the async thread. The shell is told `fileSent` once
+/// it is all on its way (the phone answers `ok`/`err` with the same id itself).
+#[allow(clippy::too_many_arguments)]
+fn send_file_ws(dev: String, tx: mpsc::UnboundedSender<Message>, id: u64, path: PathBuf, size: u64, purpose: Value, name: String, delete: bool) {
+    tokio::task::spawn_blocking(move || {
+        let data = match fs::read(&path) {
+            Ok(d) if !d.is_empty() && d.len() as u64 <= files::MAX_SIZE && (size == 0 || d.len() as u64 == size) => d,
+            _ => {
+                emit(json!({"ev": "fileSendFailed", "dev": dev, "id": id}));
+                return;
+            }
+        };
+        let header = lane::header(id, &purpose, &name, data.len() as u64, None);
+        let mut ok = tx.send(Message::Text(header.to_string().into())).is_ok();
+        for chunk in data.chunks(256 * 1024) {
+            ok = ok && tx.send(Message::Binary(chunk.to_vec().into())).is_ok();
+        }
+        if delete {
+            let _ = fs::remove_file(&path);
+        }
+        emit(json!({"ev": if ok { "fileSent" } else { "fileSendFailed" }, "dev": dev, "id": id}));
+    });
 }
 
 /// A `pad` or `kbd` message as a command for the input thread.
@@ -692,41 +751,31 @@ fn handle_op(state: &State, line: &str) {
                 }
             }
         }
-        // A file for a phone: a `file` header, then the bytes as binary frames, read
-        // and queued off the async thread. The shell is told `fileSent` when it is all
-        // on its way (the phone answers `ok`/`err` with the same id itself).
+        // A file for a phone: over a lane of its own when the phone takes them and the file
+        // is worth one (lane.rs), else over the link's socket.
         "sendFile" => {
             let dev = op["dev"].as_str().unwrap_or("").to_string();
-            let tx = state.lock().unwrap().conns.get(&dev).map(|c| c.tx.clone());
+            let (tx, lanes) = {
+                let s = state.lock().unwrap();
+                (s.conns.get(&dev).map(|c| c.tx.clone()), s.lane_phones.contains(&dev))
+            };
             let id = op["id"].as_u64().unwrap_or(0);
             let Some(tx) = tx else {
                 emit(json!({"ev": "fileSendFailed", "dev": dev, "id": id}));
                 return;
             };
             let path = PathBuf::from(op["path"].as_str().unwrap_or(""));
-            let header = json!({"t": "file", "id": id, "purpose": op["purpose"],
-                "name": op["name"].as_str().map(str::to_owned)
-                    .unwrap_or_else(|| path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default())});
+            let name = op["name"].as_str().map(str::to_owned)
+                .unwrap_or_else(|| path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default());
             let delete = op["delete"].as_bool().unwrap_or(false);
-            tokio::task::spawn_blocking(move || {
-                let data = match fs::read(&path) {
-                    Ok(d) if !d.is_empty() && d.len() as u64 <= files::MAX_SIZE => d,
-                    _ => {
-                        emit(json!({"ev": "fileSendFailed", "dev": dev, "id": id}));
-                        return;
-                    }
-                };
-                let mut header = header;
-                header["size"] = json!(data.len());
-                let mut ok = tx.send(Message::Text(header.to_string().into())).is_ok();
-                for chunk in data.chunks(256 * 1024) {
-                    ok = ok && tx.send(Message::Binary(chunk.to_vec().into())).is_ok();
-                }
-                if delete {
-                    let _ = fs::remove_file(&path);
-                }
-                emit(json!({"ev": if ok { "fileSent" } else { "fileSendFailed" }, "dev": dev, "id": id}));
-            });
+            let size = fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+            if lanes && (lane::MIN_SIZE..=lane::MAX_SIZE).contains(&size) {
+                let job = lane::Job::Down { dev: dev.clone(), id, path, size, delete, purpose: op["purpose"].clone(), name: name.clone() };
+                let token = lane::offer(state, job);
+                let _ = tx.send(Message::text(lane::header(id, &op["purpose"], &name, size, Some(&token)).to_string()));
+                return;
+            }
+            send_file_ws(dev, tx, id, path, 0, op["purpose"].clone(), name, delete);
         }
         "pcPairOpen" | "pcPairJoin" | "pcSend" | "pcUnpair" | "pcSendFile" | "pcShelf" | "pcWake" | "pcDiscover" | "pcPairClose" => pclink::op(state, &op),
         // The phone asks this PC to wake another on its LAN (it is away, or on Tailscale).
@@ -909,6 +958,8 @@ async fn main() {
         pc_wake: pclink::notifier(),
         pc_dialing: HashMap::new(),
         pc_files: HashMap::new(),
+        lanes: HashMap::new(),
+        lane_phones: HashSet::new(),
     }));
 
     emit(json!({"ev": "ready", "port": port, "fp": fingerprint, "name": name, "addrs": addresses(), "wake": wake_targets(), "discovery": udp.is_some()}));
@@ -939,7 +990,13 @@ async fn main() {
                 let _ = stream.set_nodelay(true);
                 let (acceptor, state) = (acceptor.clone(), state.clone());
                 tokio::spawn(async move {
-                    serve(stream, addr, acceptor, state.clone()).await;
+                    // A file lane opens with its magic in the clear; a TLS ClientHello with 0x16.
+                    let mut first = [0u8; 1];
+                    match timeout(HANDSHAKE_TIMEOUT, stream.peek(&mut first)).await {
+                        Ok(Ok(1)) if first[0] == lane::MAGIC[0] => lane::serve(stream, acceptor, state.clone()).await,
+                        Ok(Ok(1)) => serve(stream, addr, acceptor, state.clone()).await,
+                        _ => {}
+                    }
                     state.lock().unwrap().open_sockets -= 1;
                 });
             }
