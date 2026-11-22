@@ -273,7 +273,8 @@ actions here instead of to KDE Connect:
 
 | Direction | Message | |
 | --- | --- | --- |
-| shell → phone | `{"t":"act","a":"ring"}` | Find my phone: rings at alarm volume (put back after) until "Found it", for at most a minute. |
+| shell → phone | `{"t":"act","a":"ring","on"?:bool}` | Find my phone: rings at alarm volume (put back after) until "Found it", for at most a minute. `"on":false` stops it (absent means on). |
+| phone → shell | `{"t":"act","ringing":bool}` | Sent to the PC that asked when ringing starts or stops ("Found it", the minute running out, or `on:false`). The shell's ring buttons turn into *Stop ringing* while it rings; without it (older apps) they go back after a minute. |
 | shell → phone | `{"t":"act","a":"ping","text"?}` | A notification. |
 | shell → phone | `{"t":"act","a":"url","url"}` | `http(s)` only; offered as a notification (a background app may not open screens). |
 | shell → phone | `{"t":"act","a":"text","text"}` | Onto the phone's clipboard, with a notification. |
@@ -328,15 +329,16 @@ The desktop wallpaper behind the phone's PC card. Needs `look` in the phone's ca
 
 ## Drawing pad
 
-The phone as a drawing pad for live draw (cap `draw` in the shell's hello, while live
-draw is on; Settings → ii tools → Drawing pad). The pad stands for the focused screen and
+The phone as a drawing pad for live draw (cap `draw` in the shell's hello whenever
+Settings → ii tools → Drawing pad is on, even with live draw off, so the phone can say why). The pad stands for the focused screen and
 takes its shape (`aspect`). Strokes go through live draw's own surface
 (`LiveDraw.remoteStroke`), so smoothing, tools, the eraser and undo are the PC's.
 
 | Direction | Message | |
 | --- | --- | --- |
 | phone → shell | `{"t":"draw","a":"start"}` / `{"t":"draw","a":"stop"}` | The pad opened (live draw opens, pen down) / closed (live draw closes, the ink stays; also when the phone disconnects). |
-| shell → phone | `{"t":"draw","open","tool","eraser","color","width","palette":[…],"aspect","canUndo","canRedo"}` | The pen as the PC uses it, on start and on every change while the pad is open. `{"t":"draw","err":"disabled"}` when off. |
+| shell → phone | `{"t":"draw","open","tool","eraser","color","width","palette":[…],"aspect","canUndo","canRedo"}` | The pen as the PC uses it, on start and on every change while the pad is open. `{"t":"draw","err":"disabled"}` when the pad switch is off, `{"t":"draw","err":"liveDraw"}` when live draw itself is off (pushed again as soon as either changes while the pad is open). `open:false` means the PC's live draw is closed: strokes are ignored until the phone sends `start` again. |
+| phone → shell | `{"t":"draw","a":"enableLiveDraw"}` | The phone's *Turn on*: turns live draw on in the shell's config (`liveDraw.enable`, or `tablet.liveDraw.enable` in the tablet family), opens it and answers with the pen. |
 | phone → shell | `{"t":"draw","s":"down"\|"move"\|"up","p":[[x,y,pressure],…]}` | A stroke, x and y in 0–1 of the focused screen; `move` carries every sample since the last (the touch history). Pressure is the stylus's, 1 for a finger. With the eraser on, the points rub out instead. |
 | phone → shell | `{"t":"draw","a":"tool","tool":"pen"\|"highlighter"\|"laser"\|"eraser"}`, `{"a":"color","color"}`, `{"a":"width","width"}`, `{"a":"undo"\|"redo"\|"clear"\|"close"}` | The pad's toolbar. |
 
@@ -472,16 +474,23 @@ at once and lowered 2 points a second; `stats` carries it as `fec`.
 ### The PC's sound on the phone (Wi-Fi sessions)
 
 Cap `screenAudio`. Phone → shell `{"t":"screen","a":"audio","on":bool}`; the shell answers
-`{"t":"screen","audio":bool}` (also when it fails or the capture ends). On: a null sink
+`{"t":"screen","audio":bool}` (also when it fails or the capture ends). With
+`iiTools.screen.keepPcAudio` on (the default; Settings → ii tools → *keep the PC's sound*)
+both play: the helper captures the default sink's monitor (`<sink>.monitor`, or
+`@DEFAULT_MONITOR@`) and the shell sends it again when the default sink changes; the user's
+sink and streams are never touched. Off, the sound goes to the phone alone: a null sink
 `ii_tools_phone` ("Phone") becomes the default and every stream moves to it; off, the end
 of the session, or the capture dying restore the previous default and unload it (a shell
 that restarts mid-session unloads a leftover one). Helper op
-`{"op":"screen","a":"audio","on":bool,"source":"ii_tools_phone.monitor"}`, event
+`{"op":"screen","a":"audio","on":bool,"source":"<monitor>"}` (a new source restarts the capture), event
 `{"ev":"screenAudio","dev","sid","on"}`. ffmpeg captures the monitor as Opus (48 kHz stereo,
 128 kbit/s, 10 ms frames, Ogg unwrapped by the helper). On the screen socket, ahead of any
-queued video (at most 50 packets wait; the oldest goes): `[8][u64 0][OpusHead]` (again after
-a reconnect) and `[9][u64 pts µs][Opus packet]`. The phone plays with ~40 ms in hand and skips
-to 60 ms whenever it falls 120 ms behind. USB sessions have no sound.
+queued video (at most 50 packets wait; the oldest goes, never an unsent header; a new header
+drops what is left of the old capture): `[8][u64 0][OpusHead]` (again after a reconnect or a
+sink change) and `[9][u64 pts µs][Opus packet]`. The phone keeps 40–200 ms in hand, following
+the packets' arrival jitter and growing after an underrun; it skips whole packets before
+decoding when far behind, fills a short pts gap with a faded last frame then silence, and
+reopens the decoder from the last OpusHead if it fails. USB sessions have no sound.
 
 ## Touchpad and keyboard
 
@@ -493,7 +502,7 @@ the shell never sees them.
 | Direction | Message | |
 | --- | --- | --- |
 | phone → helper | `{"t":"pad","a":"start","w":mm,"h":mm}` | The touchpad screen opened: a uinput multitouch touchpad of that size (40 units/mm, 5 slots, BTN_LEFT/RIGHT/MIDDLE) and a Wayland virtual keyboard. libinput then gives it the user's touchpad settings and gestures. Again on a resize. |
-| phone → helper | `{"t":"pad","f":[[id,x,y],…]}` | Every finger down, x and y in 0–1; `[]` when all are lifted. Sent on every touch event. |
+| phone → helper | `{"t":"pad","f":[[id,x,y],…],"ts"?:ms}` | Every finger down, x and y in 0–1; `[]` when all are lifted. Moves go at most every 8 ms (the newest wins, and only the newest while the socket still has a backlog); a change of fingers and `[]` go at once. `ts` is the phone's uptime in ms: the helper replays frames at that cadence with a small adaptive delay (≤ 40 ms) instead of all at once when the network bunches them, drops stale moves when far behind (never a change of fingers), and splits a jump over 8 mm into steps so libinput does not discard it. Without `ts` (older apps) frames are written as they come. |
 | phone → helper | `{"t":"pad","btn":"left"\|"right"\|"middle","down":bool}` | The on-screen buttons. |
 | phone → helper | `{"t":"kbd","text":"…"}` | Typed as is, any character: each gets a keycode in the virtual keyboard's own keymap (as wtype does), so the PC's layout does not matter. |
 | phone → helper | `{"t":"kbd","key":"Return"\|"BackSpace"\|"Left"\|…\|"a","mods":["ctrl","alt","super","shift"]}` | A named key (XKB names from a fixed list) or one character, with modifiers. |
@@ -727,7 +736,7 @@ events `pcPeers {list:[{fp,name,hosts,pairedAt,lastSeen}]}`, `pcConnected {pc,na
 | `{"op":"send","dev":"<id>"\|"*","m":{…}}` | |
 | `{"op":"kick","dev"}` | Close a connection. |
 | `{"op":"sendFile","dev","id","path","name"?,"purpose","delete"?}` | A file to a phone: the same `file` header and binary frames, the other way. `fileSent` / `fileSendFailed` with the id once queued; `delete` removes the file then. |
-| `{"op":"camera","a":"arm","dev","sid","device":"/dev/videoN","mirror":bool,"rotate":0\|90\|180\|270}` or `{…,"sink":"pipewire"}` | Arm a session (one at a time; a new one ends the old with `stopped`). v4l2: `ffmpeg -f h264 -i pipe:0 … -f v4l2 <device>`; a size the device refuses (an app holds it) is scaled and padded into the old one. PipeWire: `gst-launch-1.0 fdsrc ! rawvideoparse ! videoconvert ! pipewiresink mode=provide` with `media.class=Video/Source`, `media.role=Camera`, node `ii-tools-camera`. `rotate` adds to the phone's `rot`. Two stages: the decoder (`ffmpeg`, H.264 → raw I420 at the session's size, turned, mirrored, fitted) restarts on any picture change; the writer (the device or the node) stays open the whole session and repeats the last picture every 200 ms while none comes, so the camera never vanishes. The first picture fixes the size; a later aspect or turn is fitted into it. A dropped socket has 20 s to reconnect with the same token (the phone retries by itself); `{"t":"bye"}` on the socket ends at once. |
+| `{"op":"camera","a":"arm","dev","sid","device":"/dev/videoN","mirror":bool,"rotate":0\|90\|180\|270}` or `{…,"sink":"pipewire"}` | Arm a session (one at a time; a new one ends the old with `stopped`). v4l2: `ffmpeg -f h264 -i pipe:0 … -f v4l2 <device>`, plus the PipeWire node below fed the same pictures on a queue of its own (best effort: it may drop pictures or die without ending the session), because a loopback device with `exclusive_caps=1` is output-only until written and sends no uevent when it turns into a camera, so WirePlumber never makes it a source and PipeWire apps (Firefox, OBS, the camera portal) would not see it; skipped when `pw-dump` already lists a `Video/Source` with that `api.v4l2.path`; a size the device refuses (an app holds it) is scaled and padded into the old one. PipeWire: `gst-launch-1.0 fdsrc ! rawvideoparse ! videoconvert ! pipewiresink mode=provide` with `media.class=Video/Source`, `media.role=Camera`, node `ii-tools-camera`. `rotate` adds to the phone's `rot`. Two stages: the decoder (`ffmpeg`, H.264 → raw I420 at the session's size, turned, mirrored, fitted) restarts on any picture change; the writer (the device or the node) stays open the whole session and repeats the last picture every 200 ms while none comes, so the camera never vanishes. The first picture fixes the size; a later aspect or turn is fitted into it. A dropped socket has 20 s to reconnect with the same token (the phone retries by itself); `{"t":"bye"}` on the socket ends at once. |
 | `{"op":"camera","a":"config","mirror":bool,"rotate":0\|90\|180\|270}` | Update `ffmpeg` mirror/rotation live (restarts `ffmpeg`). |
 | `{"op":"camera","a":"stop"}` | Stop the armed/running camera helper session. |
 | `{"op":"mic","a":"arm","dev","sid"}` / `{"op":"mic","a":"stop"}` | The phone's microphone session (see Microphone). |
