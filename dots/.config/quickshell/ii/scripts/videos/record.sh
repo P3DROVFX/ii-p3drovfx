@@ -41,11 +41,79 @@ rec_pid() {
     pgrep -x wf-recorder | head -n 1 | grep .
 }
 # Runs the recorder in the background with its pid on file, and waits for it.
+REC_CHILD_PID=""
 run_recorder() {
     "$REC_BIN" "$@" &
-    echo $! > "$REC_PID_FILE"
-    wait $!
+    REC_CHILD_PID=$!
+    echo "$REC_CHILD_PID" > "$REC_PID_FILE"
+    wait "$REC_CHILD_PID"
+    local status=$?
+    REC_CHILD_PID=""
     rm -f "$REC_PID_FILE"
+    return $status
+}
+
+# Temporary PulseAudio/PipeWire mix sink when recording desktop audio + microphone.
+MIX_SINK_NAME="ii_rec_mix"
+REC_MIX_IDS_FILE="${XDG_RUNTIME_DIR:-/tmp}/ii-record-mix.ids"
+MIX_OWNER=0
+
+unload_mix_modules() {
+    [[ -f "$REC_MIX_IDS_FILE" ]] || return 0
+    local claim_file="${REC_MIX_IDS_FILE}.cleaning.$$"
+    mv -f "$REC_MIX_IDS_FILE" "$claim_file" 2>/dev/null || return 0
+    local ids=()
+    local id
+    while IFS= read -r id; do
+        [[ "$id" =~ ^[0-9]+$ ]] && ids+=("$id")
+    done < "$claim_file"
+    rm -f "$claim_file"
+    local idx
+    for ((idx=${#ids[@]}-1; idx>=0; idx--)); do
+        pactl unload-module "${ids[idx]}" 2>/dev/null || true
+    done
+}
+
+setup_audio_mix() {
+    local desktop_monitor="$1"
+    local mic_source="$2"
+    local sink_id lb_desktop_id lb_mic_id
+    local loaded=()
+
+    unload_mix_modules
+
+    sink_id=$(pactl load-module module-null-sink \
+        "sink_name=$MIX_SINK_NAME" \
+        "sink_properties=device.description=ii-recording-mix" 2>/dev/null)
+    if [[ ! "$sink_id" =~ ^[0-9]+$ ]]; then
+        return 1
+    fi
+    loaded+=("$sink_id")
+
+    lb_desktop_id=$(pactl load-module module-loopback \
+        "source=$desktop_monitor" \
+        "sink=$MIX_SINK_NAME" \
+        "latency_msec=20" 2>/dev/null)
+    if [[ ! "$lb_desktop_id" =~ ^[0-9]+$ ]]; then
+        pactl unload-module "$sink_id" 2>/dev/null || true
+        return 1
+    fi
+    loaded+=("$lb_desktop_id")
+
+    lb_mic_id=$(pactl load-module module-loopback \
+        "source=$mic_source" \
+        "sink=$MIX_SINK_NAME" \
+        "latency_msec=20" 2>/dev/null)
+    if [[ ! "$lb_mic_id" =~ ^[0-9]+$ ]]; then
+        pactl unload-module "$lb_desktop_id" 2>/dev/null || true
+        pactl unload-module "$sink_id" 2>/dev/null || true
+        return 1
+    fi
+    loaded+=("$lb_mic_id")
+
+    printf '%s\n' "${loaded[@]}" > "$REC_MIX_IDS_FILE"
+    MIX_OWNER=1
+    return 0
 }
 
 CUSTOM_PATH=$(jq -r "$JSON_PATH" "$CONFIG_FILE" 2>/dev/null)
@@ -110,6 +178,11 @@ if [[ -z "$REC_RECORD_MIC" || "$REC_RECORD_MIC" == "null" ]]; then
     REC_RECORD_MIC="false"
 fi
 
+REC_MIC_DEVICE=$(jq -r ".screenRecord.micDevice" "$CONFIG_FILE" 2>/dev/null)
+if [[ "$REC_MIC_DEVICE" == "null" ]]; then
+    REC_MIC_DEVICE=""
+fi
+
 RECORDING_DIR=""
 
 TIMER_PID=""  
@@ -149,12 +222,41 @@ stop_timer() {
 
 cleanup() {
     stop_timer
+    if [[ "$MIX_OWNER" -eq 1 ]]; then
+        unload_mix_modules
+    fi
+}
+
+on_signal() {
+    if [[ -n "$REC_CHILD_PID" ]]; then
+        kill -CONT "$REC_CHILD_PID" 2>/dev/null
+        kill "$REC_CHILD_PID" 2>/dev/null
+        wait "$REC_CHILD_PID" 2>/dev/null
+        rm -f "$REC_PID_FILE"
+    fi
+    exit 1
 }
 
 trap cleanup EXIT
+trap on_signal INT TERM
 
 getdate() {
     date '+%Y-%m-%d_%H.%M.%S'
+}
+
+getmicinput() {
+    local mic=""
+    if [[ -n "$REC_MIC_DEVICE" && "$REC_MIC_DEVICE" != *.monitor ]]; then
+        if pactl list short sources 2>/dev/null | awk -v wanted="$REC_MIC_DEVICE" '$2 == wanted { found=1; exit } END { exit !found }'; then
+            echo "$REC_MIC_DEVICE"
+            return
+        fi
+    fi
+
+    mic=$(pactl get-default-source 2>/dev/null)
+    if [[ -n "$mic" && "$mic" != "null" && "$mic" != *.monitor ]]; then
+        echo "$mic"
+    fi
 }
 
 getaudiooutput() {
@@ -413,6 +515,10 @@ SOUND_FLAG=0
 if [[ "$REC_RECORD_AUDIO" == "true" ]]; then
     SOUND_FLAG=1
 fi
+MIC_FLAG=0
+if [[ "$REC_RECORD_MIC" == "true" ]]; then
+    MIC_FLAG=1
+fi
 FULLSCREEN_FLAG=0
 REGION_FLAG=0
 WINDOW_FLAG=0
@@ -432,6 +538,8 @@ for ((i=0;i<${#ARGS[@]};i++)); do
         WINDOW_FLAG=1
     elif [[ "${ARGS[i]}" == "--sound" ]]; then
         SOUND_FLAG=1
+    elif [[ "${ARGS[i]}" == "--mic" ]]; then
+        MIC_FLAG=1
     elif [[ "${ARGS[i]}" == "--fullscreen" ]]; then
         FULLSCREEN_FLAG=1
     elif [[ "${ARGS[i]}" == "--obs" ]]; then
@@ -440,20 +548,43 @@ for ((i=0;i<${#ARGS[@]};i++)); do
 done
 
 AUDIO_ARGS=()
-if [[ $SOUND_FLAG -eq 1 ]]; then
-    AUDIO_DEVICE=$(getaudiooutput)
-    if [[ -n "$AUDIO_DEVICE" ]]; then
-        AUDIO_ARGS=("--audio=$AUDIO_DEVICE")
-    else
-        # Let wf-recorder select its backend's default source when pactl cannot
-        # expose a monitor name (for example during an audio-server restart).
-        AUDIO_ARGS=("--audio")
+USE_AUDIO_MIX=0
+AUDIO_DEVICE=""
+MIC_DEVICE=""
+if [[ $SOUND_FLAG -eq 1 || $MIC_FLAG -eq 1 ]]; then
+    if [[ $SOUND_FLAG -eq 1 ]]; then
+        AUDIO_DEVICE=$(getaudiooutput)
     fi
-    # ffmpeg's AAC default of 128 kb/s audibly dulls music. wf-recorder 0.6.0
-    # drops -P options (avcodec_open2 gets NULL instead of the dictionary), so
-    # this only takes effect once a release carries the upstream fix; until
-    # then it is ignored harmlessly and audio stays at 128 kb/s.
-    AUDIO_ARGS+=("-C" "aac" "-P" "b=320k")
+    if [[ $MIC_FLAG -eq 1 ]]; then
+        MIC_DEVICE=$(getmicinput)
+    fi
+
+    if [[ $SOUND_FLAG -eq 1 && $MIC_FLAG -eq 1 && -n "$MIC_DEVICE" ]]; then
+        if [[ -n "$AUDIO_DEVICE" ]]; then
+            USE_AUDIO_MIX=1
+            AUDIO_ARGS=("--audio=${MIX_SINK_NAME}.monitor")
+        else
+            AUDIO_ARGS=("--audio=$MIC_DEVICE")
+        fi
+    elif [[ $SOUND_FLAG -eq 1 ]]; then
+        if [[ -n "$AUDIO_DEVICE" ]]; then
+            AUDIO_ARGS=("--audio=$AUDIO_DEVICE")
+        else
+            # Let wf-recorder select its backend's default source when pactl cannot
+            # expose a monitor name (for example during an audio-server restart).
+            AUDIO_ARGS=("--audio")
+        fi
+    elif [[ -n "$MIC_DEVICE" ]]; then
+        AUDIO_ARGS=("--audio=$MIC_DEVICE")
+    fi
+
+    if [[ ${#AUDIO_ARGS[@]} -gt 0 ]]; then
+        # ffmpeg's AAC default of 128 kb/s audibly dulls music. wf-recorder 0.6.0
+        # drops -P options (avcodec_open2 gets NULL instead of the dictionary), so
+        # this only takes effect once a release carries the upstream fix; until
+        # then it is ignored harmlessly and audio stays at 128 kb/s.
+        AUDIO_ARGS+=("-C" "aac" "-P" "b=320k")
+    fi
 fi
 
 IS_OBS_RECORDING=0
@@ -472,7 +603,12 @@ if rec_pid=$(rec_pid); then
     # A paused recorder is SIGSTOPped: it cannot run its shutdown handler (and would
     # never flush the file) until it is resumed, so always continue it before killing.
     kill -CONT "$rec_pid" 2>/dev/null
-    kill "$rec_pid" &
+    kill "$rec_pid" 2>/dev/null
+    for _ in {1..40}; do
+        kill -0 "$rec_pid" 2>/dev/null || break
+        sleep 0.05
+    done
+    unload_mix_modules
     exit 0
 fi
 
@@ -489,6 +625,9 @@ if [[ "$REC_USE_TOOLBAR" == "true" && $FORCE_RECORD_FLAG -eq 0 ]]; then
     qs -c ii ipc call recordingToolbar open
     exit 0
 fi
+
+# Unload any stale mix modules left behind by an interrupted recording.
+unload_mix_modules
 
 
 if [[ $WINDOW_FLAG -eq 1 && -z "$MANUAL_REGION" ]]; then
@@ -687,6 +826,15 @@ else
     CODEC_OPTS+=("-p" "color_range=tv" "-p" "colorspace=$COLOR_MATRIX"
         "-p" "color_primaries=bt709" "-p" "color_trc=bt709")
 
+    prepare_wf_audio() {
+        if [[ $USE_AUDIO_MIX -eq 1 ]]; then
+            if ! setup_audio_mix "$AUDIO_DEVICE" "$MIC_DEVICE"; then
+                notify-send "Recording Audio Warning" "Could not mix desktop audio and microphone; recording microphone only." -a 'Recorder' &
+                AUDIO_ARGS=("--audio=$MIC_DEVICE" "-C" "aac" "-P" "b=320k")
+            fi
+        fi
+    }
+
     if [[ $FULLSCREEN_FLAG -eq 1 ]]; then
         MONITOR="$(getactivemonitor)"
         read -r MON_W MON_H <<< "$(hyprctl monitors -j 2>/dev/null | jq -r --arg m "$MONITOR" \
@@ -696,6 +844,7 @@ else
             MON_H=1080
         fi
         apply_quality "$MON_W" "$MON_H" "$CODEC"
+        prepare_wf_audio
 
         notify-send "Starting recording" "$FILENAME" -a 'Recorder' & disown
         updatestate true
@@ -726,6 +875,7 @@ else
             printf "%d %d", int(s * scale + 0.5), int(t * scale + 0.5)
         }')"
         apply_quality "$REGION_W" "$REGION_H" "$CODEC"
+        prepare_wf_audio
 
         notify-send "Starting recording" "$FILENAME" -a 'Recorder' & disown
         updatestate true

@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
+import Quickshell.Services.Pipewire
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
@@ -33,6 +34,14 @@ Item {
         .arg(subPageRoot.outputSize[0])
         .arg(subPageRoot.outputSize[1])
         .arg(Config.options.screenRecord.framerate)
+
+    readonly property var micNodes: Pipewire.nodes.values.filter(node =>
+        node.audio && !node.isSink && !node.isStream && !(node.name ?? "").endsWith(".monitor")
+    )
+
+    PwObjectTracker {
+        objects: subPageRoot.micNodes
+    }
 
     ContentPage {
         id: page
@@ -249,6 +258,65 @@ Item {
                 }
                 StyledToolTip {
                     text: Translation.tr("Captures what plays through your speakers in every recording, including the bar buttons and shortcuts. The microphone is not recorded.")
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "mic"
+                text: Translation.tr("Record microphone")
+                checked: Config.options.screenRecord.recordMic
+                onCheckedChanged: {
+                    Config.options.screenRecord.recordMic = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Captures your microphone in every recording. When combined with desktop audio, both are mixed together.")
+                }
+            }
+
+            ContentSubsectionLabel {
+                text: Translation.tr("Microphone")
+                opacity: Config.options.screenRecord.recordMic ? 1 : 0.5
+            }
+
+            StyledComboBox {
+                id: recorderMicSelector
+                enabled: Config.options.screenRecord.recordMic
+                buttonIcon: "mic"
+                textRole: "displayName"
+                model: {
+                    const options = [{
+                        "displayName": Translation.tr("Default"),
+                        "value": ""
+                    }];
+                    for (const node of subPageRoot.micNodes) {
+                        if (!node.name) continue;
+                        options.push({
+                            "displayName": node.description || node.nickname || node.name,
+                            "value": node.name
+                        });
+                    }
+                    const configured = Config.options.screenRecord.micDevice;
+                    if (configured && !options.some(item => item.value === configured)) {
+                        options.push({
+                            "displayName": configured,
+                            "value": configured
+                        });
+                    }
+                    return options;
+                }
+                currentIndex: {
+                    const index = model.findIndex((item) => {
+                        return item.value === Config.options.screenRecord.micDevice;
+                    });
+                    return index !== -1 ? index : 0;
+                }
+                onActivated: (index) => {
+                    Config.options.screenRecord.micDevice = model[index].value;
+                }
+
+                StyledToolTip {
+                    parent: recorderMicSelector
+                    text: Translation.tr("Select which microphone source to record. \"Default\" uses your current system default input device.")
                 }
             }
 

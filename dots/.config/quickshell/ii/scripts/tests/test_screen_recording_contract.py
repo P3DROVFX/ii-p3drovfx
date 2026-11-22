@@ -128,6 +128,46 @@ class ScreenRecordingContractTests(unittest.TestCase):
         self.assertIn("const isRecording", REGION_SELECTION)
         self.assertIn("if (!isRecording &&", overlay_body)
 
+    def test_mic_flag_and_device_config_are_wired(self):
+        self.assertIn('jq -r ".screenRecord.recordMic"', RECORD)
+        self.assertIn('jq -r ".screenRecord.micDevice"', RECORD)
+        parse = RECORD.split('MANUAL_REGION=""', 1)[1].split("AUDIO_ARGS=()", 1)[0]
+        self.assertIn('if [[ "$REC_RECORD_MIC" == "true" ]]; then\n    MIC_FLAG=1', parse)
+        self.assertIn('"${ARGS[i]}" == "--mic"', parse)
+        mic_fn = RECORD.split("getmicinput() {", 1)[1].split("\n}\n", 1)[0]
+        self.assertIn("pactl get-default-source", mic_fn)
+        self.assertIn("!= *.monitor", mic_fn)
+
+    def test_desktop_plus_mic_uses_temporary_null_sink_mix_with_cleanup(self):
+        self.assertIn('MIX_SINK_NAME="ii_rec_mix"', RECORD)
+        self.assertIn('REC_MIX_IDS_FILE="${XDG_RUNTIME_DIR:-/tmp}/ii-record-mix.ids"', RECORD)
+        mix_fn = RECORD.split("setup_audio_mix() {", 1)[1].split("\n}\n", 1)[0]
+        self.assertIn("module-null-sink", mix_fn)
+        self.assertIn("sink_properties=device.description=ii-recording-mix", mix_fn)
+        self.assertEqual(mix_fn.count("module-loopback"), 2)
+        self.assertIn("latency_msec=20", mix_fn)
+        self.assertIn('AUDIO_ARGS=("--audio=${MIX_SINK_NAME}.monitor")', RECORD)
+        self.assertIn("trap cleanup EXIT", RECORD)
+        self.assertIn("trap on_signal INT TERM", RECORD)
+        # Stopping invocation and startup both clean up mix modules
+        stop_block = RECORD.split("\nif rec_pid=$(rec_pid); then", 1)[1].split("\nfi\n", 1)[0]
+        self.assertIn("unload_mix_modules", stop_block)
+
+    def test_recording_toolbar_passes_mic_independently_of_sound(self):
+        toolbar = (ROOT / "modules/ii/recordingToolbar/RecordingToolbar.qml").read_text()
+        exec_fn = toolbar.split("function executeRecording()", 1)[1]
+        self.assertIn('if (Config.options.screenRecord.recordAudio) args.push("--sound")', exec_fn)
+        self.assertIn('if (Config.options.screenRecord.recordMic) args.push("--mic")', exec_fn)
+        self.assertNotIn("recordAudio || Config.options.screenRecord.recordMic", exec_fn)
+
+    def test_settings_page_exposes_mic_toggle_and_pipewire_picker(self):
+        settings = (ROOT / "modules/settings/configs/widgets/ScreenRecordingConfig.qml").read_text()
+        self.assertIn("import Quickshell.Services.Pipewire", settings)
+        self.assertIn("PwObjectTracker", settings)
+        self.assertIn("Config.options.screenRecord.recordMic", settings)
+        self.assertIn("Config.options.screenRecord.micDevice", settings)
+        self.assertIn("node.audio && !node.isSink && !node.isStream", settings)
+
 
 if __name__ == "__main__":
     unittest.main()

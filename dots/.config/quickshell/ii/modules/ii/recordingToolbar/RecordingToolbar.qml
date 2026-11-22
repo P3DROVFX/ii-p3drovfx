@@ -145,21 +145,12 @@ Scope {
 
         function executeRecording() {
             const mode = toolbarContent.selectedMode || Config.options.screenRecord.mode || "fullscreen";
-            const soundFlag = (Config.options.screenRecord.recordAudio || Config.options.screenRecord.recordMic);
-
-            if (mode === "fullscreen") {
-                const args = [Directories.recordScriptPath, "--force-record", "--fullscreen"];
-                if (soundFlag) args.push("--sound");
-                Quickshell.execDetached(args);
-            } else if (mode === "region") {
-                const args = [Directories.recordScriptPath, "--force-record", "--region"];
-                if (soundFlag) args.push("--sound");
-                Quickshell.execDetached(args);
-            } else if (mode === "window") {
-                const args = [Directories.recordScriptPath, "--force-record", "--window"];
-                if (soundFlag) args.push("--sound");
-                Quickshell.execDetached(args);
-            }
+            if (mode !== "fullscreen" && mode !== "region" && mode !== "window")
+                return;
+            const args = [Directories.recordScriptPath, "--force-record", `--${mode}`];
+            if (Config.options.screenRecord.recordAudio) args.push("--sound");
+            if (Config.options.screenRecord.recordMic) args.push("--mic");
+            Quickshell.execDetached(args);
         }
     }
 }
