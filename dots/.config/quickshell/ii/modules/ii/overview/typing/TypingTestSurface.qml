@@ -382,7 +382,7 @@ Item {
                             font.family: Appearance.font.family.monospace
                             font.pixelSize: Appearance.font.pixelSize.huge
                             font.weight: Font.DemiBold
-                            color: Appearance.colors.colPrimary
+                            color: viewport.translucent ? viewport.inkColor : Appearance.colors.colPrimary
                         }
 
                         Item { Layout.fillWidth: true }
@@ -427,14 +427,14 @@ Item {
                             text: Translation.tr("%1 wpm").arg(String(Math.round(engine.wpm)))
                             font.family: Appearance.font.family.monospace
                             font.pixelSize: Appearance.font.pixelSize.small
-                            color: Appearance.colors.colOnSurfaceVariant
+                            color: viewport.translucent ? viewport.untypedColor : Appearance.colors.colOnSurfaceVariant
                         }
                         StyledText {
                             visible: root.options.showLiveAccuracy && engine.isRunning && engine.hasTarget
                             text: String(Math.round(engine.accuracy)) + "%"
                             font.family: Appearance.font.family.monospace
                             font.pixelSize: Appearance.font.pixelSize.small
-                            color: Appearance.colors.colOnSurfaceVariant
+                            color: viewport.translucent ? viewport.untypedColor : Appearance.colors.colOnSurfaceVariant
                         }
                     }
 

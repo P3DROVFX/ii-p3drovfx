@@ -40,8 +40,6 @@ Singleton {
         depth: 0 // 2^0 = 1 color
         rescaleSize: 10
     }
-    // The wallpaper's average colour: what a translucent panel lets through.
-    readonly property color wallpaperAverage: wallColorQuant.colors[0] ?? m3colors.m3background
     property real wallpaperVibrancy: (wallColorQuant.colors[0]?.hslSaturation + wallColorQuant.colors[0]?.hslLightness) / 2
     property real autoBackgroundTransparency: { // y = 0.5768x^2 - 0.759x + 0.2896
         let x = wallpaperVibrancy;

@@ -29,33 +29,16 @@ Item {
 
     readonly property real lineHeight: Math.round(root.fontSize * 1.62)
     readonly property real charWidth: Math.max(1, sizingMetrics.advanceWidth)
-    // A translucent shell lets the wallpaper through, so the theme's text colour
-    // can land on a backdrop of the same lightness (light text over a light
-    // wallpaper in dark mode). Then the ink is picked against an estimate of
-    // what is actually behind the words: the panel tint over the wallpaper's
-    // average. Untyped text is that ink dimmed toward the backdrop, but never
-    // below 3:1. An opaque shell keeps the theme colours.
+    // A translucent shell lets the wallpaper through behind the words, where
+    // the theme's light text vanishes over light patches. There the test
+    // writes in strong black instead: typed text pure black, untyped a dark
+    // grey still well apart from the backdrop, errors a dark red.
     readonly property bool translucent: Config.options.appearance.transparency.enable
         && Appearance.backgroundTransparency > 0
-    readonly property color backdrop: ColorUtils.mix(Appearance.colors.colLayer0Base,
-        Appearance.wallpaperAverage, 1 - Appearance.backgroundTransparency)
-    readonly property color inkColor: {
-        if (!root.translucent)
-            return Appearance.colors.colOnSurface;
-        const light = Appearance.m3colors.darkmode ? Appearance.m3colors.m3onSurface : Appearance.m3colors.m3background;
-        const dark = Appearance.m3colors.darkmode ? Appearance.m3colors.m3background : Appearance.m3colors.m3onSurface;
-        return ColorUtils.contrastRatio(light, root.backdrop) >= ColorUtils.contrastRatio(dark, root.backdrop) ? light : dark;
-    }
-    readonly property color untypedColor: {
-        if (!root.translucent)
-            return Appearance.colors.colSubtext;
-        for (let share = 0.55; share < 1; share += 0.05) {
-            const candidate = ColorUtils.mix(root.inkColor, root.backdrop, share);
-            if (ColorUtils.contrastRatio(candidate, root.backdrop) >= 3)
-                return candidate;
-        }
-        return root.inkColor;
-    }
+    readonly property color inkColor: root.translucent ? "#000000" : Appearance.colors.colOnSurface
+    readonly property color untypedColor: root.translucent ? "#3a3a3f" : Appearance.colors.colSubtext
+    readonly property color errorColor: root.translucent
+        ? ColorUtils.mix(Appearance.m3colors.m3error, "#000000", 0.45) : Appearance.colors.colError
     readonly property var targetWords: root.engine?.targetWords ?? []
     readonly property int currentWordIndex: root.engine?.currentWordIndex ?? 0
     readonly property string typedCurrentWord: root.wordInput(root.currentWordIndex)
@@ -125,7 +108,7 @@ Item {
             : typedChar === targetChar;
         return matched
             ? root.inkColor
-            : Appearance.colors.colError;
+            : root.errorColor;
     }
 
     TextMetrics {
@@ -251,7 +234,7 @@ Item {
                                 font.family: Appearance.font.family.monospace
                                 font.pixelSize: root.fontSize
                                 font.weight: Font.Medium
-                                color: root.blindMode ? root.inkColor : Appearance.colors.colError
+                                color: root.blindMode ? root.inkColor : root.errorColor
                                 visible: wordItem.extras.length > 0
                                 opacity: root.blindMode ? 1 : 0.75
                             }
