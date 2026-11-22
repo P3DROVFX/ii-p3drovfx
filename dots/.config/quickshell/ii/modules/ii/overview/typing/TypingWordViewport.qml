@@ -29,33 +29,10 @@ Item {
 
     readonly property real lineHeight: Math.round(root.fontSize * 1.62)
     readonly property real charWidth: Math.max(1, sizingMetrics.advanceWidth)
-    // A translucent shell lets the wallpaper through, so the theme's text colour
-    // can land on a backdrop of the same lightness (light text over a light
-    // wallpaper in dark mode). Then the ink is picked against an estimate of
-    // what is actually behind the words: the panel tint over the wallpaper's
-    // average. Untyped text is that ink dimmed toward the backdrop, but never
-    // below 3:1. An opaque shell keeps the theme colours.
-    readonly property bool translucent: Config.options.appearance.transparency.enable
-        && Appearance.backgroundTransparency > 0
-    readonly property color backdrop: ColorUtils.mix(Appearance.colors.colLayer0Base,
-        Appearance.wallpaperAverage, 1 - Appearance.backgroundTransparency)
-    readonly property color inkColor: {
-        if (!root.translucent)
-            return Appearance.colors.colOnSurface;
-        const light = Appearance.m3colors.darkmode ? Appearance.m3colors.m3onSurface : Appearance.m3colors.m3background;
-        const dark = Appearance.m3colors.darkmode ? Appearance.m3colors.m3background : Appearance.m3colors.m3onSurface;
-        return ColorUtils.contrastRatio(light, root.backdrop) >= ColorUtils.contrastRatio(dark, root.backdrop) ? light : dark;
-    }
-    readonly property color untypedColor: {
-        if (!root.translucent)
-            return Appearance.colors.colSubtext;
-        for (let share = 0.55; share < 1; share += 0.05) {
-            const candidate = ColorUtils.mix(root.inkColor, root.backdrop, share);
-            if (ColorUtils.contrastRatio(candidate, root.backdrop) >= 3)
-                return candidate;
-        }
-        return root.inkColor;
-    }
+    // Theme colours: over a translucent shell the stage puts a dark backing
+    // block behind the words (TypingTestSurface), so these keep their contrast.
+    readonly property color inkColor: Appearance.colors.colOnSurface
+    readonly property color untypedColor: Appearance.colors.colSubtext
     readonly property var targetWords: root.engine?.targetWords ?? []
     readonly property int currentWordIndex: root.engine?.currentWordIndex ?? 0
     readonly property string typedCurrentWord: root.wordInput(root.currentWordIndex)

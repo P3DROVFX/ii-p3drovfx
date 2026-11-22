@@ -3,7 +3,9 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
+import "../../background/overview" as Fade
 import qs.services
 
 /**
@@ -360,6 +362,43 @@ Item {
                 Layout.fillWidth: true
                 Layout.preferredHeight: stageColumn.implicitHeight
                 visible: !engine.isFinished
+
+                // A translucent shell lets the wallpaper through right behind
+                // the words, and light text over a light patch of it vanishes.
+                // A block of the panel's own colour sits under the stage there,
+                // faded out on every side so it reads as a soft shade rather
+                // than a card: the gradient fades top and bottom, the edge
+                // mask the sides (a MultiEffect mask would band).
+                Item {
+                    id: stageBacking
+                    readonly property real fadeX: 72
+                    readonly property real fadeY: 32
+                    readonly property color shade: ColorUtils.applyAlpha(Appearance.colors.colLayer0Base, 0.75)
+                    visible: Config.options.appearance.transparency.enable && Appearance.backgroundTransparency > 0
+                    anchors.fill: stageColumn
+                    anchors.leftMargin: -fadeX
+                    anchors.rightMargin: -fadeX
+                    anchors.topMargin: -fadeY
+                    anchors.bottomMargin: -fadeY
+                    layer.enabled: visible
+                    layer.effect: Fade.EdgeFadeMask {
+                        verticalAxis: false
+                        startClear: 0
+                        startSolid: stageBacking.width > 0 ? stageBacking.fadeX / stageBacking.width : 0
+                        endSolid: stageBacking.width > 0 ? 1 - stageBacking.fadeX / stageBacking.width : 1
+                        endClear: 1
+                    }
+
+                    Rectangle {
+                        anchors.fill: parent
+                        gradient: Gradient {
+                            GradientStop { position: 0; color: ColorUtils.applyAlpha(stageBacking.shade, 0) }
+                            GradientStop { position: stageBacking.height > 0 ? stageBacking.fadeY / stageBacking.height : 0; color: stageBacking.shade }
+                            GradientStop { position: stageBacking.height > 0 ? 1 - stageBacking.fadeY / stageBacking.height : 1; color: stageBacking.shade }
+                            GradientStop { position: 1; color: ColorUtils.applyAlpha(stageBacking.shade, 0) }
+                        }
+                    }
+                }
 
                 ColumnLayout {
                     id: stageColumn
