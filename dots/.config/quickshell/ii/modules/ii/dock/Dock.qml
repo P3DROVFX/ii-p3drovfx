@@ -385,6 +385,12 @@ Scope {
             // radius-free pass instead of `sizing`, breaking the binding loop.
             readonly property real radiusFreeThickness: dock.computeSizes(dockRoot.sizingInputs(0)).dockThickness
             readonly property real concaveCornerRadius: {
+                // Full width · rounded: the two concave corners round the screen above the
+                // tray, so they take the windows' radius - the same one as the wrapped
+                // frame's inner corners and the hug bar's screen corners - not the tray's.
+                // They sit outside the tray, so its thickness does not cap them.
+                if (dockRoot.isFullWidthConcave)
+                    return Appearance.rounding.windowRounding
                 if ((Config.options?.dock?.dockRadius ?? -1) >= 0) {
                     return Math.min(Config.options.dock.dockRadius, dockRoot.radiusFreeThickness * 0.8)
                 }

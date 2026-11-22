@@ -25,7 +25,10 @@ LazyLoader {
             return 1.0;
         var baseScale = Math.max(0.75, Math.min(1.5, screenHeight / 1080.0));
         var barSpace = BarPlacement.vertical ? 0 : Appearance.sizes.barHeight;
-        var maxAllowedHeight = screenHeight - barSpace - Appearance.sizes.elevationMargin * 2 - 40;
+        // The wrapped frame and a pinned dock take room from the screen too; a popup sized
+        // against the bare screen ran over them.
+        var edgeSpace = root.item ? (BarPlacement.vertical ? root.item.edgeInset("top") + root.item.edgeInset("bottom") : root.item.edgeInset(BarPlacement.bottom ? "top" : "bottom") + root.item.dockReserveOn(BarPlacement.bottom ? "bottom" : "top")) : 0;
+        var maxAllowedHeight = screenHeight - barSpace - edgeSpace - Appearance.sizes.elevationMargin * 2 - 40;
         var maxAllowedWidth = (screenWidth > 0 ? screenWidth : 1920) * 0.9;
         
         var userMultiplier = Config.options?.bar?.tooltips?.popupScaleMultiplier ?? 1.0;
@@ -291,6 +294,26 @@ LazyLoader {
             return 0;
         }
 
+        // Room the popup must leave at each screen edge besides the bar: the wrapped frame's
+        // ring and a pinned dock's exclusive zone. The window ignores the compositor's zones
+        // (it is placed from the screen edge, like the bar), so it has to add them itself —
+        // clamped to the bare screen, a popup near an end of the bar sat on the frame and
+        // over a dock lying beside the widget. The popup's elevation margin then keeps the
+        // same gap from the frame and the dock that it keeps from the bar.
+        readonly property string screenName: popupWindow.screen?.name ?? ""
+        readonly property real frameInset: Config.options?.appearance?.fakeScreenRounding === 3 ? (Config.options?.appearance?.wrappedFrameThickness ?? 0) : 0
+        readonly property var dockInset: (Config.options?.dock?.enable ?? false) ? (GlobalStates.dockInsets[popupWindow.screenName] ?? null) : null
+        function dockReserveOn(side) {
+            return (popupWindow.dockInset && popupWindow.dockInset.side === side) ? (popupWindow.dockInset.reserved ?? 0) : 0;
+        }
+        function edgeInset(side) {
+            return popupWindow.frameInset + popupWindow.dockReserveOn(side);
+        }
+        // The bar's own edge: the bar's zone already covers the frame there, so only a dock
+        // pinned on that same edge pushes the popup further in.
+        readonly property string barSide: BarPlacement.vertical ? (BarPlacement.bottom ? "right" : "left") : (BarPlacement.bottom ? "bottom" : "top")
+        readonly property real barSideDock: popupWindow.dockReserveOn(popupWindow.barSide)
+
         anchors.left: root.customPosition ? root.anchorLeft : (!BarPlacement.vertical || (BarPlacement.vertical && !BarPlacement.bottom))
         anchors.right: root.customPosition ? root.anchorRight : (BarPlacement.vertical && BarPlacement.bottom)
         anchors.top: root.customPosition ? root.anchorTop : (BarPlacement.vertical || (!BarPlacement.vertical && !BarPlacement.bottom))
@@ -324,15 +347,20 @@ LazyLoader {
                     return root.customMarginLeft;
                 }
                 if (!BarPlacement.vertical) {
-                    if (!root.hoverTarget || !root.QsWindow)
-                        return (screenWidth > 0 && popupWindow.implicitWidth > 0) ? Math.max(0, (screenWidth - popupWindow.implicitWidth) / 2) : 0;
-                    var targetPos = root.QsWindow.mapFromItem(root.hoverTarget, 0, 0);
-                    var centeredX = targetPos.x + (root.hoverTarget.width - popupWindow.implicitWidth) / 2;
-                    var minX = 0;
-                    var maxX = screenWidth - popupWindow.implicitWidth;
+                    var minX = popupWindow.edgeInset("left");
+                    var maxX = screenWidth - popupWindow.implicitWidth - popupWindow.edgeInset("right");
+                    var centeredX;
+                    if (!root.hoverTarget || !root.QsWindow) {
+                        if (!(screenWidth > 0 && popupWindow.implicitWidth > 0))
+                            return 0;
+                        centeredX = (minX + maxX) / 2;
+                    } else {
+                        var targetPos = root.QsWindow.mapFromItem(root.hoverTarget, 0, 0);
+                        centeredX = targetPos.x + (root.hoverTarget.width - popupWindow.implicitWidth) / 2;
+                    }
                     return Math.max(minX, Math.min(maxX, centeredX));
                 }
-                return Appearance.sizes.verticalBarWidth + popupWindow.sidebarPush;
+                return Appearance.sizes.verticalBarWidth + popupWindow.sidebarPush + popupWindow.barSideDock;
             }
 
             top: {
@@ -340,19 +368,19 @@ LazyLoader {
                     return root.customMarginTop;
                 }
                 if (!BarPlacement.vertical) {
-                    return Appearance.sizes.barHeight;
+                    return Appearance.sizes.barHeight + popupWindow.barSideDock;
                 }
                 if (!root.hoverTarget || !root.QsWindow)
-                    return 0;
+                    return popupWindow.edgeInset("top");
                 var targetPos = root.QsWindow.mapFromItem(root.hoverTarget, 0, 0);
                 var centeredY = targetPos.y + (root.hoverTarget.height - popupWindow.implicitHeight) / 2;
-                var minY = 0;
-                var maxY = screenHeight - popupWindow.implicitHeight;
+                var minY = popupWindow.edgeInset("top");
+                var maxY = screenHeight - popupWindow.implicitHeight - popupWindow.edgeInset("bottom");
                 return Math.max(minY, Math.min(maxY, centeredY));
             }
 
-            right: root.customPosition ? root.customMarginRight : Appearance.sizes.verticalBarWidth + popupWindow.sidebarPush
-            bottom: root.customPosition ? root.customMarginBottom : Appearance.sizes.barHeight
+            right: root.customPosition ? root.customMarginRight : Appearance.sizes.verticalBarWidth + popupWindow.sidebarPush + popupWindow.barSideDock
+            bottom: root.customPosition ? root.customMarginBottom : Appearance.sizes.barHeight + popupWindow.barSideDock
         }
 
         WlrLayershell.namespace: "quickshell:popup"
