@@ -17,6 +17,7 @@ QtObject {
     readonly property string deviceId: KdeConnectService.activeDeviceId
     readonly property var device: KdeConnectService.activeDevice
     readonly property bool hasDevice: root.deviceId !== "" && KdeConnectService.activeReachable
+    readonly property bool ringing: KdeConnectService.isRinging(root.deviceId)
     readonly property string name: KdeConnectService.activeDeviceDisplayName || Translation.tr("No phone")
     readonly property int charge: root.device?.charge ?? -1
     readonly property bool charging: root.device?.charging === true
@@ -83,7 +84,11 @@ QtObject {
     }
 
     function ring() {
-        if (root.enabled && root.hasDevice)
+        if (!root.enabled || !root.hasDevice)
+            return;
+        if (root.ringing)
+            KdeConnectService.stopRinging(root.deviceId);
+        else
             KdeConnectService.findMyPhone(root.deviceId);
     }
 }

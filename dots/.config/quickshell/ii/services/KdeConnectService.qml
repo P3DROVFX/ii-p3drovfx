@@ -1423,11 +1423,22 @@ Singleton {
         onTriggered: root.requestNotificationsRefresh()
     }
 
+    function isRinging(devId) {
+        return root._isIi(devId) && IiLinkService.isRinging(devId)
+    }
+
+    readonly property bool activeRinging: root.isRinging(root.activeDeviceId)
+
     function findMyPhone(devId) {
         if (root._isIi(devId))
             return root._iiFeedback(IiLinkService.phoneAct(devId, "ring"), Translation.tr("Ringing the phone"))
         root._call(devId, "findmyphone",
                    "org.kde.kdeconnect.device.findmyphone.ring", [])
+    }
+
+    function stopRinging(devId) {
+        if (root._isIi(devId))
+            return root._iiFeedback(IiLinkService.phoneAct(devId, "ring", { on: false }), Translation.tr("Stopped ringing"))
     }
 
     function sendPing(devId, message) {

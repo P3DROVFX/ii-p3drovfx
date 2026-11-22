@@ -748,7 +748,7 @@ Singleton {
         .concat(root.filesEnabled ? ["files"] : [])
         .concat(root.galleryEnabled ? ["gallery"] : [])
         .concat(root.touchpadEnabled ? ["touchpad"] : [])
-        .concat(root.drawEnabled && LiveDraw.enabled ? ["draw"] : [])
+        .concat(root.drawEnabled ? ["draw"] : [])
         .concat(root.presentEnabled ? ["present"] : [])
         .concat(PhoneScreenService.enabled ? (PhoneScreenService.wirelessEnabled ? ["screen", "screenWifi", "screenTools", "screenAudio", "screenUdp"] : ["screen", "screenTools"]) : [])
         .concat(root.cameraEnabled ? ["camera"] : [])
@@ -3630,7 +3630,15 @@ Singleton {
             canRedo: LiveDraw.canRedo(key)
         };
     }
-    readonly property string _drawKey: root._drawDev !== "" ? JSON.stringify(root._drawState()) : ""
+    readonly property string _drawKey: {
+        if (root._drawDev === "")
+            return "";
+        if (!root.drawEnabled)
+            return JSON.stringify({ t: "draw", err: "disabled" });
+        if (!LiveDraw.enabled)
+            return JSON.stringify({ t: "draw", err: "liveDraw" });
+        return JSON.stringify(root._drawState());
+    }
     on_DrawKeyChanged: {
         if (root._drawKey === "")
             root._sentKeys["draw"] = "";
@@ -3641,27 +3649,56 @@ Singleton {
     }
 
     function _draw(dev, m): void {
-        if (!root.drawEnabled || !LiveDraw.enabled)
-            return root.sendTo(dev, { t: "draw", err: "disabled" });
-        if (m.s !== undefined) {
-            if (dev === root._drawDev && LiveDraw.trayOpen)
-                LiveDraw.remoteStroke(String(m.s), Array.isArray(m.p) ? m.p : []);
-            return;
-        }
-        switch (String(m.a ?? "")) {
-        case "start":
-            root._drawDev = dev;
-            LiveDraw.open();
-            root._sentKeys["draw"] = "";
-            root.sendTo(dev, root._drawState());
-            return;
-        case "stop":
+        const a = String(m.a ?? "");
+        if (a === "stop") {
             // Leaving the pad puts live draw away too (the ink stays, as with the tray).
             if (root._drawDev === dev) {
                 root._drawDev = "";
                 LiveDraw.close();
             }
             return;
+        }
+        if (!root.drawEnabled)
+            return root.sendTo(dev, { t: "draw", err: "disabled" });
+        if (a === "enableLiveDraw") {
+            if (Config.ready) {
+                if (PanelFamily.isTablet) {
+                    if (Config.options?.tablet?.liveDraw)
+                        Config.options.tablet.liveDraw.enable = true;
+                } else if (Config.options?.liveDraw) {
+                    Config.options.liveDraw.enable = true;
+                }
+            }
+            if (!LiveDraw.enabled) {
+                root._drawDev = dev;
+                return root.sendTo(dev, { t: "draw", err: "liveDraw" });
+            }
+            root._drawDev = dev;
+            LiveDraw.open();
+            const st = root._drawState();
+            root._sentKeys["draw"] = JSON.stringify(st);
+            root.sendTo(dev, st);
+            return;
+        }
+        if (!LiveDraw.enabled) {
+            if (a === "start")
+                root._drawDev = dev;
+            return root.sendTo(dev, { t: "draw", err: "liveDraw" });
+        }
+        if (m.s !== undefined) {
+            if (dev === root._drawDev && LiveDraw.trayOpen)
+                LiveDraw.remoteStroke(String(m.s), Array.isArray(m.p) ? m.p : []);
+            return;
+        }
+        switch (a) {
+        case "start": {
+            root._drawDev = dev;
+            LiveDraw.open();
+            const st = root._drawState();
+            root._sentKeys["draw"] = JSON.stringify(st);
+            root.sendTo(dev, st);
+            return;
+        }
         case "tool":
             if (String(m.tool) === "eraser")
                 LiveDraw.eraser = true;
@@ -3679,7 +3716,7 @@ Singleton {
         case "undo":
         case "redo":
         case "clear":
-            LiveDraw.command(String(m.a), null);
+            LiveDraw.command(a, null);
             return;
         case "close":
             LiveDraw.close();
@@ -4027,11 +4064,45 @@ Singleton {
     /// The phone that announced it can be controlled from routines (Modes' phoneControl).
     readonly property string phoneControlDev: root._capDev("ctl")
 
+    /// dev id → true while "find my phone" is ringing.
+    property var ringing: ({})
+
+    function isRinging(deviceId): bool {
+        const id = root._peerOf(deviceId);
+        return id !== "" && root.ringing[id] === true;
+    }
+
+    function _setRinging(dev, on): void {
+        const id = root._peerOf(dev);
+        if (!id)
+            return;
+        const next = Object.assign({}, root.ringing);
+        if (on)
+            next[id] = true;
+        else
+            delete next[id];
+        root.ringing = next;
+        if (on)
+            ringFallbackTimer.restart();
+        else if (Object.keys(next).length === 0)
+            ringFallbackTimer.stop();
+    }
+
+    // Fallback for older phone apps that do not emit `{"t":"act","ringing":false}`.
+    Timer {
+        id: ringFallbackTimer
+        interval: 60000
+        repeat: false
+        onTriggered: root.ringing = ({})
+    }
+
     /// Something the phone does by itself: `{ kind, ...fields }` (see ModeActions.phoneControlRequest).
     function phoneControl(req): bool {
         if (root.phoneControlDev === "")
             return false;
         root.sendTo(root.phoneControlDev, Object.assign({ t: "act", a: "ctl" }, req));
+        if (req?.kind === "ring")
+            root._setRinging(root.phoneControlDev, true);
         return true;
     }
 
@@ -4041,6 +4112,8 @@ Singleton {
         if (root.connections[dev] === undefined)
             return false;
         root.sendTo(dev, Object.assign({ t: "act", a: action }, fields ?? {}));
+        if (action === "ring")
+            root._setRinging(dev, fields?.on !== false);
         return true;
     }
 
@@ -5031,6 +5104,10 @@ Singleton {
         case "draw":
             root._draw(dev, m);
             return;
+        case "act":
+            if (typeof m.ringing === "boolean")
+                root._setRinging(dev, m.ringing);
+            return;
         case "present":
             root._present(dev, m);
             return;
@@ -5234,6 +5311,7 @@ Singleton {
             if (root._presentDev === ev.dev)
                 root._presentDev = "";
             root._releasePcLyricsDev(String(ev.dev));
+            root._setRinging(String(ev.dev), false);
             IiCameraService.handleDisconnect(String(ev.dev));
             IiMicService.handleDisconnect(String(ev.dev));
             // Without the phone that sent them they go stale: KDE Connect's list takes over.
@@ -5506,6 +5584,8 @@ Singleton {
         onExited: (code, status) => {
             root.running = false;
             root.connections = ({});
+            root.ringing = ({});
+            ringFallbackTimer.stop();
             root.pairing = null;
             root._clearPcLyricsWatchers();
             if (root._restartPending) {

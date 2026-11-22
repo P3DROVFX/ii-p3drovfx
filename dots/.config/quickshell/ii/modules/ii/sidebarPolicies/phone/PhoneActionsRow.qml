@@ -108,13 +108,20 @@ Item {
         // Find My Phone
         ActionIconButton {
             id: btn1
-            iconName: "phone_in_talk"
-            toolTipText: Translation.tr("Ring phone")
+            readonly property bool ringing: KdeConnectService.isRinging(root._devId)
+            iconName: ringing ? "notifications_off" : "phone_in_talk"
+            toolTipText: ringing ? Translation.tr("Stop ringing") : Translation.tr("Ring phone")
+            active: ringing
             enabled: root._has("kdeconnect_findmyphone")
             transform: Translate { id: btn1Transform; y: 0 }
             onClicked: {
-                KdeConnectService.findMyPhone(root._devId)
-                root._feedback(Translation.tr("Ringing phone…"), true)
+                if (ringing) {
+                    KdeConnectService.stopRinging(root._devId)
+                    root._feedback(Translation.tr("Stopped ringing"), true)
+                } else {
+                    KdeConnectService.findMyPhone(root._devId)
+                    root._feedback(Translation.tr("Ringing phone…"), true)
+                }
             }
         }
 
@@ -207,14 +214,15 @@ Item {
         property string iconName: ""
         property string toolTipText: ""
         property bool feedbackFlash: false
+        property bool active: false
 
         Layout.fillWidth: true
         Layout.preferredWidth: 1
         implicitHeight: 48
         useDynamicRadius: true
-        colBackground: btn.feedbackFlash ? Appearance.colors.colPrimary : Appearance.colors.colSecondaryContainer
-        colBackgroundHover: btn.feedbackFlash ? Appearance.colors.colPrimaryHover : Appearance.colors.colSecondaryContainerHover
-        colRipple: btn.feedbackFlash ? Appearance.colors.colPrimaryActive : Appearance.colors.colSecondaryContainerActive
+        colBackground: (btn.feedbackFlash || btn.active) ? Appearance.colors.colPrimary : Appearance.colors.colSecondaryContainer
+        colBackgroundHover: (btn.feedbackFlash || btn.active) ? Appearance.colors.colPrimaryHover : Appearance.colors.colSecondaryContainerHover
+        colRipple: (btn.feedbackFlash || btn.active) ? Appearance.colors.colPrimaryActive : Appearance.colors.colSecondaryContainerActive
 
         opacity: enabled ? 1.0 : 0.4
         scale: 1.0
@@ -225,11 +233,11 @@ Item {
             verticalAlignment: Text.AlignVCenter
             text: btn.iconName
             iconSize: 22
-            color: btn.feedbackFlash ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
+            color: (btn.feedbackFlash || btn.active) ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
             // Animate the icon fill (0 -> 1) — Material Symbols supports this
             // natively without needing a `Behavior on text` swap that would
             // leak intermediate non-existent glyph strings during animation.
-            fill: btn.feedbackFlash || btn.hovered ? 1.0 : 0.0
+            fill: btn.feedbackFlash || btn.active || btn.hovered ? 1.0 : 0.0
             animateChange: true
 
             Behavior on fill {

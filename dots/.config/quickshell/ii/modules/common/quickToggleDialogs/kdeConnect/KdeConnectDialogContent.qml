@@ -418,26 +418,34 @@ StyledFlickable {
             spacing: 6
 
             Repeater {
+                readonly property bool isRinging: KdeConnectService.isRinging(KdeConnectService.activeDeviceId)
                 model: [
-                    { icon: "phone_in_talk", label: Translation.tr("Ring phone"), plugin: "kdeconnect_findmyphone" },
-                    { icon: "notifications_active", label: Translation.tr("Send a ping"), plugin: "kdeconnect_ping" },
-                    { icon: "content_paste", label: Translation.tr("Send clipboard to phone"), plugin: "kdeconnect_clipboard" },
-                    { icon: "link", label: Translation.tr("Share clipboard as link/text"), plugin: "kdeconnect_share" },
-                    { icon: "file_upload", label: Translation.tr("Send file…"), plugin: "kdeconnect_share" }
+                    {
+                        id: "ring",
+                        icon: isRinging ? "notifications_off" : "phone_in_talk",
+                        label: isRinging ? Translation.tr("Stop ringing") : Translation.tr("Ring phone"),
+                        plugin: "kdeconnect_findmyphone",
+                        active: isRinging
+                    },
+                    { id: "ping", icon: "notifications_active", label: Translation.tr("Send a ping"), plugin: "kdeconnect_ping", active: false },
+                    { id: "clip", icon: "content_paste", label: Translation.tr("Send clipboard to phone"), plugin: "kdeconnect_clipboard", active: false },
+                    { id: "link", icon: "link", label: Translation.tr("Share clipboard as link/text"), plugin: "kdeconnect_share", active: false },
+                    { id: "file", icon: "file_upload", label: Translation.tr("Send file…"), plugin: "kdeconnect_share", active: false }
                 ]
 
                 delegate: RippleButton {
                     id: actionRow
                     required property var modelData
                     readonly property bool supported: root._has(modelData.plugin)
+                    readonly property bool active: modelData.active === true
 
                     Layout.fillWidth: true
                     implicitHeight: 52
                     buttonRadius: Appearance.rounding.full
-                    colBackground: Appearance.colors.colSurfaceContainerHighest
-                    colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
-                    colBackgroundActive: Appearance.colors.colSurfaceContainerHighestActive
-                    colRipple: Appearance.colors.colSurfaceContainerHighestActive
+                    colBackground: active ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHighest
+                    colBackgroundHover: active ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colSurfaceContainerHighestHover
+                    colBackgroundActive: active ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colSurfaceContainerHighestActive
+                    colRipple: active ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colSurfaceContainerHighestActive
                     opacity: supported ? 1.0 : 0.4
                     enabled: supported
 
@@ -450,13 +458,13 @@ StyledFlickable {
                         MaterialSymbol {
                             text: actionRow.modelData.icon
                             iconSize: 22
-                            color: Appearance.colors.colOnSurface
+                            color: actionRow.active ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface
                         }
 
                         StyledText {
                             Layout.fillWidth: true
                             text: actionRow.modelData.label
-                            color: Appearance.colors.colOnSurface
+                            color: actionRow.active ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface
                             elide: Text.ElideRight
                         }
 
@@ -470,16 +478,21 @@ StyledFlickable {
 
                     onClicked: {
                         const devId = KdeConnectService.activeDeviceId;
-                        switch (actionRow.modelData.icon) {
-                        case "phone_in_talk":
-                            KdeConnectService.findMyPhone(devId);
-                            KdeConnectService.dispatchActionFeedback(Translation.tr("Ringing phone…"), true);
+                        switch (actionRow.modelData.id) {
+                        case "ring":
+                            if (KdeConnectService.isRinging(devId)) {
+                                KdeConnectService.stopRinging(devId);
+                                KdeConnectService.dispatchActionFeedback(Translation.tr("Stopped ringing"), true);
+                            } else {
+                                KdeConnectService.findMyPhone(devId);
+                                KdeConnectService.dispatchActionFeedback(Translation.tr("Ringing phone…"), true);
+                            }
                             break;
-                        case "notifications_active":
+                        case "ping":
                             KdeConnectService.sendPing(devId, Translation.tr("Ping from ii"));
                             KdeConnectService.dispatchActionFeedback(Translation.tr("Ping sent"), true);
                             break;
-                        case "content_paste":
+                        case "clip":
                             if (String(Quickshell.clipboardText ?? "").length > 0) {
                                 KdeConnectService.sendClipboard(devId);
                                 KdeConnectService.dispatchActionFeedback(Translation.tr("Clipboard shared"), true);
@@ -503,7 +516,7 @@ StyledFlickable {
                             }
                             break;
                         }
-                        case "file_upload":
+                        case "file":
                             KdeConnectService.sendFile(devId);
                             KdeConnectService.dispatchActionFeedback(Translation.tr("Pick a file to send…"), true);
                             break;
