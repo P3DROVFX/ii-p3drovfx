@@ -120,8 +120,11 @@ Singleton {
     // Single source of truth for "where the lyrics think we are": player
     // position corrected by the user's sync offset. Used by the sync itself and
     // by anything that has to reason about gaps between lines.
+    // MPRIS players are read through the shell's track clock, never the raw
+    // `position`: browsers answer a track change with the previous song's time,
+    // which put the lyrics minutes ahead (MprisController.trackClocks).
     readonly property real syncPosition: Math.max(0,
-        (root.activePlayer?.position ?? 0)
+        (root.activePlayer ? MprisController.trackPositionOf(root.activePlayer) : 0)
         + ((Config.options.background.mediaMode.lyricsOffsetMs ?? 0) / 1000))
 
     // LRCLib flags a track as instrumental. That is a real answer, not a

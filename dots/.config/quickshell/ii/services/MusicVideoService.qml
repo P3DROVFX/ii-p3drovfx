@@ -176,7 +176,9 @@ Singleton {
         if (!player)
             return 0;
         player.positionChanged();
-        return Math.max(0, Number(player.position) || 0);
+        // Through the track clock: a browser's raw position carries the previous
+        // track's time after a track change (MprisController.trackClocks).
+        return Math.max(0, Number(MprisController.trackPositionOf(player)) || 0);
     }
 
     /// Current music position in seconds: the calibrated clock while it is valid,

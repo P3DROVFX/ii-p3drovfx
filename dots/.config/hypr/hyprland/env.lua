@@ -50,6 +50,32 @@ hl.env("XDG_MENU_PREFIX", "plasma-")
 -- (quickshell/ii/scripts/videos/build-mpv-wallpaper-plugin.sh).
 prepend_unique("QML_IMPORT_PATH", { home_dir .. "/.local/lib/qt6/qml" })
 
+-- Qt 6.12.0 started recycling a Text's glyph nodes on every text update, and when
+-- the batch renderer had promoted that text node to a batch root the recycled nodes
+-- never get a renderer matrix back: the next sync dereferences it on the render
+-- thread (QSGInternalTextNode::addGlyphs → segfault, QTBUG-151670, fixed after
+-- 6.12.0 in qtdeclarative c3c6897213). Media mode hits it on exit, when the shell
+-- colours are restored and every Text repaints. Raising both thresholds keeps
+-- text nodes from ever becoming batch roots; the node threshold alone is not enough,
+-- Qt then falls back to the vertex one. Only for 6.12.0: elsewhere batch roots are
+-- what keep big animated subtrees from re-uploading their geometry every frame.
+local function qt_is(version)
+    for _, dir in ipairs({ "/usr/lib", "/usr/lib64", "/usr/lib/x86_64-linux-gnu" }) do
+        local f = io.open(dir .. "/libQt6Core.so." .. version, "r")
+        if f then
+            f:close()
+            return true
+        end
+    end
+    return false
+end
+
+if qt_is("6.12.0") then
+    for _, name in ipairs({ "QSG_RENDERER_BATCH_NODE_THRESHOLD", "QSG_RENDERER_BATCH_VERTEX_THRESHOLD" }) do
+        if not os.getenv(name) then hl.env(name, "2147483647") end
+    end
+end
+
 -- Virtual environment
 hl.env("ILLOGICAL_IMPULSE_VIRTUAL_ENV", home_dir .. "/.local/state/quickshell/.venv")
 

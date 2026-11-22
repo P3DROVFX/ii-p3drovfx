@@ -262,8 +262,13 @@ Item {
                 // MPRIS players can briefly report a position past the end of the
                 // track (most visibly right after a seek). Clamping here keeps a
                 // 3 minute song from ever displaying as 15 minutes.
-                readonly property real reportedPosition: Math.max(0,
-                    Math.min(trackLength, coverArt.player?.position ?? 0))
+                // Through the shell's track clock for MPRIS players (see
+                // MprisController.trackClocks): the raw position of a browser
+                // carries the previous track's time and pinned the bar at 100 %.
+                readonly property real reportedPosition: Math.max(0, Math.min(trackLength,
+                    coverArt.player?.dbusName !== undefined
+                        ? MprisController.trackPositionOf(coverArt.player)
+                        : (coverArt.player?.position ?? 0)))
                 // While a drag is in flight, and until the player confirms the new
                 // position, the slider owns its own value.
                 property real pendingSeekPosition: -1
