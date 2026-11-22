@@ -18,7 +18,9 @@
 //!   open the whole session and repeats the last picture while no new one comes (a
 //!   decoder restarting, the phone reconfiguring its camera, a Wi-Fi hiccup), so apps
 //!   reading the camera never see it vanish. A loopback device with exclusive caps is
-//!   a camera only while something writes to it.
+//!   a camera only while something writes to it, and emits no uevent when it flips, so
+//!   WirePlumber never creates a PipeWire source for it; v4l2 mode therefore feeds a
+//!   best-effort `pipewiresink` twin alongside unless PipeWire already lists the device.
 //!
 //! A phone whose socket drops gets [`RECONNECT_GRACE`] to come back with the same token
 //! before the session ends.
@@ -262,7 +264,7 @@ async fn run(conns: &mut mpsc::UnboundedReceiver<Ws>, output: &Output, mut cfg_r
                                 Some(w) => w,
                                 None => {
                                     let size = m.turned(cfg);
-                                    let Some(w) = Writer::start(output, size) else { return "device" };
+                                    let Some(w) = Writer::start(output, size).await else { return "device" };
                                     crate::emit(json!({"ev": "cameraLive", "dev": dev, "sid": sid, "w": size.0, "h": size.1,
                                         "sink": if *output == Output::PipeWire { "pipewire" } else { "v4l2" }}));
                                     &*writer.insert(w)
@@ -363,7 +365,7 @@ struct Decoder {
 }
 
 impl Decoder {
-    fn start(m: Meta, cfg: Cfg, size: (u32, u32), generation: u64, exit: mpsc::UnboundedSender<u64>, frames: mpsc::Sender<Vec<u8>>) -> Option<Decoder> {
+    fn start(m: Meta, cfg: Cfg, size: (u32, u32), generation: u64, exit: mpsc::UnboundedSender<u64>, frames: FrameSink) -> Option<Decoder> {
         let rot = (m.rot + cfg.rotate) % 360;
         let mut vf: Vec<String> = Vec::new();
         match rot {
@@ -405,7 +407,7 @@ impl Decoder {
                     }
                     // A writer behind (a PipeWire camera nobody reads blocks) loses this
                     // picture rather than stalling the decoder and, through it, the socket.
-                    if let Err(mpsc::error::TrySendError::Closed(_)) = frames.try_send(buf) {
+                    if let Err(mpsc::error::TrySendError::Closed(_)) = frames.try_send(Arc::new(buf)) {
                         break;
                     }
                 }
@@ -432,14 +434,31 @@ impl Decoder {
     }
 }
 
-/// The camera itself: one child for the whole session, fed raw pictures (and the last
-/// one again while none comes). Dropping it ends the child and with it the camera.
+#[derive(Clone)]
+struct FrameSink {
+    primary: mpsc::Sender<Arc<Vec<u8>>>,
+    twin: Option<mpsc::Sender<Arc<Vec<u8>>>>,
+}
+
+impl FrameSink {
+    fn try_send(&self, frame: Arc<Vec<u8>>) -> Result<(), mpsc::error::TrySendError<Arc<Vec<u8>>>> {
+        if let Some(twin) = &self.twin {
+            let _ = twin.try_send(Arc::clone(&frame));
+        }
+        self.primary.try_send(frame)
+    }
+}
+
+/// The camera itself: one primary child (plus a best-effort PipeWire twin in v4l2 mode)
+/// for the whole session, fed raw pictures (and the last one again while none comes).
+/// Dropping it ends all children and with them the camera.
 struct Writer {
     size: (u32, u32),
-    frames: mpsc::Sender<Vec<u8>>,
-    /// Fires when the child is gone (the device refused it, PipeWire went away).
+    frames: FrameSink,
+    /// Fires when the primary child is gone (the device refused it, PipeWire went away).
     dead: oneshot::Receiver<()>,
-    _task: AbortOnDrop,
+    _primary: AbortOnDrop,
+    _twin: Option<AbortOnDrop>,
 }
 
 struct AbortOnDrop(tokio::task::AbortHandle);
@@ -450,65 +469,115 @@ impl Drop for AbortOnDrop {
     }
 }
 
-impl Writer {
-    fn start(output: &Output, size: (u32, u32)) -> Option<Writer> {
-        let (w, h) = size;
-        let mut cmd = match output {
-            Output::V4l2(device) => {
-                let mut c = Command::new("ffmpeg");
-                c.args(["-hide_banner", "-loglevel", "error", "-nostats", "-f", "rawvideo", "-pix_fmt", "yuv420p", "-video_size"])
-                    .arg(format!("{w}x{h}"))
-                    .args(["-framerate", "30", "-i", "pipe:0"])
-                    .args(passthrough())
-                    .args(["-f", "v4l2"])
-                    .arg(device);
-                c
-            }
-            Output::PipeWire => {
-                let mut c = Command::new("gst-launch-1.0");
-                c.args(["-q", "fdsrc", "fd=0", "!", "rawvideoparse"])
-                    .arg(format!("width={w}"))
-                    .arg(format!("height={h}"))
-                    .args([
-                        "format=i420", "framerate=30/1", "!", "videoconvert", "!", "pipewiresink", "mode=provide", "sync=false",
-                        "client-name=ii-tools-camera",
-                        "stream-properties=\"props,media.class=Video/Source,media.role=Camera,node.name=ii-tools-camera,node.description=\\\"ii tools camera\\\"\"",
-                    ]);
-                c
-            }
-        };
-        let mut child = cmd.stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).kill_on_drop(true).spawn().ok()?;
-        let mut stdin = child.stdin.take()?;
-        // Two pictures in flight at most; a writer further behind drops the rest.
-        let (frames_tx, mut frames_rx) = mpsc::channel::<Vec<u8>>(2);
-        let (dead_tx, dead_rx) = oneshot::channel::<()>();
-        let task = tokio::spawn(async move {
-            let mut last: Option<Vec<u8>> = None;
-            let mut due = tokio::time::Instant::now() + REPEAT_EVERY;
-            loop {
-                tokio::select! {
-                    frame = frames_rx.recv() => {
-                        let Some(frame) = frame else { break };
-                        if stdin.write_all(&frame).await.is_err() {
+fn v4l2_cmd(device: &str, w: u32, h: u32) -> Command {
+    let mut c = Command::new("ffmpeg");
+    c.args(["-hide_banner", "-loglevel", "error", "-nostats", "-f", "rawvideo", "-pix_fmt", "yuv420p", "-video_size"])
+        .arg(format!("{w}x{h}"))
+        .args(["-framerate", "30", "-i", "pipe:0"])
+        .args(passthrough())
+        .args(["-f", "v4l2"])
+        .arg(device);
+    c
+}
+
+fn pipewire_cmd(w: u32, h: u32) -> Command {
+    let mut c = Command::new("gst-launch-1.0");
+    c.args(["-q", "fdsrc", "fd=0", "!", "rawvideoparse"])
+        .arg(format!("width={w}"))
+        .arg(format!("height={h}"))
+        .args([
+            "format=i420", "framerate=30/1", "!", "videoconvert", "!", "pipewiresink", "mode=provide", "sync=false",
+            "client-name=ii-tools-camera",
+            "stream-properties=\"props,media.class=Video/Source,media.role=Camera,node.name=ii-tools-camera,node.description=\\\"ii tools camera\\\"\"",
+        ]);
+    c
+}
+
+/// Whether PipeWire already exposes `device` as a Video/Source (e.g. exclusive_caps=0,
+/// or WirePlumber restarted while a writer was open); failures assume false.
+async fn has_pipewire_source(device: &str) -> bool {
+    let mut cmd = Command::new("pw-dump");
+    cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null()).kill_on_drop(true);
+    let Ok(Ok(out)) = timeout(Duration::from_secs(2), cmd.output()).await else {
+        return false;
+    };
+    if !out.status.success() {
+        return false;
+    }
+    let Ok(Value::Array(objs)) = serde_json::from_slice::<Value>(&out.stdout) else {
+        return false;
+    };
+    objs.iter().any(|obj| {
+        let props = &obj["info"]["props"];
+        props["media.class"].as_str() == Some("Video/Source")
+            && props["api.v4l2.path"].as_str() == Some(device)
+    })
+}
+
+fn spawn_writer_child(mut cmd: Command, dead: Option<oneshot::Sender<()>>) -> Option<(mpsc::Sender<Arc<Vec<u8>>>, AbortOnDrop)> {
+    let mut child = cmd.stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).kill_on_drop(true).spawn().ok()?;
+    let mut stdin = child.stdin.take()?;
+    // Two pictures in flight at most; a writer further behind drops the rest.
+    let (frames_tx, mut frames_rx) = mpsc::channel::<Arc<Vec<u8>>>(2);
+    let task = tokio::spawn(async move {
+        let mut last: Option<Arc<Vec<u8>>> = None;
+        let mut due = tokio::time::Instant::now() + REPEAT_EVERY;
+        loop {
+            tokio::select! {
+                frame = frames_rx.recv() => {
+                    let Some(frame) = frame else { break };
+                    if stdin.write_all(&frame).await.is_err() {
+                        break;
+                    }
+                    last = Some(frame);
+                    due = tokio::time::Instant::now() + REPEAT_EVERY;
+                }
+                _ = sleep_until(due), if last.is_some() => {
+                    if let Some(f) = &last {
+                        if stdin.write_all(f).await.is_err() {
                             break;
                         }
-                        last = Some(frame);
-                        due = tokio::time::Instant::now() + REPEAT_EVERY;
                     }
-                    _ = sleep_until(due), if last.is_some() => {
-                        if let Some(f) = &last {
-                            if stdin.write_all(f).await.is_err() {
-                                break;
-                            }
-                        }
-                        due = tokio::time::Instant::now() + REPEAT_EVERY;
-                    }
-                    _ = child.wait() => break,
+                    due = tokio::time::Instant::now() + REPEAT_EVERY;
                 }
+                _ = child.wait() => break,
             }
-            let _ = child.kill().await;
+        }
+        let _ = child.kill().await;
+        if let Some(dead_tx) = dead {
             let _ = dead_tx.send(());
-        });
-        Some(Writer { size, frames: frames_tx, dead: dead_rx, _task: AbortOnDrop(task.abort_handle()) })
+        }
+    });
+    Some((frames_tx, AbortOnDrop(task.abort_handle())))
+}
+
+impl Writer {
+    async fn start(output: &Output, size: (u32, u32)) -> Option<Writer> {
+        let (w, h) = size;
+        let need_twin = match output {
+            Output::V4l2(device) => !has_pipewire_source(device).await,
+            Output::PipeWire => false,
+        };
+        let cmd = match output {
+            Output::V4l2(device) => v4l2_cmd(device, w, h),
+            Output::PipeWire => pipewire_cmd(w, h),
+        };
+        let (dead_tx, dead_rx) = oneshot::channel::<()>();
+        let (primary_tx, primary_task) = spawn_writer_child(cmd, Some(dead_tx))?;
+        let (twin_tx, twin_task) = if need_twin {
+            match spawn_writer_child(pipewire_cmd(w, h), None) {
+                Some((tx, task)) => (Some(tx), Some(task)),
+                None => (None, None),
+            }
+        } else {
+            (None, None)
+        };
+        Some(Writer {
+            size,
+            frames: FrameSink { primary: primary_tx, twin: twin_tx },
+            dead: dead_rx,
+            _primary: primary_task,
+            _twin: twin_task,
+        })
     }
 }
