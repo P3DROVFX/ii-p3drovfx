@@ -564,14 +564,26 @@ impl WriterQueue {
         true
     }
 
-    /// A sound packet. Half a second waiting is stale: the oldest goes first.
+    /// A sound packet. Half a second waiting is stale: the oldest goes first, keeping any OpusHead.
     fn push_prio(&self, payload: Vec<u8>) -> bool {
         let mut g = self.inner.lock().unwrap();
         if g.closed {
             return false;
         }
-        if g.prio.len() >= AUDIO_QUEUE {
-            g.prio.pop_front();
+        let is_head = payload.first() == Some(&8);
+        if is_head {
+            // A fresh OpusHead replaces any leftover packets from an earlier capture.
+            g.prio.clear();
+        } else if g.prio.len() >= AUDIO_QUEUE {
+            let head_at_front = g
+                .prio
+                .front()
+                .is_some_and(|i| matches!(&i.msg, Message::Binary(b) if b.first() == Some(&8)));
+            if head_at_front && g.prio.len() > 1 {
+                g.prio.remove(1);
+            } else {
+                g.prio.pop_front();
+            }
         }
         g.prio.push_back(WriterItem { enqueued_at: Instant::now(), video_bytes: 0, is_frame: false, msg: Message::Binary(payload.into()) });
         self.notify.notify_one();
@@ -1212,6 +1224,8 @@ async fn run_ws_conn((ws, wants_udp): PhoneConn, sess: &mut WsSession, conns: &m
                     return WsConnEnd::End("stopped");
                 }
                 let src = sess.audio_src.borrow_and_update().clone();
+                // Stop the previous capture before opening the next (e.g. default sink switch).
+                sess.audio = None;
                 sess.audio = src.and_then(|s| Audio::start(&s));
                 crate::emit(json!({"ev": "screenAudio", "dev": sess.dev, "sid": sess.sid, "on": sess.audio.is_some()}));
             }

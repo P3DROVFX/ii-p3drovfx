@@ -1129,6 +1129,16 @@ fi`]
                 onToggled: value => Config.options.iiTools.screen.wireless = value
             }
 
+            AppToggleRow {
+                Layout.topMargin: 4
+                visible: Config.options.iiTools.screen.enable && Config.options.iiTools.screen.wireless
+                symbol: "volume_up"
+                title: Translation.tr("Phone as a monitor: keep the PC's sound")
+                description: Translation.tr("Play sound on both this PC and the phone during a wireless monitor session. Off moves sound exclusively to the phone")
+                checked: Config.options.iiTools.screen.keepPcAudio
+                onToggled: value => Config.options.iiTools.screen.keepPcAudio = value
+            }
+
             // The screen goes over USB when Wi-Fi is off: adb carries it.
             AppSettingRow {
                 Layout.topMargin: 4

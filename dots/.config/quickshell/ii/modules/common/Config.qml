@@ -3014,6 +3014,9 @@ Singleton {
                     property bool enable: true
                     // The screen may go over Wi-Fi through the link when no USB is plugged.
                     property bool wireless: true
+                    // Keep playing on this PC too (capture default sink's monitor) instead
+                    // of moving every stream onto a silent virtual sink.
+                    property bool keepPcAudio: true
                 }
                 // The phone's camera as this PC's webcam over ii link, instead of DroidCam.
                 property JsonObject camera: JsonObject {
