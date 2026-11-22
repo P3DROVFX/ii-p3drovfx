@@ -13,11 +13,11 @@
 //! Both live on one thread of their own, fed by a channel, and exist only while a phone
 //! has its touchpad open (the keyboard alone while it is a slide clicker).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::io::{Seek, Write};
 use std::os::fd::AsFd;
 use std::sync::mpsc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use evdev::uinput::VirtualDevice;
 use evdev::{AbsInfo, AbsoluteAxisCode, AttributeSet, EventType, InputEvent, KeyCode, PropType, UinputAbsSetup};
@@ -32,12 +32,20 @@ use wayland_protocols_misc::zwp_virtual_keyboard_v1::client::{
 /// Units per millimetre on the virtual touchpad.
 const RES: i32 = 40;
 const SLOTS: i32 = 5;
+const MAX_DELAY_MS: f64 = 40.0;
+const REANCHOR_LAG: Duration = Duration::from_millis(120);
+const SKIP_LAG: Duration = Duration::from_millis(40);
+const MIN_EMIT_GAP: Duration = Duration::from_millis(2);
+const INTERP_STEP_GAP: Duration = Duration::from_millis(3);
+const MAX_STEP_MM: f64 = 8.0;
+const MAX_INTERP_STEPS: usize = 8;
 
 pub enum Cmd {
     /// A phone opened its touchpad: its size in mm. `reply` carries an error back.
     Start { dev: String, w: f64, h: f64, reply: Box<dyn Fn(Value) + Send> },
     /// Every finger down now, `[id, x, y]` with x, y in 0–1. Empty: all lifted.
-    Frame { dev: String, fingers: Vec<(i64, f64, f64)> },
+    /// `ts` is the phone's monotonic uptime in ms, used to replay bursts at their real cadence.
+    Frame { dev: String, fingers: Vec<(i64, f64, f64)>, ts: Option<u64> },
     Button { dev: String, button: String, down: bool },
     Text { dev: String, text: String },
     Key { dev: String, key: String, mods: Vec<String> },
@@ -64,93 +72,339 @@ pub fn spawn() -> mpsc::Sender<Cmd> {
     tx
 }
 
-fn run(rx: mpsc::Receiver<Cmd>) {
-    let mut owner = String::new();
-    let mut pad: Option<Pad> = None;
-    let mut kbd: Option<Keyboard> = None;
+struct InputState {
+    owner: String,
+    pad: Option<Pad>,
+    kbd: Option<Keyboard>,
     // Apart from the touchpad: one phone can be a screen while another is a touchpad.
-    let mut screen: Option<Pad> = None;
+    screen: Option<Pad>,
     // Its own keyboard, made on the first key: most screens never type.
-    let mut screen_kbd: Option<Keyboard> = None;
-    for cmd in rx {
-        match cmd {
-            Cmd::ScreenStart { w, h } => screen = Pad::screen(w, h).ok(),
-            Cmd::ScreenFrame { fingers } => {
-                if let Some(p) = screen.as_mut() {
-                    let _ = p.frame(&fingers);
-                }
+    screen_kbd: Option<Keyboard>,
+    pacer: Pacer,
+}
+
+fn run(rx: mpsc::Receiver<Cmd>) {
+    let mut st = InputState {
+        owner: String::new(),
+        pad: None,
+        kbd: None,
+        screen: None,
+        screen_kbd: None,
+        pacer: Pacer::new(),
+    };
+    loop {
+        // Drain queued commands first so frames arriving in one burst are paced together.
+        loop {
+            match rx.try_recv() {
+                Ok(cmd) => handle_cmd(cmd, &mut st),
+                Err(mpsc::TryRecvError::Empty) => break,
+                Err(mpsc::TryRecvError::Disconnected) => return,
             }
-            Cmd::ScreenText { text } if screen.is_some() => {
-                if screen_kbd.is_none() {
-                    screen_kbd = Keyboard::new().ok();
-                }
-                if let Some(k) = screen_kbd.as_mut() {
-                    let _ = k.text(&text);
-                }
-            }
-            Cmd::ScreenKey { key, mods } if screen.is_some() => {
-                if screen_kbd.is_none() {
-                    screen_kbd = Keyboard::new().ok();
-                }
-                if let Some(k) = screen_kbd.as_mut() {
-                    let _ = k.key(&key, &mods);
-                }
-            }
-            Cmd::ScreenStop => {
-                screen = None;
-                screen_kbd = None;
-            }
-            Cmd::Start { dev, w, h, reply } => {
-                owner = dev;
-                pad = None;
-                match Pad::new(w, h) {
-                    Ok(p) => pad = Some(p),
-                    Err(e) => reply(serde_json::json!({"t": "pad", "err": "uinput", "msg": e.to_string()})),
-                }
-                if kbd.is_none() {
-                    kbd = Keyboard::new().ok();
-                    if kbd.is_none() {
-                        reply(serde_json::json!({"t": "pad", "err": "keyboard"}));
-                    }
-                }
-            }
-            Cmd::Keys { dev, reply } => {
-                owner = dev;
-                pad = None;
-                if kbd.is_none() {
-                    kbd = Keyboard::new().ok();
-                    if kbd.is_none() {
-                        reply(serde_json::json!({"t": "present", "err": "keyboard"}));
-                    }
-                }
-            }
-            Cmd::Frame { dev, fingers } if dev == owner => {
-                if let Some(p) = pad.as_mut() {
-                    let _ = p.frame(&fingers);
-                }
-            }
-            Cmd::Button { dev, button, down } if dev == owner => {
-                if let Some(p) = pad.as_mut() {
-                    let _ = p.button(&button, down);
-                }
-            }
-            Cmd::Text { dev, text } if dev == owner => {
-                if let Some(k) = kbd.as_mut() {
-                    let _ = k.text(&text);
-                }
-            }
-            Cmd::Key { dev, key, mods } if dev == owner => {
-                if let Some(k) = kbd.as_mut() {
-                    let _ = k.key(&key, &mods);
-                }
-            }
-            Cmd::Stop { dev } if dev == owner => {
-                owner.clear();
-                pad = None;
-                kbd = None;
-            }
-            _ => {}
         }
+        let now = Instant::now();
+        if let Some(p) = st.pad.as_mut() {
+            st.pacer.emit_due(p, now);
+        } else {
+            st.pacer.reset(true);
+        }
+        let cmd = match st.pacer.next_due() {
+            Some(due) => {
+                let wait = due.saturating_duration_since(Instant::now());
+                match rx.recv_timeout(wait) {
+                    Ok(cmd) => cmd,
+                    Err(mpsc::RecvTimeoutError::Timeout) => continue,
+                    Err(mpsc::RecvTimeoutError::Disconnected) => return,
+                }
+            }
+            None => match rx.recv() {
+                Ok(cmd) => cmd,
+                Err(_) => return,
+            },
+        };
+        handle_cmd(cmd, &mut st);
+    }
+}
+
+fn handle_cmd(cmd: Cmd, st: &mut InputState) {
+    match cmd {
+        Cmd::ScreenStart { w, h } => st.screen = Pad::screen(w, h).ok(),
+        Cmd::ScreenFrame { fingers } => {
+            if let Some(p) = st.screen.as_mut() {
+                let _ = p.frame(&fingers);
+            }
+        }
+        Cmd::ScreenText { text } if st.screen.is_some() => {
+            if st.screen_kbd.is_none() {
+                st.screen_kbd = Keyboard::new().ok();
+            }
+            if let Some(k) = st.screen_kbd.as_mut() {
+                let _ = k.text(&text);
+            }
+        }
+        Cmd::ScreenKey { key, mods } if st.screen.is_some() => {
+            if st.screen_kbd.is_none() {
+                st.screen_kbd = Keyboard::new().ok();
+            }
+            if let Some(k) = st.screen_kbd.as_mut() {
+                let _ = k.key(&key, &mods);
+            }
+        }
+        Cmd::ScreenStop => {
+            st.screen = None;
+            st.screen_kbd = None;
+        }
+        Cmd::Start { dev, w, h, reply } => {
+            st.owner = dev;
+            st.pad = None;
+            st.pacer.reset(true);
+            match Pad::new(w, h) {
+                Ok(p) => st.pad = Some(p),
+                Err(e) => reply(serde_json::json!({"t": "pad", "err": "uinput", "msg": e.to_string()})),
+            }
+            if st.kbd.is_none() {
+                st.kbd = Keyboard::new().ok();
+                if st.kbd.is_none() {
+                    reply(serde_json::json!({"t": "pad", "err": "keyboard"}));
+                }
+            }
+        }
+        Cmd::Keys { dev, reply } => {
+            st.owner = dev;
+            st.pad = None;
+            st.pacer.reset(true);
+            if st.kbd.is_none() {
+                st.kbd = Keyboard::new().ok();
+                if st.kbd.is_none() {
+                    reply(serde_json::json!({"t": "present", "err": "keyboard"}));
+                }
+            }
+        }
+        Cmd::Frame { dev, fingers, ts } if dev == st.owner => {
+            if let Some(p) = st.pad.as_mut() {
+                match ts {
+                    Some(ts) => st.pacer.push(fingers, ts, Instant::now()),
+                    None => {
+                        st.pacer.reset(true);
+                        let _ = p.frame(&fingers);
+                    }
+                }
+            }
+        }
+        Cmd::Button { dev, button, down } if dev == st.owner => {
+            if let Some(p) = st.pad.as_mut() {
+                let _ = p.button(&button, down);
+            }
+        }
+        Cmd::Text { dev, text } if dev == st.owner => {
+            if let Some(k) = st.kbd.as_mut() {
+                let _ = k.text(&text);
+            }
+        }
+        Cmd::Key { dev, key, mods } if dev == st.owner => {
+            if let Some(k) = st.kbd.as_mut() {
+                let _ = k.key(&key, &mods);
+            }
+        }
+        Cmd::Stop { dev } if dev == st.owner => {
+            st.owner.clear();
+            st.pad = None;
+            st.kbd = None;
+            st.pacer.reset(true);
+        }
+        _ => {}
+    }
+}
+
+struct Anchor {
+    arrival: Instant,
+    ts: u64,
+}
+
+struct QueuedFrame {
+    fingers: Vec<(i64, f64, f64)>,
+    due: Instant,
+    finger_change: bool,
+}
+
+struct Pacer {
+    anchor: Option<Anchor>,
+    delay_ms: f64,
+    queue: VecDeque<QueuedFrame>,
+    last_queued_ids: Vec<i64>,
+    last_emitted: Vec<(i64, f64, f64)>,
+    min_next_emit: Option<Instant>,
+}
+
+impl Pacer {
+    fn new() -> Self {
+        Self {
+            anchor: None,
+            delay_ms: 0.0,
+            queue: VecDeque::new(),
+            last_queued_ids: Vec::new(),
+            last_emitted: Vec::new(),
+            min_next_emit: None,
+        }
+    }
+
+    fn reset(&mut self, clear_delay: bool) {
+        self.anchor = None;
+        if clear_delay {
+            self.delay_ms = 0.0;
+        }
+        self.queue.clear();
+        self.last_queued_ids.clear();
+        self.last_emitted.clear();
+        self.min_next_emit = None;
+    }
+
+    fn push(&mut self, fingers: Vec<(i64, f64, f64)>, ts: u64, now: Instant) {
+        let was_empty = self.last_queued_ids.is_empty();
+        let finger_change = fingers.is_empty() || was_empty || !same_ids(&self.last_queued_ids, &fingers);
+        self.last_queued_ids = fingers.iter().map(|f| f.0).collect();
+
+        let new_gesture = was_empty && !fingers.is_empty();
+        let due = match self.anchor.as_mut() {
+            Some(anchor) if !new_gesture && ts >= anchor.ts => {
+                let dt = Duration::from_millis(ts - anchor.ts);
+                let expected = anchor.arrival + dt;
+                if now < expected {
+                    // Anchor arrived with extra network delay; pull it back to the min-latency envelope.
+                    if let Some(earlier) = now.checked_sub(dt) {
+                        anchor.arrival = earlier;
+                    } else {
+                        anchor.arrival = now;
+                        anchor.ts = ts;
+                    }
+                    self.delay_ms = (self.delay_ms * 0.98).max(0.0);
+                } else {
+                    let late = now.duration_since(expected);
+                    if late > REANCHOR_LAG {
+                        anchor.arrival = now;
+                        anchor.ts = ts;
+                    } else {
+                        let late_ms = late.as_secs_f64() * 1000.0;
+                        if late_ms > self.delay_ms {
+                            self.delay_ms = (self.delay_ms + 0.35 * (late_ms - self.delay_ms)).min(MAX_DELAY_MS);
+                        } else {
+                            self.delay_ms = (self.delay_ms - 0.02 * (self.delay_ms - late_ms)).max(0.0);
+                        }
+                    }
+                }
+                let dt_anchored = Duration::from_millis(ts.saturating_sub(anchor.ts));
+                anchor.arrival + dt_anchored + Duration::from_secs_f64(self.delay_ms / 1000.0)
+            }
+            _ => {
+                self.anchor = Some(Anchor { arrival: now, ts });
+                now + Duration::from_secs_f64(self.delay_ms / 1000.0)
+            }
+        };
+
+        self.queue.push_back(QueuedFrame { fingers, due, finger_change });
+        if self.queue.len() > 128 {
+            let last = self.queue.pop_back();
+            self.queue.retain(|f| f.finger_change);
+            if let Some(f) = last {
+                self.queue.push_back(f);
+            }
+        }
+    }
+
+    fn next_due(&self) -> Option<Instant> {
+        let front = self.queue.front()?;
+        Some(match self.min_next_emit {
+            Some(min_t) => front.due.max(min_t),
+            None => front.due,
+        })
+    }
+
+    fn emit_due(&mut self, pad: &mut Pad, now: Instant) {
+        if let Some(min_t) = self.min_next_emit {
+            if now < min_t {
+                return;
+            }
+        }
+        // Skip intermediate stale move frames in a behind-schedule burst, preserving finger changes.
+        while let Some(front) = self.queue.front() {
+            if front.due > now {
+                return;
+            }
+            let skip = !front.finger_change
+                && now.saturating_duration_since(front.due) > SKIP_LAG
+                && self.queue.get(1).is_some_and(|next| next.due <= now && !next.finger_change);
+            if skip {
+                self.queue.pop_front();
+            } else {
+                break;
+            }
+        }
+        let Some(frame) = self.queue.pop_front() else { return };
+
+        let steps = jump_steps(pad, &self.last_emitted, &frame.fingers);
+        if steps > 1 {
+            let mut interp = Vec::with_capacity(steps - 1);
+            for i in 1..steps {
+                let t = i as f64 / steps as f64;
+                let pts: Vec<(i64, f64, f64)> = self
+                    .last_emitted
+                    .iter()
+                    .map(|&(id, px, py)| {
+                        if let Some(&(_, nx, ny)) = frame.fingers.iter().find(|f| f.0 == id) {
+                            (id, px + (nx - px) * t, py + (ny - py) * t)
+                        } else {
+                            (id, px, py)
+                        }
+                    })
+                    .collect();
+                interp.push(QueuedFrame {
+                    fingers: pts,
+                    due: now + INTERP_STEP_GAP * (i - 1) as u32,
+                    finger_change: false,
+                });
+            }
+            let first_pts = interp.remove(0).fingers;
+            let _ = pad.frame(&first_pts);
+            self.last_emitted = first_pts;
+            self.queue.push_front(QueuedFrame {
+                fingers: frame.fingers,
+                due: now + INTERP_STEP_GAP * (steps - 1) as u32,
+                finger_change: frame.finger_change,
+            });
+            for step in interp.into_iter().rev() {
+                self.queue.push_front(step);
+            }
+            self.min_next_emit = Some(now + INTERP_STEP_GAP);
+        } else {
+            let _ = pad.frame(&frame.fingers);
+            self.last_emitted = frame.fingers;
+            self.min_next_emit = Some(now + MIN_EMIT_GAP);
+        }
+    }
+}
+
+fn same_ids(prev: &[i64], fingers: &[(i64, f64, f64)]) -> bool {
+    prev.len() == fingers.len() && fingers.iter().all(|(id, _, _)| prev.contains(id))
+}
+
+fn jump_steps(pad: &Pad, prev: &[(i64, f64, f64)], next: &[(i64, f64, f64)]) -> usize {
+    if prev.is_empty() || next.is_empty() {
+        return 1;
+    }
+    let w_mm = pad.max_x as f64 / RES as f64;
+    let h_mm = pad.max_y as f64 / RES as f64;
+    let mut max_mm = 0.0_f64;
+    for &(id, nx, ny) in next {
+        if let Some(&(_, px, py)) = prev.iter().find(|f| f.0 == id) {
+            let d = ((nx - px) * w_mm).hypot((ny - py) * h_mm);
+            if d > max_mm {
+                max_mm = d;
+            }
+        }
+    }
+    if max_mm <= MAX_STEP_MM {
+        1
+    } else {
+        (max_mm / MAX_STEP_MM).ceil().clamp(2.0, MAX_INTERP_STEPS as f64) as usize
     }
 }
 

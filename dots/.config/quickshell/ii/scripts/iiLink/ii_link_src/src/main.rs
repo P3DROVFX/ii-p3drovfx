@@ -708,7 +708,8 @@ fn input_cmd(dev: &str, m: &Value, tx: &mpsc::UnboundedSender<Message>) -> Optio
                 let f = f.as_array()?;
                 Some((f.first()?.as_i64()?, f.get(1)?.as_f64()?, f.get(2)?.as_f64()?))
             }).collect();
-            Some(input::Cmd::Frame { dev, fingers })
+            let ts = m["ts"].as_u64();
+            Some(input::Cmd::Frame { dev, fingers, ts })
         }
     }
 }
