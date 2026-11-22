@@ -19,8 +19,8 @@ AbstractBackgroundWidget {
 
     visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "custom" || root.lockBehavior === "center" || root.lockBehavior === "lockOnly"
     opacity: {
-        if (root.lockBehavior === "lockOnly") return GlobalStates.screenLocked ? 1 : 0;
-        if (GlobalStates.screenLocked && !visibleWhenLocked) return 0;
+        if (root.lockBehavior === "lockOnly") return root.lockLookHere ? 1 : 0;
+        if (root.lockLookHere && !visibleWhenLocked) return 0;
         return 1;
     }
 
