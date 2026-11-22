@@ -39,7 +39,16 @@ Singleton {
             ["q", "w", "f", "p", "g", "j", "l", "u", "y", ";", "[", "]"],
             ["a", "r", "s", "t", "d", "h", "n", "e", "i", "o", "'"],
             ["z", "x", "c", "v", "b", "k", "m", ",", ".", "/"]
+        ],
+        jcuken: [
+            ["й", "ц", "у", "к", "е", "н", "г", "ш", "щ", "з", "х", "ъ"],
+            ["ф", "ы", "в", "а", "п", "р", "о", "л", "д", "ж", "э"],
+            ["я", "ч", "с", "м", "и", "т", "ь", "б", "ю", "."]
         ]
+    })
+
+    readonly property var numberRows: ({
+        jcuken: ["ё", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "="]
     })
 
     readonly property var labels: ({
@@ -48,7 +57,22 @@ Singleton {
         azerty: "azerty",
         dvorak: "dvorak",
         colemak: "colemak",
+        jcuken: "йцукен",
         vial: "vial"
+    })
+
+    readonly property var scripts: ({
+        qwerty: "latin",
+        qwertz: "latin",
+        azerty: "latin",
+        dvorak: "latin",
+        colemak: "latin",
+        jcuken: "cyrillic"
+    })
+
+    readonly property var nativeLayouts: ({
+        latin: "qwerty",
+        cyrillic: "jcuken"
     })
 
     /**
@@ -62,7 +86,25 @@ Singleton {
         return root.layouts[layoutId] ?? root.layouts.qwerty;
     }
 
+    function numberRowFor(layoutId) {
+        return root.numberRows[layoutId] ?? null;
+    }
+
     function labelFor(layoutId) {
         return root.labels[layoutId] ?? layoutId;
+    }
+
+    function scriptOf(layoutId) {
+        if (layoutId === root.liveLayoutId)
+            return "";
+        return root.scripts[layoutId] ?? "latin";
+    }
+
+    function effectiveLayout(layoutId, targetScript) {
+        if (layoutId === root.liveLayoutId || !targetScript)
+            return layoutId;
+        if (root.scriptOf(layoutId) === targetScript)
+            return layoutId;
+        return root.nativeLayouts[targetScript] ?? layoutId;
     }
 }

@@ -5,18 +5,35 @@ function classicFinger(column) {
     return [-5, -4, -3, -2, -2, 2, 2, 3, 4, 5][column] || 5;
 }
 
-function classicBoard(rows, label) {
+function classicNumberFinger(column) {
+    return [-5, -5, -4, -3, -2, -2, 2, 2, 3, 4, 5, 5, 5][column] || 5;
+}
+
+function classicBoard(rows, label, numberRow) {
     const keys = [], entries = [], fingers = [];
-    const width = Math.max.apply(null, rows.map(row => row.length));
+    const maxAlpha = Math.max.apply(null, rows.map(row => row.length));
+    const hasNumberRow = Array.isArray(numberRow) && numberRow.length > 0;
+    const width = hasNumberRow ? Math.max(numberRow.length, maxAlpha + 1.5) : maxAlpha;
+    let yOffset = 0;
+    if (hasNumberRow) {
+        numberRow.forEach((char, col) => {
+            keys.push({row: 0, col: col, x: col, y: 0, w: 1, h: 1, r: 0, rx: 0, ry: 0});
+            entries.push({label: char, char: char});
+            fingers.push(classicNumberFinger(col));
+        });
+        yOffset = 1;
+    }
     rows.forEach((row, r) => row.forEach((char, col) => {
-        keys.push({row: r, col: col, x: (width - row.length) / 2 + col, y: r, w: 1, h: 1, r: 0, rx: 0, ry: 0});
+        const x = hasNumberRow ? 1.5 + r * 0.5 + col : (width - row.length) / 2 + col;
+        keys.push({row: r + yOffset, col: col, x: x, y: r + yOffset, w: 1, h: 1, r: 0, rx: 0, ry: 0});
         entries.push({label: char, char: char});
         fingers.push(classicFinger(col));
     }));
-    keys.push({row: rows.length, col: 0, x: (width - 7) / 2, y: rows.length, w: 7, h: 1, r: 0, rx: 0, ry: 0});
+    const spaceRow = rows.length + yOffset;
+    keys.push({row: spaceRow, col: 0, x: (width - 7) / 2, y: spaceRow, w: 7, h: 1, r: 0, rx: 0, ry: 0});
     entries.push({label: label, char: " "});
     fingers.push(6);
-    return {keys: keys, entries: entries, fingers: fingers, width: width, height: rows.length + 1};
+    return {keys: keys, entries: entries, fingers: fingers, width: width, height: spaceRow + 1};
 }
 
 function center(key) {

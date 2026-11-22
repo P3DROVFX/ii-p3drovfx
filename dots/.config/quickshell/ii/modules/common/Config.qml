@@ -2071,7 +2071,7 @@ Singleton {
             "search.typingTest.wordlistSize": ["standard", "extended"],
             "search.typingTest.caretStyle": ["line", "block", "underline", "off"],
             "search.appearance.resultsStyle": ["classic", "expressive"],
-            "search.typingTest.keyboard.layout": ["qwerty", "qwertz", "azerty", "dvorak", "colemak", "vial"],
+            "search.typingTest.keyboard.layout": ["qwerty", "qwertz", "azerty", "dvorak", "colemak", "jcuken", "vial"],
             "search.typingTest.sounds.theme": ["click1", "click2", "click3", "click4", "click5", "click6", "click7"],
             "search.typingTest.sounds.errorTheme": ["error1", "error2", "error3", "error4"],
             "search.speedTest.mode": ["both", "download", "upload"],
@@ -7938,7 +7938,7 @@ Singleton {
                     property bool finishOnLastWord: true
                     property JsonObject keyboard: JsonObject {
                         property bool enable: true
-                        // qwerty, qwertz, azerty, dvorak, colemak, or "vial" for the
+                        // qwerty, qwertz, azerty, dvorak, colemak, jcuken, or "vial" for the
                         // keyboard actually plugged in, read from its own firmware.
                         property string layout: "qwerty"
                         property bool highlightNextKey: true

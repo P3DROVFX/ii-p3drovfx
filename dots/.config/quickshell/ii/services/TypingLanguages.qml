@@ -125,6 +125,11 @@ Singleton {
                     throw new Error("empty words");
                 const entry = root.languageFor(root.requestedLanguageId)
                     ?? root.languageFor(root.fallbackLanguageId);
+                const rawEquiv = parsed?.equivalentChars;
+                const equivalentChars = (rawEquiv && typeof rawEquiv === "object" && !Array.isArray(rawEquiv))
+                    ? rawEquiv : ({});
+                const script = String(parsed?.script ?? entry.script
+                    ?? (words.some(word => /[\u0400-\u04FF]/.test(word)) ? "cyrillic" : "latin"));
                 const pack = {
                     id: entry.id,
                     name: String(parsed?.name ?? entry.label),
@@ -132,6 +137,8 @@ Singleton {
                     rightToLeft: Boolean(parsed?.rightToLeft ?? entry.rightToLeft),
                     joiningScript: Boolean(parsed?.joiningScript ?? entry.joiningScript),
                     preferredFont: String(parsed?.preferredFont ?? ""),
+                    script: script,
+                    equivalentChars: equivalentChars,
                     words: words
                 };
                 root.packCache = Object.assign({}, root.packCache, { [pack.id]: pack });

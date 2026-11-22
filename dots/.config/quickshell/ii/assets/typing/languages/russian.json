@@ -1,6 +1,11 @@
 {
   "name": "russian_1k",
   "bcp47": "ru-RU",
+  "script": "cyrillic",
+  "equivalentChars": {
+    "ё": ["е"],
+    "Ё": ["Е"]
+  },
   "rightToLeft": false,
   "joiningScript": false,
   "orderedByFrequency": true,

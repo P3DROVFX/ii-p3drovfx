@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
 
 /**
@@ -28,6 +29,7 @@ Item {
 
     readonly property real lineHeight: Math.round(root.fontSize * 1.62)
     readonly property real charWidth: Math.max(1, sizingMetrics.advanceWidth)
+    readonly property color untypedColor: ColorUtils.mix(Appearance.m3colors.m3onSurface, Appearance.m3colors.m3background, 0.45)
     readonly property var targetWords: root.engine?.targetWords ?? []
     readonly property int currentWordIndex: root.engine?.currentWordIndex ?? 0
     readonly property string typedCurrentWord: root.wordInput(root.currentWordIndex)
@@ -87,10 +89,15 @@ Item {
     function charColor(target: string, typed: string, index: int): color {
         const typedCharacters = Array.from(typed);
         if (index >= typedCharacters.length)
-            return Appearance.colors.colSubtext;
+            return root.untypedColor;
         if (root.blindMode)
             return Appearance.colors.colOnSurface;
-        return typedCharacters[index] === Array.from(target)[index]
+        const targetChar = Array.from(target)[index];
+        const typedChar = typedCharacters[index];
+        const matched = root.engine?.charsMatch
+            ? root.engine.charsMatch(targetChar, typedChar)
+            : typedChar === targetChar;
+        return matched
             ? Appearance.colors.colOnSurface
             : Appearance.colors.colError;
     }
@@ -214,12 +221,12 @@ Item {
                             }
 
                             StyledText {
-                                visible: wordItem.extras.length > 0
                                 text: wordItem.extras
                                 font.family: Appearance.font.family.monospace
                                 font.pixelSize: root.fontSize
                                 font.weight: Font.Medium
                                 color: root.blindMode ? Appearance.colors.colOnSurface : Appearance.colors.colError
+                                visible: wordItem.extras.length > 0
                                 opacity: root.blindMode ? 1 : 0.75
                             }
                         }

@@ -132,7 +132,7 @@
       "rightToLeft": false,
       "joiningScript": false,
       "wordCount": 996,
-      "sha256": "0a5f5bcd79c5ac9682f5b1015e269bc6577c99dad949ec9fbd1aedf5eb3d0a1f"
+      "sha256": "f87b1d050ce7d20927099b9b15001d88804d1818dcb97641d65d13776cf1e7ba"
     },
     {
       "id": "russian_extended",
@@ -142,7 +142,7 @@
       "rightToLeft": false,
       "joiningScript": false,
       "wordCount": 9866,
-      "sha256": "a3a2781fe3b0b44df8fe11867ce463d88b5027ba875ac96c6704dc018e260aaf"
+      "sha256": "b8740c786cd86cc681c3b929062cc752746375cff1da6b4368a3735540da0afe"
     }
   ]
 }

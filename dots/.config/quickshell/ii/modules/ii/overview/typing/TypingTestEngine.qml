@@ -21,8 +21,8 @@ QtObject {
     property bool finishOnLastWord: true
     property var languagePack: null
 
-    property int seed: 1
-    property int _randomState: 1
+    property real seed: 1
+    property real _randomState: 1
     property var targetWords: []
     property string targetText: ""
     // The target as code points, kept alongside the string so the per-key path
@@ -159,12 +159,34 @@ QtObject {
         x ^= x << 13;
         x ^= x >>> 17;
         x ^= x << 5;
-        root._randomState = x >>> 0;
-        return root._randomState / 4294967296;
+        const unsigned = x >>> 0;
+        root._randomState = unsigned;
+        return unsigned / 4294967296;
     }
 
     function randomIndex(length) {
         return Math.max(0, Math.min(length - 1, Math.floor(root.nextRandom() * length)));
+    }
+
+    function charsMatch(target, typed) {
+        if (target === typed)
+            return true;
+        const equiv = root.languagePack?.equivalentChars?.[target];
+        return Boolean(equiv && typeof equiv.indexOf === "function" && equiv.indexOf(typed) >= 0);
+    }
+
+    function wordsMatch(targetWord, typedWord) {
+        if (targetWord === typedWord)
+            return true;
+        const target = root.codePoints(targetWord);
+        const typed = root.codePoints(typedWord);
+        if (target.length !== typed.length)
+            return false;
+        for (let i = 0; i < target.length; i++) {
+            if (!root.charsMatch(target[i], typed[i]))
+                return false;
+        }
+        return true;
     }
 
     function decorateWord(word, index) {
@@ -183,13 +205,16 @@ QtObject {
         if (source.length === 0)
             return [];
         const generated = [];
-        let previous = "";
+        let prevIndex = -1;
         for (let index = 0; index < wordCount; index++) {
-            let word = source[root.randomIndex(source.length)];
-            if (source.length > 1 && word === previous)
-                word = source[(root.randomIndex(source.length - 1) + 1) % source.length];
-            previous = word;
-            generated.push(root.decorateWord(word, startIndex + index));
+            let wordIndex = root.randomIndex(source.length);
+            if (source.length > 1 && wordIndex === prevIndex) {
+                wordIndex = root.randomIndex(source.length - 1);
+                if (wordIndex >= prevIndex)
+                    wordIndex++;
+            }
+            prevIndex = wordIndex;
+            generated.push(root.decorateWord(source[wordIndex], startIndex + index));
         }
         return generated;
     }
@@ -205,7 +230,7 @@ QtObject {
             root.state = "loading";
             return;
         }
-        root.seed = reuseSeed ? root.seed : root.normalizeSeed(Math.floor(root.now()));
+        root.seed = reuseSeed ? root.normalizeSeed(root.seed) : root.normalizeSeed(Math.floor(root.now()));
         root._randomState = root.seed;
         root.applyTarget(root.targetRequired()
             ? root.makeTarget(root.mode === "words" ? root.wordLimit : 220, 0) : []);
@@ -259,7 +284,7 @@ QtObject {
             suffix++;
         const inserted = after.slice(prefix, after.length - suffix);
         for (let offset = 0; offset < inserted.length; offset++) {
-            const correct = !root.hasTarget || inserted[offset] === root.targetChars[prefix + offset];
+            const correct = !root.hasTarget || root.charsMatch(root.targetChars[prefix + offset], inserted[offset]);
             if (correct)
                 root.correctInputEvents++;
             else
@@ -294,7 +319,7 @@ QtObject {
         const words = String(text ?? "").split(" ");
         if (words.length !== root.wordLimit || root.targetWords.length < root.wordLimit)
             return false;
-        return words[words.length - 1] === root.targetWords[root.wordLimit - 1];
+        return root.wordsMatch(root.targetWords[root.wordLimit - 1], words[words.length - 1]);
     }
 
     function extendTargetIfNeeded() {
@@ -414,7 +439,7 @@ QtObject {
 
             const minLen = Math.min(typed.length, target.length);
             for (let c = 0; c < minLen; c++) {
-                if (typed[c] === target[c])
+                if (root.charsMatch(target[c], typed[c]))
                     correct++;
                 else
                     incorrect++;
@@ -426,7 +451,7 @@ QtObject {
                 missed += (target.length - typed.length);
 
             if (hasSpace && i < targets.length) {
-                if (inputWords[i] === targets[i])
+                if (root.wordsMatch(targets[i], inputWords[i]))
                     correct++;
                 else
                     incorrect++;

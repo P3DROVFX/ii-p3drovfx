@@ -27,7 +27,8 @@ Item {
     signal requestInputFocus
 
     readonly property bool vialMode: root.layoutId === TypingKeyboardLayouts.liveLayoutId
-    readonly property var classic: Fingers.classicBoard(TypingKeyboardLayouts.rowsFor(root.layoutId), TypingKeyboardLayouts.labelFor(root.layoutId))
+    readonly property var classic: Fingers.classicBoard(TypingKeyboardLayouts.rowsFor(root.layoutId),
+        TypingKeyboardLayouts.labelFor(root.layoutId), TypingKeyboardLayouts.numberRowFor(root.layoutId))
     readonly property var keys: root.vialMode ? VialKeyboard.keys : root.classic.keys
     readonly property var entries: root.vialMode ? VialKeyboard.activeLabels : root.classic.entries
     readonly property bool boardReady: !root.vialMode || VialKeyboard.ready
