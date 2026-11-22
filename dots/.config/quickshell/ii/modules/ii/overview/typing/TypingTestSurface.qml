@@ -382,7 +382,7 @@ Item {
                             font.family: Appearance.font.family.monospace
                             font.pixelSize: Appearance.font.pixelSize.huge
                             font.weight: Font.DemiBold
-                            color: viewport.translucent ? viewport.inkColor : Appearance.colors.colPrimary
+                            color: Appearance.colors.colPrimary
                         }
 
                         Item { Layout.fillWidth: true }
@@ -407,13 +407,13 @@ Item {
                                 MaterialSymbol {
                                     text: "language"
                                     iconSize: Appearance.font.pixelSize.normal
-                                    color: viewport.untypedColor
+                                    color: Appearance.colors.colSubtext
                                 }
                                 StyledText {
                                     text: TypingLanguages.languageFor(TypingLanguages.currentPack?.id)?.label
                                         ?? TypingLanguages.currentPack?.name ?? Translation.tr("Language")
                                     font.pixelSize: Appearance.font.pixelSize.small
-                                    color: viewport.untypedColor
+                                    color: Appearance.colors.colSubtext
                                 }
                             }
 
@@ -427,14 +427,14 @@ Item {
                             text: Translation.tr("%1 wpm").arg(String(Math.round(engine.wpm)))
                             font.family: Appearance.font.family.monospace
                             font.pixelSize: Appearance.font.pixelSize.small
-                            color: viewport.translucent ? viewport.untypedColor : Appearance.colors.colOnSurfaceVariant
+                            color: Appearance.colors.colOnSurfaceVariant
                         }
                         StyledText {
                             visible: root.options.showLiveAccuracy && engine.isRunning && engine.hasTarget
                             text: String(Math.round(engine.accuracy)) + "%"
                             font.family: Appearance.font.family.monospace
                             font.pixelSize: Appearance.font.pixelSize.small
-                            color: viewport.translucent ? viewport.untypedColor : Appearance.colors.colOnSurfaceVariant
+                            color: Appearance.colors.colOnSurfaceVariant
                         }
                     }
 
@@ -457,7 +457,7 @@ Item {
                         font.family: Appearance.font.family.monospace
                         font.pixelSize: root.options.fontSize
                         font.weight: Font.Medium
-                        color: engine.inputText.length > 0 ? viewport.inkColor : viewport.untypedColor
+                        color: engine.inputText.length > 0 ? Appearance.colors.colOnSurface : viewport.untypedColor
                     }
 
                     ColumnLayout {
