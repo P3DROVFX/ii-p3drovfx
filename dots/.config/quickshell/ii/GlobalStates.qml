@@ -2438,7 +2438,38 @@ Singleton {
         return Appearance.sizes.sidebarWidth + Math.max(0, activeCount - minTabs) * perTabWidth;
     }
 
-    readonly property real dashboardWidth: Appearance.sizes.sidebarWidth
+    // The control center: in the Default shell mode the dashboard can open as a floating
+    // card by the bar's dashboard button instead of the sidebar. It keeps dashboardPanelOpen
+    // as its open flag (keybinds, IPC and every button already drive it) but takes no screen
+    // edge: no sidebar width for the frame/popups to make room for, and no wallpaper parallax.
+    readonly property bool controlCenterActive: Config.ready && PanelFamily.isIi
+        && Config.options.sidebar.dashboardStyle === "controlCenter"
+        && !root.connectModeActive
+
+    readonly property real dashboardWidth: root.controlCenterActive ? 0 : Appearance.sizes.sidebarWidth
+
+    // Where the control center drops from: the bar's dashboard button on each screen,
+    // published by BarComponent. Items, not rects: the card maps them when it opens.
+    property var dashboardAnchorItems: ({})
+    property int dashboardAnchorRevision: 0
+
+    function setDashboardAnchor(screenName, item) {
+        if (!screenName)
+            return;
+        const next = Object.assign({}, root.dashboardAnchorItems);
+        next[screenName] = item;
+        root.dashboardAnchorItems = next;
+        root.dashboardAnchorRevision++;
+    }
+
+    function clearDashboardAnchor(screenName, item) {
+        if (!screenName || root.dashboardAnchorItems[screenName] !== item)
+            return;
+        const next = Object.assign({}, root.dashboardAnchorItems);
+        delete next[screenName];
+        root.dashboardAnchorItems = next;
+        root.dashboardAnchorRevision++;
+    }
 
     readonly property real leftSidebarTargetWidth: {
         if (!effectiveLeftOpen)
@@ -2564,7 +2595,7 @@ Singleton {
     // and stop as hard as the sidebar; a Behavior chasing the open flags in the wallpaper
     // itself would stack on the workspace chase. Consumers turn their own x Behaviors off
     // while this runs, so nothing smooths it twice.
-    property real dashboardParallaxProgress: dashboardPanelOpen ? 1 : 0
+    property real dashboardParallaxProgress: (dashboardPanelOpen && !controlCenterActive) ? 1 : 0
     property real policiesParallaxProgress: policiesPanelOpen ? 1 : 0
 
     Behavior on dashboardParallaxProgress {

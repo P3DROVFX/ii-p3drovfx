@@ -303,6 +303,11 @@ Scope {
         extraCondition: !GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate
         panelUrl: Qt.resolvedUrl("../modules/ii/sidebarDashboard/SidebarDashboard.qml")
     }
+    // The dashboard as a floating card by the bar's dashboard button (Default mode only).
+    PanelUrlLoader {
+        extraCondition: GlobalStates.controlCenterActive
+        panelUrl: Qt.resolvedUrl("../modules/ii/sidebarDashboard/ControlCenter.qml")
+    }
     PanelUrlLoader {
         extraCondition: BarPlacement.vertical && barExtraCondition && !GlobalStates.connectModeActive
         panelUrl: Qt.resolvedUrl("../modules/ii/verticalBar/VerticalBar.qml")

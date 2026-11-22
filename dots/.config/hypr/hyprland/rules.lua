@@ -267,6 +267,8 @@ hl.layer_rule({ match = { namespace = "ii-alt-tab-catcher" }, order = 1})
 -- parallax can follow the same curve; a compositor slide on top would move them twice.
 hl.layer_rule({ match = { namespace = "quickshell:sidebarRight" }, no_anim = true, order = 5})
 hl.layer_rule({ match = { namespace = "quickshell:sidebarLeft" }, no_anim = true, order = 5})
+-- The control center drops itself from the bar (and stays mapped, empty, while closed).
+hl.layer_rule({ match = { namespace = "quickshell:controlCenter" }, no_anim = true})
 -- Tablet shade. Compositor blur is deliberately off: a layer rule can only switch blur on or
 -- off, and its strength is the layer's own fade alpha, which the client cannot drive per frame.
 -- The shade blurs a frozen screencopy of the desktop itself so the strength can follow the drag.

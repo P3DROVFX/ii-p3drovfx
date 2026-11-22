@@ -58,7 +58,10 @@ Item {
             }
             color: ColorUtils.mix(root.tile.toggled ? Appearance.colors.colPrimary : Appearance.colors.colLayer3,
                 root.tile.expandedSurfaceColor, 1 - root.tall)
-            opacity: Resize.mix(root.tile.toggled && root.tile.hasMenu ? root.wide : 0, 1, root.tall)
+            // 1x1: the whole tile is the button, no circle. From 2x1 up the circle is always
+            // drawn, off state included — it used to show only for an "on" tile with a
+            // menu, which left an off 2x1 icon floating on the bare tile.
+            opacity: Resize.mix(root.wide, 1, root.tall)
         }
 
         QuickToggleMorphLayer {

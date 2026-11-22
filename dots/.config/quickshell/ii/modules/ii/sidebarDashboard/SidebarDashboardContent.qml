@@ -120,6 +120,7 @@ Item {
         if (root.editMode) return false;
         switch (event.key) {
         case Qt.Key_B:
+            if (root.controlCenter) return false;
             if (!event.isAutoRepeat) bottomGroup.setCollapsed(!bottomGroup.effectivelyCollapsed);
             return true;
         case Qt.Key_R:
@@ -183,6 +184,48 @@ Item {
     readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showKdeConnectDialog || showDnsOverTlsDialog || showIdleInhibitorDialog || showScreenShaderDialog || showModesDialog || showEasyEffectsDialog || showSmartDevicesDialog || showTrayDialog
     property bool editMode: false
     property bool isLoadedOnLeft: false
+    /// Hosted by the control center (ControlCenter.qml): the header buttons and the quick
+    /// toggles only — no banner, notifications or bottom group — sized to its content.
+    property bool controlCenter: false
+    /// The tallest the control center card may grow: its window's free height.
+    property real controlCenterMaxHeight: -1
+    // Concentric corners: the card follows the window rounding, and what sits inset by
+    // the card's padding rounds by that much less. The sidebar keeps its own radius.
+    readonly property real controlCenterInnerRadius: root.controlCenter
+        ? Math.max(0, Appearance.rounding.windowRounding - root.sidebarPadding)
+        : Appearance.rounding.normal
+    readonly property real controlCenterContentHeight: mainColumn.implicitHeight + sidebarPadding * 2
+    // A quick toggle's dialog opens as a subpage that replaces the card's content, the
+    // way the island's dashboard does it (WindowDialog.pageMode): the card takes the
+    // page's own height, padding included, and returns to the toggles' after it.
+    readonly property real controlCenterPageHeight: {
+        if (!root.controlCenter)
+            return 0;
+        let height = 0;
+        for (let i = 0; i < root.children.length; i++) {
+            const host = root.children[i];
+            if (!host || host.shownPropertyString === undefined || !host.shown || !host.item)
+                continue;
+            height = Math.max(height, host.item.pageContentHeight ?? 0);
+        }
+        return height > 0 ? height + root.sidebarPadding * 2 : 0;
+    }
+    // Kept while the page leaves, so the card shrinks from it instead of jumping.
+    property real controlCenterLastPageHeight: 0
+    onControlCenterPageHeightChanged: {
+        if (root.controlCenterPageHeight > 0)
+            root.controlCenterLastPageHeight = root.controlCenterPageHeight;
+    }
+    readonly property real controlCenterDialogHeight: root.controlCenterMaxHeight > 0
+        ? Math.min(root.controlCenterLastPageHeight, root.controlCenterMaxHeight)
+        : root.controlCenterLastPageHeight
+    /// 0 = the toggles, 1 = a subpage. One clock for the card's height and the crossfade.
+    property real controlCenterDialogLift: root.controlCenter && root.anyDialogVisible ? 1 : 0
+    Behavior on controlCenterDialogLift {
+        animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+    }
+    readonly property real controlCenterHeight: root.controlCenterContentHeight
+        + (root.controlCenterDialogHeight - root.controlCenterContentHeight) * root.controlCenterDialogLift
     readonly property bool dashboardSidebarAnimating: isLoadedOnLeft
         ? GlobalStates.leftSidebarAnimating
         : GlobalStates.rightSidebarAnimating
@@ -351,6 +394,12 @@ Item {
     // sidebar. Hand the panel the height the column can actually give it, so it
     // can cap and scroll that tray itself.
     readonly property real quickPanelMaxHeight: {
+        if (root.controlCenter) {
+            if (root.controlCenterMaxHeight <= 0)
+                return -1;
+            const header = headerRow.visible ? headerRow.implicitHeight + headerRow.Layout.topMargin + mainColumn.spacing : 0;
+            return Math.max(0, root.controlCenterMaxHeight - sidebarPadding * 2 - header);
+        }
         let available = mainColumn.height;
         const fixedHeights = [
             sidebarBanner.visible ? sidebarBanner.Layout.preferredHeight : -1,
@@ -372,7 +421,7 @@ Item {
 
     Loader {
         id: sidebarRightShadowLoader
-        active: (!GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate || root.isDynamicIslandTop || root.isDynamicIslandBottom) && !root.anyDialogVisible
+        active: (!GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate || root.isDynamicIslandTop || root.isDynamicIslandBottom) && (root.controlCenter || !root.anyDialogVisible)
         sourceComponent: Component {
             StyledRectangularShadow {
                 target: sidebarRightBackground
@@ -385,12 +434,12 @@ Item {
 
         anchors.fill: parent
         clip: true
-        implicitHeight: Math.max(0, parent.height - Appearance.sizes.hyprlandGapsOut * 2)
+        implicitHeight: root.controlCenter ? root.controlCenterHeight : Math.max(0, parent.height - Appearance.sizes.hyprlandGapsOut * 2)
         implicitWidth: sidebarWidth - Appearance.sizes.hyprlandGapsOut * 2
         color: (GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate) ? "transparent" : (Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0)
         readonly property bool isConnectDynamicIslandTop: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && root.isDynamicIslandTop
         readonly property bool isConnectDynamicIslandBottom: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && root.isDynamicIslandBottom
-        readonly property real defaultRadius: (GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && !root.isDynamicIslandTop && !root.isDynamicIslandBottom) ? 0 : Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
+        readonly property real defaultRadius: root.controlCenter ? Appearance.rounding.windowRounding : (GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && !root.isDynamicIslandTop && !root.isDynamicIslandBottom) ? 0 : Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
         radius: isConnectDynamicIslandTop ? 0 : defaultRadius
         topRightRadius: ((isConnectDynamicIslandTop && !root.isLoadedOnLeft) || (isConnectDynamicIslandBottom && root.isLoadedOnLeft)) ? 0 : defaultRadius
         topLeftRadius: ((isConnectDynamicIslandTop && root.isLoadedOnLeft) || (isConnectDynamicIslandBottom && !root.isLoadedOnLeft)) ? 0 : defaultRadius
@@ -404,7 +453,13 @@ Item {
 
         ColumnLayout {
             id: mainColumn
-            anchors.fill: parent
+            // The control center card is exactly as tall as its content: the column keeps
+            // its own height there, so a dialog lifting the card leaves the room below it.
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: root.controlCenter ? undefined : parent.bottom
+            height: implicitHeight
             anchors.margins: sidebarPadding
             spacing: sidebarPadding
 
@@ -413,7 +468,11 @@ Item {
             // as soon as the close animation settles back to zero. The 0.05 threshold
             // avoids allocating the full-column FBO during the first frames of the
             // opening animation.
-            layer.enabled: sidebarRightBackground.dialogBlurProgress > 0.05
+            // The control center swaps the toggles for the page instead of blurring them.
+            opacity: root.controlCenter ? 1 - root.controlCenterDialogLift : 1
+            visible: opacity > 0
+            enabled: !(root.controlCenter && root.anyDialogVisible)
+            layer.enabled: !root.controlCenter && sidebarRightBackground.dialogBlurProgress > 0.05
             layer.effect: MultiEffect {
                 blurEnabled: true
                 blurMax: 32
@@ -426,7 +485,7 @@ Item {
                 id: sidebarBanner
                 Layout.fillWidth: true
                 Layout.preferredHeight: 220
-                active: Config.options.sidebar.enableBanner
+                active: !root.controlCenter && Config.options.sidebar.enableBanner
                 visible: active
                 sourceComponent: SidebarBanner {
                     editMode: root.editMode
@@ -441,11 +500,13 @@ Item {
                 Layout.fillHeight: false
                 Layout.fillWidth: true
                 // Layout.margins: 10
-                Layout.topMargin: 5
+                // Even margins on the control center card: its padding alone.
+                Layout.topMargin: root.controlCenter ? 0 : 5
                 Layout.bottomMargin: 0
-                active: !Config.options.sidebar.enableBanner
+                active: root.controlCenter || !Config.options.sidebar.enableBanner
                 visible: active
                 sourceComponent: SystemButtonRow {
+                    compact: root.controlCenter
                     entranceTrigger: root.entranceTrigger
                     editMode: root.editMode
                     systemHintsVisible: root.systemHintsActive
@@ -457,6 +518,7 @@ Item {
                 id: classicQuickPanelLoader
                 styleName: "classic"
                 sourceComponent: ClassicQuickPanel {
+                    radius: root.controlCenterInnerRadius
                     editMode: root.editMode
                     onOpenVpnDialog: root.showVpnDialog = true
                     onOpenTailscaleDialog: root.showTailscaleDialog = true
@@ -468,6 +530,7 @@ Item {
                 id: androidQuickPanelLoader
                 styleName: "android"
                 sourceComponent: AndroidQuickPanel {
+                    radius: root.controlCenterInnerRadius
                     editMode: root.editMode
                     maxContentHeight: root.quickPanelMaxHeight
                     entranceTrigger: root.entranceTrigger
@@ -481,6 +544,7 @@ Item {
 
             Item {
                 id: adaptiveGroups
+                visible: !root.controlCenter
                 Layout.fillHeight: true
                 Layout.fillWidth: true
                 property real takeoverProgress: root.notificationsCollapsed ? 1.0 : 0.0
@@ -541,7 +605,7 @@ Item {
                     // Notifications remain backed by their global service; only the
                     // heavy visual center group is incubated after the sidebar
                     // slide and then kept warm for this dashboard instance.
-                    active: root.deferredContentReady
+                    active: root.deferredContentReady && !root.controlCenter
                     asynchronous: true
                     sourceComponent: CenterWidgetGroup {
                         collapsed: root.notificationsCollapsed
@@ -566,6 +630,7 @@ Item {
                     anchors.bottom: parent.bottom
                     height: adaptiveGroups.animatedBottomHeight
                     forceCollapsed: root.bottomForceCollapsed
+                    suppressed: root.controlCenter
                     keepWarm: root.keepWarm
                     chromeHintsVisible: root.systemHintsActive && !root.editMode
                     keyboardEnabled: !root.editMode && !root.anyDialogVisible && !pomodoroTimePicker.opened
@@ -585,7 +650,10 @@ Item {
         owner: root
         shownPropertyString: "showAudioOutputDialog"
         dialogRadius: sidebarRightBackground.defaultRadius
+        anchors.margins: root.controlCenter ? root.sidebarPadding : 0
         dialog: VolumeDialog {
+            pageMode: root.controlCenter
+            pageTitle: Translation.tr("Audio output")
             isSink: true
         }
     }
@@ -594,7 +662,10 @@ Item {
         owner: root
         shownPropertyString: "showAudioInputDialog"
         dialogRadius: sidebarRightBackground.defaultRadius
+        anchors.margins: root.controlCenter ? root.sidebarPadding : 0
         dialog: VolumeDialog {
+            pageMode: root.controlCenter
+            pageTitle: Translation.tr("Audio input")
             isSink: false
         }
     }
@@ -603,92 +674,131 @@ Item {
         owner: root
         shownPropertyString: "showBluetoothDialog"
         dialogRadius: sidebarRightBackground.defaultRadius
-        dialog: BluetoothDialog {}
+        anchors.margins: root.controlCenter ? root.sidebarPadding : 0
+        dialog: BluetoothDialog {
+            pageMode: root.controlCenter
+        }
     }
 
     DialogHostLoader {
         owner: root
         shownPropertyString: "showNightLightDialog"
         dialogRadius: sidebarRightBackground.defaultRadius
-        dialog: NightLightDialog {}
+        anchors.margins: root.controlCenter ? root.sidebarPadding : 0
+        dialog: NightLightDialog {
+            pageMode: root.controlCenter
+        }
     }
 
     DialogHostLoader {
         owner: root
         shownPropertyString: "showWifiDialog"
         dialogRadius: sidebarRightBackground.defaultRadius
-        dialog: WifiDialog {}
+        anchors.margins: root.controlCenter ? root.sidebarPadding : 0
+        dialog: WifiDialog {
+            pageMode: root.controlCenter
+        }
     }
 
     DialogHostLoader {
         owner: root
         shownPropertyString: "showDarkModeDialog"
         dialogRadius: sidebarRightBackground.defaultRadius
-        dialog: DarkModeDialog {}
+        anchors.margins: root.controlCenter ? root.sidebarPadding : 0
+        dialog: DarkModeDialog {
+            pageMode: root.controlCenter
+        }
     }
 
     DialogHostLoader {
         owner: root
         shownPropertyString: "showLocalSendDialog"
         dialogRadius: sidebarRightBackground.defaultRadius
-        dialog: LocalSendDialog {}
+        anchors.margins: root.controlCenter ? root.sidebarPadding : 0
+        dialog: LocalSendDialog {
+            pageMode: root.controlCenter
+        }
     }
 
     DialogHostLoader {
         owner: root
         shownPropertyString: "showVpnDialog"
         dialogRadius: sidebarRightBackground.defaultRadius
-        dialog: VpnDialog {}
+        anchors.margins: root.controlCenter ? root.sidebarPadding : 0
+        dialog: VpnDialog {
+            pageMode: root.controlCenter
+        }
     }
 
     DialogHostLoader {
         owner: root
         shownPropertyString: "showTailscaleDialog"
         dialogRadius: sidebarRightBackground.defaultRadius
-        dialog: TailscaleDialog {}
+        anchors.margins: root.controlCenter ? root.sidebarPadding : 0
+        dialog: TailscaleDialog {
+            pageMode: root.controlCenter
+        }
     }
 
     DialogHostLoader {
         owner: root
         shownPropertyString: "showKdeConnectDialog"
         dialogRadius: sidebarRightBackground.defaultRadius
-        dialog: KdeConnectDialog {}
+        anchors.margins: root.controlCenter ? root.sidebarPadding : 0
+        dialog: KdeConnectDialog {
+            pageMode: root.controlCenter
+        }
     }
 
     DialogHostLoader {
         owner: root
         shownPropertyString: "showDnsOverTlsDialog"
         dialogRadius: sidebarRightBackground.defaultRadius
-        dialog: DnsOverTlsDialog {}
+        anchors.margins: root.controlCenter ? root.sidebarPadding : 0
+        dialog: DnsOverTlsDialog {
+            pageMode: root.controlCenter
+        }
     }
 
     ToggleDialog {
         shownPropertyString: "showIdleInhibitorDialog"
-        dialog: IdleInhibitorDialog {}
+        dialog: IdleInhibitorDialog {
+            pageMode: root.controlCenter
+        }
     }
 
     ToggleDialog {
         shownPropertyString: "showScreenShaderDialog"
-        dialog: ScreenShaderDialog {}
+        dialog: ScreenShaderDialog {
+            pageMode: root.controlCenter
+        }
     }
 
     ToggleDialog {
         shownPropertyString: "showModesDialog"
-        dialog: ModesDialog {}
+        dialog: ModesDialog {
+            pageMode: root.controlCenter
+        }
     }
 
     DialogHostLoader {
         owner: root
         shownPropertyString: "showEasyEffectsDialog"
         dialogRadius: sidebarRightBackground.defaultRadius
-        dialog: EasyEffectsDialog {}
+        anchors.margins: root.controlCenter ? root.sidebarPadding : 0
+        dialog: EasyEffectsDialog {
+            pageMode: root.controlCenter
+        }
     }
 
     DialogHostLoader {
         owner: root
         shownPropertyString: "showSmartDevicesDialog"
         dialogRadius: sidebarRightBackground.defaultRadius
-        dialog: SmartDevicesDialog {}
+        anchors.margins: root.controlCenter ? root.sidebarPadding : 0
+        dialog: SmartDevicesDialog {
+            pageMode: root.controlCenter
+        }
     }
 
     // The tray tile (trayWidget) asks for this: the island shows the same dialog as a
@@ -698,7 +808,9 @@ Item {
         owner: root
         shownPropertyString: "showTrayDialog"
         dialogRadius: sidebarRightBackground.defaultRadius
+        anchors.margins: root.controlCenter ? root.sidebarPadding : 0
         dialog: TabletTrayDialog {
+            pageMode: root.controlCenter
             onItemActivated: root.showTrayDialog = false
         }
     }
@@ -1296,6 +1408,7 @@ Item {
         property alias dialog: toggleDialogLoader.sourceComponent
         readonly property bool shown: root[shownPropertyString]
         anchors.fill: parent
+        anchors.margins: root.controlCenter ? root.sidebarPadding : 0
 
         // active is managed imperatively only — NO declarative `active: shown` binding.
         // A declarative binding would destroy the item the moment `shown` goes false,
@@ -1411,6 +1524,9 @@ Item {
         property int entranceTrigger: -1
         property bool editMode: false
         property bool systemHintsVisible: false
+        /// The control center's header: only the four buttons, spread across the card
+        /// (edit, reload and settings at the start, power at the end), no profile pill.
+        property bool compact: false
         signal editModeToggled(bool newEditMode)
         readonly property bool hintVisible: systemHintsVisible && (root.Window.window?.active ?? false)
 
@@ -1442,7 +1558,8 @@ Item {
             readonly property int fullRadius: Config.options.appearance.sharpMode ? Appearance.rounding.full : height / 2
             radius: fullRadius
 
-            visible: Config.options.sidebar.dashboardHeader.profileImageType !== "none" || Config.options.sidebar.dashboardHeader.textMode !== "none"
+            visible: !systemButtonRowRoot.compact
+                && (Config.options.sidebar.dashboardHeader.profileImageType !== "none" || Config.options.sidebar.dashboardHeader.textMode !== "none")
 
             property int rowLeftMargin: Config.options.sidebar.dashboardHeader.profileImageType === "user_profile" ? 6 : 14
             readonly property bool _hasText: Config.options.sidebar.dashboardHeader.textMode !== "none"
@@ -1484,7 +1601,7 @@ Item {
 
                     UserProfileAvatar {
                         anchors.fill: parent
-                        active: GlobalStates.dashboardPanelOpen && systemButtonRowRoot.visible
+                        active: GlobalStates.dashboardPanelOpen && systemButtonRowRoot.visible && !systemButtonRowRoot.compact
                         visible: Config.options.sidebar.dashboardHeader.profileImageType === "user_profile"
                         avatarShape: Config.options.sidebar.dashboardHeader.avatarShape
                     }
@@ -1588,9 +1705,10 @@ Item {
                 top: parent.top
                 bottom: parent.bottom
                 right: parent.right
+                left: systemButtonRowRoot.compact ? parent.left : undefined
             }
-            color: Appearance.colors.colLayer1
-            padding: isCircles ? 4 : 4
+            color: systemButtonRowRoot.compact ? "transparent" : Appearance.colors.colLayer1
+            padding: systemButtonRowRoot.compact ? 0 : 4
             spacing: isCircles ? 4 : 5
             opacity: headerEntranceProgress.progress
             transform: Translate {
@@ -1670,6 +1788,12 @@ Item {
                 StyledToolTip {
                     text: Translation.tr("Settings") + " (Ctrl+Shift+S)"
                 }
+            }
+
+            Item {
+                visible: systemButtonRowRoot.compact
+                Layout.fillWidth: true
+                Layout.fillHeight: true
             }
 
             QuickToggleButton {

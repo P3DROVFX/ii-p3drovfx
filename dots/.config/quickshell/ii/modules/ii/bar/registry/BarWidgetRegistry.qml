@@ -18,6 +18,7 @@ QtObject {
             case "utility_buttons":        return s.utilButtons  ?? "default";
             case "weather":                return s.weather      ?? "default";
             case "dashboard_panel_button": return s.dashboard    ?? "default";
+            case "notifications_button":   return s.notification ?? "default";
             case "system_monitor":         return s.resources    ?? "default";
             case "policies_panel_button":  return s.policies     ?? "default";
             case "power":                  return s.power        ?? "default";

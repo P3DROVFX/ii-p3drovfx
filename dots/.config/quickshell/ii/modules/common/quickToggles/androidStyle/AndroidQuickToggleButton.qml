@@ -39,7 +39,11 @@ Item {
     property string expandedIconShape: "Circle"
     property Component expandedIconComponent: null
     property bool centerExpandedIcon: false
-    property color expandedSurfaceColor: root.toggled ? Appearance.colors.colPrimary : Appearance.colors.colLayer3
+    // The 2x1 tile's icon circle while off: the tile's surface with 10% of its ink, opaque.
+    // colLayer3 carries the content transparency and landed only ~6 levels off the tile;
+    // this matches the 1x2 circle's contrast in light and dark themes alike.
+    readonly property color expandedSurfaceInactive: ColorUtils.mix(Appearance.m3colors.m3surfaceContainer, Appearance.m3colors.m3onSurface, 0.9)
+    property color expandedSurfaceColor: root.toggled ? Appearance.colors.colPrimary : root.expandedSurfaceInactive
     property color expandedSymbolColor: root.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer3
     property real expandedStatusTransparency: 0.3
     property string expandedTitle: root.name

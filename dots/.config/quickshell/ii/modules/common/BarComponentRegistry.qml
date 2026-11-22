@@ -288,6 +288,13 @@ Singleton {
             configPage: "DashboardButtonConfig.qml"
         },
         {
+            id: "notifications_button",
+            icon: "notifications_unread",
+            title: "Notifications",
+            styleConfigKey: "notification",
+            styleOptions: defaultStyleOptions
+        },
+        {
             id: "record_indicator",
             icon: "screen_record",
             title: "Record indicator",

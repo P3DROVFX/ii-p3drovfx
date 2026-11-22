@@ -5641,7 +5641,7 @@ Singleton {
                     property string activeWindow: "default"
                     property string clock: "expressive" // default, material, expressive, neural, relief
                     property string media: "default" // default | expressive | neural | ring | tonal
-                    property string notification: "default"
+                    property string notification: "default" // notifications_button: default | expressive
                     property string utilButtons: "expressive" // default | expressive | segments | sculpt
                     property string workspaces: "default" // default | minimal | expressive | dock | index
                     property string weather: "expressive" // default | expressive | horizon | tessera | sculpt
@@ -6240,6 +6240,10 @@ Singleton {
                 }
                 property JsonObject power: JsonObject {
                     property string colorMode: "primary"
+                }
+                // Notifications button: the pill's palette while something is unread.
+                property JsonObject notificationButton: JsonObject {
+                    property string colorMode: "secondaryContainer"
                 }
                 property JsonObject policies: JsonObject {
                     property string colorMode: "primary"
@@ -8360,6 +8364,10 @@ Singleton {
                 }
                 property string position: "default"
                 property string sidebarStyle: "default" // "default" | "connect"
+                // How the dashboard opens in the Default shell mode: the full-height sidebar,
+                // or the control center, a floating card that drops from the bar next to the
+                // dashboard button (header + quick toggles only). Connect mode ignores it.
+                property string dashboardStyle: "sidebar" // "sidebar" | "controlCenter"
                 property JsonObject tabletShade: JsonObject {
                     // Height of the strip at the very top that starts the pull-down. It sits
                     // above the bar on the Overlay layer, so whatever it covers stops being

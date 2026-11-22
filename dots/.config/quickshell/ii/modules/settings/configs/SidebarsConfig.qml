@@ -67,6 +67,41 @@ Item {
             Layout.fillWidth: true
         }
 
+        // ── Dashboard style ───────────────────────────────────────────────
+        ContentSection {
+            Layout.topMargin: sidebarsRoot.sectionGap
+            title: Translation.tr("Dashboard style")
+            icon: "dashboard"
+
+            NoticeBox {
+                Layout.fillWidth: true
+                isFirst: true
+                text: ShellModePolicy.effectiveMode === "connect"
+                    ? Translation.tr("The control center is only available in the Default shell mode. Connect mode keeps the sidebar.")
+                    : Translation.tr("Open the dashboard as the full sidebar, or as a control center: a floating card with the header buttons and quick toggles that drops from the bar next to its dashboard button.")
+            }
+
+            ContentSubsection {
+                title: Translation.tr("Open the dashboard as")
+                icon: "space_dashboard"
+                Layout.fillWidth: true
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.sidebar.dashboardStyle
+                    onSelected: newValue => Config.options.sidebar.dashboardStyle = newValue
+                    options: [{
+                        "displayName": Translation.tr("Sidebar"),
+                        "icon": "right_panel_open",
+                        "value": "sidebar"
+                    }, {
+                        "displayName": Translation.tr("Control center"),
+                        "icon": "toggle_on",
+                        "value": "controlCenter"
+                    }]
+                }
+            }
+        }
+
         // ── Panel cache ───────────────────────────────────────────────────
         ContentSection {
             Layout.topMargin: sidebarsRoot.sectionGap

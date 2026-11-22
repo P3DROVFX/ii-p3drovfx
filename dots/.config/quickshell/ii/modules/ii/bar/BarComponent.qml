@@ -23,6 +23,7 @@ import qs.modules.ii.bar.widgets.tray
 import qs.modules.ii.bar.widgets.sports
 import qs.modules.ii.bar.widgets.activeWindow
 import qs.modules.ii.bar.widgets.dashboard
+import qs.modules.ii.bar.widgets.notifications
 import qs.modules.ii.bar.widgets.power
 import qs.modules.ii.bar.widgets.utilButtons
 import qs.modules.ii.bar.widgets.policies
@@ -94,7 +95,32 @@ Item {
     // that only came back when something forced a rebuild.
     property bool isNewWidget: false
 
+    // ── Control center anchor ─────────────────────────────────────────────────
+    // The control center drops from the dashboard button, whichever style draws it.
+    // Only a layer-shell bar publishes (a PanelWindow has `exclusiveZone`): a live
+    // preview of a bar style in a floating window must not steal the anchor.
+    readonly property var hostWindow: rootItem.QsWindow.window ?? null
+    readonly property string dashboardAnchorScreen: {
+        if (modelData?.id !== "dashboard_panel_button")
+            return "";
+        const win = rootItem.hostWindow;
+        if (!win || win.exclusiveZone === undefined)
+            return "";
+        return String(win.screen?.name ?? "");
+    }
+    property string publishedAnchorScreen: ""
+    onDashboardAnchorScreenChanged: rootItem.publishDashboardAnchor()
+    function publishDashboardAnchor() {
+        if (rootItem.publishedAnchorScreen === rootItem.dashboardAnchorScreen)
+            return;
+        GlobalStates.clearDashboardAnchor(rootItem.publishedAnchorScreen, rootItem);
+        rootItem.publishedAnchorScreen = rootItem.dashboardAnchorScreen;
+        GlobalStates.setDashboardAnchor(rootItem.publishedAnchorScreen, rootItem);
+    }
+    Component.onDestruction: GlobalStates.clearDashboardAnchor(rootItem.publishedAnchorScreen, rootItem)
+
     Component.onCompleted: {
+        rootItem.publishDashboardAnchor();
         rootItem.isNewWidget = GlobalStates.isNewBarWidget(modelData ? modelData.id : "");
         // Deferred on purpose: every delegate in this same build must still read
         // `false` and animate in, so the bar keeps its entrance at startup.
@@ -612,6 +638,8 @@ Item {
             return true;
         if (modelData.id === "dashboard_panel_button" && Config.options.bar.styles.dashboard !== "default")
             return true;
+        if (modelData.id === "notifications_button" && Config.options.bar.styles.notification === "expressive")
+            return true;
         if (modelData.id === "system_monitor" && (Config.options.bar.styles.resources === "expressive" || Config.options.bar.styles.resources === "sculpt"))
             return true;
         if (modelData.id === "policies_panel_button" && Config.options.bar.styles.policies !== "default")
@@ -925,6 +953,10 @@ Item {
             if (isExp)
                 return ({ url: "widgets/dashboard/ExpressiveDashboardPanelButton.qml", props: "vertical" });
             return isVert ? ({ url: "widgets/dashboard/VerticalDashboardPanelButton.qml", props: "radii" }) : ({ url: "widgets/dashboard/DashboardPanelButton.qml", props: "radii" });
+        case "notifications_button":
+            if (isExp)
+                return ({ url: "widgets/notifications/ExpressiveNotificationsButton.qml", props: "vertical" });
+            return ({ url: "widgets/notifications/NotificationsButton.qml", props: "vertical" });
         case "bluetooth_devices":
             if (isExp)
                 return ({ url: "widgets/bluetooth/ExpressiveBluetoothDevices.qml", props: "vertical" });

@@ -129,7 +129,14 @@ Rectangle {
     property bool outerSidebarAnimating: GlobalStates.rightSidebarAnimating
     property bool entrancePending: false
 
+    /// The control center hosts the dashboard without this group: never build its content.
+    property bool suppressed: false
+
     function activateContentWhenSafe() {
+        if (root.suppressed) {
+            contentActivated = false;
+            return;
+        }
         contentActivated = PerformancePolicy.nextDeferredContentReady(
             contentActivated,
             GlobalStates.sidebarRightOpen,

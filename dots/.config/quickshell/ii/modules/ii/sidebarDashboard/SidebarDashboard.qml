@@ -16,8 +16,8 @@ Scope {
     // tree obey the user's keep-alive preference. It is wanted until the slide out has
     // finished (a drag open asks for it too), then kept hidden for a minute.
     readonly property bool keepContentLoaded: Config.ready && Config.options.sidebar.keepRightSidebarLoaded
-    readonly property bool contentWanted: GlobalStates.sidebarRightOpen || GlobalStates.dashboardSlideProgress > 0
-        || root.keepContentLoaded
+    readonly property bool contentWanted: !GlobalStates.controlCenterActive
+        && (GlobalStates.sidebarRightOpen || GlobalStates.dashboardSlideProgress > 0 || root.keepContentLoaded)
 
     readonly property bool isOnRight: {
         const pos = Config.options.sidebar.position;
@@ -43,7 +43,9 @@ Scope {
     // except in Float+Connect mode (cornerStyle 1) where sidebars remain separate.
     Loader {
         id: panelLoader
-        active: !GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate
+        // The control center (ControlCenter.qml) answers the same open flag instead.
+        active: (!GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate)
+            && !GlobalStates.controlCenterActive
         sourceComponent: panelWindowComponent
     }
 

@@ -26,8 +26,8 @@ AndroidQuickToggleButton {
     expandedIconShape: "Clover8Leaf"
     centerExpandedIcon: true
     expandedSurfaceColor: BluetoothStatus.connected
-        ? (root.toggled ? Appearance.colors.colPrimary : Appearance.colors.colLayer3)
-        : (BluetoothStatus.enabled ? Appearance.colors.colLayer3 : Appearance.colors.colSurfaceContainerLow)
+        ? (root.toggled ? Appearance.colors.colPrimary : root.expandedSurfaceInactive)
+        : (BluetoothStatus.enabled ? root.expandedSurfaceInactive : Appearance.colors.colSurfaceContainerLow)
     expandedSymbolColor: BluetoothStatus.connected
         ? (root.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer3)
         : (BluetoothStatus.enabled ? Appearance.colors.colOnLayer3 : Appearance.colors.colOnSurfaceVariant)

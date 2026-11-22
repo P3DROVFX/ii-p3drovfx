@@ -189,6 +189,26 @@ ColumnLayout {
         }
 
         ContentSubsection {
+            title: Translation.tr("Open the dashboard as")
+            icon: "space_dashboard"
+            Layout.fillWidth: true
+
+            ConfigSelectionArray {
+                currentValue: Config.options.sidebar.dashboardStyle
+                onSelected: newValue => Config.options.sidebar.dashboardStyle = newValue
+                options: [{
+                    "displayName": Translation.tr("Sidebar"),
+                    "icon": "right_panel_open",
+                    "value": "sidebar"
+                }, {
+                    "displayName": Translation.tr("Control center"),
+                    "icon": "toggle_on",
+                    "value": "controlCenter"
+                }]
+            }
+        }
+
+        ContentSubsection {
             title: Translation.tr("Sidebar position")
             icon: "switch_right"
             Layout.fillWidth: true

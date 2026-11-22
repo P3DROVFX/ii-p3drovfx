@@ -21,8 +21,8 @@ AndroidQuickToggleButton {
         ? Math.round(root.device.charge) + Translation.tr("% battery") + (root.device.charging ? " · " + Translation.tr("Charging") : "")
         : ""
     expandedSurfaceColor: root.connected
-        ? (root.toggled ? Appearance.colors.colPrimary : Appearance.colors.colLayer3)
-        : (root.serviceEnabled ? Appearance.colors.colLayer3 : Appearance.colors.colSurfaceContainerLow)
+        ? (root.toggled ? Appearance.colors.colPrimary : root.expandedSurfaceInactive)
+        : (root.serviceEnabled ? root.expandedSurfaceInactive : Appearance.colors.colSurfaceContainerLow)
     expandedSymbolColor: root.connected
         ? (root.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer3)
         : (root.serviceEnabled ? Appearance.colors.colOnLayer3 : Appearance.colors.colOnSurfaceVariant)

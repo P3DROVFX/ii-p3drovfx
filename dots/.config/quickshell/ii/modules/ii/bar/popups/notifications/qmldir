@@ -1,0 +1,4 @@
+module qs.modules.ii.bar.popups.notifications
+
+NotificationsPopup 1.0 NotificationsPopup.qml
+NotificationsPopupContent 1.0 NotificationsPopupContent.qml
