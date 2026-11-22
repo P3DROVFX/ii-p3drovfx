@@ -103,6 +103,7 @@ Item {
     // On the scrolling layouts the scrolloverview plugin's overview stands behind the bar in place of this one.
     readonly property bool overviewWanted: root.queryIdle && !GlobalStates.searchOnlyMode && !Config.options.search.alwaysListApps && !Config.options.search.suggestions.enable && (Config?.options.overview.enable ?? true)
         && !ScrollOverviewPlugin.hosting
+        && !GlobalStates.scrollingLayoutActive
     // The plugin's overview stays up behind the search for as long as it is open,
     // query or not: it goes with the search (an app launched, Esc, Super again).
     readonly property bool pluginOverviewWanted: root.isOpen && GlobalStates.scrollingLayoutActive

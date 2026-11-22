@@ -726,6 +726,7 @@ Scope {
         && (Config.options.overview.enable ?? true)
         // On the scrolling layouts the scrolloverview plugin stands behind the search.
         && !ScrollOverviewPlugin.hosting
+        && !GlobalStates.scrollingLayoutActive
     // The plugin's overview stays up behind the island's search from open to close.
     readonly property bool pluginOverviewWanted: root.searchActive && GlobalStates.islandOwnsSearch
         && GlobalStates.scrollingLayoutActive
