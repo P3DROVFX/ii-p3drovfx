@@ -93,6 +93,7 @@ Item {
                         { id: "apps", label: Translation.tr("Clear application frequency"), icon: "trending_down" },
                         { id: "queries", label: Translation.tr("Clear recent queries"), icon: "history" },
                         { id: "emojis", label: Translation.tr("Clear recent emojis"), icon: "mood" },
+                        { id: "symbols", label: Translation.tr("Clear recent symbols"), icon: "emoji_symbols" },
                         { id: "panels", label: Translation.tr("Clear panel frequency"), icon: "dashboard_customize" },
                         { id: "favorites", label: Translation.tr("Clear favorites"), icon: "star" }
                     ]
@@ -110,6 +111,7 @@ Item {
                             if (modelData.id === "apps") AppUsage.resetAll();
                             else if (modelData.id === "queries") Persistent.states.search.recentQueries = [];
                             else if (modelData.id === "emojis") Persistent.states.search.recentEmojis = [];
+                            else if (modelData.id === "symbols") Persistent.states.search.recentSymbols = [];
                             else if (modelData.id === "panels") Persistent.states.search.panelUsage = [];
                             else if (modelData.id === "favorites") Persistent.states.search.pinnedEntries = [];
                         }

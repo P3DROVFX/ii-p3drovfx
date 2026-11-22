@@ -7995,6 +7995,12 @@ Singleton {
                         property bool showRecents: true
                         property string defaultCategory: "all"
                     }
+                    property JsonObject symbols: JsonObject {
+                        property bool enable: true
+                        property int gridColumns: 8
+                        property bool showRecents: true
+                        property string defaultCategory: "all"
+                    }
                     property bool windowSearch: true
                     property bool fileBrowser: true
                     property bool fileSearch: true

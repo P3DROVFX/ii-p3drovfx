@@ -16697,5 +16697,16 @@
     "GHz": "GHz",
     "%1 GHz": "%1 GHz",
     "average": "average",
-    "GPU %1%": "GPU %1%"
+    "GPU %1%": "GPU %1%",
+    "Arrows": "Arrows",
+    "Currency": "Currency",
+    "Lines & blocks": "Lines & blocks",
+    "Keys & technical": "Keys & technical",
+    "Signs": "Signs",
+    "Kaomoji": "Kaomoji",
+    "Text art": "Text art",
+    "Copy code point": "Copy code point",
+    "Try another word, a code like U+00B0, or another category": "Try another word, a code like U+00B0, or another category",
+    "Clear recent symbols": "Clear recent symbols",
+    "Search for ‘symbols’, ‘ascii’ or ‘kaomoji’ to browse typographic, math, arrow and box-drawing symbols plus text faces and text art.": "Search for ‘symbols’, ‘ascii’ or ‘kaomoji’ to browse typographic, math, arrow and box-drawing symbols plus text faces and text art."
 }

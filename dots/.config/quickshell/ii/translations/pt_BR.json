@@ -15998,5 +15998,16 @@
     "Routine": "Rotina",
     "Running now": "Em execução",
     "Runs until stopped": "Roda até ser parada",
-    "Runs once": "Roda uma vez"
+    "Runs once": "Roda uma vez",
+    "Arrows": "Setas",
+    "Currency": "Moedas",
+    "Lines & blocks": "Linhas e blocos",
+    "Keys & technical": "Teclas e técnicos",
+    "Signs": "Sinais",
+    "Kaomoji": "Kaomoji",
+    "Text art": "Arte em texto",
+    "Copy code point": "Copiar code point",
+    "Try another word, a code like U+00B0, or another category": "Tente outra palavra, um código como U+00B0 ou outra categoria",
+    "Clear recent symbols": "Limpar símbolos recentes",
+    "Search for ‘symbols’, ‘ascii’ or ‘kaomoji’ to browse typographic, math, arrow and box-drawing symbols plus text faces and text art.": "Pesquise ‘símbolos’, ‘ascii’ ou ‘kaomoji’ para navegar por símbolos tipográficos, matemáticos, setas e de desenho de caixas, além de carinhas e arte em texto."
 }

@@ -247,6 +247,7 @@ Singleton {
             property JsonObject search: JsonObject {
                 property list<var> aliases: []
                 property list<string> recentEmojis: []
+                property list<string> recentSymbols: []
                 property list<string> recentQueries: []
                 property list<string> pinnedEntries: []
                 property list<var> panelUsage: []
