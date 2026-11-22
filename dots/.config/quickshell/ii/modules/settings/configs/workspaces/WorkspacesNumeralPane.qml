@@ -5,7 +5,7 @@ import QtQuick.Layouts
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
-import "WorkspaceNumerals.js" as Numerals
+import "../../../common/functions/WorkspaceNumerals.js" as Numerals
 import "WorkspacesGrid.js" as GridMath
 
 /**

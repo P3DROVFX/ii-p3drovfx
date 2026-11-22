@@ -7,6 +7,7 @@ import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.functions
+import "../../../../common/functions/WorkspaceNumerals.js" as Numerals
 
 /**
  * Everything a bar workspace widget knows about Hyprland, for one screen.
@@ -155,8 +156,7 @@ QtObject {
 
     // ── Labels ────────────────────────────────────────────────────────────
     function labelFor(id) {
-        const map = model.cfg?.numberMap ?? [];
-        return String(map[id - 1] || id);
+        return Numerals.label(id, model.cfg?.numberMap ?? []);
     }
 
     // Numbers show while Super is held (after a short delay) or always.
