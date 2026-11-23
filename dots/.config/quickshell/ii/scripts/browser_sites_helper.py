@@ -598,11 +598,28 @@ def favicon_cache_path(cache_dir: str | Path, host: str) -> Path | None:
     return Path(cache_dir).expanduser() / f"{digest}.png"
 
 
-def _favicon_size_rank(width: object) -> tuple[int, int]:
+# Firefox stores vector favicons with this sentinel width.
+_SVG_ICON_WIDTH = 65535
+# moz_icons.flags bit for "rich" icons (apple-touch / fluid icons): opaque
+# app tiles, not the page favicon, so they only win when nothing else exists.
+_RICH_ICON_FLAG = 1
+
+
+def _favicon_size_rank(width: object, flags: object = 0) -> tuple[int, int, int]:
     try:
         value = int(width or 0)
     except (TypeError, ValueError):
         value = 0
+    try:
+        rich = 1 if int(flags or 0) & _RICH_ICON_FLAG else 0
+    except (TypeError, ValueError):
+        rich = 0
+    return (rich, *_favicon_width_rank(value))
+
+
+def _favicon_width_rank(value: int) -> tuple[int, int]:
+    if value == _SVG_ICON_WIDTH:
+        return (-1, 0)
     if 0 < value <= 64:
         return (0, -value)
     if value > 64:
@@ -619,18 +636,20 @@ def _favicon_bytes(database: Path, page_url: str) -> bytes | None:
         f"http://{_host_for_parsed(parsed)}/%",
         f"https://{_host_for_parsed(parsed)}/%",
     )
-    query = """
-        SELECT i.data, i.width, p.page_url
+    best_key: tuple[tuple[int, int, int], int] | None = None
+    best_data: bytes | None = None
+    with closing(_connect_immutable(database)) as connection:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(moz_icons)")}
+        flags_column = "i.flags" if "flags" in columns else "0"
+        query = f"""
+        SELECT i.data, i.width, p.page_url, {flags_column}
         FROM moz_icons AS i
         JOIN moz_icons_to_pages AS relation ON relation.icon_id = i.id
         JOIN moz_pages_w_icons AS p ON p.id = relation.page_id
         WHERE p.page_url = ? OR p.page_url = ?
            OR p.page_url LIKE ? OR p.page_url LIKE ?
-    """
-    best_key: tuple[tuple[int, int], int] | None = None
-    best_data: bytes | None = None
-    with closing(_connect_immutable(database)) as connection:
-        for data, width, associated_url in connection.execute(
+        """
+        for data, width, associated_url, flags in connection.execute(
             query, (page_url, root_url, *host_prefixes)
         ):
             if not isinstance(data, bytes) or not data:
@@ -643,7 +662,7 @@ def _favicon_bytes(database: Path, page_url: str) -> bytes | None:
             association_rank = 0 if associated_url == page_url else (
                 1 if associated_url == root_url else 2
             )
-            candidate_key = (_favicon_size_rank(width), association_rank)
+            candidate_key = (_favicon_size_rank(width, flags), association_rank)
             if best_key is None or candidate_key < best_key:
                 best_key = candidate_key
                 best_data = data
@@ -858,6 +877,43 @@ def _path_uri(path: Path) -> str:
     return path.resolve().as_uri()
 
 
+_SVG_COLOR = re.compile(
+    rb'(?:fill|stroke|stop-color)\s*[:=]\s*["\']?\s*(#[0-9a-fA-F]{3,8}|[a-zA-Z]+|rgba?\([^)]*\))'
+)
+_SVG_NEUTRAL_COLORS = {b"none", b"transparent", b"currentcolor", b"inherit"}
+
+
+def is_monochrome_svg(data: bytes) -> bool:
+    """A vector favicon painted in a single colour (GitHub's cat, X's logo).
+
+    Such marks are drawn for one background and vanish on the other theme, so
+    the shell tints them to the plate's foreground colour instead.
+    """
+    head = data[:512].lstrip().lower()
+    if not (head.startswith(b"<svg") or head.startswith(b"<?xml")) or b"<svg" not in head:
+        return False
+    lowered = data.lower()
+    if b"<image" in lowered or b"gradient" in lowered:
+        return False
+    colors = {
+        match.group(1).lower().replace(b" ", b"")
+        for match in _SVG_COLOR.finditer(data)
+    }
+    colors -= _SVG_NEUTRAL_COLORS
+    return len(colors) <= 1
+
+
+def _favicon_uri(path: Path) -> str:
+    """File URI for a cached favicon; `#mono` marks a single-colour vector."""
+    uri = _path_uri(path)
+    try:
+        if is_monochrome_svg(path.read_bytes()[:65536]):
+            return uri + "#mono"
+    except OSError:
+        pass
+    return uri
+
+
 def _profile_payload(discovery: ProfileDiscovery) -> dict[str, object]:
     session_path, session_mtime = sessionstore_status(discovery.profile_path)
     return {
@@ -909,7 +965,7 @@ def _command_build(args) -> tuple[dict[str, object], int]:
         if cached is not None:
             try:
                 if cached.is_file() and cached.stat().st_size > 0:
-                    site["favicon"] = _path_uri(cached)
+                    site["favicon"] = _favicon_uri(cached)
             except OSError:
                 pass
 
@@ -934,7 +990,7 @@ def _command_favicon(args) -> tuple[dict[str, object], int]:
     host = _normalized_favicon_host(args.url)
     if path is None:
         return {"ok": False, "host": host, "error": "No local favicon available"}, 1
-    return {"ok": True, "host": host, "path": str(path), "source": _path_uri(path)}, 0
+    return {"ok": True, "host": host, "path": str(path), "source": _favicon_uri(path)}, 0
 
 
 def build_argument_parser() -> argparse.ArgumentParser:

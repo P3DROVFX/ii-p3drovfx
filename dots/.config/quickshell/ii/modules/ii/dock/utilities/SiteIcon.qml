@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -20,6 +21,10 @@ Item {
     property real iconScale: 0.62
     // The plate behind a favicon; desktop widgets pass their colour scheme's.
     property color colPlate: ClockStyle.colSurfaceHighest
+    // Single-colour vector favicons (BrowserSites marks them `#mono`) are
+    // drawn for one theme; they get this colour so they read on any plate.
+    property color colMonoIcon: ColorUtils.getContrastingTextColor(icon.colPlate)
+    readonly property bool monoFavicon: icon.favicon.endsWith("#mono")
 
     readonly property string host: {
         const match = String(icon.url).match(/^[a-z]+:\/\/([^\/:?#]+)/i);
@@ -59,6 +64,12 @@ Item {
             asynchronous: true
             smooth: true
             visible: status === Image.Ready
+            layer.enabled: icon.monoFavicon
+            layer.effect: MultiEffect {
+                colorization: 1.0
+                colorizationColor: icon.colMonoIcon
+                brightness: 1.0
+            }
         }
         TileText {
             anchors.centerIn: parent

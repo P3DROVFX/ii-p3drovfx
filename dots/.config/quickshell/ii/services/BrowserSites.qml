@@ -41,7 +41,9 @@ Singleton {
     ])
     readonly property string helperPath: Directories.scriptPath + "/browser_sites_helper.py"
     readonly property string homePath: FileUtils.trimFileProtocol(Directories.home)
-    readonly property string faviconCachePath: root.homePath + "/.cache/quickshell/favicons"
+    // v2: vector favicons win over raster, rich (apple-touch) tiles lose;
+    // the bump drops caches that still hold the opaque tiles.
+    readonly property string faviconCachePath: root.homePath + "/.cache/quickshell/favicons-v2"
     readonly property int maxFaviconCacheEntries: 256
 
     property real placesMtime: 0

@@ -192,6 +192,18 @@ Item {
         }
     }
 
+    function syncDisplayedTrack() {
+        root.displayTitle = root.title;
+        root.displayArtist = root.artist;
+    }
+
+    // The artist often arrives after the title; outside the fade there is
+    // nothing to animate, just keep the shown text current.
+    onArtistChanged: {
+        if (!songSwitchAnimation.running)
+            root.displayArtist = root.artist;
+    }
+
     onTitleChanged: {
         if (root.displayTitle === "") {
             root.displayTitle = root.title;
@@ -227,8 +239,10 @@ Item {
                 easing.type: Easing.OutQuad
             }
         }
-        PropertyAction { target: root; property: "displayTitle"; value: root.title }
-        PropertyAction { target: root; property: "displayArtist"; value: root.artist }
+        // Read title/artist when the swap happens: PropertyAction values are
+        // frozen at start(), so a title that lands mid-fade (MPRIS sends an
+        // empty/old title first, the artist later) left the previous song shown.
+        ScriptAction { script: root.syncDisplayedTrack() }
         PropertyAction { target: root; property: "titleYOffset"; value: 8 }
         ParallelAnimation {
             NumberAnimation {
@@ -252,6 +266,9 @@ Item {
     property bool imgAActive: true
     property real artScaleA: 1.0
     property real artScaleB: 1.0
+    // 0..1 blur per art slot; the incoming cover zooms out of a blur.
+    property real artBlurA: 0.0
+    property real artBlurB: 0.0
     property string activeArtSource: ""
 
     onEffectiveArtSourceChanged: {
@@ -272,6 +289,8 @@ Item {
         root.imgAActive = true;
         root.artScaleA = 1.0;
         root.artScaleB = 1.0;
+        root.artBlurA = 0.0;
+        root.artBlurB = 0.0;
         root.activeArtSource = newSrc;
     }
 
@@ -313,15 +332,15 @@ Item {
         if (currentActive.source === "" || currentActive.opacity <= 0.01) {
             currentActive.source = newSrc;
             currentActive.opacity = 1.0;
-            if (root.imgAActive) root.artScaleA = 1.0;
-            else root.artScaleB = 1.0;
+            if (root.imgAActive) { root.artScaleA = 1.0; root.artBlurA = 0.0; }
+            else { root.artScaleB = 1.0; root.artBlurB = 0.0; }
             return;
         }
 
         currentIncoming.source = newSrc;
         currentIncoming.opacity = 0.0;
-        if (root.imgAActive) root.artScaleB = 0.88;
-        else root.artScaleA = 0.88;
+        if (root.imgAActive) { root.artScaleB = 1.18; root.artBlurB = 1.0; }
+        else { root.artScaleA = 1.18; root.artBlurA = 1.0; }
 
         if (currentIncoming.status === Image.Ready) {
             root.startCrossfade();
@@ -345,6 +364,11 @@ Item {
         artIncomingFade.target = incoming;
         artIncomingScale.target = root;
         artIncomingScale.property = root.imgAActive ? "artScaleB" : "artScaleA";
+
+        artIncomingBlur.target = root;
+        artIncomingBlur.property = root.imgAActive ? "artBlurB" : "artBlurA";
+        artOutgoingBlur.target = root;
+        artOutgoingBlur.property = root.imgAActive ? "artBlurA" : "artBlurB";
 
         artOutgoingFade.target = active;
         artOutgoingScale.target = root;
@@ -370,6 +394,8 @@ Item {
             const oldActive = root.imgAActive ? imgA : imgB;
             oldActive.source = "";
             oldActive.opacity = 0;
+            if (root.imgAActive) { root.artScaleA = 1.0; root.artBlurA = 0.0; }
+            else { root.artScaleB = 1.0; root.artBlurB = 0.0; }
             root.imgAActive = !root.imgAActive;
         }
 
@@ -383,10 +409,24 @@ Item {
         }
         NumberAnimation {
             id: artIncomingScale
-            from: 0.88
+            from: 1.18
             to: 1.0
-            duration: Appearance.reducedMotion ? 0 : 280
+            duration: Appearance.reducedMotion ? 0 : 420
             easing.type: Easing.OutCubic
+        }
+        NumberAnimation {
+            id: artIncomingBlur
+            from: 1.0
+            to: 0.0
+            duration: Appearance.reducedMotion ? 0 : 420
+            easing.type: Easing.OutCubic
+        }
+        NumberAnimation {
+            id: artOutgoingBlur
+            from: 0.0
+            to: 1.0
+            duration: Appearance.reducedMotion ? 0 : 220
+            easing.type: Easing.OutQuad
         }
         NumberAnimation {
             id: artOutgoingFade
@@ -399,7 +439,7 @@ Item {
         NumberAnimation {
             id: artOutgoingScale
             from: 1.0
-            to: 0.90
+            to: 0.92
             duration: Appearance.reducedMotion ? 0 : 220
             easing.type: Easing.OutQuad
         }
@@ -533,12 +573,15 @@ Item {
                     property alias artImgB: artImgB
                     readonly property bool anyButtonHovered: playBtnMouseArea.containsMouse || nextBtnMouseArea.containsMouse || albumArtMouseArea.containsMouse
 
+                    // Gap between the card edge and the album art (all four sides).
+                    readonly property real artInset: Math.max(0, (cardBg.height - albumArtWrapper.Layout.preferredWidth) / 2)
+
                     RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 8
-                        anchors.rightMargin: 8
-                        anchors.topMargin: 4
-                        anchors.bottomMargin: 4
+                        // Side insets match each edge item's vertical inset, so the
+                        // gap around the art / transport buttons is even on all sides.
+                        anchors.leftMargin: horizontalView.artInset
+                        anchors.rightMargin: Math.max(4, (cardBg.height - playBtn.implicitWidth) / 2)
                         spacing: 8
 
                         // 1. Album Art with Android Transition & Squircle Shape
@@ -548,7 +591,11 @@ Item {
                             Layout.alignment: Qt.AlignVCenter
                             Layout.preferredWidth: Math.max(28, Math.min(38, cardBg.height - 10))
                             Layout.preferredHeight: Layout.preferredWidth
-                            radius: root.innerRadius(Layout.preferredWidth, (cardBg.height - Layout.preferredWidth) / 2)
+                            // Card radius minus the visible gap, measured after the
+                            // hover/pause scale, so the corner stays concentric.
+                            readonly property real artSize: Layout.preferredWidth
+                            readonly property real visibleInset: horizontalView.artInset + artSize * (1 - scale) / 2
+                            radius: Math.max(0, Math.min(artSize / 2, (root.widgetRadius - visibleInset) / Math.max(0.01, scale)))
                             color: root.btnNextBg
 
                             scale: albumArtMouseArea.pressed ? 0.94 : (albumArtMouseArea.containsMouse ? 1.04 : (root.isPlaying ? 1.0 : 0.96))
@@ -596,6 +643,13 @@ Item {
                                 scale: root.artScaleA
                                 opacity: 0.0
                                 visible: opacity > 0.001
+                                layer.enabled: root.artBlurA > 0.001
+                                layer.effect: MultiEffect {
+                                    autoPaddingEnabled: false
+                                    blurEnabled: true
+                                    blurMax: 24
+                                    blur: root.artBlurA
+                                }
                                 onStatusChanged: {
                                     if (!root.imgAActive && status === Image.Ready && artPreloadTimer.running) {
                                         root.startCrossfade();
@@ -614,6 +668,13 @@ Item {
                                 scale: root.artScaleB
                                 opacity: 0.0
                                 visible: opacity > 0.001
+                                layer.enabled: root.artBlurB > 0.001
+                                layer.effect: MultiEffect {
+                                    autoPaddingEnabled: false
+                                    blurEnabled: true
+                                    blurMax: 24
+                                    blur: root.artBlurB
+                                }
                                 onStatusChanged: {
                                     if (root.imgAActive && status === Image.Ready && artPreloadTimer.running) {
                                         root.startCrossfade();
@@ -765,7 +826,7 @@ Item {
                             implicitHeight: targetWidth
                             Layout.alignment: Qt.AlignVCenter
                             Layout.preferredWidth: root.mediaHovered ? targetWidth : 0
-                            radius: root.innerRadius(targetWidth, (cardBg.height - targetWidth) / 2)
+                            radius: targetWidth / 2
                             clip: true
                             opacity: root.mediaHovered ? 1.0 : 0.0
                             visible: Layout.preferredWidth > 0.5 || opacity > 0.01
