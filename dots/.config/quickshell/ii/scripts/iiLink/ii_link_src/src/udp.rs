@@ -17,6 +17,8 @@
 //! (always SHARD bytes; the frame length says where the last one's padding starts) and its
 //! 16-byte tag. The frame is the WebSocket's video payload as is: `[u8 kind][u64 pts][…]`.
 //! Phone hello: `[0xA7][2][u64 counter]`, then the sealed `u32` session id and the tag.
+//! Sound: `[0xA7][3][u64 counter][u8 capture]` (11 bytes, the associated data), then the
+//! sealed `[u16 len][packet]…` (the last few sound packets, oldest first) and the tag.
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -33,6 +35,9 @@ use tokio::net::UdpSocket;
 pub const MAGIC: u8 = 0xA7;
 const T_SHARD: u8 = 1;
 const T_HELLO: u8 = 2;
+const T_AUDIO: u8 = 3;
+/// Sound datagram header: magic, type, counter and the capture's number.
+const AUDIO_HEADER: usize = 11;
 /// Shard bytes: header, shard and tag (1164) plus IP and UDP fit Tailscale's 1280 MTU.
 pub const SHARD: usize = 1100;
 /// Data shards per Reed–Solomon block (k + m stays under GF(2^8)'s 256).
@@ -237,6 +242,43 @@ impl Sender {
         }
         self.bytes += len as u64;
         self.frames += 1;
+        true
+    }
+
+    /// Sends the PC's sound: the last few packets (oldest first, each `[u8 kind][u64 pts]
+    /// [Opus]`) in one datagram, no parity (they are small, and the next datagram repeats
+    /// them). False when the phone has no UDP address.
+    pub async fn send_audio(&mut self, gen: u8, packets: &[Vec<u8>]) -> bool {
+        let Some(addr) = self.peer.addr() else { return false };
+        // Newest first until a datagram's worth: never past one shard's size.
+        let mut take = 0;
+        let mut size = 0;
+        for p in packets.iter().rev() {
+            if size + 2 + p.len() > SHARD {
+                break;
+            }
+            size += 2 + p.len();
+            take += 1;
+        }
+        if take == 0 {
+            return false;
+        }
+        let mut body = Vec::with_capacity(size + TAG);
+        for p in &packets[packets.len() - take..] {
+            body.extend_from_slice(&(p.len() as u16).to_be_bytes());
+            body.extend_from_slice(p);
+        }
+        self.counter += 1;
+        let mut pkt = Vec::with_capacity(AUDIO_HEADER + size + TAG);
+        pkt.push(MAGIC);
+        pkt.push(T_AUDIO);
+        pkt.extend_from_slice(&self.counter.to_be_bytes());
+        pkt.push(gen);
+        if self.key_seal(&pkt, &mut body).is_err() {
+            return false;
+        }
+        pkt.extend_from_slice(&body);
+        let _ = self.sock.send_to(&pkt, addr).await;
         true
     }
 

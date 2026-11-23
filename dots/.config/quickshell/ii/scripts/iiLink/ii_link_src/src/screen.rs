@@ -63,6 +63,9 @@ const UDP_STEP_UP_QUIET: Duration = Duration::from_secs(30);
 const IDR_COOLDOWN: Duration = Duration::from_millis(500);
 /// 10 ms packets: half a second.
 const AUDIO_QUEUE: usize = 50;
+/// Sound packets per UDP datagram: the new one and the two before it, so a burst of two
+/// lost datagrams costs nothing (~400 kbit/s in all at 128 kbit/s Opus).
+const AUDIO_REDUNDANCY: usize = 3;
 /// Dropping this long without a key frame: restart the encoder for one (the GOP is 2 s).
 const DROP_IDR_AFTER: Duration = Duration::from_millis(250);
 /// VA-API's key-frame interval in frames: none after the first, in practice (~2.3 h at
@@ -109,8 +112,9 @@ pub struct Slot {
     udp_peer: Option<Arc<udp::Peer>>,
 }
 
-/// A phone's screen socket, and whether it asked for the video over UDP (its hello's `udp`).
-type PhoneConn = (Ws, bool);
+/// A phone's screen socket, whether it asked for the video over UDP (its hello's `udp`),
+/// and whether it takes the PC's sound there too (`udpAudio`).
+type PhoneConn = (Ws, bool, bool);
 
 struct End {
     dev: String,
@@ -279,6 +283,7 @@ pub async fn serve(mut ws: Ws, state: State) {
         _ => None,
     };
     let wants_udp = hello.as_ref().is_some_and(|v| v["udp"].as_bool() == Some(true));
+    let udp_audio = hello.as_ref().is_some_and(|v| v["udpAudio"].as_bool() == Some(true));
     let token = hello.and_then(|v| v["token"].as_str().map(str::to_owned));
     let Some(token) = token else {
         let _ = ws.close(None).await;
@@ -292,7 +297,7 @@ pub async fn serve(mut ws: Ws, state: State) {
             .and_then(|slot| slot.conns.clone())
     };
     if let Some(tx) = tx {
-        let _ = tx.send((ws, wants_udp));
+        let _ = tx.send((ws, wants_udp, udp_audio));
     } else {
         let _ = ws.close(None).await;
     }
@@ -713,6 +718,14 @@ struct WsSession {
     /// The video over UDP, used while the phone that asked for it keeps saying hello.
     udp: Option<udp::Sender>,
     wants_udp: bool,
+    /// The phone takes the sound over UDP as well (udp.rs `send_audio`).
+    udp_audio: bool,
+    /// Numbers each capture: in its OpusHead's pts and every UDP sound datagram, so the
+    /// phone drops packets of a capture it has moved past.
+    audio_gen: u8,
+    /// The last sound packets, sent again with each new one over UDP (a lost datagram is
+    /// in the next one, with no resend to wait for).
+    audio_recent: VecDeque<Vec<u8>>,
     hevc: bool,
 }
 
@@ -773,6 +786,9 @@ async fn run_ws(mut conns: mpsc::UnboundedReceiver<PhoneConn>, p: &Params) -> &'
         audio: None,
         udp: p.udp.clone().map(|(sock, peer)| udp::Sender::new(sock, peer)),
         wants_udp: false,
+        udp_audio: false,
+        audio_gen: 0,
+        audio_recent: VecDeque::new(),
         hevc: p.hevc,
     };
 
@@ -795,8 +811,9 @@ async fn run_ws(mut conns: mpsc::UnboundedReceiver<PhoneConn>, p: &Params) -> &'
     }
 }
 
-async fn run_ws_conn((ws, wants_udp): PhoneConn, sess: &mut WsSession, conns: &mut mpsc::UnboundedReceiver<PhoneConn>) -> WsConnEnd {
+async fn run_ws_conn((ws, wants_udp, udp_audio): PhoneConn, sess: &mut WsSession, conns: &mut mpsc::UnboundedReceiver<PhoneConn>) -> WsConnEnd {
     sess.wants_udp = wants_udp;
+    sess.udp_audio = wants_udp && udp_audio;
     limit_unsent(&ws);
     let (ws_tx, mut ws_rx) = ws.split();
     let queue = WriterQueue::new();
@@ -1226,8 +1243,18 @@ async fn run_ws_conn((ws, wants_udp): PhoneConn, sess: &mut WsSession, conns: &m
                 let src = sess.audio_src.borrow_and_update().clone();
                 // Stop the previous capture before opening the next (e.g. default sink switch).
                 sess.audio = None;
-                sess.audio = src.and_then(|s| Audio::start(&s));
-                crate::emit(json!({"ev": "screenAudio", "dev": sess.dev, "sid": sess.sid, "on": sess.audio.is_some()}));
+                sess.audio_gen = sess.audio_gen.wrapping_add(1);
+                sess.audio_recent.clear();
+                let gen = sess.audio_gen;
+                sess.audio = src.as_deref().and_then(|s| Audio::start(s, gen));
+                // Confirmed on the first packet, not the spawn: a capture that fails at once
+                // would otherwise flash the phone's switch on and off.
+                if src.is_some() && sess.audio.is_none() {
+                    trace("audio", "ffmpeg did not start");
+                    crate::emit(json!({"ev": "screenAudio", "dev": sess.dev, "sid": sess.sid, "on": false}));
+                } else if src.is_none() {
+                    crate::emit(json!({"ev": "screenAudio", "dev": sess.dev, "sid": sess.sid, "on": false}));
+                }
             }
             pkt = async {
                 match sess.audio.as_mut() {
@@ -1236,15 +1263,33 @@ async fn run_ws_conn((ws, wants_udp): PhoneConn, sess: &mut WsSession, conns: &m
                 }
             }, if sess.audio.is_some() => match pkt {
                 Some(pkt) => {
-                    if pkt[0] == 8 {
-                        if let Some(a) = sess.audio.as_mut() {
+                    if let Some(a) = sess.audio.as_mut() {
+                        if pkt[0] == 8 {
                             a.head = Some(pkt.clone());
+                        } else if !a.live {
+                            a.live = true;
+                            crate::emit(json!({"ev": "screenAudio", "dev": sess.dev, "sid": sess.sid, "on": true}));
                         }
                     }
-                    queue.push_prio(pkt);
+                    // The header stays on the WebSocket (it must arrive); the packets go
+                    // over UDP when the phone takes them there, clear of the video's TCP.
+                    let mut sent = false;
+                    if pkt[0] == 9 && sess.udp_audio {
+                        if let Some(u) = sess.udp.as_mut() {
+                            sess.audio_recent.push_back(pkt.clone());
+                            while sess.audio_recent.len() > AUDIO_REDUNDANCY {
+                                sess.audio_recent.pop_front();
+                            }
+                            sent = u.send_audio(sess.audio_gen, sess.audio_recent.make_contiguous()).await;
+                        }
+                    }
+                    if !sent {
+                        queue.push_prio(pkt);
+                    }
                 }
                 None => {
                     // ffmpeg ended (PulseAudio went, the source vanished): the phone hears nothing.
+                    trace("audio", "capture ended");
                     sess.audio = None;
                     crate::emit(json!({"ev": "screenAudio", "dev": sess.dev, "sid": sess.sid, "on": false}));
                 }
@@ -1285,14 +1330,18 @@ fn limit_unsent(ws: &Ws) {
 struct Audio {
     rx: mpsc::Receiver<Vec<u8>>,
     head: Option<Vec<u8>>,
+    /// The first sound packet went out (and the shell was told).
+    live: bool,
     _child: Child,
     _reader: AbortOnDrop,
 }
 
 impl Audio {
-    fn start(source: &str) -> Option<Audio> {
+    fn start(source: &str, gen: u8) -> Option<Audio> {
         let mut child = Command::new("ffmpeg")
-            .args(["-hide_banner", "-loglevel", "error", "-fflags", "nobuffer"])
+            .args(["-hide_banner", "-nostats", "-loglevel", "error", "-fflags", "nobuffer"])
+            // No probing: the format is known, and probing holds the first sound back.
+            .args(["-probesize", "32", "-analyzeduration", "0"])
             // 10 ms fragments from PulseAudio: its default is far larger, and waits that long.
             .args(["-f", "pulse", "-fragment_size", "1920", "-i", source])
             .args(["-ac", "2", "-ar", "48000", "-c:a", "libopus", "-application", "lowdelay", "-frame_duration", "10", "-b:a", "128k"])
@@ -1300,11 +1349,21 @@ impl Audio {
             .args(["-flush_packets", "1", "-page_duration", "10000", "-f", "ogg", "-"])
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
+            .stderr(Stdio::piped())
             .kill_on_drop(true)
             .spawn()
             .ok()?;
         let out = child.stdout.take()?;
+        // ffmpeg's errors (a source that won't open, a missing encoder) into the shell's log.
+        if let Some(err) = child.stderr.take() {
+            tokio::spawn(async move {
+                use tokio::io::AsyncBufReadExt;
+                let mut lines = BufReader::new(err).lines();
+                while let Ok(Some(line)) = lines.next_line().await {
+                    trace("audio", &line);
+                }
+            });
+        }
         let (tx, rx) = mpsc::channel(64);
         let task = tokio::spawn(async move {
             let mut out = BufReader::new(out);
@@ -1330,7 +1389,7 @@ impl Audio {
                     }
                     let data = std::mem::take(&mut packet);
                     let pkt = if data.starts_with(b"OpusHead") {
-                        Some(audio_packet(8, 0, &data))
+                        Some(audio_packet(8, gen as u64, &data))
                     } else if data.starts_with(b"OpusTags") {
                         None
                     } else {
@@ -1346,7 +1405,7 @@ impl Audio {
                 }
             }
         });
-        Some(Audio { rx, head: None, _child: child, _reader: AbortOnDrop(task.abort_handle()) })
+        Some(Audio { rx, head: None, live: false, _child: child, _reader: AbortOnDrop(task.abort_handle()) })
     }
 }
 
@@ -1846,6 +1905,9 @@ mod tests {
             audio: None,
             udp: None,
             wants_udp: false,
+            udp_audio: false,
+            audio_gen: 0,
+            audio_recent: VecDeque::new(),
             hevc: false,
         };
         // Same settings -> no target change

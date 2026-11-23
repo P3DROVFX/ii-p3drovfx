@@ -455,6 +455,14 @@ a block from any k of its k + m shards, hands frames out in order, and gives up 
 frame overtook 30 ms ago (then holds the picture and asks for a key frame). Parity starts at
 20%, then 3× the reported loss over a 10% floor (+10 after a lost frame, at most 60%), raised
 at once and lowered 2 points a second; `stats` carries it as `fec`.
+The PC's sound rides the same socket when the hello also has `"udpAudio":true` (a PC without
+it ignores the key and keeps the sound on the WebSocket): each sound packet goes out as
+`[0xA7][3][u64 counter][u8 capture]` (associated data, the counter shared with the shards)
++ sealed `[u16 len][packet]…` + tag, the packet as on the WebSocket (`[9][u64 pts][Opus]`)
+together with the two before it, oldest first, so two datagrams lost in a row cost nothing.
+The OpusHead stays on the WebSocket, its pts the capture's number (1–255, wrapping; a new
+capture each time the source changes); the phone drops packets of any other capture and any
+pts it already played. Datagrams count toward the phone's loss report like shards.
 - Low latency and adaptive bitrate: packets pass through a bounded non-blocking queue.
   Congestion (oldest queued packet > 200 ms or more than 200 ms of the target bitrate queued) drops
   non-key frames (`kind == 1`, counted in `dropped`) until the next key frame or encoder
@@ -483,11 +491,16 @@ sink and streams are never touched. Off, the sound goes to the phone alone: a nu
 of the session, or the capture dying restore the previous default and unload it (a shell
 that restarts mid-session unloads a leftover one). Helper op
 `{"op":"screen","a":"audio","on":bool,"source":"<monitor>"}` (a new source restarts the capture), event
-`{"ev":"screenAudio","dev","sid","on"}`. ffmpeg captures the monitor as Opus (48 kHz stereo,
+`{"ev":"screenAudio","dev","sid","on"}`: `on:true` once the first sound packet goes out (a
+capture that fails at once never reports on; ffmpeg's errors go to the log as
+`screen audio: …`), `on:false` when it ends. The shell gives an `on` it is still waiting for
+5 s, then answers `audio:false`; an `on` sent while the session is still starting waits for
+`ready`. ffmpeg captures the monitor as Opus (48 kHz stereo,
 128 kbit/s, 10 ms frames, Ogg unwrapped by the helper). On the screen socket, ahead of any
 queued video (at most 50 packets wait; the oldest goes, never an unsent header; a new header
 drops what is left of the old capture): `[8][u64 0][OpusHead]` (again after a reconnect or a
-sink change) and `[9][u64 pts µs][Opus packet]`. The phone keeps 40–200 ms in hand, following
+sink change; its pts is the capture's number, see *Video over UDP*) and `[9][u64 pts µs][Opus
+packet]` (over UDP instead when the phone takes it there). The phone keeps 40–200 ms in hand, following
 the packets' arrival jitter and growing after an underrun; it skips whole packets before
 decoding when far behind, fills a short pts gap with a faded last frame then silence, and
 reopens the decoder from the last OpusHead if it fails. USB sessions have no sound.

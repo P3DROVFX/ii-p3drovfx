@@ -116,29 +116,56 @@ Singleton {
     }
 
     function setAudio(on): void {
-        if (on === root._audioWanted)
+        if (on === root._audioWanted) {
+            // Still waiting for the helper's first packet: the confirmation (or the
+            // timeout) answers. A `false` here turned the phone's switch back off.
+            if (on && !root.audioOn)
+                return;
             return root._reply({ audio: root.audioOn });
-        if (on && (root.transport !== "wifi" || (root.state !== "ready" && root.state !== "live")))
+        }
+        if (on && (root.transport !== "wifi" || root.state === "idle"))
             return root._reply({ audio: false });
         root._audioWanted = on;
         if (on) {
-            if (root.keepPcAudio) {
-                root._audioShared = true;
-                root._audioPrev = "";
-                root._audioSource = root._monitorSource();
-                IiLinkService.send({ op: "screen", a: "audio", on: true, source: root._audioSource });
-            } else {
-                root._audioShared = false;
-                root._audioSource = `${root.audioSink}.monitor`;
-                audioUp.running = true;
-            }
+            // Asked while the session is still starting: applied at `ready`.
+            if (root.state === "ready" || root.state === "live")
+                root._audioStart();
         } else {
+            audioPending.stop();
             IiLinkService.send({ op: "screen", a: "audio", on: false });
             root._audioDown();
         }
     }
 
+    // A capture that never sends a packet (a source that hangs) must not leave the phone waiting.
+    Timer {
+        id: audioPending
+        interval: 5000
+        onTriggered: {
+            if (!root._audioWanted || root.audioOn)
+                return;
+            console.warn("[PhoneScreen] the PC's sound did not start in time");
+            IiLinkService.send({ op: "screen", a: "audio", on: false });
+            root._audioDown();
+        }
+    }
+
+    function _audioStart(): void {
+        audioPending.restart();
+        if (root.keepPcAudio) {
+            root._audioShared = true;
+            root._audioPrev = "";
+            root._audioSource = root._monitorSource();
+            IiLinkService.send({ op: "screen", a: "audio", on: true, source: root._audioSource });
+        } else {
+            root._audioShared = false;
+            root._audioSource = `${root.audioSink}.monitor`;
+            audioUp.running = true;
+        }
+    }
+
     function _audioDown(): void {
+        audioPending.stop();
         if (!root._audioShared)
             Quickshell.execDetached(["sh", "-c", root._audioOffScript(root._audioPrev)]);
         root._audioPrev = "";
@@ -732,6 +759,8 @@ Singleton {
             if (root.transport === "wifi" || ev.transport === "ws" || root.port <= 0) {
                 root.state = "ready";
                 root._reply({ state: "ready", transport: "wifi", token: root.token, w: root.w, h: root.h, mode: root.mode, output: root.output, orient: root.orient, screens: root._monitors().length });
+                if (root._audioWanted && !root.audioOn && root.transport === "wifi")
+                    root._audioStart();
             } else {
                 adbReverse.command = ["adb", "-s", root.serial, "reverse", `tcp:${root.port}`, `tcp:${root.port}`];
                 adbReverse.running = true;
@@ -740,6 +769,7 @@ Singleton {
         case "screenAudio":
             // The helper's capture: confirmed, or ended (ffmpeg died, the source went).
             if (ev.on === true && root._audioWanted) {
+                audioPending.stop();
                 root.audioOn = true;
                 root._reply({ audio: true });
             } else if (ev.on !== true) {
