@@ -467,6 +467,7 @@ ContentPage {
                 colBackground: Appearance.colors.colLayer2
                 colBackgroundHover: Appearance.colors.colLayer2Hover
                 enabled: KdeConnectService.activeReachable && KdeConnectService.adbReachable
+                    && KdeConnectService.manageAdbConnection
                 opacity: enabled ? 1.0 : 0.5
                 contentItem: RowLayout {
                     spacing: 6

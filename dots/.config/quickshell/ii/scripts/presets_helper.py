@@ -130,6 +130,7 @@ PERSONAL_PATHS = (
     "phone.scrcpy.useWireless",
     "phone.scrcpy.autoWirelessIp",
     "phone.scrcpy.pinAdbPort",
+    "phone.scrcpy.manageAdbConnection",
     "phone.scrcpy.autoResume",
     "phone.scrcpy.embed.enabled",
     "phone.scrcpy.recording.folder",

@@ -160,15 +160,24 @@ Item {
                     onToggled: value => root.scrcpy.useWireless = value
                 }
                 ToggleRow {
+                    symbol: "link"
+                    title: Translation.tr("Keep the ADB connection alive")
+                    description: root.scrcpy.manageAdbConnection ? ""
+                        : Translation.tr("Left to an external service")
+                    help: Translation.tr("On, the shell reconnects ADB when the phone's port changes, drops dead connections and pins the port if asked. Turn it off when another service on this computer keeps ADB connected: two of them fighting over the phone leave it connected twice, and ADB commands then fail. Off, the shell only uses the connection it finds.")
+                    checked: root.scrcpy.manageAdbConnection
+                    onToggled: value => root.scrcpy.manageAdbConnection = value
+                }
+                ToggleRow {
                     symbol: "sync_alt"
                     title: Translation.tr("Auto-detect IP")
-                    description: !root.scrcpy.useWireless ? ""
+                    description: !root.scrcpy.useWireless || !root.scrcpy.manageAdbConnection ? ""
                         : root.scrcpy.autoWirelessIp
                             ? (KdeConnectService.resolvedWirelessHost !== ""
                                 ? Translation.tr("Will connect to %1").arg(KdeConnectService.resolvedWirelessHost)
                                 : Translation.tr("Waiting for the phone's IP…"))
                             : ""
-                    enabled: root.scrcpy.useWireless
+                    enabled: root.scrcpy.useWireless && root.scrcpy.manageAdbConnection
                     checked: root.scrcpy.autoWirelessIp
                     onToggled: value => root.scrcpy.autoWirelessIp = value
                 }
@@ -176,7 +185,7 @@ Item {
                     symbol: "dns"
                     title: Translation.tr("Wireless IP")
                     placeholder: Translation.tr("e.g. 192.168.1.50")
-                    visible: root.scrcpy.useWireless && !root.scrcpy.autoWirelessIp
+                    visible: root.scrcpy.useWireless && root.scrcpy.manageAdbConnection && !root.scrcpy.autoWirelessIp
                     value: root.scrcpy.wirelessIp
                     onEdited: text => root.scrcpy.wirelessIp = text
                 }
@@ -184,7 +193,7 @@ Item {
                     symbol: "tag"
                     title: Translation.tr("Wireless Port")
                     placeholder: Translation.tr("Default: 5555")
-                    visible: root.scrcpy.useWireless && !root.scrcpy.autoWirelessIp
+                    visible: root.scrcpy.useWireless && root.scrcpy.manageAdbConnection && !root.scrcpy.autoWirelessIp
                     value: root.scrcpy.wirelessPort
                     onEdited: text => root.scrcpy.wirelessPort = text
                 }
@@ -194,7 +203,7 @@ Item {
                     description: root.scrcpy.useWireless && KdeConnectService.pinnedAdbHost !== ""
                         ? Translation.tr("Pinned to %1").arg(KdeConnectService.pinnedAdbHost) : ""
                     help: Translation.tr("Wireless debugging picks a new random port every time the phone's ADB daemon restarts — an unlock is enough — which cuts the connection. Pinning holds a fixed port that survives those restarts, until the phone reboots. Unlike wireless debugging, that port stays open on every network the phone joins; connecting still requires a computer the phone has authorised.")
-                    enabled: root.scrcpy.useWireless
+                    enabled: root.scrcpy.useWireless && root.scrcpy.manageAdbConnection
                     checked: root.scrcpy.pinAdbPort
                     onToggled: value => root.scrcpy.pinAdbPort = value
                 }

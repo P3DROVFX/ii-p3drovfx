@@ -2812,6 +2812,10 @@ Singleton {
                     // TCP port that survives those restarts, until the phone reboots. Off by default:
                     // it reconfigures the phone's debugging daemon, which is the user's call to make.
                     property bool pinAdbPort: false
+                    // Off when an external keeper (such as adbkeeper) owns the wireless adb link. Two keepers
+                    // fight over it and leave two transports for one phone, and plain `adb` then fails with
+                    // "more than one device". Off, the shell only reads `adb devices`.
+                    property bool manageAdbConnection: true
                     // adbd comes back a few seconds after each restart, but whatever was
                     // mirroring died with it — reopen the same window once the phone answers.
                     property bool autoResume: true

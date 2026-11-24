@@ -565,6 +565,7 @@ class TestPersonalDataStripping(unittest.TestCase):
                     "useWireless": True,
                     "autoWirelessIp": False,
                     "pinAdbPort": True,
+                    "manageAdbConnection": False,
                     "autoResume": False,
                     "embed": {"enabled": False},
                     "recording": {"folder": "/custom/recordings"},
@@ -598,6 +599,7 @@ class TestPersonalDataStripping(unittest.TestCase):
         self.assertNotIn("useWireless", sanitized["phone"]["scrcpy"])
         self.assertNotIn("autoWirelessIp", sanitized["phone"]["scrcpy"])
         self.assertNotIn("pinAdbPort", sanitized["phone"]["scrcpy"])
+        self.assertNotIn("manageAdbConnection", sanitized["phone"]["scrcpy"])
         self.assertNotIn("autoResume", sanitized["phone"]["scrcpy"])
         self.assertNotIn("enabled", sanitized["phone"]["scrcpy"]["embed"])
         self.assertNotIn("folder", sanitized["phone"]["scrcpy"]["recording"])
@@ -630,6 +632,7 @@ class TestPersonalDataStripping(unittest.TestCase):
                     "useWireless": False,
                     "autoWirelessIp": True,
                     "pinAdbPort": False,
+                    "manageAdbConnection": True,
                     "autoResume": True,
                     "embed": {"enabled": True},
                     "recording": {"folder": "/home/importer/Videos"},
@@ -650,6 +653,7 @@ class TestPersonalDataStripping(unittest.TestCase):
         self.assertFalse(merged["phone"]["scrcpy"]["useWireless"])
         self.assertTrue(merged["phone"]["scrcpy"]["autoWirelessIp"])
         self.assertFalse(merged["phone"]["scrcpy"]["pinAdbPort"])
+        self.assertTrue(merged["phone"]["scrcpy"]["manageAdbConnection"])
         self.assertTrue(merged["phone"]["scrcpy"]["autoResume"])
         self.assertTrue(merged["phone"]["scrcpy"]["embed"]["enabled"])
         self.assertEqual(merged["phone"]["scrcpy"]["recording"]["folder"], "/home/importer/Videos")

@@ -1551,6 +1551,10 @@ Singleton {
 
     // ─── ADB reachability + intent dispatch (Phase 4 features) ────
 
+    /** False while an external keeper owns the adb link: the shell then
+     *  never connects, disconnects, pins or pings the phone; it only reads `adb devices`. */
+    readonly property bool manageAdbConnection: Config.options.phone?.scrcpy?.manageAdbConnection ?? true
+
     /**
      * Checks whether ADB is reachable on the active device. Updates
      * `adbReachable` asynchronously. Called once on shell boot and
@@ -1570,6 +1574,7 @@ Singleton {
         running: false
         command: {
             const c = (Config.options.phone && Config.options.phone.scrcpy) ? Config.options.phone.scrcpy : null
+            const keep = root.manageAdbConnection
             const useWl = c && c.useWireless
             const wantIp = useWl ? root._kdeConnectIp(root.activeDeviceId) : ""
             const fallback = useWl ? root._resolveWirelessHost(root.activeDeviceId) : ""
@@ -1587,7 +1592,7 @@ Singleton {
                 // per network device finds a dead link within a probe; at two
                 // a minute it still costs a locked phone a fraction of the
                 // ~30 wakes a minute the default 1 s keepalive did.
-                "for S in $(adb devices | awk '$2==\"device\" && index($1, \":\") {print $1}'); do " +
+                (keep ? "for S in $(adb devices | awk '$2==\"device\" && index($1, \":\") {print $1}'); do " +
                 "  timeout 3 adb -s \"$S\" shell true >/dev/null 2>&1 || adb disconnect \"$S\" >/dev/null 2>&1; " +
                 "done; " +
                 resolveIp +
@@ -1606,10 +1611,13 @@ Singleton {
                 "    [ \"$S\" = \"$IP\" ] || [ \"$S\" = \"$PIN\" ] || adb disconnect \"$S\" >/dev/null 2>&1; " +
                 "  done; " +
                 "  if [ -n \"$PINOK\" ]; then echo \"PINNED:$PIN\"; else adb connect \"$IP\" >/dev/null 2>&1; fi; " +
-                "fi; " +
+                "fi; " : "") +
                 // A USB serial never contains a colon; prefer it over any
                 // network target so a plugged-in phone always wins. The pinned
                 // port comes next: it outlives the TLS port it was found with.
+                // An external keeper may hold the pinned port too: it still
+                // outranks a TLS port that dies with the next adbd restart.
+                (keep ? "" : "PINOK=$(adb devices | awk '$2==\"device\" && $1 ~ /:5555$/ {print $1}' | head -n1); ") +
                 "SERIAL=$(adb devices | awk '$2==\"device\" {print $1}' | grep -v ':' | head -n1); " +
                 "if [ -z \"$SERIAL\" ]; then SERIAL=\"$PINOK\"; fi; " +
                 "if [ -z \"$SERIAL\" ]; then SERIAL=$(adb devices | awk '$2==\"device\" {print $1}' | head -n1); fi; " +
@@ -1757,6 +1765,7 @@ Singleton {
     // second instead of on the next poll. Only runs while wireless auto
     // mode is on.
     readonly property bool _mdnsBrowseWanted: root.serviceEnabled
+        && root.manageAdbConnection
         && !!Config.options.phone && !!Config.options.phone.scrcpy
         && Config.options.phone.scrcpy.useWireless
         && Config.options.phone.scrcpy.autoWirelessIp
@@ -1874,6 +1883,7 @@ Singleton {
     // Pinning restarts adbd, which drops whatever is connected right then —
     // so it only ever runs while nothing is mirroring.
     readonly property bool _wantsAdbPin: root.adbReachable
+        && root.manageAdbConnection
         && !!Config.options.phone?.scrcpy?.useWireless
         && !!Config.options.phone?.scrcpy?.pinAdbPort
         && root.pinnedAdbHost === ""
@@ -1961,7 +1971,7 @@ Singleton {
 
         // Build shell command — delay monkey by 1s so scrcpy starts first.
         let cmd = ""
-        if (wirelessHost.length > 0) {
+        if (wirelessHost.length > 0 && root.manageAdbConnection) {
             cmd += "adb connect " + root._shellQuote(wirelessHost) + " >/dev/null 2>&1; "
         }
         cmd += "sleep 1; "
@@ -2531,7 +2541,8 @@ Singleton {
         // just "unknown" — unhelpful. Early return with a descriptive message.
         if (!root.adbReachable) {
             const wirelessHostPreflight = root._resolveWirelessHost(devId)
-            if (!wirelessHostPreflight || mode === "usb") {
+            // Without the shell's own `adb connect` below, a known host is no way in.
+            if (!wirelessHostPreflight || mode === "usb" || !root.manageAdbConnection) {
                 root.scrcpyLaunchError = Translation.tr("Phone not connected via ADB.\n\n"
                     + "To mirror your screen you need ADB access:\n"
                     + "  • USB: plug your phone AND enable USB debugging\n"
@@ -2636,7 +2647,7 @@ Singleton {
         let baseCmd = ""
         if (root.resolvedAdbSerial) {
             scrcpyArgs.push("-s", root._shellQuote(root.resolvedAdbSerial))
-        } else if (useWireless) {
+        } else if (useWireless && root.manageAdbConnection) {
             // Android 11+ wireless debugging uses a RANDOM port that changes
             // on every toggle/reboot, so resolve the live ip:port via mDNS
             // (avahi) at launch time. Fall back to the KDE Connect / manual
