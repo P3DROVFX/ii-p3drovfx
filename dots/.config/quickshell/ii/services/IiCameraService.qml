@@ -109,7 +109,7 @@ Singleton {
         opensuse: "sudo zypper install ffmpeg-7  # or ffmpeg from Packman"
     })
     readonly property var _v4l2loopbackInstallCommands: ({
-        arch: "sudo pacman -S v4l2loopback-dkms v4l2loopback-utils linux-headers\necho v4l2loopback | sudo tee /etc/modules-load.d/v4l2loopback.conf && echo 'options v4l2loopback devices=1 exclusive_caps=1 card_label=\"ii tools camera\"' | sudo tee /etc/modprobe.d/ii-tools-camera.conf && sudo modprobe v4l2loopback",
+        arch: "sudo pacman -S v4l2loopback-dkms v4l2loopback-utils \"$(pacman -Qqo /usr/lib/modules/$(uname -r)/vmlinuz)-headers\"\necho v4l2loopback | sudo tee /etc/modules-load.d/v4l2loopback.conf && echo 'options v4l2loopback devices=1 exclusive_caps=1 card_label=\"ii tools camera\"' | sudo tee /etc/modprobe.d/ii-tools-camera.conf && sudo modprobe v4l2loopback",
         fedora: "sudo dnf install akmod-v4l2loopback v4l2loopback\necho v4l2loopback | sudo tee /etc/modules-load.d/v4l2loopback.conf && echo 'options v4l2loopback devices=1 exclusive_caps=1 card_label=\"ii tools camera\"' | sudo tee /etc/modprobe.d/ii-tools-camera.conf && sudo modprobe v4l2loopback",
         debian: "sudo apt install v4l2loopback-dkms v4l2loopback-utils\necho v4l2loopback | sudo tee /etc/modules-load.d/v4l2loopback.conf && echo 'options v4l2loopback devices=1 exclusive_caps=1 card_label=\"ii tools camera\"' | sudo tee /etc/modprobe.d/ii-tools-camera.conf && sudo modprobe v4l2loopback",
         opensuse: "sudo zypper install v4l2loopback-kmp-default v4l2loopback-utils\necho v4l2loopback | sudo tee /etc/modules-load.d/v4l2loopback.conf && echo 'options v4l2loopback devices=1 exclusive_caps=1 card_label=\"ii tools camera\"' | sudo tee /etc/modprobe.d/ii-tools-camera.conf && sudo modprobe v4l2loopback"
@@ -193,7 +193,7 @@ Singleton {
                 present: false,
                 installCommands: root._v4l2loopbackInstallCommands,
                 packages: {
-                    arch: "v4l2loopback-dkms, v4l2loopback-utils, linux-headers",
+                    arch: "v4l2loopback-dkms, v4l2loopback-utils, headers for the running kernel (linux-zen-headers, linux-lts-headers…)",
                     fedora: "akmod-v4l2loopback, v4l2loopback",
                     debian: "v4l2loopback-dkms, v4l2loopback-utils",
                     opensuse: "v4l2loopback-kmp-default, v4l2loopback-utils",
@@ -456,7 +456,7 @@ Singleton {
         case "decoder":
             return Translation.tr("FFmpeg failed to decode the camera stream — check that your FFmpeg build supports H.264");
         case "device":
-            return Translation.tr("Virtual camera device could not be opened — check permissions and that no other app is locking it");
+            return Translation.tr("The virtual camera stopped taking the video, even after reopening it — the shell's log says why (qs log -c ii | grep camera)");
         case "busy":
             return Translation.tr("Another phone is already streaming — stop it first");
         default:
@@ -475,7 +475,8 @@ Singleton {
         case "network":
             return Translation.tr("Camera stream network error — check Wi-Fi or connect the phone over USB");
         default:
-            return code;
+            // The PC's own reasons, which the phone reports back as its error.
+            return root._reasonMessage(code);
         }
     }
 

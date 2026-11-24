@@ -34,7 +34,7 @@ use futures_util::{SinkExt, StreamExt};
 use serde_json::{json, Value};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-use tokio::process::{ChildStdin, Command};
+use tokio::process::{Child, ChildStdin, Command};
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio::time::{sleep_until, timeout, Duration};
 use tokio_tungstenite::tungstenite::Message;
@@ -214,6 +214,7 @@ async fn run(conns: &mut mpsc::UnboundedReceiver<Ws>, output: &Output, mut cfg_r
     let mut generation = 0u64;
     let mut writer: Option<Writer> = None;
     let mut restarts: Vec<Instant> = Vec::new();
+    let mut writer_restarts: Vec<Instant> = Vec::new();
 
     loop {
         let (mut tx, mut rx) = ws.split();
@@ -318,7 +319,27 @@ async fn run(conns: &mut mpsc::UnboundedReceiver<Ws>, output: &Output, mut cfg_r
                         Some(w) => { let _ = (&mut w.dead).await; }
                         None => std::future::pending::<()>().await,
                     }
-                } => return "device",
+                } => {
+                    // An app opening the camera can make the writer fail once (a format it
+                    // asked for, a device busy for a moment): open it again at the same size
+                    // instead of ending the session. Only one that keeps dying is the device.
+                    let Some(size) = writer.take().map(|w| w.size) else { continue };
+                    if let Some(d) = dec.take() {
+                        d.stop();
+                    }
+                    writer_restarts.retain(|t| t.elapsed() < Duration::from_secs(30));
+                    if writer_restarts.len() >= 3 {
+                        eprintln!("camera writer: keeps ending, giving up");
+                        return "device";
+                    }
+                    writer_restarts.push(Instant::now());
+                    eprintln!("camera writer: ended, opening it again");
+                    tokio::time::sleep(Duration::from_millis(300)).await;
+                    let Some(w) = Writer::start(output, size).await else { return "device" };
+                    writer = Some(w);
+                    need_key = true;
+                    let _ = tx.send(Message::text(json!({"t": "key"}).to_string())).await;
+                },
             }
         };
         // Answer the phone's close (or say ours) and let the old socket go, so neither
@@ -389,10 +410,11 @@ impl Decoder {
             .args(["-f", "rawvideo", "pipe:1"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
+            .stderr(Stdio::piped())
             .kill_on_drop(true)
             .spawn()
             .ok()?;
+        log_stderr(&mut child, "camera decoder");
         let stdin = child.stdin.take()?;
         let mut stdout = child.stdout.take()?;
         let (kill_tx, kill_rx) = oneshot::channel::<()>();
@@ -514,8 +536,23 @@ async fn has_pipewire_source(device: &str) -> bool {
     })
 }
 
-fn spawn_writer_child(mut cmd: Command, dead: Option<oneshot::Sender<()>>) -> Option<(mpsc::Sender<Arc<Vec<u8>>>, AbortOnDrop)> {
-    let mut child = cmd.stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).kill_on_drop(true).spawn().ok()?;
+/// A child's errors into the shell's log (`[IiLink] camera writer: …`): what the device or
+/// PipeWire refused is otherwise invisible to a user reporting "device".
+fn log_stderr(child: &mut Child, what: &'static str) {
+    if let Some(err) = child.stderr.take() {
+        tokio::spawn(async move {
+            use tokio::io::AsyncBufReadExt;
+            let mut lines = tokio::io::BufReader::new(err).lines();
+            while let Ok(Some(line)) = lines.next_line().await {
+                eprintln!("{what}: {line}");
+            }
+        });
+    }
+}
+
+fn spawn_writer_child(mut cmd: Command, what: &'static str, dead: Option<oneshot::Sender<()>>) -> Option<(mpsc::Sender<Arc<Vec<u8>>>, AbortOnDrop)> {
+    let mut child = cmd.stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::piped()).kill_on_drop(true).spawn().ok()?;
+    log_stderr(&mut child, what);
     let mut stdin = child.stdin.take()?;
     // Two pictures in flight at most; a writer further behind drops the rest.
     let (frames_tx, mut frames_rx) = mpsc::channel::<Arc<Vec<u8>>>(2);
@@ -563,9 +600,9 @@ impl Writer {
             Output::PipeWire => pipewire_cmd(w, h),
         };
         let (dead_tx, dead_rx) = oneshot::channel::<()>();
-        let (primary_tx, primary_task) = spawn_writer_child(cmd, Some(dead_tx))?;
+        let (primary_tx, primary_task) = spawn_writer_child(cmd, "camera writer", Some(dead_tx))?;
         let (twin_tx, twin_task) = if need_twin {
-            match spawn_writer_child(pipewire_cmd(w, h), None) {
+            match spawn_writer_child(pipewire_cmd(w, h), "camera pipewire twin", None) {
                 Some((tx, task)) => (Some(tx), Some(task)),
                 None => (None, None),
             }
