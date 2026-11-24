@@ -3,10 +3,8 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
-import Quickshell.Io
 import qs.services
 import qs.modules.common
-import qs.modules.common.functions
 
 /**
  * The picture of a Dev tools result, read from the `visual` entry of the
@@ -24,117 +22,12 @@ Item {
     signal notice(string message)
 
     readonly property string kind: root.visual?.kind ?? ""
-    readonly property string qrStyle: root.visual?.style ?? "pixel"
-    readonly property bool isStyledQr: root.kind === "qr" && (root.qrStyle === "pixel" || root.qrStyle === "blob")
+    readonly property string qrStyle: root.visual?.style ?? QrCode.style
     readonly property bool hasVisual: root.kind === "qr" || root.kind === "swatches" || root.kind === "contrast"
 
     visible: root.hasVisual
     implicitWidth: content.implicitWidth
     implicitHeight: root.hasVisual ? content.implicitHeight : 0
-
-    function colorHex(c) {
-        const col = Qt.color(c);
-        const ch = n => Math.round(Math.max(0, Math.min(255, n * 255))).toString(16).padStart(2, "0").toUpperCase();
-        return "#" + ch(col.r) + ch(col.g) + ch(col.b);
-    }
-
-    readonly property var qrThemeColors: ({
-        darkmode: Boolean(Appearance.m3colors.darkmode),
-        surface: root.colorHex(Appearance.m3colors.m3surface),
-        surfaceLow: root.colorHex(Appearance.m3colors.m3surfaceContainerLow),
-        surfaceHigh: root.colorHex(Appearance.m3colors.m3surfaceContainerHigh),
-        onSurface: root.colorHex(Appearance.m3colors.m3onSurface),
-        primary: root.colorHex(Appearance.m3colors.m3primary),
-        primaryContainer: root.colorHex(Appearance.m3colors.m3primaryContainer),
-        secondary: root.colorHex(Appearance.m3colors.m3secondary),
-        tertiary: root.colorHex(Appearance.m3colors.m3tertiary)
-    })
-
-    readonly property var qrResolvedColors: root.isStyledQr
-        ? DevToolsRegistry.qrColors(root.qrStyle, root.qrThemeColors)
-        : ({ background: "#FFFFFF", canvasBg: "#FFFFFF", primary: "#000000" })
-
-    property string qrDisplaySvg: ""
-    property string _qrSourceA: ""
-    property string _qrSourceB: ""
-    property int _qrActiveSlot: 0
-    property int _qrPendingSlot: -1
-    property bool _qrHasDisplayed: false
-
-    function _rebuildStyledPreview() {
-        if (!root.isStyledQr) {
-            root.qrDisplaySvg = "";
-            root._qrSourceA = "";
-            root._qrSourceB = "";
-            root._qrPendingSlot = -1;
-            root._qrHasDisplayed = false;
-            return;
-        }
-        const displayColors = root.qrStyle === "pixel"
-            ? Object.assign({}, root.qrThemeColors, { canvasBg: "transparent" })
-            : Object.assign({}, root.qrThemeColors, {
-                background: "transparent",
-                cardBackground: root.qrResolvedColors.background
-            });
-        const svg = DevToolsRegistry.qrSvg(root.visual, displayColors, { sizePx: 800 });
-        root.qrDisplaySvg = svg;
-        const uri = svg.length > 0 ? ("data:image/svg+xml;utf8," + encodeURIComponent(svg)) : "";
-        if (uri.length === 0) {
-            root._qrSourceA = "";
-            root._qrSourceB = "";
-            root._qrPendingSlot = -1;
-            root._qrHasDisplayed = false;
-            return;
-        }
-        const currentImg = root._qrActiveSlot === 0 ? qrImageA : qrImageB;
-        const currentUri = root._qrActiveSlot === 0 ? root._qrSourceA : root._qrSourceB;
-        if (root._qrHasDisplayed && currentUri === uri && currentImg.status === Image.Ready) {
-            root._qrPendingSlot = -1;
-            return;
-        }
-        const target = root._qrHasDisplayed ? (1 - root._qrActiveSlot) : 0;
-        root._qrPendingSlot = target;
-        if (target === 0) {
-            root._qrSourceA = uri;
-            if (qrImageA.status === Image.Ready && root._qrPendingSlot === 0) {
-                root._qrActiveSlot = 0;
-                root._qrHasDisplayed = true;
-                root._qrPendingSlot = -1;
-            }
-        } else {
-            root._qrSourceB = uri;
-            if (qrImageB.status === Image.Ready && root._qrPendingSlot === 1) {
-                root._qrActiveSlot = 1;
-                root._qrHasDisplayed = true;
-                root._qrPendingSlot = -1;
-            }
-        }
-    }
-
-    function _scheduleQrPreview() {
-        if (!root.isStyledQr) {
-            qrPreviewDebounce.stop();
-            root._rebuildStyledPreview();
-            return;
-        }
-        qrPreviewDebounce.restart();
-    }
-
-    onVisualChanged: root._scheduleQrPreview()
-    onIsStyledQrChanged: root._scheduleQrPreview()
-    onQrThemeColorsChanged: root._scheduleQrPreview()
-    Component.onCompleted: root._scheduleQrPreview()
-
-    Timer {
-        id: qrPreviewDebounce
-        interval: 150
-        repeat: false
-        onTriggered: root._rebuildStyledPreview()
-    }
-
-    function qrExportSvg(sizePx) {
-        return DevToolsRegistry.qrSvg(root.visual, root.qrThemeColors, { sizePx: sizePx || 800 });
-    }
 
     function hexLuminance(hex) {
         const value = String(hex).replace("#", "");
@@ -145,79 +38,16 @@ Item {
         return 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4);
     }
 
-    function qrCommand(target) {
-        const rows = (root.visual?.rows ?? []).join(",");
-        return ["python3", `${Directories.scriptPath}/images/qr_png.py`, rows, target];
-    }
-
     function copyQr() {
-        if (root.isStyledQr) {
-            if (copyProc.running)
-                copyProc.running = false;
-            const rows = (root.visual?.rows ?? []).join(",");
-            copyProc.pendingSvg = root.qrExportSvg(800);
-            copyProc.stdinEnabled = true;
-            copyProc.command = ["bash", "-c", '"$@" | wl-copy --type image/png >/dev/null 2>&1', "qr",
-                "python3", `${Directories.scriptPath}/images/qr_png.py`, "--svg", "-", "--rows", rows, "--size", "800", "-"];
-            copyProc.running = true;
-            return;
-        }
-        const command = root.qrCommand("-");
-        Quickshell.execDetached(["bash", "-c", '"$@" | wl-copy --type image/png', "qr"].concat(command));
-        root.notice(Translation.tr("QR code copied as an image"));
+        QrCode.copyImage(root.visual, root.qrStyle, {
+            decoration: root.visual?.decoration ?? QrCode.decoration
+        }, (ok, message) => root.notice(message));
     }
 
     function saveQr() {
-        const folder = FileUtils.trimFileProtocol(Directories.pictures);
-        const stamp = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 19);
-        const path = `${folder}/qr-${stamp}.png`;
-        if (saveProc.running)
-            saveProc.running = false;
-        saveProc.savedPath = path;
-        if (root.isStyledQr) {
-            const rows = (root.visual?.rows ?? []).join(",");
-            saveProc.pendingSvg = root.qrExportSvg(800);
-            saveProc.stdinEnabled = true;
-            saveProc.command = ["python3", `${Directories.scriptPath}/images/qr_png.py`, "--svg", "-", "--rows", rows, "--size", "800", path];
-        } else {
-            saveProc.pendingSvg = "";
-            saveProc.stdinEnabled = false;
-            saveProc.command = root.qrCommand(path);
-        }
-        saveProc.running = true;
-    }
-
-    Process {
-        id: copyProc
-        property string pendingSvg: ""
-        stdinEnabled: true
-        onStarted: {
-            if (copyProc.pendingSvg.length > 0) {
-                copyProc.write(copyProc.pendingSvg);
-                copyProc.pendingSvg = "";
-            }
-            copyProc.stdinEnabled = false;
-        }
-        onExited: (exitCode, exitStatus) => root.notice(exitCode === 0
-            ? Translation.tr("QR code copied as an image")
-            : Translation.tr("Could not copy the QR code (rsvg-convert or Pillow is needed)"))
-    }
-
-    Process {
-        id: saveProc
-        property string savedPath: ""
-        property string pendingSvg: ""
-        stdinEnabled: true
-        onStarted: {
-            if (saveProc.pendingSvg.length > 0) {
-                saveProc.write(saveProc.pendingSvg);
-                saveProc.pendingSvg = "";
-            }
-            saveProc.stdinEnabled = false;
-        }
-        onExited: (exitCode, exitStatus) => root.notice(exitCode === 0
-            ? Translation.tr("Saved %1").arg(saveProc.savedPath)
-            : Translation.tr("Could not save the QR code (python3 with Pillow or rsvg-convert is needed)"))
+        QrCode.savePng(root.visual, root.qrStyle, "", {
+            decoration: root.visual?.decoration ?? QrCode.decoration
+        }, (ok, path, message) => root.notice(message));
     }
 
     ColumnLayout {
@@ -226,98 +56,20 @@ Item {
         anchors.right: parent.right
         spacing: Appearance.sizes.elevationMargin / 2
 
-        // ── QR: Pixel/Blob via theme-tinted SVG, Classic via black-on-white Canvas ──
+        // ── QR: Pixel/Blob/Classic via shared StyledQrCode ──
         RowLayout {
             visible: root.kind === "qr"
             Layout.fillWidth: true
             spacing: Appearance.sizes.elevationMargin
 
-            Rectangle {
-                id: qrPaper
-                readonly property int modules: (root.visual?.size ?? 21) + 4
+            StyledQrCode {
                 readonly property real availSide: Math.min(root.maxQrSide, root.width > 0 ? root.width * 0.6 : root.maxQrSide)
-                readonly property int modulePx: Math.max(1, Math.floor(availSide / modules))
-                readonly property int styledSide: Math.max(120, Math.round(availSide))
-                implicitWidth: root.isStyledQr ? styledSide : modules * modulePx
-                implicitHeight: root.isStyledQr ? styledSide : modules * modulePx
+                matrix: root.kind === "qr" ? root.visual : null
+                style: root.qrStyle
+                decoration: root.visual?.decoration ?? QrCode.decoration
+                implicitSize: Math.max(120, Math.round(availSide))
+                snapClassicSize: true
                 radius: Appearance.rounding.small
-                color: root.isStyledQr
-                    ? (root.qrStyle === "pixel"
-                        ? (root.qrResolvedColors?.canvasBg ?? "#FFFFFF")
-                        : (root.qrResolvedColors?.background ?? "#FFFFFF"))
-                    : "white"
-
-                Image {
-                    id: qrImageA
-                    anchors.fill: parent
-                    visible: root.isStyledQr
-                    opacity: (root._qrHasDisplayed && root._qrActiveSlot === 0) ? 1 : 0
-                    z: root._qrActiveSlot === 0 ? 1 : 0
-                    asynchronous: true
-                    cache: false
-                    smooth: true
-                    mipmap: true
-                    fillMode: Image.PreserveAspectFit
-                    sourceSize: Qt.size(Math.max(1, qrPaper.styledSide), Math.max(1, qrPaper.styledSide))
-                    source: root._qrSourceA
-                    onStatusChanged: {
-                        if (status === Image.Ready && root._qrPendingSlot === 0) {
-                            root._qrActiveSlot = 0;
-                            root._qrHasDisplayed = true;
-                            root._qrPendingSlot = -1;
-                        }
-                    }
-                }
-
-                Image {
-                    id: qrImageB
-                    anchors.fill: parent
-                    visible: root.isStyledQr
-                    opacity: (root._qrHasDisplayed && root._qrActiveSlot === 1) ? 1 : 0
-                    z: root._qrActiveSlot === 1 ? 1 : 0
-                    asynchronous: true
-                    cache: false
-                    smooth: true
-                    mipmap: true
-                    fillMode: Image.PreserveAspectFit
-                    sourceSize: Qt.size(Math.max(1, qrPaper.styledSide), Math.max(1, qrPaper.styledSide))
-                    source: root._qrSourceB
-                    onStatusChanged: {
-                        if (status === Image.Ready && root._qrPendingSlot === 1) {
-                            root._qrActiveSlot = 1;
-                            root._qrHasDisplayed = true;
-                            root._qrPendingSlot = -1;
-                        }
-                    }
-                }
-
-                Canvas {
-                    id: qrCanvas
-                    anchors.fill: parent
-                    visible: root.kind === "qr" && !root.isStyledQr
-                    onPaint: {
-                        const ctx = getContext("2d");
-                        ctx.reset();
-                        ctx.fillStyle = "#000000";
-                        const rows = root.visual?.rows ?? [];
-                        const px = qrPaper.modulePx;
-                        for (let y = 0; y < rows.length; y++) {
-                            const row = rows[y];
-                            for (let x = 0; x < row.length; x++) {
-                                if (row[x] === "1")
-                                    ctx.fillRect((x + 2) * px, (y + 2) * px, px, px);
-                            }
-                        }
-                    }
-                    Connections {
-                        target: root
-                        function onVisualChanged() {
-                            if (root.kind === "qr" && !root.isStyledQr)
-                                qrCanvas.requestPaint();
-                        }
-                    }
-                    onWidthChanged: if (root.kind === "qr" && !root.isStyledQr) requestPaint()
-                }
             }
 
             ColumnLayout {

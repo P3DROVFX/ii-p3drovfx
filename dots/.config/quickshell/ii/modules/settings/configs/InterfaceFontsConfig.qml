@@ -303,6 +303,85 @@ Item {
                 }
             }
         }
+
+        // ── QR codes ──────────────────────────────────────────────────────
+        LazyBlock {
+            placeholderHeight: 230
+            ContentSection {
+                title: Translation.tr("QR codes")
+                icon: "qr_code_2"
+                tooltip: Translation.tr("Default look for QR codes across Dev tools and device pairing.")
+
+                GridLayout {
+                    Layout.fillWidth: true
+                    columns: interfaceFontsRoot.width >= 600 ? 2 : 1
+                    columnSpacing: 16
+                    rowSpacing: 12
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        ContentSubsection {
+                            title: Translation.tr("QR code style")
+                            icon: "qr_code_2"
+                            tooltip: Translation.tr("Default style used for QR codes across the shell (Dev tools and ii-link pairing)")
+
+                            ConfigSelectionArray {
+                                currentValue: interfaceFontsRoot.appearance.qrStyle
+                                onSelected: newValue => {
+                                    interfaceFontsRoot.appearance.qrStyle = newValue;
+                                }
+                                options: [
+                                    {
+                                        "displayName": Translation.tr("Pixel"),
+                                        "icon": "apps",
+                                        "value": "pixel",
+                                        "tooltip": Translation.tr("Material You cookie card with themed modules and shapes")
+                                    },
+                                    {
+                                        "displayName": Translation.tr("Blob"),
+                                        "icon": "bubble_chart",
+                                        "value": "blob",
+                                        "tooltip": Translation.tr("Connected liquid blobs in the Material You accent color")
+                                    },
+                                    {
+                                        "displayName": Translation.tr("Classic"),
+                                        "icon": "grid_on",
+                                        "value": "classic",
+                                        "tooltip": Translation.tr("Sharp black squares on a white card")
+                                    }
+                                ]
+                            }
+                        }
+
+                        ConfigSwitch {
+                            buttonIcon: "auto_awesome"
+                            text: Translation.tr("QR code outer decoration")
+                            description: Translation.tr("Draw the scalloped cookie card and faint dot pattern around Pixel QR codes")
+                            enabled: interfaceFontsRoot.appearance.qrStyle === "pixel"
+                            checked: interfaceFontsRoot.appearance.qrDecoration
+                            onCheckedChanged: {
+                                interfaceFontsRoot.appearance.qrDecoration = checked;
+                            }
+
+                            StyledToolTip {
+                                text: Translation.tr("Adds the tinted Material cookie backdrop and decorative outer dots to Pixel QR codes.")
+                            }
+                        }
+                    }
+
+                    StyledQrCode {
+                        Layout.alignment: Qt.AlignVCenter | Qt.AlignHCenter
+                        text: "https://end-4.github.io/dots-hyprland-wiki/"
+                        style: interfaceFontsRoot.appearance.qrStyle
+                        decoration: interfaceFontsRoot.appearance.qrDecoration
+                        implicitSize: 140
+                        radius: Appearance.rounding.large
+                    }
+                }
+            }
+        }
     }
 
     // Sub-page overlay

@@ -2325,6 +2325,61 @@ function qrEncodeBytes(bytes, eclName = "M") {
     return { size, version, mask: bestMask, modules };
 }
 
+function qrModulesToRows(modules) {
+    const rows = [];
+    for (let y = 0; y < modules.length; y++) {
+        const modRow = modules[y];
+        let row = "";
+        for (let x = 0; x < modRow.length; x++)
+            row += modRow[x] ? "1" : "0";
+        rows.push(row);
+    }
+    return rows;
+}
+
+/// Encodes UTF-8 text into { size, version, rows }, or null when empty or too long for ecc.
+function qrEncode(text, ecc = "M") {
+    const str = String(text ?? "");
+    if (str.length === 0)
+        return null;
+    const bytes = Array.from(utf8Encode(str));
+    const qr = qrEncodeBytes(bytes, ecc || "M");
+    if (!qr)
+        return null;
+    return {
+        size: qr.size,
+        version: qr.version,
+        rows: qrModulesToRows(qr.modules)
+    };
+}
+
+/// Normalizes external "0"/"1" rows into { size, version, rows }, deriving version from size.
+function qrMatrixFromRows(rows) {
+    if (!rows || typeof rows.length !== "number" || rows.length === 0)
+        return null;
+    const size = rows.length;
+    if (size < 21 || (size - 17) % 4 !== 0)
+        return null;
+    const version = Math.round((size - 17) / 4);
+    const normalized = [];
+    for (let y = 0; y < size; y++) {
+        const raw = rows[y];
+        if (typeof raw === "string") {
+            if (raw.length !== size)
+                return null;
+            normalized.push(raw);
+        } else if (raw && typeof raw.length === "number" && raw.length === size) {
+            let line = "";
+            for (let x = 0; x < size; x++)
+                line += (raw[x] === "1" || raw[x] === 1 || raw[x] === true) ? "1" : "0";
+            normalized.push(line);
+        } else {
+            return null;
+        }
+    }
+    return { size, version, rows: normalized };
+}
+
 function qrEscapeWifi(value) {
     return String(value).replace(/([\\;,:"])/g, "\\$1");
 }
@@ -3522,7 +3577,7 @@ function toolQrCode(input = "", options = {}) {
                 decoration,
                 size: qr.size,
                 version: qr.version,
-                rows: qr.modules.map(row => row.map(v => v ? "1" : "0").join(""))
+                rows: qrModulesToRows(qr.modules)
             }
         }
     };
@@ -20207,6 +20262,8 @@ if (typeof module !== "undefined" && module.exports) {
         toolHttpStatus,
         toolCronExplainer,
         toolChmod,
+        qrEncode,
+        qrMatrixFromRows,
         qrEncodeBytes,
         qrSvg,
         qrSvgResolveColors,

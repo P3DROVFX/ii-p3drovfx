@@ -1271,7 +1271,7 @@ Singleton {
             feedbackText: Translation.tr("Result copied to clipboard"),
             execute: () => {
                 if (tool.type === "generator" || arg.length > 0) {
-                    const res = DevToolsRegistry.run(tool.id, arg, tool.defaultOptions);
+                    const res = DevToolsRegistry.run(tool.id, arg, DevToolsRegistry.defaultOptionsFor(tool));
                     if (res.output) {
                         Quickshell.clipboardText = res.output;
                     }
@@ -1290,7 +1290,7 @@ Singleton {
 
     function generatorValue(id: string): string {
         const tool = DevToolsRegistry.byId(id);
-        const res = DevToolsRegistry.run(id, "", tool?.defaultOptions ?? {});
+        const res = DevToolsRegistry.run(id, "", DevToolsRegistry.defaultOptionsFor(tool));
         return String(res.output ?? "");
     }
 

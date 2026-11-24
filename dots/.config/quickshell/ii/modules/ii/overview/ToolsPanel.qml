@@ -54,13 +54,7 @@ Item {
 
         // Restore or initialize options for this tool
         if (!root.toolOptions[tool.id]) {
-            const initialOpts = {};
-            if (tool.defaultOptions) {
-                for (const key in tool.defaultOptions) {
-                    initialOpts[key] = tool.defaultOptions[key];
-                }
-            }
-            root.toolOptions[tool.id] = initialOpts;
+            root.toolOptions[tool.id] = DevToolsRegistry.defaultOptionsFor(tool);
         }
         root.activeOptions = Object.assign({}, root.toolOptions[tool.id]);
 

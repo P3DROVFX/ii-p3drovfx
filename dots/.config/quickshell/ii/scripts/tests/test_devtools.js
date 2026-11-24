@@ -533,6 +533,21 @@ console.log("Running devtools.js unit tests...\n");
     });
     assert.ok(devtools.contrastRatio(parseHexRgb(riskyMidGrey.primary), parseHexRgb(riskyMidGrey.background)) >= 4.5, "mid-grey blob guarded");
 
+    // Shared service helpers: qrEncode and qrMatrixFromRows
+    assert.equal(devtools.qrEncode("", "M"), null);
+    const encoded = devtools.qrEncode("https://example.com", "M");
+    assert.equal(encoded.version, 2);
+    assert.equal(encoded.size, 25);
+    assert.deepEqual(encoded.rows, link.meta.visual.rows);
+
+    const rebuilt = devtools.qrMatrixFromRows(encoded.rows);
+    assert.equal(rebuilt.version, 2);
+    assert.equal(rebuilt.size, 25);
+    assert.deepEqual(rebuilt.rows, encoded.rows);
+    assert.equal(devtools.qrMatrixFromRows([]), null);
+    assert.equal(devtools.qrMatrixFromRows(["010", "101", "010"]), null);
+    assert.equal(devtools.qrMatrixFromRows(new Array(22).fill("0".repeat(22))), null);
+
     console.log("✓ QR code tests passed");
 }
 

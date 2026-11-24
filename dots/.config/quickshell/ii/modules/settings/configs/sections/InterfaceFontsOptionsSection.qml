@@ -203,4 +203,57 @@ ColumnLayout {
             }
         }
     }
+
+    ContentSection {
+        title: Translation.tr("QR codes")
+        icon: "qr_code_2"
+
+        ContentSubsection {
+            title: Translation.tr("QR code style")
+            icon: "qr_code_2"
+            tooltip: Translation.tr("Default style used for QR codes across the shell (Dev tools and ii-link pairing)")
+
+            ConfigSelectionArray {
+                currentValue: Config.options.appearance.qrStyle
+                onSelected: newValue => {
+                    Config.options.appearance.qrStyle = newValue;
+                }
+                options: [
+                    {
+                        "displayName": Translation.tr("Pixel"),
+                        "icon": "apps",
+                        "value": "pixel",
+                        "tooltip": Translation.tr("Material You cookie card with themed modules and shapes")
+                    },
+                    {
+                        "displayName": Translation.tr("Blob"),
+                        "icon": "bubble_chart",
+                        "value": "blob",
+                        "tooltip": Translation.tr("Connected liquid blobs in the Material You accent color")
+                    },
+                    {
+                        "displayName": Translation.tr("Classic"),
+                        "icon": "grid_on",
+                        "value": "classic",
+                        "tooltip": Translation.tr("Sharp black squares on a white card")
+                    }
+                ]
+            }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "auto_awesome"
+            text: Translation.tr("QR code outer decoration")
+            description: Translation.tr("Draw the scalloped cookie card and faint dot pattern around Pixel QR codes")
+            enabled: Config.options.appearance.qrStyle === "pixel"
+            checked: Config.options.appearance.qrDecoration
+            onCheckedChanged: {
+                Config.options.appearance.qrDecoration = checked;
+            }
+
+            StyledToolTip {
+                text: Translation.tr("Adds the tinted Material cookie backdrop and decorative outer dots to Pixel QR codes.")
+            }
+        }
+    }
 }

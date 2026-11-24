@@ -2107,6 +2107,7 @@ fi`]
         id: panel
         readonly property var pairing: IiLinkService.pairing
         readonly property var qr: panel.pairing?.qr ?? []
+        readonly property var qrMatrix: panel.qr.length > 0 ? QrCode.fromRows(panel.qr) : null
         property int secondsLeft: 0
 
         implicitHeight: panelLayout.implicitHeight + 36
@@ -2127,50 +2128,12 @@ fi`]
             anchors.margins: 18
             spacing: 20
 
-            Rectangle {
+            StyledQrCode {
                 Layout.alignment: Qt.AlignTop
-                implicitWidth: 196
-                implicitHeight: 196
+                matrix: panel.qrMatrix
+                busy: panel.qr.length === 0
+                implicitSize: 196
                 radius: Appearance.rounding.large
-                color: "white"
-
-                Canvas {
-                    id: qrCanvas
-                    anchors.fill: parent
-                    anchors.margins: 12
-                    visible: panel.qr.length > 0
-                    renderStrategy: Canvas.Cooperative
-                    onPaint: {
-                        const ctx = getContext("2d");
-                        ctx.reset();
-                        const n = panel.qr.length;
-                        if (n === 0)
-                            return;
-                        const cell = Math.floor(width / n);
-                        const offset = Math.floor((width - cell * n) / 2);
-                        ctx.fillStyle = "black";
-                        for (let y = 0; y < n; y++) {
-                            const rowBits = panel.qr[y];
-                            for (let x = 0; x < n; x++) {
-                                if (rowBits[x] === "1")
-                                    ctx.fillRect(offset + x * cell, offset + y * cell, cell, cell);
-                            }
-                        }
-                    }
-                    Connections {
-                        target: panel
-                        function onQrChanged() {
-                            qrCanvas.requestPaint();
-                        }
-                    }
-                }
-
-                MaterialLoadingIndicator {
-                    anchors.centerIn: parent
-                    visible: panel.qr.length === 0
-                    loading: visible
-                    implicitSize: 40
-                }
             }
 
             ColumnLayout {

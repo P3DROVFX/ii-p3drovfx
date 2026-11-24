@@ -2031,6 +2031,7 @@ Singleton {
             "phone.webcam.connection": ["wifi", "usb"],
             "phone.scrcpy.wireless.codec": ["auto", "h265", "h264"],
             "appearance.fakeScreenRounding": [0, 1, 2, 3, 4],
+            "appearance.qrStyle": ["pixel", "blob", "classic"],
             "background.zoomOutStyle": [0, 1, 2],
             "background.overviewBackgroundStyle": ["", "gnome", "real-gnome", "soft-focus", "camera-push", "depth", "card-lift", "desaturate", "directional", "material-shape"],
             "background.mediaMode.visualizerMode": [0, 1, 2, 3, 4, 5],
@@ -3486,6 +3487,8 @@ Singleton {
                 property bool scrollFadeMask: false
                 property bool settingsPerformanceMode: true
                 property int settingsUnloadDelay: 0 // Seconds Settings stays loaded after closing; 0 = unload at once, -1 = never
+                property string qrStyle: "pixel" // Allowed: pixel, blob, classic
+                property bool qrDecoration: true
                 property JsonObject appLaunchAnimation: JsonObject {
                     property bool enable: true
                     property string style: "scale" // Allowed: scale, slide

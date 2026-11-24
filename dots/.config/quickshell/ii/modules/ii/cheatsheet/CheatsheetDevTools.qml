@@ -159,7 +159,7 @@ Item {
         root.selectedIndex = targetIndex;
         root.currentToolId = tool.id;
         if (!root.toolOptions[tool.id])
-            root.toolOptions[tool.id] = Object.assign({}, tool.defaultOptions ?? {});
+            root.toolOptions[tool.id] = DevToolsRegistry.defaultOptionsFor(tool);
         root.activeOptions = Object.assign({}, root.toolOptions[tool.id]);
         if (root.toolInputs[tool.id] === undefined) {
             const sample = tool.type !== "generator" ? String(tool.sampleInput ?? "") : "";

@@ -6,28 +6,22 @@ import Quickshell
 import qs.services
 import qs.modules.common
 import "functions/devtools.js" as DevToolsEngine
-import "widgets/shapes/material-shapes.js" as MaterialShapes
 
 Singleton {
     id: root
 
-    readonly property var _qrShapesCache: {
-        const extract = poly => poly.cubics.map(c => c.points.slice());
-        return {
-            cookie4Sided: extract(MaterialShapes.getCookie4Sided()),
-            cookie6Sided: extract(MaterialShapes.getCookie6Sided()),
-            cookie7Sided: extract(MaterialShapes.getCookie7Sided()),
-            cookie9Sided: extract(MaterialShapes.getCookie9Sided())
-        };
-    }
-
     function qrColors(style: string, colors = ({})): var {
-        return DevToolsEngine.qrSvgResolveColors(style, colors);
+        if (colors && Object.keys(colors).length > 0)
+            return DevToolsEngine.qrSvgResolveColors(style || QrCode.style, colors);
+        return QrCode.colors(style);
     }
 
     function qrSvg(visual: var, colors = ({}), options = ({})): string {
-        const opts = Object.assign({}, options, { shapes: root._qrShapesCache });
-        return DevToolsEngine.qrSvg(visual, colors, opts);
+        if (colors && Object.keys(colors).length > 0) {
+            const opts = Object.assign({}, options, { shapes: QrCode._shapesCache });
+            return DevToolsEngine.qrSvg(visual, colors, opts);
+        }
+        return QrCode.svg(visual, options?.style ?? "", options);
     }
 
     readonly property var categories: [
@@ -1427,6 +1421,15 @@ Singleton {
 
     function byId(id: string): var {
         return root.tools.find(tool => tool.id === id) ?? null;
+    }
+
+    function defaultOptionsFor(tool): var {
+        const base = Object.assign({}, tool?.defaultOptions ?? {});
+        if (tool?.id === "qr_code") {
+            base.style = QrCode.style;
+            base.decoration = QrCode.decoration;
+        }
+        return base;
     }
 
     function run(toolId: string, input = "", options = {}): var {

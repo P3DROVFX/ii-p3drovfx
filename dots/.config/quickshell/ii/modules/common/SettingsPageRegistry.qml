@@ -82,7 +82,7 @@ Singleton {
             "subPages": ["widgets/CustomFontsConfig.qml"],
             "searchComponent": false,
             "searchSources": ["sections/InterfaceFontsOptionsSection.qml"],
-            "aliases": ["Base Icon Themes", "Decorative Options", "Shell family", "Panel family", "Tablet mode", "Waffle", "illogical-impulse", "Switch shell"]
+            "aliases": ["Base Icon Themes", "Decorative Options", "Shell family", "Panel family", "Tablet mode", "Waffle", "illogical-impulse", "Switch shell", "QR code", "QR style"]
         },
         {
             "id": "presets",
