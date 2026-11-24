@@ -67,6 +67,17 @@ QtObject {
                     }
                 },
                 {
+                    value: "gemini-4-hydrogen",
+                    title: "Gemini 4 Hydrogen",
+                    thinking: true,
+                    thinkingKind: "gemini-level",
+                    samplingParams: false,
+                    // Same family behaviour as 3.7/3.8: "minimal" is a 400.
+                    quirks: {
+                        thinkingFloor: "low"
+                    }
+                },
+                {
                     value: "gemini-3.7-flash",
                     title: "Gemini 3.7 Flash",
                     thinking: true,

@@ -31,6 +31,7 @@ Singleton {
 
     readonly property var models: [
         { "value": "gemini-3.8-flash", "title": "Gemini 3.8 Flash", "provider": "gemini" },
+        { "value": "gemini-4-hydrogen", "title": "Gemini 4 Hydrogen", "provider": "gemini" },
         { "value": "gemini-3.7-flash", "title": "Gemini 3.7 Flash", "provider": "gemini" },
         { "value": "gemini-2.5-flash-lite", "title": "Gemini 2.5 Flash-Lite", "provider": "gemini" },
         { "value": "claude-haiku-5-5", "title": "Claude Haiku 5.5", "provider": "claude" },
