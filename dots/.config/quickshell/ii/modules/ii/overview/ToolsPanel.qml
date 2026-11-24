@@ -16,6 +16,8 @@ Item {
     property string inputText: ""
     property var activeOptions: ({})
     property string outputText: ""
+    /// The result's meta; its `visual` (QR, swatches, contrast) is drawn above the text.
+    property var outputMeta: ({})
     property string errorText: ""
     property string noticeText: ""
 
@@ -91,6 +93,7 @@ Item {
 
         const input = tool.type === "generator" ? "" : root.inputText;
         const res = DevToolsRegistry.run(tool.id, input, root.activeOptions);
+        root.outputMeta = res.error ? ({}) : (res.meta ?? ({}));
         if (res.error) {
             root.errorText = String(res.error);
             root.outputText = "";
@@ -272,6 +275,10 @@ Item {
     Shortcut { sequence: "Ctrl+4"; onActivated: root.setCategoryByIndex(3) }
     Shortcut { sequence: "Ctrl+5"; onActivated: root.setCategoryByIndex(4) }
     Shortcut { sequence: "Ctrl+6"; onActivated: root.setCategoryByIndex(5) }
+    Shortcut { sequence: "Ctrl+7"; onActivated: root.setCategoryByIndex(6) }
+    Shortcut { sequence: "Ctrl+8"; onActivated: root.setCategoryByIndex(7) }
+    Shortcut { sequence: "Ctrl+9"; onActivated: root.setCategoryByIndex(8) }
+    Shortcut { sequence: "Ctrl+0"; onActivated: root.setCategoryByIndex(9) }
     Shortcut { sequence: "Alt+1"; onActivated: root.triggerOptionChoice(0) }
     Shortcut { sequence: "Alt+2"; onActivated: root.triggerOptionChoice(1) }
     Shortcut { sequence: "Alt+3"; onActivated: root.triggerOptionChoice(2) }
@@ -295,7 +302,7 @@ Item {
             { label: Translation.tr("Unfocus"), keys: ["Esc"] },
             { label: Translation.tr("Re-run"), actionId: "section", keys: ["Tab"] },
             { label: Translation.tr("Tool"), keys: ["←", "→"] },
-            { label: Translation.tr("Category"), keys: ["Ctrl", "1-6"] },
+            { label: Translation.tr("Category"), keys: ["Ctrl", "1-0"] },
             { label: Translation.tr("Options"), keys: ["Alt", "1-5"] },
             { label: Translation.tr("Paste"), keys: ["Ctrl", "V"] },
             { label: Translation.tr("Clear"), keys: ["Ctrl", "L"] }
@@ -843,21 +850,36 @@ Item {
                                 anchors.margins: Appearance.sizes.elevationMargin * 1.3
                                 visible: root.outputText.length > 0
                                 contentWidth: width
-                                contentHeight: Math.max(height, outputTextEdit.implicitHeight)
+                                contentHeight: Math.max(height, outputColumn.implicitHeight)
                                 clip: true
 
-                                TextEdit {
-                                    id: outputTextEdit
+                                ColumnLayout {
+                                    id: outputColumn
                                     width: parent.width
-                                    text: root.outputText
-                                    readOnly: true
-                                    wrapMode: TextEdit.WrapAnywhere
-                                    font.family: Appearance.font.family.monospace
-                                    font.pixelSize: root.selectedTool?.id === "lorem" ? Appearance.font.pixelSize.normal : Appearance.font.pixelSize.small
-                                    color: Appearance.colors.colOnSurface
-                                    selectByMouse: true
-                                    selectionColor: Appearance.colors.colSecondaryContainer
-                                    selectedTextColor: Appearance.colors.colOnSecondaryContainer
+                                    spacing: Appearance.sizes.elevationMargin / 2
+
+                                    DevToolsVisual {
+                                        Layout.fillWidth: true
+                                        visual: root.outputMeta?.visual ?? null
+                                        maxQrSide: 168
+                                        onNotice: message => root.showNotice(message)
+                                    }
+
+                                    TextEdit {
+                                        id: outputTextEdit
+                                        Layout.fillWidth: true
+                                        // The QR picture stands in for its block-character text (still what Copy copies).
+                                        visible: (root.outputMeta?.visual?.kind ?? "") !== "qr"
+                                        text: root.outputText
+                                        readOnly: true
+                                        wrapMode: TextEdit.WrapAnywhere
+                                        font.family: Appearance.font.family.monospace
+                                        font.pixelSize: root.selectedTool?.id === "lorem" ? Appearance.font.pixelSize.normal : Appearance.font.pixelSize.small
+                                        color: Appearance.colors.colOnSurface
+                                        selectByMouse: true
+                                        selectionColor: Appearance.colors.colSecondaryContainer
+                                        selectedTextColor: Appearance.colors.colOnSecondaryContainer
+                                    }
                                 }
                             }
 

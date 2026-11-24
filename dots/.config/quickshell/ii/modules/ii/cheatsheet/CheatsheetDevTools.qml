@@ -1454,23 +1454,38 @@ Item {
                     }
                 }
 
-                EditorPane {
+                // Output, with the result's picture (QR, swatches, contrast) on top.
+                ColumnLayout {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     Layout.preferredHeight: 1
                     Layout.preferredWidth: 1
                     Layout.minimumHeight: 120
-                    title: root.selectedTool?.type === "analyzer" ? Translation.tr("Analysis") : Translation.tr("Output")
-                    symbol: root.isGenerator ? "wand_stars" : "output"
-                    shape: "SoftBurst"
-                    readOnly: true
-                    rich: root.isDiff && root.outputText.length > 0
-                    text: root.isDiff && root.outputText.length > 0 ? root.diffHtml(root.outputText) : root.outputText
-                    countText: root.textStats(root.outputText)
-                    errorText: root.errorText
-                    emptyText: root.isGenerator
-                        ? Translation.tr("Press Ctrl+R or the refresh button to generate a value")
-                        : Translation.tr("Type or paste something into the input to see the result")
+                    spacing: ClockStyle.paneGap
+
+                    DevToolsVisual {
+                        Layout.fillWidth: true
+                        visual: root.errorText.length === 0 ? (root.outputMeta?.visual ?? null) : null
+                        maxQrSide: 280
+                        onNotice: message => root.showNotice(message)
+                    }
+
+                    EditorPane {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        Layout.minimumHeight: 120
+                        title: root.selectedTool?.type === "analyzer" ? Translation.tr("Analysis") : Translation.tr("Output")
+                        symbol: root.isGenerator ? "wand_stars" : "output"
+                        shape: "SoftBurst"
+                        readOnly: true
+                        rich: root.isDiff && root.outputText.length > 0
+                        text: root.isDiff && root.outputText.length > 0 ? root.diffHtml(root.outputText) : root.outputText
+                        countText: root.textStats(root.outputText)
+                        errorText: root.errorText
+                        emptyText: root.isGenerator
+                            ? Translation.tr("Press Ctrl+R or the refresh button to generate a value")
+                            : Translation.tr("Type or paste something into the input to see the result")
+                    }
                 }
             }
 

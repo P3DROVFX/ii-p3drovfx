@@ -17,7 +17,10 @@ Singleton {
         { id: "converters", label: Translation.tr("Converters"), icon: "sync_alt" },
         { id: "formatters", label: Translation.tr("Formatters"), icon: "code" },
         { id: "text", label: Translation.tr("Text"), icon: "match_case" },
+        { id: "time", label: Translation.tr("Time & units"), icon: "straighten" },
+        { id: "color", label: Translation.tr("Color"), icon: "palette" },
         { id: "web", label: Translation.tr("Web & system"), icon: "public" },
+        { id: "dev", label: Translation.tr("Developer"), icon: "terminal" },
         // Page-only: its tools need files and a preview, so only the
         // cheatsheet page shows them (search(..., true)).
         { id: "media", label: Translation.tr("Images"), icon: "image", pageOnly: true }
@@ -262,18 +265,115 @@ Singleton {
         {
             id: "color_converter",
             name: Translation.tr("Color Converter"),
-            category: "converters",
+            category: "color",
             type: "transformer",
             icon: "palette",
             description: Translation.tr("Convert color between Hex, RGB(A), and HSL(A)"),
-            keywords: ["color", "cor", "hex", "rgb", "rgba", "hsl", "hsla", "palette"],
+            keywords: ["color", "cor", "hex", "rgb", "rgba", "hsl", "hsla"],
             searchTerms: ["color converter", "convert color", "hex to rgb", "rgb to hex", "color format converter"],
             sampleInput: "#4A90E2",
             defaultOptions: {},
             options: []
         },
 
+        {
+            id: "data_converter",
+            name: Translation.tr("YAML / JSON / TOML"),
+            category: "converters",
+            type: "transformer",
+            icon: "data_object",
+            description: Translation.tr("Convert config files between JSON, YAML and TOML"),
+            keywords: ["yaml", "yml", "toml", "config"],
+            searchTerms: ["yaml to json", "json to yaml", "toml to json", "json to toml", "yaml converter", "toml converter"],
+            sampleInput: "server:\n  host: example.com\n  ports: [80, 443]\nusers:\n  - name: ana\n    admin: true\n  - name: bo\n",
+            defaultOptions: { from: "auto", to: "json", indent: "2" },
+            options: [
+                {
+                    id: "from",
+                    type: "choice",
+                    label: Translation.tr("From"),
+                    default: "auto",
+                    choices: [
+                        { value: "auto", label: Translation.tr("Auto") },
+                        { value: "json", label: "JSON" },
+                        { value: "yaml", label: "YAML" },
+                        { value: "toml", label: "TOML" }
+                    ]
+                },
+                {
+                    id: "to",
+                    type: "choice",
+                    label: Translation.tr("To"),
+                    default: "json",
+                    choices: [
+                        { value: "json", label: "JSON" },
+                        { value: "yaml", label: "YAML" },
+                        { value: "toml", label: "TOML" }
+                    ]
+                },
+                {
+                    id: "indent",
+                    type: "choice",
+                    label: Translation.tr("Indent"),
+                    default: "2",
+                    choices: [
+                        { value: "2", label: "2" },
+                        { value: "4", label: "4" }
+                    ]
+                }
+            ]
+        },
+
         // ── Formatters ──
+        {
+            id: "code_formatter",
+            name: Translation.tr("XML / HTML / CSS / SQL Formatter"),
+            category: "formatters",
+            type: "transformer",
+            icon: "format_align_left",
+            description: Translation.tr("Beautify or minify XML, HTML, CSS and SQL"),
+            keywords: ["xml", "css", "sql", "beautify", "prettify", "pretty print", "indent"],
+            searchTerms: ["xml formatter", "html formatter", "css formatter", "sql formatter", "css minifier", "html beautifier", "format sql"],
+            sampleInput: "select u.id, u.name, count(o.id) as orders from users u left join orders o on o.user_id = u.id and o.paid = true where u.active = 1 group by u.id, u.name order by orders desc limit 10;",
+            defaultOptions: { language: "auto", mode: "beautify", indent: "2", uppercase: true },
+            options: [
+                {
+                    id: "language",
+                    type: "choice",
+                    label: Translation.tr("Language"),
+                    default: "auto",
+                    choices: [
+                        { value: "auto", label: Translation.tr("Auto") },
+                        { value: "xml", label: "XML" },
+                        { value: "html", label: "HTML" },
+                        { value: "css", label: "CSS" },
+                        { value: "sql", label: "SQL" }
+                    ]
+                },
+                {
+                    id: "mode",
+                    type: "choice",
+                    label: Translation.tr("Mode"),
+                    default: "beautify",
+                    choices: [
+                        { value: "beautify", label: Translation.tr("Beautify") },
+                        { value: "minify", label: Translation.tr("Minify") }
+                    ]
+                },
+                {
+                    id: "indent",
+                    type: "choice",
+                    label: Translation.tr("Indent"),
+                    default: "2",
+                    choices: [
+                        { value: "2", label: "2" },
+                        { value: "4", label: "4" },
+                        { value: "tab", label: "Tab" }
+                    ]
+                },
+                { id: "uppercase", type: "toggle", label: Translation.tr("SQL keywords in caps"), default: true }
+            ]
+        },
         {
             id: "json_formatter",
             name: Translation.tr("JSON Formatter & Validator"),
@@ -577,6 +677,44 @@ Singleton {
             ]
         },
         {
+            id: "qr_code",
+            name: Translation.tr("QR Code"),
+            category: "encoders",
+            type: "transformer",
+            icon: "qr_code_2",
+            description: Translation.tr("Text, links, Wi-Fi logins (ssid:/password: lines) or contacts (name:/phone:/email:) as a QR code"),
+            keywords: ["qr", "qrcode", "qr code", "vcard", "wifi qr", "codigo qr"],
+            searchTerms: ["qr code generator", "make qr code", "wifi qr code", "qr code for link", "gerar qr code", "contact qr code"],
+            sampleInput: "ssid: Home\npassword: correct horse battery staple",
+            defaultOptions: { kind: "auto", ecc: "M" },
+            options: [
+                {
+                    id: "kind",
+                    type: "choice",
+                    label: Translation.tr("Content"),
+                    default: "auto",
+                    choices: [
+                        { value: "auto", label: Translation.tr("Auto") },
+                        { value: "text", label: Translation.tr("Text / link") },
+                        { value: "wifi", label: "Wi-Fi" },
+                        { value: "vcard", label: Translation.tr("Contact") }
+                    ]
+                },
+                {
+                    id: "ecc",
+                    type: "choice",
+                    label: Translation.tr("Error correction"),
+                    default: "M",
+                    choices: [
+                        { value: "L", label: "L 7%" },
+                        { value: "M", label: "M 15%" },
+                        { value: "Q", label: "Q 25%" },
+                        { value: "H", label: "H 30%" }
+                    ]
+                }
+            ]
+        },
+        {
             id: "hex_text",
             name: Translation.tr("Text ↔ Hex"),
             category: "encoders",
@@ -663,7 +801,191 @@ Singleton {
             options: []
         },
 
+        // ── Time & units ──
+        {
+            id: "unit_converter",
+            name: Translation.tr("Unit Converter"),
+            category: "time",
+            type: "analyzer",
+            icon: "straighten",
+            description: Translation.tr("Length, mass, temperature, area, volume, speed, energy, power, pressure, time and screen units (px, rem, pt)"),
+            keywords: ["unit", "units", "unidade", "unidades", "measure", "medida", "km", "miles", "kg", "lb", "celsius", "fahrenheit", "px", "rem"],
+            searchTerms: ["unit converter", "convert units", "km to miles", "celsius to fahrenheit", "px to rem", "kg to lb", "conversor de unidades"],
+            sampleInput: "72 °F",
+            defaultOptions: { dpi: 96, rootSize: 16 },
+            options: [
+                {
+                    id: "dpi",
+                    type: "choice",
+                    label: Translation.tr("Screen DPI"),
+                    default: 96,
+                    choices: [
+                        { value: 72, label: "72" },
+                        { value: 96, label: "96 (CSS)" },
+                        { value: 160, label: "160 (Android)" },
+                        { value: 220, label: "220" }
+                    ]
+                },
+                {
+                    id: "rootSize",
+                    type: "choice",
+                    label: Translation.tr("1rem"),
+                    default: 16,
+                    choices: [
+                        { value: 14, label: "14px" },
+                        { value: 16, label: "16px" },
+                        { value: 18, label: "18px" },
+                        { value: 20, label: "20px" }
+                    ]
+                }
+            ]
+        },
+        {
+            id: "time_zones",
+            name: Translation.tr("Time Zones"),
+            category: "time",
+            type: "analyzer",
+            icon: "travel_explore",
+            description: Translation.tr("A time in one place shown across cities, with daylight saving and a meeting planner grid"),
+            keywords: ["tz", "timezone", "timezones", "time zone", "fuso", "fuso horario", "world clock", "meeting", "reuniao"],
+            searchTerms: ["time zone converter", "world clock", "meeting planner", "convert time zone", "fuso horario", "what time is it in"],
+            sampleInput: "14:00 São Paulo",
+            defaultOptions: { zones: "Local, UTC, New York, London, Berlin, Tokyo", grid: false, dateOrder: "dmy" },
+            options: [
+                { id: "zones", type: "text", label: Translation.tr("Show in"), default: "Local, UTC, New York, London, Berlin, Tokyo" },
+                { id: "grid", type: "toggle", label: Translation.tr("Meeting grid"), default: false },
+                {
+                    id: "dateOrder",
+                    type: "choice",
+                    label: Translation.tr("Dates"),
+                    default: "dmy",
+                    choices: [
+                        { value: "dmy", label: "DD/MM" },
+                        { value: "mdy", label: "MM/DD" }
+                    ]
+                }
+            ]
+        },
+        {
+            id: "date_calculator",
+            name: Translation.tr("Date Calculator"),
+            category: "time",
+            type: "analyzer",
+            icon: "date_range",
+            description: Translation.tr("Days between dates, business days, adding days, weeks or months, ISO week and age"),
+            keywords: ["dates", "days", "calendar", "business days", "dias", "dias uteis", "datas", "calendario", "week", "semana", "age", "idade"],
+            searchTerms: ["date calculator", "days between dates", "business days", "add days to date", "days until", "calculadora de datas", "iso week"],
+            sampleInput: "2026-01-01 to 2026-12-25",
+            defaultOptions: { dateOrder: "dmy" },
+            options: [
+                {
+                    id: "dateOrder",
+                    type: "choice",
+                    label: Translation.tr("Dates"),
+                    default: "dmy",
+                    choices: [
+                        { value: "dmy", label: "DD/MM/YYYY" },
+                        { value: "mdy", label: "MM/DD/YYYY" }
+                    ]
+                }
+            ]
+        },
+
+        // ── Color ──
+        {
+            id: "contrast_checker",
+            name: Translation.tr("Contrast Checker"),
+            category: "color",
+            type: "analyzer",
+            icon: "contrast",
+            description: Translation.tr("WCAG contrast ratio of a text colour on a background, with the closest colour that passes"),
+            keywords: ["contrast", "contraste", "wcag", "a11y", "accessibility", "acessibilidade"],
+            searchTerms: ["contrast checker", "wcag contrast", "color contrast", "accessible colors", "contrast ratio"],
+            sampleInput: "#777777 on #FFFFFF",
+            defaultOptions: {},
+            options: []
+        },
+        {
+            id: "palette_generator",
+            name: Translation.tr("Palette Generator"),
+            category: "color",
+            type: "transformer",
+            icon: "colors",
+            description: Translation.tr("Tonal ramps and harmonies from one colour, or every Material You role exactly as matugen makes them (also takes a matugen command)"),
+            keywords: ["palette", "paleta", "tones", "tonal", "shades", "harmony", "complementary", "triadic", "scheme", "matugen", "material you", "m3"],
+            searchTerms: ["palette generator", "color palette", "tonal palette", "color harmony", "complementary color", "gerar paleta", "matugen colors", "material you scheme", "material 3 color roles"],
+            sampleInput: "#6750A4",
+            defaultOptions: { scheme: "tonal", format: "list", matugenType: "tonal-spot", mode: "dark" },
+            options: [
+                {
+                    id: "scheme",
+                    type: "choice",
+                    label: Translation.tr("Scheme"),
+                    default: "tonal",
+                    choices: [
+                        { value: "tonal", label: Translation.tr("Tonal") },
+                        { value: "matugen", label: Translation.tr("Material You (matugen)") },
+                        { value: "shades", label: Translation.tr("Shades") },
+                        { value: "complementary", label: Translation.tr("Complementary") },
+                        { value: "analogous", label: Translation.tr("Analogous") },
+                        { value: "triadic", label: Translation.tr("Triadic") },
+                        { value: "split", label: Translation.tr("Split") },
+                        { value: "tetradic", label: Translation.tr("Tetradic") }
+                    ]
+                },
+                {
+                    id: "format",
+                    type: "choice",
+                    label: Translation.tr("Format"),
+                    default: "list",
+                    choices: [
+                        { value: "list", label: Translation.tr("List") },
+                        { value: "css", label: "CSS" },
+                        { value: "json", label: "JSON" },
+                        { value: "qml", label: "QML" }
+                    ]
+                },
+                {
+                    id: "matugenType",
+                    type: "choice",
+                    label: Translation.tr("Matugen type"),
+                    default: "tonal-spot",
+                    choices: [
+                        { value: "tonal-spot", label: Translation.tr("Tonal spot") },
+                        { value: "vibrant", label: Translation.tr("Vibrant") },
+                        { value: "expressive", label: Translation.tr("Expressive") },
+                        { value: "neutral", label: Translation.tr("Neutral") },
+                        { value: "rainbow", label: Translation.tr("Rainbow") },
+                        { value: "fruit-salad", label: Translation.tr("Fruit salad") }
+                    ]
+                },
+                {
+                    id: "mode",
+                    type: "choice",
+                    label: Translation.tr("Matugen mode"),
+                    default: "dark",
+                    choices: [
+                        { value: "dark", label: Translation.tr("Dark") },
+                        { value: "light", label: Translation.tr("Light") }
+                    ]
+                }
+            ]
+        },
+
         // ── Web & system ──
+        {
+            id: "subnet_calculator",
+            name: Translation.tr("Subnet Calculator"),
+            category: "web",
+            type: "analyzer",
+            icon: "lan",
+            description: Translation.tr("IPv4 and IPv6 CIDR: netmask, network, host range and count; extra lines are checked for membership"),
+            keywords: ["subnet", "cidr", "ipv4", "ipv6", "netmask", "mask", "sub-rede", "subrede", "ip"],
+            searchTerms: ["subnet calculator", "cidr calculator", "ip range", "netmask calculator", "ipv6 subnet", "calculadora de sub-rede"],
+            sampleInput: "192.168.1.130/26\n192.168.1.150\n192.168.1.200",
+            defaultOptions: {},
+            options: []
+        },
         {
             id: "url_parser",
             name: Translation.tr("URL Parser"),
@@ -728,6 +1050,331 @@ Singleton {
             defaultOptions: {},
             options: []
         },
+
+        // ── Developer (one slot per tool) ──
+        // @slot-begin curl_converter
+        {
+            id: "curl_converter",
+            name: Translation.tr("cURL Converter"),
+            category: "dev",
+            type: "transformer",
+            icon: "api",
+            description: Translation.tr("Convert cURL to fetch, Python, HTTPie, wget, Go, or HTTP to cURL"),
+            keywords: ["curl", "curlc", "fetch", "httpie", "wget", "requests", "golang", "request"],
+            searchTerms: ["curl converter", "curl to fetch", "curl to python", "curl to go", "curl to wget", "curl to httpie", "http request to curl", "copy as curl"],
+            sampleInput: "curl -X POST 'https://ex.io/v1?dry=1' \\\n  -H 'Content-Type: application/json' \\\n  -H 'X-Request-Id: req_94' \\\n  -u 'alice:secret' \\\n  -d '{\"item\":\"kbd\",\"qty\":2}'",
+            defaultOptions: { target: "fetch" },
+            options: [
+                {
+                    id: "target",
+                    type: "choice",
+                    label: Translation.tr("Target"),
+                    default: "fetch",
+                    choices: [
+                        { value: "fetch", label: Translation.tr("fetch") },
+                        { value: "python", label: Translation.tr("Python") },
+                        { value: "httpie", label: Translation.tr("HTTPie") },
+                        { value: "wget", label: Translation.tr("wget") },
+                        { value: "go", label: Translation.tr("Go") },
+                        { value: "parsed", label: Translation.tr("Parsed") }
+                    ]
+                }
+            ]
+        },
+        // @slot-end curl_converter
+        // @slot-begin json_query
+        {
+            id: "json_query",
+            name: Translation.tr("JSON Query (JSONPath / jq)"),
+            category: "dev",
+            type: "transformer",
+            icon: "manage_search",
+            description: Translation.tr("Query, filter and transform JSON with JSONPath or jq expressions"),
+            keywords: ["jsonpath", "jq", "jpath", "filter", "extract", "select", "filtrar", "consultar"],
+            searchTerms: ["json query", "jsonpath", "jq filter", "query json", "filter json", "extract json"],
+            sampleInput: "{\n  \"store\": {\n    \"book\": [\n      {\n        \"category\": \"reference\",\n        \"author\": \"Nigel Rees\",\n        \"title\": \"Sayings of the Century\",\n        \"price\": 8.95\n      },\n      {\n        \"category\": \"fiction\",\n        \"author\": \"Evelyn Waugh\",\n        \"title\": \"Sword of Honour\",\n        \"price\": 12.99\n      },\n      {\n        \"category\": \"fiction\",\n        \"author\": \"Herman Melville\",\n        \"title\": \"Moby Dick\",\n        \"isbn\": \"0-553-21311-3\",\n        \"price\": 8.99\n      },\n      {\n        \"category\": \"fiction\",\n        \"author\": \"J. R. R. Tolkien\",\n        \"title\": \"The Lord of the Rings\",\n        \"isbn\": \"0-395-19395-8\",\n        \"price\": 22.99\n      }\n    ],\n    \"bicycle\": {\n      \"color\": \"red\",\n      \"price\": 399\n    }\n  }\n}",
+            defaultOptions: { query: "$.store.book[?(@.price < 10)].title", syntax: "auto", asArray: false },
+            options: [
+                { id: "query", type: "text", label: Translation.tr("Query"), default: "$.store.book[?(@.price < 10)].title" },
+                {
+                    id: "syntax",
+                    type: "choice",
+                    label: Translation.tr("Syntax"),
+                    default: "auto",
+                    choices: [
+                        { value: "auto", label: Translation.tr("Auto") },
+                        { value: "jsonpath", label: "JSONPath" },
+                        { value: "jq", label: "jq" }
+                    ]
+                },
+                { id: "asArray", type: "toggle", label: Translation.tr("Results as array"), default: false }
+            ]
+        },
+        // @slot-end json_query
+        // @slot-begin json_types
+        {
+            id: "json_types",
+            name: Translation.tr("JSON → Types"),
+            category: "dev",
+            type: "transformer",
+            icon: "schema",
+            description: Translation.tr("Infer TypeScript, Zod, Python, Go, Rust, or JSON Schema types from JSON"),
+            keywords: ["types", "typescript", "zod", "python", "golang", "rust", "jsonschema", "interface", "struct", "dataclass", "infer", "codegen"],
+            searchTerms: ["json to typescript", "json to types", "json to zod", "json to go struct", "json to rust serde", "json to python dataclass", "json schema generator", "infer types from json"],
+            sampleInput: "{\n  \"id\": 1042,\n  \"username\": \"ana_silva\",\n  \"email\": \"ana@example.com\",\n  \"createdAt\": \"2026-04-12T14:30:00Z\",\n  \"bio\": null,\n  \"address\": {\n    \"street\": \"Av. Paulista, 1000\",\n    \"city\": \"Sao Paulo\",\n    \"zipCode\": \"01310-100\"\n  },\n  \"orders\": [\n    {\n      \"orderId\": \"ord-901\",\n      \"total\": 149.9,\n      \"paid\": true,\n      \"couponCode\": \"SPRING10\"\n    },\n    {\n      \"orderId\": \"ord-902\",\n      \"total\": 80,\n      \"paid\": false\n    }\n  ]\n}",
+            defaultOptions: { target: "typescript", rootName: "Root" },
+            options: [
+                {
+                    id: "target",
+                    type: "choice",
+                    label: Translation.tr("Target"),
+                    default: "typescript",
+                    choices: [
+                        { value: "typescript", label: "TypeScript" },
+                        { value: "zod", label: "Zod" },
+                        { value: "python", label: "Python" },
+                        { value: "go", label: "Go" },
+                        { value: "rust", label: "Rust" },
+                        { value: "jsonschema", label: "JSON Schema" }
+                    ]
+                },
+                {
+                    id: "rootName",
+                    type: "text",
+                    label: Translation.tr("Root name"),
+                    default: "Root"
+                }
+            ]
+        },
+        // @slot-end json_types
+        // @slot-begin glob_tester
+        {
+            id: "glob_tester",
+            name: Translation.tr("Glob & .gitignore Tester"),
+            category: "dev",
+            type: "analyzer",
+            icon: "filter_alt",
+            description: Translation.tr("Test .gitignore rules or shell glob patterns against file and directory paths"),
+            keywords: ["glob", "gitignore", ".gitignore", "ignore", "wildcard", "fnmatch", "minimatch"],
+            searchTerms: ["glob tester", "gitignore tester", "test gitignore", "glob pattern matcher", "ignore rules", "wildcard matcher"],
+            sampleInput: "# Dependencies & logs\nnode_modules/\n*.log\n!important.log\n\n# Root-only build output\n/build\n!build/keep.txt\n\n# Nested docs & escaped hash\ndocs/**/*.pdf\n\\#draft.md\n---\nnode_modules/\nnode_modules/pkg.js\nsrc/app.log\nimportant.log\nbuild/\nbuild/keep.txt\nsrc/build/readme.md\ndocs/guide.pdf\ndocs/a/b/spec.pdf\n#draft.md\nsrc/index.ts",
+            defaultOptions: { mode: "gitignore" },
+            options: [
+                {
+                    id: "mode",
+                    type: "choice",
+                    label: Translation.tr("Mode"),
+                    default: "gitignore",
+                    choices: [
+                        { value: "gitignore", label: Translation.tr(".gitignore") },
+                        { value: "glob", label: Translation.tr("Glob") }
+                    ]
+                }
+            ]
+        },
+        // @slot-end glob_tester
+        // @slot-begin semver_tool
+        {
+            id: "semver_tool",
+            name: Translation.tr("Semver"),
+            category: "dev",
+            type: "analyzer",
+            icon: "sell",
+            description: Translation.tr("Parse, bump, compare, sort, and test SemVer 2.0.0 versions and node-semver ranges"),
+            keywords: ["semver", "version", "versao", "range", "prerelease", "npm", "bump", "satisfies", "caret", "tilde"],
+            searchTerms: ["semantic version", "semver range", "version comparison", "semver parser", "npm version range", "bump version", "sort versions"],
+            sampleInput: "^1.2.3\n1.2.2\n1.2.3\n1.2.4-alpha.1\n1.3.0\n1.5.2-rc.1\n1.9.0\n2.0.0-alpha.1\n2.0.0",
+            defaultOptions: { includePrerelease: false, loose: false, order: "asc", pre: "rc" },
+            options: [
+                { id: "includePrerelease", type: "toggle", label: Translation.tr("Include prereleases"), default: false },
+                { id: "loose", type: "toggle", label: Translation.tr("Loose / coerce"), default: false },
+                {
+                    id: "order",
+                    type: "choice",
+                    label: Translation.tr("Sort"),
+                    default: "asc",
+                    choices: [
+                        { value: "asc", label: Translation.tr("Asc") },
+                        { value: "desc", label: Translation.tr("Desc") }
+                    ]
+                },
+                { id: "pre", type: "text", label: Translation.tr("Pre ID"), default: "rc" }
+            ]
+        },
+        // @slot-end semver_tool
+        // @slot-begin commit_lint
+        {
+            id: "commit_lint",
+            name: Translation.tr("Conventional Commits"),
+            category: "dev",
+            type: "analyzer",
+            icon: "commit",
+            description: Translation.tr("Lint a Conventional Commit message or turn a git log into a Markdown changelog"),
+            keywords: ["commit", "conventional", "commitlint", "changelog", "lint", "git log"],
+            searchTerms: ["conventional commits", "commit lint", "commit message validator", "changelog generator", "git log changelog", "commitlint"],
+            sampleInput: "a3f91c2 feat(auth)!: require PKCE for OAuth2\n8b14e09 feat(search): add fuzzy tool matching\n4d2c7a1 fix(panel): stop tooltip edge clipping\ne901b54 perf(render): cache parsed icon glyphs\n19f3a88 docs: document DevTools shortcuts\n7c02d11 ci: run QV4 check on pull requests\nf558e20 Merge PR #142 from dev/fix-focus",
+            defaultOptions: { maxHeader: 72, version: "", types: "" },
+            options: [
+                {
+                    id: "maxHeader",
+                    type: "choice",
+                    label: Translation.tr("Max header"),
+                    default: 72,
+                    choices: [
+                        { value: 50, label: "50" },
+                        { value: 72, label: "72" },
+                        { value: 100, label: "100" }
+                    ]
+                },
+                { id: "version", type: "text", label: Translation.tr("Version"), default: "" },
+                { id: "types", type: "text", label: Translation.tr("Types (blank = default)"), default: "" }
+            ]
+        },
+        // @slot-end commit_lint
+        // @slot-begin regex_explainer
+        {
+            id: "regex_explainer",
+            name: Translation.tr("Regex Explainer"),
+            category: "text",
+            type: "analyzer",
+            icon: "account_tree",
+            description: Translation.tr("Parse and explain JavaScript regular expressions as a tree with groups, flags and safety warnings"),
+            keywords: ["explain", "explainer", "explicar", "pattern", "pcre", "ast", "backtracking", "redos", "syntax"],
+            searchTerms: ["regex explainer", "explain regex", "regular expression explainer", "regex parser", "regex tree", "explicar regex"],
+            sampleInput: "/^(?<user>[\\w.-]+)@(?<host>(?:[a-z0-9-]+\\.)+[a-z]{2,})$/iu",
+            defaultOptions: { view: "full", showSpans: false },
+            options: [
+                {
+                    id: "view",
+                    type: "choice",
+                    label: Translation.tr("View"),
+                    default: "full",
+                    choices: [
+                        { value: "full", label: Translation.tr("Full") },
+                        { value: "tree", label: Translation.tr("Tree only") },
+                        { value: "summary", label: Translation.tr("Summary") }
+                    ]
+                },
+                { id: "showSpans", type: "toggle", label: Translation.tr("Offsets"), default: false }
+            ]
+        },
+        // @slot-end regex_explainer
+        // @slot-begin log_formatter
+        {
+            id: "log_formatter",
+            name: Translation.tr("Log & Stack Trace Reader"),
+            category: "dev",
+            type: "analyzer",
+            icon: "troubleshoot",
+            description: Translation.tr("Strip ANSI codes and timestamps, collapse repeats, filter levels and summarize stack traces"),
+            keywords: ["log", "logs", "stack", "trace", "stacktrace", "traceback", "panic", "ansi", "journalctl", "quickshell"],
+            searchTerms: ["log reader", "log formatter", "stack trace reader", "python traceback", "qml warning", "strip ansi", "parse logs"],
+            sampleInput: "\x1b[36m15:04:50.120\x1b[0m INFO  [server] Listening on :8080\n\x1b[33m15:04:51.005 WARN  [cache] Pool full, retrying\x1b[0m\n\x1b[33m15:04:51.410 WARN  [cache] Pool full, retrying\x1b[0m\n\x1b[33m15:04:51.820 WARN  [cache] Pool full, retrying\x1b[0m\n\x1b[31m15:04:52.300 ERROR [worker] Job #42 failed\x1b[0m\nTraceback (most recent call last):\n  File \"/usr/lib/python3/site-packages/celery.py\", line 47, in run\n    return fn(*args)\n  File \"/app/sync.py\", line 83, in run_sync\n    raise ValueError(\"bad url\")\nValueError: bad url\n15:04:53.150 WARN  file:///ui/Bar.qml:42:9: TypeError: null",
+            defaultOptions: { level: "all", stripTimestamps: true, collapse: true, framesOnly: false },
+            options: [
+                {
+                    id: "level",
+                    type: "choice",
+                    label: Translation.tr("Min level"),
+                    default: "all",
+                    choices: [
+                        { value: "all", label: Translation.tr("All") },
+                        { value: "debug", label: Translation.tr("Debug") },
+                        { value: "info", label: Translation.tr("Info") },
+                        { value: "warn", label: Translation.tr("Warn") },
+                        { value: "error", label: Translation.tr("Error") }
+                    ]
+                },
+                { id: "stripTimestamps", type: "toggle", label: Translation.tr("Strip timestamps"), default: true },
+                { id: "collapse", type: "toggle", label: Translation.tr("Collapse repeats"), default: true },
+                { id: "framesOnly", type: "toggle", label: Translation.tr("App frame only"), default: false }
+            ]
+        },
+        // @slot-end log_formatter
+        // @slot-begin markdown_table
+        {
+            id: "markdown_table",
+            name: Translation.tr("Markdown Table"),
+            category: "converters",
+            type: "transformer",
+            icon: "table_chart",
+            description: Translation.tr("Format and convert tables across Markdown, CSV, TSV, JSON and HTML"),
+            keywords: ["markdown", "md", "mdtable", "tsv", "gfm"],
+            searchTerms: ["markdown table", "csv to markdown", "json to markdown", "tsv to markdown", "format markdown table", "table formatter", "html table"],
+            sampleInput: "Name,Role,Score\n\"Silva, José\",Engineer,98.5\nAda Lovelace,Mathematician,100\nYūki Tanaka,Designer,94.2",
+            defaultOptions: { from: "auto", to: "markdown", align: "auto", compact: false, header: true },
+            options: [
+                {
+                    id: "from",
+                    type: "choice",
+                    label: Translation.tr("From"),
+                    default: "auto",
+                    choices: [
+                        { value: "auto", label: Translation.tr("Auto") },
+                        { value: "markdown", label: "Markdown" },
+                        { value: "csv", label: "CSV" },
+                        { value: "tsv", label: "TSV" },
+                        { value: "json", label: "JSON" },
+                        { value: "spaces", label: Translation.tr("Spaces") }
+                    ]
+                },
+                {
+                    id: "to",
+                    type: "choice",
+                    label: Translation.tr("To"),
+                    default: "markdown",
+                    choices: [
+                        { value: "markdown", label: "Markdown" },
+                        { value: "csv", label: "CSV" },
+                        { value: "tsv", label: "TSV" },
+                        { value: "json", label: "JSON" },
+                        { value: "html", label: "HTML" }
+                    ]
+                },
+                {
+                    id: "align",
+                    type: "choice",
+                    label: Translation.tr("Align"),
+                    default: "auto",
+                    choices: [
+                        { value: "auto", label: Translation.tr("Auto") },
+                        { value: "left", label: Translation.tr("Left") },
+                        { value: "center", label: Translation.tr("Center") },
+                        { value: "right", label: Translation.tr("Right") }
+                    ]
+                },
+                { id: "compact", type: "toggle", label: Translation.tr("Compact"), default: false },
+                { id: "header", type: "toggle", label: Translation.tr("Header row"), default: true }
+            ]
+        },
+        // @slot-end markdown_table
+        // @slot-begin hypr_keybind
+        {
+            id: "hypr_keybind",
+            name: Translation.tr("Hyprland Keybind"),
+            category: "dev",
+            type: "transformer",
+            icon: "keyboard",
+            description: Translation.tr("Convert between Hyprland Lua (hl.bind), hyprland.conf, and human keybinds with dispatcher validation"),
+            keywords: ["hyprland", "keybind", "keybinds", "bind", "shortcut", "hotkey", "hl.bind", "keymap", "atalho"],
+            searchTerms: ["hyprland keybind", "hyprland bind converter", "hl.bind", "hyprland.conf bind", "validate keybind", "shortcut converter", "keybind table"],
+            sampleInput: "bind = SUPER SHIFT, T, exec, kitty\nbindl = , Print, exec, grim\nSuper+Q: killactive\nCtrl+Alt+Delete → exit\nhl.bind(\"SUPER + D\", hl.dsp.window.float({ action = \"toggle\" }))\nbind = SUPER, B, movefocsu, l",
+            defaultOptions: { to: "lua" },
+            options: [
+                {
+                    id: "to",
+                    type: "choice",
+                    label: Translation.tr("Output"),
+                    default: "lua",
+                    choices: [
+                        { value: "lua", label: "Lua (hl.bind)" },
+                        { value: "conf", label: "hyprland.conf" },
+                        { value: "table", label: Translation.tr("Table") }
+                    ]
+                }
+            ]
+        },
+        // @slot-end hypr_keybind
 
         // ── Images (cheatsheet page only) ──
         {
