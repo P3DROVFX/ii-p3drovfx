@@ -81,7 +81,22 @@ Item {
                     : Translation.tr("Open the dashboard as the full sidebar, or as a control center: a floating card with the header buttons and quick toggles that drops from the bar next to its dashboard button.")
             }
 
+            ConfigSwitch {
+                buttonIcon: "dashboard"
+                text: Translation.tr("Enable dashboard")
+                checked: Config.options.sidebar.dashboardEnabled
+                onCheckedChanged: {
+                    if (Config.ready && checked !== Config.options.sidebar.dashboardEnabled)
+                        Config.options.sidebar.dashboardEnabled = checked;
+                }
+
+                StyledToolTip {
+                    text: Translation.tr("Off, the dashboard (sidebar and control center) is never loaded and its keybind and buttons open nothing, saving all the memory it uses. The policies sidebar unloads the same way when none of its tabs is enabled.")
+                }
+            }
+
             ContentSubsection {
+                visible: Config.options.sidebar.dashboardEnabled
                 title: Translation.tr("Open the dashboard as")
                 icon: "space_dashboard"
                 Layout.fillWidth: true

@@ -2438,11 +2438,27 @@ Singleton {
         return Appearance.sizes.sidebarWidth + Math.max(0, activeCount - minTabs) * perTabWidth;
     }
 
+    // Whether each sidebar exists at all. Off, its panel is never loaded and its open flag
+    // is refused (onDashboardPanelOpenChanged / onPoliciesPanelOpenChanged), so keybinds,
+    // IPC and buttons open nothing instead of an empty window. Policies has no switch of
+    // its own: it is off when none of its tabs is (mirrors SidebarPoliciesContent.tabs).
+    // ii family only: the tablet drives its own shade through the same flags.
+    readonly property bool dashboardEnabled: !Config.ready || !PanelFamily.isIi || (Config.options.sidebar.dashboardEnabled ?? true)
+    readonly property bool policiesEnabled: {
+        if (!Config.ready || !PanelFamily.isIi)
+            return true;
+        const p = Config.options.policies;
+        return SearchPanelRegistry.aiPolicyEnabled || p.translator !== 0 || p.player !== 0
+            || p.wallpapers !== 0 || (p.weeb !== 0 && p.weeb !== 2) || p.anki !== 0 || p.phone !== 0;
+    }
+    onDashboardEnabledChanged: if (!dashboardEnabled) dashboardPanelOpen = false
+    onPoliciesEnabledChanged: if (!policiesEnabled) policiesPanelOpen = false
+
     // The control center: in the Default shell mode the dashboard can open as a floating
     // card by the bar's dashboard button instead of the sidebar. It keeps dashboardPanelOpen
     // as its open flag (keybinds, IPC and every button already drive it) but takes no screen
     // edge: no sidebar width for the frame/popups to make room for, and no wallpaper parallax.
-    readonly property bool controlCenterActive: Config.ready && PanelFamily.isIi
+    readonly property bool controlCenterActive: Config.ready && PanelFamily.isIi && root.dashboardEnabled
         && Config.options.sidebar.dashboardStyle === "controlCenter"
         && !root.connectModeActive
 
@@ -3430,6 +3446,10 @@ Singleton {
             policiesPanelOpen = false;
             return;
         }
+        if (policiesPanelOpen && !root.policiesEnabled) {
+            policiesPanelOpen = false;
+            return;
+        }
         if (policiesPanelOpen) {
             if (root.activeLeftSidebarMonitor === "") {
                 root.activeLeftSidebarMonitor = Hyprland.focusedMonitor?.name ?? "";
@@ -3444,6 +3464,10 @@ Singleton {
         // Before the notification sweep, not after: a refused open must not
         // count as the user having read what it would have shown them.
         if (dashboardPanelOpen && root.editMode) {
+            dashboardPanelOpen = false;
+            return;
+        }
+        if (dashboardPanelOpen && !root.dashboardEnabled) {
             dashboardPanelOpen = false;
             return;
         }

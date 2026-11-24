@@ -144,6 +144,20 @@ ColumnLayout {
         icon: "view_sidebar"
 
         ConfigSwitch {
+            buttonIcon: "dashboard"
+            text: Translation.tr("Enable dashboard")
+            checked: Config.options.sidebar.dashboardEnabled
+            onCheckedChanged: {
+                if (Config.ready && checked !== Config.options.sidebar.dashboardEnabled)
+                    Config.options.sidebar.dashboardEnabled = checked;
+            }
+
+            StyledToolTip {
+                text: Translation.tr("Off, the dashboard (sidebar and control center) is never loaded and its keybind and buttons open nothing, saving all the memory it uses. The policies sidebar unloads the same way when none of its tabs is enabled.")
+            }
+        }
+
+        ConfigSwitch {
             buttonIcon: "keep"
             text: Translation.tr("Keep right sidebar loaded")
             checked: Config.options.sidebar.keepRightSidebarLoaded

@@ -296,11 +296,11 @@ Scope {
         panelUrl: Qt.resolvedUrl("../modules/common/panels/windowSwitcher/WindowSwitcherPeek.qml")
     }
     PanelUrlLoader {
-        extraCondition: !GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate
+        extraCondition: GlobalStates.policiesEnabled && (!GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate)
         panelUrl: Qt.resolvedUrl("../modules/ii/sidebarPolicies/SidebarPolicies.qml")
     }
     PanelUrlLoader {
-        extraCondition: !GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate
+        extraCondition: GlobalStates.dashboardEnabled && (!GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate)
         panelUrl: Qt.resolvedUrl("../modules/ii/sidebarDashboard/SidebarDashboard.qml")
     }
     // The dashboard as a floating card by the bar's dashboard button (Default mode only).

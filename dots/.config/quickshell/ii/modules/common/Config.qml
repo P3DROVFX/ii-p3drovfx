@@ -8368,6 +8368,9 @@ Singleton {
                 // or the control center, a floating card that drops from the bar next to the
                 // dashboard button (header + quick toggles only). Connect mode ignores it.
                 property string dashboardStyle: "sidebar" // "sidebar" | "controlCenter"
+                // Off: the dashboard (sidebar and control center) is never loaded and its
+                // keybinds, IPC and buttons open nothing. Saves its whole RAM.
+                property bool dashboardEnabled: true
                 property JsonObject tabletShade: JsonObject {
                     // Height of the strip at the very top that starts the pull-down. It sits
                     // above the bar on the Overlay layer, so whatever it covers stops being

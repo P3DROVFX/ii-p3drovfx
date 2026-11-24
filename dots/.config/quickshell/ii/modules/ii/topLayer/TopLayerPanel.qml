@@ -243,13 +243,31 @@ PanelWindow {
                 topPanel.sidebarPreloadAllowed = true;
         }
     }
-    readonly property bool keepRightSidebarContentLoaded: topPanel.sidebarPreloadAllowed && Config.ready && Config.options.sidebar.keepRightSidebarLoaded
+    // A disabled sidebar (GlobalStates.dashboardEnabled / policiesEnabled) is never kept
+    // warm: each slot only preloads when a sidebar it can show is enabled.
+    readonly property bool leftSlotHasSidebar: {
+        const pos = Config.options.sidebar.position;
+        if (pos === "inverted")
+            return GlobalStates.dashboardEnabled;
+        if (pos === "left")
+            return GlobalStates.dashboardEnabled || GlobalStates.policiesEnabled;
+        return GlobalStates.policiesEnabled;
+    }
+    readonly property bool rightSlotHasSidebar: {
+        const pos = Config.options.sidebar.position;
+        if (pos === "inverted")
+            return GlobalStates.policiesEnabled;
+        if (pos === "right")
+            return GlobalStates.dashboardEnabled || GlobalStates.policiesEnabled;
+        return GlobalStates.dashboardEnabled;
+    }
+    readonly property bool keepRightSidebarContentLoaded: topPanel.sidebarPreloadAllowed && Config.ready && Config.options.sidebar.keepRightSidebarLoaded && topPanel.rightSlotHasSidebar
     // Every screen has a TopLayerPanel; only the one the sidebar opens on (the
     // warm monitor, which follows the last open) builds and keeps its content.
     // Without the monitor test each screen built both sidebars - on two
     // monitors the kept-loaded dashboard and policies were paid twice.
     readonly property bool rightSidebarContentWanted: (GlobalStates.sidebarRightOpen || topPanel.keepRightSidebarContentLoaded) && topPanel.rightSidebarWarmOnMonitor
-    readonly property bool keepLeftSidebarContentLoaded: topPanel.sidebarPreloadAllowed && Config.ready && Config.options.sidebar.keepLeftSidebarLoaded
+    readonly property bool keepLeftSidebarContentLoaded: topPanel.sidebarPreloadAllowed && Config.ready && Config.options.sidebar.keepLeftSidebarLoaded && topPanel.leftSlotHasSidebar
     readonly property bool leftSidebarContentWanted: (GlobalStates.sidebarLeftOpen || topPanel.keepLeftSidebarContentLoaded) && topPanel.leftSidebarWarmOnMonitor
     readonly property bool leftSidebarActiveOnMonitor: (GlobalStates.animatedLeftSidebarWidth > 0 || GlobalStates.sidebarLeftOpen) && screen.name === GlobalStates.effectiveLeftMonitor && !(GlobalStates.policiesDetached && topPanel.policiesRenderedOnLeft)
     readonly property bool rightSidebarActiveOnMonitor: (GlobalStates.animatedRightSidebarWidth > 0 || GlobalStates.sidebarRightOpen) && screen.name === GlobalStates.effectiveRightMonitor && !(GlobalStates.policiesDetached && topPanel.policiesRenderedOnRight)
@@ -1050,7 +1068,7 @@ PanelWindow {
                 if (pos === "inverted") {
                     return leftDashboardContentComponent;
                 } else if (pos === "left") {
-                    if (GlobalStates.dashboardPanelOpen) {
+                    if (GlobalStates.dashboardPanelOpen || !GlobalStates.policiesEnabled) {
                         return leftDashboardContentComponent;
                     } else {
                         return policiesContentComponent;
@@ -1190,7 +1208,7 @@ PanelWindow {
                 if (pos === "inverted") {
                     return policiesContentComponent;
                 } else if (pos === "right") {
-                    if (GlobalStates.sidebarLeftOpen) {
+                    if (GlobalStates.sidebarLeftOpen || !GlobalStates.dashboardEnabled) {
                         return policiesContentComponent;
                     } else {
                         return rightDashboardContentComponent;
