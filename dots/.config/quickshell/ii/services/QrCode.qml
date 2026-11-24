@@ -94,6 +94,35 @@ Singleton {
         return DevToolsEngine.qrMatrixFromRows(rows);
     }
 
+    function _escapeWifi(value): string {
+        return String(value ?? "").replace(/([\\;,:"])/g, "\\$1");
+    }
+
+    /**
+     * Wi-Fi join string (the "WIFI:" format Android and iOS cameras read).
+     * `security`: an nmcli key-mgmt ("wpa-psk", "sae", "none", "owe", ...) or a
+     * QR type ("WPA", "SAE", "WEP", "nopass"). "none" with a password is WEP.
+     */
+    function wifiPayload(ssid, password = "", security = "", hidden = false): string {
+        const pass = String(password ?? "");
+        const sec = String(security ?? "").toLowerCase();
+        let type;
+        if (sec === "sae")
+            type = "SAE";
+        else if (sec === "wep" || (sec === "none" && pass.length > 0))
+            type = "WEP";
+        else if (sec === "nopass" || sec === "none" || sec === "owe" || pass.length === 0)
+            type = "nopass";
+        else
+            type = "WPA";
+        let payload = `WIFI:T:${type};S:${root._escapeWifi(ssid)};`;
+        if (type !== "nopass")
+            payload += `P:${root._escapeWifi(pass)};`;
+        if (hidden)
+            payload += "H:true;";
+        return payload + ";";
+    }
+
     function colors(style = "", overrides = null): var {
         const resolvedStyle = root._normalizeStyle(style, null);
         const palette = overrides ? Object.assign({}, root.themeColors, overrides) : root.themeColors;

@@ -157,6 +157,24 @@ Singleton {
         [ -n "$uuid" ] && nmcli -e no -g 802-1x.identity,802-1x.domain-suffix-match,802-1x.ca-cert connection show uuid "$uuid"
     `
 
+    // $1 SSID. What sharing the network as a QR code needs: the active Wi-Fi
+    // profile (or the saved one for the SSID), printed as five lines - SSID,
+    // hidden, key-mgmt, then the PSK and WEP key. This is the one read that
+    // passes --show-secrets, and only when the user asks to share the network;
+    // the output goes straight to the caller and is never logged.
+    readonly property string kReadShareSecret: root.kFindProfile + `
+        uuid=$(nmcli -t -f UUID,TYPE,DEVICE connection show --active |
+            while IFS=: read -r u t d; do [ "$t" = 802-11-wireless ] && { echo "$u"; break; }; done)
+        if [ -n "$uuid" ] && [ -n "$1" ] && [ "$(nmcli -e no -g 802-11-wireless.ssid connection show uuid "$uuid")" != "$1" ]; then
+            uuid=""
+        fi
+        [ -n "$uuid" ] || uuid=$(find_profile "$1")
+        [ -n "$uuid" ] || exit 10
+        nmcli -e no -g 802-11-wireless.ssid,802-11-wireless.hidden connection show uuid "$uuid" || exit
+        sec=$(nmcli -s -e no -g 802-11-wireless-security.key-mgmt,802-11-wireless-security.psk,802-11-wireless-security.wep-key0 connection show uuid "$uuid" 2>/dev/null)
+        [ -n "$sec" ] && printf '%s\\n' "$sec" || printf '\\n\\n\\n'
+    `
+
     readonly property bool busy: root.active !== null
     property var active: null
     property var pending: []
@@ -261,6 +279,30 @@ Singleton {
                 identity: lines[0] ?? "",
                 domain: lines[1] ?? "",
                 caCert: (lines[2] ?? "").length > 0
+            });
+        });
+    }
+
+    /**
+     * Everything a Wi-Fi join QR code needs for `ssid`: { ok, ssid, hidden,
+     * keyMgmt, password }. `ok` is false when no saved profile matches.
+     */
+    function readWifiShareInfo(ssid: string, callback): void {
+        root.runScript(root.kReadShareSecret, [ssid], "share", (code, out) => {
+            if (code !== 0) {
+                callback({ ok: false, ssid: ssid, hidden: false, keyMgmt: "", password: "" });
+                return;
+            }
+            const lines = out.split("\n");
+            const keyMgmt = (lines[2] ?? "").trim();
+            const psk = lines[3] ?? "";
+            const wep = lines[4] ?? "";
+            callback({
+                ok: true,
+                ssid: (lines[0] ?? "").length > 0 ? lines[0] : ssid,
+                hidden: (lines[1] ?? "").trim() === "yes",
+                keyMgmt: keyMgmt,
+                password: keyMgmt === "none" ? wep : psk
             });
         });
     }

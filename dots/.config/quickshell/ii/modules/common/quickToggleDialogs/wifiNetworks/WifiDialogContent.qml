@@ -14,6 +14,14 @@ StyledFlickable {
 
     property int activePasswordIndex: -1
 
+    /// The connected network's "Share" quick action: the dialog swaps to its QR page.
+    signal shareRequested(string ssid)
+
+    /// Slides the connected row back from its quick actions.
+    function closeQuickActions(): void {
+        connectedFlick.showActions = false;
+    }
+
     // With a cable plugged in, a missing Wi-Fi list is not "no connection":
     // the Wi-Fi state then sits inline under its own header instead of the
     // full-page placeholder, so it cannot read as the Ethernet's state.
@@ -375,102 +383,205 @@ StyledFlickable {
                             }
                         }
 
-                        // Disconnect Button (outline / border and no fill)
-                        Rectangle {
-                            id: wifiDisconnectBtn
+                        // Horizontal scroll for action buttons so narrower widths or long translations never overflow
+                        Flickable {
+                            id: actionsFlick
                             Layout.fillWidth: true
-                            Layout.preferredWidth: wifiDisconnectRow.implicitWidth + 32
                             Layout.fillHeight: true
-                            radius: height / 2
-                            color: "transparent"
-                            
-                            border.width: 2
-                            border.color: wifiDisconnectMouse.containsMouse ? Appearance.colors.colOnSurface : Appearance.colors.colOutline
+                            contentWidth: actionsRow.width
+                            contentHeight: height
+                            flickableDirection: Flickable.HorizontalFlick
+                            boundsBehavior: Flickable.StopAtBounds
+                            interactive: actionsFlick.contentWidth > actionsFlick.width
+                            clip: true
 
-                            Behavior on border.color {
-                                ColorAnimation { duration: 150 }
-                            }
+                            property bool _wheelScrolling: false
 
-                            MouseArea {
-                                id: wifiDisconnectMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    Network.disconnectWifiNetwork();
-                                    connectedFlick.showActions = false;
+                            Behavior on contentX {
+                                enabled: actionsFlick._wheelScrolling && !actionsFlick.dragging && !actionsFlick.flicking
+                                NumberAnimation {
+                                    duration: Appearance.animation.elementMoveFast.duration
+                                    easing.type: Easing.OutCubic
+                                    onStopped: actionsFlick._wheelScrolling = false
                                 }
                             }
 
-                            RowLayout {
-                                id: wifiDisconnectRow
-                                anchors.centerIn: parent
-                                spacing: 6
-                                
-                                MaterialSymbol {
-                                    text: "wifi_off"
-                                    iconSize: 18
-                                    color: wifiDisconnectMouse.containsMouse ? Appearance.colors.colOnSurface : Appearance.colors.colOutline
-                                    Behavior on color { ColorAnimation { duration: 150 } }
-                                }
-                                
-                                StyledText {
-                                    text: Translation.tr("Disconnect")
-                                    font.pixelSize: Appearance.font.pixelSize.small
-                                    font.bold: true
-                                    color: wifiDisconnectMouse.containsMouse ? Appearance.colors.colOnSurface : Appearance.colors.colOutline
-                                    elide: Text.ElideRight
-                                    Behavior on color { ColorAnimation { duration: 150 } }
-                                }
-                            }
-                        }
-
-                        // Forget Button (filled colErrorContainer)
-                        Rectangle {
-                            id: wifiForgetBtn
-                            Layout.fillWidth: true
-                            Layout.preferredWidth: wifiForgetRow.implicitWidth + 32
-                            Layout.fillHeight: true
-                            radius: height / 2
-                            
-                            color: wifiForgetMouse.containsPress ? Appearance.colors.colErrorContainerActive
-                                   : wifiForgetMouse.containsMouse ? Appearance.colors.colErrorContainerHover
-                                   : Appearance.colors.colErrorContainer
-
-                            Behavior on color {
-                                ColorAnimation { duration: 150 }
+                            onDraggingChanged: {
+                                if (dragging)
+                                    actionsFlick._wheelScrolling = false;
                             }
 
-                            MouseArea {
-                                id: wifiForgetMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    if (Network.active) {
-                                        Network.forgetWifiNetwork(Network.active.ssid);
+                            Connections {
+                                target: connectedFlick
+                                function onShowActionsChanged() {
+                                    if (!connectedFlick.showActions) {
+                                        actionsFlick._wheelScrolling = false;
+                                        actionsFlick.contentX = 0;
                                     }
-                                    connectedFlick.showActions = false;
+                                }
+                            }
+
+                            WheelHandler {
+                                enabled: connectedFlick.showActions && actionsFlick.contentWidth > actionsFlick.width
+                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                                onWheel: event => {
+                                    const maxX = Math.max(0, actionsFlick.contentWidth - actionsFlick.width);
+                                    const delta = event.angleDelta.x !== 0 ? event.angleDelta.x : event.angleDelta.y;
+                                    actionsFlick._wheelScrolling = true;
+                                    actionsFlick.contentX = Math.max(0, Math.min(maxX, actionsFlick.contentX - delta * 0.5));
+                                    event.accepted = true;
                                 }
                             }
 
                             RowLayout {
-                                id: wifiForgetRow
-                                anchors.centerIn: parent
-                                spacing: 6
-                                
-                                MaterialSymbol {
-                                    text: "delete"
-                                    iconSize: 18
-                                    color: Appearance.colors.colOnErrorContainer
+                                id: actionsRow
+                                width: Math.max(actionsFlick.width, implicitWidth)
+                                height: actionsFlick.height
+                                spacing: 8
+
+                                // Share Button (QR code, tonal circle like Android's)
+                                Rectangle {
+                                    id: wifiShareBtn
+                                    Layout.preferredWidth: 56
+                                    Layout.minimumWidth: 56
+                                    Layout.fillHeight: true
+                                    radius: height / 2
+                                    enabled: !(Network.active?.enterprise ?? false)
+                                    opacity: enabled ? 1 : 0.4
+                                    color: wifiShareMouse.containsPress ? Appearance.colors.colSecondaryContainerActive
+                                           : wifiShareMouse.containsMouse ? Appearance.colors.colSecondaryContainerHover
+                                           : Appearance.colors.colSecondaryContainer
+
+                                    Behavior on color {
+                                        ColorAnimation { duration: 150 }
+                                    }
+
+                                    MouseArea {
+                                        id: wifiShareMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            if (Network.active)
+                                                root.shareRequested(Network.active.ssid);
+                                        }
+                                    }
+
+                                    StyledToolTip {
+                                        text: wifiShareBtn.enabled ? Translation.tr("Share")
+                                            : Translation.tr("Enterprise networks can't be shared as a QR code")
+                                        alternativeVisibleCondition: wifiShareMouse.containsMouse
+                                        extraVisibleCondition: false
+                                    }
+
+                                    MaterialSymbol {
+                                        anchors.centerIn: parent
+                                        text: "qr_code_2"
+                                        iconSize: 22
+                                        color: Appearance.colors.colOnSecondaryContainer
+                                    }
                                 }
-                                
-                                StyledText {
-                                    text: Translation.tr("Forget")
-                                    font.pixelSize: Appearance.font.pixelSize.small
-                                    font.bold: true
-                                    color: Appearance.colors.colOnErrorContainer
-                                    elide: Text.ElideRight
+
+                                // Disconnect Button (outline / border and no fill)
+                                Rectangle {
+                                    id: wifiDisconnectBtn
+                                    Layout.fillWidth: true
+                                    Layout.minimumWidth: wifiDisconnectRow.implicitWidth + 32
+                                    Layout.preferredWidth: wifiDisconnectRow.implicitWidth + 32
+                                    Layout.fillHeight: true
+                                    radius: height / 2
+                                    color: "transparent"
+
+                                    border.width: 2
+                                    border.color: wifiDisconnectMouse.containsMouse ? Appearance.colors.colOnSurface : Appearance.colors.colOutline
+
+                                    Behavior on border.color {
+                                        ColorAnimation { duration: 150 }
+                                    }
+
+                                    MouseArea {
+                                        id: wifiDisconnectMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            Network.disconnectWifiNetwork();
+                                            connectedFlick.showActions = false;
+                                        }
+                                    }
+
+                                    RowLayout {
+                                        id: wifiDisconnectRow
+                                        anchors.centerIn: parent
+                                        spacing: 6
+
+                                        MaterialSymbol {
+                                            text: "wifi_off"
+                                            iconSize: 18
+                                            color: wifiDisconnectMouse.containsMouse ? Appearance.colors.colOnSurface : Appearance.colors.colOutline
+                                            Behavior on color { ColorAnimation { duration: 150 } }
+                                        }
+
+                                        StyledText {
+                                            text: Translation.tr("Disconnect")
+                                            font.pixelSize: Appearance.font.pixelSize.small
+                                            font.bold: true
+                                            color: wifiDisconnectMouse.containsMouse ? Appearance.colors.colOnSurface : Appearance.colors.colOutline
+                                            elide: Text.ElideRight
+                                            Behavior on color { ColorAnimation { duration: 150 } }
+                                        }
+                                    }
+                                }
+
+                                // Forget Button (filled colErrorContainer)
+                                Rectangle {
+                                    id: wifiForgetBtn
+                                    Layout.fillWidth: true
+                                    Layout.minimumWidth: wifiForgetRow.implicitWidth + 32
+                                    Layout.preferredWidth: wifiForgetRow.implicitWidth + 32
+                                    Layout.fillHeight: true
+                                    radius: height / 2
+
+                                    color: wifiForgetMouse.containsPress ? Appearance.colors.colErrorContainerActive
+                                           : wifiForgetMouse.containsMouse ? Appearance.colors.colErrorContainerHover
+                                           : Appearance.colors.colErrorContainer
+
+                                    Behavior on color {
+                                        ColorAnimation { duration: 150 }
+                                    }
+
+                                    MouseArea {
+                                        id: wifiForgetMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            if (Network.active) {
+                                                Network.forgetWifiNetwork(Network.active.ssid);
+                                            }
+                                            connectedFlick.showActions = false;
+                                        }
+                                    }
+
+                                    RowLayout {
+                                        id: wifiForgetRow
+                                        anchors.centerIn: parent
+                                        spacing: 6
+
+                                        MaterialSymbol {
+                                            text: "delete"
+                                            iconSize: 18
+                                            color: Appearance.colors.colOnErrorContainer
+                                        }
+
+                                        StyledText {
+                                            text: Translation.tr("Forget")
+                                            font.pixelSize: Appearance.font.pixelSize.small
+                                            font.bold: true
+                                            color: Appearance.colors.colOnErrorContainer
+                                            elide: Text.ElideRight
+                                        }
+                                    }
                                 }
                             }
                         }
