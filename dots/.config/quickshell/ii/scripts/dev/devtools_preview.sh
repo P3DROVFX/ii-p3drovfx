@@ -46,6 +46,9 @@ if [ ! -S "$XDG_RUNTIME_DIR/$SOCKET" ]; then echo "kwin did not start (see $OUT/
 (
     export XDG_CONFIG_HOME="$RUN/config" XDG_STATE_HOME="$RUN/state" XDG_CACHE_HOME="$RUN/cache"
     export WAYLAND_DISPLAY="$SOCKET" DBUS_SYSTEM_BUS_ADDRESS=unix:path=/nonexistent
+    # Marks a throwaway shell: Modes and its tasks stay off (an empty state dir
+    # would otherwise make every catch-up routine run the user's real commands).
+    export II_SANDBOX=1
     export DT_TOOLS="$TOOLS" DT_OUT="$OUT" DT_INPUTS="$INPUTS" DT_OPTIONS="$OPTIONS"
     unset HYPRLAND_INSTANCE_SIGNATURE DISPLAY
     exec qs -p "$PREVIEW_QML"

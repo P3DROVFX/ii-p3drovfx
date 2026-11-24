@@ -81,6 +81,9 @@ QtObject {
     function start(owner, kind, label, command) {
         if (!String(command ?? "").trim().length)
             throw new Error("empty command");
+        // A sandboxed shell (II_SANDBOX=1) must never run the user's commands.
+        if (Quickshell.env("II_SANDBOX") === "1")
+            throw new Error("sandboxed shell: tasks are disabled");
         if (root.isRunning(owner))
             throw new Error("still running from the last time");
         const now = Date.now();

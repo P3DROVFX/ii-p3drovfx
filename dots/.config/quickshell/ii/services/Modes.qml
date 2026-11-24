@@ -42,7 +42,11 @@ Singleton {
     readonly property bool storesReady: Config.ready && Persistent.ready
     // Flips once the persisted state has been reconciled; watchers only start then.
     property bool ready: false
-    readonly property bool enabled: Config.options.modes.enable
+    // II_SANDBOX=1 marks a throwaway shell (scripts/dev previews, the Settings
+    // gallery): its state dir is empty, so every catch-up routine looks missed
+    // and would run the user's real commands. Modes stays off there.
+    readonly property bool sandboxed: Quickshell.env("II_SANDBOX") === "1"
+    readonly property bool enabled: Config.options.modes.enable && !root.sandboxed
     readonly property int graceSec: Config.options.modes.graceSec
 
     // Normalized copies of the definitions. Always JS arrays, replaced only
