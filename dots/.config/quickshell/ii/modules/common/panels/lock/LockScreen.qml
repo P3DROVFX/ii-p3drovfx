@@ -209,6 +209,20 @@ Scope {
         id: lock
         locked: GlobalStates.screenLocked
         surface: root.sessionLockSurface
+        // logind's LockedHint is how anything outside the shell tells the session is locked.
+        // `secure` rather than `locked`: true only once the compositor confirms every screen is
+        // covered, false on unlock and when the compositor ends the lock itself.
+        onSecureChanged: lockedHintProc.exec(["busctl", "--system", "call", "org.freedesktop.login1", "/org/freedesktop/login1/session/auto", "org.freedesktop.login1.Session", "SetLockedHint", "b", lock.secure ? "true" : "false"])
+    }
+
+    Process {
+        id: lockedHintProc
+        stderr: StdioCollector {
+            onStreamFinished: {
+                if (text.length > 0)
+                    console.warn(`[Lock] could not set logind's LockedHint: ${text.trim()}`);
+            }
+        }
     }
 
     function lock() {
