@@ -118,7 +118,16 @@ Rectangle {
         }
     }
 
+    // Change handlers (onResolvedMatrixChanged, onEffectiveStyleChanged, ...) can
+    // run before dependent bindings such as hasMatrix / isStyled re-evaluate, so
+    // reading them there sees stale values (e.g. a matrix that arrives after
+    // creation looked absent and the preview was cleared). Defer the dispatch to
+    // the next event-loop turn, when every binding is up to date.
     function _schedulePreview() {
+        Qt.callLater(root._dispatchPreview);
+    }
+
+    function _dispatchPreview() {
         if (!root.isStyled || !root.hasMatrix) {
             previewDebounce.stop();
             root._rebuildStyledPreview();
@@ -221,6 +230,7 @@ Rectangle {
                 }
             }
         }
+        onVisibleChanged: if (visible) requestPaint()
         onWidthChanged: if (visible) requestPaint()
         onHeightChanged: if (visible) requestPaint()
     }
