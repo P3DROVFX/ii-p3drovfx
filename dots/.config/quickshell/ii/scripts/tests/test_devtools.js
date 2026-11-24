@@ -467,6 +467,72 @@ console.log("Running devtools.js unit tests...\n");
     assert.equal(devtools.toolQrCode("ssid: a;b\npassword: p:w").meta.payload, "WIFI:T:WPA;S:a\\;b;P:p\\:w;;");
     assert.ok(devtools.toolQrCode("name: Ana Souza\nphone: +55 11 9999").meta.payload.includes("N:Souza;Ana;;;"));
     assert.ok(devtools.toolQrCode("hello", { kind: "wifi" }).error);
+
+    // Styled QR SVG rendering & options
+    assert.equal(wifi.meta.visual.style, "pixel");
+    assert.equal(wifi.meta.visual.decoration, true);
+    const blobRes = devtools.toolQrCode("https://example.com", { style: "blob" });
+    assert.equal(blobRes.meta.visual.style, "blob");
+    const classicRes = devtools.toolQrCode("https://example.com", { style: "classic", ecc: "M" });
+    assert.equal(classicRes.meta.visual.style, "classic");
+    assert.equal(classicRes.output, link.output);
+    assert.deepEqual(classicRes.meta.visual.rows, link.meta.visual.rows);
+
+    for (const style of ["pixel", "blob", "classic"]) {
+        const res = devtools.toolQrCode("https://example.com", { style });
+        const svgA = devtools.qrSvg(res.meta.visual);
+        const svgB = devtools.qrSvg(res.meta.visual);
+        const svgUncached = devtools.qrSvg(res.meta.visual, {}, { noCache: true });
+        assert.ok(svgA.startsWith("<svg ") && svgA.endsWith("</svg>"), `valid SVG for ${style}`);
+        assert.ok(svgA.includes('viewBox="') && svgA.includes("<path d=\""), `SVG has viewBox and path for ${style}`);
+        assert.equal(svgA, svgB, `deterministic SVG output for ${style}`);
+        assert.equal(svgA, svgUncached, `cached matches uncached SVG for ${style}`);
+    }
+
+    const noDecorSvg = devtools.qrSvg(devtools.toolQrCode("https://example.com", { style: "pixel", decoration: false }).meta.visual);
+    assert.ok(noDecorSvg.includes('viewBox="-4 -4 '), "pixel without decoration uses 4-module viewBox");
+
+    // Contrast guard corrects low-contrast palettes (>= 4.5:1 for module tones, <= 1.35:1 for faint dots)
+    const parseHexRgb = hex => {
+        const h = hex.replace("#", "");
+        return { r: parseInt(h.slice(0, 2), 16), g: parseInt(h.slice(2, 4), 16), b: parseInt(h.slice(4, 6), 16), a: 1 };
+    };
+    const riskyLight = devtools.qrSvgResolveColors("pixel", {
+        darkmode: false,
+        surfaceHigh: "#F4EAE1",
+        onSurface: "#E5D8CE",
+        primary: "#DFD2C8",
+        secondary: "#DDD0C6",
+        tertiary: "#D9CCC2",
+        outerDot: "#000000",
+        lightDot: "#111111"
+    });
+    const lightBgRgb = parseHexRgb(riskyLight.backgroundTint);
+    for (const tone of riskyLight.tones) {
+        assert.ok(devtools.contrastRatio(parseHexRgb(tone), lightBgRgb) >= 4.5, `light tone ${tone} guarded`);
+    }
+    assert.ok(devtools.contrastRatio(parseHexRgb(riskyLight.outerDot), lightBgRgb) <= 1.35, "outerDot capped");
+    assert.ok(devtools.contrastRatio(parseHexRgb(riskyLight.lightDot), lightBgRgb) <= 1.35, "lightDot capped");
+
+    const riskyDark = devtools.qrSvgResolveColors("pixel", {
+        darkmode: true,
+        surfaceHigh: "#282320",
+        onSurface: "#35302C",
+        primary: "#3A332E",
+        secondary: "#322D28",
+        tertiary: "#3F3832"
+    });
+    const darkBgRgb = parseHexRgb(riskyDark.backgroundTint);
+    for (const tone of riskyDark.tones) {
+        assert.ok(devtools.contrastRatio(parseHexRgb(tone), darkBgRgb) >= 4.5, `dark tone ${tone} guarded`);
+    }
+
+    const riskyMidGrey = devtools.qrSvgResolveColors("blob", {
+        background: "#777777",
+        primary: "#808080"
+    });
+    assert.ok(devtools.contrastRatio(parseHexRgb(riskyMidGrey.primary), parseHexRgb(riskyMidGrey.background)) >= 4.5, "mid-grey blob guarded");
+
     console.log("✓ QR code tests passed");
 }
 

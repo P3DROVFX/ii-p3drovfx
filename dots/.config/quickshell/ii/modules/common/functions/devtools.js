@@ -2399,6 +2399,1085 @@ function qrPayload(text, kind) {
     return { kind: "text", payload: String(text) };
 }
 
+// ─── 9b. Styled QR SVG Renderer (Pixel + Blob + Classic) ─────────────────────
+
+const QR_SVG_KAPPA = 0.5522847498;
+const _qrRegionsCache = {};
+const _qrOuterDecorCache = {};
+const _qrSvgCache = {};
+const _qrSvgCacheOrder = [];
+let _qrPolyCacheRaw = null;
+let _qrPolyCacheData = null;
+let _qrLastShapesRef = null;
+
+function qrSvgFmt(n) {
+    const r = Math.round(n * 100) / 100;
+    if (r === 0)
+        return "0";
+    if (r > -1 && r < 1) {
+        const s = String(r);
+        return r > 0 ? s.slice(1) : "-" + s.slice(2);
+    }
+    return String(r);
+}
+
+function qrSvgHash2d(x, y, seed) {
+    let h = (x * 374761393 + y * 668265263 + (seed || 0) * 1442695041) | 0;
+    h = ((h ^ (h >>> 13)) * 1274126177) | 0;
+    return (h ^ (h >>> 16)) >>> 0;
+}
+
+function qrSvgAlignmentCenters(version) {
+    const pos = qrAlignmentPositions(version);
+    const n = pos.length;
+    const centers = [];
+    for (let i = 0; i < n; i++) {
+        for (let j = 0; j < n; j++) {
+            if ((i === 0 && j === 0) || (i === 0 && j === n - 1) || (i === n - 1 && j === 0))
+                continue;
+            centers.push([pos[i], pos[j]]);
+        }
+    }
+    return centers;
+}
+
+function qrSvgNormalizeMatrix(qr) {
+    if (qr && qr.modules) {
+        return {
+            size: qr.size,
+            version: qr.version || Math.round((qr.size - 17) / 4),
+            modules: qr.modules
+        };
+    }
+    const rows = (qr && qr.rows) || [];
+    const size = rows.length;
+    const modules = [];
+    for (let y = 0; y < size; y++) {
+        const row = [];
+        for (let x = 0; x < size; x++)
+            row.push(rows[y][x] === "1");
+        modules.push(row);
+    }
+    return {
+        size,
+        version: (qr && qr.version) || Math.round((size - 17) / 4),
+        modules
+    };
+}
+
+function qrSvgParseHex(str, fallbackHex) {
+    const parsed = parseColor(str);
+    if (parsed)
+        return { r: parsed.r, g: parsed.g, b: parsed.b, a: 1 };
+    const fb = parseColor(fallbackHex);
+    return fb ? { r: fb.r, g: fb.g, b: fb.b, a: 1 } : { r: 0, g: 0, b: 0, a: 1 };
+}
+
+function qrSvgMixHex(hexA, hexB, t) {
+    const a = qrSvgParseHex(hexA, "#000000");
+    const b = qrSvgParseHex(hexB, "#FFFFFF");
+    const k = Math.max(0, Math.min(1, t));
+    return colorToHex({
+        r: a.r + (b.r - a.r) * k,
+        g: a.g + (b.g - a.g) * k,
+        b: a.b + (b.b - a.b) * k,
+        a: 1
+    });
+}
+
+function qrSvgGuardBackground(bgRgb, preferLightBg) {
+    const lum = relativeLuminance(bgRgb);
+    if (preferLightBg && lum >= 0.28)
+        return bgRgb;
+    if (!preferLightBg && lum <= 0.12)
+        return bgRgb;
+    const hsl = rgbToHsl(bgRgb);
+    let lo = hsl.l;
+    let hi = preferLightBg ? 1 : 0;
+    for (let i = 0; i < 24; i++) {
+        const mid = (lo + hi) * 0.5;
+        const c = hslToRgb(hsl.h, hsl.s, mid);
+        const mLum = relativeLuminance(c);
+        if (preferLightBg ? mLum >= 0.30 : mLum <= 0.11)
+            hi = mid;
+        else
+            lo = mid;
+    }
+    return parseColor(colorToHex(hslToRgb(hsl.h, hsl.s, hi))) || bgRgb;
+}
+
+function qrSvgEnsureContrast(fgHex, bgRgb, preferDarkInk, minRatio) {
+    const fgRgb = qrSvgParseHex(fgHex, preferDarkInk ? "#000000" : "#FFFFFF");
+    const bgLum = relativeLuminance(bgRgb);
+    const fgLum = relativeLuminance(fgRgb);
+    const rightSide = preferDarkInk ? fgLum < bgLum : fgLum > bgLum;
+    if (rightSide && contrastRatio(fgRgb, bgRgb) >= minRatio)
+        return colorToHex(fgRgb);
+
+    const hsl = rgbToHsl(fgRgb);
+    const bgHsl = rgbToHsl(bgRgb);
+    let lo = rightSide ? hsl.l : bgHsl.l;
+    const hiEnd = preferDarkInk ? 0 : 1;
+    let hi = hiEnd;
+    const endRgb = hslToRgb(hsl.h, hsl.s, hiEnd);
+    if (contrastRatio(endRgb, bgRgb) < minRatio)
+        return preferDarkInk ? "#000000" : "#FFFFFF";
+
+    for (let i = 0; i < 28; i++) {
+        const mid = (lo + hi) * 0.5;
+        if (contrastRatio(hslToRgb(hsl.h, hsl.s, mid), bgRgb) >= minRatio)
+            hi = mid;
+        else
+            lo = mid;
+    }
+    const dir = preferDarkInk ? -1 : 1;
+    let l = hi;
+    let out = hslToRgb(hsl.h, hsl.s, l);
+    for (let guard = 0; guard < 50 && contrastRatio(parseColor(colorToHex(out)), bgRgb) < minRatio; guard++) {
+        l = Math.max(0, Math.min(1, l + dir * 0.002));
+        out = hslToRgb(hsl.h, hsl.s, l);
+    }
+    return colorToHex(out);
+}
+
+function qrSvgEnsureDotContrast(dotHex, bgRgb, maxRatio) {
+    const dotRgb = qrSvgParseHex(dotHex, colorToHex(bgRgb));
+    if (contrastRatio(dotRgb, bgRgb) <= maxRatio)
+        return colorToHex(dotRgb);
+    const bgHex = colorToHex(bgRgb);
+    let lo = 0;
+    let hi = 1;
+    for (let i = 0; i < 20; i++) {
+        const mid = (lo + hi) * 0.5;
+        const mixed = qrSvgParseHex(qrSvgMixHex(bgHex, dotHex, mid), bgHex);
+        if (contrastRatio(mixed, bgRgb) <= maxRatio)
+            lo = mid;
+        else
+            hi = mid;
+    }
+    return qrSvgMixHex(bgHex, dotHex, lo);
+}
+
+/**
+ * Resolves theme or explicit colours into a contrast-safe QR palette.
+ * Dark/light module tones are guaranteed >= 5.0:1 against the background tint
+ * (safely above 4.5:1), and decorative dots stay <= 1.28:1.
+ */
+function qrSvgResolveColors(style, colors) {
+    const c = colors || {};
+    const minRatio = typeof c.minContrast === "number" ? c.minContrast : 5.0;
+    let isDark = false;
+    if (c.darkmode !== undefined) {
+        isDark = Boolean(c.darkmode);
+    } else {
+        const probe = c.backgroundTint || c.background || c.surfaceHigh || c.surface;
+        if (probe && probe !== "transparent")
+            isDark = relativeLuminance(qrSvgParseHex(probe, "#FFFFFF")) < 0.18;
+    }
+
+    if (style === "pixel") {
+        let rawTint = c.backgroundTint;
+        if (!rawTint) {
+            const baseSurf = c.surfaceHigh || c.background || (isDark ? "#282320" : "#F4EAE1");
+            if (c.primaryContainer) {
+                const surfLum = relativeLuminance(qrSvgParseHex(baseSurf, "#F4EAE1"));
+                const pcLum = relativeLuminance(qrSvgParseHex(c.primaryContainer, baseSurf));
+                const samePolarity = (surfLum < 0.2) === (pcLum < 0.2);
+                rawTint = qrSvgMixHex(baseSurf, c.primaryContainer, samePolarity ? 0.18 : 0.08);
+            } else {
+                rawTint = baseSurf;
+            }
+        }
+        const tintRgb = qrSvgGuardBackground(qrSvgParseHex(rawTint, isDark ? "#282320" : "#F4EAE1"), !isDark);
+        const backgroundTint = colorToHex(tintRgb);
+        const preferDarkInk = relativeLuminance(tintRgb) >= 0.20;
+
+        let tones;
+        if (Array.isArray(c.tones) && c.tones.length > 0) {
+            tones = c.tones.map(t => qrSvgEnsureContrast(t, tintRgb, preferDarkInk, minRatio));
+        } else {
+            const onSurf = c.onSurface || (preferDarkInk ? "#1F2A3A" : "#F3E5D8");
+            const prim = c.primary || onSurf;
+            const mainRaw = c.primary && c.onSurface ? qrSvgMixHex(onSurf, prim, 0.22) : prim;
+            const main = qrSvgEnsureContrast(mainRaw, tintRgb, preferDarkInk, minRatio);
+            const darker = qrSvgEnsureContrast(
+                c.darker || qrSvgMixHex(main, preferDarkInk ? "#000000" : "#FFFFFF", 0.45),
+                tintRgb, preferDarkInk, minRatio
+            );
+            const mid = qrSvgEnsureContrast(c.secondary || c.primary || main, tintRgb, preferDarkInk, minRatio);
+            const accent = qrSvgEnsureContrast(c.tertiary || c.secondary || main, tintRgb, preferDarkInk, minRatio);
+            tones = [main, darker, mid, accent];
+        }
+
+        const outerDot = qrSvgEnsureDotContrast(
+            c.outerDot || qrSvgMixHex(backgroundTint, tones[0], 0.12),
+            tintRgb, 1.28
+        );
+        const lightDot = qrSvgEnsureDotContrast(
+            c.lightDot || qrSvgMixHex(backgroundTint, tones[0], 0.08),
+            tintRgb, 1.22
+        );
+        const canvasBg = c.canvasBg !== undefined
+            ? c.canvasBg
+            : (c.surfaceLow || c.surface || (preferDarkInk ? "#FFFFFF" : "#141210"));
+
+        return {
+            canvasBg,
+            backgroundTint,
+            outerDot,
+            lightDot,
+            primary: tones[0],
+            tones
+        };
+    }
+
+    if (style === "blob") {
+        const bgExplicit = c.background;
+        const bgProbe = (bgExplicit && bgExplicit !== "transparent")
+            ? bgExplicit
+            : (c.cardBackground || c.surfaceLow || c.surface || (isDark ? "#1B1822" : "#FFFFFF"));
+        const bgRgb = qrSvgGuardBackground(qrSvgParseHex(bgProbe, isDark ? "#1B1822" : "#FFFFFF"), !isDark);
+        const preferDarkInk = relativeLuminance(bgRgb) >= 0.20;
+        const primary = qrSvgEnsureContrast(
+            c.primary || (preferDarkInk ? "#673AB7" : "#D0BCFF"),
+            bgRgb, preferDarkInk, minRatio
+        );
+        return {
+            background: bgExplicit === "transparent" ? "transparent" : colorToHex(bgRgb),
+            primary
+        };
+    }
+
+    // Classic / square
+    const bgExplicit = c.background;
+    const bgProbe = (bgExplicit && bgExplicit !== "transparent") ? bgExplicit : "#FFFFFF";
+    const bgRgb = qrSvgGuardBackground(qrSvgParseHex(bgProbe, "#FFFFFF"), true);
+    const preferDarkInk = relativeLuminance(bgRgb) >= 0.20;
+    const primary = qrSvgEnsureContrast(c.primary || "#000000", bgRgb, preferDarkInk, minRatio);
+    return {
+        background: bgExplicit === "transparent" ? "transparent" : colorToHex(bgRgb),
+        primary
+    };
+}
+
+function qrSvgCompileRelCubics(cubics, scale) {
+    if (!cubics || cubics.length === 0)
+        return null;
+    const ox = -scale * 0.5;
+    const oy = -scale * 0.5;
+    const round2 = v => Math.round(v * 100) / 100;
+    const dx0 = round2(ox + cubics[0][0] * scale);
+    const dy0 = round2(oy + cubics[0][1] * scale);
+    let curX = dx0;
+    let curY = dy0;
+    const parts = [];
+    for (let i = 0; i < cubics.length; i++) {
+        const c = cubics[i];
+        const c1x = round2(ox + c[2] * scale);
+        const c1y = round2(oy + c[3] * scale);
+        const c2x = round2(ox + c[4] * scale);
+        const c2y = round2(oy + c[5] * scale);
+        const ex = round2(ox + c[6] * scale);
+        const ey = round2(oy + c[7] * scale);
+        const dx1 = c1x - curX;
+        const dy1 = c1y - curY;
+        const dx2 = c2x - curX;
+        const dy2 = c2y - curY;
+        const dx = ex - curX;
+        const dy = ey - curY;
+        if (dx1 === 0 && dy1 === 0 && dx2 === 0 && dy2 === 0 && dx === 0 && dy === 0)
+            continue;
+        parts.push(
+            (parts.length === 0 ? "c" : " ") +
+            qrSvgFmt(dx1) + "," + qrSvgFmt(dy1) + " " +
+            qrSvgFmt(dx2) + "," + qrSvgFmt(dy2) + " " +
+            qrSvgFmt(dx) + "," + qrSvgFmt(dy)
+        );
+        curX = ex;
+        curY = ey;
+    }
+    parts.push("z");
+    return { dx0, dy0, body: parts.join("") };
+}
+
+function qrSvgCubicsToPath(cubics, cx, cy, scale) {
+    const compiled = qrSvgCompileRelCubics(cubics, scale);
+    if (!compiled)
+        return "";
+    return "M" + qrSvgFmt(cx + compiled.dx0) + "," + qrSvgFmt(cy + compiled.dy0) + compiled.body;
+}
+
+function qrSvgEvalCubic(c, t) {
+    const u = 1 - t;
+    const u2 = u * u, t2 = t * t;
+    const w0 = u2 * u, w1 = 3 * t * u2, w2 = 3 * t2 * u, w3 = t2 * t;
+    return [
+        c[0] * w0 + c[2] * w1 + c[4] * w2 + c[6] * w3,
+        c[1] * w0 + c[3] * w1 + c[5] * w2 + c[7] * w3
+    ];
+}
+
+function qrSvgSamplePolygon(cubics, samplesPerCubic) {
+    const pts = [];
+    const n = samplesPerCubic || 6;
+    for (let i = 0; i < cubics.length; i++) {
+        const c = cubics[i];
+        for (let s = 0; s < n; s++)
+            pts.push(qrSvgEvalCubic(c, s / n));
+    }
+    return pts;
+}
+
+function qrSvgPolyBounds(cubics) {
+    if (_qrPolyCacheRaw === cubics && _qrPolyCacheData)
+        return _qrPolyCacheData;
+    const poly = qrSvgSamplePolygon(cubics, 6);
+    let rMin2 = Infinity;
+    let rMax2 = 0;
+    for (let i = 0; i < poly.length; i++) {
+        const dx = poly[i][0] - 0.5;
+        const dy = poly[i][1] - 0.5;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < rMin2) rMin2 = d2;
+        if (d2 > rMax2) rMax2 = d2;
+    }
+    const data = { poly, rMin: Math.sqrt(rMin2), rMax: Math.sqrt(rMax2) };
+    _qrPolyCacheRaw = cubics;
+    _qrPolyCacheData = data;
+    return data;
+}
+
+function qrSvgPointInPoly(px, py, poly) {
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        const xi = poly[i][0], yi = poly[i][1];
+        const xj = poly[j][0], yj = poly[j][1];
+        const hit = ((yi > py) !== (yj > py)) &&
+            (px < (xj - xi) * (py - yi) / (yj - yi + 1e-12) + xi);
+        if (hit)
+            inside = !inside;
+    }
+    return inside;
+}
+
+function qrSvgMinDistToPoly(px, py, poly) {
+    let minD2 = Infinity;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        const ax = poly[j][0], ay = poly[j][1];
+        const bx = poly[i][0], by = poly[i][1];
+        const abx = bx - ax, aby = by - ay;
+        const len2 = abx * abx + aby * aby;
+        let t = len2 > 0 ? ((px - ax) * abx + (py - ay) * aby) / len2 : 0;
+        if (t < 0) t = 0;
+        else if (t > 1) t = 1;
+        const dx = px - (ax + t * abx);
+        const dy = py - (ay + t * aby);
+        const d2 = dx * dx + dy * dy;
+        if (d2 < minD2) minD2 = d2;
+    }
+    return Math.sqrt(minD2);
+}
+
+function qrSvgFallbackCookie(lobes, innerRatio) {
+    const n = lobes * 2;
+    const pts = [];
+    for (let i = 0; i < n; i++) {
+        const a = (i * Math.PI * 2) / n - Math.PI / 2;
+        const r = (i % 2 === 0) ? 0.5 : 0.5 * innerRatio;
+        pts.push([0.5 + r * Math.cos(a), 0.5 + r * Math.sin(a)]);
+    }
+    const cubics = [];
+    for (let j = 0; j < n; j++) {
+        const p0 = pts[(j + n - 1) % n];
+        const p1 = pts[j];
+        const p2 = pts[(j + 1) % n];
+        const s1x = (p0[0] + p1[0]) * 0.5, s1y = (p0[1] + p1[1]) * 0.5;
+        const s2x = (p1[0] + p2[0]) * 0.5, s2y = (p1[1] + p2[1]) * 0.5;
+        cubics.push([
+            s1x, s1y,
+            s1x + (p1[0] - s1x) * 0.66, s1y + (p1[1] - s1y) * 0.66,
+            s2x + (p1[0] - s2x) * 0.66, s2y + (p1[1] - s2y) * 0.66,
+            s2x, s2y
+        ]);
+    }
+    return cubics;
+}
+
+function qrSvgBuildRegions(size, version) {
+    const cacheKey = size + ":" + version;
+    if (_qrRegionsCache[cacheKey])
+        return _qrRegionsCache[cacheKey];
+    const isFinder = [];
+    const isSeparator = [];
+    const isAlignment = [];
+    for (let y = 0; y < size; y++) {
+        isFinder.push(new Array(size).fill(false));
+        isSeparator.push(new Array(size).fill(false));
+        isAlignment.push(new Array(size).fill(false));
+    }
+    function markBox(arr, x0, y0, w, h) {
+        for (let yy = Math.max(0, y0); yy < Math.min(size, y0 + h); yy++) {
+            for (let xx = Math.max(0, x0); xx < Math.min(size, x0 + w); xx++)
+                arr[yy][xx] = true;
+        }
+    }
+    markBox(isFinder, 0, 0, 7, 7);
+    markBox(isFinder, size - 7, 0, 7, 7);
+    markBox(isFinder, 0, size - 7, 7, 7);
+    markBox(isSeparator, 0, 0, 8, 8);
+    markBox(isSeparator, size - 8, 0, 8, 8);
+    markBox(isSeparator, 0, size - 8, 8, 8);
+    const alignCenters = qrSvgAlignmentCenters(version);
+    for (let a = 0; a < alignCenters.length; a++) {
+        const ac = alignCenters[a];
+        markBox(isAlignment, ac[0] - 2, ac[1] - 2, 5, 5);
+    }
+    const regions = { isFinder, isSeparator, isAlignment, alignCenters };
+    _qrRegionsCache[cacheKey] = regions;
+    return regions;
+}
+
+function qrSvgPillPath(x, y, w, h, r) {
+    const rx = Math.min(r, w * 0.5, h * 0.5);
+    const rxStr = qrSvgFmt(rx);
+    const negRxStr = qrSvgFmt(-rx);
+    const dxLine = w - rx * 2;
+    const dyLine = h - rx * 2;
+    const parts = ["M" + qrSvgFmt(x + rx) + "," + qrSvgFmt(y)];
+    if (dxLine > 0.005) parts.push("h" + qrSvgFmt(dxLine));
+    parts.push("a" + rxStr + "," + rxStr + " 0 0,1 " + rxStr + "," + rxStr);
+    if (dyLine > 0.005) parts.push("v" + qrSvgFmt(dyLine));
+    parts.push("a" + rxStr + "," + rxStr + " 0 0,1 " + negRxStr + "," + rxStr);
+    if (dxLine > 0.005) parts.push("h" + qrSvgFmt(-dxLine));
+    parts.push("a" + rxStr + "," + rxStr + " 0 0,1 " + negRxStr + "," + negRxStr);
+    if (dyLine > 0.005) parts.push("v" + qrSvgFmt(-dyLine));
+    parts.push("a" + rxStr + "," + rxStr + " 0 0,1 " + rxStr + "," + negRxStr);
+    parts.push("z");
+    return parts.join("");
+}
+
+function qrSvgCircleArcSuffix(r) {
+    const rStr = qrSvgFmt(r);
+    const dPos = qrSvgFmt(r * 2);
+    const dNeg = qrSvgFmt(-r * 2);
+    return "a" + rStr + "," + rStr + " 0 1,0 " + dPos + ",0a" + rStr + "," + rStr + " 0 1,0 " + dNeg + ",0z";
+}
+
+function qrSvgCirclePath(cx, cy, r) {
+    return "M" + qrSvgFmt(cx - r) + "," + qrSvgFmt(cy) + qrSvgCircleArcSuffix(r);
+}
+
+function qrSvgRingPath(cx, cy, rOuter, rInner) {
+    const ro = qrSvgFmt(rOuter), doPos = qrSvgFmt(rOuter * 2), doNeg = qrSvgFmt(-rOuter * 2);
+    const ri = qrSvgFmt(rInner), diPos = qrSvgFmt(rInner * 2), diNeg = qrSvgFmt(-rInner * 2);
+    const cyStr = qrSvgFmt(cy);
+    return (
+        "M" + qrSvgFmt(cx - rOuter) + "," + cyStr +
+        "a" + ro + "," + ro + " 0 1,0 " + doPos + ",0a" + ro + "," + ro + " 0 1,0 " + doNeg + ",0z" +
+        "M" + qrSvgFmt(cx - rInner) + "," + cyStr +
+        "a" + ri + "," + ri + " 0 1,1 " + diPos + ",0a" + ri + "," + ri + " 0 1,1 " + diNeg + ",0z"
+    );
+}
+
+function qrSvgPickToneIndex(h, tonesCount) {
+    if (tonesCount <= 1)
+        return 0;
+    const p = (h >>> 8) % 100;
+    if (p < 46) return 0;
+    if (p < 72) return Math.min(1, tonesCount - 1);
+    if (p < 89) return Math.min(2, tonesCount - 1);
+    return Math.min(3, tonesCount - 1);
+}
+
+function qrSvgBuildOuterDecorPaths(size, viewMin, viewPad, quietZone, cookieScale, cookie4) {
+    const cacheKey = size + ":" + cookieScale.toFixed(2);
+    const cached = _qrOuterDecorCache[cacheKey];
+    if (cached && cached.cookieRef === cookie4)
+        return cached;
+
+    const bounds = qrSvgPolyBounds(cookie4);
+    const polyNorm = bounds.poly;
+    const minG = Math.floor(viewMin);
+    const maxG = Math.ceil(size + viewPad);
+    const edgeMargin = 0.72;
+    const quietMin = -quietZone;
+    const quietMax = size + quietZone;
+    const qrCenter = size * 0.5;
+    const ox = qrCenter - cookieScale * 0.5;
+    const oy = qrCenter - cookieScale * 0.5;
+    const rMaxSkip = bounds.rMax + 0.02;
+    const rMinInside = bounds.rMin - (1.45 / cookieScale + 0.02);
+    const edgeSuffix = qrSvgCircleArcSuffix(0.25);
+
+    const interiorRuns = [];
+    const edgeDots = [];
+
+    for (let gy = minG; gy < maxG; gy++) {
+        const cy = gy + 0.5;
+        const ny = (cy - oy) / cookieScale;
+        const nyD = ny - 0.5;
+        const inQuietY = cy > quietMin && cy < quietMax;
+        let runStart = null;
+
+        for (let gx = minG; gx < maxG; gx++) {
+            const cx = gx + 0.5;
+            let state = 0; // 0 = skip, 1 = interior (0.33), 2 = edge (0.25)
+            if (!(inQuietY && cx > quietMin && cx < quietMax)) {
+                const nx = (cx - ox) / cookieScale;
+                const nxD = nx - 0.5;
+                const rCenter = Math.sqrt(nxD * nxD + nyD * nyD);
+                if (rCenter <= rMaxSkip) {
+                    if (rCenter < rMinInside) {
+                        state = 1;
+                    } else if (qrSvgPointInPoly(nx, ny, polyNorm)) {
+                        const distMod = qrSvgMinDistToPoly(nx, ny, polyNorm) * cookieScale;
+                        if (distMod >= edgeMargin)
+                            state = distMod < 1.35 ? 2 : 1;
+                    }
+                }
+            }
+            if (state === 1) {
+                if (runStart === null)
+                    runStart = gx;
+            } else {
+                if (runStart !== null) {
+                    const w = gx - runStart;
+                    interiorRuns.push("M" + runStart + "," + gy + "h" + w + "v1h-" + w + "z");
+                    runStart = null;
+                }
+                if (state === 2)
+                    edgeDots.push("M" + qrSvgFmt(cx - 0.25) + "," + qrSvgFmt(cy) + edgeSuffix);
+            }
+        }
+        if (runStart !== null) {
+            const w = maxG - runStart;
+            interiorRuns.push("M" + runStart + "," + gy + "h" + w + "v1h-" + w + "z");
+        }
+    }
+
+    const result = {
+        cookieRef: cookie4,
+        interiorPath: interiorRuns.join(""),
+        edgePath: edgeDots.join("")
+    };
+    _qrOuterDecorCache[cacheKey] = result;
+    return result;
+}
+
+function qrSvgRenderPixel(mat, regions, opts) {
+    const size = mat.size;
+    const colors = opts.colors;
+    const shapes = opts.shapes || {};
+    const cookie4 = shapes.cookie4Sided || qrSvgFallbackCookie(4, 0.72);
+    const cookie9 = shapes.cookie9Sided || qrSvgFallbackCookie(9, 0.76);
+    const smallShapesRaw = [
+        shapes.cookie6Sided || qrSvgFallbackCookie(6, 0.78),
+        shapes.cookie7Sided || qrSvgFallbackCookie(7, 0.78),
+        shapes.cookie4Sided || qrSvgFallbackCookie(4, 0.78)
+    ];
+
+    const decoration = opts.decoration !== false;
+    const quietZone = decoration ? 2.5 : 4;
+    const moduleRatio = 0.85;
+    const qrCenter = size * 0.5;
+    const cookieScale = decoration
+        ? Math.max(size * 1.46, (size * 0.5 + quietZone + 3.0) / 0.415)
+        : (size + 8);
+    const viewPad = decoration ? Math.ceil(cookieScale * 0.5 - size * 0.5 + 1.5) : 4;
+    const viewMin = -viewPad;
+    const viewSize = size + viewPad * 2;
+    const defs = [];
+    const elements = [];
+
+    if (colors.canvasBg && colors.canvasBg !== "transparent") {
+        elements.push('<rect x="' + qrSvgFmt(viewMin) + '" y="' + qrSvgFmt(viewMin) + '" width="' + qrSvgFmt(viewSize) + '" height="' + qrSvgFmt(viewSize) + '" fill="' + colors.canvasBg + '"/>');
+    }
+
+    elements.push('<path d="' + qrSvgCubicsToPath(cookie4, qrCenter, qrCenter, cookieScale) + '" fill="' + colors.backgroundTint + '"/>');
+
+    if (decoration) {
+        const decor = qrSvgBuildOuterDecorPaths(size, viewMin, viewPad, quietZone, cookieScale, cookie4);
+        if (decor.interiorPath.length > 0) {
+            defs.push('<pattern id="od" width="1" height="1" patternUnits="userSpaceOnUse"><circle cx=".5" cy=".5" r=".33" fill="' + colors.outerDot + '"/></pattern>');
+            elements.push('<path d="' + decor.interiorPath + '" fill="url(#od)"/>');
+        }
+        if (decor.edgePath.length > 0)
+            elements.push('<path d="' + decor.edgePath + '" fill="' + colors.outerDot + '"/>');
+    }
+
+    if (colors.lightDot) {
+        const ldParts = [];
+        for (let ly = 0; ly < size; ly++) {
+            const row = mat.modules[ly];
+            const sepRow = regions.isSeparator[ly];
+            const alignRow = regions.isAlignment[ly];
+            let lx = 0;
+            while (lx < size) {
+                if (row[lx] || sepRow[lx] || alignRow[lx]) {
+                    lx++;
+                    continue;
+                }
+                const x0 = lx;
+                lx++;
+                while (lx < size && !row[lx] && !sepRow[lx] && !alignRow[lx])
+                    lx++;
+                const w = lx - x0;
+                ldParts.push("M" + x0 + "," + ly + "h" + w + "v1h-" + w + "z");
+            }
+        }
+        if (ldParts.length > 0) {
+            defs.push('<pattern id="ld" width="1" height="1" patternUnits="userSpaceOnUse"><circle cx=".5" cy=".5" r=".19" fill="' + colors.lightDot + '"/></pattern>');
+            elements.push('<path d="' + ldParts.join("") + '" fill="url(#ld)"/>');
+        }
+    }
+
+    const visited = [];
+    for (let vy = 0; vy < size; vy++)
+        visited.push(new Array(size).fill(false));
+
+    function isDataDark(x, y) {
+        if (x < 0 || y < 0 || x >= size || y >= size)
+            return false;
+        if (!mat.modules[y][x] || regions.isFinder[y][x] || regions.isAlignment[y][x])
+            return false;
+        return !visited[y][x];
+    }
+
+    const tones = colors.tones || [colors.primary];
+    const bucketByColor = {};
+    const bucketOrder = [];
+    const toneBucketIdx = [];
+    for (let t = 0; t < tones.length; t++) {
+        const col = tones[t];
+        if (bucketByColor[col] === undefined) {
+            bucketByColor[col] = bucketOrder.length;
+            bucketOrder.push({ color: col, parts: [] });
+        }
+        toneBucketIdx.push(bucketByColor[col]);
+    }
+
+    const mInset = (1 - moduleRatio) * 0.5;
+    const pillRadius = moduleRatio * 0.5;
+    const rxStr = qrSvgFmt(pillRadius);
+    const dStr = qrSvgFmt(moduleRatio);
+    const dNegStr = qrSvgFmt(-moduleRatio);
+    const hPillMid = "a" + rxStr + "," + rxStr + " 0 1,1 0," + dStr + "h";
+    const hPillEnd = "a" + rxStr + "," + rxStr + " 0 1,1 0," + dNegStr + "z";
+    const vPillMid = "a" + rxStr + "," + rxStr + " 0 1,0 " + dStr + ",0v";
+    const vPillEnd = "a" + rxStr + "," + rxStr + " 0 1,0 " + dNegStr + ",0z";
+    const dotSuffix = qrSvgCircleArcSuffix(pillRadius);
+    const smallCompiled = [
+        qrSvgCompileRelCubics(smallShapesRaw[0], moduleRatio * 1.08),
+        qrSvgCompileRelCubics(smallShapesRaw[1], moduleRatio * 1.08),
+        qrSvgCompileRelCubics(smallShapesRaw[2], moduleRatio * 1.08)
+    ];
+
+    for (let y = 0; y < size; y++) {
+        const yInsetStr = qrSvgFmt(y + mInset);
+        const yHalfStr = qrSvgFmt(y + 0.5);
+        for (let x = 0; x < size; x++) {
+            if (!isDataDark(x, y))
+                continue;
+            const h = qrSvgHash2d(x, y, size);
+            const maxCap = 2 + ((h >>> 3) % 3);
+            let hAvail = 1;
+            while (hAvail < maxCap && isDataDark(x + hAvail, y)) hAvail++;
+            let vAvail = 1;
+            while (vAvail < maxCap && isDataDark(x, y + vAvail)) vAvail++;
+
+            let dir = "single";
+            const preferV = (h & 1) === 1;
+            if (preferV && vAvail >= 2) dir = "v";
+            else if (!preferV && hAvail >= 2) dir = "h";
+            else if (vAvail >= 2) dir = "v";
+            else if (hAvail >= 2) dir = "h";
+
+            const bucket = bucketOrder[toneBucketIdx[qrSvgPickToneIndex(h, tones.length)]].parts;
+            if (dir === "h") {
+                for (let hx = 0; hx < hAvail; hx++) visited[y][x + hx] = true;
+                const span = hAvail - 1;
+                bucket.push("M" + qrSvgFmt(x + 0.5) + "," + yInsetStr + "h" + span + hPillMid + (-span) + hPillEnd);
+            } else if (dir === "v") {
+                for (let hy = 0; hy < vAvail; hy++) visited[y + hy][x] = true;
+                const span = vAvail - 1;
+                bucket.push("M" + qrSvgFmt(x + mInset) + "," + yHalfStr + "v" + span + vPillMid + (-span) + vPillEnd);
+            } else {
+                visited[y][x] = true;
+                if ((h % 5) === 0) {
+                    const sc = smallCompiled[(h >>> 4) % smallCompiled.length];
+                    bucket.push("M" + qrSvgFmt(x + 0.5 + sc.dx0) + "," + qrSvgFmt(y + 0.5 + sc.dy0) + sc.body);
+                } else {
+                    bucket.push("M" + qrSvgFmt(x + mInset) + "," + yHalfStr + dotSuffix);
+                }
+            }
+        }
+    }
+
+    const tone0Parts = bucketOrder[toneBucketIdx[0]].parts;
+    if (regions.alignCenters.length > 0) {
+        for (let ai = 0; ai < regions.alignCenters.length; ai++) {
+            const ac = regions.alignCenters[ai];
+            const acx = ac[0] + 0.5;
+            const acy = ac[1] + 0.5;
+            tone0Parts.push(qrSvgRingPath(acx, acy, 2.44, 1.56));
+            tone0Parts.push(qrSvgCirclePath(acx, acy, 0.62));
+        }
+    }
+
+    const finderPositions = [[3.5, 3.5], [size - 3.5, 3.5], [3.5, size - 3.5]];
+    const finderCoreBucket = bucketOrder[toneBucketIdx[tones.length > 1 ? 1 : 0]].parts;
+    for (let fi = 0; fi < finderPositions.length; fi++) {
+        const fp = finderPositions[fi];
+        tone0Parts.push(qrSvgRingPath(fp[0], fp[1], 3.48, 2.52));
+        finderCoreBucket.push(qrSvgCubicsToPath(cookie9, fp[0], fp[1], 3.16));
+    }
+
+    for (let bi = 0; bi < bucketOrder.length; bi++) {
+        const b = bucketOrder[bi];
+        if (b.parts.length > 0)
+            elements.push('<path d="' + b.parts.join("") + '" fill="' + b.color + '"/>');
+    }
+
+    if (defs.length > 0)
+        elements.unshift("<defs>" + defs.join("") + "</defs>");
+
+    return {
+        viewBox: qrSvgFmt(viewMin) + " " + qrSvgFmt(viewMin) + " " + qrSvgFmt(viewSize) + " " + qrSvgFmt(viewSize),
+        elements
+    };
+}
+
+function qrSvgRoundedOctagonLoop(cx, cy, halfSize, chamfer, r, ccw) {
+    const h = halfSize;
+    const c = chamfer;
+    const pts = [
+        [cx - h + c, cy - h],
+        [cx + h - c, cy - h],
+        [cx + h, cy - h + c],
+        [cx + h, cy + h - c],
+        [cx + h - c, cy + h],
+        [cx - h + c, cy + h],
+        [cx - h, cy + h - c],
+        [cx - h, cy - h + c]
+    ];
+    if (ccw) pts.reverse();
+    const n = pts.length;
+    const cmds = [];
+    for (let i = 0; i < n; i++) {
+        const prev = pts[(i + n - 1) % n];
+        const curr = pts[i];
+        const next = pts[(i + 1) % n];
+        const d1x = curr[0] - prev[0], d1y = curr[1] - prev[1];
+        const d2x = next[0] - curr[0], d2y = next[1] - curr[1];
+        const l1 = Math.sqrt(d1x * d1x + d1y * d1y);
+        const l2 = Math.sqrt(d2x * d2x + d2y * d2y);
+        const rr = Math.min(r, l1 * 0.45, l2 * 0.45);
+        const pStart = [curr[0] - (d1x / l1) * rr, curr[1] - (d1y / l1) * rr];
+        const pEnd = [curr[0] + (d2x / l2) * rr, curr[1] + (d2y / l2) * rr];
+        if (i === 0) cmds.push("M" + qrSvgFmt(pStart[0]) + "," + qrSvgFmt(pStart[1]));
+        else cmds.push("L" + qrSvgFmt(pStart[0]) + "," + qrSvgFmt(pStart[1]));
+        cmds.push("Q" + qrSvgFmt(curr[0]) + "," + qrSvgFmt(curr[1]) + " " + qrSvgFmt(pEnd[0]) + "," + qrSvgFmt(pEnd[1]));
+    }
+    cmds.push("z");
+    return cmds.join("");
+}
+
+function qrSvgBlobCornerCmd(dxIn, dyIn, dxOut, dyOut, rad) {
+    const k = QR_SVG_KAPPA;
+    const c1x = dxIn * rad * k;
+    const c1y = dyIn * rad * k;
+    const c2x = dxIn * rad + dxOut * rad * (1 - k);
+    const c2y = dyIn * rad + dyOut * rad * (1 - k);
+    const ex = dxIn * rad + dxOut * rad;
+    const ey = dyIn * rad + dyOut * rad;
+    return "c" + qrSvgFmt(c1x) + "," + qrSvgFmt(c1y) + " " + qrSvgFmt(c2x) + "," + qrSvgFmt(c2y) + " " + qrSvgFmt(ex) + "," + qrSvgFmt(ey);
+}
+
+function qrSvgTraceLiquidBlobs(grid, size, rOut, rIn) {
+    const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];
+    const cornerCmds = new Array(32);
+    for (let dIn = 0; dIn < 4; dIn++) {
+        for (let dOut = 0; dOut < 4; dOut++) {
+            const dxIn = DIRS[dIn][0], dyIn = DIRS[dIn][1];
+            const dxOut = DIRS[dOut][0], dyOut = DIRS[dOut][1];
+            const cross = dxIn * dyOut - dyIn * dxOut;
+            if (cross === 0) continue;
+            const rad = cross > 0 ? rOut : rIn;
+            cornerCmds[(dIn << 2) | dOut] = qrSvgBlobCornerCmd(dxIn, dyIn, dxOut, dyOut, rad);
+        }
+    }
+
+    const stride = size + 1;
+    const head = new Array(stride * stride).fill(-1);
+    const edges = [];
+
+    function addEdge(sx, sy, dirIdx) {
+        const key = sy * stride + sx;
+        const idx = edges.length;
+        edges.push({
+            sx, sy, dir: dirIdx,
+            ex: sx + DIRS[dirIdx][0],
+            ey: sy + DIRS[dirIdx][1],
+            used: false,
+            next: head[key]
+        });
+        head[key] = idx;
+    }
+
+    for (let y = 0; y < size; y++) {
+        const row = grid[y];
+        const rowUp = y > 0 ? grid[y - 1] : null;
+        const rowDn = y + 1 < size ? grid[y + 1] : null;
+        for (let x = 0; x < size; x++) {
+            if (!row[x]) continue;
+            if (!rowUp || !rowUp[x]) addEdge(x, y, 0);
+            if (x + 1 >= size || !row[x + 1]) addEdge(x + 1, y, 1);
+            if (!rowDn || !rowDn[x]) addEdge(x + 1, y + 1, 2);
+            if (x <= 0 || !row[x - 1]) addEdge(x, y + 1, 3);
+        }
+    }
+
+    const dotSuffix = qrSvgCircleArcSuffix(Math.min(0.45, rOut));
+    const singleR = Math.min(0.45, rOut);
+    const pathParts = [];
+
+    for (let ei = 0; ei < edges.length; ei++) {
+        const startEdge = edges[ei];
+        if (startEdge.used) continue;
+        const loop = [];
+        let curr = startEdge;
+        while (curr && !curr.used) {
+            curr.used = true;
+            loop.push(curr);
+            const key = curr.ey * stride + curr.ex;
+            const pref0 = (curr.dir + 1) & 3;
+            const pref1 = curr.dir;
+            const pref2 = (curr.dir + 3) & 3;
+            let best0 = null, best1 = null, best2 = null;
+            for (let idx = head[key]; idx !== -1; idx = edges[idx].next) {
+                const cand = edges[idx];
+                if (cand.used) continue;
+                if (cand.dir === pref0) { best0 = cand; break; }
+                if (cand.dir === pref1 && !best1) best1 = cand;
+                else if (cand.dir === pref2 && !best2) best2 = cand;
+            }
+            curr = best0 || best1 || best2;
+        }
+        if (loop.length < 4) continue;
+        if (loop.length === 4 &&
+            loop[0].dir === 0 && loop[1].dir === 1 && loop[2].dir === 2 && loop[3].dir === 3) {
+            pathParts.push("M" + qrSvgFmt(loop[0].sx + 0.5 - singleR) + "," + qrSvgFmt(loop[0].sy + 0.5) + dotSuffix);
+            continue;
+        }
+        const verts = [];
+        const nEdges = loop.length;
+        for (let li = 0; li < nEdges; li++) {
+            const prevE = loop[(li + nEdges - 1) % nEdges];
+            const currE = loop[li];
+            if (prevE.dir !== currE.dir) {
+                verts.push({
+                    x: currE.sx, y: currE.sy,
+                    dIn: prevE.dir, dOut: currE.dir
+                });
+            }
+        }
+        const nv = verts.length;
+        if (nv < 4) continue;
+        const cmds = [];
+        let prevOutX = 0;
+        let prevOutY = 0;
+        for (let vi = 0; vi < nv; vi++) {
+            const v = verts[vi];
+            const dxIn = DIRS[v.dIn][0], dyIn = DIRS[v.dIn][1];
+            const dxOut = DIRS[v.dOut][0], dyOut = DIRS[v.dOut][1];
+            const cross = dxIn * dyOut - dyIn * dxOut;
+            const rad = cross > 0 ? rOut : rIn;
+            const pInX = v.x - dxIn * rad;
+            const pInY = v.y - dyIn * rad;
+            if (vi === 0) {
+                cmds.push("M" + qrSvgFmt(pInX) + "," + qrSvgFmt(pInY));
+            } else {
+                if (dxIn !== 0) {
+                    const dx = pInX - prevOutX;
+                    if (Math.abs(dx) > 0.005) cmds.push("h" + qrSvgFmt(dx));
+                } else {
+                    const dy = pInY - prevOutY;
+                    if (Math.abs(dy) > 0.005) cmds.push("v" + qrSvgFmt(dy));
+                }
+            }
+            cmds.push(cornerCmds[(v.dIn << 2) | v.dOut]);
+            prevOutX = v.x + dxOut * rad;
+            prevOutY = v.y + dyOut * rad;
+        }
+        cmds.push("z");
+        pathParts.push(cmds.join(""));
+    }
+    return pathParts.join("");
+}
+
+function qrSvgRenderBlob(mat, regions, opts) {
+    const size = mat.size;
+    const colors = opts.colors;
+    const quietZone = 4;
+    const viewMin = -quietZone;
+    const viewSize = size + quietZone * 2;
+    const elements = [];
+    if (colors.background && colors.background !== "transparent") {
+        elements.push('<rect x="' + qrSvgFmt(viewMin) + '" y="' + qrSvgFmt(viewMin) + '" width="' + qrSvgFmt(viewSize) + '" height="' + qrSvgFmt(viewSize) + '" fill="' + colors.background + '"/>');
+    }
+    const grid = [];
+    for (let y = 0; y < size; y++) {
+        const row = [];
+        const modRow = mat.modules[y];
+        const findRow = regions.isFinder[y];
+        const alignRow = regions.isAlignment[y];
+        for (let x = 0; x < size; x++) {
+            row.push(Boolean(modRow[x] && !findRow[x] && !alignRow[x]));
+        }
+        grid.push(row);
+    }
+    const pathParts = [];
+    const blobPath = qrSvgTraceLiquidBlobs(grid, size, 0.38, 0.34);
+    if (blobPath.length > 0)
+        pathParts.push(blobPath);
+
+    if (regions.alignCenters.length > 0) {
+        for (let ai = 0; ai < regions.alignCenters.length; ai++) {
+            const ac = regions.alignCenters[ai];
+            pathParts.push(qrSvgRingPath(ac[0] + 0.5, ac[1] + 0.5, 2.46, 1.56));
+            pathParts.push(qrSvgCirclePath(ac[0] + 0.5, ac[1] + 0.5, 0.70));
+        }
+    }
+
+    const finderPositions = [[3.5, 3.5], [size - 3.5, 3.5], [3.5, size - 3.5]];
+    for (let fi = 0; fi < finderPositions.length; fi++) {
+        const fp = finderPositions[fi];
+        pathParts.push(qrSvgRoundedOctagonLoop(fp[0], fp[1], 3.5, 1.65, 0.40, false));
+        pathParts.push(qrSvgRoundedOctagonLoop(fp[0], fp[1], 2.5, 1.20, 0.28, true));
+        pathParts.push(qrSvgPillPath(fp[0] - 1.5, fp[1] - 1.5, 3.0, 3.0, 0.72));
+    }
+    if (pathParts.length > 0)
+        elements.push('<path d="' + pathParts.join("") + '" fill="' + colors.primary + '"/>');
+
+    return {
+        viewBox: qrSvgFmt(viewMin) + " " + qrSvgFmt(viewMin) + " " + qrSvgFmt(viewSize) + " " + qrSvgFmt(viewSize),
+        elements
+    };
+}
+
+function qrSvgRenderSquare(mat, opts) {
+    const size = mat.size;
+    const colors = opts.colors;
+    const quietZone = 4;
+    const viewMin = -quietZone;
+    const viewSize = size + quietZone * 2;
+    const parts = [];
+    for (let y = 0; y < size; y++) {
+        const row = mat.modules[y];
+        let x = 0;
+        while (x < size) {
+            if (!row[x]) {
+                x++;
+                continue;
+            }
+            const x0 = x;
+            x++;
+            while (x < size && row[x])
+                x++;
+            const w = x - x0;
+            parts.push("M" + x0 + "," + y + "h" + w + "v1h-" + w + "z");
+        }
+    }
+    const elements = [];
+    if (colors.background && colors.background !== "transparent") {
+        elements.push('<rect x="' + qrSvgFmt(viewMin) + '" y="' + qrSvgFmt(viewMin) + '" width="' + qrSvgFmt(viewSize) + '" height="' + qrSvgFmt(viewSize) + '" fill="' + colors.background + '"/>');
+    }
+    elements.push('<path d="' + parts.join("") + '" fill="' + colors.primary + '"/>');
+    return {
+        viewBox: qrSvgFmt(viewMin) + " " + qrSvgFmt(viewMin) + " " + qrSvgFmt(viewSize) + " " + qrSvgFmt(viewSize),
+        elements
+    };
+}
+
+/// Renders a QR visual ({ size, version, rows, style, decoration }) as an SVG string.
+function qrSvg(visual, colors = {}, options = {}) {
+    if (!visual || (!visual.rows && !visual.modules))
+        return "";
+    const opts = options || {};
+    const rawStyle = opts.style || visual.style || "pixel";
+    const style = (rawStyle === "blob" || rawStyle === "classic" || rawStyle === "square") ? rawStyle : "pixel";
+    const decoration = opts.decoration !== undefined ? Boolean(opts.decoration) : (visual.decoration !== false);
+    const sizePx = opts.sizePx || 800;
+    const resolvedColors = qrSvgResolveColors(style, colors);
+
+    const shapesObj = opts.shapes || null;
+    let canUseSvgCache = !opts.noCache;
+    let shapeTag = "0";
+    if (shapesObj) {
+        if (_qrLastShapesRef === null)
+            _qrLastShapesRef = shapesObj;
+        if (shapesObj === _qrLastShapesRef)
+            shapeTag = "1";
+        else
+            canUseSvgCache = false;
+    }
+
+    let rowsKey = "";
+    if (canUseSvgCache) {
+        if (visual.rows) {
+            rowsKey = visual.rows.join(",");
+        } else {
+            const mods = visual.modules;
+            const rParts = [];
+            for (let i = 0; i < mods.length; i++) {
+                const row = mods[i];
+                const cParts = [];
+                for (let j = 0; j < row.length; j++)
+                    cParts.push(row[j] ? "1" : "0");
+                rParts.push(cParts.join(""));
+            }
+            rowsKey = rParts.join(",");
+        }
+    }
+
+    const cacheKey = canUseSvgCache
+        ? (style + "|" + (decoration ? 1 : 0) + "|" + sizePx + "|" + shapeTag + "|" + JSON.stringify(resolvedColors) + "|" + rowsKey)
+        : "";
+    if (canUseSvgCache && _qrSvgCache[cacheKey] !== undefined)
+        return _qrSvgCache[cacheKey];
+
+    const mat = qrSvgNormalizeMatrix(visual);
+    const regions = qrSvgBuildRegions(mat.size, mat.version);
+    const renderOpts = {
+        colors: resolvedColors,
+        shapes: shapesObj,
+        decoration
+    };
+
+    let result;
+    if (style === "pixel")
+        result = qrSvgRenderPixel(mat, regions, renderOpts);
+    else if (style === "blob")
+        result = qrSvgRenderBlob(mat, regions, renderOpts);
+    else
+        result = qrSvgRenderSquare(mat, renderOpts);
+
+    const svg =
+        '<svg xmlns="http://www.w3.org/2000/svg" width="' + sizePx + '" height="' + sizePx + '" viewBox="' + result.viewBox + '">' +
+        result.elements.join("") +
+        "</svg>";
+
+    if (canUseSvgCache) {
+        if (_qrSvgCacheOrder.length >= 24) {
+            const oldest = _qrSvgCacheOrder.shift();
+            delete _qrSvgCache[oldest];
+        }
+        _qrSvgCache[cacheKey] = svg;
+        _qrSvgCacheOrder.push(cacheKey);
+    }
+    return svg;
+}
+
 function toolQrCode(input = "", options = {}) {
     const text = String(input).replace(/\s+$/, "");
     if (text.trim().length === 0)
@@ -2408,6 +3487,9 @@ function toolQrCode(input = "", options = {}) {
         return { output: "", error: content.error };
     const bytes = Array.from(utf8Encode(content.payload));
     const ecc = options.ecc ?? "M";
+    const rawStyle = options.style ?? "pixel";
+    const style = (rawStyle === "blob" || rawStyle === "classic") ? rawStyle : "pixel";
+    const decoration = options.decoration !== false;
     const qr = qrEncodeBytes(bytes, ecc);
     if (!qr)
         return { output: "", error: `Too long for a QR code at level ${ecc}: ${bytes.length} bytes.` };
@@ -2434,7 +3516,14 @@ function toolQrCode(input = "", options = {}) {
             ecc,
             bytes: bytes.length,
             payload: content.payload,
-            visual: { kind: "qr", size: qr.size, version: qr.version, rows: qr.modules.map(row => row.map(v => v ? "1" : "0").join("")) }
+            visual: {
+                kind: "qr",
+                style,
+                decoration,
+                size: qr.size,
+                version: qr.version,
+                rows: qr.modules.map(row => row.map(v => v ? "1" : "0").join(""))
+            }
         }
     };
 }
@@ -19119,6 +20208,8 @@ if (typeof module !== "undefined" && module.exports) {
         toolCronExplainer,
         toolChmod,
         qrEncodeBytes,
+        qrSvg,
+        qrSvgResolveColors,
         toolQrCode,
         parseIpv6,
         formatIpv6,

@@ -6,9 +6,29 @@ import Quickshell
 import qs.services
 import qs.modules.common
 import "functions/devtools.js" as DevToolsEngine
+import "widgets/shapes/material-shapes.js" as MaterialShapes
 
 Singleton {
     id: root
+
+    readonly property var _qrShapesCache: {
+        const extract = poly => poly.cubics.map(c => c.points.slice());
+        return {
+            cookie4Sided: extract(MaterialShapes.getCookie4Sided()),
+            cookie6Sided: extract(MaterialShapes.getCookie6Sided()),
+            cookie7Sided: extract(MaterialShapes.getCookie7Sided()),
+            cookie9Sided: extract(MaterialShapes.getCookie9Sided())
+        };
+    }
+
+    function qrColors(style: string, colors = ({})): var {
+        return DevToolsEngine.qrSvgResolveColors(style, colors);
+    }
+
+    function qrSvg(visual: var, colors = ({}), options = ({})): string {
+        const opts = Object.assign({}, options, { shapes: root._qrShapesCache });
+        return DevToolsEngine.qrSvg(visual, colors, opts);
+    }
 
     readonly property var categories: [
         { id: "all", label: Translation.tr("All"), icon: "grid_view" },
@@ -682,12 +702,24 @@ Singleton {
             category: "encoders",
             type: "transformer",
             icon: "qr_code_2",
-            description: Translation.tr("Text, links, Wi-Fi logins (ssid:/password: lines) or contacts (name:/phone:/email:) as a QR code"),
+            description: Translation.tr("Text, links, Wi-Fi logins or contacts as a Pixel, Blob or Classic QR code"),
             keywords: ["qr", "qrcode", "qr code", "vcard", "wifi qr", "codigo qr"],
             searchTerms: ["qr code generator", "make qr code", "wifi qr code", "qr code for link", "gerar qr code", "contact qr code"],
             sampleInput: "ssid: Home\npassword: correct horse battery staple",
-            defaultOptions: { kind: "auto", ecc: "M" },
+            defaultOptions: { style: "pixel", decoration: true, kind: "auto", ecc: "M" },
             options: [
+                {
+                    id: "style",
+                    type: "choice",
+                    label: Translation.tr("Style"),
+                    default: "pixel",
+                    choices: [
+                        { value: "pixel", label: Translation.tr("Pixel") },
+                        { value: "blob", label: Translation.tr("Blob") },
+                        { value: "classic", label: Translation.tr("Classic") }
+                    ]
+                },
+                { id: "decoration", type: "toggle", label: Translation.tr("Decoration"), default: true },
                 {
                     id: "kind",
                     type: "choice",
