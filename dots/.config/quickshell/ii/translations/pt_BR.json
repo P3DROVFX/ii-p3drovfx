@@ -16038,5 +16038,8 @@
     "Set PIN (min 4 characters)": "Definir PIN (mín. 4 caracteres)",
     "Change PIN": "Alterar PIN",
     "Save PIN": "Salvar PIN",
-    "Remove PIN": "Remover PIN"
+    "Remove PIN": "Remover PIN",
+    "Hide on empty workspace": "Ocultar em workspace vazia",
+    "Keep the dock hidden on the desktop as well instead of showing it automatically when a workspace has no windows": "Mantém a dock oculta também na área de trabalho em vez de exibi-la automaticamente quando a workspace não tem janelas",
+    "Keep the dock hidden on the desktop too": "Mantém a dock oculta também na área de trabalho"
 }

@@ -605,6 +605,20 @@ Item {
 
                 ConfigRow {
                     uniform: true
+                    visible: Config.options.dock.enable && !Config.options.dock.pinnedOnStartup
+                    ConfigSwitch {
+                        buttonIcon: "visibility_off"
+                        text: Translation.tr("Hide on empty workspace")
+                        checked: Config.options.dock.hideOnEmptyWorkspace
+                        onCheckedChanged: Config.options.dock.hideOnEmptyWorkspace = checked
+                        StyledToolTip {
+                            text: Translation.tr("Keep the dock hidden on the desktop as well instead of showing it automatically when a workspace has no windows")
+                        }
+                    }
+                }
+
+                ConfigRow {
+                    uniform: true
                     visible: Config.options.dock.enable
                     ConfigSwitch {
                         buttonIcon: "mouse"
@@ -637,6 +651,7 @@ Item {
                         onCheckedChanged: Config.options.dock.isolateMonitors = checked
                     }
                     ConfigSwitch {
+                        enabled: Config.options.dock.pinnedOnStartup || !Config.options.dock.hideOnEmptyWorkspace
                         buttonIcon: "center_focus_strong"
                         text: Translation.tr("Show only on focused monitor")
                         checked: Config.options.dock.showOnlyOnFocusedMonitor

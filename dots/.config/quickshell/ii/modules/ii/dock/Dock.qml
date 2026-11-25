@@ -348,7 +348,8 @@ Scope {
             // A fullscreen window takes the screen even from a pinned dock: it hides, holds no
             // zone, and shows on hover like an unpinned one (when hover is allowed there).
             readonly property bool pinnedShown: dock.pinned && !dockRoot.hasFullscreenWindow
-            property bool reveal: !GlobalStates.presetBarHidden && !dockRoot.realGnomeOverviewOpen && (dockRoot.pinnedShown || GlobalStates.editMode || DockPresets.isSwitchingPreset || (!anySidebarOpen && ((dockRoot.effectiveHoverToReveal && dockMouseArea.containsMouse) || (dockContent.requestDockShow) || (workspaceEmpty && !isSpecialWorkspaceOpen && (!(Config.options?.dock.showOnlyOnFocusedMonitor ?? false) || isFocusedMonitor)))))
+            readonly property bool hideOnEmptyWorkspace: Config.options?.dock?.hideOnEmptyWorkspace ?? false
+            property bool reveal: !GlobalStates.presetBarHidden && !dockRoot.realGnomeOverviewOpen && (dockRoot.pinnedShown || GlobalStates.editMode || DockPresets.isSwitchingPreset || (!anySidebarOpen && ((dockRoot.effectiveHoverToReveal && dockMouseArea.containsMouse) || (dockContent.requestDockShow) || (!dockRoot.hideOnEmptyWorkspace && workspaceEmpty && !isSpecialWorkspaceOpen && (!(Config.options?.dock.showOnlyOnFocusedMonitor ?? false) || isFocusedMonitor)))))
             property bool positionChanging: false
 
             // TODO: check for multi-monitor situations

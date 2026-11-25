@@ -318,6 +318,19 @@ StyledFlickable {
 
         EditPanelRow {
             Layout.fillWidth: true
+            visible: !Config.options.dock.pinnedOnStartup
+            first: false
+            last: false
+            symbol: "visibility_off"
+            title: Translation.tr("Hide on empty workspace")
+            subtitle: Translation.tr("Keep the dock hidden on the desktop too")
+            trailingKind: "switch"
+            switchChecked: Config.options.dock.hideOnEmptyWorkspace
+            onActivated: Config.options.dock.hideOnEmptyWorkspace = !Config.options.dock.hideOnEmptyWorkspace
+        }
+
+        EditPanelRow {
+            Layout.fillWidth: true
             first: false
             last: false
             symbol: "highlight_mouse_cursor"
