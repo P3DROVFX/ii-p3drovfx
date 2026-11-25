@@ -518,6 +518,17 @@ Item {
                 }
             }
 
+            ConfigSwitch {
+                buttonIcon: "bolt"
+                text: Translation.tr("Snappy window switch")
+                enabled: windowsRoot.switcher.enable
+                checked: windowsRoot.switcher.snappySwitch
+                onCheckedChanged: windowsRoot.switcher.snappySwitch = checked
+                StyledToolTip {
+                    text: Translation.tr("Switches immediately on a quick Alt+Tab tap without UI delay, matching snappy GNOME and Windows behavior")
+                }
+            }
+
             // The same choice as the Dynamic Island page's switch, so every switcher setting is here.
             WindowsChoiceCards {
                 enabled: windowsRoot.switcher.enable

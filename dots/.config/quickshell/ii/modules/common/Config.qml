@@ -7517,6 +7517,8 @@ Singleton {
                 // Alt+letter on the desktop opens the switcher already searching. Off: typing
                 // searches only once Alt+Tab has opened it.
                 property bool searchAnywhere: false
+                // Switches immediately on a quick Alt+Tab tap without UI delay.
+                property bool snappySwitch: true
             }
 
             // Ctrl+Shift+Super+Q starts the app of the last closed window again, on its workspace.

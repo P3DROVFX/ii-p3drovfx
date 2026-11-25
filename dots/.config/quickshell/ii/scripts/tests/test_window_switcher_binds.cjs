@@ -278,6 +278,19 @@ expect("typing Tab", count("${T}", "ALT + Tab"), 1)
 expect("root Tab", count("", "ALT + Tab"), 1)
 expect("root same", count("", "ALT + ${stub.sameAppKey}"), 1)
 expect("root release", count("", "ALT_L"), 1)
+expect("root code:64 release", count("", "code:64"), 1)
+expect("root code:108 release", count("", "code:108"), 1)
+expect("hold code:64 release", count("${S}", "code:64"), 1)
+expect("hold code:108 release", count("${S}", "code:108"), 1)
+`);
+
+scenario('raw keycode Alt releases (code:64 and code:108) commit without duplicating', `
+press("ALT + Tab"); expect("submap", current, "${S}"); take()
+release("code:64"); expect("submap after code:64", current, ""); expect("globals", take(), "Commit")
+press("ALT + Tab"); take()
+release("ALT_L"); release("code:64"); expect("both firing only commits once", take(), "Commit")
+press("ALT + Tab"); take()
+release("code:108"); expect("submap after code:108", current, ""); expect("globals", take(), "Commit")
 `);
 
 scenario('switching off takes the entry binds away, and Alt+\` with them', `

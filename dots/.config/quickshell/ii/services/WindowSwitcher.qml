@@ -64,9 +64,11 @@ Singleton {
     readonly property bool peekWholeWorkspace: root.options?.peekWholeWorkspace ?? false
     /// The one-line key reminder under the switcher.
     readonly property bool showKeyHints: root.options?.showKeyHints ?? true
+    /// Switches immediately on a quick Alt+Tab tap without UI delay, via direct Hyprland IPC.
+    readonly property bool snappySwitch: root.options?.snappySwitch ?? true
 
     /// Shown this long after Alt+Tab; a release before then switches without any UI at all.
-    readonly property int quickTapMs: 150
+    readonly property int quickTapMs: root.snappySwitch ? 40 : 150
 
     // ------------------------------------------------------------------ state
 
@@ -482,11 +484,15 @@ Singleton {
         // and one on another workspace switches there - both done by Hyprland's own focus.
         if (entry.address === current && !entry.special)
             return;
-        const focus = root.focusChunk(entry);
         if (!peeked) {
-            Quickshell.execDetached(["hyprctl", "eval", focus]);
+            if (root.snappySwitch) {
+                Hyprland.dispatch(`hl.dsp.focus({ window = "address:${entry.address}" })`);
+            } else {
+                Quickshell.execDetached(["hyprctl", "eval", root.focusChunk(entry)]);
+            }
             return;
         }
+        const focus = root.focusChunk(entry);
         // The peek already showed the window where it lives: arrive there without the
         // workspace sliding in behind it. Animations go off for this one switch and come back
         // as they were - on a compositor timer, so a shell that dies right now cannot leave
@@ -829,6 +835,7 @@ function __ii_alt_tab_g(n)
 end
 if __ii_alt_tab_v ~= 2 then
   __ii_alt_tab_v = 2
+  __ii_alt_tab_code_release = 1
   __ii_alt_tab_q = 0
   local S, T = "${root.submapName}", "${root.typingSubmapName}"
   local function g(n) __ii_alt_tab_g(n) end
@@ -866,7 +873,7 @@ if __ii_alt_tab_v ~= 2 then
       hl.dispatch(hl.dsp.submap("reset")); g("Commit")
     end
   end
-  for _, k in ipairs({ "ALT_L", "ALT_R" }) do
+  for _, k in ipairs({ "ALT_L", "ALT_R", "code:64", "code:108" }) do
     hl.bind(k, release, { release = true, ignore_mods = true, transparent = true, non_consuming = true, description = "${root.bindTag}" })
   end
   local function common()
@@ -881,7 +888,9 @@ if __ii_alt_tab_v ~= 2 then
     hl.bind("End", function() g("End") end, { ignore_mods = true })
   end
   hl.define_submap(S, function()
-    for _, k in ipairs({ "ALT_L", "ALT_R" }) do hl.bind(k, release, { release = true, ignore_mods = true }) end
+    for _, k in ipairs({ "ALT_L", "ALT_R", "code:64", "code:108" }) do
+      hl.bind(k, release, { release = true, ignore_mods = true, non_consuming = true })
+    end
     hl.bind("Escape", escape, { ignore_mods = true })
     common()
     for _, k in ipairs(letters) do
@@ -904,6 +913,27 @@ if __ii_alt_tab_v ~= 2 then
       hl.bind("SHIFT + code:" .. d[2], digit(d[1]), { repeating = true })
     end
     hl.bind("catchall", function() end, { ignore_mods = true })
+  end)
+end
+if __ii_alt_tab_code_release ~= 1 then
+  __ii_alt_tab_code_release = 1
+  local S, T = "${root.submapName}", "${root.typingSubmapName}"
+  local function release()
+    if hl.get_current_submap() ~= S then return end
+    if __ii_alt_tab_q > 0 then
+      __ii_alt_tab_typing_keys()
+      hl.dispatch(hl.dsp.submap(T)); __ii_alt_tab_g("Release")
+    else
+      hl.dispatch(hl.dsp.submap("reset")); __ii_alt_tab_g("Commit")
+    end
+  end
+  for _, k in ipairs({ "code:64", "code:108" }) do
+    hl.bind(k, release, { release = true, ignore_mods = true, transparent = true, non_consuming = true, description = "${root.bindTag}" })
+  end
+  hl.define_submap(S, function()
+    for _, k in ipairs({ "code:64", "code:108" }) do
+      hl.bind(k, release, { release = true, ignore_mods = true, non_consuming = true })
+    end
   end)
 end`
 

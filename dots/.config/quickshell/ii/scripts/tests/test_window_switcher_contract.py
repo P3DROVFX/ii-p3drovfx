@@ -68,6 +68,21 @@ class KeyTests(unittest.TestCase):
         # down before the submap was entered.
         self.assertRegex(self.service,
             r'hl\.bind\(k, release, \{ release = true, ignore_mods = true, transparent = true')
+        self.assertIn('"ALT_L", "ALT_R", "code:64", "code:108"', self.service)
+        self.assertIn('non_consuming = true', self.service)
+
+    def test_snappy_switch_behaviour(self):
+        self.assertIn('readonly property bool snappySwitch: root.options?.snappySwitch ?? true', self.service)
+        self.assertIn('readonly property int quickTapMs: root.snappySwitch ? 40 : 150', self.service)
+        commit = self.service[self.service.index("function commit"):]
+        commit = commit[:commit.index("\n    }\n")]
+        self.assertIn('if (root.snappySwitch)', commit)
+        self.assertIn('Hyprland.dispatch(`hl.dsp.focus({ window = "address:${entry.address}" })`)', commit)
+        self.assertIn('Quickshell.execDetached(["hyprctl", "eval", root.focusChunk(entry)])', commit)
+        page = read(WINDOWS_PAGE)
+        self.assertIn('buttonIcon: "bolt"', page)
+        self.assertIn('text: Translation.tr("Snappy window switch")', page)
+        self.assertIn('windowsRoot.switcher.snappySwitch', page)
 
     def test_finishing_leaves_the_submap_inside_the_compositor(self):
         self.assertIn('hl.dispatch(hl.dsp.submap("reset")); g(n)', self.service)
@@ -394,7 +409,7 @@ class SettingsTests(unittest.TestCase):
         block = block[:block.index("}")]
         for key in ("bool enable: true", "bool includeOtherWorkspaces: true", "bool showThumbnails: true",
                     "int peekDelayMs: 600", "bool searchAnywhere: false", "bool currentMonitorOnly: false",
-                    "bool peekWholeWorkspace: false", "bool showKeyHints: true"):
+                    "bool peekWholeWorkspace: false", "bool showKeyHints: true", "bool snappySwitch: true"):
             self.assertIn(key, block)
         # The island toggle needs the legacy key while useModernSchema is false.
         self.assertIn("property bool disableWindowSwitcher: false", config)
