@@ -36,8 +36,11 @@ Scope { // Scope
     readonly property real sidebarWidth: GlobalStates.policiesWidth
     readonly property real topBarOffset: !BarPlacement.vertical && !BarPlacement.bottom && GlobalStates.barOpen ? Appearance.sizes.barHeight : 0
     readonly property real bottomBarOffset: !BarPlacement.vertical && BarPlacement.bottom && GlobalStates.barOpen ? Appearance.sizes.barHeight : 0
-    readonly property real leftBarOffset: BarPlacement.vertical && !BarPlacement.bottom && isOnLeft && GlobalStates.barOpen ? Appearance.sizes.verticalBarWindowWidth : 0
-    readonly property real rightBarOffset: BarPlacement.vertical && BarPlacement.bottom && !isOnLeft && GlobalStates.barOpen ? Appearance.sizes.verticalBarWindowWidth : 0
+    readonly property real liveVerticalBarWidth: GlobalStates.verticalBarVisibleWidthFor(root.policyMonitorName)
+    readonly property real maxLeftBarOffset: BarPlacement.vertical && !BarPlacement.bottom && isOnLeft && GlobalStates.barOpen ? Appearance.sizes.verticalBarWindowWidth : 0
+    readonly property real maxRightBarOffset: BarPlacement.vertical && BarPlacement.bottom && !isOnLeft && GlobalStates.barOpen ? Appearance.sizes.verticalBarWindowWidth : 0
+    readonly property real leftBarOffset: BarPlacement.vertical && !BarPlacement.bottom && isOnLeft && GlobalStates.barOpen ? root.liveVerticalBarWidth : 0
+    readonly property real rightBarOffset: BarPlacement.vertical && BarPlacement.bottom && !isOnLeft && GlobalStates.barOpen ? root.liveVerticalBarWidth : 0
     // On the bar's own side this sidebar asks the compositor to ignore every exclusive
     // zone (so the bar's strip cannot push it), which also drops the wrapped frame's
     // ring and a pinned dock: it ran the full screen height, under the dock. Those are
@@ -253,6 +256,9 @@ Scope { // Scope
             }
 
             // The surface starts at the screen edge; the open content stops beside the bar.
+            // Keep the surface width stable at maxBarOffset so live bar auto-hide slides do not
+            // resize the Wayland layer surface on every frame.
+            readonly property real maxBarOffset: root.pin ? 0 : (root.isOnLeft ? root.maxLeftBarOffset : root.maxRightBarOffset) + root.sideDockInset + root.dockReclaim
             readonly property real effectiveBarOffset: root.pin ? 0 : (root.isOnLeft ? root.leftBarOffset : root.rightBarOffset) + root.sideDockInset + root.dockReclaim
 
             // Setting exclusiveZone resets exclusionMode to Normal. Use the Wayland
@@ -260,7 +266,7 @@ Scope { // Scope
             exclusiveZone: root.pin
                 ? Math.max(0, sidebarWidth - Appearance.sizes.hyprlandGapsOut - Appearance.sizes.elevationMargin - (root.barReservesSpace ? (root.isOnLeft ? root.leftBarOffset : root.rightBarOffset) : 0))
                 : (BarPlacement.vertical && (BarPlacement.bottom !== root.isOnLeft) ? -1 : 0)
-            implicitWidth: sidebarWidth + effectiveBarOffset
+            implicitWidth: sidebarWidth + maxBarOffset
             WlrLayershell.namespace: root.isOnLeft ? "quickshell:sidebarLeft" : "quickshell:sidebarRight"
             // Hyprland hands pointer focus to any layer surface that maps asking for keyboard
             // interactivity, no matter where the cursor really is, and only re-evaluates it on the
@@ -351,11 +357,15 @@ Scope { // Scope
                 height: GlobalStates.policiesPointerHole.height
             }
 
-            // Keep the bar clickable without clipping the slide drawn over its strip.
+            // Keep the bar (and its auto-hide edge hover strip) clickable without
+            // clipping the slide drawn over its strip.
+            readonly property real maskEdgeInset: (root.pin && GlobalStates.connectModeActive) ? 0 : Appearance.sizes.hyprlandGapsOut
             mask: Region {
-                x: root.isOnLeft ? panelWindow.effectiveBarOffset : 0
+                x: root.isOnLeft
+                    ? (panelWindow.effectiveBarOffset + panelWindow.maskEdgeInset)
+                    : Math.max(0, panelWindow.width - panelWindow.effectiveBarOffset - panelWindow.sidebarWidth)
                 y: 0
-                width: panelWindow.width - panelWindow.effectiveBarOffset
+                width: Math.max(0, panelWindow.sidebarWidth - panelWindow.maskEdgeInset)
                 height: panelWindow.height
                 regions: GlobalStates.policiesPointerHoleActive ? [pointerHoleRegion] : []
             }
@@ -479,9 +489,11 @@ Scope { // Scope
                 }
 
                 Behavior on anchors.leftMargin {
+                    enabled: !root.ignoresZones
                     animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
                 }
                 Behavior on anchors.rightMargin {
+                    enabled: !root.ignoresZones
                     animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
                 }
 

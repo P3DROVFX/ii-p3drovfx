@@ -43,8 +43,10 @@ Scope {
 
             // Below a top bar, else a sleek margin from the edge.
             readonly property int topMarginValue: {
-                if (!Config.options.bar.vertical && !Config.options.bar.bottom)
-                    return Appearance.sizes.barHeight + 12;
+                if (!Config.options.bar.vertical && !Config.options.bar.bottom) {
+                    const barH = GlobalStates.horizontalBarVisibleHeightFor(popupWindow.screen?.name ?? "");
+                    return Math.max(24, Math.round(barH) + 12);
+                }
                 return 24;
             }
 

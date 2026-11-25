@@ -58,29 +58,31 @@ Scope {
             readonly property int leftFrameThickness: (!BarPlacement.vertical || BarPlacement.bottom) ? frameThickness : 0
             readonly property int rightFrameThickness: (!BarPlacement.vertical || !BarPlacement.bottom) ? frameThickness : 0
             readonly property int barGaps: (BarInteraction.cornerStyle !== 0) ? Appearance.sizes.hyprlandGapsOut : 0
+            readonly property real liveBarHeight: GlobalStates.horizontalBarVisibleHeightFor(popupWindow.screen?.name ?? "")
+            readonly property real liveVerticalBarWidth: GlobalStates.verticalBarVisibleWidthFor(popupWindow.screen?.name ?? "")
 
             margins {
                 top: {
                     if (BarPlacement.vertical) {
                         return topFrameThickness;
                     }
-                    return BarPlacement.bottom ? 0 : Appearance.sizes.barHeight + topFrameThickness;
+                    return BarPlacement.bottom ? 0 : popupWindow.liveBarHeight + topFrameThickness;
                 }
                 bottom: {
                     if (BarPlacement.vertical) {
                         return bottomFrameThickness;
                     }
-                    return BarPlacement.bottom ? Appearance.sizes.barHeight + bottomFrameThickness : 0;
+                    return BarPlacement.bottom ? popupWindow.liveBarHeight + bottomFrameThickness : 0;
                 }
                 left: {
                     if (BarPlacement.vertical) {
-                        return (BarPlacement.bottom ? leftFrameThickness : Appearance.sizes.verticalBarWindowWidth + leftFrameThickness) + popupWindow.sidebarPush;
+                        return (BarPlacement.bottom ? leftFrameThickness : popupWindow.liveVerticalBarWidth + leftFrameThickness) + popupWindow.sidebarPush;
                     }
                     return leftFrameThickness + popupWindow.sidebarPush;
                 }
                 right: {
                     if (BarPlacement.vertical) {
-                        return (BarPlacement.bottom ? Appearance.sizes.verticalBarWindowWidth + rightFrameThickness : rightFrameThickness) + popupWindow.sidebarPush;
+                        return (BarPlacement.bottom ? popupWindow.liveVerticalBarWidth + rightFrameThickness : rightFrameThickness) + popupWindow.sidebarPush;
                     }
                     return barGaps + 4 + rightFrameThickness + popupWindow.sidebarPush;
                 }

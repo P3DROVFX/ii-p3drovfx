@@ -27,8 +27,9 @@ Scope {
     // The surface starts at the screen edge; the open content stops beside the bar.
     // Ignoring every zone (to keep the bar off) also ignores a pinned dock on this edge,
     // which lies beside the bar: the open content stops beside the dock as well.
+    readonly property string dashboardMonitorName: root.isOnRight ? GlobalStates.effectiveRightMonitor : GlobalStates.effectiveLeftMonitor
     readonly property bool ignoresZones: BarPlacement.vertical && (BarPlacement.bottom === root.isOnRight)
-    readonly property var dockInset: GlobalStates.dockInsets[root.isOnRight ? GlobalStates.effectiveRightMonitor : GlobalStates.effectiveLeftMonitor] ?? null
+    readonly property var dockInset: GlobalStates.dockInsets[root.dashboardMonitorName] ?? null
     readonly property real sideDockInset: (root.ignoresZones && root.dockInset && root.dockInset.side === (root.isOnRight ? "right" : "left"))
         ? (root.dockInset.reserved ?? 0) : 0
     // Respecting the zones, the surface began beside a pinned dock on this edge and slid
@@ -36,8 +37,11 @@ Scope {
     // starts at the screen edge like it does with no dock, and the content stops beside it.
     readonly property real dockReclaim: (!root.ignoresZones && root.dockInset && root.dockInset.side === (root.isOnRight ? "right" : "left"))
         ? (root.dockInset.reserved ?? 0) : 0
-    readonly property real effectiveBarOffset: (BarPlacement.vertical && GlobalStates.barOpen && (BarPlacement.bottom === root.isOnRight)
+    readonly property real liveVerticalBarWidth: GlobalStates.verticalBarVisibleWidthFor(root.dashboardMonitorName)
+    readonly property real maxBarOffset: (BarPlacement.vertical && GlobalStates.barOpen && (BarPlacement.bottom === root.isOnRight)
         ? Appearance.sizes.verticalBarWindowWidth : 0) + root.sideDockInset + root.dockReclaim
+    readonly property real effectiveBarOffset: (BarPlacement.vertical && GlobalStates.barOpen && (BarPlacement.bottom === root.isOnRight)
+        ? root.liveVerticalBarWidth : 0) + root.sideDockInset + root.dockReclaim
 
     // Loader guard: PanelWindow (Wayland surface) is never created in connect mode,
     // except in Float+Connect mode (cornerStyle 1) where sidebars remain separate.
@@ -64,16 +68,19 @@ Scope {
             // Setting exclusiveZone resets exclusionMode to Normal. Use the Wayland
             // sentinel directly so the bar cannot push this surface off the screen edge.
             exclusiveZone: BarPlacement.vertical && (BarPlacement.bottom === root.isOnRight) ? -1 : 0
-            implicitWidth: sidebarWidth + root.effectiveBarOffset
+            implicitWidth: sidebarWidth + root.maxBarOffset
             margins {
                 left: root.isOnRight ? 0 : -root.dockReclaim
                 right: root.isOnRight ? -root.dockReclaim : 0
             }
-            // Keep the bar clickable without clipping the slide drawn over its strip.
+            // Keep the bar (and its auto-hide edge hover strip) clickable without
+            // clipping the slide drawn over its strip.
             mask: Region {
-                x: root.isOnRight ? 0 : root.effectiveBarOffset
+                x: root.isOnRight
+                    ? Math.max(0, panelWindow.width - root.effectiveBarOffset - root.sidebarWidth)
+                    : (root.effectiveBarOffset + Appearance.sizes.hyprlandGapsOut)
                 y: 0
-                width: panelWindow.width - root.effectiveBarOffset
+                width: Math.max(0, root.sidebarWidth - Appearance.sizes.hyprlandGapsOut)
                 height: panelWindow.height
             }
             WlrLayershell.namespace: root.isOnRight ? "quickshell:sidebarRight" : "quickshell:sidebarLeft"

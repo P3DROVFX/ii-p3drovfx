@@ -101,6 +101,16 @@ Scope {
             Component.onDestruction: GlobalStates.setBarIsland(islandPublisher.screenName, "", 0, 0)
         }
 
+        QtObject {
+            id: visibleHeightPublisher
+            readonly property string screenName: root.screen ? root.screen.name : ""
+            readonly property real visibleHeight: Math.min(Appearance.sizes.barHeight,
+                Math.max(0, Appearance.sizes.barHeight + (root.isBottom ? barContent.anchors.bottomMargin : barContent.anchors.topMargin)))
+            onVisibleHeightChanged: GlobalStates.setHorizontalBarVisibleHeight(visibleHeightPublisher.screenName, visibleHeightPublisher.visibleHeight)
+            Component.onCompleted: GlobalStates.setHorizontalBarVisibleHeight(visibleHeightPublisher.screenName, visibleHeightPublisher.visibleHeight)
+            Component.onDestruction: GlobalStates.setHorizontalBarVisibleHeight(visibleHeightPublisher.screenName, 0)
+        }
+
         // ── Window tracking (for showBarBackground) ──────────────────────────
         Connections {
             enabled: Config.options.bar.barBackgroundStyle === 2 || (Config.options.bar.barBackgroundStyle === 3 && (BarInteraction.cornerStyle === 0 || BarInteraction.cornerStyle === 1))
@@ -180,7 +190,7 @@ Scope {
             target: hoverRegion
             function onContainsMouseChanged() {
                 if (hoverRegion.containsMouse) {
-                    if (barRoot.hoverDelay <= 0 || barRoot.hiddenAmount < 1 || barRoot.superShow || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen) {
+                    if (barRoot.hoverDelay <= 0 || barRoot.hiddenAmount < 1 || barRoot.superShow || GlobalStates.sidebarKeepsBarVisible) {
                         barRoot.hoverTriggered = true;
                     } else {
                         hoverOpenTimer.restart();
@@ -193,7 +203,7 @@ Scope {
         }
 
         property bool superShow: false
-        property bool mustShow: hoverTriggered || superShow || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen || GlobalStates.editMode || GlobalStates.anyBarPopupOpen
+        property bool mustShow: hoverTriggered || superShow || GlobalStates.sidebarKeepsBarVisible || GlobalStates.editMode || GlobalStates.anyBarPopupOpen
         // BarInteraction, not the stored flag: a touch-first family forces auto-hide off
         // without rewriting the preference the user has saved.
         property real hiddenAmount: (BarInteraction.autoHide && !mustShow) ? Appearance.sizes.barHeight : 0

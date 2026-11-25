@@ -72,8 +72,8 @@ Scope {
             ? (Config.options.bar.bottom ? "right" : "left")
             : (Config.options.bar.bottom ? "bottom" : "top")
         readonly property real barThickness: root.barVertical
-            ? (Config.options.bar.sizes.width ?? Appearance.sizes.verticalBarWidth)
-            : (Config.options.bar.sizes.height ?? Appearance.sizes.barHeight)
+            ? GlobalStates.verticalBarVisibleWidthFor(root.screenName)
+            : GlobalStates.horizontalBarVisibleHeightFor(root.screenName)
         // Read the animated widths, not only the open flags: an opening sidebar clears the
         // card immediately and a closing one only releases it once it is actually gone.
         readonly property real leftSidebarInset: (GlobalStates.effectiveLeftMonitor === root.screenName && root.screenName !== "")

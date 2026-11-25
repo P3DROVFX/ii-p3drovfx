@@ -231,6 +231,8 @@ PanelWindow {
 
     readonly property bool leftSidebarOpenOnMonitor: GlobalStates.sidebarLeftOpen && screen.name === GlobalStates.effectiveLeftMonitor
     readonly property bool rightSidebarOpenOnMonitor: GlobalStates.sidebarRightOpen && screen.name === GlobalStates.effectiveRightMonitor
+    readonly property bool sidebarKeepsBarVisibleOnMonitor: (topPanel.leftSidebarOpenOnMonitor && !GlobalStates.policiesOpenedByKeybind)
+        || (topPanel.rightSidebarOpenOnMonitor && !GlobalStates.dashboardOpenedByKeybind)
     /// The "keep loaded" sidebars are built only once the panel queue has drained. In
     /// connect mode this window also carries the bar, and building both sidebars with it
     /// delayed the first paint after login. Latched: a later preset hold must not unload them.
@@ -525,7 +527,7 @@ PanelWindow {
                     target: hoverRegion
                     function onContainsMouseChanged() {
                         if (hoverRegion.containsMouse) {
-                            if (hBarItem.hoverDelay <= 0 || (Config?.options.bar.autoHide.enable && !hBarItem.mustShow) === false || hBarItem.superShow || topPanel.leftSidebarOpenOnMonitor || topPanel.rightSidebarOpenOnMonitor) {
+                            if (hBarItem.hoverDelay <= 0 || (Config?.options.bar.autoHide.enable && !hBarItem.mustShow) === false || hBarItem.superShow || topPanel.sidebarKeepsBarVisibleOnMonitor) {
                                 hBarItem.hoverTriggered = true;
                             } else {
                                 hoverOpenTimer.restart();
@@ -538,7 +540,7 @@ PanelWindow {
                 }
 
                 property bool superShow: false
-                property bool mustShow: hoverTriggered || superShow || topPanel.leftSidebarOpenOnMonitor || topPanel.rightSidebarOpenOnMonitor
+                property bool mustShow: hoverTriggered || superShow || topPanel.sidebarKeepsBarVisibleOnMonitor
 
                 MouseArea {
                     id: hoverRegion
@@ -679,6 +681,16 @@ PanelWindow {
                 Behavior on hiddenAmount {
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(hBarItem)
                 }
+
+                QtObject {
+                    id: hBarVisibleHeightPublisher
+                    readonly property string screenName: topPanel.screen ? topPanel.screen.name : ""
+                    readonly property real visibleHeight: Math.min(Appearance.sizes.barHeight,
+                        Math.max(0, Appearance.sizes.barHeight + (topPanel.barBottom ? barContent.anchors.bottomMargin : barContent.anchors.topMargin)))
+                    onVisibleHeightChanged: GlobalStates.setHorizontalBarVisibleHeight(hBarVisibleHeightPublisher.screenName, hBarVisibleHeightPublisher.visibleHeight)
+                    Component.onCompleted: GlobalStates.setHorizontalBarVisibleHeight(hBarVisibleHeightPublisher.screenName, hBarVisibleHeightPublisher.visibleHeight)
+                    Component.onDestruction: GlobalStates.setHorizontalBarVisibleHeight(hBarVisibleHeightPublisher.screenName, 0)
+                }
             }
         }
     }
@@ -749,7 +761,7 @@ PanelWindow {
                     target: hoverRegion
                     function onContainsMouseChanged() {
                         if (hoverRegion.containsMouse) {
-                            if (vBarItem.hoverDelay <= 0 || (Config?.options.bar.autoHide.enable && !vBarItem.mustShow) === false || vBarItem.superShow || topPanel.leftSidebarOpenOnMonitor || topPanel.rightSidebarOpenOnMonitor) {
+                            if (vBarItem.hoverDelay <= 0 || (Config?.options.bar.autoHide.enable && !vBarItem.mustShow) === false || vBarItem.superShow || topPanel.sidebarKeepsBarVisibleOnMonitor) {
                                 vBarItem.hoverTriggered = true;
                             } else {
                                 hoverOpenTimer.restart();
@@ -762,7 +774,7 @@ PanelWindow {
                 }
 
                 property bool superShow: false
-                property bool mustShow: hoverTriggered || superShow || topPanel.leftSidebarOpenOnMonitor || topPanel.rightSidebarOpenOnMonitor
+                property bool mustShow: hoverTriggered || superShow || topPanel.sidebarKeepsBarVisibleOnMonitor
 
                 MouseArea {
                     id: hoverRegion
@@ -912,6 +924,17 @@ PanelWindow {
 
                 Behavior on hiddenAmount {
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(vBarItem)
+                }
+
+                QtObject {
+                    id: vBarVisibleWidthPublisher
+                    readonly property string screenName: topPanel.screen ? topPanel.screen.name : ""
+                    readonly property real visibleWidth: topPanel.barOnRight
+                        ? Math.max(0, hoverRegion.width - barContent.x)
+                        : Math.max(0, barContent.x + barContent.width)
+                    onVisibleWidthChanged: GlobalStates.setVerticalBarVisibleWidth(vBarVisibleWidthPublisher.screenName, vBarVisibleWidthPublisher.visibleWidth)
+                    Component.onCompleted: GlobalStates.setVerticalBarVisibleWidth(vBarVisibleWidthPublisher.screenName, vBarVisibleWidthPublisher.visibleWidth)
+                    Component.onDestruction: GlobalStates.setVerticalBarVisibleWidth(vBarVisibleWidthPublisher.screenName, 0)
                 }
             }
         }

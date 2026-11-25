@@ -79,8 +79,8 @@ Scope {
             // Responsive top margin - offset from top bar (if active at the top) to avoid overlaps
             readonly property int topMarginValue: {
                 if (!BarPlacement.vertical && !BarPlacement.bottom) {
-                    // Bar is active at the top
-                    return Appearance.sizes.barHeight + 12;
+                    const barH = GlobalStates.horizontalBarVisibleHeightFor(popupWindow.screen?.name ?? "");
+                    return Math.max(24, Math.round(barH) + 12);
                 }
                 return 24; // Standard sleek top margin if bar is on the bottom or side
             }

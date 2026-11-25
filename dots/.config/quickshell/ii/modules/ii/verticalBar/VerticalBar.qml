@@ -110,6 +110,16 @@ Scope {
                         Component.onDestruction: GlobalStates.setBarIsland(islandPublisher.screenName, "", 0, 0)
                     }
 
+                    QtObject {
+                        id: visibleWidthPublisher
+                        readonly property string screenName: barLoader.modelData ? barLoader.modelData.name : ""
+                        readonly property real visibleWidth: Math.max(0, Appearance.sizes.verticalBarWindowWidth
+                            + (Config.options.bar.bottom ? barContent.anchors.rightMargin : barContent.anchors.leftMargin))
+                        onVisibleWidthChanged: GlobalStates.setVerticalBarVisibleWidth(visibleWidthPublisher.screenName, visibleWidthPublisher.visibleWidth)
+                        Component.onCompleted: GlobalStates.setVerticalBarVisibleWidth(visibleWidthPublisher.screenName, visibleWidthPublisher.visibleWidth)
+                        Component.onDestruction: GlobalStates.setVerticalBarVisibleWidth(visibleWidthPublisher.screenName, 0)
+                    }
+
                     property int monitorIndex: barLoader.monitorIndex
                     property bool hasActiveWindows: false
                     property bool showBarBackground: barRoot.hasActiveWindows && Config.options.bar.barBackgroundStyle === 2 || Config.options.bar.barBackgroundStyle === 1 || Config.options.bar.barBackgroundStyle === 3
@@ -179,7 +189,7 @@ Scope {
                         target: hoverRegion
                         function onContainsMouseChanged() {
                             if (hoverRegion.containsMouse) {
-                                if (barRoot.hoverDelay <= 0 || barRoot.hiddenAmount < 1 || barRoot.superShow || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen) {
+                                if (barRoot.hoverDelay <= 0 || barRoot.hiddenAmount < 1 || barRoot.superShow || GlobalStates.sidebarKeepsBarVisible) {
                                     barRoot.hoverTriggered = true;
                                 } else {
                                     hoverOpenTimer.restart();
@@ -192,7 +202,7 @@ Scope {
                     }
 
                     property bool superShow: false
-                    property bool mustShow: hoverTriggered || superShow || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen || GlobalStates.editMode || GlobalStates.anyBarPopupOpen
+                    property bool mustShow: hoverTriggered || superShow || GlobalStates.sidebarKeepsBarVisible || GlobalStates.editMode || GlobalStates.anyBarPopupOpen
                     property real hiddenAmount: (Config.options.bar.autoHide.enable && !mustShow) ? Appearance.sizes.verticalBarWindowWidth : 0
                     Behavior on hiddenAmount {
                         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(barRoot)

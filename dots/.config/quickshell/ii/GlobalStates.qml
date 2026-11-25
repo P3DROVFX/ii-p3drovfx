@@ -886,6 +886,50 @@ Singleton {
     // knows its padding and style, so the mode's viewport reads this rather
     // than deriving the dock's size a second time.
     property var dockInsets: ({})
+    // Live visible width of the vertical bar per monitor (0 when auto-hidden,
+    // Appearance.sizes.verticalBarWindowWidth when revealed). Sidebars on the
+    // same edge follow this live so they sit at the screen edge while the bar
+    // is hidden and slide aside as it reveals.
+    property var verticalBarVisibleWidths: ({})
+    function setVerticalBarVisibleWidth(screenName, width) {
+        if (!screenName)
+            return;
+        const clamped = Math.max(0, width || 0);
+        if (root.verticalBarVisibleWidths[screenName] === clamped)
+            return;
+        const next = Object.assign({}, root.verticalBarVisibleWidths);
+        next[screenName] = clamped;
+        root.verticalBarVisibleWidths = next;
+    }
+    function verticalBarVisibleWidthFor(screenName) {
+        if (!BarPlacement.vertical || !root.barOpen)
+            return 0;
+        if (screenName && root.verticalBarVisibleWidths[screenName] !== undefined)
+            return root.verticalBarVisibleWidths[screenName];
+        return Config.options?.bar?.autoHide?.enable ? 0 : Appearance.sizes.verticalBarWindowWidth;
+    }
+    // Live visible height of the horizontal bar per monitor (0 when auto-hidden,
+    // Appearance.sizes.barHeight when revealed). Popups and notifications follow
+    // this live so they sit at the screen edge while the bar is hidden and slide
+    // aside as it reveals.
+    property var horizontalBarVisibleHeights: ({})
+    function setHorizontalBarVisibleHeight(screenName, height) {
+        if (!screenName)
+            return;
+        const clamped = Math.max(0, height || 0);
+        if (root.horizontalBarVisibleHeights[screenName] === clamped)
+            return;
+        const next = Object.assign({}, root.horizontalBarVisibleHeights);
+        next[screenName] = clamped;
+        root.horizontalBarVisibleHeights = next;
+    }
+    function horizontalBarVisibleHeightFor(screenName) {
+        if (BarPlacement.vertical || !root.barOpen)
+            return 0;
+        if (screenName && root.horizontalBarVisibleHeights[screenName] !== undefined)
+            return root.horizontalBarVisibleHeights[screenName];
+        return BarInteraction.autoHide ? 0 : Appearance.sizes.barHeight;
+    }
     // `reserved` is the exclusive zone the dock holds for windows right now: its
     // thickness while pinned and revealed, 0 otherwise. A surface that ignores the
     // compositor's zones reads it to stay clear of the dock the way zone-respecting
@@ -2744,6 +2788,10 @@ Singleton {
 
     property bool dashboardPanelOpen: false // formerly sidebarRightOpen
     property bool policiesPanelOpen: false  // formerly sidebarLeftOpen
+    property bool dashboardOpenedByKeybind: false
+    property bool policiesOpenedByKeybind: false
+    readonly property bool sidebarKeepsBarVisible: (policiesPanelOpen && !policiesOpenedByKeybind)
+        || (dashboardPanelOpen && !dashboardOpenedByKeybind)
     property int dashboardWifiDialogOpenCount: 0
     property int dashboardBluetoothDialogOpenCount: 0
     readonly property bool dashboardWifiDialogOpen: dashboardWifiDialogOpenCount > 0
@@ -2928,7 +2976,7 @@ Singleton {
     property var clearHomeScreenAppsHandler: null
     property int homeScreenAppsRevision: 0
 
-    function toggleLeftSidebar(monitorName) {
+    function toggleLeftSidebar(monitorName, fromKeybind) {
         if (PanelFamily.nativeAppWindows) {
             if (root.leftSidebarHandler)
                 root.leftSidebarHandler(monitorName);
@@ -2938,23 +2986,26 @@ Singleton {
             root.policiesPanelOpen = false;
         } else {
             root.activeLeftSidebarMonitor = monitorName || Hyprland.focusedMonitor?.name || "";
+            root.policiesOpenedByKeybind = Boolean(fromKeybind);
             root.policiesPanelOpen = true;
         }
     }
 
-    function toggleRightSidebar(monitorName) {
+    function toggleRightSidebar(monitorName, fromKeybind) {
         if (root.dashboardPanelOpen) {
             root.dashboardPanelOpen = false;
         } else {
             root.activeRightSidebarMonitor = monitorName || Hyprland.focusedMonitor?.name || "";
+            root.dashboardOpenedByKeybind = Boolean(fromKeybind);
             root.dashboardPanelOpen = true;
         }
     }
 
-    function openLeftSidebar(monitorName) {
+    function openLeftSidebar(monitorName, fromKeybind) {
         if (PanelFamily.nativeAppWindows)
             return;
         root.activeLeftSidebarMonitor = monitorName || Hyprland.focusedMonitor?.name || "";
+        root.policiesOpenedByKeybind = Boolean(fromKeybind);
         root.policiesPanelOpen = true;
     }
 
@@ -3187,8 +3238,9 @@ Singleton {
         root.openRecents(name);
     }
 
-    function openRightSidebar(monitorName) {
+    function openRightSidebar(monitorName, fromKeybind) {
         root.activeRightSidebarMonitor = monitorName || Hyprland.focusedMonitor?.name || "";
+        root.dashboardOpenedByKeybind = Boolean(fromKeybind);
         root.dashboardPanelOpen = true;
     }
 
@@ -3457,6 +3509,8 @@ Singleton {
             if (Config.options.sidebar.position == "right" || Config.options.sidebar.position == "left") {
                 root.dashboardPanelOpen = false;
             }
+        } else {
+            root.policiesOpenedByKeybind = false;
         }
     }
 
@@ -3480,6 +3534,8 @@ Singleton {
             if (Config.options.sidebar.position == "right" || Config.options.sidebar.position == "left") {
                 root.policiesPanelOpen = false;
             }
+        } else {
+            root.dashboardOpenedByKeybind = false;
         }
     }
 
@@ -3582,14 +3638,14 @@ Singleton {
         name: "sidebarRightToggle"
         description: "Toggles right sidebar on press"
         onPressed: {
-            root.toggleRightSidebar();
+            root.toggleRightSidebar("", true);
         }
     }
     GlobalShortcut {
         name: "sidebarRightOpen"
         description: "Opens right sidebar on press"
         onPressed: {
-            root.openRightSidebar();
+            root.openRightSidebar("", true);
         }
     }
     GlobalShortcut {
@@ -3605,14 +3661,14 @@ Singleton {
         name: "sidebarLeftToggle"
         description: "Toggles left sidebar on press"
         onPressed: {
-            root.toggleLeftSidebar();
+            root.toggleLeftSidebar("", true);
         }
     }
     GlobalShortcut {
         name: "sidebarLeftOpen"
         description: "Opens left sidebar on press"
         onPressed: {
-            root.openLeftSidebar();
+            root.openLeftSidebar("", true);
         }
     }
     GlobalShortcut {
