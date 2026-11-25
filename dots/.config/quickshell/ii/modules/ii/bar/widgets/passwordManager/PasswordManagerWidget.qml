@@ -22,7 +22,7 @@ MouseArea {
 
     readonly property color contentColor: Appearance.colors.colOnLayer1
     readonly property string glyph: {
-        switch (PasswordManager.state) {
+        switch (PasswordManager.effectiveState) {
         case "unlocked": return "key";
         case "missing": return "key_off";
         default: return "lock";

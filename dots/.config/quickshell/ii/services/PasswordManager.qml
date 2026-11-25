@@ -4,9 +4,11 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Services.Pam
 import Quickshell.Wayland
 import qs
 import qs.modules.common
+import qs.modules.common.functions
 
 /**
  * Passwords: the bar widget's bridge to a password manager CLI.
@@ -28,10 +30,25 @@ Singleton {
     readonly property int autoLockMinutes: Math.max(0, root._cfg?.autoLock ?? 15)
     readonly property bool lockWithScreen: root._cfg?.lockWithScreen ?? true
     readonly property bool suggestForWindow: root._cfg?.suggestForWindow ?? true
+    readonly property bool quickUnlockEnabled: root._cfg?.quickUnlock ?? false
 
     // "unknown" until the first status answer, then one of
     // missing | unauthenticated | locked | unlocked.
     property string state: "unknown"
+    // True when the underlying CLI session stays alive for the current boot,
+    // while access in the shell is gated behind PAM (fingerprint / system
+    // password) or a locally hashed PIN.
+    property bool softLocked: false
+    property bool pinConfigured: false
+    property bool pinBusy: false
+    property string pinError: ""
+    readonly property int quickUnlockMaxAttempts: 5
+    property int quickUnlockAttemptsLeft: quickUnlockMaxAttempts
+    property int fingerPamTriesLeft: 3
+    readonly property bool fingerPamActive: fingerPam.active
+    property bool pamUnlockInProgress: false
+    property string _pendingPamSecret: ""
+
     property string provider: ""
     property string account: ""
     // Host of a non-default server (bitwarden.eu, self-hosted); "" for bitwarden.com.
@@ -48,7 +65,12 @@ Singleton {
     // { bitwarden: bool, rbw: bool, pass: bool } — for the settings page.
     property var installed: ({})
 
-    readonly property bool unlocked: root.state === "unlocked"
+    readonly property bool canUseQuickUnlock: root.quickUnlockEnabled && root.provider !== "pass" && root.provider !== ""
+    readonly property bool fingerprintReady: root.canUseQuickUnlock && root.softLocked
+        && Fingerprint.deviceAvailable && Fingerprint.hasEnrolled
+        && !Fingerprint.busy && !GlobalStates.screenLocked
+    readonly property bool unlocked: root.state === "unlocked" && !root.softLocked
+    readonly property string effectiveState: root.softLocked ? "soft_locked" : root.state
     readonly property bool needsPassword: root.provider === "bitwarden"
     readonly property string providerName: {
         switch (root.provider) {
@@ -266,16 +288,115 @@ Singleton {
     }
 
     function lock(): void {
+        if (root.canUseQuickUnlock && root.state === "unlocked") {
+            root.disarmFingerprint();
+            root.items = [];
+            root.softLocked = true;
+            root.quickUnlockAttemptsLeft = root.quickUnlockMaxAttempts;
+            root.clearError();
+            autoLockTimer.stop();
+            return;
+        }
+        root.hardLock();
+    }
+
+    function hardLock(): void {
+        root.disarmFingerprint();
+        root.softLocked = false;
         root.items = [];
+        root.quickUnlockAttemptsLeft = root.quickUnlockMaxAttempts;
+        autoLockTimer.stop();
         root._runAction("lock", ["lock"]);
     }
 
+    function _completeQuickUnlock(): void {
+        root.disarmFingerprint();
+        root._pendingPamSecret = "";
+        root.pamUnlockInProgress = false;
+        root.quickUnlockAttemptsLeft = root.quickUnlockMaxAttempts;
+        root.softLocked = false;
+        root.clearError();
+        if (root.autoLockMinutes > 0)
+            autoLockTimer.restart();
+        // Re-verify the underlying CLI session is still unlocked; if bw/rbw
+        // was locked externally, _applyStatus drops back to "locked".
+        root.refresh();
+    }
+
+    function unlockWithQuickAuth(secret: string): void {
+        if (!root.softLocked)
+            return;
+        const value = String(secret ?? "");
+        if (value.length === 0) {
+            root._fail({
+                error: root.pinConfigured
+                    ? Translation.tr("Enter your PIN")
+                    : Translation.tr("Enter your system password"),
+                code: "empty"
+            });
+            return;
+        }
+        if (root.pinConfigured) {
+            if (actionProc.running)
+                return;
+            root.clearError();
+            root.busy = true;
+            root.busyAction = "quick_unlock";
+            actionProc.pendingStdin = value + "\n";
+            actionProc.stdinEnabled = true;
+            actionProc.exec(["python3", Directories.scriptPath + "/password_manager.py", "pin-verify"]);
+            return;
+        }
+        if (root.pamUnlockInProgress || pam.active)
+            return;
+        root.clearError();
+        root._pendingPamSecret = value;
+        root.pamUnlockInProgress = true;
+        pam.start();
+    }
+
+    function armFingerprint(): void {
+        if (!root.fingerprintReady || fingerPam.active)
+            return;
+        root.fingerPamTriesLeft = 3;
+        fingerPam.start();
+    }
+
+    function disarmFingerprint(): void {
+        if (fingerPam.active)
+            fingerPam.abort();
+    }
+
+    function setPin(pin: string): void {
+        if (pinManageProc.running)
+            return;
+        root.pinError = "";
+        root.pinBusy = true;
+        pinManageProc.action = "set";
+        pinManageProc.pendingStdin = String(pin ?? "") + "\n";
+        pinManageProc.stdinEnabled = true;
+        pinManageProc.exec(["python3", Directories.scriptPath + "/password_manager.py", "pin-set"]);
+    }
+
+    function clearPin(): void {
+        if (pinManageProc.running)
+            return;
+        root.pinError = "";
+        root.pinBusy = true;
+        pinManageProc.action = "clear";
+        pinManageProc.pendingStdin = "";
+        pinManageProc.stdinEnabled = false;
+        pinManageProc.exec(["python3", Directories.scriptPath + "/password_manager.py", "pin-clear"]);
+    }
+
     function sync(): void {
+        if (!root.unlocked)
+            return;
         root._runAction("sync", ["sync"]);
     }
 
     function copy(item, field: string): void {
-        if (!item)
+        if (!item || !root.unlocked)
             return;
         actionProc.lastItem = item;
         actionProc.lastField = field;
@@ -285,7 +406,7 @@ Singleton {
     }
 
     function autoType(item, mode: string): void {
-        if (!item)
+        if (!item || !root.unlocked)
             return;
         actionProc.lastItem = item;
         if (root._runAction("type", ["type", "--id", String(item.id), "--mode", mode]))
@@ -319,6 +440,10 @@ Singleton {
         const host = String(payload.server ?? "").replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/^vault\./, "");
         root.server = (host === "" || host.endsWith("bitwarden.com")) ? "" : host;
         root.state = String(payload.state ?? "locked");
+        if (root.state !== "unlocked") {
+            root.softLocked = false;
+            root.disarmFingerprint();
+        }
         if (!root.unlocked) {
             root.items = [];
             autoLockTimer.stop();
@@ -389,7 +514,13 @@ Singleton {
             }
             if (!payload.ok) {
                 root._fail(payload);
-                if (payload.code === "locked") {
+                if (action === "quick_unlock") {
+                    if (payload.attemptsLeft !== undefined)
+                        root.quickUnlockAttemptsLeft = Number(payload.attemptsLeft);
+                    if (payload.code === "hard_lock")
+                        root.hardLock();
+                } else if (payload.code === "locked") {
+                    root.softLocked = false;
                     root.state = "locked";
                     root.items = [];
                 }
@@ -398,10 +529,15 @@ Singleton {
             root.clearError();
             switch (action) {
             case "unlock":
+                root.softLocked = false;
                 root.state = "unlocked";
                 root.refresh();
                 break;
+            case "quick_unlock":
+                root._completeQuickUnlock();
+                break;
             case "lock":
+                root.softLocked = false;
                 root.items = [];
                 root.refresh();
                 break;
@@ -428,8 +564,105 @@ Singleton {
                 const payload = JSON.parse(detectOut.text || "{}");
                 root.wtypeAvailable = payload.wtype ?? false;
                 root.installed = payload.providers ?? {};
+                root.pinConfigured = payload.pinConfigured ?? false;
             } catch (error) {
                 root.wtypeAvailable = false;
+            }
+        }
+    }
+
+    Process {
+        id: pinManageProc
+        property string action: ""
+        property string pendingStdin: ""
+        stdout: StdioCollector { id: pinManageOut }
+        onStarted: {
+            if (pinManageProc.pendingStdin.length > 0) {
+                pinManageProc.write(pinManageProc.pendingStdin);
+                pinManageProc.pendingStdin = "";
+            }
+            pinManageProc.stdinEnabled = false;
+        }
+        onExited: {
+            root.pinBusy = false;
+            try {
+                const payload = JSON.parse(pinManageOut.text || "{}");
+                if (payload.ok) {
+                    root.pinConfigured = payload.configured ?? (pinManageProc.action === "set");
+                    root.pinError = "";
+                } else {
+                    root.pinError = String(payload.error ?? Translation.tr("Could not update PIN"));
+                }
+            } catch (error) {
+                root.pinError = Translation.tr("The helper returned invalid data");
+            }
+        }
+    }
+
+    // ── PAM quick-unlock (system password + fingerprint via fprintd) ────────
+    PamContext {
+        id: pam
+
+        onPamMessage: {
+            if (this.responseRequired) {
+                const secret = root._pendingPamSecret;
+                root._pendingPamSecret = "";
+                this.respond(secret);
+            }
+        }
+
+        onCompleted: result => {
+            root._pendingPamSecret = "";
+            root.pamUnlockInProgress = false;
+            if (result == PamResult.Success) {
+                root._completeQuickUnlock();
+            } else {
+                root.quickUnlockAttemptsLeft = Math.max(0, root.quickUnlockAttemptsLeft - 1);
+                if (root.quickUnlockAttemptsLeft <= 0) {
+                    root._fail({
+                        error: Translation.tr("Too many failed attempts — vault locked"),
+                        code: "hard_lock"
+                    });
+                    root.hardLock();
+                } else {
+                    root._fail({
+                        error: Translation.tr("Wrong password (%1 left)").arg(root.quickUnlockAttemptsLeft),
+                        code: "quick_auth"
+                    });
+                }
+            }
+        }
+    }
+
+    readonly property string nixosPamFprintd: "/run/current-system/sw/lib/security/pam_fprintd.so"
+    property bool nixosPam: false
+    Process {
+        running: true
+        command: ["test", "-e", root.nixosPamFprintd]
+        onExited: code => root.nixosPam = code === 0
+    }
+
+    PamContext {
+        id: fingerPam
+
+        configDirectory: FileUtils.trimFileProtocol(Quickshell.shellPath("modules/common/panels/lock/pam"))
+        config: root.nixosPam ? "fprintd-nixos.conf" : "fprintd.conf"
+
+        onPamMessage: {
+            if (this.messageIsError && this.message.includes("Failed to match")) {
+                root.fingerPamTriesLeft = Math.max(0, root.fingerPamTriesLeft - 1);
+                root._fail({
+                    error: root.fingerPamTriesLeft > 0
+                        ? Translation.tr("Fingerprint didn't match (%1 left)").arg(root.fingerPamTriesLeft)
+                        : Translation.tr("Fingerprint failed — use PIN or password"),
+                    code: "fingerprint"
+                });
+            }
+        }
+
+        onCompleted: result => {
+            if (result == PamResult.Success) {
+                root._completeQuickUnlock();
             }
         }
     }
@@ -469,7 +702,16 @@ Singleton {
             autoLockTimer.restart();
     }
 
+    onQuickUnlockEnabledChanged: {
+        // Turning quick unlock off while soft-locked must drop the live CLI
+        // session immediately so no unguarded session key stays behind.
+        if (!root.quickUnlockEnabled && root.softLocked)
+            root.hardLock();
+    }
+
     onConfiguredProviderChanged: {
+        root.disarmFingerprint();
+        root.softLocked = false;
         root.items = [];
         root.state = "unknown";
         root.refresh();
@@ -478,8 +720,19 @@ Singleton {
     Connections {
         target: GlobalStates
         function onScreenLockedChanged() {
-            if (GlobalStates.screenLocked && root.lockWithScreen && root.unlocked && root.provider !== "pass")
-                root.lock();
+            if (GlobalStates.screenLocked) {
+                root.disarmFingerprint();
+                if (root.lockWithScreen && root.unlocked && root.provider !== "pass")
+                    root.lock();
+            }
+        }
+    }
+
+    Connections {
+        target: Fingerprint
+        function onBusyChanged() {
+            if (Fingerprint.busy)
+                root.disarmFingerprint();
         }
     }
 

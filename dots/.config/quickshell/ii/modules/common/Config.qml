@@ -5923,6 +5923,10 @@ Singleton {
                     property bool lockWithScreen: true
                     // Put the login matching the focused window first.
                     property bool suggestForWindow: true
+                    // Keep the backend session alive for this boot and gate
+                    // re-opening behind PAM (fingerprint / system password) or
+                    // an optional PIN. Disabled by default for security.
+                    property bool quickUnlock: false
                 }
 
                 property JsonObject portWatcher: JsonObject {

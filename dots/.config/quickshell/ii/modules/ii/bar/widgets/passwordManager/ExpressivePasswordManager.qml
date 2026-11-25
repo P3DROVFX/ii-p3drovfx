@@ -43,7 +43,7 @@ MouseArea {
     readonly property string glyph: {
         if (root.clip)
             return PasswordManager.clipField === "username" ? "person" : PasswordManager.clipField === "totp" ? "pin" : "content_paste";
-        switch (PasswordManager.state) {
+        switch (PasswordManager.effectiveState) {
         case "unlocked": return "key";
         case "missing": return "key_off";
         default: return "lock";

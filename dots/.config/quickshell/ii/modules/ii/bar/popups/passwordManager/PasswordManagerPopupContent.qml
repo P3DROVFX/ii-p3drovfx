@@ -67,9 +67,15 @@ ColumnLayout {
             root.selectedIndex = 0;
             PasswordManager.clearError();
             PasswordManager.refresh();
+            if (PasswordManager.softLocked)
+                PasswordManager.armFingerprint();
             Qt.callLater(root.focusInput);
+        } else {
+            PasswordManager.disarmFingerprint();
         }
     }
+
+    Component.onDestruction: PasswordManager.disarmFingerprint()
 
     function focusInput(): void {
         if (PasswordManager.unlocked)
@@ -80,9 +86,14 @@ ColumnLayout {
 
     Connections {
         target: PasswordManager
-        function onStateChanged() {
-            if (root.opened)
-                Qt.callLater(root.focusInput);
+        function onEffectiveStateChanged() {
+            if (!root.opened)
+                return;
+            if (PasswordManager.softLocked)
+                PasswordManager.armFingerprint();
+            else
+                PasswordManager.disarmFingerprint();
+            Qt.callLater(root.focusInput);
         }
     }
 

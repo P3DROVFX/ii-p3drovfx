@@ -88,8 +88,9 @@ ContentPage {
                 StyledText {
                     Layout.fillWidth: true
                     text: {
-                        switch (PasswordManager.state) {
+                        switch (PasswordManager.effectiveState) {
                         case "unlocked": return Translation.tr("%1 is open").arg(PasswordManager.providerName);
+                        case "soft_locked": return Translation.tr("%1 is locked (Quick unlock)").arg(PasswordManager.providerName);
                         case "locked": return Translation.tr("%1 is locked").arg(PasswordManager.providerName);
                         case "unauthenticated": return Translation.tr("Not signed in to %1").arg(PasswordManager.providerName);
                         case "missing": return Translation.tr("No password manager found");
@@ -193,6 +194,134 @@ ContentPage {
             text: Translation.tr("Suggest the login for the focused window")
             checked: root.cfg.suggestForWindow
             onCheckedChanged: root.cfg.suggestForWindow = checked
+        }
+    }
+
+    ContentSection {
+        icon: "fingerprint"
+        title: Translation.tr("Quick unlock")
+
+        ConfigSwitch {
+            buttonIcon: "fingerprint"
+            text: Translation.tr("Unlock with fingerprint or PIN (PAM)")
+            checked: root.cfg.quickUnlock
+            onCheckedChanged: root.cfg.quickUnlock = checked
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            materialIcon: "warning"
+            text: Translation.tr("Enable at your own risk. Your master password is still required once per boot, after which Bitwarden's session key stays active in tmpfs ($XDG_RUNTIME_DIR) and the shell gates access with PAM (fingerprint/system password) or a PIN. Any malware running under your user account could read the active session key while this is enabled. Five failed attempts automatically lock the vault completely.")
+        }
+
+        ContentSubsection {
+            visible: root.cfg.quickUnlock
+            title: Translation.tr("Custom PIN (optional)")
+            icon: "pin"
+
+            StyledText {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                font.pixelSize: Appearance.font.pixelSize.small
+                color: Appearance.colors.colSubtext
+                text: PasswordManager.pinConfigured
+                    ? Translation.tr("A custom PIN is configured (stored as a PBKDF2-SHA256 hash). Leave blank or remove it to use your Linux account password via PAM instead. Enrolled fingerprints always work when available.")
+                    : Translation.tr("No custom PIN set — quick unlock will accept your Linux account password via PAM (and enrolled fingerprints if available). Set a PIN below to unlock with a shorter code.")
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: 44
+                    radius: Appearance.rounding.full
+                    color: Appearance.colors.colLayer2
+
+                    StyledTextInput {
+                        id: pinInput
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        verticalAlignment: TextInput.AlignVCenter
+                        echoMode: TextInput.Password
+                        passwordCharacter: "•"
+                        enabled: !PasswordManager.pinBusy
+                        color: Appearance.colors.colOnLayer2
+                        font.pixelSize: Appearance.font.pixelSize.normal
+                        clip: true
+                        Keys.onReturnPressed: {
+                            if (pinInput.text.length >= 4) {
+                                PasswordManager.setPin(pinInput.text);
+                                pinInput.text = "";
+                            }
+                        }
+
+                        StyledText {
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: pinInput.text.length === 0
+                            text: PasswordManager.pinConfigured
+                                ? Translation.tr("New PIN (min 4 characters)")
+                                : Translation.tr("Set PIN (min 4 characters)")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            color: Appearance.colors.colSubtext
+                        }
+                    }
+                }
+
+                RippleButton {
+                    implicitHeight: 44
+                    implicitWidth: savePinText.implicitWidth + 32
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: Appearance.colors.colPrimary
+                    colBackgroundHover: Appearance.colors.colPrimaryHover
+                    colRipple: Appearance.colors.colPrimaryActive
+                    enabled: !PasswordManager.pinBusy && pinInput.text.length >= 4
+                    onClicked: {
+                        PasswordManager.setPin(pinInput.text);
+                        pinInput.text = "";
+                    }
+
+                    StyledText {
+                        id: savePinText
+                        anchors.centerIn: parent
+                        text: PasswordManager.pinConfigured ? Translation.tr("Change PIN") : Translation.tr("Save PIN")
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        font.weight: Font.DemiBold
+                        color: Appearance.colors.colOnPrimary
+                    }
+                }
+
+                RippleButton {
+                    visible: PasswordManager.pinConfigured
+                    implicitHeight: 44
+                    implicitWidth: removePinText.implicitWidth + 28
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: Appearance.colors.colErrorContainer
+                    colBackgroundHover: Appearance.colors.colErrorContainer
+                    colRipple: Appearance.colors.colError
+                    enabled: !PasswordManager.pinBusy
+                    onClicked: PasswordManager.clearPin()
+
+                    StyledText {
+                        id: removePinText
+                        anchors.centerIn: parent
+                        text: Translation.tr("Remove PIN")
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        color: Appearance.colors.colOnErrorContainer
+                    }
+                }
+            }
+
+            StyledText {
+                Layout.fillWidth: true
+                visible: PasswordManager.pinError.length > 0
+                wrapMode: Text.WordWrap
+                font.pixelSize: Appearance.font.pixelSize.small
+                color: Appearance.colors.colError
+                text: PasswordManager.pinError
+            }
         }
     }
 

@@ -212,5 +212,80 @@ class HelperTests(unittest.TestCase):
         self.assertFalse(self.mod.has_control_chars("pässwörd!"))
 
 
+class QuickUnlockPinTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        root = Path(self.tmp.name)
+        self.runtime = root / "run"
+        self.runtime.mkdir(mode=0o700)
+        self.state_dir = root / "state"
+        self.state_dir.mkdir(mode=0o700)
+        self.env = dict(
+            os.environ,
+            XDG_RUNTIME_DIR=str(self.runtime),
+            II_PASSWORDS_STATE_DIR=str(self.state_dir),
+        )
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def call(self, *args, stdin=None):
+        result = subprocess.run([sys.executable, str(SCRIPT), *args],
+                                input=stdin, capture_output=True, text=True, env=self.env,
+                                timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout), result.stdout
+
+    def test_pin_lifecycle_and_hashed_storage(self):
+        out, _ = self.call("pin-status")
+        self.assertTrue(out["ok"])
+        self.assertFalse(out["configured"])
+
+        out, _ = self.call("pin-set", stdin="123\n")
+        self.assertFalse(out["ok"])
+        self.assertEqual(out["code"], "invalid")
+
+        out, raw = self.call("pin-set", stdin="482910\n")
+        self.assertTrue(out["ok"], out)
+        self.assertTrue(out["configured"])
+        self.assertNotIn("482910", raw)
+
+        pin_file = self.state_dir / "pin.json"
+        self.assertEqual(stat.S_IMODE(pin_file.stat().st_mode), 0o600)
+        disk = pin_file.read_text()
+        self.assertNotIn("482910", disk)
+        self.assertIn("pbkdf2_hmac_sha256", disk)
+
+        detect, _ = self.call("detect")
+        self.assertTrue(detect["pinConfigured"])
+
+        ok_verify, _ = self.call("pin-verify", stdin="482910\n")
+        self.assertTrue(ok_verify["ok"], ok_verify)
+
+        out, _ = self.call("pin-clear")
+        self.assertTrue(out["ok"])
+        self.assertFalse(out["configured"])
+        self.assertFalse(pin_file.exists())
+
+    def test_pin_lockout_triggers_hard_lock_after_five_failures(self):
+        self.call("pin-set", stdin="998877\n")
+        for expected_left in (4, 3, 2, 1):
+            out, _ = self.call("pin-verify", stdin="000000\n")
+            self.assertFalse(out["ok"])
+            self.assertEqual(out["code"], "auth")
+            self.assertEqual(out["attemptsLeft"], expected_left)
+        out, _ = self.call("pin-verify", stdin="000000\n")
+        self.assertFalse(out["ok"])
+        self.assertEqual(out["code"], "hard_lock")
+
+    def test_symlink_pin_file_is_refused(self):
+        target = Path(self.tmp.name) / "decoy.json"
+        target.write_text('{"salt":"aa","hash":"bb","iterations":600000}')
+        (self.state_dir / "pin.json").symlink_to(target)
+        out, _ = self.call("pin-status")
+        self.assertTrue(out["ok"])
+        self.assertFalse(out["configured"])
+
+
 if __name__ == "__main__":
     unittest.main()

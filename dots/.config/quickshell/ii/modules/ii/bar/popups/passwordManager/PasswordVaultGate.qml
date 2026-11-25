@@ -19,12 +19,14 @@ ColumnLayout {
     id: root
 
     property int contentWidth: 360
-    readonly property string vaultState: PasswordManager.state
+    readonly property string vaultState: PasswordManager.effectiveState
+    readonly property bool softLocked: root.vaultState === "soft_locked"
     readonly property bool failed: PasswordManager.errorText.length > 0
-    readonly property bool unlocking: PasswordManager.busy && PasswordManager.busyAction === "unlock"
-    // Each key of the master password, so the popup holds open while typing.
+    readonly property bool unlocking: (PasswordManager.busy && (PasswordManager.busyAction === "unlock" || PasswordManager.busyAction === "quick_unlock"))
+        || PasswordManager.pamUnlockInProgress
+    // Each key of the master password / PIN, so the popup holds open while typing.
     signal typedKey()
-    readonly property bool wantsPassword: root.vaultState === "locked" && PasswordManager.needsPassword
+    readonly property bool wantsPassword: (root.vaultState === "locked" && PasswordManager.needsPassword) || root.softLocked
 
     spacing: 0
 
@@ -36,7 +38,10 @@ ColumnLayout {
     function submit(): void {
         if (root.unlocking)
             return;
-        if (root.vaultState === "locked") {
+        if (root.softLocked) {
+            PasswordManager.unlockWithQuickAuth(passwordInput.text);
+            passwordInput.text = "";
+        } else if (root.vaultState === "locked") {
             PasswordManager.unlock(passwordInput.text);
             passwordInput.text = "";
         } else if (root.vaultState === "unauthenticated") {
@@ -59,8 +64,10 @@ ColumnLayout {
         Layout.topMargin: 14
         implicitSize: 104
         shapeString: {
-            if (root.failed && root.vaultState === "locked")
+            if (root.failed && (root.vaultState === "locked" || root.softLocked))
                 return "SoftBurst";
+            if (root.softLocked)
+                return PasswordManager.fingerPamActive ? "Cookie9Sided" : "Cookie12Sided";
             switch (root.vaultState) {
             case "locked": return "Cookie12Sided";
             case "unauthenticated": return "Clover4Leaf";
@@ -68,7 +75,7 @@ ColumnLayout {
             default: return "Circle";
             }
         }
-        color: (root.failed && root.vaultState === "locked") ? Appearance.colors.colErrorContainer
+        color: (root.failed && (root.vaultState === "locked" || root.softLocked)) ? Appearance.colors.colErrorContainer
             : root.vaultState === "missing" ? Appearance.colors.colSurfaceContainerHighest
             : Appearance.colors.colPrimary
 
@@ -80,8 +87,13 @@ ColumnLayout {
             anchors.centerIn: parent
             visible: !root.unlocking
             text: {
-                if (root.failed && root.vaultState === "locked")
+                if (root.failed && (root.vaultState === "locked" || root.softLocked))
                     return "password";
+                if (root.softLocked) {
+                    if (PasswordManager.fingerPamActive)
+                        return "fingerprint";
+                    return PasswordManager.pinConfigured ? "pin" : "lock";
+                }
                 switch (root.vaultState) {
                 case "locked": return "lock";
                 case "unauthenticated": return "person";
@@ -91,7 +103,7 @@ ColumnLayout {
             }
             iconSize: 44
             fill: 1
-            color: (root.failed && root.vaultState === "locked") ? Appearance.colors.colOnErrorContainer
+            color: (root.failed && (root.vaultState === "locked" || root.softLocked)) ? Appearance.colors.colOnErrorContainer
                 : root.vaultState === "missing" ? Appearance.colors.colOnSurface
                 : Appearance.colors.colOnPrimary
         }
@@ -110,6 +122,7 @@ ColumnLayout {
         Layout.topMargin: 16
         text: {
             switch (root.vaultState) {
+            case "soft_locked":
             case "locked": return root.unlocking ? Translation.tr("Unlocking…") : Translation.tr("Vault locked");
             case "unauthenticated": return Translation.tr("Not signed in");
             case "missing": return Translation.tr("No password manager");
@@ -130,6 +143,15 @@ ColumnLayout {
         wrapMode: Text.WordWrap
         text: {
             switch (root.vaultState) {
+            case "soft_locked":
+                if (PasswordManager.fingerPamActive) {
+                    return PasswordManager.pinConfigured
+                        ? Translation.tr("Touch fingerprint sensor or enter PIN")
+                        : Translation.tr("Touch fingerprint sensor or enter system password");
+                }
+                return PasswordManager.pinConfigured
+                    ? Translation.tr("Enter your PIN to unlock")
+                    : Translation.tr("Enter your system password to unlock");
             case "missing": return Translation.tr("Install bitwarden-cli, rbw or pass");
             case "unauthenticated": return Translation.tr("Sign in once from a terminal — US, EU or self-hosted");
             default: {
@@ -142,7 +164,7 @@ ColumnLayout {
         color: Appearance.colors.colSubtext
     }
 
-    // ── Master password field (bw) ───────────────────────────────────────────
+    // ── Master password / PIN / PAM password field ───────────────────────────
     Rectangle {
         id: field
         visible: root.wantsPassword
@@ -163,7 +185,7 @@ ColumnLayout {
             anchors.left: parent.left
             anchors.leftMargin: 20
             anchors.verticalCenter: parent.verticalCenter
-            text: "password"
+            text: root.softLocked ? (PasswordManager.pinConfigured ? "pin" : "key") : "password"
             iconSize: Appearance.font.pixelSize.larger
             color: Appearance.colors.colOnSurfaceVariant
         }
@@ -192,7 +214,9 @@ ColumnLayout {
             StyledText {
                 anchors.verticalCenter: parent.verticalCenter
                 visible: passwordInput.text.length === 0
-                text: Translation.tr("Master password")
+                text: root.softLocked
+                    ? (PasswordManager.pinConfigured ? Translation.tr("PIN") : Translation.tr("System password"))
+                    : Translation.tr("Master password")
                 font.pixelSize: Appearance.font.pixelSize.normal
                 color: Appearance.colors.colSubtext
             }
@@ -254,13 +278,76 @@ ColumnLayout {
         }
     }
 
+    // ── Quick unlock secondary actions (retry fingerprint / hard lock) ───────
+    RowLayout {
+        visible: root.softLocked
+        Layout.alignment: Qt.AlignHCenter
+        Layout.topMargin: 10
+        spacing: 8
+
+        RippleButton {
+            visible: PasswordManager.fingerprintReady && !PasswordManager.fingerPamActive
+            implicitHeight: 32
+            implicitWidth: retryFpRow.implicitWidth + 24
+            buttonRadius: Appearance.rounding.full
+            colBackground: Appearance.colors.colSecondaryContainer
+            colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+            colRipple: Appearance.colors.colSecondaryContainerActive
+            enabled: !root.unlocking
+            onClicked: PasswordManager.armFingerprint()
+
+            RowLayout {
+                id: retryFpRow
+                anchors.centerIn: parent
+                spacing: 6
+                MaterialSymbol {
+                    text: "fingerprint"
+                    iconSize: Appearance.font.pixelSize.normal
+                    color: Appearance.colors.colOnSecondaryContainer
+                }
+                StyledText {
+                    text: Translation.tr("Retry fingerprint")
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: Appearance.colors.colOnSecondaryContainer
+                }
+            }
+        }
+
+        RippleButton {
+            implicitHeight: 32
+            implicitWidth: hardLockRow.implicitWidth + 24
+            buttonRadius: Appearance.rounding.full
+            colBackground: ColorUtils.applyAlpha(Appearance.colors.colOnSurface, 0.06)
+            colBackgroundHover: ColorUtils.applyAlpha(Appearance.colors.colOnSurface, 0.12)
+            colRipple: ColorUtils.applyAlpha(Appearance.colors.colOnSurface, 0.18)
+            enabled: !root.unlocking
+            onClicked: PasswordManager.hardLock()
+
+            RowLayout {
+                id: hardLockRow
+                anchors.centerIn: parent
+                spacing: 6
+                MaterialSymbol {
+                    text: "lock"
+                    iconSize: Appearance.font.pixelSize.normal
+                    color: Appearance.colors.colOnSurfaceVariant
+                }
+                StyledText {
+                    text: Translation.tr("Lock completely")
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: Appearance.colors.colOnSurfaceVariant
+                }
+            }
+        }
+    }
+
     // The failure, in words.
     StyledText {
         Layout.alignment: Qt.AlignHCenter
         Layout.topMargin: 10
         Layout.maximumWidth: root.contentWidth - 24
         // Faded in place, so a wrong password never changes the popup's height.
-        visible: root.vaultState === "locked" || root.failed
+        visible: root.vaultState === "locked" || root.softLocked || root.failed
         opacity: root.failed ? 1 : 0
         horizontalAlignment: Text.AlignHCenter
         wrapMode: Text.WordWrap

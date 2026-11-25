@@ -26,8 +26,11 @@ world-readable, /proc/PID/environ is not).
 from __future__ import annotations
 
 import argparse
+import hashlib
+import hmac
 import json
 import os
+import secrets
 import shutil
 import stat
 import subprocess
@@ -84,22 +87,181 @@ def emit(payload: dict) -> None:
     sys.stdout.flush()
 
 
+def _ensure_private_dir(path: Path) -> Path:
+    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    st = os.lstat(path)
+    if stat.S_ISLNK(st.st_mode) or not stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid():
+        raise BridgeError("Refusing to use untrusted private directory", "runtime")
+    os.chmod(path, 0o700)
+    return path
+
+
+def _read_private_file(path: Path) -> str:
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(path, flags)
+    except FileNotFoundError:
+        return ""
+    except OSError:
+        # Symlink or unreadable file: drop it if possible and refuse to trust it.
+        path.unlink(missing_ok=True)
+        return ""
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid() or (stat.S_IMODE(st.st_mode) & 0o077):
+            path.unlink(missing_ok=True)
+            return ""
+        with os.fdopen(fd, "r", encoding="utf-8") as handle:
+            fd = -1
+            return handle.read()
+    finally:
+        if fd >= 0:
+            os.close(fd)
+
+
+def _write_private_file(path: Path, content: str) -> None:
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(tmp, flags, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            fd = -1
+            handle.write(content)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, path)
+    except BaseException:
+        if fd >= 0:
+            os.close(fd)
+        tmp.unlink(missing_ok=True)
+        raise
+
+
 def runtime_dir() -> Path:
     # Test harnesses point this elsewhere so they never touch the real session.
     override = os.environ.get("II_PASSWORDS_RUNTIME_DIR")
     if override:
-        path = Path(override)
-        path.mkdir(mode=0o700, parents=True, exist_ok=True)
-        os.chmod(path, 0o700)
-        return path
+        return _ensure_private_dir(Path(override))
     base = os.environ.get("XDG_RUNTIME_DIR")
     if not base:
         # No fallback on purpose: anywhere else could be readable by others.
         raise BridgeError("XDG_RUNTIME_DIR is not set", "runtime")
-    path = Path(base) / "ii-passwords"
-    path.mkdir(mode=0o700, exist_ok=True)
-    os.chmod(path, 0o700)
-    return path
+    return _ensure_private_dir(Path(base) / "ii-passwords")
+
+
+def state_dir() -> Path:
+    override = os.environ.get("II_PASSWORDS_STATE_DIR")
+    if override:
+        return _ensure_private_dir(Path(override))
+    base = os.environ.get("XDG_STATE_HOME")
+    root = Path(base) if base else (Path.home() / ".local" / "state")
+    return _ensure_private_dir(root / "ii-passwords")
+
+
+PIN_PBKDF2_ITERATIONS = 600_000
+PIN_MIN_LENGTH = 4
+PIN_MAX_LENGTH = 64
+MAX_PIN_ATTEMPTS = 5
+
+
+def _pin_file() -> Path:
+    return state_dir() / "pin.json"
+
+
+def _pin_failures_file() -> Path:
+    return runtime_dir() / "pin-failures"
+
+
+def _read_pin_failures() -> int:
+    try:
+        raw = _read_private_file(_pin_failures_file()).strip()
+        return max(0, int(raw)) if raw else 0
+    except (BridgeError, ValueError):
+        return 0
+
+
+def _write_pin_failures(count: int) -> None:
+    try:
+        path = _pin_failures_file()
+        if count <= 0:
+            path.unlink(missing_ok=True)
+        else:
+            _write_private_file(path, str(count))
+    except BridgeError:
+        pass
+
+
+def pin_configured() -> bool:
+    try:
+        raw = _read_private_file(_pin_file())
+        if not raw:
+            return False
+        data = json.loads(raw)
+        return bool(data.get("salt") and data.get("hash"))
+    except (BridgeError, json.JSONDecodeError, AttributeError):
+        return False
+
+
+def pin_status() -> dict:
+    failures = _read_pin_failures()
+    return {
+        "configured": pin_configured(),
+        "attemptsLeft": max(0, MAX_PIN_ATTEMPTS - failures),
+    }
+
+
+def pin_set(pin: str) -> dict:
+    if len(pin) < PIN_MIN_LENGTH:
+        raise BridgeError(f"PIN must be at least {PIN_MIN_LENGTH} characters", "invalid")
+    if len(pin) > PIN_MAX_LENGTH:
+        raise BridgeError(f"PIN must be at most {PIN_MAX_LENGTH} characters", "invalid")
+    if has_control_chars(pin):
+        raise BridgeError("PIN cannot contain control characters", "invalid")
+    salt = secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac("sha256", pin.encode("utf-8"), salt, PIN_PBKDF2_ITERATIONS)
+    payload = {
+        "algo": "pbkdf2_hmac_sha256",
+        "iterations": PIN_PBKDF2_ITERATIONS,
+        "salt": salt.hex(),
+        "hash": digest.hex(),
+    }
+    _write_private_file(_pin_file(), json.dumps(payload, separators=(",", ":")))
+    _write_pin_failures(0)
+    return {"configured": True, "attemptsLeft": MAX_PIN_ATTEMPTS}
+
+
+def pin_clear() -> dict:
+    try:
+        _pin_file().unlink(missing_ok=True)
+    except BridgeError:
+        pass
+    _write_pin_failures(0)
+    return {"configured": False, "attemptsLeft": MAX_PIN_ATTEMPTS}
+
+
+def pin_verify(pin: str) -> dict:
+    raw = _read_private_file(_pin_file())
+    if not raw:
+        raise BridgeError("No PIN is configured", "unconfigured")
+    try:
+        data = json.loads(raw)
+        salt = bytes.fromhex(data["salt"])
+        expected = bytes.fromhex(data["hash"])
+        iterations = int(data.get("iterations", PIN_PBKDF2_ITERATIONS))
+    except (json.JSONDecodeError, KeyError, ValueError) as exc:
+        raise BridgeError("Stored PIN data is invalid", "error") from exc
+    if iterations < 100_000:
+        raise BridgeError("Stored PIN parameters are too weak", "error")
+    candidate = hashlib.pbkdf2_hmac("sha256", pin.encode("utf-8"), salt, iterations)
+    if hmac.compare_digest(candidate, expected):
+        _write_pin_failures(0)
+        return {"verified": True, "attemptsLeft": MAX_PIN_ATTEMPTS}
+    failures = _read_pin_failures() + 1
+    if failures >= MAX_PIN_ATTEMPTS:
+        _write_pin_failures(0)
+        raise BridgeError("Too many failed attempts — vault locked", "hard_lock")
+    _write_pin_failures(failures)
+    left = MAX_PIN_ATTEMPTS - failures
+    raise BridgeError(f"Wrong PIN ({left} left)", "auth")
 
 
 def run(cmd: list[str], env: dict | None = None, stdin: str | None = None,
@@ -191,22 +353,10 @@ class Bitwarden:
         return self.session_file
 
     def _session(self) -> str:
-        path = self._session_path()
-        try:
-            st = path.stat()
-        except FileNotFoundError:
-            return ""
-        # Only trust a file we own that nobody else can read.
-        if st.st_uid != os.getuid() or stat.S_IMODE(st.st_mode) & 0o077:
-            path.unlink(missing_ok=True)
-            return ""
-        return path.read_text().strip()
+        return _read_private_file(self._session_path()).strip()
 
     def _store_session(self, key: str) -> None:
-        path = self._session_path()
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w") as handle:
-            handle.write(key)
+        _write_private_file(self._session_path(), key)
 
     def _env(self) -> dict:
         key = self._session()
@@ -611,7 +761,8 @@ def resolve(provider: str) -> str:
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("command", choices=["detect", "status", "unlock", "lock", "list",
-                                            "sync", "copy", "type", "login"])
+                                            "sync", "copy", "type", "login",
+                                            "pin-status", "pin-set", "pin-clear", "pin-verify"])
     parser.add_argument("--provider", default="auto")
     parser.add_argument("--id", default="")
     parser.add_argument("--field", default="password", choices=["password", "username", "totp"])
@@ -620,7 +771,34 @@ def main(argv: list[str]) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "detect":
-        emit({"ok": True, "providers": available(), "wtype": bool(shutil.which("wtype"))})
+        emit({
+            "ok": True,
+            "providers": available(),
+            "wtype": bool(shutil.which("wtype")),
+            "pinConfigured": pin_configured(),
+        })
+        return 0
+
+    if args.command in ("pin-status", "pin-set", "pin-clear", "pin-verify"):
+        try:
+            if args.command == "pin-status":
+                out = pin_status()
+            elif args.command == "pin-set":
+                pin = sys.stdin.readline().rstrip("\n")
+                out = pin_set(pin)
+                pin = ""
+            elif args.command == "pin-clear":
+                out = pin_clear()
+            else:
+                pin = sys.stdin.readline().rstrip("\n")
+                out = pin_verify(pin)
+                pin = ""
+        except BridgeError as err:
+            emit({"ok": False, "error": str(err), "code": err.code,
+                  "attemptsLeft": max(0, MAX_PIN_ATTEMPTS - _read_pin_failures())})
+            return 0
+        out["ok"] = True
+        emit(out)
         return 0
 
     try:
