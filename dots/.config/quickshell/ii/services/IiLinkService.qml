@@ -5410,6 +5410,12 @@ Singleton {
             const p = root.pcMediaPlayer ?? MprisController.activePlayer;
             return p && root.continueOnLinkedPc(p, root.handoffPc) ? "ok" : "unavailable";
         }
+        /// A notification on the connected phone, for scripts: "ok" once handed to the link (no
+        /// receipt comes back), "no_phone" when none is connected.
+        function ping(text: string): string {
+            const dev = Object.keys(root.connections)[0] ?? "";
+            return dev !== "" && root.phoneAct(dev, "ping", { text: text }) ? "ok" : "no_phone";
+        }
         /// The linked PCs: name, fingerprint and whether each is connected.
         function pcs(): string {
             return JSON.stringify(root.pcPeers.map(p => ({ name: p.name, fp: p.fp, connected: root.pcConnections[p.fp] !== undefined })));
