@@ -11,11 +11,11 @@ Item {
     property real topPadding: padding
     property real bottomPadding: padding
 
-    implicitWidth: vertical 
+    implicitWidth: vertical
         ? (gridLayout.implicitHeight > 0 ? Appearance.sizes.baseVerticalBarWidth : 0)
         : (gridLayout.implicitWidth > 0 ? (gridLayout.implicitWidth + leftPadding + rightPadding) : 0)
-    implicitHeight: vertical 
-        ? (gridLayout.implicitHeight > 0 ? (gridLayout.implicitHeight + topPadding + bottomPadding) : 0) 
+    implicitHeight: vertical
+        ? (gridLayout.implicitHeight > 0 ? (gridLayout.implicitHeight + topPadding + bottomPadding) : 0)
         : (gridLayout.implicitWidth > 0 ? Appearance.sizes.baseBarHeight : 0)
 
     width: implicitWidth
@@ -27,53 +27,67 @@ Item {
 
     property color colBackground: Appearance.colors.colLayer1
 
-    Rectangle {
-        id: background
-        // Fade rather than blink: a group that empties or fills is the same
-        // event as a widget arriving or leaving, and should read that way.
-        visible: opacity > 0.001
-        opacity: (root.vertical ? (gridLayout.implicitHeight > 0) : (gridLayout.implicitWidth > 0)) ? 1 : 0
-        Behavior on opacity {
-            enabled: background.radiiArmed
-            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(background)
-        }
-        anchors {
-            fill: parent
-            topMargin: root.vertical ? 0 : 4
-            bottomMargin: root.vertical ? 0 : 4
-            leftMargin: root.vertical ? 4 : 0
-            rightMargin: root.vertical ? 4 : 0
-        }
-        color: root.colBackground
+    // Lazy background: expressive and material widgets use transparent
+    // backgrounds, so they never allocate this Rectangle or its 4 Behaviors.
+    Loader {
+        id: backgroundLoader
+        anchors.fill: parent
+        active: root.colBackground.a > 0.001
+        sourceComponent: Rectangle {
+            id: background
+            visible: opacity > 0.001
+            opacity: (root.vertical ? (gridLayout.implicitHeight > 0) : (gridLayout.implicitWidth > 0)) ? 1 : 0
+            Behavior on opacity {
+                enabled: background.radiiArmed
+                NumberAnimation {
+                    duration: Appearance.animation.elementMoveFast.duration
+                    easing.type: Appearance.animation.elementMoveFast.type
+                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                }
+            }
+            anchors {
+                fill: parent
+                topMargin: root.vertical ? 0 : 4
+                bottomMargin: root.vertical ? 0 : 4
+                leftMargin: root.vertical ? 4 : 0
+                rightMargin: root.vertical ? 4 : 0
+            }
+            color: root.colBackground
 
-        // These flip whenever a neighbour appears or disappears: a widget that
-        // gains a neighbour squares off the side facing it. Snapping between
-        // full-round and square is the most visible part of "the bar changed",
-        // so they morph on the same clock as everything else that resizes.
-        // Armed one pass after creation: the radii resolve from `undefined` on
-        // the first evaluation, and animating that would morph every corner on
-        // the bar at startup.
-        property bool radiiArmed: false
-        Component.onCompleted: Qt.callLater(() => background.radiiArmed = true)
+            property bool radiiArmed: false
+            Component.onCompleted: Qt.callLater(() => background.radiiArmed = true)
 
-        property real animatedStartRadius: root.startRadius ?? 0
-        property real animatedEndRadius: root.endRadius ?? 0
-        Behavior on animatedStartRadius {
-            enabled: background.radiiArmed
-            animation: Appearance.animation.barResize.numberAnimation.createObject(background)
-        }
-        Behavior on animatedEndRadius {
-            enabled: background.radiiArmed
-            animation: Appearance.animation.barResize.numberAnimation.createObject(background)
-        }
+            property real animatedStartRadius: root.startRadius ?? 0
+            property real animatedEndRadius: root.endRadius ?? 0
+            Behavior on animatedStartRadius {
+                enabled: background.radiiArmed
+                NumberAnimation {
+                    duration: Appearance.animation.barResize.duration
+                    easing.type: Appearance.animation.barResize.type
+                    easing.bezierCurve: Appearance.animation.barResize.bezierCurve
+                }
+            }
+            Behavior on animatedEndRadius {
+                enabled: background.radiiArmed
+                NumberAnimation {
+                    duration: Appearance.animation.barResize.duration
+                    easing.type: Appearance.animation.barResize.type
+                    easing.bezierCurve: Appearance.animation.barResize.bezierCurve
+                }
+            }
 
-        topLeftRadius: animatedStartRadius
-        bottomLeftRadius: root.vertical ? animatedEndRadius : animatedStartRadius
-        topRightRadius: root.vertical ? animatedStartRadius : animatedEndRadius
-        bottomRightRadius: animatedEndRadius
+            topLeftRadius: animatedStartRadius
+            bottomLeftRadius: root.vertical ? animatedEndRadius : animatedStartRadius
+            topRightRadius: root.vertical ? animatedStartRadius : animatedEndRadius
+            bottomRightRadius: animatedEndRadius
 
-        Behavior on color {
-            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+            Behavior on color {
+                ColorAnimation {
+                    duration: Appearance.animation.elementMoveFast.duration
+                    easing.type: Appearance.animation.elementMoveFast.type
+                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                }
+            }
         }
     }
 

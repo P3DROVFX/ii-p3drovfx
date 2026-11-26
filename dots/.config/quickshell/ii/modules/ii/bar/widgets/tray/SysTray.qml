@@ -31,7 +31,7 @@ Item {
             closeOverflowMenu();
     }
 
-    readonly property var overflowWindow: overflowPopup.item ?? (trayOverflowLayout.QsWindow ? trayOverflowLayout.QsWindow.window : null)
+    readonly property var overflowWindow: overflowPopupLoader.item?.item ?? null
 
     function grabFocus() {
         focusGrab.wanted = true;
@@ -66,12 +66,12 @@ Item {
     onTrayOverflowOpenChanged: {
         if (sysTrayRoot.trayOverflowOpen) {
             sysTrayRoot.grabFocus();
-            if (overflowPopup)
-                overflowPopup._clickActive = true;
+            if (overflowPopupLoader.item)
+                overflowPopupLoader.item._clickActive = true;
         } else {
             sysTrayRoot.closeActiveMenu();
-            if (overflowPopup)
-                overflowPopup.close();
+            if (overflowPopupLoader.item)
+                overflowPopupLoader.item.close();
             if (GlobalStates.isBarPopupOpen("tray"))
                 GlobalStates.closeBarPopup("tray");
             focusGrab.wanted = false;
@@ -147,35 +147,39 @@ Item {
                 }
             }
 
-            StyledPopup {
-                id: overflowPopup
-                popupId: "tray"
-                hoverTarget: trayOverflowButton
-                forceClick: true
-                touchToggle: false
-                selfDismiss: false
-                _clickActive: sysTrayRoot.trayOverflowOpen || _ipcActive
-                active: sysTrayRoot.unpinnedItems.length > 0 && (_computedActive || _isClosing)
+            Loader {
+                id: overflowPopupLoader
+                active: sysTrayRoot.unpinnedItems.length > 0 && (sysTrayRoot.trayOverflowOpen || GlobalStates.isBarPopupOpen("tray") || (item?.active ?? false))
+                sourceComponent: StyledPopup {
+                    id: overflowPopup
+                    popupId: "tray"
+                    hoverTarget: trayOverflowButton
+                    forceClick: true
+                    touchToggle: false
+                    selfDismiss: false
+                    _clickActive: sysTrayRoot.trayOverflowOpen || _ipcActive
+                    active: sysTrayRoot.unpinnedItems.length > 0 && (_computedActive || _isClosing)
 
-                GridLayout {
-                    id: trayOverflowLayout
-                    anchors.centerIn: parent
-                    columns: Math.ceil(Math.sqrt(sysTrayRoot.unpinnedItems.length))
-                    columnSpacing: 10
-                    rowSpacing: 10
+                    GridLayout {
+                        id: trayOverflowLayout
+                        anchors.centerIn: parent
+                        columns: Math.ceil(Math.sqrt(sysTrayRoot.unpinnedItems.length))
+                        columnSpacing: 10
+                        rowSpacing: 10
 
-                    Repeater {
-                        model: ScriptModel {
-                            values: sysTrayRoot.unpinnedItems
-                        }
+                        Repeater {
+                            model: ScriptModel {
+                                values: sysTrayRoot.unpinnedItems
+                            }
 
-                        delegate: SysTrayItem {
-                            required property SystemTrayItem modelData
-                            item: modelData
-                            Layout.fillHeight: !sysTrayRoot.vertical
-                            Layout.fillWidth: sysTrayRoot.vertical
-                            onMenuClosed: sysTrayRoot.releaseFocus()
-                            onMenuOpened: qsWindow => sysTrayRoot.setExtraWindowAndGrabFocus(qsWindow)
+                            delegate: SysTrayItem {
+                                required property SystemTrayItem modelData
+                                item: modelData
+                                Layout.fillHeight: !sysTrayRoot.vertical
+                                Layout.fillWidth: sysTrayRoot.vertical
+                                onMenuClosed: sysTrayRoot.releaseFocus()
+                                onMenuOpened: qsWindow => sysTrayRoot.setExtraWindowAndGrabFocus(qsWindow)
+                            }
                         }
                     }
                 }

@@ -10,6 +10,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.modules.ii.wrappedFrame
+import qs.modules.ii.bar.registry
 import qs.modules.ii.bar.shared
 import qs.modules.ii.bar
 
@@ -72,10 +73,7 @@ Scope {
         }
         property bool showBarBackground: (hasActiveWindows && Config.options.bar.barBackgroundStyle === 2) || Config.options.bar.barBackgroundStyle === 1 || Config.options.bar.barBackgroundStyle === 3
 
-        BarThemes {
-            id: barThemes
-        }
-        property var activeTheme: barThemes.getTheme(Config.options.bar.expressiveColorTheme)
+        readonly property var activeTheme: BarWidgetRegistry.activeTheme
 
         // The Dynamic Island style reserves the whole strip but draws only a pill
         // centred in it: the dock reads what is really occupied to take the rest.

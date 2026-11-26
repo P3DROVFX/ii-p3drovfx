@@ -6,39 +6,9 @@ import qs.modules.common.functions
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
-import qs.modules.ii.bar.widgets.weather
 import qs.modules.ii.bar.shared
 import qs.modules.ii.bar.registry
 import qs.modules.ii.bar.groups
-
-// Widget subdir imports (bar/widgets/<group>/)
-import qs.modules.ii.bar.widgets.workspaces
-import qs.modules.ii.bar.widgets.clock
-import qs.modules.ii.bar.widgets.media
-import qs.modules.ii.bar.widgets.battery
-import qs.modules.ii.bar.widgets.bluetooth
-import qs.modules.ii.bar.widgets.resources
-import qs.modules.ii.bar.widgets.keyboard
-import qs.modules.ii.bar.widgets.tray
-import qs.modules.ii.bar.widgets.sports
-import qs.modules.ii.bar.widgets.activeWindow
-import qs.modules.ii.bar.widgets.dashboard
-import qs.modules.ii.bar.widgets.notifications
-import qs.modules.ii.bar.widgets.power
-import qs.modules.ii.bar.widgets.utilButtons
-import qs.modules.ii.bar.widgets.policies
-import qs.modules.ii.bar.widgets.timer
-import qs.modules.ii.bar.widgets.indicators
-import qs.modules.ii.bar.widgets.dockToPanel
-import qs.modules.ii.bar.widgets.portWatcher
-import qs.modules.ii.bar.widgets.passwordManager
-import qs.modules.ii.bar.widgets.networkSpeed
-import qs.modules.ii.bar.widgets.privacy
-import qs.modules.ii.bar.widgets.aiPlanUsage
-import "widgets/search"
-import "widgets/date"
-
-import qs.modules.ii.verticalBar as Vertical
 
 Item {
     id: rootItem
@@ -135,10 +105,6 @@ Item {
     resources: [
         Translate {
             id: entryTranslation
-            // Rests at zero. The entry animation declares its own `from: 15`, so
-            // a widget that never animates is simply in place — no binding here
-            // can strand a rebuilt widget 15px off, and nothing outside the
-            // animation can move it.
             x: 0
             y: 0
         },
@@ -146,18 +112,18 @@ Item {
             id: moveTranslation
         },
         Translate {
-            id: verticalTranslation
-            y: 0
-        },
-        Translate {
-            id: dragTranslation
-            x: (!rootItem.vertical && rootItem.isBeingDragged) ? rootItem.dragOffset : 0
-            y: (rootItem.vertical && rootItem.isBeingDragged) ? rootItem.dragOffset : 0
-        },
-        Translate {
-            id: reorderTranslation
-            x: (!rootItem.vertical && !rootItem.isBeingDragged) ? rootItem.reorderShift : 0
-            y: (rootItem.vertical && !rootItem.isBeingDragged) ? rootItem.reorderShift : 0
+            id: offsetTranslation
+            x: rootItem.vertical ? 0 : (rootItem.isBeingDragged ? rootItem.dragOffset : rootItem.reorderShift)
+            y: (rootItem.isNotchMode && !rootItem.isWidgetVisibleInNotch)
+                ? -20
+                : (rootItem.vertical ? (rootItem.isBeingDragged ? rootItem.dragOffset : rootItem.reorderShift) : 0)
+            Behavior on y {
+                enabled: rootItem.isNotchActive
+                NumberAnimation {
+                    duration: rootItem.isNotchMode ? 320 : 0
+                    easing.type: Easing.OutCubic
+                }
+            }
         }
     ]
 
@@ -423,7 +389,6 @@ Item {
     // not the persisted layout flags. A configured widget can stay in the
     // model while its loaded component is invisible (for example, an idle timer).
     readonly property bool hasActiveLeftNeighbor: {
-        console.log("[DEBUG NEIGHBOR]", modelData?.id, "isDefault:", rootItem.isDefault, "hasContent:", rootItem.hasActiveLayoutContent, "parent:", rootItem.parent, "childrenCount:", rootItem.parent?.children?.length);
         if (!rootItem.isDefault || !rootItem.hasActiveLayoutContent)
             return false;
 
@@ -525,186 +490,37 @@ Item {
         }
     }
 
-    opacity: (rootItem.vertical ? (rootItem.hasLayoutContent && wrapper.implicitHeight > 0) : targetWidth > 0)
-        ? (rootItem.isBeingDragged ? 0.94 : 1.0) : 0.0
+    opacity: (rootItem.isNotchMode && !rootItem.isWidgetVisibleInNotch)
+        ? 0.0
+        : ((rootItem.vertical ? (rootItem.hasLayoutContent && wrapper.implicitHeight > 0) : targetWidth > 0)
+            ? (rootItem.isBeingDragged ? 0.94 : 1.0) : 0.0)
     Behavior on opacity {
-        enabled: !Appearance.reducedMotion && GlobalStates.editMode && !rootItem.isNotchMode
-        animation: Appearance.animation.barResize.numberAnimation.createObject(rootItem)
+        enabled: !Appearance.reducedMotion && (GlobalStates.editMode || rootItem.isNotchActive)
+        NumberAnimation {
+            duration: rootItem.isNotchMode ? 280 : Appearance.animation.barResize.duration
+            easing.type: rootItem.isNotchMode ? Easing.OutQuad : Appearance.animation.barResize.type
+            easing.bezierCurve: rootItem.isNotchMode ? [] : Appearance.animation.barResize.bezierCurve
+        }
     }
     visible: !rootItem.layoutReady || (hasLayoutContent && (!isNotchMode || opacity > 0.01))
 
     readonly property bool isNotchMode: isNotchActive && !isNotchExpanded
-
-    states: [
-        State {
-            name: "visible"
-            when: rootItem.isNotchMode && rootItem.isWidgetVisibleInNotch
-            PropertyChanges {
-                target: verticalTranslation
-                y: 0
-            }
-            PropertyChanges {
-                target: rootItem
-                opacity: 1.0
-            }
-        },
-        State {
-            name: "hidden"
-            when: rootItem.isNotchMode && !rootItem.isWidgetVisibleInNotch
-            PropertyChanges {
-                target: verticalTranslation
-                y: -20
-            }
-            PropertyChanges {
-                target: rootItem
-                opacity: 0.0
-            }
-        }
-    ]
-
-    transitions: [
-        Transition {
-            from: "hidden"
-            to: "visible"
-            ParallelAnimation {
-                NumberAnimation {
-                    target: verticalTranslation
-                    property: "y"
-                    duration: rootItem.isNotchMode ? 350 : 0
-                    easing.type: Easing.OutCubic
-                }
-                NumberAnimation {
-                    target: rootItem
-                    property: "opacity"
-                    duration: rootItem.isNotchMode ? 300 : 150
-                    easing.type: Easing.OutQuad
-                }
-            }
-        },
-        Transition {
-            from: "visible"
-            to: "hidden"
-            ParallelAnimation {
-                NumberAnimation {
-                    target: verticalTranslation
-                    property: "y"
-                    duration: rootItem.isNotchMode ? 300 : 0
-                    easing.type: Easing.OutCubic
-                }
-                NumberAnimation {
-                    target: rootItem
-                    property: "opacity"
-                    duration: rootItem.isNotchMode ? 250 : 150
-                    easing.type: Easing.OutQuad
-                }
-            }
-        }
-    ]
     // ─────────────────────────────────────────────────────────────────────────
 
-    // ── Registry ──────────────────────────────────────────────────────────────
-    BarWidgetRegistry {
-        id: registry
-    }
-
-    // Widget style resolution — single source of truth
-    readonly property string widgetStyle: registry.getStyle(modelData.id)
+    // Widget style resolution — shared BarWidgetRegistry singleton
+    readonly property string widgetStyle: BarWidgetRegistry.getStyle(modelData.id)
     readonly property bool isExpressiveFromRegistry: widgetStyle === "expressive"
     readonly property bool isMinimal: widgetStyle === "minimal"
-
-    // ── Explicit style checks (HEAD) – keep them for maximum compatibility ──
-    readonly property bool isMaterial: {
-        if (modelData.id === "clock" && Config.options.bar.styles.clock === "material") {
-            return true;
-        }
-        if (modelData.id === "keyboard_layout" && Config.options.bar.styles.keyboard === "material") {
-            return true;
-        }
-        if (modelData.id === "battery" && Config.options.bar.styles.battery === "material") {
-            return true;
-        }
-        return false;
-    }
-    readonly property bool isExpressive: {
-        if (modelData.id === "clock" && Config.options.bar.styles.clock === "expressive")
-            return true;
-        if (modelData.id === "music_player" && ["expressive", "neural", "ring", "tonal"].includes(Config.options.bar.styles.media))
-            return true;
-        if (modelData.id === "workspaces" && Config.options.bar.styles.workspaces === "expressive")
-            return true;
-        if (modelData.id === "utility_buttons" && Config.options.bar.styles.utilButtons !== "default")
-            return true;
-        if (modelData.id === "weather" && (Config.options.bar.styles.weather === "expressive" || Config.options.bar.styles.weather === "horizon" || Config.options.bar.styles.weather === "tessera" || Config.options.bar.styles.weather === "sculpt"))
-            return true;
-        if (modelData.id === "dashboard_panel_button" && Config.options.bar.styles.dashboard !== "default")
-            return true;
-        if (modelData.id === "notifications_button" && Config.options.bar.styles.notification === "expressive")
-            return true;
-        if (modelData.id === "system_monitor" && (Config.options.bar.styles.resources === "expressive" || Config.options.bar.styles.resources === "sculpt"))
-            return true;
-        if (modelData.id === "policies_panel_button" && Config.options.bar.styles.policies !== "default")
-            return true;
-        if (modelData.id === "power" && Config.options.bar.styles.power !== "default")
-            return true;
-        if (modelData.id === "battery" && Config.options.bar.styles.battery === "expressive")
-            return true;
-        if (modelData.id === "system_tray" && Config.options.bar.styles.systray === "expressive")
-            return true;
-        if (modelData.id === "bluetooth_devices" && (Config.options.bar.styles.bluetooth === "expressive" || Config.options.bar.styles.bluetooth === "sculpt"))
-            return true;
-        if (modelData.id === "keyboard_layout" && (Config.options.bar.styles.keyboard === "expressive" || Config.options.bar.styles.keyboard === "sculpt"))
-            return true;
-        if (modelData.id === "sports" && Config.options.bar.styles.sports === "expressive")
-            return true;
-        if (modelData.id === "active_window" && Config.options.bar.styles.activeWindow === "expressive")
-            return true;
-        // Only the two families that paint their own surface go bare. The
-        // default one is a plain bar widget and wants the group chip, exactly
-        // like the clock or the weather.
-        if (modelData.id === "record_indicator" && Config.options.bar.styles.recordIndicator !== "default")
-            return true;
-        if (modelData.id === "dictation_indicator")
-            return true;
-        if (modelData.id === "phone_scrcpy_indicator")
-            return true;
-        if (modelData.id === "shell_update_indicator")
-            return true;
-        if (modelData.id === "mode_indicator")
-            return true;
-        if (modelData.id === "easyeffects_indicator")
-            return true;
-        if (modelData.id === "port_watcher" && Config.options.bar.styles.portWatcher === "expressive")
-            return true;
-        if (modelData.id === "password_manager" && Config.options.bar.styles.passwordManager === "expressive")
-            return true;
-        if (modelData.id === "ai_plan_usage" && Config.options.bar.styles.aiPlanUsage === "expressive")
-            return true;
-        if (modelData.id === "network_speed" && Config.options.bar.styles.networkSpeed === "expressive")
-            return true;
-        if (modelData.id === "search" && ["expressive", "neural", "sculpt"].includes(Config.options.bar.styles.search))
-            return true;
-        if (modelData.id === "date" && (Config.options.bar.styles.date === "expressive" || Config.options.bar.styles.date === "neural"))
-            return true;
-        if (modelData.id === "timer" && (Config.options.bar.styles.timer === "expressive" || Config.options.bar.styles.timer === "sculpt"))
-            return true;
-        if (modelData.id === "clock" && (Config.options.bar.styles.clock === "neural" || Config.options.bar.styles.clock === "relief"))
-            return true;
-        // Bare indicator: no group chip, no padding around it.
-        if (modelData.id === "privacy_pill")
-            return true;
-        return false;
-    }
+    readonly property bool isMaterial: BarWidgetRegistry.isMaterial(modelData.id)
+    readonly property bool isExpressive: BarWidgetRegistry.isExpressive(modelData.id)
     readonly property bool isDefault: !rootItem.isExpressive && !rootItem.isMaterial && !rootItem.isMinimal && (rootItem.widgetStyle === "default" || rootItem.widgetStyle === "classic")
 
     // ── Radius convenience aliases (from upstream/dev) ──────────────────────
     property real startRadius: groupTheme.startRadius
     property real endRadius: groupTheme.endRadius
 
-    // ── Theme ─────────────────────────────────────────────────────────────────
-    BarThemes {
-        id: barThemes
-    }
-    property var activeTheme: barThemes.themes[Config.options.bar.expressiveColorTheme] || barThemes.themes["content"]
+    // ── Theme (shared singleton) ──────────────────────────────────────────────
+    readonly property var activeTheme: BarWidgetRegistry.activeTheme
 
     // ── BarGroup wrapper ──────────────────────────────────────────────────────
     BarGroup {
@@ -726,10 +542,10 @@ Item {
 
         x: rootItem.isNotchMode ? (rootItem.parent ? (rootItem.parent.width / 2 - rootItem.x - wrapper.implicitWidth / 2) : 0) : 0
 
-        transform: [entryTranslation, moveTranslation, verticalTranslation, dragTranslation, reorderTranslation]
+        transform: [entryTranslation, moveTranslation, offsetTranslation]
 
         readonly property bool itemIsVisible: rootItem.selfVisibleOrEditing && rootItem.loadedItemVisible
-        readonly property bool paddingless: !itemIsVisible || registry.isPaddingless(modelData.id, rootItem.isExpressive) || rootItem.isMaterial || (modelData.id === "music_player" && rootItem.widgetStyle === "neural" && rootItem.vertical)
+        readonly property bool paddingless: !itemIsVisible || BarWidgetRegistry.isPaddingless(modelData.id, rootItem.isExpressive) || rootItem.isMaterial || (modelData.id === "music_player" && rootItem.widgetStyle === "neural" && rootItem.vertical)
         padding: paddingless ? 0 : 5
         // A touch-first bar widens anything narrower than its plate. The widget itself
         // keeps its size and the grid lays it out from the left, so all of that extra
@@ -831,9 +647,9 @@ Item {
     }
 
     // ── Component resolution ──────────────────────────────────────────────────
-    // Resolves each widget slot to its QML URL + prop mode so Loader.setSource
-    // only compiles and instantiates the active widget for this slot.
-    readonly property var resolvedSpec: rootItem.resolveWidgetSpec(modelData?.id ?? "", rootItem.vertical, rootItem.widgetStyle)
+    // Resolves each widget slot via the shared BarWidgetRegistry singleton so
+    // Loader.setSource only compiles and instantiates the active widget.
+    readonly property var resolvedSpec: BarWidgetRegistry.resolveWidgetSpec(modelData?.id ?? "", rootItem.vertical, rootItem.widgetStyle)
     property string _loadedWidgetUrl: ""
     property bool _itemLoaderReady: false
 
@@ -861,177 +677,6 @@ Item {
             props.endRadius = Qt.binding(() => rootItem.endRadius);
         }
         itemLoader.setSource(Qt.resolvedUrl(spec.url), props);
-    }
-
-    function resolveWidgetSpec(id, isVert, style) {
-        const isExp = style === "expressive";
-        const isMin = style === "minimal";
-        switch (id) {
-        case "workspaces":
-            if (isMin)
-                return ({ url: "widgets/workspaces/MinimalWorkspaces.qml", props: "vertical" });
-            if (isExp)
-                return ({ url: "widgets/workspaces/ExpressiveWorkspaces.qml", props: "vertical" });
-            if (style === "dock")
-                return ({ url: "widgets/workspaces/DockWorkspaces.qml", props: "vertical" });
-            if (style === "index")
-                return ({ url: "widgets/workspaces/IndexWorkspaces.qml", props: "vertical" });
-            if (style === "pills")
-                return ({ url: "widgets/workspaces/PillsWorkspaces.qml", props: "vertical" });
-            return ({ url: "widgets/workspaces/Workspaces.qml", props: "vertical" });
-        case "music_player":
-            if (isExp)
-                return ({ url: "widgets/media/ExpressiveMedia.qml", props: "vertical" });
-            if (style === "neural")
-                return isVert ? ({ url: "../verticalBar/VerticalNeuralMedia.qml", props: "none" }) : ({ url: "widgets/media/NeuralMedia.qml", props: "vertical" });
-            if (style === "ring")
-                return ({ url: "widgets/media/RingMedia.qml", props: "vertical" });
-            if (style === "tonal")
-                return ({ url: "widgets/media/TonalMedia.qml", props: "vertical" });
-            return isVert ? ({ url: "../verticalBar/VerticalMedia.qml", props: "none" }) : ({ url: "widgets/media/Media.qml", props: "none" });
-        case "system_monitor":
-            if (isExp)
-                return ({ url: "widgets/resources/ExpressiveResources.qml", props: "vertical" });
-            if (style === "sculpt")
-                return ({ url: "widgets/resources/SculptResources.qml", props: "vertical" });
-            return isVert ? ({ url: "../verticalBar/Resources.qml", props: "none" }) : ({ url: "widgets/resources/Resources.qml", props: "none" });
-        case "clock":
-            if (isExp)
-                return ({ url: "widgets/clock/ExpressiveClockWidget.qml", props: "vertical" });
-            if (style === "neural")
-                return ({ url: "widgets/clock/NeuralClockWidget.qml", props: "vertical" });
-            if (style === "relief")
-                return ({ url: "widgets/clock/ReliefClockWidget.qml", props: "vertical" });
-            return isVert ? ({ url: "../verticalBar/VerticalClockWidget.qml", props: "none" }) : ({ url: "widgets/clock/ClockWidget.qml", props: "none" });
-        case "battery":
-            if (isExp)
-                return ({ url: "widgets/battery/ExpressiveBattery.qml", props: "vertical" });
-            return isVert ? ({ url: "../verticalBar/BatteryIndicator.qml", props: "none" }) : ({ url: "widgets/battery/BatteryIndicator.qml", props: "none" });
-        case "keyboard_layout":
-            if (isExp)
-                return ({ url: "widgets/keyboard/ExpressiveKeyboardLayout.qml", props: "vertical" });
-            if (style === "sculpt")
-                return ({ url: "widgets/keyboard/SculptKeyboardLayout.qml", props: "vertical" });
-            return isVert ? ({ url: "../verticalBar/VerticalKeyboardLayoutWidget.qml", props: "none" }) : ({ url: "widgets/keyboard/KeyboardLayoutWidget.qml", props: "vertical" });
-        case "utility_buttons":
-            if (style === "segments")
-                return ({ url: "widgets/utilButtons/SegmentedUtilButtons.qml", props: "vertical" });
-            if (style === "sculpt")
-                return ({ url: "widgets/utilButtons/SculptUtilButtons.qml", props: "vertical" });
-            if (isExp)
-                return ({ url: "widgets/utilButtons/ExpressiveUtilButtons.qml", props: "vertical" });
-            return ({ url: "widgets/utilButtons/UtilButtons.qml", props: "vertical" });
-        case "system_tray":
-            if (isExp)
-                return ({ url: "widgets/tray/ExpressiveSystemTray.qml", props: "vertical" });
-            return ({ url: "widgets/tray/SysTray.qml", props: "vertical" });
-        case "active_window":
-            if (isExp)
-                return ({ url: "widgets/activeWindow/ExpressiveActiveWindow.qml", props: "vertical" });
-            return ({ url: "widgets/activeWindow/ActiveWindow.qml", props: "vertical" });
-        case "weather":
-            if (isExp)
-                return ({ url: "widgets/weather/ExpressiveWeatherBar.qml", props: "vertical" });
-            if (style === "horizon")
-                return ({ url: "widgets/weather/HorizonWeatherWidget.qml", props: "vertical" });
-            if (style === "tessera")
-                return ({ url: "widgets/weather/TesseraWeatherWidget.qml", props: "vertical" });
-            if (style === "sculpt")
-                return ({ url: "widgets/weather/SculptWeatherWidget.qml", props: "vertical" });
-            return ({ url: "widgets/weather/WeatherBar.qml", props: "vertical" });
-        case "policies_panel_button":
-            if (style === "outline")
-                return ({ url: "widgets/policies/OutlinePoliciesPanelButton.qml", props: "vertical" });
-            if (isExp)
-                return ({ url: "widgets/policies/ExpressivePoliciesPanelButton.qml", props: "vertical" });
-            return ({ url: "widgets/policies/PoliciesPanelButton.qml", props: "radii" });
-        case "dashboard_panel_button":
-            if (style === "orbs")
-                return ({ url: "widgets/dashboard/OrbsDashboardPanelButton.qml", props: "vertical" });
-            if (style === "sculpt")
-                return ({ url: "widgets/dashboard/SculptDashboardPanelButton.qml", props: "vertical" });
-            if (isExp)
-                return ({ url: "widgets/dashboard/ExpressiveDashboardPanelButton.qml", props: "vertical" });
-            return isVert ? ({ url: "widgets/dashboard/VerticalDashboardPanelButton.qml", props: "radii" }) : ({ url: "widgets/dashboard/DashboardPanelButton.qml", props: "radii" });
-        case "notifications_button":
-            if (isExp)
-                return ({ url: "widgets/notifications/ExpressiveNotificationsButton.qml", props: "vertical" });
-            return ({ url: "widgets/notifications/NotificationsButton.qml", props: "vertical" });
-        case "bluetooth_devices":
-            if (isExp)
-                return ({ url: "widgets/bluetooth/ExpressiveBluetoothDevices.qml", props: "vertical" });
-            if (style === "sculpt")
-                return ({ url: "widgets/bluetooth/SculptBluetoothDevices.qml", props: "vertical" });
-            return isVert ? ({ url: "../verticalBar/VerticalBluetoothDevicesWidget.qml", props: "none" }) : ({ url: "widgets/bluetooth/BluetoothDevicesWidget.qml", props: "vertical" });
-        case "sports":
-            if (isExp)
-                return ({ url: "widgets/sports/ExpressiveSports.qml", props: "vertical" });
-            return ({ url: "widgets/sports/Sports.qml", props: "vertical" });
-        case "power":
-            if (style === "solid")
-                return ({ url: "widgets/power/SolidPowerButton.qml", props: "vertical" });
-            if (style === "dot")
-                return ({ url: "widgets/power/DotPowerButton.qml", props: "vertical" });
-            if (isExp)
-                return ({ url: "widgets/power/ExpressivePowerButton.qml", props: "vertical" });
-            return ({ url: "widgets/power/PowerButton.qml", props: "verticalAndRadii" });
-        case "network_speed":
-            if (isExp)
-                return ({ url: "widgets/networkSpeed/ExpressiveNetworkSpeed.qml", props: "vertical" });
-            return ({ url: "widgets/networkSpeed/NetworkSpeedWidget.qml", props: "vertical" });
-        case "date":
-            if (isExp)
-                return ({ url: "widgets/date/ExpressiveDateWidget.qml", props: "vertical" });
-            if (style === "neural")
-                return ({ url: "widgets/date/NeuralDateWidget.qml", props: "vertical" });
-            return ({ url: "widgets/date/DateWidget.qml", props: "vertical" });
-        case "timer":
-            if (isExp)
-                return ({ url: "widgets/timer/ExpressiveTimerWidget.qml", props: "vertical" });
-            if (style === "sculpt")
-                return ({ url: "widgets/timer/SculptTimerWidget.qml", props: "vertical" });
-            return isVert ? ({ url: "../verticalBar/VerticalTimerWidget.qml", props: "none" }) : ({ url: "widgets/timer/TimerWidget.qml", props: "none" });
-        case "record_indicator":
-            return ({ url: "widgets/indicators/RecordIndicator.qml", props: "vertical" });
-        case "dictation_indicator":
-            return ({ url: "widgets/indicators/DictationIndicator.qml", props: "vertical" });
-        case "phone_scrcpy_indicator":
-            return ({ url: "widgets/indicators/PhoneScrcpyIndicator.qml", props: "vertical" });
-        case "shell_update_indicator":
-            return ({ url: "widgets/indicators/ShellUpdateIndicator.qml", props: "vertical" });
-        case "mode_indicator":
-            return ({ url: "widgets/indicators/ModeIndicator.qml", props: "vertical" });
-        case "easyeffects_indicator":
-            return ({ url: "widgets/indicators/EasyEffectsIndicator.qml", props: "vertical" });
-        case "screen_share_indicator":
-            return ({ url: "widgets/indicators/ScreenShareIndicator.qml", props: "none" });
-        case "dock_to_panel":
-            return ({ url: "widgets/dockToPanel/DockToPanel.qml", props: "vertical" });
-        case "port_watcher":
-            if (isExp)
-                return ({ url: "widgets/portWatcher/ExpressivePortWatcher.qml", props: "vertical" });
-            return ({ url: "widgets/portWatcher/PortWatcherWidget.qml", props: "vertical" });
-        case "password_manager":
-            if (isExp)
-                return ({ url: "widgets/passwordManager/ExpressivePasswordManager.qml", props: "vertical" });
-            return ({ url: "widgets/passwordManager/PasswordManagerWidget.qml", props: "vertical" });
-        case "ai_plan_usage":
-            if (isExp)
-                return ({ url: "widgets/aiPlanUsage/ExpressiveAiPlanUsage.qml", props: "vertical" });
-            return ({ url: "widgets/aiPlanUsage/AiPlanUsageWidget.qml", props: "vertical" });
-        case "privacy_pill":
-            return ({ url: "widgets/privacy/PrivacyPill.qml", props: "vertical" });
-        case "search":
-            if (isExp)
-                return ({ url: "widgets/search/ExpressiveSearchBarWidget.qml", props: "vertical" });
-            if (style === "neural")
-                return ({ url: "widgets/search/NeuralSearchBarWidget.qml", props: "vertical" });
-            if (style === "sculpt")
-                return ({ url: "widgets/search/SculptSearchBarWidget.qml", props: "vertical" });
-            return ({ url: "widgets/search/SearchBarWidget.qml", props: "vertical" });
-        default:
-            return null;
-        }
     }
 
     function toggleVisible(visibility) {
@@ -1107,7 +752,11 @@ Item {
     property real reorderShift: rootItem.reorderShiftTarget
     Behavior on reorderShift {
         enabled: !Appearance.reducedMotion && GlobalStates.editMode
-        animation: Appearance.animation.barResize.numberAnimation.createObject(rootItem)
+        NumberAnimation {
+            duration: Appearance.animation.barResize.duration
+            easing.type: Appearance.animation.barResize.type
+            easing.bezierCurve: Appearance.animation.barResize.bezierCurve
+        }
     }
 
     readonly property real dragOffset: rootItem.isBeingDragged && rootItem.editController
@@ -1120,13 +769,21 @@ Item {
         ? rootItem.editController.gapAfter(rootItem.barSection, rootItem.originalIndex) : 0
     property real editGapBefore: rootItem.editGapBeforeTarget
     Behavior on editGapBefore {
-        enabled: !Appearance.reducedMotion
-        animation: Appearance.animation.barResize.numberAnimation.createObject(rootItem)
+        enabled: !Appearance.reducedMotion && GlobalStates.editMode
+        NumberAnimation {
+            duration: Appearance.animation.barResize.duration
+            easing.type: Appearance.animation.barResize.type
+            easing.bezierCurve: Appearance.animation.barResize.bezierCurve
+        }
     }
     property real editGapAfter: rootItem.editGapAfterTarget
     Behavior on editGapAfter {
-        enabled: !Appearance.reducedMotion
-        animation: Appearance.animation.barResize.numberAnimation.createObject(rootItem)
+        enabled: !Appearance.reducedMotion && GlobalStates.editMode
+        NumberAnimation {
+            duration: Appearance.animation.barResize.duration
+            easing.type: Appearance.animation.barResize.type
+            easing.bezierCurve: Appearance.animation.barResize.bezierCurve
+        }
     }
 
     readonly property bool editLifted: false

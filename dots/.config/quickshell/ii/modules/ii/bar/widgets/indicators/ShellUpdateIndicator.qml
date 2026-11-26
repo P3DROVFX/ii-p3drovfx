@@ -38,7 +38,7 @@ MouseArea {
     readonly property int behind: ShellUpdates.commitsBehind
     // Hovered, or holding its popup open: the pill stays lit and expanded for
     // as long as the popup is up, so it reads as the popup's anchor.
-    readonly property bool engaged: containsMouse || popup.opened
+    readonly property bool engaged: containsMouse || (popupLoader.item?.opened ?? false)
     readonly property bool expanded: engaged && behind > 0
 
     readonly property real baseSize: (vertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.baseBarHeight) - 14
@@ -130,29 +130,26 @@ MouseArea {
         }
     }
 
-    // What the update contains: the AI summary when there is one, then the
-    // commits grouped by kind, capped so a big update does not fill the screen.
-    // Sticky so the Summarize button and the rows can be reached.
-    StyledPopup {
-        id: popup
-        popupId: "shellUpdate"
-        hoverTarget: indicator
-        stickyHover: true
-        popupRadius: Appearance.rounding.large
+    // Lazy: do not construct StyledPopup until hovered or opened via IPC.
+    Loader {
+        id: popupLoader
+        active: (indicator.containsMouse || GlobalStates.isBarPopupOpen("shellUpdate") || (item?.active ?? false)) && BarInteraction.enablePopups
+        sourceComponent: StyledPopup {
+            id: popup
+            popupId: "shellUpdate"
+            hoverTarget: indicator
+            stickyHover: true
+            popupRadius: Appearance.rounding.large
 
-        readonly property int cardWidth: 380
+            readonly property int cardWidth: 380
 
-        // Keep the indicator's popup body lazy. ShellUpdateSummaryCard owns
-        // the optional AI summary service; constructing it while the popup is
-        // closed made a bar-only update indicator pull the whole AI graph into
-        // memory. The closed indicator only needs ShellUpdates.hasUpdate.
-        contentItem: Loader {
-            id: popupContentLoader
-            active: popup.active
-            sourceComponent: popup.popupContent
-        }
+            contentItem: Loader {
+                id: popupContentLoader
+                active: popup.active
+                sourceComponent: popup.popupContent
+            }
 
-        property Component popupContent: Component {
+            property Component popupContent: Component {
         ColumnLayout {
             id: updateLayout
             spacing: 10
@@ -361,5 +358,6 @@ MouseArea {
             }
         }
         }
+    }
     }
 }

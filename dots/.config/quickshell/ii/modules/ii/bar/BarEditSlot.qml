@@ -38,7 +38,7 @@ Item {
     Component.onCompleted: if (root.controller) root.controller.registerSlot(root)
     Component.onDestruction: {
         GlobalStates.clearEditBarHover(root);
-        if (root.controller)
+        if (root.controller && typeof root.controller.unregisterSlot === "function")
             root.controller.unregisterSlot(root);
     }
 
