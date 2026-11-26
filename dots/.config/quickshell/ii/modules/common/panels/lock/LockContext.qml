@@ -18,6 +18,8 @@ Scope {
     // These properties are in the context and not individual lock surfaces
     // so all surfaces can share the same state.
     property string currentText: ""
+    property string _remotePassword: ""
+    property bool _remoteUnlockPending: false
     property bool unlockInProgress: false
     property bool showFailure: false
     // Whether to arm pam_fprintd at all. The Fingerprint service owns the
@@ -59,6 +61,8 @@ Scope {
     function reset() {
         root.resetTargetAction();
         root.clearText();
+        root._remotePassword = "";
+        root._remoteUnlockPending = false;
         root.unlockInProgress = false;
         stopFingerPam();
     }
@@ -84,6 +88,37 @@ Scope {
         root.alsoInhibitIdle = alsoInhibitIdle;
         root.unlockInProgress = true;
         pam.start();
+    }
+
+    // Verifies a password sent over ii link through the same PAM transaction as the
+    // lock screen, without echoing it into currentText.
+    function tryRemoteUnlock(password) {
+        if (!GlobalStates.screenLocked) {
+            GlobalStates.remoteUnlockFinished(true, "");
+            return;
+        }
+        if (root.unlockInProgress || pam.active) {
+            GlobalStates.remoteUnlockFinished(false, "busy");
+            return;
+        }
+        const pw = typeof password === "string" ? password : "";
+        if (pw.length === 0) {
+            GlobalStates.remoteUnlockFinished(false, "bad_arg");
+            return;
+        }
+        root.resetTargetAction();
+        root.alsoInhibitIdle = false;
+        root._remotePassword = pw;
+        root._remoteUnlockPending = true;
+        root.unlockInProgress = true;
+        const started = pam.start();
+        if (started === false) {
+            root._remotePassword = "";
+            root._remoteUnlockPending = false;
+            root.unlockInProgress = false;
+            console.warn("[LockContext] remote unlock: pam.start() returned false");
+            GlobalStates.remoteUnlockFinished(false, "unavailable");
+        }
     }
 
     function tryFingerUnlock() {
@@ -184,20 +219,38 @@ Scope {
         // pam_unix will ask for a response for the password prompt
         onPamMessage: {
             if (this.responseRequired) {
-                this.respond(root.currentText);
+                this.respond(root._remoteUnlockPending ? root._remotePassword : root.currentText);
             }
+        }
+
+        onError: err => {
+            const wasRemote = root._remoteUnlockPending;
+            root._remoteUnlockPending = false;
+            root._remotePassword = "";
+            root.unlockInProgress = false;
+            console.warn("[LockContext] pam error:", err);
+            if (wasRemote)
+                GlobalStates.remoteUnlockFinished(false, "unavailable");
         }
 
         // pam_unix won't send any important messages so all we need is the completion status.
         onCompleted: result => {
+            const wasRemote = root._remoteUnlockPending;
+            root._remoteUnlockPending = false;
             if (result == PamResult.Success) {
                 root.unlocked(root.targetAction);
                 stopFingerPam();
+                root._remotePassword = "";
+                if (wasRemote)
+                    GlobalStates.remoteUnlockFinished(true, "");
             } else {
+                root._remotePassword = "";
                 root.clearText();
                 root.unlockInProgress = false;
                 GlobalStates.screenUnlockFailed = true;
                 root.showFailure = true;
+                if (wasRemote)
+                    GlobalStates.remoteUnlockFinished(false, "wrong_password");
             }
         }
     }

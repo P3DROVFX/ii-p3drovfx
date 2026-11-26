@@ -477,6 +477,10 @@ Singleton {
     property bool capsLockActive: false
     property bool screenLockContainsCharacters: false
     property bool screenUnlockFailed: false
+    // Active LockScreen's LockContext while mounted, so IiLinkService can verify
+    // a remote unlock password through the lock screen's own PAM flow.
+    property var activeLockContext: null
+    signal remoteUnlockFinished(bool ok, string code)
     property bool screenTranslatorOpen: false
     // Ripple signal: emitted by LockSurface on click, received by Background.qml
     // (WlSessionLock and WlrLayershell panels can't directly share children)

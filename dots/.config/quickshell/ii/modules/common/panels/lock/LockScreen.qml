@@ -142,7 +142,7 @@ Scope {
     function unlockKeyring() {
         unlockKeyringProc.exec({
             environment: ({
-                    "UNLOCK_PASSWORD": lockContext.currentText
+                    "UNLOCK_PASSWORD": lockContext._remotePassword.length > 0 ? lockContext._remotePassword : lockContext.currentText
                 }),
             command: ["bash", "-c", Quickshell.shellPath("scripts/keyring/unlock.sh")]
         });
@@ -323,7 +323,14 @@ Scope {
         }
     }
 
-    Component.onCompleted: initIfReady()
+    Component.onCompleted: {
+        GlobalStates.activeLockContext = lockContext;
+        initIfReady();
+    }
+    Component.onDestruction: {
+        if (GlobalStates.activeLockContext === lockContext)
+            GlobalStates.activeLockContext = null;
+    }
 
     Connections {
         target: Config

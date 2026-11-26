@@ -109,7 +109,8 @@ Commands with an argument, answered with `ok` or `err` (`bad_arg`, `not_found`, 
 | `clipCopyPc` | `"<cliphist id>"`: copies that entry to the PC's current clipboard (`locked`, `not_found`) | clipHistory |
 | `share` | `{to: "browser"\|"ai"\|"note"\|"reminder"\|"task", text}`. `browser` takes only an `http(s)` link. | share |
 | `deck` | a deck id: `g:<gesture action>`, `c:<command id>`, `app:<desktop id>`, `discordMute`, `discordDeafen` (`locked`, `unavailable`, `not_found`) | deck |
-| `power` | `"poweroff"` / `"reboot"`: replies `ok`, then runs it 0.8 s later (the phone confirms before sending). Off with `iiTools.remote.power`. | power |
+| `power` | `"poweroff"` / `"reboot"`: replies `ok`, then runs it 0.8 s later (the phone confirms before sending). Off with `iiTools.remote.power`. Refused with `locked` while locked. | power |
+| `unlock` | `"<password>"`: verifies against the active `LockScreen`'s PAM context (`LockContext.tryRemoteUnlock`) and unlocks on success; replies `ok` or `err` (`wrong_password`, `busy`, `unavailable`, `disabled`, `bad_arg`, `timeout`). While `screenLocked` is true, `state.on` always includes `"lock"` and other remote/deck/power/share/clip commands return `locked` (touchpad and `lockAod` remain allowed). | unlock (with remote) |
 
 ## Clipboard history
 

@@ -722,7 +722,7 @@ Singleton {
         { id: "scratchpad", name: Translation.tr("Scratchpad"), icon: "inventory_2", toggle: true }
     ]
     readonly property var allowedActions: root.remoteEnabled ? root.actions : []
-    readonly property var capabilities: (root.remoteEnabled ? ["remote", "workspaces", "modes", "presets"] : [])
+    readonly property var capabilities: (root.remoteEnabled ? ["remote", "workspaces", "modes", "presets", "unlock"] : [])
         .concat(root.remoteEnabled ? ["display", "modeActions"] : [])
         .concat(root.powerEnabled ? ["power"] : [])
         .concat(root.audioEnabled ? ["audio"] : [])
@@ -773,11 +773,11 @@ Singleton {
     // What is on right now, read from the same state the shell itself draws from.
     readonly property bool _aodUp: (GlobalStates.oledSaverMonitors ?? []).length > 0
     readonly property var activeActions: {
-        if (!root.remoteEnabled)
-            return root._deckActive;
         const on = [];
         if (GlobalStates.screenLocked)
             on.push("lock");
+        if (!root.remoteEnabled)
+            return on.concat(root._deckActive);
         if (GlobalStates.screenLocked && root._aodUp)
             on.push("lockAod");
         if (!GlobalStates.screenLocked && root._aodUp)
@@ -826,9 +826,13 @@ Singleton {
             GlobalStates.toggleOledSaver();
             return "";
         case "mediaMode":
+            if (GlobalStates.screenLocked)
+                return "locked";
             GlobalStates.requestMediaMode("toggle");
             return "";
         case "scratchpad":
+            if (GlobalStates.screenLocked)
+                return "locked";
             Hyprland.dispatch(`hl.dsp.workspace.toggle_special("special")`);
             return "";
         }
@@ -976,12 +980,12 @@ Singleton {
     }
 
     function _runDeck(id): string {
+        if (GlobalStates.screenLocked)
+            return "locked";
         if (id.startsWith("g:")) {
             const action = id.slice(2);
             if (root._deckSkip.includes(action) || !TouchGestureActionRegistry.actions.some(a => a.id === action))
                 return "not_found";
-            if (action === "lock" && GlobalStates.screenLocked)
-                return "locked";
             TouchGestureActionRegistry.trigger(action, Hyprland.focusedMonitor?.name ?? "");
             return "";
         }
@@ -4688,6 +4692,8 @@ Singleton {
 
     /// Runs a command that carries an argument; returns "" when done, or why not.
     function _runArg(action, arg): string {
+        if (GlobalStates.screenLocked && root._remoteArgActions.includes(action))
+            return "locked";
         switch (action) {
         case "workspace": {
             const n = Number(arg);
@@ -4849,6 +4855,66 @@ Singleton {
         }
     }
 
+    // ── Remote unlock ───────────────────────────────────────────────────
+    // Delegates password verification to the active LockScreen's PamContext and
+    // replies with ok or err (wrong_password / busy / unavailable / timeout).
+    property var _pendingUnlock: null
+
+    Timer {
+        id: unlockTimeoutTimer
+        interval: 10000
+        onTriggered: {
+            const req = root._pendingUnlock;
+            root._pendingUnlock = null;
+            console.warn("[IiLink] unlock timed out");
+            if (req)
+                root.sendTo(req.dev, { t: "err", id: req.id, code: "timeout" });
+        }
+    }
+
+    Connections {
+        target: GlobalStates
+        function onRemoteUnlockFinished(ok, code) {
+            unlockTimeoutTimer.stop();
+            const req = root._pendingUnlock;
+            root._pendingUnlock = null;
+            if (!req)
+                return;
+            if (!ok)
+                console.warn("[IiLink] unlock failed:", code);
+            root.sendTo(req.dev, ok ? { t: "ok", id: req.id } : { t: "err", id: req.id, code: code || "wrong_password" });
+        }
+    }
+
+    function _runUnlock(dev, id, arg): void {
+        if (!root.remoteEnabled) {
+            root.sendTo(dev, { t: "err", id: id, code: "disabled" });
+            return;
+        }
+        if (!GlobalStates.screenLocked) {
+            root.sendTo(dev, { t: "ok", id: id });
+            return;
+        }
+        const ctx = GlobalStates.activeLockContext;
+        if (!ctx) {
+            console.warn("[IiLink] unlock: activeLockContext is null");
+            root.sendTo(dev, { t: "err", id: id, code: "unavailable" });
+            return;
+        }
+        if (root._pendingUnlock !== null) {
+            root.sendTo(dev, { t: "err", id: id, code: "busy" });
+            return;
+        }
+        if (typeof arg !== "string" || arg.length === 0) {
+            console.warn("[IiLink] unlock: bad_arg, type =", typeof arg);
+            root.sendTo(dev, { t: "err", id: id, code: "bad_arg" });
+            return;
+        }
+        root._pendingUnlock = { dev: dev, id: id };
+        unlockTimeoutTimer.restart();
+        ctx.tryRemoteUnlock(arg);
+    }
+
     // ── Public API ──────────────────────────────────────────────────────
     function startPairing(): void {
         root.lastPaired = null;
@@ -5004,6 +5070,10 @@ Singleton {
             const id = Number(m.id ?? 0);
             const action = String(m.a ?? "");
             let why;
+            if (action === "unlock") {
+                root._runUnlock(dev, id, m.arg);
+                return;
+            }
             if (action === "live")
                 why = root.pcLiveEnabled ? root._runLive(m.arg) : "disabled";
             else if (action === "focus")
@@ -5015,18 +5085,18 @@ Singleton {
             else if (action === "pcLyrics")
                 why = root.pcMediaEnabled ? root._runPcLyrics(dev, m.arg) : "disabled";
             else if (action === "clip")
-                why = root.clipEnabled ? root._clipFromPhone(dev, m.arg) : "disabled";
+                why = !root.clipEnabled ? "disabled" : (GlobalStates.screenLocked ? "locked" : root._clipFromPhone(dev, m.arg));
             else if (action === "clipPull") {
                 root._clipPull(dev, id, m.arg);
                 return;
             } else if (action === "clipCopyPc")
                 why = root._clipCopyPc(m.arg);
             else if (action === "share")
-                why = root.shareEnabled ? root._share(m.arg) : "disabled";
+                why = !root.shareEnabled ? "disabled" : (GlobalStates.screenLocked ? "locked" : root._share(m.arg));
             else if (action === "deck")
                 why = root.deckEnabled ? root._runDeck(String(m.arg ?? "")) : "disabled";
             else if (action === "power")
-                why = root.powerEnabled ? root._runPower(String(m.arg ?? "")) : "disabled";
+                why = !root.powerEnabled ? "disabled" : (GlobalStates.screenLocked ? "locked" : root._runPower(String(m.arg ?? "")));
             else if (root._remoteArgActions.includes(action))
                 why = root.remoteEnabled ? root._runArg(action, m.arg) : "disabled";
             else if (root._audioArgActions.includes(action))
