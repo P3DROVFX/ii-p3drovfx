@@ -185,15 +185,74 @@ function routePoints(points) {
 
 // ── Summary ─────────────────────────────────────────────────────────────
 
-/// The night a day belongs to: the longest sleep session filed under it (sessions are filed
-/// under the day they end), or null.
-function mainSleep(day) {
+/// The index's version: 2 since a night chains the pieces a wake-up splits it into (1 kept
+/// only the longest piece). An index of another version is re-summarized on load.
+var INDEX_V = 2;
+
+// Samsung Health ends a session when the sleeper wakes and starts another when they fall
+// asleep again: the user's nights show 2 min to almost 3 h (01:47 → 04:42) between pieces.
+// A nap comes hours after the morning's wake, so a gap over 3 h starts something else.
+var NIGHT_GAP_MS = 3 * 3600000;
+
+/**
+ * The night a day belongs to, or null: the longest sleep session filed under it (sessions
+ * are filed under the day they end) and every other session of that day that chains to it
+ * with gaps of at most NIGHT_GAP_MS. {main, pieces (by start), start, end, min}: `min`
+ * counts the pieces' own spans (an overlap once), not the wake-ups between them.
+ */
+function night(day) {
     var list = day && day.sessions && Array.isArray(day.sessions.sleep) ? day.sessions.sleep : [];
-    var best = null;
+    var main = null;
     for (var i = 0; i < list.length; i++)
-        if (best === null || list[i].end - list[i].start > best.end - best.start)
-            best = list[i];
-    return best;
+        if (main === null || list[i].end - list[i].start > main.end - main.start)
+            main = list[i];
+    if (main === null)
+        return null;
+    var pieces = [main], start = main.start, end = main.end, grew = true;
+    // A piece can chain through another that lies between it and the main one.
+    while (grew) {
+        grew = false;
+        for (var j = 0; j < list.length; j++) {
+            var s = list[j];
+            if (pieces.indexOf(s) < 0 && s.end >= start - NIGHT_GAP_MS && s.start <= end + NIGHT_GAP_MS) {
+                pieces.push(s);
+                start = Math.min(start, s.start);
+                end = Math.max(end, s.end);
+                grew = true;
+            }
+        }
+    }
+    pieces.sort(function (a, b) { return a.start - b.start; });
+    var ms = 0, reach = start;
+    for (var k = 0; k < pieces.length; k++) {
+        ms += Math.max(0, pieces[k].end - Math.max(pieces[k].start, reach));
+        reach = Math.max(reach, pieces[k].end);
+    }
+    return { main: main, pieces: pieces, start: start, end: end, min: Math.round(ms / 60000) };
+}
+
+/// A night's stages on one axis from its start: each piece's own ("asleep" for a piece
+/// without any) and every wake-up between pieces as "awake", so the charts show it. A
+/// night of one piece keeps that piece's list as it is.
+function nightStages(n) {
+    if (n.pieces.length === 1)
+        return Array.isArray(n.main.stages) ? n.main.stages : [];
+    var out = [], reach = n.start;
+    for (var i = 0; i < n.pieces.length; i++) {
+        var p = n.pieces[i];
+        var off = Math.round((p.start - n.start) / 60000), woke = Math.round((reach - n.start) / 60000);
+        if (off > woke)
+            out.push([woke, off - woke, "awake"]);
+        var st = Array.isArray(p.stages) && p.stages.length > 0 ? p.stages : [[0, Math.round((p.end - p.start) / 60000), "asleep"]];
+        for (var j = 0; j < st.length; j++)
+            out.push([off + st[j][0], st[j][1], st[j][2]]);
+        reach = Math.max(reach, p.end);
+    }
+    return out;
+}
+
+function _spans(sessions) {
+    return sessions.map(function (p) { return [p.start, p.end]; });
 }
 
 /// The index entry for a valid Day (PROTOCOL.md, "Vitals" → store). Every field is there,
@@ -221,11 +280,12 @@ function summarize(day) {
     out.exMin = Math.round(exMs / 60000);
     if (routes.length > 0)
         out.rt = routes;
-    var sl = mainSleep(day);
-    if (sl !== null) {
-        out.sleep = { start: sl.start, end: sl.end, min: Math.round((sl.end - sl.start) / 60000) };
-        if (num(sl.score))
-            out.sleep.score = sl.score;
+    var nt = night(day);
+    if (nt !== null) {
+        out.sleep = { start: nt.start, end: nt.end, min: nt.min, pieces: _spans(nt.pieces) };
+        // Samsung scores each piece; the night shows its main one's.
+        if (num(nt.main.score))
+            out.sleep.score = nt.main.score;
     }
     for (k in (day.measurements || {})) {
         var list = day.measurements[k], lastM = null;
@@ -343,6 +403,16 @@ function purgeEmpty(index) {
     return out;
 }
 
+/// An index of an older version brought to INDEX_V: each day's Summary from `fresh`
+/// ({date: summarize(its Day file)}), a day whose file was not readable kept as it was.
+/// Returns purgeEmpty()'s {index, dates, routes}.
+function migrate(old, fresh) {
+    var next = {};
+    for (var date in old)
+        next[date] = fresh[date] !== undefined ? fresh[date] : old[date];
+    return purgeEmpty(next);
+}
+
 // ── Reads ───────────────────────────────────────────────────────────────
 
 function sortedDates(index) {
@@ -422,18 +492,19 @@ function latest(index, dates, key) {
     return null;
 }
 
-/// The main night of `date`: from the Day when it is loaded (stages, source), else from
-/// its Summary alone.
+/// The night of `date` (see night()): from the Day when it is loaded (stages, source), else
+/// from its Summary alone. `pieces` are the sessions' [start, end]; score and efficiency
+/// are the main session's.
 function sleepFor(summary, day) {
     if (day) {
-        var sl = mainSleep(day);
-        if (sl === null)
+        var nt = night(day);
+        if (nt === null)
             return null;
         return {
-            start: sl.start, end: sl.end, min: Math.round((sl.end - sl.start) / 60000),
-            score: num(sl.score) ? sl.score : null,
-            efficiency: num(sl.efficiency) ? sl.efficiency : null,
-            stages: Array.isArray(sl.stages) ? sl.stages : [],
+            start: nt.start, end: nt.end, min: nt.min, pieces: _spans(nt.pieces),
+            score: num(nt.main.score) ? nt.main.score : null,
+            efficiency: num(nt.main.efficiency) ? nt.main.efficiency : null,
+            stages: nightStages(nt),
             source: day.source && day.source.sleep ? day.source.sleep : ""
         };
     }
@@ -441,6 +512,8 @@ function sleepFor(summary, day) {
         return null;
     return {
         start: summary.sleep.start, end: summary.sleep.end, min: summary.sleep.min,
+        // A day whose file could not be re-read on migration keeps its v1 entry, without pieces.
+        pieces: summary.sleep.pieces || [[summary.sleep.start, summary.sleep.end]],
         score: num(summary.sleep.score) ? summary.sleep.score : null, efficiency: null, stages: null, source: ""
     };
 }
@@ -603,6 +676,9 @@ function dayDigest(date, summary, day) {
     }
     if (summary.sleep) {
         out.sleep = { start: _clock(summary.sleep.start), end: _clock(summary.sleep.end), minutes: summary.sleep.min };
+        // A night split by wake-ups: `minutes` leaves the time between its sessions out.
+        if (summary.sleep.pieces && summary.sleep.pieces.length > 1)
+            out.sleep.sessions = summary.sleep.pieces.length;
         if (num(summary.sleep.score))
             out.sleep.score = summary.sleep.score;
     }
@@ -624,9 +700,12 @@ function dayDigest(date, summary, day) {
     var hr = day.samples && day.samples.heartRate;
     if (hr && Array.isArray(hr.bins))
         out.heartRateByHour = hourlyMeans(hr.bins);
-    var night = mainSleep(day);
-    if (out.sleep && night && Array.isArray(night.stages) && night.stages.length > 0)
-        out.sleep.stageMinutes = stageMinutes(night.stages);
+    var nt = night(day);
+    if (out.sleep && nt) {
+        var stages = nightStages(nt);
+        if (stages.length > 0)
+            out.sleep.stageMinutes = stageMinutes(stages);
+    }
     var ex = (day.sessions && day.sessions.exercise) || [];
     if (ex.length > 0) {
         out.workouts = [];

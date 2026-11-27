@@ -163,7 +163,7 @@ Singleton {
         Config.options.vitals.retentionDays = days;
         const req = { write: [] };
         if (root._prune(req, days) > 0) {
-            req.write.push(["index.json", JSON.stringify({ v: 1, days: root._data.index })]);
+            req.write.push(["index.json", JSON.stringify({ v: Logic.INDEX_V, days: root._data.index })]);
             req.write.push(["sync.json", root._syncText()]);
         }
         if (req.pruneBefore)
@@ -347,7 +347,7 @@ Singleton {
             root._lastSync = Date.now();
             root._prune(req, root.retentionDays);
         }
-        req.write.push(["index.json", JSON.stringify({ v: 1, days: root._data.index })]);
+        req.write.push(["index.json", JSON.stringify({ v: Logic.INDEX_V, days: root._data.index })]);
         req.write.push(["sync.json", root._syncText()]);
         root._store(req);
         if (done)
@@ -467,14 +467,21 @@ Singleton {
         onLoaded: {
             try {
                 const parsed = JSON.parse(indexFile.text());
-                if (parsed?.v === 1 && parsed.days && typeof parsed.days === "object") {
+                if (parsed?.v === Logic.INDEX_V && parsed.days && typeof parsed.days === "object") {
                     const p = Logic.purgeEmpty(parsed.days);
                     root._setIndex(p.index);
                     if (p.dates.length > 0) {
-                        const req = { write: [["index.json", JSON.stringify({ v: 1, days: p.index })]] };
+                        const req = { write: [["index.json", JSON.stringify({ v: Logic.INDEX_V, days: p.index })]] };
                         root._drop(req, p);
                         root._store(req);
                     }
+                } else if (parsed?.v === 1 && parsed.days && typeof parsed.days === "object") {
+                    // Shown as it is until the rebuild swaps the new one in whole; the store
+                    // counts as read only then, so no message lands on the old one.
+                    root._setIndex(parsed.days);
+                    rebuilder.old = parsed.days;
+                    rebuilder.running = true;
+                    return;
                 } else
                     console.warn("[Vitals] index.json has an unknown shape, starting empty");
             } catch (e) {
@@ -489,6 +496,45 @@ Singleton {
             root._indexRead = true;
             root._filesRead();
         }
+    }
+
+    // An index summarized under an older rule: every day again from its file, which the
+    // store already holds, so it needs neither the phone nor a resend. One file per line:
+    // JSON.stringify never writes a newline and the files end without one.
+    Process {
+        id: rebuilder
+        property var old: ({})
+        command: ["find", `${root.storeDir}/days`, "-maxdepth", "1", "-name", "*.json", "-exec", "awk", "1", "{}", "+"]
+        stdout: StdioCollector {
+            id: rebuiltText
+            onStreamFinished: root._rebuilt(rebuiltText.text)
+        }
+    }
+
+    function _rebuilt(text: string): void {
+        const fresh = {};
+        for (const line of text.split("\n")) {
+            let d = null;
+            try {
+                d = JSON.parse(line);
+            } catch (e) {
+                continue;
+            }
+            if (Logic.dayError(d) === "" && rebuilder.old[d.date] !== undefined)
+                fresh[d.date] = Logic.summarize(d);
+        }
+        const p = Logic.migrate(rebuilder.old, fresh);
+        rebuilder.old = ({});
+        // Switched off meanwhile: that cleared everything, and nothing is written.
+        if (!root.enabled)
+            return;
+        console.info(`[Vitals] index re-summarized from ${Object.keys(fresh).length} day files`);
+        root._setIndex(p.index);
+        const req = { write: [["index.json", JSON.stringify({ v: Logic.INDEX_V, days: p.index })]] };
+        root._drop(req, p);
+        root._store(req);
+        root._indexRead = true;
+        root._filesRead();
     }
 
     // Messages wait for all three files: one landing later would overwrite what they set.

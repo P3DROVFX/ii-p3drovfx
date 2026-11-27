@@ -42,7 +42,7 @@ VitalsPage {
         for (let i = dates.length - 1; i >= 0; i--) {
             const s = VitalsService.summary(dates[i])?.sleep;
             if (s)
-                out.push({ date: dates[i], start: s.start, end: s.end, min: s.min, score: s.score ?? null });
+                out.push({ date: dates[i], start: s.start, end: s.end, min: s.min, score: s.score ?? null, pieces: s.pieces ?? [[s.start, s.end]] });
         }
         return out;
     }
@@ -204,9 +204,10 @@ VitalsPage {
         if (!n)
             return out;
         if (Array.isArray(n.stages) && n.stages.length > 0) {
+            // Bed to wake less every awake stretch, the wake-ups between a split night's sessions too.
             const awake = root.stageTotals(n.stages).find(t => t.stage === "awake")?.min ?? 0;
             out.push({ key: "asleep", symbol: "schedule", shape: MaterialShape.Shape.Cookie9Sided,
-                caption: Translation.tr("Time asleep"), value: VitalsTypes.duration(n.min - awake) });
+                caption: Translation.tr("Time asleep"), value: VitalsTypes.duration((n.end - n.start) / 60000 - awake) });
         }
         if (typeof n.efficiency === "number")
             out.push({ key: "efficiency", symbol: "percent", shape: MaterialShape.Shape.Clover4Leaf,
@@ -519,15 +520,22 @@ VitalsPage {
                                 color: ColorUtils.applyAlpha(ClockStyle.colPrimary, 0.1)
                             }
 
-                            Rectangle {
-                                readonly property real from: row.heading ? 0 : root.axisAt(row.modelData.start, row.modelData.date)
-                                readonly property real to: row.heading ? 0 : root.axisAt(row.modelData.end, row.modelData.date)
-                                x: Math.round(from * track.width)
-                                width: Math.max(4, Math.round((to - from) * track.width))
-                                height: 14
-                                anchors.verticalCenter: parent.verticalCenter
-                                radius: ClockStyle.pill(height)
-                                color: ClockStyle.colPrimary
+                            // One bar per session: a night split by a wake-up shows the gap.
+                            Repeater {
+                                model: row.heading ? [] : row.modelData.pieces
+
+                                Rectangle {
+                                    required property var modelData
+                                    readonly property real from: root.axisAt(modelData[0], row.modelData.date)
+                                    readonly property real to: root.axisAt(modelData[1], row.modelData.date)
+                                    x: Math.round(from * track.width)
+                                    width: Math.max(4, Math.round((to - from) * track.width))
+                                    // Not anchored: a pooled row's bars sit without a parent.
+                                    y: Math.round((track.height - height) / 2)
+                                    height: 14
+                                    radius: ClockStyle.pill(height)
+                                    color: ClockStyle.colPrimary
+                                }
                             }
                         }
 

@@ -211,6 +211,80 @@ class SleepTests(unittest.TestCase):
         self.assertIsNone(js("sleepFor(summarize(d), null)", d=day()))
 
 
+def at(minute):
+    """Epoch ms of `minute` past 2026-11-27 00:00 (negative = the evening before)."""
+    return MIDNIGHT + minute * 60000
+
+
+# A night Samsung split at two wake-ups (00:59-05:08, 06:06-06:45, 06:51-09:41) and an
+# afternoon nap more than 3 h after the last piece.
+SPLIT_DAY = day(sessions={"sleep": [
+    {"start": at(366), "end": at(405), "score": 40, "stages": [[0, 39, "light"]]},
+    {"start": at(59), "end": at(308), "score": 82, "efficiency": 90,
+     "stages": [[0, 100, "light"], [100, 149, "deep"]]},
+    {"start": at(411), "end": at(581), "score": 60, "stages": []},
+    {"start": at(900), "end": at(930), "score": 30},
+]}, source={"sleep": "samsung"})
+
+
+@unittest.skipIf(NODE is None, "node is not installed")
+class SplitNightTests(unittest.TestCase):
+    def test_pieces_within_3_h_make_one_night_and_the_nap_stays_out(self):
+        s = js("summarize(d).sleep", d=SPLIT_DAY)
+        self.assertEqual((s["start"], s["end"]), (at(59), at(581)))
+        self.assertEqual(s["pieces"], [[at(59), at(308)], [at(366), at(405)], [at(411), at(581)]])
+        self.assertEqual(s["score"], 82)  # the longest piece's
+        self.assertEqual(js("summarize(d).n.sleep", d=SPLIT_DAY), 4)
+
+    def test_minutes_count_the_pieces_not_the_wake_ups(self):
+        self.assertEqual(js("summarize(d).sleep.min", d=SPLIT_DAY), 249 + 39 + 170)
+        # 01:47 to 04:42 is under 3 h: the night before 27 Nov chains across it.
+        two = day(sessions={"sleep": [{"start": at(-162), "end": at(107), "score": 51},
+                                      {"start": at(282), "end": at(405), "score": 29}]})
+        self.assertEqual(js("[summarize(d).sleep.min, summarize(d).sleep.score]", d=two), [269 + 123, 51])
+        apart = day(sessions={"sleep": [{"start": at(-162), "end": at(107)}, {"start": at(288), "end": at(405)}]})
+        self.assertEqual(js("summarize(d).sleep.pieces.length", d=apart), 1)
+
+    def test_stages_carry_each_wake_up_as_awake_on_one_axis(self):
+        r = js("sleepFor(summarize(d), d)", d=SPLIT_DAY)
+        self.assertEqual(r["stages"], [
+            [0, 100, "light"], [100, 149, "deep"], [249, 58, "awake"],
+            [307, 39, "light"], [346, 6, "awake"], [352, 170, "asleep"],
+        ])
+        self.assertEqual((r["min"], r["efficiency"], len(r["pieces"])), (458, 90, 3))
+        self.assertEqual(js("dayDigest('2026-11-27', summarize(d), d).sleep", d=SPLIT_DAY)["stageMinutes"],
+                         {"light": 139, "deep": 149, "awake": 64, "asleep": 170})
+        self.assertEqual(js("dayDigest('2026-11-27', summarize(d), null).sleep.sessions", d=SPLIT_DAY), 3)
+
+    def test_an_older_index_is_re_summarized_from_the_day_files(self):
+        # v1 kept only the longest piece (249 min).
+        old = {"2026-11-27": {"hash": H1, "t": {}, "s": {}, "last": {}, "n": {"sleep": 4}, "exMin": 0, "m": {}, "sc": {},
+                              "sleep": {"start": at(59), "end": at(308), "min": 249, "score": 82}},
+               "2026-11-26": {"hash": H2, "t": {"steps": 5}, "s": {}, "last": {}, "n": {}, "exMin": 0, "m": {}, "sc": {}}}
+        r = js("migrate(old, {'2026-11-27': summarize(d)})", old=old, d=SPLIT_DAY)
+        self.assertEqual(r["index"]["2026-11-27"]["sleep"]["min"], 458)
+        self.assertEqual(r["index"]["2026-11-26"], old["2026-11-26"])  # no readable file: kept
+        self.assertEqual(js("INDEX_V"), 2)
+        self.assertIn("parsed?.v === Logic.INDEX_V", SERVICE)
+        self.assertIn("parsed?.v === 1", SERVICE)
+        self.assertNotIn("v: 1,", SERVICE)
+        self.assertIn("root._indexRead = true;\n        root._filesRead();\n    }", SERVICE.split("function _rebuilt(")[1])
+
+    def test_the_rebuild_reads_one_day_file_per_line(self):
+        self.assertIn('command: ["find", `${root.storeDir}/days`, "-maxdepth", "1", "-name", "*.json", "-exec", "awk", "1", "{}", "+"]', SERVICE)
+        tmp = tempfile.mkdtemp()
+        try:
+            store = os.path.join(tmp, "vitals")
+            days = [day("2026-11-26", H2, totals={"steps": {"day": 1}}), SPLIT_DAY]
+            req = {"dir": store, "write": [["days/%s.json" % d["date"], json.dumps(d, separators=(",", ":"))] for d in days]}
+            subprocess.run([sys.executable, str(STORE)], input=json.dumps(req) + "\n", text=True, check=True)
+            out = subprocess.run(["find", store + "/days", "-maxdepth", "1", "-name", "*.json", "-exec", "awk", "1", "{}", "+"],
+                                 capture_output=True, text=True, check=True).stdout
+            self.assertEqual(sorted(json.loads(line)["date"] for line in out.split("\n") if line), ["2026-11-26", "2026-11-27"])
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
 @unittest.skipIf(NODE is None, "node is not installed")
 class ProfileTests(unittest.TestCase):
     def test_age_counts_the_birthday(self):

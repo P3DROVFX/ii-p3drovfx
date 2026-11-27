@@ -265,15 +265,17 @@ other than the phone's counter, with the most step records over the last 30 days
 The shell keeps the data in `~/.local/state/quickshell/user/vitals/` (0700, files 0600, each
 replaced atomically by `scripts/vitals/vitals_store.py`): `meta.json` (last meta +
 `receivedAt`), `days/<date>.json` (each day as received, rewritten only when its `hash`
-changed), `index.json` (`{"v":1,"days":{date: summary}}`), `routes/<id>.json` (`{id, points}`)
+changed), `index.json` (`{"v":2,"days":{date: summary}}`; an older `v` is re-summarized from the day files on load), `routes/<id>.json` (`{id, points}`)
 and `sync.json` (`{lastSync, lastPage, resume, routes: {id: 1 stored | 0 none}}`; `resume` is
 the `next` of an answer cut short, asked from on the next connect). A day that does
 not match the shapes above is skipped whole, with the key at fault logged and no value.
 After each sync, days older than `vitals.retentionDays` (0 = forever; today counts as one)
 are pruned with their routes. `summary`: `{hash, t: {totals key: day}, s: {samples key: [min,
 avg, max]}, last: {samples key: last}, n: {sessions key: count}, exMin, m: {measurements key:
-last entry}, sc: {scores}, sleep?: {start, end, min, score?} (the longest night ending that
-day), rt?: [exercise ids with a route]}`.
+last entry}, sc: {scores}, sleep?: {start, end, min, score?, pieces} (the night ending that
+day: its longest session plus every session of that day chained to it by gaps of at most 3 h,
+as Samsung splits a night at each wake-up; `min` sums the sessions, `score` is the longest
+one's, `pieces` their `[start, end]`), rt?: [exercise ids with a route]}`.
 
 ## Do Not Disturb and the PC's live activity
 
