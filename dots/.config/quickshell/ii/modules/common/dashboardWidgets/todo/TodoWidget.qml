@@ -883,7 +883,7 @@ Item {
 
         sourceComponent: Item {
             id: canvasView
-            readonly property alias sheet: editor
+            readonly property var sheet: editorLoader.item
 
             opacity: 0
             transform: Translate {
@@ -930,17 +930,40 @@ Item {
                 onWheel: wheel => wheel.accepted = true
             }
 
-            NewTaskSheet {
-                id: editor
+            // Loaded by URL so NewTaskSheet (and AlarmService/DatePickerPopup) are
+            // not compiled until the user actually opens the task editor.
+            Loader {
+                id: editorLoader
                 anchors.fill: parent
-                editTask: root.editingTask
-                showShortcutHints: root.showShortcutHints
-                onControlPressed: root.ctrlPressed = true
-                onControlReleased: root.ctrlPressed = false
-                onCloseRequested: root.closeView()
-                onSaved: {
-                    if (!root.editingTask)
-                        root.selectTab(0);
+                asynchronous: false
+                Component.onCompleted: {
+                    setSource(Qt.resolvedUrl("NewTaskSheet.qml"), {
+                        editTask: root.editingTask,
+                        showShortcutHints: root.showShortcutHints
+                    });
+                }
+
+                Connections {
+                    target: root
+                    function onShowShortcutHintsChanged() {
+                        if (editorLoader.item)
+                            editorLoader.item.showShortcutHints = root.showShortcutHints;
+                    }
+                    function onEditingTaskChanged() {
+                        if (editorLoader.item)
+                            editorLoader.item.editTask = root.editingTask;
+                    }
+                }
+
+                Connections {
+                    target: editorLoader.item
+                    function onControlPressed() { root.ctrlPressed = true; }
+                    function onControlReleased() { root.ctrlPressed = false; }
+                    function onCloseRequested() { root.closeView(); }
+                    function onSaved() {
+                        if (!root.editingTask)
+                            root.selectTab(0);
+                    }
                 }
             }
         }

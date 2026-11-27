@@ -28,7 +28,7 @@ Item {
     signal controlPressed()
     signal controlReleased()
     property bool showShortcutHints: false
-    readonly property bool datePickerOpen: datePicker.opened
+    readonly property bool datePickerOpen: datePickerLoader.opened
 
     function reveal(item) {
         if (!item.activeFocus) return;
@@ -42,8 +42,7 @@ Item {
     }
 
     function openDatePicker() {
-        datePicker.open(root.formHasDate ? root.formDate : null, Translation.tr("Due date"));
-        datePicker.forceActiveFocus();
+        datePickerLoader.open(root.formHasDate ? root.formDate : null, Translation.tr("Due date"));
     }
 
     function releaseKey(event) {
@@ -55,26 +54,28 @@ Item {
         if (event.key === Qt.Key_Control || (event.modifiers & Qt.ControlModifier))
             root.controlPressed();
         if (root.datePickerOpen) {
+            const dp = datePickerLoader.item;
+            if (!dp) return false;
             if (event.key === Qt.Key_Escape) {
-                if (!event.isAutoRepeat) datePicker.dismiss();
+                if (!event.isAutoRepeat) dp.dismiss();
                 return true;
             }
             if (event.modifiers !== Qt.NoModifier) return false;
-            let date = new Date(datePicker.selected);
+            let date = new Date(dp.selected);
             if (event.key === Qt.Key_Left) date.setDate(date.getDate() - 1);
             else if (event.key === Qt.Key_Right) date.setDate(date.getDate() + 1);
             else if (event.key === Qt.Key_Up) date.setDate(date.getDate() - 7);
             else if (event.key === Qt.Key_Down) date.setDate(date.getDate() + 7);
-            else if (event.key === Qt.Key_PageUp) date = datePicker.addMonths(date, -1);
-            else if (event.key === Qt.Key_PageDown) date = datePicker.addMonths(date, 1);
+            else if (event.key === Qt.Key_PageUp) date = dp.addMonths(date, -1);
+            else if (event.key === Qt.Key_PageDown) date = dp.addMonths(date, 1);
             else if (event.key === Qt.Key_Home) date = new Date();
             else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
-                if (!event.isAutoRepeat) datePicker.confirm();
+                if (!event.isAutoRepeat) dp.confirm();
                 return true;
             } else return false;
-            datePicker.selected = date;
-            datePicker.viewYear = date.getFullYear();
-            datePicker.viewMonth = date.getMonth();
+            dp.selected = date;
+            dp.viewYear = date.getFullYear();
+            dp.viewMonth = date.getMonth();
             return true;
         }
         if (event.key === Qt.Key_Escape) {
@@ -275,7 +276,7 @@ Item {
         Keys.onReleased: event => root.releaseKey(event)
         property real hintProgress: root.showShortcutHints && (shortcut.length > 0 || activeFocus) ? 1 : 0
         Behavior on hintProgress {
-            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(optionChip)
+            NumberAnimation { duration: Appearance.animation.elementMoveFast.duration }
         }
 
         StyledText {
@@ -290,7 +291,7 @@ Item {
         }
 
         Behavior on colBackground {
-            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(optionChip)
+            ColorAnimation { duration: Appearance.animation.elementMoveFast.duration }
         }
 
 
@@ -343,7 +344,7 @@ Item {
         Accessible.name: fieldRow.caption + ": " + fieldRow.value
 
         Behavior on colBackground {
-            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(fieldRow)
+            ColorAnimation { duration: Appearance.animation.elementMoveFast.duration }
         }
 
 
@@ -578,62 +579,66 @@ Item {
                 }
             }
 
-            ColumnLayout {
+            Loader {
                 Layout.fillWidth: true
-                visible: root.alarmEditorOpen
-                spacing: 8
-
-                Flow {
-                    Layout.fillWidth: true
-                    spacing: 6
-
-                    OptionChip {
-                        label: Translation.tr("No alarm")
-                        selected: root.formAlarmTime.length === 0
-                        onTriggered: {
-                            root.formAlarmTime = "";
-                            root.alarmEditorOpen = false;
-                        }
-                    }
-
-                    Repeater {
-                        model: ["08:00", "09:00", "12:00", "18:00", "21:00"]
-
-                        OptionChip {
-                            required property string modelData
-                            label: modelData
-                            selected: root.formAlarmTime === modelData
-                            onTriggered: root.formAlarmTime = modelData
-                        }
-                    }
-                }
-
-                RowLayout {
-                    visible: root.formAlarmTime.length > 0
+                active: root.alarmEditorOpen
+                visible: active
+                sourceComponent: ColumnLayout {
+                    width: parent ? parent.width : 0
                     spacing: 8
 
-                    StyledSpinBox {
-                        implicitHeight: baseHeight
-                        from: 0
-                        to: 23
-                        value: parseInt(root.formAlarmTime.split(":")[0]) || 0
-                        onValueModified: root.setAlarmPart(value, parseInt(root.formAlarmTime.split(":")[1]) || 0)
+                    Flow {
+                        Layout.fillWidth: true
+                        spacing: 6
+
+                        OptionChip {
+                            label: Translation.tr("No alarm")
+                            selected: root.formAlarmTime.length === 0
+                            onTriggered: {
+                                root.formAlarmTime = "";
+                                root.alarmEditorOpen = false;
+                            }
+                        }
+
+                        Repeater {
+                            model: ["08:00", "09:00", "12:00", "18:00", "21:00"]
+
+                            OptionChip {
+                                required property string modelData
+                                label: modelData
+                                selected: root.formAlarmTime === modelData
+                                onTriggered: root.formAlarmTime = modelData
+                            }
+                        }
                     }
 
-                    StyledText {
-                        text: ":"
-                        font.pixelSize: Appearance.font.pixelSize.large
-                        font.weight: Font.Bold
-                        color: Appearance.colors.colOnSurfaceVariant
-                    }
+                    RowLayout {
+                        visible: root.formAlarmTime.length > 0
+                        spacing: 8
 
-                    StyledSpinBox {
-                        implicitHeight: baseHeight
-                        from: 0
-                        to: 59
-                        stepSize: 5
-                        value: parseInt(root.formAlarmTime.split(":")[1]) || 0
-                        onValueModified: root.setAlarmPart(parseInt(root.formAlarmTime.split(":")[0]) || 0, value)
+                        StyledSpinBox {
+                            implicitHeight: baseHeight
+                            from: 0
+                            to: 23
+                            value: parseInt(root.formAlarmTime.split(":")[0]) || 0
+                            onValueModified: root.setAlarmPart(value, parseInt(root.formAlarmTime.split(":")[1]) || 0)
+                        }
+
+                        StyledText {
+                            text: ":"
+                            font.pixelSize: Appearance.font.pixelSize.large
+                            font.weight: Font.Bold
+                            color: Appearance.colors.colOnSurfaceVariant
+                        }
+
+                        StyledSpinBox {
+                            implicitHeight: baseHeight
+                            from: 0
+                            to: 59
+                            stepSize: 5
+                            value: parseInt(root.formAlarmTime.split(":")[1]) || 0
+                            onValueModified: root.setAlarmPart(parseInt(root.formAlarmTime.split(":")[0]) || 0, value)
+                        }
                     }
                 }
             }
@@ -896,28 +901,56 @@ Item {
         root.formTags = next;
     }
 
-    DatePickerPopup {
-        id: datePicker
+    // Built lazily by URL only when the user opens the due-date picker and
+    // torn down once its close animation finishes.
+    Loader {
+        id: datePickerLoader
         anchors.fill: parent
-        Keys.onPressed: event => { event.accepted = root.handleKey(event); }
-        Keys.onReleased: event => root.releaseKey(event)
-        onOpenedChanged: {
-            if (!opened) dateField.forceActiveFocus();
-        }
+        z: 300
+        active: false
+        asynchronous: false
+        source: active ? Qt.resolvedUrl("../../widgets/DatePickerPopup.qml") : ""
+        readonly property bool opened: item?.opened ?? false
 
-        StyledText {
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.bottom: parent.bottom
-            text: "← ↑ ↓ → · PgUp / PgDn · Home\nEnter · Esc"
-            horizontalAlignment: Text.AlignHCenter
-            font.pixelSize: Appearance.font.pixelSize.smallest
-            color: Appearance.colors.colOnSurface
-            opacity: root.showShortcutHints ? 1 : 0
-            Behavior on opacity {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        function open(date, titleText) {
+            active = true;
+            if (item) {
+                item.open(date, titleText);
+                item.forceActiveFocus();
             }
         }
-        onAccepted: date => root.selectDate(date)
+
+        Connections {
+            target: datePickerLoader.item
+            function onAccepted(date) { root.selectDate(date); }
+            function onOpenedChanged() {
+                if (datePickerLoader.item && !datePickerLoader.item.opened)
+                    dateField.forceActiveFocus();
+            }
+            function onVisibleChanged() {
+                if (datePickerLoader.item && !datePickerLoader.item.visible && !datePickerLoader.item.opened) {
+                    Qt.callLater(() => {
+                        if (datePickerLoader.item && !datePickerLoader.item.visible && !datePickerLoader.item.opened)
+                            datePickerLoader.active = false;
+                    });
+                }
+            }
+        }
+    }
+
+    StyledText {
+        z: 301
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        visible: root.datePickerOpen && opacity > 0.001
+        text: "← ↑ ↓ → · PgUp / PgDn · Home\nEnter · Esc"
+        horizontalAlignment: Text.AlignHCenter
+        font.pixelSize: Appearance.font.pixelSize.smallest
+        color: Appearance.colors.colOnSurface
+        opacity: root.datePickerOpen && root.showShortcutHints ? 1 : 0
+        Behavior on opacity {
+            NumberAnimation { duration: Appearance.animation.elementMoveFast.duration }
+        }
     }
 
     readonly property int fabSize: root.dense ? 40 : (root.compact ? 42 : 52)
