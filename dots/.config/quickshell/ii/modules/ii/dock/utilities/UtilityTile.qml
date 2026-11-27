@@ -59,6 +59,10 @@ Item {
     readonly property var captionAxes: ({ "wght": 700, "wdth": 100, "ROND": 100 })
 
     default property alias content: body.data
+    // Optional lazy face components: when provided, only the active face is
+    // instantiated instead of keeping both square and wide trees alive.
+    property Component squareFace: null
+    property Component wideFace: null
 
     Rectangle {
         id: surface
@@ -73,5 +77,11 @@ Item {
     Item {
         id: body
         anchors.fill: parent
+
+        Loader {
+            anchors.fill: parent
+            active: (tile.wide ? tile.wideFace : tile.squareFace) !== null
+            sourceComponent: tile.wide ? tile.wideFace : tile.squareFace
+        }
     }
 }

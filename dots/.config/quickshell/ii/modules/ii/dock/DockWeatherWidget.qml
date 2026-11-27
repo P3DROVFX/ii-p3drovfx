@@ -156,16 +156,6 @@ Item {
         radius: (Config.options?.dock?.widgetRadius ?? -1) >= 0 ? Config.options.dock.widgetRadius : (Appearance.rounding.windowRounding + 12)
         clip: true
 
-        // Ensure children like the weather icon are properly clipped by the radius
-        layer.enabled: true
-        layer.effect: OpacityMask {
-            maskSource: Rectangle {
-                width: bgRect.width
-                height: bgRect.height
-                radius: bgRect.radius
-            }
-        }
-
         gradient: Gradient {
             orientation: Gradient.Horizontal
             GradientStop { position: 0.0; color: getGradientColor(0) }

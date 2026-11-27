@@ -100,41 +100,95 @@ DockButton {
     width: root.slotWidth
     height: root.slotHeight
 
-    // Hover-only MouseArea for running apps (shows preview popup)
-    Loader {
-        id: hoverAreaLoader
+    // Unified hover + click + drag MouseArea (replaces two Loader { active: true } MouseAreas)
+    MouseArea {
+        id: interactionArea
         anchors.fill: parent
-        active: true
-        sourceComponent: MouseArea {
-            id: hoverArea
-            anchors.fill: parent
-            hoverEnabled: true
-            acceptedButtons: Qt.NoButton
-            cursorShape: Qt.PointingHandCursor
-            onEntered: {
-                if (dockContent?.suppressHover)
-                    return;
-                dockContent?.onButtonEntered(root);
-                if (appIsRunning && appToplevel?.toplevels)
-                    lastFocused = appToplevel.toplevels.length - 1;
+        z: 10
+        hoverEnabled: true
+        acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+        preventStealing: true
+        cursorShape: Qt.PointingHandCursor
+        property point pressPoint: Qt.point(0, 0)
+        property int pressButton: Qt.NoButton
+        property bool dragActive: false
+
+        onEntered: {
+            if (dockContent?.suppressHover)
+                return;
+            dockContent?.onButtonEntered(root);
+            if (appIsRunning && appToplevel?.toplevels)
+                lastFocused = appToplevel.toplevels.length - 1;
+        }
+        onExited: {
+            dockContent?.onButtonExited(root);
+        }
+        onPressed: event => {
+            pressButton = event.button;
+            root._pressed = event.button === Qt.LeftButton;
+            // Local coordinates move under a stationary pointer as the
+            // icon magnifies. Only scene movement can start a real drag.
+            pressPoint = interactionArea.mapToItem(null, event.x, event.y);
+        }
+        onPositionChanged: event => {
+            if (!pressed || pressButton !== Qt.LeftButton)
+                return;
+            const point = interactionArea.mapToItem(null, event.x, event.y);
+            const dist = Math.max(Math.abs(point.x - pressPoint.x), Math.abs(point.y - pressPoint.y));
+            // Only allow drag when delegateIndex >= 0 (reorderable items)
+            if (!dragActive && dist > 5 && root.delegateIndex >= 0) {
+                dragActive = true;
+                root._pressed = false;
+                if (dockContent) {
+                    dockContent.buttonHovered = false;
+                    dockContent.startItemDrag(root.delegateIndex, interactionArea, event.x, event.y);
+                }
             }
-            onExited: {
-                dockContent?.onButtonExited(root);
+            if (dragActive) {
+                if (dockContent)
+                    dockContent.moveItemDrag(interactionArea, event.x, event.y);
+            }
+        }
+        onReleased: event => {
+            root._pressed = false;
+            if (dragActive) {
+                dragActive = false;
+                if (dockContent)
+                    dockContent.endItemDrag();
+                return;
+            }
+            // In Edit Mode a click is inert: the drag reorders, the badge
+            // unpins, and nothing launches.
+            if (GlobalStates.editMode)
+                return;
+            if (event.button === Qt.RightButton) {
+                dockContent?.openAppContextMenu(root, root.appToplevel, root.desktopEntry);
+                return;
+            }
+            if (event.button === Qt.MiddleButton) {
+                root.playLaunchAnimation();
+                root.desktopEntry?.execute();
+                return;
+            }
+            if (!appToplevel || appToplevel.toplevels.length === 0) {
+                root.playLaunchAnimation();
+                root.desktopEntry?.execute();
+                return;
+            }
+            lastFocused = (lastFocused + 1) % appToplevel.toplevels.length;
+            appToplevel.toplevels[lastFocused].activate();
+        }
+        onCanceled: {
+            root._pressed = false;
+            if (dragActive) {
+                dragActive = false;
+                if (dockContent)
+                    dockContent.cancelDrag();
             }
         }
     }
 
     // ── Edit Mode: pinned, or merely here ────────────────────────────────────
-    // A dock in the mode holds two kinds of icon - the ones that are KEPT and
-    // the ones that are only open right now - and the only thing that told
-    // them apart was the colour of a 16px badge, with the pinned one's badge
-    // on the right and the unpinned one's on the left. Two neighbours put
-    // their badges in the same gap, which read as one icon wearing both.
-    //
-    // So: the badges share a corner (one icon, one badge, never a pair in the
-    // gap between two), a kept app gets a filled plate under it, and one that
-    // is only open gets a dashed outline and a dimmed icon - the shape the
-    // shell already uses for "a slot, not yet filled".
     readonly property bool editPinned: root.appToplevel?.pinned ?? false
     readonly property bool editBadgesActive: GlobalStates.editMode && (GlobalStates.editProgress > 0.85 || Appearance.reducedMotion)
 
@@ -192,9 +246,6 @@ DockButton {
     // from here, so the dock is arranged where it is drawn rather than only
     // from the catalogue.
     Loader {
-        // The SAME corner as the badge above, deliberately: on opposite
-        // corners two neighbouring icons put their badges together in the gap
-        // between them, and the pair read as belonging to one icon.
         anchors.top: parent.top
         anchors.right: parent.right
         z: 11
@@ -218,136 +269,12 @@ DockButton {
         }
     }
 
-    // Drag overlay (dots-hyprland pattern)
-    Loader {
-        anchors.fill: parent
-        z: 10
-        active: true
-        sourceComponent: MouseArea {
-            id: dragOverlay
-            anchors.fill: parent
-            acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-            preventStealing: true
-            cursorShape: Qt.PointingHandCursor
-            property point pressPoint: Qt.point(0, 0)
-            property int pressButton: Qt.NoButton
-            property bool dragActive: false
-
-            onPressed: event => {
-                pressButton = event.button;
-                root._pressed = event.button === Qt.LeftButton;
-                // Local coordinates move under a stationary pointer as the
-                // icon magnifies. Only scene movement can start a real drag.
-                pressPoint = dragOverlay.mapToItem(null, event.x, event.y);
-            }
-            onPositionChanged: event => {
-                if (!pressed || pressButton !== Qt.LeftButton)
-                    return;
-                const point = dragOverlay.mapToItem(null, event.x, event.y);
-                const dist = Math.max(Math.abs(point.x - pressPoint.x), Math.abs(point.y - pressPoint.y));
-                // Only allow drag when delegateIndex >= 0 (reorderable items)
-                if (!dragActive && dist > 5 && root.delegateIndex >= 0) {
-                    dragActive = true;
-                    root._pressed = false;
-                    if (dockContent) {
-                        dockContent.buttonHovered = false;
-                        dockContent.startItemDrag(root.delegateIndex, dragOverlay, event.x, event.y);
-                    }
-                }
-                if (dragActive) {
-                    if (dockContent)
-                        dockContent.moveItemDrag(dragOverlay, event.x, event.y);
-                }
-            }
-            onReleased: event => {
-                root._pressed = false;
-                if (dragActive) {
-                    dragActive = false;
-                    if (dockContent)
-                        dockContent.endItemDrag();
-                    return;
-                }
-                // In Edit Mode a click is inert: the drag reorders, the badge
-                // unpins, and nothing launches.
-                if (GlobalStates.editMode)
-                    return;
-                if (event.button === Qt.RightButton) {
-                    if (dockContent) {
-                        dockContent.buttonHovered = false;
-                        dockContent.lastHoveredButton = null;
-                    }
-                    dockContextMenu.open();
-                    return;
-                }
-                if (event.button === Qt.MiddleButton) {
-                    root.playLaunchAnimation();
-                    root.desktopEntry?.execute();
-                    return;
-                }
-                if (!appToplevel || appToplevel.toplevels.length === 0) {
-                    root.playLaunchAnimation();
-                    root.desktopEntry?.execute();
-                    return;
-                }
-                lastFocused = (lastFocused + 1) % appToplevel.toplevels.length;
-                appToplevel.toplevels[lastFocused].activate();
-            }
-            onCanceled: {
-                root._pressed = false;
-                if (dragActive) {
-                    dragActive = false;
-                    if (dockContent)
-                        dockContent.cancelDrag();
-                }
-            }
-        }
-    }
-
     altAction: () => {
-        if (dockContent) {
-            dockContent.buttonHovered = false;
-            dockContent.lastHoveredButton = null;
-        }
-        dockContextMenu.open();
+        dockContent?.openAppContextMenu(root, root.appToplevel, root.desktopEntry);
     }
 
-    DockContextMenu {
-        id: dockContextMenu
-        appToplevel: root.appToplevel
-        desktopEntry: root.desktopEntry
-        anchorItem: root
-    }
-
-    Connections {
-        target: dockContextMenu
-        function onActiveChanged() {
-            if (!dockContent)
-                return;
-            if (dockContextMenu.active)
-                dockContent.registerContextMenuOpen();
-            else
-                dockContent.registerContextMenuClose();
-        }
-    }
-
-    Connections {
-        target: Notifications
-        function onNotify(notif) {
-            if (!notif)
-                return;
-            var targetName = (root.desktopEntry?.name ?? root.appToplevel?.appId ?? "").toLowerCase();
-            var appName = (notif.appName || "").toLowerCase();
-            if (targetName !== "" && appName !== "" && (appName === targetName || targetName.includes(appName) || appName.includes(targetName))) {
-                attention.playNotification(root.notificationAnimation);
-            }
-        }
-    }
-
-    // Safety: if this button is destroyed while menu is open, clean up the counter
-    Component.onDestruction: {
-        if (dockContent && dockContextMenu.active)
-            dockContent.registerContextMenuClose();
-    }
+    Component.onCompleted: dockContent?.registerAppButton(root)
+    Component.onDestruction: dockContent?.unregisterAppButton(root)
 
     DockRunningIndicator {
         // Above the plate: the shape mask covers the bottom of the slot and used
@@ -387,7 +314,7 @@ DockButton {
         // tooltip; only an app with no window to preview gets the name.
         readonly property bool tooltipsEnabled: (Config.options?.dock?.enableAppTooltip ?? false) || GlobalStates.editMode
             || ((Config.options?.dock?.enablePreview ?? true) && !root.appIsRunning)
-        readonly property bool hovered: hoverAreaLoader.item?.containsMouse ?? false
+        readonly property bool hovered: interactionArea.containsMouse
         // Latched on hover, not onLoaded: writing `used` from onLoaded
         // re-evaluated `active` while it was being applied (a binding loop).
         onHoveredChanged: if (hovered && tooltipsEnabled) used = true

@@ -68,16 +68,16 @@ Item {
         return path.includes("Mkos-Big-Sur");
     }
 
-    MaterialShape {
-        id: adaptiveBackground
+    Loader {
+        id: adaptiveBackgroundLoader
         anchors.fill: parent
-        shapeString: Config.options.dock.shapeMask
-        visible: Config.options.dock.enableShapeMask && !root.isThemedIcon
-        // The plate is the app's identity, the same whether it runs or not.
-        // Dimming an unlaunched app is the glyph's job (iconOpacity and the
-        // desaturated copy below); a see-through plate made the shape read as
-        // a different, disabled kind of icon.
-        color: Appearance.colors.colPrimaryContainer
+        active: Config.options.dock.enableShapeMask
+        sourceComponent: MaterialShape {
+            anchors.fill: parent
+            shapeString: Config.options.dock.shapeMask
+            visible: !root.isThemedIcon
+            color: Appearance.colors.colPrimaryContainer
+        }
     }
 
     Item {
@@ -99,10 +99,10 @@ Item {
                 Math.ceil(parent.height * root.renderScale) + TaskbarApps.iconThemeRevision)
             backer.mipmap: root.renderScale > 1
 
-            layer.enabled: Config.options.dock.enableShapeMask && root.isThemedIcon
+            layer.enabled: Config.options.dock.enableShapeMask && root.isThemedIcon && adaptiveBackgroundLoader.item !== null
             layer.textureSize: Qt.size(Math.ceil(width * root.renderScale), Math.ceil(height * root.renderScale))
             layer.effect: OpacityMask {
-                maskSource: adaptiveBackground
+                maskSource: adaptiveBackgroundLoader.item
             }
 
             Behavior on opacity {
@@ -110,32 +110,27 @@ Item {
             }
         }
 
-        Desaturate {
+        Loader {
             anchors.fill: parent
-            source: baseIcon
-            desaturation: 0.8
-            visible: !root.isRunning && !Config.options.dock.monochromeIcons && Config.options.dock.dimInactiveIcons
-            opacity: baseIcon.opacity
+            active: !root.isRunning && !Config.options.dock.monochromeIcons && Config.options.dock.dimInactiveIcons
+            sourceComponent: MultiEffect {
+                anchors.fill: parent
+                source: baseIcon
+                saturation: -0.8
+                opacity: baseIcon.opacity
+            }
         }
     }
 
     Loader {
         active: Config.options.dock.monochromeIcons
         anchors.fill: iconContent
-        sourceComponent: Item {
-            Desaturate {
-                id: monochromeSource
-                anchors.fill: parent
-                source: baseIcon
-                desaturation: 0.8
-                visible: false
-            }
-            ColorOverlay {
-                anchors.fill: parent
-                source: monochromeSource
-                color: ColorUtils.transparentize(Appearance.colors.colPrimary,
-                    Config.options.appearance.iconTintPercentage)
-            }
+        sourceComponent: MultiEffect {
+            anchors.fill: parent
+            source: baseIcon
+            saturation: -0.8
+            colorization: 1.0 - Config.options.appearance.iconTintPercentage
+            colorizationColor: Appearance.colors.colPrimary
         }
     }
 }

@@ -30,7 +30,7 @@ Item {
     StyledRectangularShadow {
         target: surface
         visible: root.visible && root.opacity > 0.01
-        cached: !root.resizing
+        cached: false
         z: -1
     }
 

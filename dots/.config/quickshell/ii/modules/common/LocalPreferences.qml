@@ -94,6 +94,8 @@ Singleton {
         "bar.screenList",
         "bar.floatingNotch.onlyShowOnSingleMonitor",
         "bar.floatingNotch.singleMonitorName",
+        "dock.onlyShowOnSingleMonitor",
+        "dock.monitor",
         "background.widgets.showOnlyOnSingleMonitor",
         "background.widgets.targetMonitor",
         "background.monitorWallpapers",

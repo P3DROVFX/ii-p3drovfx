@@ -41,80 +41,80 @@ UtilityTile {
     }
 
     // ── Square: hours over minutes ──────────────────────────────────────
-    ColumnLayout {
-        anchors.centerIn: parent
-        visible: !tile.wide
-        spacing: -Math.round(tile.side * 0.2)
-        TileValue {
-            Layout.alignment: Qt.AlignHCenter
-            text: tile.hours
-            color: tile.contentColor
-            font.variableAxes: tile.tallAxes
-            font.pixelSize: Math.round(tile.side * 0.48)
-        }
-        TileValue {
-            Layout.alignment: Qt.AlignHCenter
-            text: tile.minutes
-            color: ClockStyle.colPrimary
-            font.variableAxes: tile.tallAxes
-            font.pixelSize: Math.round(tile.side * 0.48)
+    squareFace: Component {
+        Item {
+            anchors.fill: parent
+            ColumnLayout {
+                anchors.centerIn: parent
+                spacing: -Math.round(tile.side * 0.2)
+                TileValue {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: tile.hours
+                    color: tile.contentColor
+                    font.variableAxes: tile.tallAxes
+                    font.pixelSize: Math.round(tile.side * 0.48)
+                }
+                TileValue {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: tile.minutes
+                    color: ClockStyle.colPrimary
+                    font.variableAxes: tile.tallAxes
+                    font.pixelSize: Math.round(tile.side * 0.48)
+                }
+            }
         }
     }
 
     // ── Wide: one line, as tall as the card allows ──────────────────────
     readonly property int wideSize: Math.round(tile.height * 0.9)
-    // The font's ':' sits on the lowercase height, visibly under the middle
-    // of tall condensed figures, so the colon is two dots centred on them.
-    Row {
-        id: wideRow
-        anchors.centerIn: parent
-        visible: tile.wide
-        spacing: Math.round(tile.wideSize * 0.06)
-
-        TileValue {
-            id: hoursText
-            text: tile.hours
-            color: tile.contentColor
-            font.variableAxes: tile.tallAxes
-            font.pixelSize: tile.wideSize
-        }
+    wideFace: Component {
         Item {
-            id: colon
-            readonly property real dot: Math.max(3, Math.round(tile.wideSize * 0.11))
-            // Centre of the figures, in the row's coordinates.
-            // Figures stand on the baseline and rise ~0.72 em with these axes
-            // (measured on the rendered digits: FontMetrics describes the
-            // font's default instance, not the narrow heavy one drawn).
-            readonly property real middle: hoursText.y + hoursText.baselineOffset - tile.wideSize * 0.36
-            width: colon.dot
-            height: hoursText.height
-            Repeater {
-                model: 2
-                delegate: Rectangle {
-                    required property int index
+            anchors.fill: parent
+            Row {
+                id: wideRow
+                anchors.centerIn: parent
+                spacing: Math.round(tile.wideSize * 0.06)
+
+                TileValue {
+                    id: hoursText
+                    text: tile.hours
+                    color: tile.contentColor
+                    font.variableAxes: tile.tallAxes
+                    font.pixelSize: tile.wideSize
+                }
+                Item {
+                    id: colon
+                    readonly property real dot: Math.max(3, Math.round(tile.wideSize * 0.11))
+                    readonly property real middle: hoursText.y + hoursText.baselineOffset - tile.wideSize * 0.36
                     width: colon.dot
-                    height: colon.dot
-                    radius: colon.dot / 2
-                    color: ClockStyle.colPrimary
-                    y: colon.middle - colon.dot / 2 + (index === 0 ? -1 : 1) * Math.round(tile.wideSize * 0.16)
+                    height: hoursText.height
+                    Repeater {
+                        model: 2
+                        delegate: Rectangle {
+                            required property int index
+                            width: colon.dot
+                            height: colon.dot
+                            radius: colon.dot / 2
+                            color: ClockStyle.colPrimary
+                            y: colon.middle - colon.dot / 2 + (index === 0 ? -1 : 1) * Math.round(tile.wideSize * 0.16)
+                        }
+                    }
+                }
+                TileValue {
+                    text: tile.minutes
+                    color: tile.contentColor
+                    font.variableAxes: tile.tallAxes
+                    font.pixelSize: tile.wideSize
+                }
+                TileCaption {
+                    id: meridiemText
+                    visible: tile.twelveHour
+                    y: hoursText.baselineOffset - meridiemText.baselineOffset
+                    text: tile.meridiem
+                    color: tile.captionColor
+                    font.pixelSize: tile.captionSize
                 }
             }
-        }
-        TileValue {
-            text: tile.minutes
-            color: tile.contentColor
-            font.variableAxes: tile.tallAxes
-            font.pixelSize: tile.wideSize
-        }
-        TileCaption {
-            id: meridiemText
-            visible: tile.twelveHour
-            // On the figures' baseline (set by position: anchors inside a
-            // Row cut the digits before).
-            y: hoursText.baselineOffset - meridiemText.baselineOffset
-            text: tile.meridiem
-            color: tile.captionColor
-            font.pixelSize: tile.captionSize
         }
     }
 }
