@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import qs
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.settings.configs.cheatsheet
@@ -45,8 +46,28 @@ Item {
             NoticeBox {
                 Layout.fillWidth: true
                 isFirst: true
+                isLast: false
+                materialIcon: "apps"
+                text: Translation.tr("Timetable (now Calendar) and Email moved to Settings → Apps & Overlays as standalone apps. You can now launch them directly from Search.")
+
+                RippleButtonWithIcon {
+                    implicitHeight: 34
+                    materialIcon: "arrow_forward"
+                    mainText: Translation.tr("Apps & Overlays")
+                    colBackground: Appearance.colors.colSecondaryContainer
+                    colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                    colRipple: Appearance.colors.colSecondaryContainerActive
+                    colText: Appearance.colors.colOnSecondaryContainer
+                    onClicked: GlobalStates.openSettingsPage("overlays")
+                }
+            }
+
+            NoticeBox {
+                Layout.fillWidth: true
+                isFirst: false
+                isLast: true
                 materialIcon: "settings"
-                text: Translation.tr("Each page's own options live inside the Cheatsheet, behind the gear next to its close button: key symbols and font sizes for Keybinds, display, reminders, calendar colors and sources for Timetable, the Amino acids classification and the Commands layout.")
+                text: Translation.tr("Each page's own options live inside the Cheatsheet, behind the gear next to its close button: key symbols and font sizes for Keybinds, the Amino acids classification and the Commands layout.")
             }
 
             CheatsheetPages {
