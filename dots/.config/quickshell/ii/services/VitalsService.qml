@@ -140,6 +140,9 @@ Singleton {
     // ── Actions ─────────────────────────────────────────────────────────
 
     function syncNow(): void {
+        // A second paging chain would ask for every page again; the running one covers it.
+        if (root._syncing)
+            return;
         if (root.loaded)
             root._get(Logic.sinceOnConnect(root._data.dates, root._meta?.stepsFrom ?? "", root.stepsFrom, root._resume));
         else
@@ -206,6 +209,8 @@ Singleton {
     /// The phone with `vitals` connected: catch up on what changed.
     function connected(): void {
         root._lastError = "";
+        // A chain cut by the disconnect never finishes; this connection starts its own.
+        root._endSync();
         root.syncNow();
     }
 
