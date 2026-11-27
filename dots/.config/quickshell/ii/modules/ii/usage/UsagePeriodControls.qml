@@ -39,8 +39,9 @@ GridLayout {
         { key: "month", name: Translation.tr("Month") }
     ]
     // The arrows stop where the data does rather than walking into periods retention
-    // has already dropped, and never into the future.
-    readonly property bool canGoBack: AppStats.hasEarlierPeriod(root.granularity, root.periodOffset)
+    // has already dropped, and never into the future. Writable so a page whose data is
+    // not AppStats' (ii Vitals) can bound it by its own oldest day.
+    property bool canGoBack: AppStats.hasEarlierPeriod(root.granularity, root.periodOffset)
     readonly property bool canGoForward: root.periodOffset < 0
 
     columns: root.width >= 470 ? 2 : 1

@@ -189,6 +189,8 @@ Singleton {
     // ── Workout types ───────────────────────────────────────────────────
     // Health Connect's EXERCISE_TYPE_* names in lower snake case; the rest read as written.
 
+    // Icons checked against Material Symbols Rounded: `fitness_center` is a diagonal barbell
+    // that reads as the `open_in_full` arrows at badge size, so lifting takes `exercise`.
     readonly property var exerciseTypes: ({
         walking: { label: Translation.tr("Walking"), icon: "directions_walk" },
         running: { label: Translation.tr("Running"), icon: "directions_run" },
@@ -196,14 +198,27 @@ Singleton {
         biking: { label: Translation.tr("Cycling"), icon: "directions_bike" },
         biking_stationary: { label: Translation.tr("Indoor cycling"), icon: "directions_bike" },
         hiking: { label: Translation.tr("Hiking"), icon: "hiking" },
-        strength_training: { label: Translation.tr("Strength training"), icon: "fitness_center" },
-        weightlifting: { label: Translation.tr("Weightlifting"), icon: "fitness_center" },
+        strength_training: { label: Translation.tr("Strength training"), icon: "exercise" },
+        weightlifting: { label: Translation.tr("Weightlifting"), icon: "exercise" },
+        calisthenics: { label: Translation.tr("Calisthenics"), icon: "sports_gymnastics" },
+        high_intensity_interval_training: { label: Translation.tr("HIIT"), icon: "sprint" },
         swimming_pool: { label: Translation.tr("Swimming"), icon: "pool" },
         swimming_open_water: { label: Translation.tr("Open water swimming"), icon: "pool" },
         yoga: { label: Translation.tr("Yoga"), icon: "self_improvement" },
+        pilates: { label: Translation.tr("Pilates"), icon: "self_improvement" },
+        rowing: { label: Translation.tr("Rowing"), icon: "rowing" },
         rowing_machine: { label: Translation.tr("Rowing machine"), icon: "rowing" },
+        paddling: { label: Translation.tr("Paddling"), icon: "kayaking" },
         stair_climbing: { label: Translation.tr("Stair climbing"), icon: "stairs" },
-        other: { label: Translation.tr("Workout"), icon: "exercise" }
+        tennis: { label: Translation.tr("Tennis"), icon: "sports_tennis" },
+        badminton: { label: Translation.tr("Badminton"), icon: "sports_tennis" },
+        soccer: { label: Translation.tr("Football"), icon: "sports_soccer" },
+        basketball: { label: Translation.tr("Basketball"), icon: "sports_basketball" },
+        volleyball: { label: Translation.tr("Volleyball"), icon: "sports_volleyball" },
+        martial_arts: { label: Translation.tr("Martial arts"), icon: "sports_martial_arts" },
+        skiing: { label: Translation.tr("Skiing"), icon: "downhill_skiing" },
+        wheelchair: { label: Translation.tr("Wheelchair"), icon: "accessible" },
+        other: { label: Translation.tr("Workout"), icon: "sprint" }
     })
 
     function exerciseLabel(type: string): string {
@@ -215,6 +230,6 @@ Singleton {
     }
 
     function exerciseIcon(type: string): string {
-        return root.exerciseTypes[type]?.icon ?? "exercise";
+        return (root.exerciseTypes[type] ?? root.exerciseTypes.other).icon;
     }
 }
