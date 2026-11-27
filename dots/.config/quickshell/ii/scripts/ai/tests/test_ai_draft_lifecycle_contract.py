@@ -92,6 +92,8 @@ class AiDraftLifecycleContractTests(unittest.TestCase):
     def test_history_reloads_the_selected_chat_and_supports_legacy_content(self):
         self.assertIn('Always reload the selected file', AI_QML)
         self.assertIn('root.sessions.openSession(sessionId)', AI_QML)
+        self.assertIn('const originalMessages = Array.from(session?.messages ?? []);', AI_QML)
+        self.assertIn('const source = Array.from(messages ?? []);', AI_QML)
         self.assertIn('const persistedRaw = String(data?.rawContent ?? "")', AI_QML)
         self.assertIn('String(data?.content ?? "")', AI_QML)
         self.assertIn('function refreshVisibleMessageIds()', SEARCH_PANEL_QML)
