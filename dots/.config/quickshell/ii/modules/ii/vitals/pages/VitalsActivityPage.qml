@@ -253,8 +253,9 @@ VitalsPage {
                                 Layout.fillWidth: true
                                 visible: text.length > 0
                                 text: {
+                                    // The chart below already says the period is empty.
                                     if (root.heroDays.length === 0)
-                                        return Translation.tr("No data %1").arg(root.periodWord);
+                                        return "";
                                     if (root.isDay)
                                         return root.heroGoal > 0 ? Translation.tr("of %1").arg(VitalsTypes.format(root.heroKey, root.heroGoal)) : "";
                                     return Translation.tr("a day on average · %1 in all").arg(VitalsTypes.format(root.heroKey, root.heroTotal));

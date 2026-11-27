@@ -178,10 +178,10 @@ VitalsPage {
     /// The content half of each stage's colour pair (VitalsStyle.colStage).
     function colOnStage(stage: string): color {
         switch (stage) {
-        case "deep": return ClockStyle.colOnPrimaryContainer;
+        case "deep": return Appearance.m3colors.darkmode ? ClockStyle.colOnPrimaryContainer : Appearance.m3colors.m3onPrimaryFixed;
         case "light": return ClockStyle.colOnPrimary;
         case "rem": return ClockStyle.colOnTertiary;
-        case "awake": return ClockStyle.colOnSurface;
+        case "awake": return Appearance.m3colors.m3surface; // outline has no on-pair; surface is what it is drawn against
         default: return ClockStyle.colOnSecondaryContainer;
         }
     }
@@ -700,7 +700,7 @@ VitalsPage {
                 }
             }
 
-            // On the sheet itself: a field under it would be the awake stage's own colour.
+            // On the sheet itself, as on the page's pane.
             VitalsHypnogram {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 170

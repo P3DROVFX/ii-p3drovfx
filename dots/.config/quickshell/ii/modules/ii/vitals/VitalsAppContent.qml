@@ -68,6 +68,10 @@ FocusScope {
     property string currentPage: ""
     property string shownPage: ""
     property bool settingsOpen: false
+    /// Set once the frame is built. A page asked for while the window is still being built
+    /// asynchronously waits in GlobalStates until then: switching pages mid-build destroyed
+    /// the page being incubated and the saved page then overwrote the one asked for.
+    property bool ready: false
 
     readonly property Item page: pageLoader.item
     readonly property var currentFab: root.settingsOpen || !root.showPages ? null : (root.page?.fab ?? null)
@@ -85,6 +89,8 @@ FocusScope {
     }
 
     function consumePending(): void {
+        if (!root.ready)
+            return;
         const pending = GlobalStates.vitalsAppPendingPage;
         GlobalStates.vitalsAppPendingPage = "";
         if (pending === "settings") {
@@ -100,7 +106,7 @@ FocusScope {
 
     /// Lands on the wanted page once it exists, else on Today.
     function settle(): void {
-        if (root.pageIds.length === 0)
+        if (!root.ready || root.pageIds.length === 0)
             return;
         const target = root.pageIds.includes(root.wantedPage) ? root.wantedPage : root.pageIds[0];
         if (target !== root.currentPage)
@@ -142,6 +148,7 @@ FocusScope {
 
     Component.onCompleted: {
         root.wantedPage = root.appState?.page ?? "today";
+        root.ready = true;
         root.consumePending();
         root.syncOnOpen();
     }

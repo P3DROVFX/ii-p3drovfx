@@ -28,10 +28,10 @@ ContentPage {
         onBack: root.goBack()
     }
 
-    // [ Day ][ Limits         ][ Ring  ]
-    // [     ][ Bedtime        ][ Break ]
+    // [ Day ][ Limits         ][ Ring  ][ Break ]
+    // [     ][ Bedtime        ][ Vitals         ]
     WidgetPreviewStage {
-        columns: 4
+        columns: 5
         rows: 2
 
         WidgetPreviewSlot {
@@ -60,6 +60,14 @@ ContentPage {
             }
         }
         WidgetPreviewSlot {
+            column: 4
+            BreakWidget {
+                anchors.centerIn: parent
+                isPreview: true
+                scale: parent.width / Math.max(1, implicitWidth)
+            }
+        }
+        WidgetPreviewSlot {
             column: 1
             row: 1
             columnSpan: 2
@@ -72,7 +80,8 @@ ContentPage {
         WidgetPreviewSlot {
             column: 3
             row: 1
-            BreakWidget {
+            columnSpan: 2
+            VitalsWidget {
                 anchors.centerIn: parent
                 isPreview: true
                 scale: parent.width / Math.max(1, implicitWidth)

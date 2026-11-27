@@ -136,7 +136,8 @@ Item {
             height: root.plotHeight
             renderStrategy: Canvas.Cooperative
 
-            readonly property var paintKey: [root.blocks, root.lanes, width, height, root.minutes]
+            // The stage colours too, so a new scheme (wallpaper, light/dark) repaints.
+            readonly property var paintKey: [root.blocks, root.lanes, width, height, root.minutes, root.colLabel, VitalsStyle.colStage("deep"), VitalsStyle.colStage("light"), VitalsStyle.colStage("rem"), VitalsStyle.colStage("awake")]
             onPaintKeyChanged: requestPaint()
 
             onPaint: {

@@ -541,11 +541,20 @@ VitalsPage {
                     }
 
                     StyledText {
+                        id: workoutStats
                         Layout.fillWidth: true
                         text: workoutTile.stats.join(" · ")
                         elide: Text.ElideRight
                         font.pixelSize: ClockStyle.textNormal
                         color: workoutTile.colContentVariant
+
+                        HoverHandler {
+                            id: workoutStatsHover
+                        }
+                        StyledToolTip {
+                            extraVisibleCondition: workoutStatsHover.hovered && workoutStats.truncated
+                            text: workoutStats.text
+                        }
                     }
                 }
             }

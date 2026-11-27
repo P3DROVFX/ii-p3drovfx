@@ -526,7 +526,8 @@ fi`]
                     }
 
                     ColorsFeatureTile {
-                        width: syncTilesBox.tileWidth
+                        // Last of ten: alone on its row at three columns, so it takes the row.
+                        width: syncFlow.children.length % syncTilesBox.columns === 1 ? syncTilesBox.width : syncTilesBox.tileWidth
                         height: 152
                         symbol: "ecg_heart"
                         shapeOn: MaterialShape.Shape.Puffy

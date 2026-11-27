@@ -162,7 +162,7 @@ VitalsPage {
                         last: true
                         symbol: "keyboard"
                         title: Translation.tr("Keybind")
-                        description: Translation.tr("Super+H opens this app (the vitalsToggle shortcut)")
+                        description: Translation.tr("Super+H opens and closes this app")
                     }
                 }
 

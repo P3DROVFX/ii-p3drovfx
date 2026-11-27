@@ -125,7 +125,7 @@ VitalsPage {
     pageSubtitle: {
         const parts = [];
         if (root.lastEntry)
-            parts.push(Translation.tr("last measured %1").arg(VitalsFormat.dayLabel(root.lastEntry.date, root.now)));
+            parts.push(Translation.tr("Last measured %1").arg(VitalsFormat.dayLabel(root.lastEntry.date, root.now)));
         if (root.lastNight)
             parts.push(Translation.tr("skin temperature as of %1").arg(VitalsFormat.dayLabel(root.lastNight.date, root.now)));
         return parts.join(" · ");

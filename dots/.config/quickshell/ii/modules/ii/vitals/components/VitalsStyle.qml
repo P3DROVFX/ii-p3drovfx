@@ -51,12 +51,16 @@ Singleton {
 
     // ── Sleep stages ────────────────────────────────────────────────────
     // Each stage takes its own colour role (the plan's stage chart); drawn on a tile.
+    // Awake is the neutral outline tone: surface-highest vanished on the tile and matched
+    // the sheet's fields, and the accent roles are taken by the sleeping stages.
     function colStage(stage: string): color {
         switch (stage) {
-        case "deep": return ClockStyle.colPrimaryContainer;
+        // A light scheme's container is nearly the tile's own tone; its fixed-dim sibling
+        // keeps the contrast the container has in a dark scheme.
+        case "deep": return Appearance.m3colors.darkmode ? ClockStyle.colPrimaryContainer : Appearance.m3colors.m3primaryFixedDim;
         case "light": return ClockStyle.colPrimary;
         case "rem": return ClockStyle.colTertiary;
-        case "awake": return ClockStyle.colSurfaceHighest;
+        case "awake": return Appearance.colors.colOutline;
         default: return ClockStyle.colSecondaryContainer;
         }
     }
