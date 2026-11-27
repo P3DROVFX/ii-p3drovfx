@@ -303,6 +303,67 @@ Item {
                     }
                 }
             }
+
+            AppCard {
+                id: calendarCard
+                width: shelf.cardWidth
+                height: shelf.cardHeight
+                accent: "secondary"
+                symbol: "calendar_month"
+                shape: MaterialShape.Shape.Cookie12Sided
+                title: Translation.tr("Calendar")
+                summary: CalendarService.khalAvailable
+                    ? Translation.tr("Standalone calendar app (%1 calendars). Runs in its own process and frees all RAM on close.").arg(CalendarService.calendars.length)
+                    : Translation.tr("Standalone calendar app. Runs in its own process and frees all RAM on close.")
+                keys: {
+                    const bind = HyprlandBinds.effective.find(row => row.kind === "bind"
+                        && String(row.action ?? "").includes("quickshell:calendarOpen"));
+                    if (!bind)
+                        return [];
+                    const mods = Array.from(bind.mods ?? []).map(m => m.charAt(0) + m.slice(1).toLowerCase());
+                    return mods.concat([String(bind.key ?? "").toUpperCase()]).filter(Boolean);
+                }
+                checked: Config.options.calendarApp?.enable ?? true
+                onToggled: value => {
+                    if (Config.ready && Config.options.calendarApp)
+                        Config.options.calendarApp.enable = value;
+                }
+                onOpenRequested: GlobalStates.openCalendarApp("")
+
+                ColorsChip {
+                    readonly property bool isFloating: Config.options.calendarApp?.openFloating ?? true
+                    symbol: isFloating ? "picture_in_picture_alt" : "grid_view"
+                    label: isFloating ? Translation.tr("Floating") : Translation.tr("Tiling")
+                    chosen: isFloating
+                    colContent: calendarCard.colOnPlate
+                    colChosen: calendarCard.colStrong
+                    colOnChosen: calendarCard.colOnStrong
+                    onClicked: {
+                        if (Config.ready && Config.options.calendarApp)
+                            Config.options.calendarApp.openFloating = !isFloating;
+                    }
+                    StyledToolTip {
+                        text: Translation.tr("Toggle whether Calendar opens as a centered floating window (Cheatsheet size) or tiled.")
+                    }
+                }
+
+                ColorsChip {
+                    readonly property bool hasShortcut: calendarCard.keys.length > 0
+                    symbol: "keyboard"
+                    label: hasShortcut ? Translation.tr("Shortcut") : Translation.tr("Set shortcut")
+                    chosen: hasShortcut
+                    colContent: calendarCard.colOnPlate
+                    colChosen: calendarCard.colStrong
+                    colOnChosen: calendarCard.colOnStrong
+                    onClicked: {
+                        HyprlandGui.openTab("shortcuts");
+                        GlobalStates.openSettingsPage("hyprland");
+                    }
+                    StyledToolTip {
+                        text: Translation.tr("Open Hyprland Shortcuts to enable or edit the Calendar keybind.")
+                    }
+                }
+            }
         }
 
         // ── on screen ──

@@ -33,4 +33,12 @@ Singleton {
     readonly property string scriptPath: FileUtils.trimFileProtocol(Quickshell.shellPath("scripts"))
     // Per-app state, e.g. `${appsState}/files.json`.
     readonly property string appsState: FileUtils.trimFileProtocol(`${state}/user/apps`)
+    // Shared shell state/cache paths read by standalone apps (no mkdir/rm side effects).
+    readonly property string todoPath: FileUtils.trimFileProtocol(`${state}/user/todo.json`)
+    readonly property string remindersPath: FileUtils.trimFileProtocol(`${state}/user/reminders.json`)
+    readonly property string notesPath: FileUtils.trimFileProtocol(`${state}/user/notes.json`)
+    readonly property string holidaysCachePath: FileUtils.trimFileProtocol(`${state}/user/generated/holidays.json`)
+    readonly property string googleCalendarColorsPath: FileUtils.trimFileProtocol(`${state}/user/generated/google_calendar_colors.json`)
+    readonly property string weatherCachePath: FileUtils.trimFileProtocol(`${state}/user/generated/weather.json`)
+    readonly property string phoneContactsPath: FileUtils.trimFileProtocol(`${state}/user/iilink/contacts.json`)
 }

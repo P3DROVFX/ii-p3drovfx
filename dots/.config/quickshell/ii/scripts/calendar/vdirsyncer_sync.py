@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -101,7 +102,25 @@ def sync_request(request: dict[str, Any]) -> dict[str, Any]:
     khal_config_path = str(request.get("khalConfig") or "").strip() or None
     vdirsyncer_config_path = str(request.get("vdirsyncerConfig") or "").strip()
     config_path = Path(vdirsyncer_config_path).expanduser() if vdirsyncer_config_path else default_vdirsyncer_config()
+    if config_path is None or shutil.which("vdirsyncer") is None:
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "local_only",
+            "calendar": calendar,
+            "target": "",
+            "error": "",
+        }
     target = resolve_target(calendar, calendar_path(calendar, khal_config_path) if calendar else None, config_path)
+    if calendar and not target:
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "local_calendar",
+            "calendar": calendar,
+            "target": "",
+            "error": "",
+        }
     command = ["vdirsyncer", "sync"] + ([target] if target else [])
     # Tokens granted by older reauth helpers carry extra scopes; without this,
     # oauthlib refuses every refresh of them with "Scope has changed".

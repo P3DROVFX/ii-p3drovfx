@@ -607,6 +607,42 @@ Singleton {
 
     IpcHandler {
         target: "calendar"
+        function open(): void {
+            GlobalStates.openCalendarApp("");
+        }
+        function openMode(mode: string): void {
+            GlobalStates.openCalendarApp("", mode);
+        }
+        function openDate(date: string): void {
+            GlobalStates.openCalendarApp(date, "month");
+        }
+        function quit(): void {
+            Quickshell.execDetached(["qs", "-p", Quickshell.shellPath("apps/calendar.qml"), "ipc", "call", "calendar", "quit"]);
+        }
+        function reload(): void {
+            root.loadEvents();
+        }
+        function setConfig(path: string, valueJson: string): void {
+            const clean = String(path ?? "").trim();
+            if (!clean)
+                return;
+            let val;
+            try {
+                val = JSON.parse(valueJson);
+            } catch (e) {
+                return;
+            }
+            const keys = clean.split(".");
+            let cursor = Config.options;
+            for (let i = 0; i < keys.length - 1; i++) {
+                if (!cursor || cursor[keys[i]] === undefined || cursor[keys[i]] === null)
+                    return;
+                cursor = cursor[keys[i]];
+            }
+            const leaf = keys[keys.length - 1];
+            if (cursor && cursor[leaf] !== undefined)
+                cursor[leaf] = val;
+        }
         function sync() {
             root.requestWritableCalendarSyncs();
         }

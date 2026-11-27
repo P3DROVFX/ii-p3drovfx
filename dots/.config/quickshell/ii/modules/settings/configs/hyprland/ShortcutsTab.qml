@@ -250,6 +250,46 @@ ContentPage {
                 }
             }
         }
+
+        HyprToggle {
+            readonly property string calendarBindId: HyprlandBinds.bindId(["SUPER", "ALT"], "C")
+            readonly property var calendarBindRow: HyprlandBinds.effective.find(row => row.kind === "bind"
+                && String(row.action ?? "").includes("quickshell:calendarOpen")) ?? null
+            readonly property string activeKeyLabel: {
+                if (!calendarBindRow)
+                    return "Super + Alt + C";
+                const mods = Array.from(calendarBindRow.mods ?? []).map(m => m.charAt(0) + m.slice(1).toLowerCase());
+                return mods.concat([String(calendarBindRow.key ?? "").toUpperCase()]).filter(Boolean).join(" + ");
+            }
+
+            buttonIcon: "calendar_month"
+            text: Translation.tr("Open Calendar shortcut")
+            alwaysExplain: true
+            badgeText: calendarBindRow ? activeKeyLabel : ""
+            textOn: Translation.tr("Bound to %1 in custom/keybinds.lua. Click Apply in the corner to save.").arg(activeKeyLabel)
+            textOff: Translation.tr("One-click bind for Super + Alt + C to open the standalone Calendar app.")
+            switchOn: calendarBindRow !== null
+            onRequested: wanted => {
+                if (wanted) {
+                    HyprlandBinds.saveBind(
+                        calendarBindId,
+                        "SUPER + ALT + C",
+                        HyprlandBinds.buildAction("global", "quickshell:calendarOpen"),
+                        { description: "Shell: Open Calendar" }
+                    );
+                } else {
+                    const existing = calendarBindRow;
+                    if (!existing)
+                        return;
+                    const id = existing.id || HyprlandBinds.bindId(existing.mods ?? [], existing.key ?? "");
+                    if (HyprlandBinds.managedBind(id)) {
+                        HyprlandBinds.removeBind(id);
+                    } else {
+                        HyprlandBinds.releaseOnly(id, HyprlandBinds.comboSource(existing.mods ?? [], existing.key ?? ""));
+                    }
+                }
+            }
+        }
     }
 
     ContentSection {

@@ -1530,7 +1530,6 @@ Singleton {
         const tabs = [
             { id: "keybinds", label: Translation.tr("Keybinds"), icon: "keyboard", keywords: ["keybinds", "atalhos", "shortcuts", "binds"], enabled: true },
             { id: "commands", label: Translation.tr("Commands"), icon: "terminal", keywords: ["commands", "comandos", "cmd"], enabled: Config.options.cheatsheet.enableCommands },
-            { id: "timetable", label: Translation.tr("Timetable"), icon: "calendar_month", keywords: ["timetable", "horário", "aula", "agenda escolar"], enabled: Config.options.cheatsheet.enableTimetable },
             { id: "elements", label: Translation.tr("Elements"), icon: "experiment", keywords: ["periodic", "elements", "tabela periódica"], enabled: Config.options.cheatsheet.enablePeriodicTable },
             { id: "aminoAcids", label: Translation.tr("Amino acids"), icon: "biotech", keywords: ["amino", "aminoácidos", "protein"], enabled: Config.options.cheatsheet.enableAminoAcids },
             { id: "workspaces", label: Translation.tr("Workspaces"), icon: "dashboard", keywords: ["workspaces", "layouts", "perfis"], enabled: Config.options.cheatsheet.enableWorkspaceProfiles }

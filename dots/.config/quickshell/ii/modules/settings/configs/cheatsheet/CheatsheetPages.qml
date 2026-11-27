@@ -25,13 +25,6 @@ Item {
 
     readonly property var featured: [
         {
-            key: "enableTimetable",
-            symbol: "calendar_month",
-            shape: MaterialShape.Shape.Cookie12Sided,
-            name: Translation.tr("Timetable"),
-            summary: Translation.tr("Weekly and monthly calendar with events, alarms and sports")
-        },
-        {
             key: "enableFootball",
             symbol: "sports_soccer",
             shape: MaterialShape.Shape.Sunny,
@@ -85,7 +78,6 @@ Item {
     ]
 
     readonly property var enabledMap: ({
-        "enableTimetable": Config.options.cheatsheet.enableTimetable,
         "enableFootball": Config.options.cheatsheet.enableFootball,
         "enablePeriodicTable": Config.options.cheatsheet.enablePeriodicTable,
         "enableAminoAcids": Config.options.cheatsheet.enableAminoAcids,
@@ -97,8 +89,8 @@ Item {
     // In the order of the cheatsheet's own tab bar.
     readonly property var pages: {
         const entry = page => ({ key: page.key, symbol: page.symbol, name: page.name, enabled: root.enabledMap[page.key] === true });
-        const [timetable, football] = root.featured;
-        return [entry(timetable), { key: "", symbol: "keyboard", name: Translation.tr("Keybinds"), enabled: true }]
+        const [football] = root.featured;
+        return [{ key: "", symbol: "keyboard", name: Translation.tr("Keybinds"), enabled: true }]
             .concat(root.compact.slice(0, 4).map(entry), [entry(football)], root.compact.slice(4).map(entry));
     }
 

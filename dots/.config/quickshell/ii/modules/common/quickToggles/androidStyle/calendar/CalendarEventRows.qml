@@ -236,7 +236,7 @@ Item {
                             colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
                             colRipple: Appearance.colors.colSurfaceContainerHighestActive
 
-                            onClicked: GlobalStates.openCheatsheet("timetable")
+                            onClicked: GlobalStates.openCalendarApp("")
 
                             MaterialSymbol {
                                 anchors.centerIn: parent

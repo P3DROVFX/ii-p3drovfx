@@ -7148,6 +7148,16 @@ Singleton {
             }
 
             /**
+             * Standalone Calendar app (apps/calendar.qml). Runs in its own qs -p process so closing
+             * it returns all memory to the OS.
+             */
+            property JsonObject calendarApp: JsonObject {
+                property bool enable: true
+                // Default: open floating at the same size as the Cheatsheet.
+                property bool openFloating: true
+            }
+
+            /**
              * EasyEffects: the app, and how the quick switchers (island bubble, quick
              * toggle, bar widget, keybinds) behave. Edited from the app's settings page.
              */

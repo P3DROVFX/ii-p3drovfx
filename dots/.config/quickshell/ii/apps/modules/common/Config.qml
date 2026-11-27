@@ -23,8 +23,31 @@ Singleton {
     // stays out of the app's heap.
     readonly property var sections: [
         "appearance", "interactions", "language", "time", "apps", "userProfile",
+        "calendar", "calendarApp", "cheatsheet.timetableTodayFirst", "cheatsheet.enableTimetable",
+        "clockApp.timetableLeadMinutes", "weather.useUSCS",
         "bar.sizes", "bar.verbose", "bar.tooltips", "dock.height", "search.appearance", "background.widgets.gridStep"
     ]
+
+    // Forward a config mutation to the running shell (which owns config.json) and
+    // reflect it immediately in the local read-only snapshot until FileView reloads.
+    function setShellOption(dottedPath: string, value): void {
+        const path = String(dottedPath ?? "").trim();
+        if (!path)
+            return;
+        const keys = path.split(".");
+        let cursor = root.options;
+        for (let i = 0; i < keys.length - 1; i++) {
+            if (!cursor || typeof cursor[keys[i]] !== "object" || cursor[keys[i]] === null)
+                cursor[keys[i]] = {};
+            cursor = cursor[keys[i]];
+        }
+        cursor[keys[keys.length - 1]] = value;
+        root.optionsChanged();
+        Quickshell.execDetached([
+            "qs", "-c", "ii", "ipc", "call", "calendar", "setConfig",
+            path, JSON.stringify(value)
+        ]);
+    }
 
     property var options: ({})
     property bool ready: false

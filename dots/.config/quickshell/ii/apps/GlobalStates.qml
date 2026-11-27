@@ -19,6 +19,9 @@ Singleton {
     property bool islandDashboardOpen: false
     property bool modesOpen: false
     property bool notesAppOpen: false
+    property bool notesOpen: false
+    property string timetableRequestedDate: ""
+    property int timetableNavigationRequest: 0
     property bool osdVolumeOpen: false
     property bool overlayOpen: false
     property bool overviewOpen: false

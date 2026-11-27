@@ -28,7 +28,7 @@ ColumnLayout {
             NoticeBox {
                 Layout.fillWidth: true
                 materialIcon: "settings"
-                text: Translation.tr("Each page's own options live inside the Cheatsheet, behind the gear next to its close button: key symbols and font sizes for Keybinds, display, reminders, calendar colors and sources for Timetable, the Amino acids classification and the Commands layout.")
+                text: Translation.tr("Each page's own options live inside the Cheatsheet, behind the gear next to its close button: key symbols and font sizes for Keybinds, the Amino acids classification and the Commands layout.")
             }
 
             ConfigSwitch {
@@ -41,19 +41,6 @@ ColumnLayout {
                 }
                 StyledToolTip {
                     text: Translation.tr("Keep only the last opened tab in memory for quick reopening. Switching tabs releases the previous one.")
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "calendar_month"
-                text: Translation.tr("Enable Timetable")
-                checked: Config.options.cheatsheet.enableTimetable
-                onCheckedChanged: {
-                    Config.options.cheatsheet.enableTimetable = checked;
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("Weekly and monthly calendar timetable with event scheduling, alarms, and sports integration.")
                 }
             }
 

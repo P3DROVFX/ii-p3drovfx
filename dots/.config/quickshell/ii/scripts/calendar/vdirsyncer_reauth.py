@@ -236,16 +236,21 @@ def _error_html(msg: str) -> bytes:
 
 def notify_quickshell_ipc() -> None:
     shell_dir = Path(__file__).resolve().parents[2]
-    try:
-        subprocess.run(
-            ["qs", "-c", str(shell_dir), "ipc", "call", "calendar", "onGoogleAuthComplete"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=3,
-            check=False,
-        )
-    except Exception:
-        pass
+    commands = [
+        ["qs", "-c", str(shell_dir), "ipc", "call", "calendar", "onGoogleAuthComplete"],
+        ["qs", "-p", str(shell_dir / "apps" / "calendar.qml"), "ipc", "call", "calendar", "onGoogleAuthComplete"],
+    ]
+    for cmd in commands:
+        try:
+            subprocess.run(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=3,
+                check=False,
+            )
+        except Exception:
+            pass
 
 
 def run_reauth(
