@@ -17,6 +17,7 @@ import qs.modules.ii.cheatsheet
 import qs.modules.ii.notes
 import qs.modules.ii.clock
 import qs.modules.ii.health
+import qs.modules.ii.vitals
 import qs.modules.ii.dock
 import qs.modules.ii.lock
 import qs.modules.ii.mediaControls
@@ -133,6 +134,10 @@ Scope {
         // Same shape as the clock app; the helper runs in HealthService either way.
         extraCondition: Config.options.health?.enable ?? true
         panelUrl: Qt.resolvedUrl("../modules/ii/health/HealthApp.qml")
+    }
+    PanelUrlLoader {
+        // Always loaded, like EasyEffects: switched off, the window is where it is turned on.
+        panelUrl: Qt.resolvedUrl("../modules/ii/vitals/VitalsApp.qml")
     }
     // The mode start/end banner; the dynamic island draws it when a notch is on.
     PanelUrlLoader {

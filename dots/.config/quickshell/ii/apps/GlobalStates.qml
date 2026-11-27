@@ -29,6 +29,7 @@ Singleton {
     property bool sessionOpen: false
     property bool settingsOpen: false
     property bool usageOpen: false
+    property bool vitalsAppOpen: false
     property bool wallpaperSelectorOpen: false
     property bool desktopMenuOpen: false
     property bool screenLocked: false
