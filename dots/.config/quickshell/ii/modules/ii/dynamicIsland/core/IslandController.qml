@@ -58,7 +58,7 @@ Item {
         const all = sourceSet.all;
         for (let i = 0; i < all.length; i++) {
             const source = all[i];
-            if (!source.active)
+            if (!source || !source.active)
                 continue;
             const descriptor = IslandRegistry.byId(source.activityId);
             if (!descriptor)

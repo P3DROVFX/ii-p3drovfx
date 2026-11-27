@@ -8,12 +8,6 @@ import qs
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.ii.dynamicIsland.core
-import qs.modules.ii.overview
-import qs.modules.ii.wallpaperSelector
-import qs.modules.ii.dynamicIsland.widgets
-import qs.modules.ii.localSendPopup
-import qs.modules.ii.colorPickerPopup
-import qs.modules.ii.displayModesPopup
 import qs.services
 
 /**
@@ -543,7 +537,7 @@ Item {
     Item {
         id: faces
         anchors.fill: parent
-        readonly property real blur: Math.max(content.morphBlur, content.dashboardReveal)
+        readonly property real blur: content.morphBlur
         opacity: content.morphOpacity * (1 - content.dashboardReveal) * (1 - content.switcherReveal)
         visible: faces.opacity > 0.001
 
@@ -723,17 +717,32 @@ Item {
                 ? content.searchFieldHeight : parent.height
 
             active: Config.ready
+            asynchronous: true
             visible: content.isSearch
             opacity: content.isSearch ? 1 : 0
+            source: active ? Quickshell.shellPath("modules/ii/overview/SearchWidget.qml") : ""
 
             Behavior on opacity {
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(searchLoader)
             }
 
-            sourceComponent: SearchWidget {
-                inNotchMode: true
-                hostWidth: searchLoader.width
-                hostHeight: searchLoader.height
+            Binding {
+                target: searchLoader.item
+                property: "inNotchMode"
+                value: true
+                when: searchLoader.item !== null
+            }
+            Binding {
+                target: searchLoader.item
+                property: "hostWidth"
+                value: searchLoader.width
+                when: searchLoader.item !== null
+            }
+            Binding {
+                target: searchLoader.item
+                property: "hostHeight"
+                value: searchLoader.height
+                when: searchLoader.item !== null
             }
 
             /**
@@ -811,6 +820,7 @@ Item {
             active: content.overviewBuilt
             visible: (content.overviewVisible || content.overviewFade > 0.01) && opacity > 0.01
             opacity: content.overviewFade
+            source: active ? Quickshell.shellPath("modules/ii/overview/OverviewWidget.qml") : ""
 
             transform: [
                 Translate {
@@ -818,15 +828,13 @@ Item {
                 }
             ]
 
-            sourceComponent: OverviewWidget {
-                hosted: true
-                panelWindow: content.overviewPanelWindow
-                monitorIndex: content.overviewMonitorIndex
-                gridRows: content.overviewRows
-                gridColumns: content.overviewColumns
-                fixedScale: content.overviewScale
-                suppressEntrance: false
-            }
+            Binding { target: overviewLoader.item; property: "hosted"; value: true; when: overviewLoader.item !== null }
+            Binding { target: overviewLoader.item; property: "panelWindow"; value: content.overviewPanelWindow; when: overviewLoader.item !== null }
+            Binding { target: overviewLoader.item; property: "monitorIndex"; value: content.overviewMonitorIndex; when: overviewLoader.item !== null }
+            Binding { target: overviewLoader.item; property: "gridRows"; value: content.overviewRows; when: overviewLoader.item !== null }
+            Binding { target: overviewLoader.item; property: "gridColumns"; value: content.overviewColumns; when: overviewLoader.item !== null }
+            Binding { target: overviewLoader.item; property: "fixedScale"; value: content.overviewScale; when: overviewLoader.item !== null }
+            Binding { target: overviewLoader.item; property: "suppressEntrance"; value: false; when: overviewLoader.item !== null }
         }
 
         // ── A picked colour, and an incoming transfer ────────────────────────────
@@ -839,14 +847,17 @@ Item {
             active: content.isColorPicker || content.activityId === "colorPicker"
             visible: content.isColorPicker
             opacity: content.isColorPicker ? 1 : 0
+            source: active ? Quickshell.shellPath("modules/ii/colorPickerPopup/ColorPickerPopupContent.qml") : ""
 
             Behavior on opacity {
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(colorPickerLoader)
             }
 
-            sourceComponent: ColorPickerPopupContent {
-                hosted: true
-                onDismissed: GlobalStates.colorPickerPopupOpen = false
+            Binding { target: colorPickerLoader.item; property: "hosted"; value: true; when: colorPickerLoader.item !== null }
+            Connections {
+                target: colorPickerLoader.item
+                ignoreUnknownSignals: true
+                function onDismissed() { GlobalStates.colorPickerPopupOpen = false; }
             }
         }
 
@@ -856,14 +867,17 @@ Item {
             active: content.isDisplayModes || content.activityId === "displayModes"
             visible: content.isDisplayModes
             opacity: content.isDisplayModes ? 1 : 0
+            source: active ? Quickshell.shellPath("modules/ii/displayModesPopup/DisplayModesPopupContent.qml") : ""
 
             Behavior on opacity {
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(displayModesLoader)
             }
 
-            sourceComponent: DisplayModesPopupContent {
-                hosted: true
-                onDismissed: GlobalStates.displayModesPopupOpen = false
+            Binding { target: displayModesLoader.item; property: "hosted"; value: true; when: displayModesLoader.item !== null }
+            Connections {
+                target: displayModesLoader.item
+                ignoreUnknownSignals: true
+                function onDismissed() { GlobalStates.displayModesPopupOpen = false; }
             }
         }
 
@@ -873,16 +887,19 @@ Item {
             active: content.isLocalSendRequest
             visible: content.isLocalSendRequest
             opacity: content.isLocalSendRequest ? 1 : 0
+            source: active ? Quickshell.shellPath("modules/ii/localSendPopup/LocalSendPopupContent.qml") : ""
 
             Behavior on opacity {
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(localSendRequestLoader)
             }
 
-            sourceComponent: LocalSendPopupContent {
-                hosted: true
-                transfer: LocalSend.currentTransfer
-                onAcceptRequested: LocalSend.acceptTransfer()
-                onRejectRequested: LocalSend.denyTransfer()
+            Binding { target: localSendRequestLoader.item; property: "hosted"; value: true; when: localSendRequestLoader.item !== null }
+            Binding { target: localSendRequestLoader.item; property: "transfer"; value: LocalSend.currentTransfer; when: localSendRequestLoader.item !== null }
+            Connections {
+                target: localSendRequestLoader.item
+                ignoreUnknownSignals: true
+                function onAcceptRequested() { LocalSend.acceptTransfer(); }
+                function onRejectRequested() { LocalSend.denyTransfer(); }
             }
         }
 
@@ -896,18 +913,21 @@ Item {
             active: content.isAskpass || content.activityId === "askpass"
             visible: content.isAskpass
             opacity: content.isAskpass ? 1 : 0
+            source: active ? Quickshell.shellPath("modules/ii/dynamicIsland/widgets/IslandAskpassCard.qml") : ""
 
             Behavior on opacity {
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(askpassLoader)
             }
 
-            sourceComponent: IslandAskpassCard {
-                request: AskpassService.current
-                style: AskpassService.currentStyle
-                shown: content.isAskpass
-                focused: content.askpassFocused
-                fingerprint: content.controller.sources.fingerprint
-                onFocusRequested: content.askpassFocusRequested()
+            Binding { target: askpassLoader.item; property: "request"; value: AskpassService.current; when: askpassLoader.item !== null }
+            Binding { target: askpassLoader.item; property: "style"; value: AskpassService.currentStyle; when: askpassLoader.item !== null }
+            Binding { target: askpassLoader.item; property: "shown"; value: content.isAskpass; when: askpassLoader.item !== null }
+            Binding { target: askpassLoader.item; property: "focused"; value: content.askpassFocused; when: askpassLoader.item !== null }
+            Binding { target: askpassLoader.item; property: "fingerprint"; value: content.controller.sources.fingerprint; when: askpassLoader.item !== null }
+            Connections {
+                target: askpassLoader.item
+                ignoreUnknownSignals: true
+                function onFocusRequested() { content.askpassFocusRequested(); }
             }
         }
 
@@ -921,14 +941,17 @@ Item {
             active: content.isSession || content.activityId === "session"
             visible: content.isSession
             opacity: content.isSession ? 1 : 0
+            source: active ? Quickshell.shellPath("modules/ii/dynamicIsland/widgets/IslandSessionMenu.qml") : ""
 
             Behavior on opacity {
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(sessionLoader)
             }
 
-            sourceComponent: IslandSessionMenu {
-                active: content.isSession
-                onCloseRequested: GlobalStates.sessionOpen = false
+            Binding { target: sessionLoader.item; property: "active"; value: content.isSession; when: sessionLoader.item !== null }
+            Connections {
+                target: sessionLoader.item
+                ignoreUnknownSignals: true
+                function onCloseRequested() { GlobalStates.sessionOpen = false; }
             }
 
             function focusSession() {
@@ -970,22 +993,28 @@ Item {
             active: content.isWallpaper || content.activityId === "wallpaper"
             visible: content.isWallpaper
             opacity: content.isWallpaper ? 1 : 0
+            source: active ? Quickshell.shellPath("modules/ii/wallpaperSelector/WallpaperSelectorContent.qml") : ""
 
             Behavior on opacity {
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(wallpaperLoader)
             }
 
-            sourceComponent: WallpaperSelectorContent {
-                compact: true
-                compactStyle: Config.options.bar.floatingNotch.wallpaperBrowserStyle
-                screenAspect: {
+            Binding { target: wallpaperLoader.item; property: "compact"; value: true; when: wallpaperLoader.item !== null }
+            Binding { target: wallpaperLoader.item; property: "compactStyle"; value: Config.options.bar.floatingNotch.wallpaperBrowserStyle; when: wallpaperLoader.item !== null }
+            Binding {
+                target: wallpaperLoader.item
+                property: "screenAspect"
+                value: {
                     const screen = (content.QsWindow.window as QsWindow)?.screen ?? null;
                     return screen && screen.height > 0 ? screen.width / screen.height : 16 / 10;
                 }
-                // The island's crossfade is the open animation; this only says whether
-                // the contents should have made their entrance.
-                active: content.isWallpaper || content.activityId === "wallpaper"
-                onCloseRequested: GlobalStates.wallpaperSelectorOpen = false
+                when: wallpaperLoader.item !== null
+            }
+            Binding { target: wallpaperLoader.item; property: "active"; value: content.isWallpaper || content.activityId === "wallpaper"; when: wallpaperLoader.item !== null }
+            Connections {
+                target: wallpaperLoader.item
+                ignoreUnknownSignals: true
+                function onCloseRequested() { GlobalStates.wallpaperSelectorOpen = false; }
             }
 
             // The browser's own focus-on-open runs when the flag flips, before this
@@ -1037,8 +1066,8 @@ Item {
             anchors.fill: parent
             sideIds: content.sideIds
             restHeight: content.restingHeight
-            sportsGame: content.controller.sources.sports.liveGame
-            phoneLive: content.controller.sources.phoneLive.current
+            sportsGame: content.controller.sources.sports?.liveGame ?? null
+            phoneLive: content.controller.sources.phoneLive?.current ?? null
             visible: !content.hasWidget && !content.isSearch && !content.isOsd && !content.isWallpaper
                 && !content.isSession && !content.isColorPicker && !content.isDisplayModes
                 && !content.isLocalSendRequest && !content.isAskpass
@@ -1060,16 +1089,10 @@ Item {
         requested: content.dashboardWanted
         retainFor: 60000
         asynchronous: true
-        // The other half of the crossfade: it arrives soft and sharpens as the faces go.
+        // The other half of the crossfade: clean opacity + subtle scale (no giant blur FBO).
         opacity: content.dashboardReveal
+        scale: 0.97 + 0.03 * content.dashboardReveal
         visible: content.dashboardReveal > 0.001
-        layer.enabled: content.dashboardReveal > 0.001 && content.dashboardReveal < 0.999
-        layer.smooth: true
-        layer.effect: MultiEffect {
-            blurEnabled: true
-            blurMax: 24
-            blur: 1 - content.dashboardReveal
-        }
         source: Quickshell.shellPath("modules/ii/dynamicIsland/dashboard/IslandDashboard.qml")
 
         Binding {
@@ -1094,16 +1117,15 @@ Item {
         active: content.isWindowSwitcher || content.switcherReveal > 0.001
         visible: content.switcherReveal > 0.001
         opacity: content.switcherReveal
+        source: active ? Quickshell.shellPath("modules/ii/dynamicIsland/widgets/IslandWindowSwitcher.qml") : ""
 
-        sourceComponent: IslandWindowSwitcher {
-            shown: content.isWindowSwitcher
-            coverWidth: content.switcherMetrics.coverWidth
-            coverHeight: content.switcherMetrics.coverHeight
-            topPadding: content.switcherMetrics.topPadding
-            titleGap: content.switcherMetrics.titleGap
-            titleHeight: content.switcherMetrics.titleHeight
-            searchHeight: content.switcherMetrics.searchHeight
-            hintsHeight: content.switcherMetrics.hintsHeight
-        }
+        Binding { target: windowSwitcherLoader.item; property: "shown"; value: content.isWindowSwitcher; when: windowSwitcherLoader.item !== null }
+        Binding { target: windowSwitcherLoader.item; property: "coverWidth"; value: content.switcherMetrics.coverWidth; when: windowSwitcherLoader.item !== null }
+        Binding { target: windowSwitcherLoader.item; property: "coverHeight"; value: content.switcherMetrics.coverHeight; when: windowSwitcherLoader.item !== null }
+        Binding { target: windowSwitcherLoader.item; property: "topPadding"; value: content.switcherMetrics.topPadding; when: windowSwitcherLoader.item !== null }
+        Binding { target: windowSwitcherLoader.item; property: "titleGap"; value: content.switcherMetrics.titleGap; when: windowSwitcherLoader.item !== null }
+        Binding { target: windowSwitcherLoader.item; property: "titleHeight"; value: content.switcherMetrics.titleHeight; when: windowSwitcherLoader.item !== null }
+        Binding { target: windowSwitcherLoader.item; property: "searchHeight"; value: content.switcherMetrics.searchHeight; when: windowSwitcherLoader.item !== null }
+        Binding { target: windowSwitcherLoader.item; property: "hintsHeight"; value: content.switcherMetrics.hintsHeight; when: windowSwitcherLoader.item !== null }
     }
 }

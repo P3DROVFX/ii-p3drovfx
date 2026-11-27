@@ -8,6 +8,8 @@ import Quickshell
 Scope {
     id: root
 
+    readonly property var panelWindow: islandLoader.item ? islandLoader.item.panelWindow : null
+
     LazyLoader {
         id: islandLoader
         // One place decides whether the island exists; see IslandPolicy for why.
