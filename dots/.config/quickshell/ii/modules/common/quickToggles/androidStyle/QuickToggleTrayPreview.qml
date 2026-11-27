@@ -71,6 +71,7 @@ AndroidWidgetTileBase {
         sportsWidget: { icon: "sports_soccer", label: Translation.tr("Sports") },
         sportsCard: { icon: "scoreboard", label: Translation.tr("Sports Card") },
         photoWidget: { icon: "photo_library", label: Translation.tr("Photo") },
+        vitalsWidget: { icon: "ecg_heart", label: Translation.tr("Vitals") },
         trayWidget: { icon: "apps", label: Translation.tr("Active apps") },
         smartDevices: { icon: "home_iot_device", label: Translation.tr("Smart Devices") }
     })

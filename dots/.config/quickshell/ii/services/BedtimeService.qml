@@ -272,12 +272,17 @@ Singleton {
     }
 
     /**
-     * The last `count` nights, oldest first, recorded or estimated:
-     * [{ night, target (Date), lastActive (ms, 0 unknown), phoneLastActive (ms, 0 unknown), lateMinutes, estimated, onTime, applies }].
+     * The last `count` nights, oldest first, recorded, from the watch or estimated:
+     * [{ night, target (Date), lastActive (ms, 0 unknown), phoneLastActive (ms, 0 unknown), lateMinutes, estimated, onTime, applies,
+     *    source: "pc" | "watch" | "usage" | "" }]. A watch night's `lastActive` is when you fell asleep.
      */
     function history(count) {
         if (IiLinkService.usageEnabled)
             AppStats.phoneHistory;
+        // Checked on Config first: reading VitalsService would create it with vitals off.
+        const watch = (Config.options?.iiTools?.vitals?.enable ?? false) && (Config.options?.vitals?.bedtime?.enable ?? true);
+        if (watch)
+            VitalsService.dataVersion;
         const out = [];
         const today = root.parseKey(root.tonightKey);
         for (let i = count; i >= 1; i--) {
@@ -287,11 +292,22 @@ Singleton {
             const target = root.targetFor(key, record?.target);
             let lastActive = record?.lastActive ?? 0;
             let estimated = false;
+            let source = lastActive ? "pc" : "";
+            if (!lastActive && watch) {
+                // The index's night, not sleepFor(): that loads each day file for its
+                // stages, and fourteen nights would push the app's days out of the cache.
+                const slept = VitalsService.summary(root.dayKey(new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1)))?.sleep;
+                if (slept) {
+                    lastActive = slept.start;
+                    source = "watch";
+                }
+            }
             if (!lastActive) {
                 const guess = root.estimateFromUsage(key);
                 if (guess) {
                     lastActive = guess.lastActive;
                     estimated = true;
+                    source = "usage";
                 }
             }
             const phoneLastActive = IiLinkService.usageEnabled
@@ -305,6 +321,7 @@ Singleton {
                 phoneLastActive: phoneLastActive,
                 lateMinutes: lateMinutes,
                 estimated: estimated,
+                source: source,
                 onTime: lastActive > 0 && lateMinutes <= root.onTimeGraceMinutes,
                 applies: root.appliesTo(key)
             });

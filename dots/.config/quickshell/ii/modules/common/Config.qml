@@ -4508,6 +4508,13 @@ Singleton {
                         property real y: 200
                         property int widgetSize: 100
                     }
+                    property JsonObject wellbeing_vitals: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                    }
                     property JsonObject wellbeing_break: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free"

@@ -392,6 +392,27 @@ Singleton {
             return name.length ? Translation.tr("Shortcut quickshell:modes-%1").arg(name)
                 : Translation.tr("The routine's shortcut is pressed");
         }
+        case "vitalsSleep": {
+            const score = t.metric === "score";
+            const value = v => score ? String(v) : root.durationText(v * 60);
+            const parts = [];
+            if (t.below !== null && t.below !== undefined)
+                parts.push(Translation.tr("below %1").arg(value(t.below)));
+            if (t.above !== null && t.above !== undefined)
+                parts.push(Translation.tr("above %1").arg(value(t.above)));
+            const what = score ? Translation.tr("Last night's sleep score") : Translation.tr("Last night's sleep");
+            return parts.length ? `${what} ${parts.join(" · ")}` : what;
+        }
+        case "vitalsEnergy": {
+            const parts = [];
+            if (t.below !== null && t.below !== undefined)
+                parts.push(Translation.tr("below %1").arg(t.below));
+            if (t.above !== null && t.above !== undefined)
+                parts.push(Translation.tr("above %1").arg(t.above));
+            return parts.length ? `${Translation.tr("Energy score")} ${parts.join(" · ")}` : Translation.tr("Energy score");
+        }
+        case "vitalsStepGoal":
+            return Translation.tr("Today's step goal reached");
         }
         return root.triggerTypeLabel(t.type);
     }

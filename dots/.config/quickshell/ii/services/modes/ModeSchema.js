@@ -46,7 +46,10 @@ var CONDITION_SOURCES = {
     timerDone: "conditions/TimerDoneCondition.qml",
     phoneAlarm: "conditions/PhoneAlarmCondition.qml",
     pomodoroLap: "conditions/PomodoroLapCondition.qml",
-    shortcut: "conditions/ShortcutCondition.qml"
+    shortcut: "conditions/ShortcutCondition.qml",
+    vitalsSleep: "conditions/VitalsSleepCondition.qml",
+    vitalsEnergy: "conditions/VitalsEnergyCondition.qml",
+    vitalsStepGoal: "conditions/VitalsStepGoalCondition.qml"
 };
 
 // Milliseconds a trigger's verdict must hold before the watcher commits it.
@@ -132,6 +135,10 @@ var TRIGGER_TYPES = {
     deviceInUse: { label: "Mic, camera or screen in use", icon: "videocam", editor: "deviceInUse", group: "you" },
     discordVoice: { label: "Discord voice call", icon: "headset_mic", editor: "none", group: "you" },
     pomodoro: { label: "Pomodoro timer", icon: "timer", editor: "pomodoro", group: "you" },
+    // ii Vitals, read after the fact from what the phone synced (every 10 min).
+    vitalsSleep: { label: "Last night's sleep", icon: "bedtime", editor: "vitals", group: "you" },
+    vitalsEnergy: { label: "Energy score", icon: "bolt", editor: "vitals", group: "you" },
+    vitalsStepGoal: { label: "Step goal reached", icon: "directions_walk", editor: "vitals", group: "you" },
     battery: { label: "Battery", icon: "battery_5_bar", editor: "battery", group: "system" },
     resource: { label: "CPU, GPU, memory or disk", icon: "memory", editor: "resource", group: "system" },
     keyboardLayout: { label: "Keyboard layout", icon: "keyboard", editor: "keyboardLayout", group: "system" },
@@ -457,6 +464,20 @@ function normalizeTrigger(raw) {
         break;
     case "shortcut":
         t.name = typeof t.name === "string" && t.name.trim().length ? slugify(t.name) : "";
+        break;
+    case "vitalsSleep":
+        // `below` / `above` are minutes for the duration, points for the score.
+        t.metric = t.metric === "score" ? "score" : "duration";
+        t.below = optionalInt(t.below, 0, t.metric === "score" ? 100 : 1440);
+        t.above = optionalInt(t.above, 0, t.metric === "score" ? 100 : 1440);
+        if (t.below === null && t.above === null)
+            t.below = t.metric === "score" ? 60 : 360;
+        break;
+    case "vitalsEnergy":
+        t.below = optionalInt(t.below, 0, 100);
+        t.above = optionalInt(t.above, 0, 100);
+        if (t.below === null && t.above === null)
+            t.below = 50;
         break;
     }
     // A pulse is a moment; holding it for a while makes no sense.

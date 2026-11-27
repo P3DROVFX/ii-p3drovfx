@@ -366,6 +366,10 @@ function series(index, dates, key, fromDate, toDate) {
 function latest(index, dates, key) {
     for (var i = dates.length - 1; i >= 0; i--) {
         var date = dates[i], s = index[date];
+        // _setIndex swaps the index and its dates one after the other; a binding woken
+        // between the two sees dates the index no longer has.
+        if (!s)
+            continue;
         if (s.last && s.last[key])
             return { value: s.last[key][1], time: s.last[key][0], date: date };
         if (s.m && s.m[key])
@@ -466,5 +470,244 @@ function hrZones(years) {
     var out = [];
     for (var z = 0; z < 5; z++)
         out.push({ zone: z + 1, from: Math.round(max * cuts[z]), to: Math.round(max * cuts[z + 1]) });
+    return out;
+}
+
+// ── Assistant ───────────────────────────────────────────────────────────
+// What the read-only assistant tools return: aggregates only. Age instead of the birth
+// date, no route points and no exercise ids, no per-minute bins (hours at most), times as
+// local "HH:MM".
+
+function _r(v, decimals) {
+    var f = Math.pow(10, decimals || 0);
+    return Math.round(v * f) / f;
+}
+
+function _clock(ms) {
+    var d = new Date(ms);
+    return (d.getHours() < 10 ? "0" : "") + d.getHours() + ":" + (d.getMinutes() < 10 ? "0" : "") + d.getMinutes();
+}
+
+function _inRange(date, fromDate, toDate) {
+    return !(fromDate && date < fromDate) && !(toDate && date > toDate);
+}
+
+/// The profile without the birth date: {age?, sex?, heightCm?, weightKg?}.
+function profileDigest(meta, today) {
+    var p = (meta && meta.profile) || {};
+    var out = {};
+    var years = age(p.birthDate || "", today);
+    if (years >= 0)
+        out.age = years;
+    if (typeof p.sex === "string")
+        out.sex = p.sex;
+    if (num(p.heightCm))
+        out.heightCm = p.heightCm;
+    if (num(p.weightKg))
+        out.weightKg = p.weightKg;
+    return out;
+}
+
+/// A measurement entry with its time as "HH:MM".
+function _measure(entry) {
+    var out = {};
+    for (var f in entry)
+        out[f] = f === "time" ? _clock(entry.time) : (num(entry[f]) ? _r(entry[f], 2) : entry[f]);
+    return out;
+}
+
+/// Mean per hour of the day (24 entries, null without data) of [minute, value] bins.
+function hourlyMeans(bins) {
+    var sum = [], n = [], out = [];
+    for (var h = 0; h < 24; h++) {
+        sum.push(0);
+        n.push(0);
+    }
+    for (var i = 0; i < (bins || []).length; i++) {
+        var hour = Math.floor(bins[i][0] / 60);
+        if (hour >= 0 && hour < 24 && num(bins[i][1])) {
+            sum[hour] += bins[i][1];
+            n[hour]++;
+        }
+    }
+    for (h = 0; h < 24; h++)
+        out.push(n[h] > 0 ? _r(sum[h] / n[h], 1) : null);
+    return out;
+}
+
+/// Minutes per stage of a night's [offsetMin, durMin, stage] list.
+function stageMinutes(stages) {
+    var out = {};
+    for (var i = 0; i < (stages || []).length; i++)
+        out[stages[i][2]] = (out[stages[i][2]] || 0) + stages[i][1];
+    return out;
+}
+
+/// One day: from its Summary, plus hours, stages and workouts when its Day is loaded.
+function dayDigest(date, summary, day) {
+    if (!summary)
+        return null;
+    var out = { date: date }, k;
+    if (Object.keys(summary.t || {}).length > 0) {
+        out.totals = {};
+        for (k in summary.t)
+            out.totals[k] = _r(summary.t[k], 1);
+    }
+    if (Object.keys(summary.s || {}).length > 0) {
+        out.samples = {};
+        for (k in summary.s)
+            out.samples[k] = { min: _r(summary.s[k][0], 1), avg: _r(summary.s[k][1], 1), max: _r(summary.s[k][2], 1) };
+    }
+    if (summary.sleep) {
+        out.sleep = { start: _clock(summary.sleep.start), end: _clock(summary.sleep.end), minutes: summary.sleep.min };
+        if (num(summary.sleep.score))
+            out.sleep.score = summary.sleep.score;
+    }
+    if (summary.n && summary.n.exercise > 0)
+        out.exercise = { sessions: summary.n.exercise, minutes: summary.exMin };
+    if (Object.keys(summary.m || {}).length > 0) {
+        out.measurements = {};
+        for (k in summary.m)
+            out.measurements[k] = _measure(summary.m[k]);
+    }
+    if (Object.keys(summary.sc || {}).length > 0)
+        out.scores = summary.sc;
+    if (!day)
+        return out;
+
+    var steps = day.totals && day.totals.steps;
+    if (steps && Array.isArray(steps.hourly))
+        out.stepsByHour = steps.hourly;
+    var hr = day.samples && day.samples.heartRate;
+    if (hr && Array.isArray(hr.bins))
+        out.heartRateByHour = hourlyMeans(hr.bins);
+    var night = mainSleep(day);
+    if (out.sleep && night && Array.isArray(night.stages) && night.stages.length > 0)
+        out.sleep.stageMinutes = stageMinutes(night.stages);
+    var ex = (day.sessions && day.sessions.exercise) || [];
+    if (ex.length > 0) {
+        out.workouts = [];
+        var fields = ["kcal", "distanceM", "steps", "hrAvg", "hrMax", "hrMin", "elevationM", "speedAvgMps"];
+        for (var i = 0; i < ex.length; i++) {
+            var w = { type: ex[i].type, start: _clock(ex[i].start), minutes: Math.round((ex[i].end - ex[i].start) / 60000) };
+            if (typeof ex[i].title === "string")
+                w.title = ex[i].title;
+            for (var f = 0; f < fields.length; f++)
+                if (num(ex[i][fields[f]]))
+                    w[fields[f]] = _r(ex[i][fields[f]], 1);
+            out.workouts.push(w);
+        }
+    }
+    for (k in (day.sessions || {})) {
+        if (k === "sleep" || k === "exercise")
+            continue;
+        var list = day.sessions[k], ms = 0;
+        for (var j = 0; j < list.length; j++)
+            ms += list[j].end - list[j].start;
+        out.sessions = out.sessions || {};
+        out.sessions[k] = { count: list.length, minutes: Math.round(ms / 60000) };
+    }
+    return out;
+}
+
+/// A date range at a glance: per key the total/mean/extremes over the days that have it.
+function rangeDigest(index, dates, fromDate, toDate) {
+    var ds = dates.filter(function (d) { return _inRange(d, fromDate, toDate); });
+    var out = { from: fromDate, to: toDate, daysWithData: ds.length };
+    var totals = {}, samples = {}, scores = {}, measurements = {};
+    var nights = [], exSessions = 0, exMinutes = 0, k;
+    for (var i = 0; i < ds.length; i++) {
+        var s = index[ds[i]];
+        for (k in (s.t || {})) {
+            var t = totals[k] || (totals[k] = { total: 0, days: 0, best: null });
+            t.total += s.t[k];
+            t.days++;
+            if (t.best === null || s.t[k] > t.best.value)
+                t.best = { date: ds[i], value: _r(s.t[k], 1) };
+        }
+        for (k in (s.s || {})) {
+            var m = samples[k] || (samples[k] = { sum: 0, days: 0, min: s.s[k][0], max: s.s[k][2] });
+            m.sum += s.s[k][1];
+            m.days++;
+            m.min = Math.min(m.min, s.s[k][0]);
+            m.max = Math.max(m.max, s.s[k][2]);
+        }
+        for (k in (s.sc || {})) {
+            var c = scores[k] || (scores[k] = { sum: 0, days: 0, min: s.sc[k], max: s.sc[k] });
+            c.sum += s.sc[k];
+            c.days++;
+            c.min = Math.min(c.min, s.sc[k]);
+            c.max = Math.max(c.max, s.sc[k]);
+        }
+        for (k in (s.m || {})) {
+            if (!measurements[k])
+                measurements[k] = { first: _measure(s.m[k]), firstDate: ds[i] };
+            measurements[k].last = _measure(s.m[k]);
+            measurements[k].lastDate = ds[i];
+        }
+        if (s.sleep)
+            nights.push(s.sleep);
+        if (s.n && s.n.exercise > 0) {
+            exSessions += s.n.exercise;
+            exMinutes += s.exMin;
+        }
+    }
+    out.totals = {};
+    for (k in totals)
+        out.totals[k] = { total: _r(totals[k].total, 1), perDay: _r(totals[k].total / totals[k].days, 1), days: totals[k].days, best: totals[k].best };
+    out.samples = {};
+    for (k in samples)
+        out.samples[k] = { avg: _r(samples[k].sum / samples[k].days, 1), min: _r(samples[k].min, 1), max: _r(samples[k].max, 1), days: samples[k].days };
+    out.scores = {};
+    for (k in scores)
+        out.scores[k] = { avg: _r(scores[k].sum / scores[k].days, 1), min: scores[k].min, max: scores[k].max, days: scores[k].days };
+    out.measurements = measurements;
+    if (nights.length > 0) {
+        var mins = nights.map(function (n) { return n.min; });
+        var scored = nights.filter(function (n) { return num(n.score); });
+        out.sleep = {
+            nights: nights.length,
+            avgMinutes: Math.round(mins.reduce(function (a, b) { return a + b; }, 0) / mins.length),
+            minMinutes: Math.min.apply(null, mins),
+            maxMinutes: Math.max.apply(null, mins)
+        };
+        if (scored.length > 0)
+            out.sleep.avgScore = _r(scored.reduce(function (a, n) { return a + n.score; }, 0) / scored.length, 1);
+    }
+    out.exercise = { sessions: exSessions, minutes: exMinutes };
+    return out;
+}
+
+/// One value per day of `key` (as series()), as weekly means past 62 days so a long
+/// range stays short, with the overall mean and extremes.
+function trendDigest(index, dates, key, fromDate, toDate) {
+    var pts = series(index, dates, key, fromDate, toDate);
+    var out = { key: key, from: fromDate, to: toDate, days: pts.length };
+    if (pts.length === 0)
+        return out;
+    var vals = pts.map(function (p) { return p.value; });
+    out.mean = _r(vals.reduce(function (a, b) { return a + b; }, 0) / vals.length, 1);
+    out.min = _r(Math.min.apply(null, vals), 1);
+    out.max = _r(Math.max.apply(null, vals), 1);
+    if (pts.length <= 62) {
+        out.points = pts.map(function (p) { return [p.date, _r(p.value, 1)]; });
+        return out;
+    }
+    // Weeks counted from the first day of the range that has data.
+    out.weekly = [];
+    var start = pts[0].date, sum = 0, n = 0;
+    for (var i = 0; i <= pts.length; i++) {
+        var p = pts[i];
+        if (n > 0 && (p === undefined || daysBetween(start, p.date) >= 7)) {
+            out.weekly.push([start, _r(sum / n, 1)]);
+            start = p ? addDays(start, Math.floor(daysBetween(start, p.date) / 7) * 7) : start;
+            sum = 0;
+            n = 0;
+        }
+        if (p !== undefined) {
+            sum += p.value;
+            n++;
+        }
+    }
     return out;
 }

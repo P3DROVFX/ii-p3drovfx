@@ -282,6 +282,43 @@ class StoreWriterTests(unittest.TestCase):
 
 SERVICE = read("services/VitalsService.qml")
 TYPES = read("services/VitalsTypes.qml")
+@unittest.skipIf(NODE is None, "node is not installed")
+class AssistantDigestTests(unittest.TestCase):
+    """What the vitals tools hand the provider: aggregates, never the raw records."""
+
+    def test_profile_gives_age_not_birth_date(self):
+        r = js("profileDigest({profile: {birthDate: '2003-04-10', sex: 'male', heightCm: 178}}, '2026-11-27')")
+        self.assertEqual(r, {"age": 23, "sex": "male", "heightCm": 178})
+
+    def test_a_day_has_hours_and_stages_but_no_bins_ids_or_routes(self):
+        r = js("dayDigest('2026-11-27', summarize(d), d)", d=FULL_DAY)
+        text = json.dumps(r)
+        for leak in ('"bins"', '"id"', '"route"', EX_A, '"last"'):
+            self.assertNotIn(leak, text, leak)
+        self.assertEqual(len(r["heartRateByHour"]), 24)
+        self.assertEqual(r["heartRateByHour"][10], 141)
+        self.assertEqual(r["sleep"]["stageMinutes"], {"light": 20, "deep": 40, "asleep": 392})
+        self.assertEqual([w["type"] for w in r["workouts"]], ["walking", "strength_training"])
+        self.assertEqual(r["sessions"], {"mindfulness": {"count": 1, "minutes": 10}})
+
+    def test_a_range_aggregates_per_key(self):
+        other = day("2026-11-26", H2, totals={"steps": {"day": 2000}}, scores={"energy": 60})
+        r = js("(() => { const ix = applyDays({}, days).index; return rangeDigest(ix, sortedDates(ix), '2026-11-26', '2026-11-27'); })()",
+               days=[other, FULL_DAY])
+        self.assertEqual(r["totals"]["steps"], {"total": 10412, "perDay": 5206, "days": 2, "best": {"date": "2026-11-27", "value": 8412}})
+        self.assertEqual(r["scores"]["energy"]["avg"], 68)
+        self.assertEqual(r["sleep"]["nights"], 1)
+
+    def test_a_long_trend_folds_into_weeks(self):
+        days = [day(f"2026-{m:02d}-{d:02d}", f"{i:016x}", totals={"steps": {"day": 1000 * (i % 7)}})
+                for i, (m, d) in enumerate([(9, x) for x in range(1, 31)] + [(10, x) for x in range(1, 32)] + [(11, x) for x in range(1, 11)])]
+        r = js("(() => { const ix = applyDays({}, days).index; return trendDigest(ix, sortedDates(ix), 'steps', '', ''); })()", days=days)
+        self.assertEqual(r["days"], 71)
+        self.assertNotIn("points", r)
+        self.assertEqual(len(r["weekly"]), 11)
+        self.assertEqual(r["weekly"][0], ["2026-09-01", 3000])
+
+
 LINK = read("services/IiLinkService.qml")
 CONFIG = read("modules/common/Config.qml")
 PROTOCOL = read("scripts/iiLink/PROTOCOL.md")
@@ -330,6 +367,50 @@ class WiringTests(unittest.TestCase):
         for text in ('"what":"vitals"', '"what":"vitalsRoute"', '{"t":"vitalsRoute"', '"more":bool', '"error":"disabled"',
                      "vitals_store.py", "index.json", "retentionDays"):
             self.assertIn(text, section, text)
+
+
+REGISTRY = read("services/ai/AiToolRegistry.qml")
+AI = read("services/Ai.qml")
+VITALS_AI = read("services/ai/integrations/AiVitalsIntegration.qml")
+SCHEMA = read("services/modes/ModeSchema.js")
+BEDTIME = read("services/BedtimeService.qml")
+VITALS_TOOLS = ("vitals_summary", "vitals_day", "vitals_trend")
+
+
+class IntegrationTests(unittest.TestCase):
+    def test_tools_exist_only_while_the_assistant_switch_is_on(self):
+        self.assertIn("].concat(root.vitalsToolsOn ? root.vitalsDefinitions : [])", REGISTRY)
+        self.assertRegex(REGISTRY, r"vitalsToolsOn: \(Config\.options\?\.iiTools\?\.vitals\?\.enable \?\? false\)\s*&& \(Config\.options\?\.vitals\?\.assistant\?\.enable \?\? false\)")
+        self.assertRegex(CONFIG, r"property JsonObject assistant: JsonObject \{\s*// [^\n]*\n\s*property bool enable: false")
+
+    def test_tools_are_read_only_and_handled(self):
+        block = REGISTRY.split("readonly property var vitalsDefinitions: [")[1].split("\n    ]\n")[0]
+        for tool in VITALS_TOOLS:
+            self.assertIn(f'id: "{tool}"', block)
+            self.assertIn(f'"{tool}": call => root.vitalsIntegration.', AI)
+        self.assertEqual(block.count('kind: "localRead"'), len(VITALS_TOOLS))
+        self.assertEqual(block.count('network: "never"'), len(VITALS_TOOLS))
+
+    def test_tools_answer_through_the_digests(self):
+        for fn in ("Logic.profileDigest(", "Logic.rangeDigest(", "Logic.dayDigest(", "Logic.trendDigest("):
+            self.assertIn(fn, VITALS_AI)
+        self.assertNotIn("birthDate", VITALS_AI)
+        self.assertNotIn("VitalsService.route(", VITALS_AI)
+
+    def test_modes_conditions_are_wired(self):
+        for type_, file in (("vitalsSleep", "VitalsSleepCondition"), ("vitalsEnergy", "VitalsEnergyCondition"),
+                            ("vitalsStepGoal", "VitalsStepGoalCondition")):
+            self.assertIn(f'{type_}: "conditions/{file}.qml"', SCHEMA)
+            self.assertRegex(SCHEMA, rf'{type_}: \{{ label: "[^"]+", icon: "[a-z_]+", editor: "vitals"')
+            self.assertTrue((ROOT / f"services/modes/conditions/{file}.qml").exists(), file)
+        self.assertTrue((ROOT / "modules/ii/modes/forms/TriggerVitals.qml").exists())
+
+    def test_bedtime_asks_the_watch_before_the_usage_estimate(self):
+        history = BEDTIME.split("function history(count)")[1].split("function streak(")[0]
+        self.assertLess(history.index("VitalsService.summary("), history.index("root.estimateFromUsage(key)"))
+        self.assertIn("vitals?.bedtime?.enable", history)
+        self.assertNotIn(".stages", history)
+        self.assertNotIn("sleepFor(", history.split("not sleepFor()")[1])
 
 
 if __name__ == "__main__":

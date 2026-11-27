@@ -81,6 +81,7 @@ ColumnLayout {
         case "shell": return Translation.tr("Terminal");
         case "rag": return Translation.tr("Local retrieval");
         case "memory": return Translation.tr("Memory");
+        case "vitals": return Translation.tr("Vitals");
         default: return Translation.tr("Other");
         }
     }
