@@ -64,89 +64,91 @@ UtilityTile {
     }
 
     // ── Square ──────────────────────────────────────────────────────────
-    Item {
-        anchors.fill: parent
-        visible: !tile.wide
+    squareFace: Component {
+        Item {
+            anchors.fill: parent
 
-        // Turns with elapsed seconds, each step gliding over its second.
-        TileShape {
-            anchors.centerIn: parent
-            width: Math.round(tile.side * (tile.started ? 0.9 : 0.74))
-            height: width
-            renderScale: tile.renderScale
-            shape: MaterialShape.Shape.Cookie12Sided
-            color: tile.started ? ColorUtils.applyAlpha(tile.contentColor, 0.12) : ClockStyle.colPrimaryContainer
-            rotation: tile.seconds * 6
-            Behavior on rotation {
-                enabled: !Appearance.reducedMotion && tile.running
-                NumberAnimation { duration: 1000; easing.type: Easing.Linear }
+            // Turns with elapsed seconds, each step gliding over its second.
+            TileShape {
+                anchors.centerIn: parent
+                width: Math.round(tile.side * (tile.started ? 0.9 : 0.74))
+                height: width
+                renderScale: tile.renderScale
+                shape: MaterialShape.Shape.Cookie12Sided
+                color: tile.started ? ColorUtils.applyAlpha(tile.contentColor, 0.12) : ClockStyle.colPrimaryContainer
+                rotation: tile.seconds * 6
+                Behavior on rotation {
+                    enabled: !Appearance.reducedMotion && tile.running
+                    NumberAnimation { duration: 1000; easing.type: Easing.Linear }
+                }
+                Behavior on width {
+                    animation: ClockStyle.motionDefault.numberAnimation.createObject(this)
+                }
             }
-            Behavior on width {
-                animation: ClockStyle.motionDefault.numberAnimation.createObject(this)
+            TileSymbol {
+                anchors.centerIn: parent
+                visible: !tile.started
+                text: "timer"
+                iconSize: Math.round(tile.side * 0.4)
+                fill: 1
+                color: ClockStyle.colOnPrimaryContainer
             }
-        }
-        TileSymbol {
-            anchors.centerIn: parent
-            visible: !tile.started
-            text: "timer"
-            iconSize: Math.round(tile.side * 0.4)
-            fill: 1
-            color: ClockStyle.colOnPrimaryContainer
-        }
-        TileValue {
-            anchors.centerIn: parent
-            visible: tile.started
-            text: tile.shortText
-            color: tile.contentColor
-            font.pixelSize: Math.round(tile.side * (tile.shortText.length > 4 ? 0.32 : 0.38))
+            TileValue {
+                anchors.centerIn: parent
+                visible: tile.started
+                text: tile.shortText
+                color: tile.contentColor
+                font.pixelSize: Math.round(tile.side * (tile.shortText.length > 4 ? 0.32 : 0.38))
+            }
         }
     }
 
     // ── Wide ────────────────────────────────────────────────────────────
-    RowLayout {
-        anchors.fill: parent
-        anchors.margins: tile.pad
-        visible: tile.wide
-        spacing: tile.pad
+    wideFace: Component {
+        RowLayout {
+            anchors.fill: parent
+            anchors.margins: tile.pad
+            spacing: tile.pad
 
-        TileButton {
-            implicitWidth: tile.badgeSize
-            implicitHeight: tile.badgeSize
-            symbol: tile.running ? "pause" : "play_arrow"
-            filled: true
-            active: tile.running
-            iconScale: 0.52
-            onClicked: TimerService.toggleStopwatch()
-        }
-
-        ColumnLayout {
-            Layout.fillWidth: true
-            Layout.alignment: Qt.AlignVCenter
-            spacing: -2
-            TileValue {
-                Layout.fillWidth: true
-                text: tile.mainText
-                color: tile.contentColor
-                font.pixelSize: tile.valueSize
+            TileButton {
+                implicitWidth: tile.badgeSize
+                implicitHeight: tile.badgeSize
+                symbol: tile.running ? "pause" : "play_arrow"
+                filled: true
+                active: tile.running
+                iconScale: 0.52
+                onClicked: TimerService.toggleStopwatch()
             }
-            TileCaption {
-                Layout.fillWidth: true
-                text: tile.laps.length > 0
-                    ? Translation.tr("Lap %1 · %2").arg(tile.laps.length + 1).arg(ClockFormat.stopwatch(tile.currentLap).main)
-                    : tile.running ? Translation.tr("Running") : tile.started ? Translation.tr("Paused") : Translation.tr("Stopwatch")
-                color: tile.captionColor
-                font.pixelSize: tile.captionSize
-            }
-        }
 
-        TileButton {
-            visible: tile.started
-            implicitWidth: Math.round(tile.badgeSize * 0.84)
-            implicitHeight: implicitWidth
-            symbol: tile.running ? "flag" : "restart_alt"
-            tip: tile.running ? Translation.tr("Lap") : Translation.tr("Reset")
-            colContent: tile.contentColor
-            onClicked: tile.running ? TimerService.stopwatchRecordLap() : TimerService.stopwatchReset()
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignVCenter
+                spacing: -2
+                TileValue {
+                    Layout.fillWidth: true
+                    text: tile.mainText
+                    color: tile.contentColor
+                    font.pixelSize: tile.valueSize
+                }
+                TileCaption {
+                    Layout.fillWidth: true
+                    text: tile.laps.length > 0
+                        ? Translation.tr("Lap %1 · %2").arg(tile.laps.length + 1).arg(ClockFormat.stopwatch(tile.currentLap).main)
+                        : tile.running ? Translation.tr("Running") : tile.started ? Translation.tr("Paused") : Translation.tr("Stopwatch")
+                    color: tile.captionColor
+                    font.pixelSize: tile.captionSize
+                }
+            }
+
+            TileButton {
+                visible: tile.started
+                implicitWidth: Math.round(tile.badgeSize * 0.84)
+                implicitHeight: implicitWidth
+                symbol: tile.running ? "flag" : "restart_alt"
+                tip: tile.running ? Translation.tr("Lap") : Translation.tr("Reset")
+                colContent: tile.contentColor
+                onClicked: tile.running ? TimerService.stopwatchRecordLap() : TimerService.stopwatchReset()
+            }
         }
     }
 }

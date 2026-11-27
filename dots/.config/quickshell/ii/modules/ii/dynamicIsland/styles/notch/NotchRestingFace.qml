@@ -349,7 +349,7 @@ Item {
                 anchors.fill: parent
                 radius: width / 2
                 visible: false
-                layer.enabled: true
+                layer.enabled: coverImage.status === Image.Ready
             }
 
             MultiEffect {

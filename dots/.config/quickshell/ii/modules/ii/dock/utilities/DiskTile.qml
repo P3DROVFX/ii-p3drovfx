@@ -64,10 +64,6 @@ UtilityTile {
         Shape {
             anchors.fill: parent
             preferredRendererType: Shape.CurveRenderer
-            // The curve renderer leaves the disc's edge as hard steps here; a
-            // multisampled layer smooths it.
-            layer.enabled: true
-            layer.samples: 4
             ShapePath {
                 fillColor: pie.colRest
                 strokeColor: "transparent"
@@ -103,60 +99,25 @@ UtilityTile {
     }
 
     // ── Square: the share over a faint pie ──────────────────────────────
-    Item {
-        anchors.fill: parent
-        visible: !tile.wide
+    squareFace: Component {
+        Item {
+            anchors.fill: parent
 
-        Pie {
-            anchors.centerIn: parent
-            width: Math.round(tile.side * 0.8)
-            height: width
-            colSlice: ColorUtils.applyAlpha(tile.sliceColor, 0.32)
-            colRest: ColorUtils.applyAlpha(tile.contentColor, 0.08)
-        }
-        RowLayout {
-            anchors.centerIn: parent
-            spacing: 0
-            TileValue {
-                Layout.alignment: Qt.AlignBaseline
-                text: tile.ready ? String(tile.percent) : "—"
-                color: tile.full ? ClockStyle.colError : tile.contentColor
-                font.pixelSize: Math.round(tile.side * 0.38)
+            Pie {
+                anchors.centerIn: parent
+                width: Math.round(tile.side * 0.8)
+                height: width
+                colSlice: ColorUtils.applyAlpha(tile.sliceColor, 0.32)
+                colRest: ColorUtils.applyAlpha(tile.contentColor, 0.08)
             }
-            TileValue {
-                Layout.alignment: Qt.AlignBaseline
-                visible: tile.ready
-                text: "%"
-                color: tile.captionColor
-                font.variableAxes: ClockStyle.axesDigits
-                font.pixelSize: Math.round(tile.side * 0.2)
-            }
-        }
-    }
-
-    // ── Wide ────────────────────────────────────────────────────────────
-    RowLayout {
-        anchors.fill: parent
-        anchors.margins: tile.pad
-        anchors.rightMargin: tile.pad * 2
-        visible: tile.wide
-        spacing: tile.pad
-
-        Pie {
-            implicitWidth: tile.badgeSize
-            implicitHeight: tile.badgeSize
-        }
-        ColumnLayout {
-            Layout.fillWidth: true
-            Layout.alignment: Qt.AlignVCenter
-            spacing: -2
             RowLayout {
-                spacing: 1
+                anchors.centerIn: parent
+                spacing: 0
                 TileValue {
                     Layout.alignment: Qt.AlignBaseline
                     text: tile.ready ? String(tile.percent) : "—"
                     color: tile.full ? ClockStyle.colError : tile.contentColor
-                    font.pixelSize: tile.valueSize
+                    font.pixelSize: Math.round(tile.side * 0.38)
                 }
                 TileValue {
                     Layout.alignment: Qt.AlignBaseline
@@ -164,15 +125,52 @@ UtilityTile {
                     text: "%"
                     color: tile.captionColor
                     font.variableAxes: ClockStyle.axesDigits
-                    font.pixelSize: Math.round(tile.valueSize * 0.55)
+                    font.pixelSize: Math.round(tile.side * 0.2)
                 }
             }
-            TileCaption {
+        }
+    }
+
+    // ── Wide ────────────────────────────────────────────────────────────
+    wideFace: Component {
+        RowLayout {
+            anchors.fill: parent
+            anchors.margins: tile.pad
+            anchors.rightMargin: tile.pad * 2
+            spacing: tile.pad
+
+            Pie {
+                implicitWidth: tile.badgeSize
+                implicitHeight: tile.badgeSize
+            }
+            ColumnLayout {
                 Layout.fillWidth: true
-                text: tile.ready ? Translation.tr("%1 free · %2").arg(tile.bytes(ResourceUsage.diskFree)).arg(tile.mount)
-                    : tile.mount
-                color: tile.captionColor
-                font.pixelSize: tile.captionSize
+                Layout.alignment: Qt.AlignVCenter
+                spacing: -2
+                RowLayout {
+                    spacing: 1
+                    TileValue {
+                        Layout.alignment: Qt.AlignBaseline
+                        text: tile.ready ? String(tile.percent) : "—"
+                        color: tile.full ? ClockStyle.colError : tile.contentColor
+                        font.pixelSize: tile.valueSize
+                    }
+                    TileValue {
+                        Layout.alignment: Qt.AlignBaseline
+                        visible: tile.ready
+                        text: "%"
+                        color: tile.captionColor
+                        font.variableAxes: ClockStyle.axesDigits
+                        font.pixelSize: Math.round(tile.valueSize * 0.55)
+                    }
+                }
+                TileCaption {
+                    Layout.fillWidth: true
+                    text: tile.ready ? Translation.tr("%1 free · %2").arg(tile.bytes(ResourceUsage.diskFree)).arg(tile.mount)
+                        : tile.mount
+                    color: tile.captionColor
+                    font.pixelSize: tile.captionSize
+                }
             }
         }
     }

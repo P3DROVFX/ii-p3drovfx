@@ -10,6 +10,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.modules.ii.bar as Bar
+import qs.modules.ii.bar.registry
 import qs.modules.ii.bar.shared
 
 Item { // Bar content region
@@ -18,13 +19,17 @@ Item { // Bar content region
     property var screen: root.QsWindow.window?.screen
     property int monitorIndex
 
-    // ── Edit Mode ─────────────────────────────────────────────────────────────
-    property var barEditController: editController
-    Bar.BarEditController {
-        id: editController
+    // ── Edit Mode (lazy — only loaded while editing) ──────────────────────────
+    readonly property var barEditController: editControllerLoader.item
+    Loader {
+        id: editControllerLoader
         anchors.fill: parent
         z: 100
-        vertical: true
+        active: GlobalStates.editMode
+        source: active ? Qt.resolvedUrl("../bar/BarEditController.qml") : ""
+        onLoaded: {
+            if (item) item.vertical = true;
+        }
     }
     property var brightnessMonitor: Brightness.getMonitorForScreen(screen)
     property bool hasActiveWindows: false
@@ -65,10 +70,7 @@ Item { // Bar content region
     readonly property var centerList: centerIdx === -1 ? fullModel.slice() : [fullModel[centerIdx]]
     readonly property var rightList: centerIdx === -1 ? root._emptyLayout : fullModel.slice(centerIdx + 1)
 
-    BarThemes {
-        id: barThemes
-    }
-    property var activeTheme: barThemes.getTheme(Config.options.bar.expressiveColorTheme)
+    readonly property var activeTheme: BarWidgetRegistry.activeTheme
 
     readonly property bool isIslandMode: Config.options.bar.barBackgroundStyle === 3
     readonly property bool isDynamicIsland: BarInteraction.cornerStyle === 3

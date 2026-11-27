@@ -59,9 +59,9 @@ MediaWidgetBase {
         color: Appearance.colors.colSecondaryContainer
 
         // `clip` is rectangular in QML, so a child's square corners would poke
-        // out of the card's rounded ones. Masking to the card's own shape is
-        // the only thing that actually rounds a child.
-        layer.enabled: true
+        // out of the card's rounded ones. Only enable the offscreen layer when a
+        // track is actually visible.
+        layer.enabled: root.hasTrack
         layer.effect: OpacityMask {
             maskSource: Rectangle {
                 width: card.width
@@ -86,16 +86,14 @@ MediaWidgetBase {
             Image {
                 anchors.fill: parent
                 source: root.artSource
-                visible: root.artSource !== ""
+                visible: root.hasTrack && root.artSource !== ""
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
                 cache: false
                 sourceSize.width: root.badgeSize * 2
                 sourceSize.height: root.badgeSize * 2
 
-                // Clipped to the badge's silhouette, so the artwork takes the
-                // Material shape instead of sitting in a square on top of it.
-                layer.enabled: true
+                layer.enabled: visible && status === Image.Ready
                 layer.effect: OpacityMask {
                     maskSource: MaterialShape {
                         width: artBadge.width

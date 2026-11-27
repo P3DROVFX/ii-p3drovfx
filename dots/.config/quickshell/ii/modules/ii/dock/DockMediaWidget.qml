@@ -615,7 +615,8 @@ Item {
                                 visible: false
                             }
 
-                            layer.enabled: true
+                            layer.enabled: (artImgA.visible && artImgA.status === Image.Ready)
+                                || (artImgB.visible && artImgB.status === Image.Ready)
                             layer.effect: OpacityMask {
                                 maskSource: artMask
                             }
@@ -940,7 +941,7 @@ Item {
                             visible: false
                         }
 
-                        layer.enabled: true
+                        layer.enabled: vertArtImg.visible && vertArtImg.status === Image.Ready
                         layer.effect: OpacityMask {
                             maskSource: vertArtMask
                         }

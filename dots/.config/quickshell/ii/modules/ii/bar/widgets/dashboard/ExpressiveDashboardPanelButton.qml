@@ -35,25 +35,28 @@ Item {
         }
     }
 
-    Canvas {
+    // Lightweight Rectangle in rest state; dashed-border Canvas only loads while
+    // the right sidebar is open (avoids keeping a permanent 2D Canvas FBO alive).
+    Rectangle {
         id: pill
         visible: root.isMaterial
         anchors.centerIn: parent
-        anchors.verticalCenterOffset: root.vertical ? 0 : -0
 
-        property color pillColor: GlobalStates.sidebarRightOpen 
+        property color pillColor: GlobalStates.sidebarRightOpen
             ? (mouseArea.containsMouse ? Appearance.colors.colLayer4Hover : "transparent")
             : (mouseArea.containsMouse ? widgetPalette.colBackgroundHover : widgetPalette.colBackground)
 
-        property color borderColor: GlobalStates.sidebarRightOpen 
+        property color borderColor: GlobalStates.sidebarRightOpen
             ? widgetPalette.colBackground
             : "transparent"
 
         property real borderWidth: GlobalStates.sidebarRightOpen ? 1.5 : 0
         property real dashLength: GlobalStates.sidebarRightOpen ? 6 : 0
         property real gapLength: GlobalStates.sidebarRightOpen ? 4 : 0
-        property real radius: (typeof rootItem !== "undefined" ? rootItem.groupStyle : Config.options.bar.barGroupStyle) === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
         property real dashOffset: 0
+
+        radius: (typeof rootItem !== "undefined" ? rootItem.groupStyle : Config.options.bar.barGroupStyle) === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
+        color: GlobalStates.sidebarRightOpen ? "transparent" : pillColor
 
         implicitWidth: root.vertical ? Appearance.sizes.verticalBarWidth - 8 : Math.max(0, flow.implicitWidth - flow.itemSpacing) + 10
         implicitHeight: root.vertical ? Math.max(0, flow.implicitHeight - flow.itemSpacing) + 10 : Appearance.sizes.baseBarHeight - 8
@@ -61,48 +64,53 @@ Item {
         width: implicitWidth
         height: implicitHeight
 
-        onPillColorChanged: requestPaint()
-        onBorderColorChanged: requestPaint()
-        onWidthChanged: requestPaint()
-        onHeightChanged: requestPaint()
-        onDashOffsetChanged: requestPaint()
-
         Behavior on pillColor {
             ColorAnimation { duration: 150 }
         }
 
-        onPaint: {
-            if (width <= 0 || height <= 0) return;
-            var ctx = getContext("2d");
-            ctx.clearRect(0, 0, width, height);
-
-            var w = width;
-            var h = height;
-            var bw = borderWidth;
-            var r = Math.min(radius, (w - 2 * bw) / 2, (h - 2 * bw) / 2);
-
-            ctx.save();
-
-            ctx.beginPath();
-            ctx.moveTo(bw + r, bw);
-            ctx.arcTo(w - bw, bw, w - bw, h - bw, r);
-            ctx.arcTo(w - bw, h - bw, bw, h - bw, r);
-            ctx.arcTo(bw, h - bw, bw, bw, r);
-            ctx.arcTo(bw, bw, w - bw, bw, r);
-            ctx.closePath();
-
-            ctx.fillStyle = pillColor;
-            ctx.fill();
-
-            if (bw > 0) {
-                ctx.strokeStyle = borderColor;
-                ctx.lineWidth = bw;
-                ctx.setLineDash([dashLength, gapLength]);
-                ctx.lineDashOffset = dashOffset;
-                ctx.stroke();
+        Loader {
+            anchors.fill: parent
+            active: root.isMaterial && GlobalStates.sidebarRightOpen
+            sourceComponent: Canvas {
+                id: dashCanvas
+                anchors.fill: parent
+                Connections {
+                    target: pill
+                    function onPillColorChanged() { dashCanvas.requestPaint(); }
+                    function onBorderColorChanged() { dashCanvas.requestPaint(); }
+                    function onWidthChanged() { dashCanvas.requestPaint(); }
+                    function onHeightChanged() { dashCanvas.requestPaint(); }
+                    function onDashOffsetChanged() { dashCanvas.requestPaint(); }
+                }
+                Component.onCompleted: requestPaint()
+                onPaint: {
+                    if (width <= 0 || height <= 0) return;
+                    var ctx = getContext("2d");
+                    ctx.clearRect(0, 0, width, height);
+                    var w = width;
+                    var h = height;
+                    var bw = pill.borderWidth;
+                    var r = Math.min(pill.radius, (w - 2 * bw) / 2, (h - 2 * bw) / 2);
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.moveTo(bw + r, bw);
+                    ctx.arcTo(w - bw, bw, w - bw, h - bw, r);
+                    ctx.arcTo(w - bw, h - bw, bw, h - bw, r);
+                    ctx.arcTo(bw, h - bw, bw, bw, r);
+                    ctx.arcTo(bw, bw, w - bw, bw, r);
+                    ctx.closePath();
+                    ctx.fillStyle = pill.pillColor;
+                    ctx.fill();
+                    if (bw > 0) {
+                        ctx.strokeStyle = pill.borderColor;
+                        ctx.lineWidth = bw;
+                        ctx.setLineDash([pill.dashLength, pill.gapLength]);
+                        ctx.lineDashOffset = pill.dashOffset;
+                        ctx.stroke();
+                    }
+                    ctx.restore();
+                }
             }
-
-            ctx.restore();
         }
     }
 

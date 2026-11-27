@@ -733,24 +733,35 @@ Item {
     // opens its menu (size, stack, options). The (+) tile at the end adds.
     readonly property bool editLayerActive: GlobalStates.editMode && (GlobalStates.editProgress > 0.85 || Appearance.reducedMotion)
     readonly property string editAddKey: "__editAdd"
-    readonly property alias dockEdit: dockEditController
-    DockEditController {
-        id: dockEditController
-        dockContent: root
+    readonly property var dockEdit: dockEditControllerLoader.item
+    Loader {
+        id: dockEditControllerLoader
+        active: GlobalStates.editMode
+        source: active ? Qt.resolvedUrl("DockEditController.qml") : ""
+        onLoaded: {
+            if (item)
+                item.dockContent = root;
+        }
     }
-    DockEditMenu {
-        id: dockEditMenu
-        dockContent: root
-        controller: dockEditController
+    Loader {
+        id: dockEditMenuLoader
+        active: GlobalStates.editMode
+        source: active ? Qt.resolvedUrl("DockEditMenu.qml") : ""
+        onLoaded: {
+            if (item) {
+                item.dockContent = root;
+                item.controller = Qt.binding(() => dockEditControllerLoader.item);
+            }
+        }
     }
-    readonly property bool editMenuOpen: dockEditMenu.active && !dockEditMenu.isClosing
-    readonly property var editMenuTarget: dockEditMenu.target
+    readonly property bool editMenuOpen: (dockEditMenuLoader.item?.active ?? false) && !(dockEditMenuLoader.item?.isClosing ?? false)
+    readonly property var editMenuTarget: dockEditMenuLoader.item?.target ?? null
     function openEditMenu(anchor, item) {
-        dockEditMenu.openFor(anchor, item, item?.type === "editAdd" ? "add" : "item");
+        dockEditMenuLoader.item?.openFor(anchor, item, item?.type === "editAdd" ? "add" : "item");
     }
     onEditLayerActiveChanged: {
         if (!root.editLayerActive)
-            dockEditMenu.close();
+            dockEditMenuLoader.item?.close();
     }
 
     function startIslandDrag(islandId, scenePosition) {
@@ -1038,6 +1049,8 @@ Item {
         hoveredSlot = slotItem;
         lastHoveredButton = slotItem;
         buttonHovered = true;
+        if (!root._previewPopupWanted && (slotItem?.appToplevel?.toplevels?.length ?? 0) > 0)
+            root._previewPopupWanted = true;
     }
 
     function onButtonExited(slotItem) {
@@ -3484,49 +3497,39 @@ Item {
             width: root.isVertical ? itemHeight : leadingIslandGap + bodyMainExtent
             height: root.isVertical ? leadingIslandGap + bodyMainExtent : itemHeight
 
-            // Horizontal mode: left vertical line
-            Rectangle {
-                visible: delegateWrapper._sepShowBefore && !root.isVertical
-                anchors.left: parent.left
-                anchors.leftMargin: delegateWrapper._separatorLineMargin
-                anchors.verticalCenter: parent.verticalCenter
-                width: root.sepThickness
-                height: parent.height - root.dotMarginV * 2
-                radius: Appearance.rounding.full
-                color: Appearance.colors.colOutlineVariant
-            }
-            // Horizontal mode: right vertical line
-            Rectangle {
-                visible: delegateWrapper._sepShowAfter && !root.isVertical
-                anchors.right: parent.right
-                anchors.rightMargin: delegateWrapper._separatorLineMargin
-                anchors.verticalCenter: parent.verticalCenter
-                width: root.sepThickness
-                height: parent.height - root.dotMarginV * 2
-                radius: Appearance.rounding.full
-                color: Appearance.colors.colOutlineVariant
-            }
-            // Vertical mode: top horizontal line
-            Rectangle {
-                visible: delegateWrapper._sepShowBefore && root.isVertical
-                anchors.top: parent.top
-                anchors.topMargin: delegateWrapper._separatorLineMargin
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: parent.width - root.dotMargin * 2
-                height: root.sepThickness
-                radius: Appearance.rounding.full
-                color: Appearance.colors.colOutlineVariant
-            }
-            // Vertical mode: bottom horizontal line
-            Rectangle {
-                visible: delegateWrapper._sepShowAfter && root.isVertical
-                anchors.bottom: parent.bottom
-                anchors.bottomMargin: delegateWrapper._separatorLineMargin
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: parent.width - root.dotMargin * 2
-                height: root.sepThickness
-                radius: Appearance.rounding.full
-                color: Appearance.colors.colOutlineVariant
+            // Intelligent separators — only instantiated on delegates that actually show one.
+            Loader {
+                anchors.fill: parent
+                active: delegateWrapper._sepShowBefore || delegateWrapper._sepShowAfter
+                sourceComponent: Item {
+                    anchors.fill: parent
+                    Rectangle {
+                        visible: delegateWrapper._sepShowBefore
+                        anchors.left: !root.isVertical ? parent.left : undefined
+                        anchors.leftMargin: !root.isVertical ? delegateWrapper._separatorLineMargin : 0
+                        anchors.verticalCenter: !root.isVertical ? parent.verticalCenter : undefined
+                        anchors.top: root.isVertical ? parent.top : undefined
+                        anchors.topMargin: root.isVertical ? delegateWrapper._separatorLineMargin : 0
+                        anchors.horizontalCenter: root.isVertical ? parent.horizontalCenter : undefined
+                        width: root.isVertical ? parent.width - root.dotMargin * 2 : root.sepThickness
+                        height: root.isVertical ? root.sepThickness : parent.height - root.dotMarginV * 2
+                        radius: Appearance.rounding.full
+                        color: Appearance.colors.colOutlineVariant
+                    }
+                    Rectangle {
+                        visible: delegateWrapper._sepShowAfter
+                        anchors.right: !root.isVertical ? parent.right : undefined
+                        anchors.rightMargin: !root.isVertical ? delegateWrapper._separatorLineMargin : 0
+                        anchors.verticalCenter: !root.isVertical ? parent.verticalCenter : undefined
+                        anchors.bottom: root.isVertical ? parent.bottom : undefined
+                        anchors.bottomMargin: root.isVertical ? delegateWrapper._separatorLineMargin : 0
+                        anchors.horizontalCenter: root.isVertical ? parent.horizontalCenter : undefined
+                        width: root.isVertical ? parent.width - root.dotMargin * 2 : root.sepThickness
+                        height: root.isVertical ? root.sepThickness : parent.height - root.dotMarginV * 2
+                        radius: Appearance.rounding.full
+                        color: Appearance.colors.colOutlineVariant
+                    }
+                }
             }
 
             Loader {
@@ -3547,39 +3550,84 @@ Item {
                 readonly property int _index: delegateWrapper.index
                 readonly property real _magnificationScale: delegateWrapper._magnificationScale
                 readonly property string _islandId: delegateWrapper.islandId
+                readonly property string _itemType: delegateWrapper.itemData?.type ?? ""
+                readonly property string _itemUrl: {
+                    switch (_itemType) {
+                    case "appGroup": return "DockAppGroupButton.qml";
+                    case "file": return "DockFileButton.qml";
+                    case "media": return "DockMediaWidget.qml";
+                    case "weather": return "DockWeatherWidget.qml";
+                    case "sports": return "DockSportsWidget.qml";
+                    case "livePreview": return "DockLivePreviewWidget.qml";
+                    case "tasks": return "DockTasksWidget.qml";
+                    case "utility": return "DockUtilityWidget.qml";
+                    case "widgetStack": return "DockWidgetStack.qml";
+                    case "phone": return "DockPhoneWidget.qml";
+                    case "editAdd": return "DockEditAddButton.qml";
+                    default: return "";
+                    }
+                }
 
-                sourceComponent: {
-                    switch (itemData.type) {
+                active: (_itemType === "media" || _itemType === "livePreview") ? root.dockWidgetsActive : true
+                function _syncSource() {
+                    if (_itemUrl.length > 0) {
+                        contentLoader.source = Qt.resolvedUrl(_itemUrl);
+                        return;
+                    }
+                    let comp = null;
+                    switch (_itemType) {
                     case "action":
-                        return actionItemComponent;
-                    case "appGroup":
-                        return appGroupItemComponent;
+                        comp = actionItemComponent;
+                        break;
                     case "app":
-                        return appItemComponent;
-                    case "file":
-                        return fileItemComponent;
-                    case "media":
-                        return mediaItemComponent;
-                    case "weather":
-                        return weatherItemComponent;
-                    case "sports":
-                        return sportsItemComponent;
-                    case "livePreview":
-                        return livePreviewItemComponent;
-                    case "phone":
-                        return phoneItemComponent;
-                    case "tasks":
-                        return tasksItemComponent;
-                    case "utility":
-                        return utilityItemComponent;
-                    case "widgetStack":
-                        return widgetStackItemComponent;
+                        comp = appItemComponent;
+                        break;
                     case "runningAppsGroup":
-                        return runningAppsGroupComponent;
-                    case "editAdd":
-                        return editAddItemComponent;
-                    default:
-                        return null;
+                        comp = runningAppsGroupComponent;
+                        break;
+                    }
+                    contentLoader.sourceComponent = comp;
+                }
+                Component.onCompleted: _syncSource()
+                on_ItemTypeChanged: _syncSource()
+                onLoaded: {
+                    if (_itemUrl.length === 0 || !item)
+                        return;
+                    const t = _itemType;
+                    item.dockContent = root;
+                    if (t === "editAdd") {
+                        item.anchorTarget = contentLoader;
+                        return;
+                    }
+                    item.delegateIndex = Qt.binding(() => delegateWrapper.index);
+                    if (t === "appGroup") {
+                        item.apps = Qt.binding(() => delegateWrapper.itemData?.apps ?? []);
+                        item.groupId = Qt.binding(() => delegateWrapper.itemData?.groupId ?? "");
+                        item.autoGroup = Qt.binding(() => delegateWrapper.itemData?.autoGroup === true);
+                    } else if (t === "file") {
+                        item.filePath = Qt.binding(() => delegateWrapper.itemData?.path ?? "");
+                    } else if (t === "media") {
+                        item.isVertical = Qt.binding(() => root.isVertical);
+                        item.squareMode = Qt.binding(() => root.mediaSquare);
+                    } else if (t === "livePreview") {
+                        item.isVertical = Qt.binding(() => root.isVertical);
+                        item.dockRevealed = Qt.binding(() => root.dockRevealed);
+                        item.dockWindowVisible = Qt.binding(() => root.dockWindowVisible);
+                    } else if (t === "weather" || t === "sports" || t === "tasks" || t === "phone") {
+                        item.isVertical = Qt.binding(() => root.isVertical);
+                    } else if (t === "utility") {
+                        item.isVertical = Qt.binding(() => root.isVertical);
+                        item.kind = Qt.binding(() => delegateWrapper.itemData?.kind ?? "");
+                        item.wide = Qt.binding(() => root._utilitySlots(delegateWrapper.itemData) > 1);
+                        item.width = Qt.binding(() => root.isVertical ? root.buttonSlotSize : Math.max(root.buttonSlotSize, delegateWrapper.animatedContentExtent));
+                        item.height = Qt.binding(() => root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight);
+                    } else if (t === "widgetStack") {
+                        item.isVertical = Qt.binding(() => root.isVertical);
+                        item.members = Qt.binding(() => root.widgetStackMembers);
+                        item.currentType = Qt.binding(() => root.widgetStackCurrentType);
+                        item.width = Qt.binding(() => root.widgetStackExtent);
+                        item.height = Qt.binding(() => root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight);
+                        item.currentTypeRequested.connect(type => root.widgetStackCurrentType = type);
                     }
                 }
             }
@@ -3588,79 +3636,70 @@ Item {
                 anchors.fill: contentLoader
                 z: 7
                 active: root.editLayerActive && !delegateWrapper.isExiting
-                    && root.dockEdit.editable(delegateWrapper.itemData)
-                sourceComponent: DockEditItemLayer {
-                    dockContent: root
-                    wrapper: delegateWrapper
-                    itemData: delegateWrapper.itemData
-                    delegateIndex: delegateWrapper.delegateIndex
+                    && (root.dockEdit?.editable(delegateWrapper.itemData) ?? false)
+                source: active ? Qt.resolvedUrl("DockEditItemLayer.qml") : ""
+                onLoaded: {
+                    if (!item)
+                        return;
+                    item.dockContent = root;
+                    item.wrapper = delegateWrapper;
+                    item.itemData = Qt.binding(() => delegateWrapper.itemData);
+                    item.delegateIndex = Qt.binding(() => delegateWrapper.delegateIndex);
                 }
             }
 
-            Rectangle {
-                readonly property bool _dropArmed: root.isGroupDropTarget(delegateWrapper.delegateIndex)
-                readonly property bool _dropBuilding: root.isGroupDropCandidate(delegateWrapper.delegateIndex)
-                visible: _dropArmed || _dropBuilding
+            // Group-drop highlight & badge — only instantiated while dragging over this slot.
+            Loader {
                 anchors.fill: parent
                 z: 5
-                radius: Appearance.rounding.normal
-                color: root.groupDropIsBlocked(delegateWrapper.delegateIndex)
-                    ? Appearance.colors.colErrorContainer
-                    : Appearance.colors.colPrimaryContainer
-                // Fills in as the hold builds, so the gesture reads as "keep
-                // holding to group" rather than appearing out of nowhere.
-                opacity: _dropArmed ? 0.28 : (_dropBuilding ? 0.28 * root._groupDropProgress : 0.0)
-            }
+                readonly property bool _dropArmed: root.dragging && root.isGroupDropTarget(delegateWrapper.delegateIndex)
+                readonly property bool _dropBuilding: root.dragging && root.isGroupDropCandidate(delegateWrapper.delegateIndex)
+                active: _dropArmed || _dropBuilding
+                sourceComponent: Item {
+                    anchors.fill: parent
+                    readonly property bool _armed: root.isGroupDropTarget(delegateWrapper.delegateIndex)
+                    readonly property bool _building: root.isGroupDropCandidate(delegateWrapper.delegateIndex)
 
-            Rectangle {
-                visible: root.isGroupDropTarget(delegateWrapper.delegateIndex)
-                width: Math.max(Appearance.font.pixelSize.normal, root.buttonSlotSize * 0.3)
-                height: width
-                anchors.top: parent.top
-                anchors.right: parent.right
-                anchors.topMargin: -height * 0.18
-                anchors.rightMargin: -width * 0.18
-                z: 6
-                radius: Appearance.rounding.full
-                color: root.groupDropIsBlocked(delegateWrapper.delegateIndex)
-                    ? Appearance.colors.colError
-                    : Appearance.colors.colPrimary
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: Appearance.rounding.normal
+                        color: root.groupDropIsBlocked(delegateWrapper.delegateIndex)
+                            ? Appearance.colors.colErrorContainer
+                            : Appearance.colors.colPrimaryContainer
+                        opacity: _armed ? 0.28 : (_building ? 0.28 * root._groupDropProgress : 0.0)
+                    }
 
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: root.groupDropIsBlocked(delegateWrapper.delegateIndex)
-                        ? "block"
-                        : (root.groupDropWillCreate(delegateWrapper.delegateIndex) ? "create_new_folder" : "group_add")
-                    iconSize: Appearance.font.pixelSize.small
-                    color: root.groupDropIsBlocked(delegateWrapper.delegateIndex)
-                        ? Appearance.colors.colOnError
-                        : Appearance.colors.colOnPrimary
+                    Rectangle {
+                        visible: _armed
+                        width: Math.max(Appearance.font.pixelSize.normal, root.buttonSlotSize * 0.3)
+                        height: width
+                        anchors.top: parent.top
+                        anchors.right: parent.right
+                        anchors.topMargin: -height * 0.18
+                        anchors.rightMargin: -width * 0.18
+                        z: 1
+                        radius: Appearance.rounding.full
+                        color: root.groupDropIsBlocked(delegateWrapper.delegateIndex)
+                            ? Appearance.colors.colError
+                            : Appearance.colors.colPrimary
+
+                        MaterialSymbol {
+                            anchors.centerIn: parent
+                            text: root.groupDropIsBlocked(delegateWrapper.delegateIndex)
+                                ? "block"
+                                : (root.groupDropWillCreate(delegateWrapper.delegateIndex) ? "create_new_folder" : "group_add")
+                            iconSize: Appearance.font.pixelSize.small
+                            color: root.groupDropIsBlocked(delegateWrapper.delegateIndex)
+                                ? Appearance.colors.colOnError
+                                : Appearance.colors.colOnPrimary
+                        }
+                    }
                 }
             }
         }
     }
 
-    // ── Item type components ───────────────────────────────────────────────
-
-    Component {
-        id: appGroupItemComponent
-        Item {
-            id: appGroupItemRoot
-            width: root.buttonSlotSize
-            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
-            readonly property var _itemData: parent._itemData
-            readonly property int _index: parent._index
-
-            DockAppGroupButton {
-                anchors.centerIn: parent
-                apps: appGroupItemRoot._itemData.apps ?? []
-                dockContent: root
-                groupId: appGroupItemRoot._itemData.groupId ?? ""
-                autoGroup: appGroupItemRoot._itemData.autoGroup === true
-                delegateIndex: appGroupItemRoot._index
-            }
-        }
-    }
+    // ── Item type components (lightweight inline; heavy widgets load by URL) ──
 
     Component {
         id: actionItemComponent
@@ -3805,173 +3844,6 @@ Item {
     }
 
     Component {
-        id: fileItemComponent
-        Item {
-            id: fileItemRoot
-            width: root.buttonSlotSize
-            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
-            readonly property var _itemData: parent._itemData
-            readonly property int _index: parent._index
-            DockFileButton {
-                anchors.centerIn: parent
-                filePath: fileItemRoot._itemData.path
-                dockContent: root
-                delegateIndex: fileItemRoot._index
-            }
-        }
-    }
-
-    Component {
-        id: mediaItemComponent
-        Item {
-            id: mediaItemRoot
-            width: root.isVertical ? root.buttonSlotSize : root.buttonSlotSize * root.mediaSlots
-            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
-            readonly property int _index: parent._index
-            Loader {
-                anchors.fill: parent
-                active: root.dockWidgetsActive
-                sourceComponent: DockMediaWidget {
-                    anchors.centerIn: parent
-                    isVertical: root.isVertical
-                    squareMode: root.mediaSquare
-                    dockContent: root
-                    delegateIndex: mediaItemRoot._index
-                }
-            }
-        }
-    }
-
-    Component {
-        id: weatherItemComponent
-        Item {
-            id: weatherItemRoot
-            width: root.isVertical ? root.buttonSlotSize : root.buttonSlotSize * 3
-            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
-            readonly property int _index: parent._index
-            DockWeatherWidget {
-                anchors.centerIn: parent
-                isVertical: root.isVertical
-                dockContent: root
-                delegateIndex: weatherItemRoot._index
-            }
-        }
-    }
-
-    Component {
-        id: sportsItemComponent
-        Item {
-            id: sportsItemRoot
-            width: root.isVertical ? root.buttonSlotSize : root.buttonSlotSize * 3
-            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
-            readonly property int _index: parent._index
-            DockSportsWidget {
-                anchors.centerIn: parent
-                isVertical: root.isVertical
-                dockContent: root
-                delegateIndex: sportsItemRoot._index
-            }
-        }
-    }
-
-    Component {
-        id: livePreviewItemComponent
-        Item {
-            id: livePreviewItemRoot
-            width: root.isVertical ? root.buttonSlotSize : root.buttonSlotSize * root.livePreviewWidgetSlots
-            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
-            readonly property int _index: parent._index
-            Loader {
-                anchors.fill: parent
-                active: root.dockWidgetsActive
-                sourceComponent: DockLivePreviewWidget {
-                    anchors.centerIn: parent
-                    isVertical: root.isVertical
-                    dockContent: root
-                    dockRevealed: root.dockRevealed
-                    dockWindowVisible: root.dockWindowVisible
-                    delegateIndex: livePreviewItemRoot._index
-                    onPickerRequested: {
-                        // Picker wiring belongs to the following live-preview phase.
-                    }
-                }
-            }
-        }
-    }
-
-    Component {
-        id: tasksItemComponent
-        Item {
-            id: tasksItemRoot
-            width: root.isVertical ? root.buttonSlotSize : root.buttonSlotSize * 3
-            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
-            readonly property int _index: parent._index
-            DockTasksWidget {
-                anchors.centerIn: parent
-                isVertical: root.isVertical
-                dockContent: root
-                delegateIndex: tasksItemRoot._index
-            }
-        }
-    }
-
-
-    Component {
-        id: utilityItemComponent
-        Item {
-            id: utilityItemRoot
-            readonly property int _index: parent._index
-            readonly property var _itemData: parent._itemData
-            // Follows the slot while it glides between square and wide.
-            width: root.isVertical ? root.buttonSlotSize : Math.max(root.buttonSlotSize, parent._animatedContentExtent)
-            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
-            DockUtilityWidget {
-                anchors.fill: parent
-                isVertical: root.isVertical
-                dockContent: root
-                delegateIndex: utilityItemRoot._index
-                kind: utilityItemRoot._itemData?.kind ?? ""
-                wide: root._utilitySlots(utilityItemRoot._itemData) > 1
-            }
-        }
-    }
-
-    Component {
-        id: widgetStackItemComponent
-        Item {
-            id: widgetStackItemRoot
-            width: root.widgetStackExtent
-            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
-            readonly property int _index: parent._index
-            DockWidgetStack {
-                anchors.fill: parent
-                isVertical: root.isVertical
-                dockContent: root
-                delegateIndex: widgetStackItemRoot._index
-                members: root.widgetStackMembers
-                currentType: root.widgetStackCurrentType
-                onCurrentTypeRequested: type => root.widgetStackCurrentType = type
-            }
-        }
-    }
-
-    Component {
-        id: phoneItemComponent
-        Item {
-            id: phoneItemRoot
-            width: root.buttonSlotSize
-            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
-            readonly property int _index: parent._index
-            DockPhoneWidget {
-                anchors.centerIn: parent
-                isVertical: root.isVertical
-                dockContent: root
-                delegateIndex: phoneItemRoot._index
-            }
-        }
-    }
-
-    Component {
         id: runningAppsGroupComponent
         Item {
             id: runningAppsRoot
@@ -4043,43 +3915,25 @@ Item {
         }
     }
 
-    Component {
-        id: editAddItemComponent
-        Item {
-            id: editAddRoot
-            width: root.buttonSlotSize
-            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
-
-            DockEditAddButton {
-                anchors.centerIn: parent
-                dockContent: root
-                anchorTarget: editAddRoot
-            }
-        }
-    }
-
-    // ── Preview Popup ──────────────────────────────────────────────────────
+    // ── Preview Popup (lazy on first hover of a running app) ───────────────
+    property bool _previewPopupWanted: false
     Loader {
         id: previewPopupLoader
-        // Not while Edit Mode is on: a window preview popping up over the dock
-        // you are rearranging is in the way, and there is nothing to switch to.
-        active: (Config.options.dock.enablePreview ?? true) && !GlobalStates.editMode
-        sourceComponent: DockPreviewPopup {
-            dockRoot: root
-            dockWindow: root.QsWindow.window
-            appTopLevel: root.lastHoveredButton?.appToplevel
+        active: (Config.options.dock.enablePreview ?? true) && !GlobalStates.editMode && root._previewPopupWanted
+        source: active ? Qt.resolvedUrl("widgets/DockPreviewPopup.qml") : ""
+        onLoaded: {
+            if (!item)
+                return;
+            item.dockRoot = root;
+            item.dockWindow = Qt.binding(() => root.QsWindow.window);
+            item.appTopLevel = Qt.binding(() => root.lastHoveredButton?.appToplevel);
         }
     }
 
     // The dock's one tooltip: every item's DockTooltip asks this host, which
     // slides a single bubble between items inside one resident surface.
-    // In window-preview mode only items with no window to preview (pinned apps
-    // not running, widgets) want it. It comes up on the first such hover and
-    // stays, so a preview-only dock maps no surface until then.
     readonly property var dockTooltipHost: tooltipHostLoader.item
     property bool _tooltipHostWanted: false
-    // Deferred, so the host's surface is never created inside the item's own
-    // binding or hover update.
     function requestTooltipHost() {
         Qt.callLater(root._wantTooltipHost);
     }
@@ -4090,8 +3944,87 @@ Item {
         id: tooltipHostLoader
         active: (Config.options?.dock?.enableAppTooltip ?? false)
             || ((Config.options?.dock?.enablePreview ?? true) && root._tooltipHostWanted)
-        sourceComponent: DockTooltipHost {
-            dockContent: root
+        source: active ? Qt.resolvedUrl("widgets/DockTooltipHost.qml") : ""
+        onLoaded: {
+            if (item)
+                item.dockContent = root;
+        }
+    }
+
+    // ── Shared App Context Menu (O(1) instead of one DockContextMenu per app) ──
+    property bool _appMenuWanted: false
+    property var _pendingAppMenuReq: null
+    function openAppContextMenu(anchorBtn, appToplevel, desktopEntry) {
+        if (root.buttonHovered) {
+            root.buttonHovered = false;
+            root.lastHoveredButton = null;
+        }
+        const req = { anchor: anchorBtn, toplevel: appToplevel, entry: desktopEntry };
+        if (sharedAppMenuLoader.item) {
+            root._applyAppMenuReq(sharedAppMenuLoader.item, req);
+            return;
+        }
+        root._pendingAppMenuReq = req;
+        root._appMenuWanted = true;
+    }
+    function _applyAppMenuReq(menu, req) {
+        if (!menu || !req)
+            return;
+        menu.anchorItem = req.anchor;
+        menu.appToplevel = req.toplevel;
+        menu.desktopEntry = req.entry;
+        menu.open();
+    }
+    Loader {
+        id: sharedAppMenuLoader
+        active: root._appMenuWanted
+        source: active ? Qt.resolvedUrl("DockContextMenu.qml") : ""
+        onLoaded: {
+            if (item && root._pendingAppMenuReq) {
+                const req = root._pendingAppMenuReq;
+                root._pendingAppMenuReq = null;
+                root._applyAppMenuReq(item, req);
+            }
+        }
+    }
+    Connections {
+        target: sharedAppMenuLoader.item
+        ignoreUnknownSignals: true
+        function onActiveChanged() {
+            if (sharedAppMenuLoader.item?.active)
+                root.registerContextMenuOpen();
+            else
+                root.registerContextMenuClose();
+        }
+    }
+
+    // ── Centralized Notifications dispatch (O(1) Connections instead of O(N)) ──
+    property var _appButtons: []
+    function registerAppButton(btn) {
+        if (btn && root._appButtons.indexOf(btn) < 0)
+            root._appButtons.push(btn);
+    }
+    function unregisterAppButton(btn) {
+        const idx = root._appButtons.indexOf(btn);
+        if (idx >= 0)
+            root._appButtons.splice(idx, 1);
+    }
+    Connections {
+        target: Notifications
+        function onNotify(notif) {
+            if (!notif)
+                return;
+            const appName = (notif.appName || "").toLowerCase();
+            if (appName === "")
+                return;
+            for (let i = 0; i < root._appButtons.length; i++) {
+                const btn = root._appButtons[i];
+                if (!btn)
+                    continue;
+                const targetName = (btn.desktopEntry?.name ?? btn.appToplevel?.appId ?? "").toLowerCase();
+                if (targetName !== "" && (appName === targetName || targetName.includes(appName) || appName.includes(targetName)))
+                    btn.playNotificationAnimation();
+            }
         }
     }
 

@@ -19,7 +19,7 @@ ContentSection {
                 Config.options.bar.singleMonitorName = Quickshell.screens[0].name;
         }
         StyledToolTip {
-            text: Translation.tr("Display the bar on only one chosen monitor instead of all monitors")
+            text: Translation.tr("Display the bar on only one chosen monitor instead of all monitors. Rendering the bar on multiple monitors duplicates all widgets and consumes significantly more RAM.")
         }
     }
 

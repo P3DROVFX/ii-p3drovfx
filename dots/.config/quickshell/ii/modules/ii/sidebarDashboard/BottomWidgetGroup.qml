@@ -60,19 +60,22 @@ Rectangle {
                 "type": "calendar",
                 "name": Translation.tr("Calendar"),
                 "icon": "calendar_month",
-                "widget": calendarWidgetComponent
+                "url": Qt.resolvedUrl("../../common/dashboardWidgets/calendar/CalendarWidget.qml"),
+                "hasShortcutHints": true
             },
             {
                 "type": "todo",
                 "name": Translation.tr("To Do"),
                 "icon": "check_circle",
-                "widget": todoWidgetComponent
+                "url": Qt.resolvedUrl("../../common/dashboardWidgets/todo/TodoWidget.qml"),
+                "hasShortcutHints": false
             },
             {
                 "type": "timer",
                 "name": Translation.tr("Timer"),
                 "icon": "schedule",
-                "widget": timerWidgetComponent
+                "url": Qt.resolvedUrl("../../common/dashboardWidgets/timer/PomodoroWidget.qml"),
+                "hasShortcutHints": true
             }
         ];
         if (root.showNotesTab) {
@@ -80,46 +83,16 @@ Rectangle {
                 "type": "notes",
                 "name": Translation.tr("Notes"),
                 "icon": "note_stack",
-                "widget": notesWidgetComponent
+                "url": Qt.resolvedUrl("../../common/dashboardWidgets/notes/NotesDashboardWidget.qml"),
+                "hasShortcutHints": true
             });
         }
         return list;
     }
 
-    Component {
-        id: calendarWidgetComponent
-        CalendarWidget {
-            entranceTrigger: root.contentEntranceTrigger
-            keyboardEnabled: root.keyboardEnabled && !root.effectivelyCollapsed
-                && root.tabs[root.selectedTab]?.type === "calendar"
-            showShortcutHints: root.hintVisible
-        }
-    }
-    Component {
-        id: todoWidgetComponent
-        TodoWidget {
-            entranceTrigger: root.contentEntranceTrigger
-            keyboardEnabled: root.keyboardEnabled && !root.effectivelyCollapsed
-                && root.tabs[root.selectedTab]?.type === "todo"
-        }
-    }
-    Component {
-        id: timerWidgetComponent
-        PomodoroWidget {
-            entranceTrigger: root.contentEntranceTrigger
-            keyboardEnabled: root.keyboardEnabled && !root.effectivelyCollapsed
-                && root.tabs[root.selectedTab]?.type === "timer"
-            showShortcutHints: root.hintVisible
-        }
-    }
-    Component {
-        id: notesWidgetComponent
-        NotesDashboardWidget {
-            entranceTrigger: root.contentEntranceTrigger
-            keyboardEnabled: root.keyboardEnabled && !root.effectivelyCollapsed
-                && root.tabs[root.selectedTab]?.type === "notes"
-            showShortcutHints: root.hintVisible
-        }
+    readonly property var currentTabMeta: {
+        const idx = Math.max(0, Math.min(root.selectedTab, root.tabs.length - 1));
+        return root.tabs[idx];
     }
 
     // A retained dashboard loads the selected widget while hidden. A cold
@@ -474,12 +447,43 @@ Rectangle {
             Loader {
                 id: tabStack
                 anchors.fill: parent
-                active: root.contentActivated
+                // Unload the active bottom widget when collapsed so collapsing
+                // the bottom group actually frees its RAM.
+                active: root.contentActivated && !root.effectivelyCollapsed
                 asynchronous: true
+
+                property url pendingUrl: root.currentTabMeta.url
+                source: pendingUrl
+
+                // Push properties imperatively instead of QQmlBind on tabStack.item:
+                // Qt 6.11's QQmlBind::setObject() segfaults in QQmlPropertyPrivate::setBinding
+                // when QQuickLoader::setActive() tears down its item.
+                function syncTabProps() {
+                    const it = tabStack.item;
+                    if (!it)
+                        return;
+                    if (it.hasOwnProperty("entranceTrigger"))
+                        it.entranceTrigger = root.contentEntranceTrigger;
+                    if (it.hasOwnProperty("keyboardEnabled"))
+                        it.keyboardEnabled = root.keyboardEnabled && !root.effectivelyCollapsed;
+                    if (tabStack.source.toString().indexOf("TodoWidget") === -1
+                            && it.hasOwnProperty("showShortcutHints"))
+                        it.showShortcutHints = root.hintVisible;
+                }
+
+                onLoaded: tabStack.syncTabProps()
+
+                Connections {
+                    target: root
+                    function onContentEntranceTriggerChanged() { tabStack.syncTabProps(); }
+                    function onKeyboardEnabledChanged() { tabStack.syncTabProps(); }
+                    function onEffectivelyCollapsedChanged() { tabStack.syncTabProps(); }
+                    function onHintVisibleChanged() { tabStack.syncTabProps(); }
+                }
 
                 Component.onCompleted: {
                     const idx = Math.max(0, Math.min(root.selectedTab, root.tabs.length - 1));
-                    tabStack.sourceComponent = root.tabs[idx].widget;
+                    tabStack.pendingUrl = root.tabs[idx].url;
                     root.previousIndex = idx;
                 }
 
@@ -487,8 +491,8 @@ Rectangle {
                     target: root
                     function onSelectedTabChanged() {
                         const idx = Math.max(0, Math.min(root.selectedTab, root.tabs.length - 1));
-                        if (!root.contentActivated || !tabStack.item) {
-                            tabStack.sourceComponent = root.tabs[idx].widget;
+                        if (!root.contentActivated || root.effectivelyCollapsed || !tabStack.item) {
+                            tabStack.pendingUrl = root.tabs[idx].url;
                             root.previousIndex = idx;
                             return;
                         }
@@ -531,8 +535,8 @@ Rectangle {
         }
         PropertyAction {
             target: tabStack
-            property: "sourceComponent"
-            value: root.tabs[Math.max(0, Math.min(root.selectedTab, root.tabs.length - 1))].widget
+            property: "pendingUrl"
+            value: root.tabs[Math.max(0, Math.min(root.selectedTab, root.tabs.length - 1))].url
         } // The source change happens here
         ParallelAnimation {
             PropertyAnimation {

@@ -796,14 +796,27 @@ Item {
                     title: Translation.tr("Show on")
                     icon: "desktop_windows"
                     Layout.fillWidth: true
-                    tooltip: Translation.tr("The monitor the dock lives on. If it is disconnected, the dock shows on every monitor.")
+                    tooltip: Translation.tr("The monitor the dock lives on. Showing on all monitors duplicates the dock window and increases RAM usage.")
 
                     ConfigSelectionArray {
                         currentValue: {
+                            const single = Config.options.dock.onlyShowOnSingleMonitor ?? true;
+                            if (!single)
+                                return "";
                             const wanted = Config.options.dock.monitor ?? "";
-                            return Quickshell.screens.some(screen => screen.name === wanted) ? wanted : "";
+                            if (wanted.length > 0 && Quickshell.screens.some(screen => screen.name === wanted))
+                                return wanted;
+                            return Quickshell.screens.length > 0 ? Quickshell.screens[0].name : "";
                         }
-                        onSelected: newValue => Config.options.dock.monitor = newValue
+                        onSelected: newValue => {
+                            if (newValue === "") {
+                                Config.options.dock.onlyShowOnSingleMonitor = false;
+                                Config.options.dock.monitor = "";
+                            } else {
+                                Config.options.dock.onlyShowOnSingleMonitor = true;
+                                Config.options.dock.monitor = newValue;
+                            }
+                        }
                         options: [{
                             "displayName": Translation.tr("All monitors"),
                             "icon": "select_all",

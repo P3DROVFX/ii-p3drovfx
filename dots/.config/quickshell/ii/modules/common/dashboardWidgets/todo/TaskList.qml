@@ -21,9 +21,8 @@ Item {
     property bool dense: false
     property bool showShortcutHints: false
 
-    // Fade the content itself: repainting a translucent surface changes its color.
-    // One mask handles both rounded corners and scroll edges, including the blur.
-    layer.enabled: visible && (Appearance.rounding.normal > 0 || edgeFade.overflowing)
+    // Only allocate the offscreen OpacityMask FBO when the list actually overflows.
+    layer.enabled: visible && edgeFade.overflowing
     layer.effect: OpacityMask {
         maskSource: Rectangle {
             id: viewportMask

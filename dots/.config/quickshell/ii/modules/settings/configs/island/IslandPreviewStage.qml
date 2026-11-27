@@ -13,7 +13,6 @@ import qs.modules.ii.bar.shared
 import qs.modules.ii.dynamicIsland.core
 import qs.modules.ii.dynamicIsland.bubble
 import qs.modules.ii.dynamicIsland.styles.notch
-import qs.modules.ii.dynamicIsland.widgets
 import qs.modules.ii.overview
 import qs.modules.ii.wallpaperSelector
 import qs.modules.settings.configs.colors
@@ -372,35 +371,6 @@ Item {
     }
 
     Component {
-        id: sessionHost
-        IslandSessionMenu {
-            active: true
-        }
-    }
-    Component {
-        id: askpassHost
-        IslandAskpassCard {
-            request: root.askpassRequest
-            style: root.hostProps?.style ?? "card"
-            shown: true
-            focused: false
-        }
-    }
-    Component {
-        id: switcherHost
-        IslandWindowSwitcher {
-            // Live window captures only while on show, not while kept.
-            shown: switcherSlot.wanted
-            previewEntries: root.switcherEntries
-            coverWidth: root.switcherCoverWidth
-            coverHeight: root.switcherCoverHeight
-            topPadding: 16
-            titleGap: 10
-            titleHeight: 22
-            hintsHeight: 0
-        }
-    }
-    Component {
         id: wallpaperHost
         WallpaperSelectorContent {
             compact: true
@@ -685,17 +655,31 @@ Item {
                             HostSlot {
                                 id: sessionSlot
                                 host: "session"
-                                sourceComponent: sessionHost
+                                source: active ? Quickshell.shellPath("modules/ii/dynamicIsland/widgets/IslandSessionMenu.qml") : ""
+                                Binding { target: sessionSlot.item; property: "active"; value: true; when: sessionSlot.item !== null }
                             }
                             HostSlot {
                                 id: askpassSlot
                                 host: "askpass"
-                                sourceComponent: askpassHost
+                                source: active ? Quickshell.shellPath("modules/ii/dynamicIsland/widgets/IslandAskpassCard.qml") : ""
+                                Binding { target: askpassSlot.item; property: "request"; value: root.askpassRequest; when: askpassSlot.item !== null }
+                                Binding { target: askpassSlot.item; property: "style"; value: root.hostProps?.style ?? "card"; when: askpassSlot.item !== null }
+                                Binding { target: askpassSlot.item; property: "shown"; value: true; when: askpassSlot.item !== null }
+                                Binding { target: askpassSlot.item; property: "focused"; value: false; when: askpassSlot.item !== null }
                             }
                             HostSlot {
                                 id: switcherSlot
                                 host: "switcher"
-                                sourceComponent: switcherHost
+                                source: active ? Quickshell.shellPath("modules/ii/dynamicIsland/widgets/IslandWindowSwitcher.qml") : ""
+                                // Live window captures only while on show, not while kept.
+                                Binding { target: switcherSlot.item; property: "shown"; value: switcherSlot.wanted; when: switcherSlot.item !== null }
+                                Binding { target: switcherSlot.item; property: "previewEntries"; value: root.switcherEntries; when: switcherSlot.item !== null }
+                                Binding { target: switcherSlot.item; property: "coverWidth"; value: root.switcherCoverWidth; when: switcherSlot.item !== null }
+                                Binding { target: switcherSlot.item; property: "coverHeight"; value: root.switcherCoverHeight; when: switcherSlot.item !== null }
+                                Binding { target: switcherSlot.item; property: "topPadding"; value: 16; when: switcherSlot.item !== null }
+                                Binding { target: switcherSlot.item; property: "titleGap"; value: 10; when: switcherSlot.item !== null }
+                                Binding { target: switcherSlot.item; property: "titleHeight"; value: 22; when: switcherSlot.item !== null }
+                                Binding { target: switcherSlot.item; property: "hintsHeight"; value: 0; when: switcherSlot.item !== null }
                             }
                             HostSlot {
                                 id: wallpaperSlot

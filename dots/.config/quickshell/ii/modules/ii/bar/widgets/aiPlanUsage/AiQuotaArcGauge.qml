@@ -29,8 +29,6 @@ Item {
     Shape {
         anchors.fill: parent
         preferredRendererType: Shape.CurveRenderer
-        layer.enabled: true
-        layer.smooth: true
 
         ShapePath {
             strokeColor: root.trackColor

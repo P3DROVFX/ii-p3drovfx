@@ -9,7 +9,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.modules.ii.bar.shared
-import qs.modules.ii.bar.widgets.weather
+import qs.modules.ii.bar.registry
 
 // Thin orchestrator — owns only:
 //   • screen / monitor sizing props
@@ -62,20 +62,21 @@ Item {
         id: layout
     }
 
-    // ── Edit Mode ─────────────────────────────────────────────────────────────
-    property var barEditController: editController
-    BarEditController {
-        id: editController
+    // ── Edit Mode (lazy — only loaded while editing) ──────────────────────────
+    readonly property var barEditController: editControllerLoader.item
+    Loader {
+        id: editControllerLoader
         anchors.fill: parent
         z: 100
-        vertical: false
+        active: GlobalStates.editMode
+        source: active ? Qt.resolvedUrl("BarEditController.qml") : ""
+        onLoaded: {
+            if (item) item.vertical = false;
+        }
     }
 
-    // ── Theme ─────────────────────────────────────────────────────────────────
-    BarThemes {
-        id: barThemes
-    }
-    property var activeTheme: barThemes.getTheme(Config.options.bar.expressiveColorTheme)
+    // ── Theme (shared singleton) ──────────────────────────────────────────────
+    readonly property var activeTheme: BarWidgetRegistry.activeTheme
 
     readonly property real verticalTopOffset: styleLoader.verticalTopOffset
     readonly property real verticalBottomOffset: styleLoader.verticalBottomOffset

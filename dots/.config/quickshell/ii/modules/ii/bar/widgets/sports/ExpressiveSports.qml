@@ -12,7 +12,7 @@ MouseArea {
     property bool vertical: false
 
     BarWidgetPalette {
-        id: palette
+        id: widgetPalette
         colorMode: Config.options.bar.sports.colorMode
     }
 
@@ -61,8 +61,8 @@ MouseArea {
         }
     }
 
-    implicitWidth: shouldBeVisible ? (vertical ? Appearance.sizes.verticalBarWidth : (celebrating ? Math.max(celebrationLength, layout.implicitWidth + 8) : layout.implicitWidth + 8)) : 0
-    implicitHeight: shouldBeVisible ? (vertical ? (celebrating ? Math.max(celebrationLength, layoutVert.implicitHeight + 8) : layoutVert.implicitHeight + 8) : Appearance.sizes.baseBarHeight) : 0
+    implicitWidth: shouldBeVisible ? (vertical ? Appearance.sizes.verticalBarWidth : (celebrating ? Math.max(celebrationLength, (contentLoader.item?.implicitWidth ?? 0) + 8) : (contentLoader.item?.implicitWidth ?? 0) + 8)) : 0
+    implicitHeight: shouldBeVisible ? (vertical ? (celebrating ? Math.max(celebrationLength, (contentLoader.item?.implicitHeight ?? 0) + 8) : (contentLoader.item?.implicitHeight ?? 0) + 8) : Appearance.sizes.baseBarHeight) : 0
     hoverEnabled: !BarInteraction.clickToShow
 
     // Click-to-show gives the left click to the popup; cycling moves to the right button.
@@ -206,147 +206,155 @@ MouseArea {
         }
     }
 
-    RowLayout {
-        id: layout
-        visible: !root.vertical
-        opacity: root.celebrating ? 0 : 1
-        Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-        anchors.centerIn: parent
-        spacing: 4
-        transform: Translate { x: root.horizontalOffset; y: root.verticalOffset }
+    // Lazy single-orientation content: avoids constructing 4 MaterialShapes +
+    // 4 StyledImages when no games are active or for the unused orientation.
+    Loader {
+        id: contentLoader
+        active: root.internalVisible
+        anchors.centerIn: root.vertical ? undefined : parent
+        anchors.top: root.vertical ? parent.top : undefined
+        anchors.topMargin: root.vertical ? 4 : 0
+        anchors.horizontalCenter: root.vertical ? parent.horizontalCenter : undefined
+        sourceComponent: root.vertical ? layoutVertComp : layoutHorizComp
+    }
 
-        MaterialShape {
-            Layout.alignment: Qt.AlignVCenter
-            shapeString: "Cookie7Sided"
-            color: palette.colBackgroundVariant
-            implicitSize: Appearance.sizes.baseBarHeight - 8
-            StyledImage {
-                anchors.centerIn: parent
-                width: parent.implicitSize - 14
-                height: parent.implicitSize - 14
-                source: !root.vertical && root.displayGame ? root.displayGame.home.logo : ""
-                cache: false
+    Component {
+        id: layoutHorizComp
+        RowLayout {
+            id: layout
+            opacity: root.celebrating ? 0 : 1
+            Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+            spacing: 4
+            transform: Translate { x: root.horizontalOffset; y: root.verticalOffset }
+
+            MaterialShape {
+                Layout.alignment: Qt.AlignVCenter
+                shapeString: "Cookie7Sided"
+                color: widgetPalette.colBackgroundVariant
+                implicitSize: Appearance.sizes.baseBarHeight - 8
+                StyledImage {
+                    anchors.centerIn: parent
+                    width: parent.implicitSize - 14
+                    height: parent.implicitSize - 14
+                    source: root.displayGame ? root.displayGame.home.logo : ""
+                    cache: false
+                }
             }
-        }
 
-        Rectangle {
-            id: statusPill
-            Layout.alignment: Qt.AlignVCenter
-            Layout.preferredHeight: Appearance.sizes.baseBarHeight - 14
-            Layout.preferredWidth: Math.max(statusText.implicitWidth + 16, 30)
-            radius: Appearance.rounding.full
-            color: root.containsMouse ? palette.colBackgroundHover : palette.colBackground
-            
-            AnimatedStyledText {
-                id: statusText
-                anchors.centerIn: parent
-                // If game state is "in" (active), show score. Otherwise show full status (time/date)
-                text: root.displayGame ? (root.displayGame.state === "in" ? `${root.displayGame.home.score} - ${root.displayGame.away.score}` : root.displayGame.status) : ""
-                font.pixelSize: 10
-                font.weight: Font.Black
-                color: palette.colOnBackground
-                animateChange: true
+            Rectangle {
+                id: statusPill
+                Layout.alignment: Qt.AlignVCenter
+                Layout.preferredHeight: Appearance.sizes.baseBarHeight - 14
+                Layout.preferredWidth: Math.max(statusText.implicitWidth + 16, 30)
+                radius: Appearance.rounding.full
+                color: root.containsMouse ? widgetPalette.colBackgroundHover : widgetPalette.colBackground
+
+                AnimatedStyledText {
+                    id: statusText
+                    anchors.centerIn: parent
+                    text: root.displayGame ? (root.displayGame.state === "in" ? `${root.displayGame.home.score} - ${root.displayGame.away.score}` : root.displayGame.status) : ""
+                    font.pixelSize: 10
+                    font.weight: Font.Black
+                    color: widgetPalette.colOnBackground
+                    animateChange: true
+                }
             }
-        }
 
-        MaterialShape {
-            Layout.alignment: Qt.AlignVCenter
-            shapeString: "Cookie7Sided"
-            color: palette.colBackgroundVariant
-            implicitSize: Appearance.sizes.baseBarHeight - 8
-            StyledImage {
-                anchors.centerIn: parent
-                width: parent.implicitSize - 14
-                height: parent.implicitSize - 14
-                source: !root.vertical && root.displayGame ? root.displayGame.away.logo : ""
-                cache: false
+            MaterialShape {
+                Layout.alignment: Qt.AlignVCenter
+                shapeString: "Cookie7Sided"
+                color: widgetPalette.colBackgroundVariant
+                implicitSize: Appearance.sizes.baseBarHeight - 8
+                StyledImage {
+                    anchors.centerIn: parent
+                    width: parent.implicitSize - 14
+                    height: parent.implicitSize - 14
+                    source: root.displayGame ? root.displayGame.away.logo : ""
+                    cache: false
+                }
             }
         }
     }
 
-    // Vertical Material
-    ColumnLayout {
-        id: layoutVert
-        visible: root.vertical
-        opacity: root.celebrating ? 0 : 1
-        Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-        anchors {
-            top: parent.top
-            topMargin: 4
-            horizontalCenter: parent.horizontalCenter
-        }
-        spacing: 6
-        transform: Translate { x: root.horizontalOffset; y: root.verticalOffset }
-
-        // Home Team
+    Component {
+        id: layoutVertComp
         ColumnLayout {
-            spacing: 2
-            Layout.alignment: Qt.AlignHCenter
-            MaterialShape {
+            id: layoutVert
+            opacity: root.celebrating ? 0 : 1
+            Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+            spacing: 6
+            transform: Translate { x: root.horizontalOffset; y: root.verticalOffset }
+
+            // Home Team
+            ColumnLayout {
+                spacing: 2
                 Layout.alignment: Qt.AlignHCenter
-                shapeString: "Cookie7Sided"
-                color: palette.colBackgroundVariant
-                implicitSize: Appearance.sizes.verticalBarWidth - 8
-                StyledImage {
-                    anchors.centerIn: parent
-                    width: parent.implicitSize - 12
-                    height: parent.implicitSize - 12
-                    source: root.vertical && root.displayGame ? root.displayGame.home.logo : ""
-                    cache: false
+                MaterialShape {
+                    Layout.alignment: Qt.AlignHCenter
+                    shapeString: "Cookie7Sided"
+                    color: widgetPalette.colBackgroundVariant
+                    implicitSize: Appearance.sizes.verticalBarWidth - 8
+                    StyledImage {
+                        anchors.centerIn: parent
+                        width: parent.implicitSize - 12
+                        height: parent.implicitSize - 12
+                        source: root.displayGame ? root.displayGame.home.logo : ""
+                        cache: false
+                    }
+                }
+                AnimatedStyledText {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: root.displayGame ? root.displayGame.home.score : ""
+                    font.pixelSize: 12
+                    font.weight: Font.Black
+                    color: widgetPalette.colBare
+                    visible: root.displayGame ? root.displayGame.state !== "pre" : false
+                    animateChange: true
                 }
             }
-            AnimatedStyledText {
-                Layout.alignment: Qt.AlignHCenter
-                text: root.displayGame ? root.displayGame.home.score : ""
-                font.pixelSize: 12
-                font.weight: Font.Black
-                color: palette.colBare
-                visible: root.displayGame ? root.displayGame.state !== "pre" : false
-                animateChange: true
-            }
-        }
 
-        // Status
-        Rectangle {
-            Layout.alignment: Qt.AlignHCenter
-            implicitWidth: Appearance.sizes.verticalBarWidth - 8
-            implicitHeight: 20 // Fixed height is probably okay here for vertical flow
-            radius: Appearance.rounding.full
-            color: root.containsMouse ? palette.colBackgroundHover : palette.colBackground
-            AnimatedStyledText {
-                anchors.centerIn: parent
-                text: root.displayGame ? (root.displayGame.state === "in" ? root.displayGame.status : root.displayGame.status.split(" ")[0]) : ""
-                font.pixelSize: 8
-                font.weight: Font.Black
-                color: palette.colOnBackground
-                animateChange: true
-            }
-        }
-
-        // Away Team
-        ColumnLayout {
-            spacing: 2
-            Layout.alignment: Qt.AlignHCenter
-            AnimatedStyledText {
+            // Status
+            Rectangle {
                 Layout.alignment: Qt.AlignHCenter
-                text: root.displayGame ? root.displayGame.away.score : ""
-                font.pixelSize: 12
-                font.weight: Font.Black
-                color: palette.colBare
-                visible: root.displayGame ? root.displayGame.state !== "pre" : false
-                animateChange: true
-            }
-            MaterialShape {
-                Layout.alignment: Qt.AlignHCenter
-                shapeString: "Cookie7Sided"
-                color: palette.colBackgroundVariant
-                implicitSize: Appearance.sizes.verticalBarWidth - 8
-                StyledImage {
+                implicitWidth: Appearance.sizes.verticalBarWidth - 8
+                implicitHeight: 20
+                radius: Appearance.rounding.full
+                color: root.containsMouse ? widgetPalette.colBackgroundHover : widgetPalette.colBackground
+                AnimatedStyledText {
                     anchors.centerIn: parent
-                    width: parent.implicitSize - 12
-                    height: parent.implicitSize - 12
-                    source: root.vertical && root.displayGame ? root.displayGame.away.logo : ""
-                    cache: false
+                    text: root.displayGame ? (root.displayGame.state === "in" ? root.displayGame.status : root.displayGame.status.split(" ")[0]) : ""
+                    font.pixelSize: 8
+                    font.weight: Font.Black
+                    color: widgetPalette.colOnBackground
+                    animateChange: true
+                }
+            }
+
+            // Away Team
+            ColumnLayout {
+                spacing: 2
+                Layout.alignment: Qt.AlignHCenter
+                AnimatedStyledText {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: root.displayGame ? root.displayGame.away.score : ""
+                    font.pixelSize: 12
+                    font.weight: Font.Black
+                    color: widgetPalette.colBare
+                    visible: root.displayGame ? root.displayGame.state !== "pre" : false
+                    animateChange: true
+                }
+                MaterialShape {
+                    Layout.alignment: Qt.AlignHCenter
+                    shapeString: "Cookie7Sided"
+                    color: widgetPalette.colBackgroundVariant
+                    implicitSize: Appearance.sizes.verticalBarWidth - 8
+                    StyledImage {
+                        anchors.centerIn: parent
+                        width: parent.implicitSize - 12
+                        height: parent.implicitSize - 12
+                        source: root.displayGame ? root.displayGame.away.logo : ""
+                        cache: false
+                    }
                 }
             }
         }

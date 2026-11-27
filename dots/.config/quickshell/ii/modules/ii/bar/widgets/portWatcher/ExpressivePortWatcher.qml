@@ -8,13 +8,9 @@ import QtQuick
 /**
  * Port Watcher — expressive bar style.
  *
- * The same pill grammar the other expressive widgets use: a container-tinted
- * capsule holding the count, with a filled shape as the indicator on the
- * trailing edge.
- *
- * The palette is fixed. It cannot key off the popup either, because the popup
- * opens on hover — an "active" tint would be a hover tint wearing a different
- * name. The only thing hovering does is morph the shape in the indicator.
+ * Single lazy orientation via Loader: avoids instantiating two MaterialShapes,
+ * two AnimatedStyledTexts, and 8 dynamic Behavior animations (or any of them
+ * when hidden).
  */
 MouseArea {
     id: root
@@ -26,176 +22,181 @@ MouseArea {
         && (!(Config.options.bar.portWatcher.hideWhenEmpty ?? false) || root.portCount > 0)
 
     BarWidgetPalette {
-        id: palette
+        id: widgetPalette
         colorMode: Config.options.bar.portWatcher.colorMode
     }
 
-    readonly property color colContainer: root.containsMouse ? palette.colBackgroundHover : palette.colBackground
-    readonly property color colOnContainer: palette.colOnBackground
-    readonly property color colIndicator: palette.colBackgroundVariant
-    readonly property color colOnIndicator: palette.colOnBackgroundVariant
-
-    // Hover is a shape change, nothing else. The spin sells the swap as a
-    // morph instead of a hard cut between two silhouettes.
+    readonly property color colContainer: root.containsMouse ? widgetPalette.colBackgroundHover : widgetPalette.colBackground
+    readonly property color colOnContainer: widgetPalette.colOnBackground
+    readonly property color colIndicator: widgetPalette.colBackgroundVariant
+    readonly property color colOnIndicator: widgetPalette.colOnBackgroundVariant
     readonly property string indicatorShape: root.containsMouse ? "Clover4Leaf" : "Circle"
 
     visible: root.shown
-    implicitWidth: !root.shown ? 0 : (root.vertical ? Appearance.sizes.verticalBarWidth : pill.implicitWidth)
-    implicitHeight: !root.shown ? 0 : (root.vertical ? pillVertical.implicitHeight : Appearance.sizes.baseBarHeight)
+    implicitWidth: !root.shown ? 0 : (root.vertical ? Appearance.sizes.verticalBarWidth : (pillLoader.item?.implicitWidth ?? 0))
+    implicitHeight: !root.shown ? 0 : (root.vertical ? (pillLoader.item?.implicitHeight ?? 0) : Appearance.sizes.baseBarHeight)
     hoverEnabled: !BarInteraction.clickToShow
 
     Behavior on implicitWidth {
-        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
+        NumberAnimation {
+            duration: Appearance.animation.barResize.duration
+            easing.type: Appearance.animation.barResize.type
+            easing.bezierCurve: Appearance.animation.barResize.bezierCurve
+        }
     }
 
     onClicked: PortWatcher.refresh()
-
-    // Drive the morph from the hover itself. Re-declaring onShapeStringChanged
-    // on the MaterialShape would override the handler inside MaterialShape.qml
-    // that turns shapeString into a polygon, and the shape would stop updating.
     onContainsMouseChanged: {
-        morph.restart();
-        morphVertical.restart();
+        if (pillLoader.item && typeof pillLoader.item.restartMorph === "function")
+            pillLoader.item.restartMorph();
     }
 
-    // ── Horizontal capsule ───────────────────────────────────────────────────
-    Rectangle {
-        id: pill
-
-        visible: !root.vertical
+    Loader {
+        id: pillLoader
         anchors.centerIn: parent
-        radius: (typeof rootItem !== "undefined" ? rootItem.groupStyle : Config.options.bar.barGroupStyle) === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
-        implicitHeight: Appearance.sizes.baseBarHeight - 8
-        height: implicitHeight
-        implicitWidth: countText.implicitWidth + indicator.width + 22
-        width: implicitWidth
-        color: root.colContainer
+        active: root.shown
+        sourceComponent: root.vertical ? pillVerticalComp : pillHorizontalComp
+    }
 
-        Behavior on color {
-            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-        }
-        Behavior on implicitWidth {
-            animation: Appearance.animation.barResize.numberAnimation.createObject(this)
-        }
+    Component {
+        id: pillHorizontalComp
+        Rectangle {
+            id: pill
+            function restartMorph() { morph.restart(); }
 
-        AnimatedStyledText {
-            id: countText
-
-            anchors.left: parent.left
-            anchors.leftMargin: 11
-            anchors.verticalCenter: parent.verticalCenter
-            text: String(root.portCount)
-            font.pixelSize: Appearance.font.pixelSize.small
-            font.weight: Font.Bold
-            color: root.colOnContainer
-            animateChange: true
+            radius: (typeof rootItem !== "undefined" ? rootItem.groupStyle : Config.options.bar.barGroupStyle) === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
+            implicitHeight: Appearance.sizes.baseBarHeight - 8
+            height: implicitHeight
+            implicitWidth: countText.implicitWidth + indicator.width + 22
+            width: implicitWidth
+            color: root.colContainer
 
             Behavior on color {
-                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                ColorAnimation { duration: Appearance.animation.elementMoveFast.duration }
             }
-        }
-
-        MaterialShape {
-            id: indicator
-
-            anchors.right: parent.right
-            anchors.rightMargin: 4
-            anchors.verticalCenter: parent.verticalCenter
-            shapeString: root.indicatorShape
-            implicitSize: parent.height - 8
-            color: root.colIndicator
-
-            NumberAnimation {
-                id: morph
-                target: indicator
-                property: "rotation"
-                from: -40
-                to: 0
-                duration: 340
-                easing.type: Easing.OutBack
+            Behavior on implicitWidth {
+                NumberAnimation {
+                    duration: Appearance.animation.barResize.duration
+                    easing.type: Appearance.animation.barResize.type
+                    easing.bezierCurve: Appearance.animation.barResize.bezierCurve
+                }
             }
 
-            Behavior on color {
-                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+            AnimatedStyledText {
+                id: countText
+                anchors.left: parent.left
+                anchors.leftMargin: 11
+                anchors.verticalCenter: parent.verticalCenter
+                text: String(root.portCount)
+                font.pixelSize: Appearance.font.pixelSize.small
+                font.weight: Font.Bold
+                color: root.colOnContainer
+                animateChange: true
+
+                Behavior on color {
+                    ColorAnimation { duration: Appearance.animation.elementMoveFast.duration }
+                }
             }
 
-            MaterialSymbol {
-                anchors.centerIn: parent
-                // The shape spins; the glyph stays upright.
-                rotation: -indicator.rotation
-                text: "lan"
-                iconSize: Appearance.font.pixelSize.small
-                fill: 1
-                color: root.colOnIndicator
+            MaterialShape {
+                id: indicator
+                anchors.right: parent.right
+                anchors.rightMargin: 4
+                anchors.verticalCenter: parent.verticalCenter
+                shapeString: root.indicatorShape
+                implicitSize: parent.height - 8
+                color: root.colIndicator
+
+                NumberAnimation {
+                    id: morph
+                    target: indicator
+                    property: "rotation"
+                    from: -40
+                    to: 0
+                    duration: 340
+                    easing.type: Easing.OutBack
+                }
+
+                Behavior on color {
+                    ColorAnimation { duration: Appearance.animation.elementMoveFast.duration }
+                }
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    rotation: -indicator.rotation
+                    text: "lan"
+                    iconSize: Appearance.font.pixelSize.small
+                    fill: 1
+                    color: root.colOnIndicator
+                }
             }
         }
     }
 
-    // ── Vertical capsule ─────────────────────────────────────────────────────
-    Rectangle {
-        id: pillVertical
+    Component {
+        id: pillVerticalComp
+        Rectangle {
+            id: pillVertical
+            function restartMorph() { morphVertical.restart(); }
 
-        visible: root.vertical
-        anchors.centerIn: parent
-        radius: (typeof rootItem !== "undefined" ? rootItem.groupStyle : Config.options.bar.barGroupStyle) === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
-        implicitWidth: Appearance.sizes.verticalBarWidth - 8
-        width: implicitWidth
-        implicitHeight: countTextVertical.implicitHeight + indicatorVertical.height + 16
-        height: implicitHeight
-        color: root.colContainer
-
-        Behavior on color {
-            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-        }
-
-        AnimatedStyledText {
-            id: countTextVertical
-
-            anchors.top: parent.top
-            anchors.topMargin: 7
-            anchors.horizontalCenter: parent.horizontalCenter
-            text: String(root.portCount)
-            font.pixelSize: Appearance.font.pixelSize.smaller
-            font.weight: Font.Bold
-            color: root.colOnContainer
-            animateChange: true
+            radius: (typeof rootItem !== "undefined" ? rootItem.groupStyle : Config.options.bar.barGroupStyle) === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
+            implicitWidth: Appearance.sizes.verticalBarWidth - 8
+            width: implicitWidth
+            implicitHeight: countTextVertical.implicitHeight + indicatorVertical.height + 16
+            height: implicitHeight
+            color: root.colContainer
 
             Behavior on color {
-                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-            }
-        }
-
-        MaterialShape {
-            id: indicatorVertical
-
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: 3
-            anchors.horizontalCenter: parent.horizontalCenter
-            shapeString: root.indicatorShape
-            implicitSize: parent.width - 6
-            color: root.colIndicator
-
-            NumberAnimation {
-                id: morphVertical
-                target: indicatorVertical
-                property: "rotation"
-                from: -40
-                to: 0
-                duration: 340
-                easing.type: Easing.OutBack
+                ColorAnimation { duration: Appearance.animation.elementMoveFast.duration }
             }
 
-            Behavior on color {
-                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+            AnimatedStyledText {
+                id: countTextVertical
+                anchors.top: parent.top
+                anchors.topMargin: 7
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: String(root.portCount)
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                font.weight: Font.Bold
+                color: root.colOnContainer
+                animateChange: true
+
+                Behavior on color {
+                    ColorAnimation { duration: Appearance.animation.elementMoveFast.duration }
+                }
             }
 
-            MaterialSymbol {
-                anchors.centerIn: parent
-                rotation: -indicatorVertical.rotation
-                text: "lan"
-                iconSize: Appearance.font.pixelSize.small
-                fill: 1
-                color: root.colOnIndicator
+            MaterialShape {
+                id: indicatorVertical
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 3
+                anchors.horizontalCenter: parent.horizontalCenter
+                shapeString: root.indicatorShape
+                implicitSize: parent.width - 6
+                color: root.colIndicator
+
+                NumberAnimation {
+                    id: morphVertical
+                    target: indicatorVertical
+                    property: "rotation"
+                    from: -40
+                    to: 0
+                    duration: 340
+                    easing.type: Easing.OutBack
+                }
+
+                Behavior on color {
+                    ColorAnimation { duration: Appearance.animation.elementMoveFast.duration }
+                }
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    rotation: -indicatorVertical.rotation
+                    text: "lan"
+                    iconSize: Appearance.font.pixelSize.small
+                    fill: 1
+                    color: root.colOnIndicator
+                }
             }
         }
     }

@@ -906,12 +906,19 @@ Item {
         }
     }
 
-    // ── Window Preview Popup (Bar Native) ──────────────────────────────
-    StyledPopup {
-        id: previewPopup
-        hoverTarget: root.lastHoveredButton
-        stickyHover: true
-        active: (Config.options?.dockToPanel?.enablePreview ?? true) && !(Config.options?.dockToPanel?.enableTooltip ?? false) && !root.scratchpadOpen && (root.buttonHovered || previewPopup._popupHovered) && (root.lastHoveredButton?.appToplevel?.toplevels?.length ?? 0) > 0
+    // ── Window Preview Popup (Bar Native, lazy) ────────────────────────
+    Loader {
+        id: previewPopupLoader
+        active: (Config.options?.dockToPanel?.enablePreview ?? true)
+            && !(Config.options?.dockToPanel?.enableTooltip ?? false)
+            && !root.scratchpadOpen
+            && (root.buttonHovered || (item?.active ?? false))
+            && (root.lastHoveredButton?.appToplevel?.toplevels?.length ?? 0) > 0
+        sourceComponent: StyledPopup {
+            id: previewPopup
+            hoverTarget: root.lastHoveredButton
+            stickyHover: true
+            active: (Config.options?.dockToPanel?.enablePreview ?? true) && !(Config.options?.dockToPanel?.enableTooltip ?? false) && !root.scratchpadOpen && (root.buttonHovered || previewPopup._popupHovered) && (root.lastHoveredButton?.appToplevel?.toplevels?.length ?? 0) > 0
 
         contentItem: RowLayout {
             spacing: 8
@@ -1032,5 +1039,6 @@ Item {
                 }
             }
         }
+    }
     }
 }

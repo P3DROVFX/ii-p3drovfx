@@ -287,22 +287,25 @@ DockButton {
             height: root.buttonSize
             anchors.centerIn: parent
 
-            MaterialShape {
-                id: iconMask
-                width: Math.max(1, fileIconContainer.width)
-                height: Math.max(1, fileIconContainer.height)
-                shapeString: Config.options.appearance.icons.shapeMask
-                visible: false
+            Loader {
+                id: iconMaskLoader
+                active: Config.options.appearance.icons.enableShapeMask
+                sourceComponent: MaterialShape {
+                    width: Math.max(1, fileIconContainer.width)
+                    height: Math.max(1, fileIconContainer.height)
+                    shapeString: Config.options.appearance.icons.shapeMask
+                    visible: false
+                }
             }
 
-            layer.enabled: Config.options.appearance.icons.enableShapeMask
+            layer.enabled: Config.options.appearance.icons.enableShapeMask && iconMaskLoader.item !== null
             // Rendered at the largest size the lens draws it, or the mask's
             // texture is stretched into visible steps while magnified.
             layer.textureSize: Qt.size(Math.ceil(width * (root.dockContent?.magnificationRenderScale ?? 1)),
                 Math.ceil(height * (root.dockContent?.magnificationRenderScale ?? 1)))
             layer.smooth: true
             layer.effect: OpacityMask {
-                maskSource: iconMask
+                maskSource: iconMaskLoader.item
             }
 
             Image {
@@ -315,7 +318,7 @@ DockButton {
                 cache: true
                 sourceSize: Qt.size(root.buttonSize * 2, root.buttonSize * 2)
 
-                layer.enabled: true
+                layer.enabled: root.isImage && thumbnailImage.status === Image.Ready
                 layer.effect: OpacityMask {
                     maskSource: Rectangle {
                         width: thumbnailImage.width

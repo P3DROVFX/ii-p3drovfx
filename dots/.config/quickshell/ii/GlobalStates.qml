@@ -1513,7 +1513,10 @@ Singleton {
         if (!Config.ready)
             return true;
         if (Config.options.bar.onlyShowOnSingleMonitor) {
-            return screen.name === Config.options.bar.singleMonitorName;
+            const target = Config.options.bar.singleMonitorName;
+            if (!target || !Quickshell.screens.some(s => s.name === target))
+                return Quickshell.screens.length > 0 && screen.name === Quickshell.screens[0].name;
+            return screen.name === target;
         }
         const list = Config.options.bar.screenList;
         if (list && list.length > 0) {

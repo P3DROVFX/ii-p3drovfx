@@ -33,6 +33,7 @@ import qs.modules.ii.overview
 Scope {
     id: root
 
+    readonly property alias panelWindow: win
     readonly property HyprlandMonitor hyprMonitor: Hyprland.monitorFor(win.screen)
 
     // ── What to show ─────────────────────────────────────────────────────────
@@ -2759,12 +2760,19 @@ Scope {
                 }
             }
 
+            // Large faces (dashboard, search, wallpaper, session, window switcher) have
+            // internal padding and rounded content, so rectangular `clip: true` suffices
+            // without allocating two giant offscreen FBOs (contentShape + contentClip).
+            readonly property bool needsShapeMask: !root.hidden && !root.dashboardActive
+                && !root.searchActive && !root.wallpaperActive && !root.sessionActive
+                && !root.windowSwitcherActive && notchContent.dashboardReveal <= 0.001
+
             // The body's silhouette, rendered only as the content's mask.
             Item {
                 id: contentShape
                 anchors.fill: contentClip
                 visible: false
-                layer.enabled: true
+                layer.enabled: container.needsShapeMask
 
                 // The silhouette itself, in every shell: one item that only changes its
                 // properties. Two children swapped by `visible` under this hidden layer
@@ -2798,14 +2806,11 @@ Scope {
                 clip: true
 
                 /**
-                 * Clipped to the body's *shape*, not its bounding box.
-                 *
-                 * `clip` is rectangular, so anything a face drew near its bottom edge
-                 * - a background, a row, a fading icon - showed in the triangles
-                 * outside the rounded corners, most visibly while the surface was
-                 * resizing and the content had not settled into it yet.
+                 * Clipped to the body's *shape*, not its bounding box, while compact/card
+                 * faces are active. Large padded faces (dashboard, search, etc.) drop the
+                 * offscreen MultiEffect mask so Qt does not retain giant FBOs in memory.
                  */
-                layer.enabled: true
+                layer.enabled: container.needsShapeMask
                 layer.effect: MultiEffect {
                     maskEnabled: true
                     maskSource: contentShape

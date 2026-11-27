@@ -69,105 +69,112 @@ Item {
     property bool passedBottomRight: animatedValue > 0.5
     property bool passedBottomLeft:  animatedValue > 0.75
 
-    // Circular source
-    Rectangle {
-        id: circularContent
+    // Load only the active geometry (circular OR sharp) so each instance never
+    // allocates two permanent offscreen layer FBOs + two OpacityMasks at once.
+    Loader {
         anchors.fill: parent
-        radius: implicitSize / 2
-        color: root.colSecondary
-        visible: false
-        layer.enabled: true
-        layer.smooth: true
-
-        Shape {
+        active: !Config.options.appearance.sharpMode
+        sourceComponent: Item {
             anchors.fill: parent
-            preferredRendererType: Shape.CurveRenderer
+            Rectangle {
+                id: circularContent
+                anchors.fill: parent
+                radius: root.implicitSize / 2
+                color: root.colSecondary
+                visible: false
+                layer.enabled: true
+                layer.smooth: true
 
-            ShapePath {
-                id: primaryPath
-                pathHints: ShapePath.PathSolid & ShapePath.PathNonIntersecting
-                strokeColor: root.colPrimary
-                strokeWidth: root.lineWidth
-                capStyle: ShapePath.RoundCap
-                fillColor: root.colPrimary
+                Shape {
+                    anchors.fill: parent
+                    preferredRendererType: Shape.CurveRenderer
 
-                startX: root.centerX
-                startY: root.centerY
+                    ShapePath {
+                        id: primaryPath
+                        pathHints: ShapePath.PathSolid & ShapePath.PathNonIntersecting
+                        strokeColor: root.colPrimary
+                        strokeWidth: root.lineWidth
+                        capStyle: ShapePath.RoundCap
+                        fillColor: root.colPrimary
 
-                PathAngleArc {
-                    moveToStart: false
-                    centerX: root.centerX
-                    centerY: root.centerY
-                    radiusX: root.arcRadius
-                    radiusY: root.arcRadius
-                    startAngle: root.startAngle
-                    sweepAngle: root.degree
+                        startX: root.centerX
+                        startY: root.centerY
+
+                        PathAngleArc {
+                            moveToStart: false
+                            centerX: root.centerX
+                            centerY: root.centerY
+                            radiusX: root.arcRadius
+                            radiusY: root.arcRadius
+                            startAngle: root.startAngle
+                            sweepAngle: root.degree
+                        }
+                        PathLine {
+                            x: primaryPath.startX
+                            y: primaryPath.startY
+                        }
+                    }
                 }
-                PathLine {
-                    x: primaryPath.startX
-                    y: primaryPath.startY
-                }
+            }
+
+            OpacityMask {
+                anchors.fill: parent
+                source: circularContent
+                invert: true
+                maskSource: root.textMask
             }
         }
     }
 
-    // Square source
-    Rectangle {
-        id: squareContent
+    Loader {
         anchors.fill: parent
-        radius: 0
-        color: root.colSecondary
-        visible: false
-        layer.enabled: true
-        layer.smooth: true
-
-        Shape {
+        active: Config.options.appearance.sharpMode
+        sourceComponent: Item {
             anchors.fill: parent
+            Rectangle {
+                id: squareContent
+                anchors.fill: parent
+                radius: 0
+                color: root.colSecondary
+                visible: false
+                layer.enabled: true
+                layer.smooth: true
 
-            ShapePath {
-                strokeColor: "transparent"
-                fillColor: root.colPrimary
+                Shape {
+                    anchors.fill: parent
 
-                startX: root.sz / 2
-                startY: root.sz / 2
+                    ShapePath {
+                        strokeColor: "transparent"
+                        fillColor: root.colPrimary
 
-                PathLine { x: root.sz / 2; y: 0 }
+                        startX: root.sz / 2
+                        startY: root.sz / 2
 
-                PathLine {
-                    x: root.passedTopRight ? root.sz : root.tipX
-                    y: root.passedTopRight ? 0       : root.tipY
+                        PathLine { x: root.sz / 2; y: 0 }
+                        PathLine {
+                            x: root.passedTopRight ? root.sz : root.tipX
+                            y: root.passedTopRight ? 0       : root.tipY
+                        }
+                        PathLine {
+                            x: root.passedBottomRight ? root.sz : root.tipX
+                            y: root.passedBottomRight ? root.sz : root.tipY
+                        }
+                        PathLine {
+                            x: root.passedBottomLeft ? 0       : root.tipX
+                            y: root.passedBottomLeft ? root.sz : root.tipY
+                        }
+                        PathLine { x: root.tipX; y: root.tipY }
+                        PathLine { x: root.sz / 2; y: root.sz / 2 }
+                    }
                 }
+            }
 
-                PathLine {
-                    x: root.passedBottomRight ? root.sz : root.tipX
-                    y: root.passedBottomRight ? root.sz : root.tipY
-                }
-
-                PathLine {
-                    x: root.passedBottomLeft ? 0       : root.tipX
-                    y: root.passedBottomLeft ? root.sz : root.tipY
-                }
-
-                PathLine { x: root.tipX; y: root.tipY }
-
-                PathLine { x: root.sz / 2; y: root.sz / 2 }
+            OpacityMask {
+                anchors.fill: parent
+                source: squareContent
+                invert: true
+                maskSource: root.textMask
             }
         }
-    }
-
-    OpacityMask {
-        anchors.fill: parent
-        visible: !Config.options.appearance.sharpMode
-        source: circularContent
-        invert: true
-        maskSource: root.textMask
-    }
-
-    OpacityMask {
-        anchors.fill: parent
-        visible: Config.options.appearance.sharpMode
-        source: squareContent
-        invert: true
-        maskSource: root.textMask
     }
 }

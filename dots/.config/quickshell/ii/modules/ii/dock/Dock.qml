@@ -110,15 +110,22 @@ Scope {
         }
     }
 
-    // `dock.monitor` keeps the dock on one output; unset, or naming one that
-    // is not connected, it is on every output.
+    // `dock.monitor` keeps the dock on one output; when unset (or disconnected)
+    // and `onlyShowOnSingleMonitor` is true (default), falls back to the first
+    // connected screen instead of duplicating the PanelWindow on every monitor.
     readonly property var dockScreens: {
-        const wanted = String(Config.options?.dock?.monitor ?? "");
         const screens = Quickshell.screens;
-        if (wanted.length === 0)
+        if (screens.length === 0)
             return screens;
-        const only = screens.filter(screen => screen.name === wanted);
-        return only.length > 0 ? only : screens;
+        const wanted = String(Config.options?.dock?.monitor ?? "");
+        if (wanted.length > 0) {
+            const only = screens.filter(screen => screen.name === wanted);
+            if (only.length > 0)
+                return only;
+        }
+        if (Config.options?.dock?.onlyShowOnSingleMonitor ?? true)
+            return [screens[0]];
+        return screens;
     }
 
     Variants {
@@ -768,46 +775,47 @@ Scope {
                         Behavior on anchors.leftMargin { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(dockVisualBackground) }
                         Behavior on anchors.rightMargin { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(dockVisualBackground) }
 
-                        Notch {
-                            id: dynamicIslandNotch
-                            visible: dockRoot.isDynamicIsland && !dockContent.islandsStyle && !dock.isVertical
+                        Loader {
+                            id: dynamicIslandNotchLoader
                             anchors.fill: parent
-                            bodyWidth: parent.width
-                            bodyHeight: parent.height
-                            disableBehaviors: true
-                            topRadius: dockRoot.concaveCornerRadius
-                            bottomRadius: Math.min(dockContent.dockCornerRadius, parent.height)
-                            fillColor: Appearance.colors.colLayer0
+                            active: dockRoot.isDynamicIsland && !dockContent.islandsStyle
+                            sourceComponent: Item {
+                                anchors.fill: parent
 
-                            transform: Scale {
-                                xScale: 1
-                                yScale: dock.dockEffectivePosition === "bottom" ? -1 : 1
-                                origin.y: dynamicIslandNotch.height / 2
+                                Notch {
+                                    id: dynamicIslandNotch
+                                    visible: !dock.isVertical
+                                    anchors.fill: parent
+                                    bodyWidth: parent.width
+                                    bodyHeight: parent.height
+                                    disableBehaviors: true
+                                    topRadius: dockRoot.concaveCornerRadius
+                                    bottomRadius: Math.min(dockContent.dockCornerRadius, parent.height)
+                                    fillColor: Appearance.colors.colLayer0
+
+                                    transform: Scale {
+                                        xScale: 1
+                                        yScale: dock.dockEffectivePosition === "bottom" ? -1 : 1
+                                        origin.y: dynamicIslandNotch.height / 2
+                                    }
+                                }
+
+                                Notch {
+                                    id: dynamicIslandNotchVertical
+                                    visible: dock.isVertical
+                                    x: (parent.width - width) / 2
+                                    y: (parent.height - height) / 2
+                                    width: parent.height
+                                    height: parent.width
+                                    rotation: dock.dockEffectivePosition === "left" ? -90 : 90
+                                    bodyWidth: width
+                                    bodyHeight: height
+                                    disableBehaviors: true
+                                    topRadius: dockRoot.concaveCornerRadius
+                                    bottomRadius: Math.min(dockContent.dockCornerRadius, height)
+                                    fillColor: Appearance.colors.colLayer0
+                                }
                             }
-                        }
-
-                        // Side dynamic island: the same silhouette turned to the
-                        // edge it hangs from. The concave shoulders flare into the
-                        // screen at the tray's two ends and the inner corners stay
-                        // round. It is laid out along the tray's long axis and
-                        // rotated about its centre, so it still fills the tray.
-                        Notch {
-                            id: dynamicIslandNotchVertical
-                            visible: dockRoot.isDynamicIsland && !dockContent.islandsStyle && dock.isVertical
-                            // Centred by hand: centerIn rounds to whole pixels, and on the tray's
-                            // fractional width the turned body ended 0.4 px short of the screen
-                            // edge, a column where the wallpaper showed through.
-                            x: (parent.width - width) / 2
-                            y: (parent.height - height) / 2
-                            width: parent.height
-                            height: parent.width
-                            rotation: dock.dockEffectivePosition === "left" ? -90 : 90
-                            bodyWidth: width
-                            bodyHeight: height
-                            disableBehaviors: true
-                            topRadius: dockRoot.concaveCornerRadius
-                            bottomRadius: Math.min(dockContent.dockCornerRadius, height)
-                            fillColor: Appearance.colors.colLayer0
                         }
 
                         // Full width · rounded: the tray spans the screen and

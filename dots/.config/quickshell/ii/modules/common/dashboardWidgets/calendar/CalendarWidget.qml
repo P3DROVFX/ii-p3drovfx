@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import "calendar_layout.js" as CalendarLayout
 import qs
 import qs.modules.common
@@ -30,7 +31,33 @@ Item {
     property date selectedDate: new Date()
     readonly property bool hintVisible: root.keyboardEnabled
         && (root.showShortcutHints || root.ctrlPressed) && (root.Window.window?.active ?? false)
-    signal dismissPopups()
+    property var activePopupButton: null
+    function dismissPopups() {
+        if (root.activePopupButton) {
+            const btn = root.activePopupButton;
+            root.activePopupButton = null;
+            btn.popupPinned = false;
+            btn.showPopup = false;
+        }
+    }
+    function openPopupFor(btn) {
+        if (root.activePopupButton && root.activePopupButton !== btn) {
+            const prev = root.activePopupButton;
+            prev.popupPinned = false;
+            prev.showPopup = false;
+        }
+        root.activePopupButton = btn;
+    }
+    function closePopupFor(btn) {
+        if (root.activePopupButton === btn)
+            root.activePopupButton = null;
+    }
+    Connections {
+        target: GlobalStates
+        function onSidebarRightOpenChanged() {
+            if (!GlobalStates.sidebarRightOpen) root.dismissPopups();
+        }
+    }
 
     function openCalendar() {
         GlobalStates.sidebarRightOpen = false;
@@ -362,13 +389,21 @@ Item {
                             return CalendarLayout.weekDays[(i + Config.options.time.firstDayOfWeek) % 7];
                         })
 
-                        delegate: CalendarDayButton {
-                            day: Translation.tr(modelData.day)
-                            isToday: modelData.today
-                            bold: true
-                            enabled: false
-                            taskList: []
-                            cellSize: root.cellSize
+                        delegate: Item {
+                            required property var modelData
+                            implicitWidth: root.cellSize
+                            implicitHeight: root.cellSize
+
+                            StyledText {
+                                anchors.centerIn: parent
+                                text: Translation.tr(modelData.day)
+                                horizontalAlignment: Text.AlignHCenter
+                                font.pixelSize: root.cellSize < 14
+                                    ? Math.max(7, Math.round(root.cellSize * 0.6))
+                                    : (root.cellSize < 28 ? Appearance.font.pixelSize.smallie : Appearance.font.pixelSize.normal)
+                                font.weight: Font.DemiBold
+                                color: Appearance.colors.colOnLayer1
+                            }
                         }
                     }
                 }
@@ -404,10 +439,8 @@ Item {
                                 Keys.priority: Keys.BeforeItem
                                 Keys.onPressed: event => { event.accepted = root.handleKey(event); }
                                 Keys.onReleased: event => root.releaseKey(event)
-                                Connections {
-                                    target: root
-                                    function onDismissPopups() { dayButton.closePopup(); }
-                                }
+                                onPopupRequested: (src, pinned) => root.openPopupFor(src)
+                                onPopupReleased: src => root.closePopupFor(src)
                                 day: calendarLayout[modelData][index].day
                                 isToday: calendarLayout[modelData][index].today
                                 taskList: root.tasksForDate(
@@ -428,16 +461,20 @@ Item {
         }
     }
 
-    // Side agenda panel for desktop wide layout
-    Rectangle {
-        id: wideAgendaPanel
-        visible: !root.isShortHeight && root.isWide
+    // Side agenda panel for desktop wide layout (lazy: never built in sidebar)
+    Loader {
+        id: wideAgendaPanelLoader
+        active: !root.isShortHeight && root.isWide
+        visible: active
         anchors.left: calendarLeftContainer.right
         anchors.leftMargin: 8
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        color: "transparent"
+        sourceComponent: Rectangle {
+            id: wideAgendaPanel
+            anchors.fill: parent
+            color: "transparent"
 
         ColumnLayout {
             anchors.fill: parent
@@ -553,21 +590,26 @@ Item {
                 }
             }
         }
+        }
     }
 
-    // Bottom agenda card for tall layout (2x4)
-    Rectangle {
-        id: tallAgendaPanel
-        visible: root.isTall
+    // Bottom agenda card for tall layout (2x4, lazy)
+    Loader {
+        id: tallAgendaPanelLoader
+        active: root.isTall
+        visible: active
         anchors.top: calendarLeftContainer.bottom
         anchors.topMargin: 4
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: navigationHint.top
         anchors.bottomMargin: 2
-        radius: Appearance.rounding.small
-        color: Appearance.colors.colSurfaceContainer
-        clip: true
+        sourceComponent: Rectangle {
+            id: tallAgendaPanel
+            anchors.fill: parent
+            radius: Appearance.rounding.small
+            color: Appearance.colors.colSurfaceContainer
+            clip: true
 
         ColumnLayout {
             anchors.fill: parent
@@ -635,6 +677,7 @@ Item {
                     }
                 }
             }
+        }
         }
     }
 
@@ -723,12 +766,16 @@ Item {
         }
     }
 
-    // ── Compact Week View (2x2) ───────────────────────────────────────────
-    Item {
-        id: compactWeekView
-        visible: root.isCompactSquare
+    // ── Compact Week View (2x2, lazy) ─────────────────────────────────────
+    Loader {
+        id: compactWeekViewLoader
+        active: root.isCompactSquare
+        visible: active
         anchors.fill: parent
         anchors.margins: 6
+        sourceComponent: Item {
+            id: compactWeekView
+            anchors.fill: parent
 
         ColumnLayout {
             anchors.fill: parent
@@ -871,14 +918,19 @@ Item {
                 }
             }
         }
+        }
     }
 
-    // ── Wide Banner View (4x2): Week Strip on Left + Full Agenda on Right ──
-    Item {
-        id: wideWeekView
-        visible: root.isWideBanner
+    // ── Wide Banner View (4x2, lazy): Week Strip on Left + Full Agenda on Right ──
+    Loader {
+        id: wideWeekViewLoader
+        active: root.isWideBanner
+        visible: active
         anchors.fill: parent
         anchors.margins: 6
+        sourceComponent: Item {
+            id: wideWeekView
+            anchors.fill: parent
 
         readonly property real paneWidth: Math.floor((width - 9) / 2)
 
@@ -1165,6 +1217,51 @@ Item {
                         }
                     }
                 }
+            }
+        }
+        }
+    }
+
+    // Single shared CalendarPopup for all 42 day buttons (replaces 42 per-cell
+    // LazyLoaders + 84 eager Behavior animations).
+    LazyLoader {
+        id: sharedPopupLoader
+        active: itemScale > 0.9 && root.activePopupButton !== null
+
+        property real itemScale: root.activePopupButton ? 1 : 0.85
+        property real itemOpacity: root.activePopupButton ? 1 : 0
+
+        Behavior on itemScale {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        }
+        Behavior on itemOpacity {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        }
+
+        component: CalendarPopup {
+            id: popup
+            readonly property var anchorBtn: root.activePopupButton
+            taskList: anchorBtn ? (anchorBtn.taskList ?? []) : []
+            taskMargin: anchorBtn ? anchorBtn.taskMargin : 5
+            parent: anchorBtn?.QsWindow?.contentItem ?? null
+            scale: sharedPopupLoader.itemScale
+            opacity: sharedPopupLoader.itemOpacity
+
+            x: {
+                if (!anchorBtn || !anchorBtn.QsWindow || !parent) return 0;
+                const buttonPos = anchorBtn.QsWindow.contentItem.mapFromItem(anchorBtn, 0, 0);
+                const centeredX = buttonPos.x + (anchorBtn.width / 2) - (popup.width / 2);
+                return Math.max(0, Math.min(centeredX, parent.width - popup.width));
+            }
+
+            y: {
+                if (!anchorBtn || !anchorBtn.QsWindow || !parent) return 0;
+                const buttonPos = anchorBtn.QsWindow.contentItem.mapFromItem(anchorBtn, 0, 0);
+                const gap = 4;
+                const above = buttonPos.y - popup.height - gap;
+                const below = buttonPos.y + anchorBtn.height + gap;
+                const preferred = above >= 0 ? above : below;
+                return Math.max(0, Math.min(preferred, parent.height - popup.height));
             }
         }
     }

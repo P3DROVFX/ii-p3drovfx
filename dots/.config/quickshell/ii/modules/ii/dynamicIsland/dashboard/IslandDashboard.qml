@@ -2,26 +2,12 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.quickToggles
-import qs.modules.common.quickToggleDialogs.bluetoothDevices
-import qs.modules.common.quickToggleDialogs.nightLight
-import qs.modules.common.quickToggleDialogs.volumeMixer
-import qs.modules.common.quickToggleDialogs.wifiNetworks
-import qs.modules.common.quickToggleDialogs.darkMode
-import qs.modules.common.quickToggleDialogs.localSend
-import qs.modules.common.quickToggleDialogs.vpn
-import qs.modules.common.quickToggleDialogs.tailscale
-import qs.modules.common.quickToggleDialogs.kdeConnect
-import qs.modules.common.quickToggleDialogs.dnsOverTls
-import qs.modules.common.quickToggleDialogs.easyEffects
-import qs.modules.common.quickToggleDialogs.idleInhibitor
-import qs.modules.common.quickToggleDialogs.screenShader
-import qs.modules.ii.sidebarDashboard.modes
-import qs.modules.tablet.sidebarDashboard
 import "../../../common/quickToggles/androidStyle/QuickToggleCatalog.js" as QuickToggleCatalog
 import "../../../common/quickToggles/androidStyle/QuickToggleLayout.js" as QuickToggleLayout
 
@@ -118,13 +104,23 @@ Item {
     /** Pages can take text (a Wi-Fi password), so the island takes the keyboard for them. */
     readonly property bool wantsKeyboard: dashboard.openPage !== ""
 
-    readonly property var pageComponents: ({
-        wifi: wifiPage, bluetooth: bluetoothPage, audioOutput: audioOutputPage,
-        audioInput: audioInputPage, nightLight: nightLightPage, darkMode: darkModePage,
-        localSend: localSendPage, vpn: vpnPage, tailscale: tailscalePage,
-        kdeConnect: kdeConnectPage, dnsOverTls: dnsOverTlsPage,
-        idleInhibitor: idleInhibitorPage, screenShader: screenShaderPage, modes: modesPage,
-        easyEffects: easyEffectsPage, tray: trayPage
+    readonly property var pageSources: ({
+        wifi: { path: "modules/common/quickToggleDialogs/wifiNetworks/WifiDialog.qml", props: { pageMode: true } },
+        bluetooth: { path: "modules/common/quickToggleDialogs/bluetoothDevices/BluetoothDialog.qml", props: { pageMode: true } },
+        audioOutput: { path: "modules/common/quickToggleDialogs/volumeMixer/VolumeDialog.qml", props: { pageMode: true, isSink: true } },
+        audioInput: { path: "modules/common/quickToggleDialogs/volumeMixer/VolumeDialog.qml", props: { pageMode: true, isSink: false } },
+        nightLight: { path: "modules/common/quickToggleDialogs/nightLight/NightLightDialog.qml", props: { pageMode: true } },
+        darkMode: { path: "modules/common/quickToggleDialogs/darkMode/DarkModeDialog.qml", props: { pageMode: true } },
+        localSend: { path: "modules/common/quickToggleDialogs/localSend/LocalSendDialog.qml", props: { pageMode: true } },
+        vpn: { path: "modules/common/quickToggleDialogs/vpn/VpnDialog.qml", props: { pageMode: true } },
+        tailscale: { path: "modules/common/quickToggleDialogs/tailscale/TailscaleDialog.qml", props: { pageMode: true } },
+        kdeConnect: { path: "modules/common/quickToggleDialogs/kdeConnect/KdeConnectDialog.qml", props: { pageMode: true } },
+        dnsOverTls: { path: "modules/common/quickToggleDialogs/dnsOverTls/DnsOverTlsDialog.qml", props: { pageMode: true } },
+        idleInhibitor: { path: "modules/common/quickToggleDialogs/idleInhibitor/IdleInhibitorDialog.qml", props: { pageMode: true } },
+        screenShader: { path: "modules/common/quickToggleDialogs/screenShader/ScreenShaderDialog.qml", props: { pageMode: true } },
+        modes: { path: "modules/ii/sidebarDashboard/modes/ModesDialog.qml", props: { pageMode: true } },
+        easyEffects: { path: "modules/common/quickToggleDialogs/easyEffects/EasyEffectsDialog.qml", props: { pageMode: true } },
+        tray: { path: "modules/tablet/sidebarDashboard/TabletTrayDialog.qml", props: { pageMode: true } }
     })
 
     // Only pages whose dialog has no title of its own need one for the bar.
@@ -134,7 +130,7 @@ Item {
     })
 
     function showPage(id) {
-        if (!dashboard.pageComponents[id])
+        if (!dashboard.pageSources[id])
             return;
         dashboard.editMode = false;
         dashboard.shownPage = id;
@@ -360,8 +356,26 @@ Item {
         width: dashboard.panelWidth
         height: dashboard.pageHeight
         active: dashboard.shownPage !== ""
-        sourceComponent: dashboard.pageComponents[dashboard.shownPage] ?? null
         opacity: 1 - (1 - dashboard.pageProgress) * (1 - dashboard.pageProgress)
+
+        function syncSource() {
+            const spec = dashboard.pageSources[dashboard.shownPage];
+            if (!spec) {
+                pageLoader.setSource("");
+                return;
+            }
+            // Created already in page mode (initialProperties run before Component.onCompleted)
+            // so the dialog's own pop-in animation is never armed underneath the slide.
+            pageLoader.setSource(Quickshell.shellPath(spec.path), spec.props);
+        }
+
+        Connections {
+            target: dashboard
+            function onShownPageChanged() {
+                pageLoader.syncSource();
+            }
+        }
+        Component.onCompleted: pageLoader.syncSource()
 
         onLoaded: {
             const page = pageLoader.item;
@@ -383,30 +397,11 @@ Item {
             function onDetailsRequested() {
                 dashboard.closePage();
             }
+            function onItemActivated() {
+                dashboard.closePage();
+            }
         }
     }
-
-    // Each page is the sidebar's dialog for that tile, created already in page mode:
-    // set after creation, the dialog's own pop-in (scale from 0.88, rise from 40px
-    // lower) was still armed and played underneath the horizontal slide.
-    Component { id: wifiPage; WifiDialog { pageMode: true } }
-    Component { id: bluetoothPage; BluetoothDialog { pageMode: true } }
-    Component { id: audioOutputPage; VolumeDialog { pageMode: true; isSink: true } }
-    Component { id: audioInputPage; VolumeDialog { pageMode: true; isSink: false } }
-    Component { id: nightLightPage; NightLightDialog { pageMode: true } }
-    Component { id: darkModePage; DarkModeDialog { pageMode: true } }
-    Component { id: localSendPage; LocalSendDialog { pageMode: true } }
-    Component { id: vpnPage; VpnDialog { pageMode: true } }
-    Component { id: tailscalePage; TailscaleDialog { pageMode: true } }
-    Component { id: kdeConnectPage; KdeConnectDialog { pageMode: true } }
-    Component { id: dnsOverTlsPage; DnsOverTlsDialog { pageMode: true } }
-    Component { id: idleInhibitorPage; IdleInhibitorDialog { pageMode: true } }
-    Component { id: screenShaderPage; ScreenShaderDialog { pageMode: true } }
-    Component { id: modesPage; ModesDialog { pageMode: true } }
-    Component { id: easyEffectsPage; EasyEffectsDialog { pageMode: true } }
-    // The tablet shade's tray dialog, as an island page: tapping an app activates it
-    // and leaves the page, the same way the shade closes on activation.
-    Component { id: trayPage; TabletTrayDialog { pageMode: true; onItemActivated: dashboard.closePage() } }
 
     readonly property real segmentHeight: 36
 

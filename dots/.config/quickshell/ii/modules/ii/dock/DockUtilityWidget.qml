@@ -63,25 +63,40 @@ Item {
     readonly property bool live: root.dockContent?.dockWidgetsActive ?? true
     readonly property bool hovered: interaction.containsMouse
     property bool dropHovering: false
-    readonly property bool panelOpen: panel.active && !panel.isClosing
+    readonly property bool panelOpen: (panelLoaderHost.item?.active ?? false) && !(panelLoaderHost.item?.isClosing ?? false)
     readonly property Item tile: tileLoader.item
+    property bool _panelWanted: false
+    property bool _menuWanted: false
 
     readonly property real contentMagnification: root.dockContent ? root.dockContent._getSlotMagScale(root) : 1.0
     scale: root.contentMagnification
     transformOrigin: root.dockContent?.magnificationTransformOrigin ?? Item.Bottom
 
     function openPanel() {
-        if (root.hasPanel)
-            panel.open();
+        if (!root.hasPanel)
+            return;
+        if (panelLoaderHost.item) {
+            panelLoaderHost.item.open();
+            return;
+        }
+        root._panelWanted = true;
     }
 
     function closePanel() {
-        panel.close();
+        panelLoaderHost.item?.close();
+    }
+
+    function openWidgetMenu() {
+        if (widgetMenuLoader.item) {
+            widgetMenuLoader.item.open();
+            return;
+        }
+        root._menuWanted = true;
     }
 
     function togglePanel() {
         if (root.panelOpen)
-            panel.close();
+            root.closePanel();
         else
             root.openPanel();
     }
@@ -157,7 +172,7 @@ Item {
                 return;
             }
             if (event.button === Qt.RightButton)
-                widgetMenu.open();
+                root.openWidgetMenu();
             else if (event.button === Qt.MiddleButton)
                 root.togglePanel();
             else
@@ -211,22 +226,25 @@ Item {
         }
     }
 
-    DropArea {
+    Loader {
         anchors.fill: parent
         z: 2
-        enabled: root.acceptsDrops
-        keys: ["text/uri-list"]
-        onEntered: drag => {
-            root.dropHovering = true;
-            drag.accept(Qt.CopyAction);
-        }
-        onExited: root.dropHovering = false
-        onDropped: drop => {
-            root.dropHovering = false;
-            const urls = root._fileUrls(drop);
-            if (urls.length > 0 && root.tile && typeof root.tile.dropFiles === "function") {
-                root.tile.dropFiles(urls);
-                drop.accept(Qt.CopyAction);
+        active: root.acceptsDrops
+        sourceComponent: DropArea {
+            anchors.fill: parent
+            keys: ["text/uri-list"]
+            onEntered: drag => {
+                root.dropHovering = true;
+                drag.accept(Qt.CopyAction);
+            }
+            onExited: root.dropHovering = false
+            onDropped: drop => {
+                root.dropHovering = false;
+                const urls = root._fileUrls(drop);
+                if (urls.length > 0 && root.tile && typeof root.tile.dropFiles === "function") {
+                    root.tile.dropFiles(urls);
+                    drop.accept(Qt.CopyAction);
+                }
             }
         }
     }
@@ -234,19 +252,24 @@ Item {
     DockTooltip {
         parentItem: root
         text: root.tile?.tooltipText || root.title
-        showTooltip: interaction.containsMouse && !root.panelOpen && !widgetMenu.active
+        showTooltip: interaction.containsMouse && !root.panelOpen && !(widgetMenuLoader.item?.active ?? false)
         tooltipOffset: -root.dotMarginV
     }
 
-    // ── Panel: the full view a click opens ─────────────────────────────────
-    DockContextMenuBase {
-        id: panel
-        anchorItem: root
-        headerText: root.title
-        headerSubtitle: root.tile?.panelSubtitle ?? ""
-        headerSymbol: root.symbol
-        menuWidth: root.tile?.panelWidth ?? 340
-        contentComponent: root.hasPanel ? panelComponent : null
+    // ── Panel: lazy-loaded only on first open ──────────────────────────────
+    Loader {
+        id: panelLoaderHost
+        active: root.hasPanel && root._panelWanted
+        sourceComponent: DockContextMenuBase {
+            id: panel
+            anchorItem: root
+            headerText: root.title
+            headerSubtitle: root.tile?.panelSubtitle ?? ""
+            headerSymbol: root.symbol
+            menuWidth: root.tile?.panelWidth ?? 340
+            contentComponent: root.hasPanel ? panelComponent : null
+            Component.onCompleted: Qt.callLater(() => panel.open())
+        }
     }
 
     Component {
@@ -259,52 +282,56 @@ Item {
         }
     }
 
-    // ── Widget menu ─────────────────────────────────────────────────────────
-    DockContextMenuBase {
-        id: widgetMenu
-        anchorItem: root
-        headerText: root.title
-        headerSubtitle: root.wide ? Translation.tr("Wide widget") : Translation.tr("Square widget")
-        headerSymbol: root.symbol
-        menuId: "dockWidget"
-        menuGroups: widgetMenu.menuOpen ? [
-            // The widget's own actions move and hide as one entry.
-            (root.tile?.menuActions ?? []).map(action => Object.assign({ "block": "widgetActions" }, action)).concat(root.hasPanel ? [
-                { id: "__panel", icon: "open_in_full", text: Translation.tr("Open") }
-            ] : []),
-            root.isVertical ? [] : [
-                root.wide
-                    ? { id: "__square", icon: "crop_square", text: Translation.tr("Make square") }
-                    : { id: "__wide", icon: "crop_16_9", text: Translation.tr("Make wide") }
-            ],
-            [
-                { id: "__settings", icon: "settings", text: Translation.tr("Widget settings") },
-                { id: "__remove", icon: "remove_circle", text: Translation.tr("Remove from dock"), destructive: true }
-            ]
-        ].filter(group => group.length > 0) : []
+    // ── Widget menu: lazy-loaded only on first right-click ─────────────────
+    Loader {
+        id: widgetMenuLoader
+        active: root._menuWanted
+        sourceComponent: DockContextMenuBase {
+            id: widgetMenu
+            anchorItem: root
+            headerText: root.title
+            headerSubtitle: root.wide ? Translation.tr("Wide widget") : Translation.tr("Square widget")
+            headerSymbol: root.symbol
+            menuId: "dockWidget"
+            menuGroups: widgetMenu.menuOpen ? [
+                (root.tile?.menuActions ?? []).map(action => Object.assign({ "block": "widgetActions" }, action)).concat(root.hasPanel ? [
+                    { id: "__panel", icon: "open_in_full", text: Translation.tr("Open") }
+                ] : []),
+                root.isVertical ? [] : [
+                    root.wide
+                        ? { id: "__square", icon: "crop_square", text: Translation.tr("Make square") }
+                        : { id: "__wide", icon: "crop_16_9", text: Translation.tr("Make wide") }
+                ],
+                [
+                    { id: "__settings", icon: "settings", text: Translation.tr("Widget settings") },
+                    { id: "__remove", icon: "remove_circle", text: Translation.tr("Remove from dock"), destructive: true }
+                ]
+            ].filter(group => group.length > 0) : []
 
-        onActionTriggered: actionId => {
-            widgetMenu.close();
-            switch (actionId) {
-            case "__panel":
-                root.openPanel();
-                break;
-            case "__square":
-                root.dockContent?.setUtilityWide(root.kind, false);
-                break;
-            case "__wide":
-                root.dockContent?.setUtilityWide(root.kind, true);
-                break;
-            case "__settings":
-                GlobalStates.openSettingsPage("dock", "widgets/DockUtilitiesConfig.qml");
-                break;
-            case "__remove":
-                root.dockContent?.removeUtility(root.kind);
-                break;
-            default:
-                if (root.tile && typeof root.tile.menuAction === "function")
-                    root.tile.menuAction(actionId);
+            onActionTriggered: actionId => {
+                widgetMenu.close();
+                switch (actionId) {
+                case "__panel":
+                    root.openPanel();
+                    break;
+                case "__square":
+                    root.dockContent?.setUtilityWide(root.kind, false);
+                    break;
+                case "__wide":
+                    root.dockContent?.setUtilityWide(root.kind, true);
+                    break;
+                case "__settings":
+                    GlobalStates.openSettingsPage("dock", "widgets/DockUtilitiesConfig.qml");
+                    break;
+                case "__remove":
+                    root.dockContent?.removeUtility(root.kind);
+                    break;
+                default:
+                    if (root.tile && typeof root.tile.menuAction === "function")
+                        root.tile.menuAction(actionId);
+                }
             }
+            Component.onCompleted: Qt.callLater(() => widgetMenu.open())
         }
     }
 
@@ -322,12 +349,14 @@ Item {
         }
     }
     Connections {
-        target: panel
-        function onActiveChanged() { root._holdDock(panel.active); }
+        target: panelLoaderHost.item
+        ignoreUnknownSignals: true
+        function onActiveChanged() { root._holdDock(panelLoaderHost.item?.active ?? false); }
     }
     Connections {
-        target: widgetMenu
-        function onActiveChanged() { root._holdDock(widgetMenu.active); }
+        target: widgetMenuLoader.item
+        ignoreUnknownSignals: true
+        function onActiveChanged() { root._holdDock(widgetMenuLoader.item?.active ?? false); }
     }
     Component.onDestruction: {
         root.dockContent?.unregisterUtilityHost(root.kind, root);

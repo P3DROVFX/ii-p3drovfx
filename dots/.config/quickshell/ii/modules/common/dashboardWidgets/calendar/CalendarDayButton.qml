@@ -18,16 +18,25 @@ RippleButton {
     property bool popupPinned: false
     property bool keyboardSelected: false
     property bool showShortcutHint: false
+    signal popupRequested(var sourceButton, bool pinned)
+    signal popupReleased(var sourceButton)
 
     function closePopup() {
+        const wasOpen = button.showPopup || button.popupPinned;
         button.popupPinned = false;
         button.showPopup = false;
+        if (wasOpen)
+            button.popupReleased(button);
     }
 
     function togglePopup() {
         if (!button.taskList.length || button.isToday === -1 || button.bold) return;
         button.popupPinned = !button.popupPinned;
         button.showPopup = button.popupPinned;
+        if (button.showPopup)
+            button.popupRequested(button, true);
+        else
+            button.popupReleased(button);
     }
 
     colBackground: button.keyboardSelected ? Appearance.colors.colLayer2Hover : "transparent"
@@ -138,66 +147,23 @@ RippleButton {
         y: button.compactCell ? button.height - height - 1 : 4
     }
 
-    LazyLoader {
-        id: popupLoader
-        active: itemScale > 0.9
-
-        property real itemScale: button.showPopup ? 1 : 0.85
-        property real itemOpacity: button.showPopup ? 1 : 0
-        
-        Behavior on itemScale {
-            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-        }
-        Behavior on itemOpacity {
-            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-        }
-
-        component: CalendarPopup {
-            id: popup
-            parent: button.QsWindow?.contentItem
-            scale: popupLoader.itemScale
-            opacity: popupLoader.itemOpacity
-
-            x: {
-                if (!button.QsWindow) return 0;
-                const buttonPos = button.QsWindow.contentItem.mapFromItem(button, 0, 0);
-                const centeredX = buttonPos.x + (button.width / 2) - (popup.width / 2);
-                return Math.max(0, Math.min(centeredX, parent.width - popup.width));
-            }
-            
-            y: {
-                if (!button.QsWindow) return 0;
-                const buttonPos = button.QsWindow.contentItem.mapFromItem(button, 0, 0);
-                const gap = 4;
-                const above = buttonPos.y - popup.height - gap;
-                const below = buttonPos.y + button.height + gap;
-                const preferred = above >= 0 ? above : below;
-                return Math.max(0, Math.min(preferred, parent.height - popup.height));
-            }
-        }
-    }
-    
     MouseArea {
         anchors.fill: parent
         hoverEnabled: true
         acceptedButtons: PanelFamily.touchFirst ? Qt.LeftButton : Qt.NoButton
         onEntered: {
             if (button.taskList.length > 0 && button.isToday !== -1 && !button.bold) {
-                button.showPopup = true
+                button.showPopup = true;
+                button.popupRequested(button, false);
             }
         }
         onExited: {
-            if (!button.popupPinned)
+            if (!button.popupPinned) {
                 button.showPopup = false;
+                button.popupReleased(button);
+            }
         }
         onClicked: button.togglePopup()
-    }
-
-    Connections {
-        target: GlobalStates
-        function onSidebarRightOpenChanged() {
-            if (!GlobalStates.sidebarRightOpen) button.closePopup();
-        }
     }
     
     StyledText {

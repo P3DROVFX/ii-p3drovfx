@@ -6057,7 +6057,7 @@ Singleton {
                     property bool cardAnimation: true
                 }
                 property list<string> screenList: [] // List of names, like "eDP-1", find out with 'hyprctl monitors' command
-                property bool onlyShowOnSingleMonitor: false
+                property bool onlyShowOnSingleMonitor: true
                 property string singleMonitorName: ""
 
                 property JsonObject timers: JsonObject {
@@ -6479,9 +6479,10 @@ Singleton {
                 property bool smartGrouping: false
                 property bool isolateMonitors: false
                 property bool showOnlyOnFocusedMonitor: false
-                // The one monitor the dock lives on, by output name (empty:
-                // every monitor; a name that is not connected also means
-                // every monitor, so unplugging it never loses the dock).
+                // Keeps the dock on a single monitor by default (saves ~70-120 MB
+                // of GL context + widget RAM per extra output). When `monitor` is
+                // empty or disconnected, falls back to Quickshell.screens[0].
+                property bool onlyShowOnSingleMonitor: true
                 property string monitor: ""
                 // Nothing in the dock can be dragged to a new place (items,
                 // islands, groups made by dropping).
