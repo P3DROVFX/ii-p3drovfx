@@ -16711,7 +16711,6 @@
     "Try another word, a code like U+00B0, or another category": "Try another word, a code like U+00B0, or another category",
     "Clear recent symbols": "Clear recent symbols",
     "Search for ‘symbols’, ‘ascii’ or ‘kaomoji’ to browse typographic, math, arrow and box-drawing symbols plus text faces and text art.": "Search for ‘symbols’, ‘ascii’ or ‘kaomoji’ to browse typographic, math, arrow and box-drawing symbols plus text faces and text art.",
-    "Enter your PIN": "Enter your PIN",
     "Enter your system password": "Enter your system password",
     "Could not update PIN": "Could not update PIN",
     "Too many failed attempts — vault locked": "Too many failed attempts — vault locked",
@@ -16722,7 +16721,6 @@
     "Touch fingerprint sensor or enter system password": "Touch fingerprint sensor or enter system password",
     "Enter your PIN to unlock": "Enter your PIN to unlock",
     "Enter your system password to unlock": "Enter your system password to unlock",
-    "PIN": "PIN",
     "System password": "System password",
     "Retry fingerprint": "Retry fingerprint",
     "Lock completely": "Lock completely",
@@ -16735,10 +16733,9 @@
     "No custom PIN set — quick unlock will accept your Linux account password via PAM (and enrolled fingerprints if available). Set a PIN below to unlock with a shorter code.": "No custom PIN set — quick unlock will accept your Linux account password via PAM (and enrolled fingerprints if available). Set a PIN below to unlock with a shorter code.",
     "New PIN (min 4 characters)": "New PIN (min 4 characters)",
     "Set PIN (min 4 characters)": "Set PIN (min 4 characters)",
-    "Change PIN": "Change PIN",
     "Save PIN": "Save PIN",
-    "Remove PIN": "Remove PIN",
     "Hide on empty workspace": "Hide on empty workspace",
     "Keep the dock hidden on the desktop as well instead of showing it automatically when a workspace has no windows": "Keep the dock hidden on the desktop as well instead of showing it automatically when a workspace has no windows",
-    "Keep the dock hidden on the desktop too": "Keep the dock hidden on the desktop too"
+    "Keep the dock hidden on the desktop too": "Keep the dock hidden on the desktop too",
+    "Display the bar on only one chosen monitor instead of all monitors. Rendering the bar on multiple monitors duplicates all widgets and consumes significantly more RAM.": "Display the bar on only one chosen monitor instead of all monitors. Rendering the bar on multiple monitors duplicates all widgets and consumes significantly more RAM."
 }

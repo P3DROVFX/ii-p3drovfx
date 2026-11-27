@@ -101,10 +101,20 @@ Item {
     }
 
     Component.onCompleted: {
-        LyricsService.initiliazeLyrics();
+        if (root.lyricsEnabled && root.hasTrack)
+            LyricsService.initiliazeLyrics();
         if (typeof rootItem !== "undefined")
             rootItem.toggleVisible(root.present);
         Qt.callLater(root.updatePopupRect);
+    }
+
+    onHasTrackChanged: {
+        if (root.lyricsEnabled && root.hasTrack)
+            LyricsService.initiliazeLyrics();
+    }
+    onLyricsEnabledChanged: {
+        if (root.lyricsEnabled && root.hasTrack)
+            LyricsService.initiliazeLyrics();
     }
 
     // Mpris only emits position on demand for most players, so a ticking clock

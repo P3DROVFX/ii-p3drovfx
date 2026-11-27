@@ -109,7 +109,7 @@ Item {
                 sourceSize.width: width
                 sourceSize.height: height
 
-                layer.enabled: true
+                layer.enabled: root.hasTrack && artworkEnabled && root.artSource !== "" && status === Image.Ready
                 layer.effect: OpacityMask {
                     maskSource: Rectangle {
                         width: artworkItem.width

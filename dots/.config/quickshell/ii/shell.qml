@@ -9,9 +9,10 @@
 // Qt sizes each window's texture atlas to the next power of two over the window, so every
 // full-screen layer (background, desktop widgets, island, overview transition) got a
 // 2048x2048 RGBA atlas (16 MB of VRAM) the moment it showed its first small image. The atlas
-// only batches small images; 1024x1024 holds everything up to 512 px and costs 4 MB.
-//@ pragma Env QSG_ATLAS_WIDTH=1024
-//@ pragma Env QSG_ATLAS_HEIGHT=1024
+// only batches small icons/shapes; 512x512 holds everything up to 256 px and costs 1 MB
+// instead of 4-16 MB per GL window across the shell.
+//@ pragma Env QSG_ATLAS_WIDTH=512
+//@ pragma Env QSG_ATLAS_HEIGHT=512
 // No MALLOC_CONF pragma: jemalloc reads its options at the first allocation, before any pragma is
 // applied, so it never reached the shell's own allocator; it only replaced the launcher's narenas:1
 // for a crash-relaunched shell. The patched Quickshell compiles narenas:1 in (quickshell-build 0006).
