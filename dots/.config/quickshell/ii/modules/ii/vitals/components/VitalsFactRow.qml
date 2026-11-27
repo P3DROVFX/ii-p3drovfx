@@ -8,6 +8,8 @@ import qs.modules.ii.clock.components
  * A read-only row in a Vitals sheet: the timetable rail's form row (shape icon, small bold
  * caption, bold value) without the pointer, since nothing opens from it. Sheets give each
  * row its own shape so a column of facts does not read as a column of identical dots.
+ * Its implicit width is its content's, so a Flow of transparent rows (Sleep's details
+ * bar) packs them at their natural widths.
  */
 Rectangle {
     id: root
@@ -18,11 +20,13 @@ Rectangle {
     property string value: ""
 
     Layout.fillWidth: true
+    implicitWidth: content.implicitWidth + content.anchors.leftMargin + content.anchors.rightMargin
     implicitHeight: 58
     radius: Appearance.rounding.small
     color: ClockStyle.colField
 
     RowLayout {
+        id: content
         anchors.fill: parent
         anchors.leftMargin: 10
         anchors.rightMargin: 12

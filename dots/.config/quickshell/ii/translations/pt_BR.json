@@ -16355,5 +16355,7 @@
     "No such metric": "Essa métrica não existe",
     "%1 trend": "Tendência de %1",
     "a day on average": "por dia em média",
-    "in all · %1 a day on average": "no total · %1 por dia em média"
+    "in all · %1 a day on average": "no total · %1 por dia em média",
+    "Time asleep": "Tempo dormindo",
+    "Hide details (Esc)": "Ocultar detalhes (Esc)"
 }

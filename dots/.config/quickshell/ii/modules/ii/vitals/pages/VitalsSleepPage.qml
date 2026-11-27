@@ -14,8 +14,9 @@ import qs.modules.ii.vitals.components
 /**
  * Sleep: the chosen night (last night unless another is picked) as a large stage chart,
  * beside a ladder of every night from bed to wake on a 20:00–12:00 axis with the goal
- * window behind it. A night opens its sheet: the chart again, minutes per stage, score,
- * efficiency and the skin temperature of that night. ←/→ walk between nights.
+ * window behind it. Choosing a night (a click, ←/→, Enter) also folds a details bar open
+ * along the page's foot (under the pane when stacked) with what the pane does not show:
+ * time asleep, efficiency, skin temperature and the source. Esc folds it away.
  *
  * The ladder reads the index only (bed, wake, length, score per day), so every night is
  * there at no cost; only the chosen night's day file is read, for its stages.
@@ -64,6 +65,8 @@ VitalsPage {
     readonly property int selectedIndex: root.nights.findIndex(n => n.date === root.selectedDate)
     /// sleepFor(selectedDate): stages arrive with the day file.
     property var night: null
+    /// The chosen night's skin temperature {key, avg, min, max}, or null.
+    property var skin: null
     /// The chart grows in once per page; a layout switch rebuilds the pane settled.
     property bool grown: false
 
@@ -74,6 +77,26 @@ VitalsPage {
             return;
         }
         root.night = root.selectedDate !== "" ? VitalsService.sleepFor(root.selectedDate) : null;
+        root.skin = root.night ? root.skinOf(VitalsService.day(root.selectedDate)) : null;
+    }
+
+    /// The night's skin temperature: the samples inside the session when the day file
+    /// has them, else the day's mean from the index.
+    function skinOf(day): var {
+        const key = VitalsService.present.skinTempC ? "skinTempC" : VitalsService.present.skinTempDeltaC ? "skinTempDeltaC" : "";
+        if (key === "")
+            return null;
+        const smp = day?.samples?.[key];
+        if (smp?.bins) {
+            const d = root.selectedDate;
+            const midnight = new Date(Number(d.slice(0, 4)), Number(d.slice(5, 7)) - 1, Number(d.slice(8, 10))).getTime();
+            const from = (root.night.start - midnight) / 60000, to = (root.night.end - midnight) / 60000;
+            const inside = smp.bins.filter(b => b[0] >= from && b[0] <= to).map(b => b[1]);
+            if (inside.length > 0)
+                return { key: key, avg: inside.reduce((a, b) => a + b, 0) / inside.length, min: Math.min(...inside), max: Math.max(...inside) };
+        }
+        const s = VitalsService.summary(root.selectedDate)?.s?.[key];
+        return s ? { key: key, avg: s[1], min: s[0], max: s[2] } : null;
     }
 
     Component.onCompleted: root.refresh()
@@ -118,22 +141,21 @@ VitalsPage {
         return true;
     }
 
-    /// Picks a night; an open night sheet follows it.
+    /// Picks a night and opens its details bar; an open bar follows the pick.
     function choose(date: string): void {
         root.selectedDate = date;
-        if (root.panels?.isShowing(nightSheet))
-            root.panels.current.date = date;
+        root.detailsOpen = true;
+        // Stacked, the pane and its bar head the ladder: scroll them into view.
+        if (!root.wide)
+            ladderView.positionViewAtBeginning();
+        else
+            root.showRow(date);
+    }
+
+    function showRow(date: string): void {
         const i = root.ladder.findIndex(r => r.key === date);
         if (i >= 0)
             ladderView.positionViewAtIndex(i, ListView.Contain);
-    }
-
-    function openNight(date: string): void {
-        root.selectedDate = date;
-        if (root.panels?.isShowing(nightSheet))
-            root.panels.current.date = date;
-        else
-            root.panels?.show(nightSheet, { date: date });
     }
 
     function handleKey(key: int, modifiers: int): bool {
@@ -142,10 +164,61 @@ VitalsPage {
         if (key === Qt.Key_Right)
             return root.step(-1);
         if ((key === Qt.Key_Return || key === Qt.Key_Enter) && root.selectedDate !== "") {
-            root.openNight(root.selectedDate);
+            root.choose(root.selectedDate);
             return true;
         }
         return false;
+    }
+
+    function handleEscape(): bool {
+        if (!root.detailsOpen)
+            return false;
+        root.detailsOpen = false;
+        return true;
+    }
+
+    // ── Details bar ─────────────────────────────────────────────────────
+    property bool detailsOpen: false
+    /// 0 → 1 as the bar folds open; every size that makes room for it derives from this.
+    property real detailsProgress: root.detailsOpen ? 1 : 0
+    Behavior on detailsProgress {
+        enabled: !ClockStyle.reducedMotion
+        // Qt's emphasized spline snaps then crawls on a height fold; standard reads as one move.
+        NumberAnimation {
+            id: detailsFold
+            duration: ClockStyle.motionDefault.duration
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Appearance.animationCurves.standard
+        }
+    }
+    /// The room the wide layout's bar takes under the pane and the ladder, gap included.
+    readonly property real detailsSpace: root.wide ? detailsBar.height + Math.round(root.detailsProgress * root.gap) : 0
+
+    readonly property var sourceNames: ({ samsung: Translation.tr("Samsung Health"), healthConnect: Translation.tr("Health Connect") })
+
+    /// The bar's facts: only what the pane does not already show (it has the length, the
+    /// times, the score and each stage's minutes).
+    readonly property var nightFacts: {
+        const n = root.night;
+        const out = [];
+        if (!n)
+            return out;
+        if (Array.isArray(n.stages) && n.stages.length > 0) {
+            const awake = root.stageTotals(n.stages).find(t => t.stage === "awake")?.min ?? 0;
+            out.push({ key: "asleep", symbol: "schedule", shape: MaterialShape.Shape.Cookie9Sided,
+                caption: Translation.tr("Time asleep"), value: VitalsTypes.duration(n.min - awake) });
+        }
+        if (typeof n.efficiency === "number")
+            out.push({ key: "efficiency", symbol: "percent", shape: MaterialShape.Shape.Clover4Leaf,
+                caption: Translation.tr("Efficiency"), value: Translation.tr("%1 %").arg(Math.round(n.efficiency)) });
+        const t = root.skin;
+        if (t)
+            out.push({ key: "skin", symbol: "thermostat", shape: MaterialShape.Shape.SoftBurst, caption: Translation.tr("Skin temperature"),
+                value: Translation.tr("%1 (%2 to %3)").arg(VitalsTypes.format(t.key, t.avg)).arg(VitalsTypes.format(t.key, t.min)).arg(VitalsTypes.format(t.key, t.max)) });
+        if (n.source)
+            out.push({ key: "source", symbol: "smartphone", shape: MaterialShape.Shape.Cookie6Sided,
+                caption: Translation.tr("Source"), value: root.sourceNames[n.source] ?? n.source });
+        return out;
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────
@@ -174,17 +247,6 @@ VitalsPage {
         awake: Translation.tr("Awake"),
         asleep: Translation.tr("Asleep")
     })
-
-    /// The content half of each stage's colour pair (VitalsStyle.colStage).
-    function colOnStage(stage: string): color {
-        switch (stage) {
-        case "deep": return Appearance.m3colors.darkmode ? ClockStyle.colOnPrimaryContainer : Appearance.m3colors.m3onPrimaryFixed;
-        case "light": return ClockStyle.colOnPrimary;
-        case "rem": return ClockStyle.colOnTertiary;
-        case "awake": return Appearance.m3colors.m3surface; // outline has no on-pair; surface is what it is drawn against
-        default: return ClockStyle.colOnSecondaryContainer;
-        }
-    }
 
     /// Where a time of day sits on the ladder's 20:00 → 12:00 axis (0–1), for the night
     /// that ends on `date`.
@@ -223,8 +285,20 @@ VitalsPage {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         anchors.margins: ClockStyle.gapTiny
+        anchors.bottomMargin: ClockStyle.gapTiny + root.detailsSpace
         width: Math.floor((root.width - root.gap - ClockStyle.gapTiny * 2) * 0.56)
         sourceComponent: nightPaneComponent
+    }
+
+    Loader {
+        id: detailsBar
+        active: root.wide && root.nights.length > 0
+        visible: active
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.margins: ClockStyle.gapTiny
+        sourceComponent: detailsBarComponent
     }
 
     Rectangle {
@@ -233,6 +307,7 @@ VitalsPage {
         anchors.fill: parent
         anchors.margins: ClockStyle.gapTiny
         anchors.leftMargin: root.wide ? sidePane.width + root.gap + ClockStyle.gapTiny : ClockStyle.gapTiny
+        anchors.bottomMargin: ClockStyle.gapTiny + root.detailsSpace
         radius: ClockStyle.radiusCard
         color: root.wide ? ClockStyle.colPane : "transparent"
         clip: true
@@ -250,29 +325,65 @@ VitalsPage {
             bottomMargin: root.wide ? 0 : ClockStyle.gapLarge
             reuseItems: true
 
+            // The chosen row stays in sight while the bar's room shrinks the ladder.
+            onHeightChanged: {
+                if (root.wide && root.detailsOpen)
+                    root.showRow(root.selectedDate);
+            }
+
+            // Whether the stacked header's top is showing. It follows contentY only, not
+            // originY, so a header growing above the view (the bar folding) does not clear it.
+            property bool atTop: true
+            onContentYChanged: atTop = contentY - originY < 1
+
             model: ScriptModel {
                 values: root.ladder
                 objectProp: "key"
             }
 
-            // A fixed height: a header that grows after the first layout is left above the view.
+            // A computed height: a header that grows after the first layout is left above the
+            // view, so the details bar's fold re-pins a header whose top was showing.
             header: Rectangle {
                 width: ladderView.width
-                height: (root.wide ? 0 : root.stackedPaneHeight + ClockStyle.gap) + 74
+                height: (root.wide ? 0 : root.stackedPaneHeight + ClockStyle.gap + stackedBar.height + stackedBar.Layout.topMargin) + 74
                 z: 2
                 color: root.wide ? ClockStyle.colPane : ClockStyle.colBackground
+                onHeightChanged: {
+                    if (!ladderView.atTop)
+                        return;
+                    // In step with the fold, so the pane's top never slips under the edge; any
+                    // other change waits, since a re-pin inside the cascade that rebuilds this
+                    // header on a layout switch crashed the shell.
+                    if (detailsFold.running)
+                        ladderView.positionViewAtBeginning();
+                    else
+                        Qt.callLater(() => ladderView.positionViewAtBeginning());
+                }
 
                 ColumnLayout {
                     anchors.fill: parent
                     spacing: ClockStyle.gapSmall
 
-                    Loader {
+                    ColumnLayout {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: root.stackedPaneHeight
                         Layout.bottomMargin: ClockStyle.gap
-                        active: !root.wide
-                        visible: active
-                        sourceComponent: nightPaneComponent
+                        visible: !root.wide
+                        spacing: 0
+
+                        Loader {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: root.stackedPaneHeight
+                            active: !root.wide
+                            sourceComponent: nightPaneComponent
+                        }
+
+                        Loader {
+                            id: stackedBar
+                            Layout.fillWidth: true
+                            Layout.topMargin: Math.round(root.detailsProgress * root.gap)
+                            active: !root.wide
+                            sourceComponent: detailsBarComponent
+                        }
                     }
 
                     RowLayout {
@@ -369,7 +480,7 @@ VitalsPage {
                     colBackgroundToggled: ClockStyle.colSecondaryContainer
                     colBackgroundToggledHover: ClockStyle.colSecondaryContainerHover
                     colRippleToggled: ClockStyle.colSecondaryContainerActive
-                    onClicked: root.openNight(row.modelData.date)
+                    onClicked: root.choose(row.modelData.date)
 
                     readonly property color colText: nightButton.toggled ? ClockStyle.colOnSecondaryContainer : ClockStyle.colOnSurface
                     readonly property color colTextVariant: nightButton.toggled ? ClockStyle.colOnSecondaryContainer : ClockStyle.colOnSurfaceVariant
@@ -516,7 +627,12 @@ VitalsPage {
                     ClockCardAction {
                         symbol: "info"
                         tip: Translation.tr("Night details (Enter)")
-                        onClicked: root.openNight(pane.date)
+                        onClicked: {
+                            if (root.detailsOpen)
+                                root.detailsOpen = false;
+                            else
+                                root.choose(pane.date);
+                        }
                     }
                 }
 
@@ -648,180 +764,54 @@ VitalsPage {
             }
         }
     }
-
-    // ── A night's sheet ─────────────────────────────────────────────────
+    // ── The chosen night's details ──────────────────────────────────────
     Component {
-        id: nightSheet
+        id: detailsBarComponent
 
-        ClockSheet {
-            id: sheet
-            property string date: ""
-            property var n: null
-            property var session: null
-            property var skin: null
+        // One row of facts on the pane's surface (no fields inside it); the content stays
+        // pinned to the top while the height folds, so it rises with the bar's edge.
+        Rectangle {
+            id: bar
+            readonly property real openHeight: Math.max(factFlow.implicitHeight, closeButton.height) + ClockStyle.gapSmall * 2
+            implicitHeight: Math.round(root.detailsProgress * bar.openHeight)
+            radius: ClockStyle.radiusCard
+            color: ClockStyle.colPane
+            clip: true
 
-            readonly property var totals: root.stageTotals(sheet.n?.stages)
-            readonly property var sourceNames: ({ samsung: Translation.tr("Samsung Health"), healthConnect: Translation.tr("Health Connect") })
-
-            title: sheet.date === root.today ? Translation.tr("Last night") : VitalsFormat.dayLabel(sheet.date, root.now)
-            subtitle: sheet.n ? VitalsFormat.clock(sheet.n.start) + " → " + VitalsFormat.clock(sheet.n.end)
-                + (sheet.n.source ? " · " + (sheet.sourceNames[sheet.n.source] ?? sheet.n.source) : "") : ""
-
-            function refresh(): void {
-                sheet.n = VitalsService.sleepFor(sheet.date);
-                const day = VitalsService.day(sheet.date);
-                sheet.session = day && sheet.n ? ((day.sessions?.sleep ?? []).find(s => s.start === sheet.n.start) ?? null) : null;
-                sheet.skin = sheet.skinOf(day);
-            }
-
-            /// The night's skin temperature: the samples inside the session when the day file
-            /// has them, else the day's mean from the index.
-            function skinOf(day): var {
-                const key = VitalsService.present.skinTempC ? "skinTempC" : VitalsService.present.skinTempDeltaC ? "skinTempDeltaC" : "";
-                if (key === "" || !sheet.n)
-                    return null;
-                const smp = day?.samples?.[key];
-                if (smp?.bins) {
-                    const midnight = new Date(Number(sheet.date.slice(0, 4)), Number(sheet.date.slice(5, 7)) - 1, Number(sheet.date.slice(8, 10))).getTime();
-                    const from = (sheet.n.start - midnight) / 60000, to = (sheet.n.end - midnight) / 60000;
-                    const inside = smp.bins.filter(b => b[0] >= from && b[0] <= to).map(b => b[1]);
-                    if (inside.length > 0)
-                        return { key: key, avg: inside.reduce((a, b) => a + b, 0) / inside.length, min: Math.min(...inside), max: Math.max(...inside) };
-                }
-                const s = VitalsService.summary(sheet.date)?.s?.[key];
-                return s ? { key: key, avg: s[1], min: s[0], max: s[2] } : null;
-            }
-
-            Component.onCompleted: sheet.refresh()
-            onDateChanged: sheet.refresh()
-
-            Connections {
-                target: VitalsService
-                function onDayLoaded(date) {
-                    if (date === sheet.date)
-                        sheet.refresh();
-                }
-            }
-
-            // On the sheet itself, as on the page's pane.
-            VitalsHypnogram {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 170
-                stages: sheet.n?.stages ?? null
-                start: sheet.n?.start ?? 0
-                end: sheet.n?.end ?? 0
-            }
-
-            // Minutes per stage, each in its own colour pair.
-            GridLayout {
-                Layout.fillWidth: true
-                visible: sheet.totals.length > 1
-                columns: 2
-                columnSpacing: ClockStyle.gapSmall
-                rowSpacing: ClockStyle.gapSmall
+            Flow {
+                id: factFlow
+                anchors.left: parent.left
+                anchors.right: closeButton.left
+                anchors.top: parent.top
+                anchors.margins: ClockStyle.gapSmall
+                spacing: ClockStyle.gapSmall
+                opacity: root.detailsProgress * VitalsStyle.emphasis(root.selectedDate, root.today)
 
                 Repeater {
                     model: ScriptModel {
-                        values: sheet.totals
-                        objectProp: "stage"
+                        values: root.nightFacts
+                        objectProp: "key"
                     }
 
-                    Rectangle {
-                        id: stageTile
+                    VitalsFactRow {
                         required property var modelData
-                        Layout.fillWidth: true
-                        Layout.preferredWidth: 1
-                        implicitHeight: 70
-                        radius: ClockStyle.radiusSmall
-                        color: VitalsStyle.colStage(stageTile.modelData.stage)
-
-                        ColumnLayout {
-                            anchors.fill: parent
-                            anchors.margins: 10
-                            spacing: 0
-
-                            RowLayout {
-                                Layout.fillWidth: true
-
-                                StyledText {
-                                    Layout.fillWidth: true
-                                    text: root.stageNames[stageTile.modelData.stage] ?? ""
-                                    font.pixelSize: Appearance.font.pixelSize.smallest
-                                    font.weight: Font.Bold
-                                    color: root.colOnStage(stageTile.modelData.stage)
-                                }
-
-                                StyledText {
-                                    text: Translation.tr("%1 %").arg(Math.round(stageTile.modelData.share * 100))
-                                    font.pixelSize: ClockStyle.textSmall
-                                    font.weight: Font.DemiBold
-                                    color: root.colOnStage(stageTile.modelData.stage)
-                                }
-                            }
-
-                            Item {
-                                Layout.fillHeight: true
-                            }
-
-                            StyledText {
-                                text: root.hoursMinutes(stageTile.modelData.min)
-                                font.family: ClockStyle.fontMain
-                                font.variableAxes: ClockStyle.axesDigitsBold
-                                font.pixelSize: 26
-                                color: root.colOnStage(stageTile.modelData.stage)
-                            }
-                        }
+                        color: "transparent"
+                        symbol: modelData.symbol
+                        shapeKind: modelData.shape
+                        caption: modelData.caption
+                        value: modelData.value
                     }
                 }
             }
 
-            VitalsFactRow {
-                symbol: "schedule"
-                shapeKind: MaterialShape.Shape.Cookie9Sided
-                caption: Translation.tr("Time in bed")
-                value: {
-                    if (!sheet.n)
-                        return "–";
-                    const awake = sheet.totals.find(t => t.stage === "awake")?.min ?? 0;
-                    const bed = VitalsTypes.duration(sheet.n.min);
-                    return awake > 0 ? Translation.tr("%1 · %2 asleep").arg(bed).arg(VitalsTypes.duration(sheet.n.min - awake)) : bed;
-                }
-            }
-
-            VitalsFactRow {
-                visible: sheet.n?.score !== null && sheet.n?.score !== undefined
-                symbol: "star"
-                shapeKind: MaterialShape.Shape.Sunny
-                caption: Translation.tr("Sleep score")
-                value: Translation.tr("%1 of 100").arg(sheet.n?.score ?? 0)
-            }
-
-            VitalsFactRow {
-                visible: typeof sheet.session?.efficiency === "number"
-                symbol: "percent"
-                shapeKind: MaterialShape.Shape.Clover4Leaf
-                caption: Translation.tr("Efficiency")
-                value: Translation.tr("%1 % of the time in bed").arg(Math.round(sheet.session?.efficiency ?? 0))
-            }
-
-            VitalsFactRow {
-                visible: sheet.skin !== null
-                symbol: "thermostat"
-                shapeKind: MaterialShape.Shape.SoftBurst
-                caption: Translation.tr("Skin temperature")
-                value: sheet.skin
-                    ? Translation.tr("%1 (%2 to %3)").arg(VitalsTypes.format(sheet.skin.key, sheet.skin.avg))
-                        .arg(VitalsTypes.format(sheet.skin.key, sheet.skin.min)).arg(VitalsTypes.format(sheet.skin.key, sheet.skin.max))
-                    : ""
-            }
-
-            StyledText {
-                Layout.fillWidth: true
-                visible: sheet.n === null
-                text: Translation.tr("No sleep session ends on this day.")
-                wrapMode: Text.WordWrap
-                font.pixelSize: ClockStyle.textSmall
-                color: ClockStyle.colOnSurfaceVariant
+            ClockCardAction {
+                id: closeButton
+                anchors.right: parent.right
+                anchors.rightMargin: ClockStyle.gap
+                y: Math.round((bar.openHeight - height) / 2)
+                symbol: "close"
+                tip: Translation.tr("Hide details (Esc)")
+                onClicked: root.detailsOpen = false
             }
         }
     }
