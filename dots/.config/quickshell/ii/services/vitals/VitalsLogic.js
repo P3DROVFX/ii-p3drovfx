@@ -138,7 +138,8 @@ function dayError(d) {
         if (!isObj(d[kind]))
             return kind;
         for (var k in d[kind]) {
-            if (!KEY_RE.test(k))
+            // "constructor", "toString"…: reads like `summary.t[key]` would find Object's.
+            if (!KEY_RE.test(k) || k in Object.prototype)
                 return kind + " key";
             var why = _checks[kind](k, d[kind][k]);
             if (why !== "")
@@ -159,6 +160,9 @@ function dayError(d) {
 function metaError(m) {
     if (!isObj(m) || !isObj(m.sources))
         return "meta.sources";
+    // Object.assign() onto the stored meta would set its prototype instead.
+    if (Object.prototype.hasOwnProperty.call(m, "__proto__"))
+        return "meta.__proto__";
     if (m.oldest !== undefined && !isDate(m.oldest))
         return "meta.oldest";
     if (m.newest !== undefined && !isDate(m.newest))
@@ -236,14 +240,25 @@ function summarize(day) {
     return out;
 }
 
+/// A Summary with nothing in it: its Day had no kinds.
+function emptySummary(s) {
+    var groups = [s.t, s.s, s.n, s.m, s.sc];
+    for (var g = 0; g < groups.length; g++)
+        if (Object.keys(groups[g] || {}).length > 0)
+            return false;
+    return !s.sleep;
+}
+
 /**
  * What one `vitals` message changes, against the index the PC holds.
- * Returns {index, write: [Day], skipped: [{date, why}], unchanged: n}: `index` is a new
- * object only when something changed (else the same one), `write` the days whose hash
- * differs (to store as received), `skipped` the malformed ones.
+ * Returns {index, write: [Day], skipped: [{date, why}], unchanged: n, dates, routes}:
+ * `index` is a new object only when something changed (else the same one), `write` the
+ * days whose hash differs (to store as received), `skipped` the malformed ones. A Day with
+ * no kinds is the phone saying that day has no data (any more): its entry leaves the index,
+ * and `dates` / `routes` list what went, for their files.
  */
 function applyDays(index, days) {
-    var out = { index: index, write: [], skipped: [], unchanged: 0 };
+    var out = { index: index, write: [], skipped: [], unchanged: 0, dates: [], routes: [] };
     if (!Array.isArray(days))
         return out;
     var next = null;
@@ -255,13 +270,26 @@ function applyDays(index, days) {
             continue;
         }
         var have = (next || index)[d.date];
+        var sum = summarize(d);
+        if (emptySummary(sum)) {
+            if (have === undefined) {
+                out.unchanged++;
+                continue;
+            }
+            if (next === null)
+                next = Object.assign({}, index);
+            delete next[d.date];
+            out.dates.push(d.date);
+            out.routes = out.routes.concat(have.rt || []);
+            continue;
+        }
         if (have && have.hash === d.hash) {
             out.unchanged++;
             continue;
         }
         if (next === null)
             next = Object.assign({}, index);
-        next[d.date] = summarize(d);
+        next[d.date] = sum;
         out.write.push(d);
     }
     if (next !== null)
@@ -297,6 +325,21 @@ function prune(index, cut) {
             delete out.index[out.dates[j]];
     }
     out.dates.sort();
+    return out;
+}
+
+/// {index, dates, routes: []} without the empty entries an older phone build sent (Days
+/// with no kinds); the same index when there are none.
+function purgeEmpty(index) {
+    var out = { index: index, dates: [], routes: [] };
+    for (var date in index)
+        if (emptySummary(index[date]))
+            out.dates.push(date);
+    if (out.dates.length > 0) {
+        out.index = Object.assign({}, index);
+        for (var i = 0; i < out.dates.length; i++)
+            delete out.index[out.dates[i]];
+    }
     return out;
 }
 
@@ -366,10 +409,6 @@ function series(index, dates, key, fromDate, toDate) {
 function latest(index, dates, key) {
     for (var i = dates.length - 1; i >= 0; i--) {
         var date = dates[i], s = index[date];
-        // _setIndex swaps the index and its dates one after the other; a binding woken
-        // between the two sees dates the index no longer has.
-        if (!s)
-            continue;
         if (s.last && s.last[key])
             return { value: s.last[key][1], time: s.last[key][0], date: date };
         if (s.m && s.m[key])
@@ -393,6 +432,7 @@ function sleepFor(summary, day) {
         return {
             start: sl.start, end: sl.end, min: Math.round((sl.end - sl.start) / 60000),
             score: num(sl.score) ? sl.score : null,
+            efficiency: num(sl.efficiency) ? sl.efficiency : null,
             stages: Array.isArray(sl.stages) ? sl.stages : [],
             source: day.source && day.source.sleep ? day.source.sleep : ""
         };
@@ -401,7 +441,7 @@ function sleepFor(summary, day) {
         return null;
     return {
         start: summary.sleep.start, end: summary.sleep.end, min: summary.sleep.min,
-        score: num(summary.sleep.score) ? summary.sleep.score : null, stages: null, source: ""
+        score: num(summary.sleep.score) ? summary.sleep.score : null, efficiency: null, stages: null, source: ""
     };
 }
 
@@ -421,11 +461,14 @@ function missingRoutes(index, dates, have) {
 
 /// `since` for the get on connect and Sync now: a week before the newest day kept; "" with
 /// nothing kept, or when the steps the phone last applied (`meta.stepsFrom`) are not the
-/// ones wanted (changed while the phone was away: steps differ on every day).
-function sinceOnConnect(dates, appliedStepsFrom, stepsFrom) {
+/// ones wanted (changed while the phone was away: steps differ on every day). `resume`, the
+/// next page of an answer cut short, goes first when older: a full resend for a new steps
+/// source stopped halfway leaves the old source's steps on every day after it.
+function sinceOnConnect(dates, appliedStepsFrom, stepsFrom, resume) {
     if (dates.length === 0 || (appliedStepsFrom && appliedStepsFrom !== stepsFrom))
         return "";
-    return addDays(dates[dates.length - 1], -7);
+    var since = addDays(dates[dates.length - 1], -7);
+    return isDate(resume) && resume < since ? resume : since;
 }
 
 function getMessage(since, stepsFrom) {

@@ -15,8 +15,8 @@ import re
 import shutil
 import sys
 
-REL = re.compile(r"^(?:(?:meta|index|sync)\.json|days/\d{4}-\d{2}-\d{2}\.json|routes/[0-9a-f]{16}\.json)$")
-DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+REL = re.compile(r"(?:(?:meta|index|sync)\.json|days/\d{4}-\d{2}-\d{2}\.json|routes/[0-9a-f]{16}\.json)")
+DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
 def ensure_dir(path):
@@ -57,10 +57,10 @@ def main():
     writes = req.get("write", [])
     deletes = req.get("delete", [])
     for rel in [w[0] for w in writes] + deletes:
-        if not REL.match(rel):
+        if not REL.fullmatch(rel):
             raise ValueError(f"refusing path {rel!r}")
     cut = req.get("pruneBefore", "")
-    if cut and not DATE.match(cut):
+    if cut and not DATE.fullmatch(cut):
         raise ValueError("pruneBefore is not a date")
 
     if req.get("wipe"):
@@ -74,7 +74,7 @@ def main():
     if cut:
         days = os.path.join(root, "days")
         for name in os.listdir(days) if os.path.isdir(days) else []:
-            if name.endswith(".json") and DATE.match(name[:-5]) and name[:-5] < cut:
+            if name.endswith(".json") and DATE.fullmatch(name[:-5]) and name[:-5] < cut:
                 unlink(os.path.join(days, name))
 
 

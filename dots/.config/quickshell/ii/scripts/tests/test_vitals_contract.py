@@ -135,6 +135,7 @@ class StoreLogicTests(unittest.TestCase):
             day(measurements={"body": [{"weightKg": 70}]}),
             day(scores={"energy": None}),
             day(totals={"__proto__": {"day": 1}}),
+            day(totals={"constructor": {"day": 1}}),
             day(source={"steps": 3}),
             day(totals=[]),
             "2026-11-27",
@@ -150,6 +151,19 @@ class StoreLogicTests(unittest.TestCase):
     def test_meta_needs_sources(self):
         self.assertEqual(js("metaError(m)", m={"goals": {}}), "meta.sources")
         self.assertEqual(js("metaError(m)", m={"sources": {"samsung": "on"}, "oldest": "2026-05-11"}), "")
+        self.assertEqual(js("metaError(m)", m={"sources": {}, "__proto__": {"routes": True}}), "meta.__proto__")
+
+    def test_a_day_with_no_kinds_deletes_the_stored_day(self):
+        stored = day("2026-11-26", H1, totals={"steps": {"day": 10}},
+                     sessions={"exercise": [{"id": EX_A, "type": "walking", "start": 1, "end": 2, "route": True}]})
+        r = js("(() => { const i = applyDays({}, [a]).index; const r = applyDays(i, [gone, today]);"
+               " return {days: sortedDates(r.index), dates: r.dates, routes: r.routes, write: r.write.length}; })()",
+               a=stored, gone=day("2026-11-26", H2), today=day("2026-11-27", H2))
+        self.assertEqual(r, {"days": [], "dates": ["2026-11-26"], "routes": [EX_A], "write": 0})
+        # Kind-less entries an older phone build left in the index go on load.
+        old = {"2026-07-08": js("summarize(d)", d=day("2026-07-08")), "2026-11-27": js("summarize(d)", d=FULL_DAY)}
+        self.assertEqual(js("(() => { const p = purgeEmpty(i); return [sortedDates(p.index), p.dates]; })()", i=old),
+                         [["2026-11-27"], ["2026-07-08"]])
 
     def test_route_points_are_checked(self):
         self.assertEqual(js("routePoints(p)", p=[[1, 45.1, 5.7, None], [2, 45.2, 5.8, 212.5]]), [[1, 45.1, 5.7, None], [2, 45.2, 5.8, 212.5]])
@@ -186,6 +200,10 @@ class SleepTests(unittest.TestCase):
         self.assertEqual(r["score"], 78)
         self.assertEqual(r["stages"][1], [20, 40, "deep"])
         self.assertEqual(r["source"], "samsung")
+        self.assertIsNone(r["efficiency"])
+        night = json.loads(json.dumps(FULL_DAY))
+        night["sessions"]["sleep"][0]["efficiency"] = 91.5
+        self.assertEqual(js("sleepFor(summarize(d), d).efficiency", d=night), 91.5)
 
     def test_without_the_day_file_it_answers_from_the_summary(self):
         r = js("sleepFor(summarize(d), null)", d=FULL_DAY)
@@ -222,6 +240,11 @@ class SyncTests(unittest.TestCase):
 
     def test_steps_source_changed_while_away_asks_for_everything(self):
         self.assertEqual(js("sinceOnConnect(['2026-11-27'], 'auto', 'phone')"), "")
+
+    def test_an_answer_cut_short_is_resumed(self):
+        self.assertEqual(js("sinceOnConnect(['2026-11-27'], 'phone', 'phone', '2026-06-10')"), "2026-06-10")
+        self.assertEqual(js("sinceOnConnect(['2026-11-27'], 'phone', 'phone', '')"), "2026-11-20")
+        self.assertEqual(js("sinceOnConnect(['2026-11-27'], 'auto', 'phone', '2026-06-10')"), "")
 
     def test_paging_continues_from_next_until_more_is_false(self):
         self.assertEqual(js("nextGet(m, 'phone')", m={"t": "vitals", "days": [], "more": True, "next": "2026-06-10"}),
@@ -262,7 +285,7 @@ class StoreWriterTests(unittest.TestCase):
         self.assertEqual(Path(self.dir, "days/2026-11-27.json").read_text(), '{"date":"2026-11-27"}')
 
     def test_paths_outside_the_layout_are_refused(self):
-        for rel in ("../escape.json", "days/x.json", "routes/../../x.json", "notes.txt"):
+        for rel in ("../escape.json", "days/x.json", "routes/../../x.json", "notes.txt", "index.json\n"):
             r = self.run_store(write=[[rel, "{}"]])
             self.assertEqual(r.returncode, 1, rel)
             self.assertIn("refusing path", r.stderr)

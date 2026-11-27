@@ -53,13 +53,13 @@ Singleton {
         return "empty";
     }
     readonly property var meta: root._meta
-    readonly property var index: root._index
-    readonly property var dates: root._dates
-    readonly property var present: root._present
+    readonly property var index: root._data.index
+    readonly property var dates: root._data.dates
+    readonly property var present: root._data.present
     readonly property real lastSync: root._lastSync
     readonly property bool syncing: root._syncing
     readonly property real progress: root._progress
-    readonly property int dataVersion: root._dataVersion
+    readonly property int dataVersion: root._data.version
     /// The phone's last `error` ("disabled" | "permission" | "unavailable"), "" after data.
     readonly property string lastError: root._lastError
     /// The store's files have been read (index, sync state, meta).
@@ -69,14 +69,16 @@ Singleton {
     signal routeLoaded(string id)
 
     property var _meta: null
-    property var _index: ({})
-    property var _dates: []
-    property var _present: ({})
+    // One object, so every read here (summary, series, latest…) sees an index, its dates
+    // and its present set from the same swap, whichever of them woke the binding.
+    property var _data: ({ index: {}, dates: [], present: {}, version: 0 })
     property real _lastSync: 0
     property string _lastPage: ""
+    /// Where an answer cut short (phone gone, timeout) would have gone on; "" when the last
+    /// one finished. Kept in sync.json, so the next connect asks from there.
+    property string _resume: ""
     property bool _syncing: false
     property real _progress: 0
-    property int _dataVersion: 0
     property string _lastError: ""
     property bool _indexRead: false
     property bool _syncRead: false
@@ -94,15 +96,15 @@ Singleton {
     // ── Reads ───────────────────────────────────────────────────────────
 
     function summary(date: string): var {
-        return root._index[date] ?? null;
+        return root._data.index[date] ?? null;
     }
 
     function series(key: string, fromDate, toDate): var {
-        return Logic.series(root._index, root._dates, key, fromDate ?? "", toDate ?? "");
+        return Logic.series(root._data.index, root._data.dates, key, fromDate ?? "", toDate ?? "");
     }
 
     function latest(key: string): var {
-        return Logic.latest(root._index, root._dates, key);
+        return Logic.latest(root._data.index, root._data.dates, key);
     }
 
     /// The Day as stored, or null; a stored one not in memory loads and emits dayLoaded.
@@ -112,13 +114,13 @@ Singleton {
             root._touch(date);
             return cached;
         }
-        if (root._index[date] !== undefined)
+        if (root._data.index[date] !== undefined)
             root._read("day", date);
         return null;
     }
 
     function sleepFor(date: string): var {
-        const s = root._index[date];
+        const s = root._data.index[date];
         if (!s?.sleep)
             return null;
         const d = root._dayCache[date];
@@ -138,8 +140,8 @@ Singleton {
     // ── Actions ─────────────────────────────────────────────────────────
 
     function syncNow(): void {
-        if (root._indexRead)
-            root._get(Logic.sinceOnConnect(root._dates, root._meta?.stepsFrom ?? "", root.stepsFrom));
+        if (root.loaded)
+            root._get(Logic.sinceOnConnect(root._data.dates, root._meta?.stepsFrom ?? "", root.stepsFrom, root._resume));
         else
             root._getPending = true;
     }
@@ -158,7 +160,7 @@ Singleton {
         Config.options.vitals.retentionDays = days;
         const req = { write: [] };
         if (root._prune(req, days) > 0) {
-            req.write.push(["index.json", JSON.stringify({ v: 1, days: root._index })]);
+            req.write.push(["index.json", JSON.stringify({ v: 1, days: root._data.index })]);
             req.write.push(["sync.json", root._syncText()]);
         }
         if (req.pruneBefore)
@@ -171,6 +173,7 @@ Singleton {
         root._meta = null;
         root._lastSync = 0;
         root._lastPage = "";
+        root._resume = "";
         root._lastError = "";
         root._routes = ({});
         root._routeCache = ({});
@@ -210,7 +213,7 @@ Singleton {
     function handleMessage(m: var): void {
         if (!root.enabled)
             return;
-        if (!root._indexRead) {
+        if (!root.loaded) {
             root._early.push(m);
             return;
         }
@@ -239,6 +242,8 @@ Singleton {
         root._dayCache = ({});
         root._dayOrder = [];
         root._indexRead = root._syncRead = root._metaRead = false;
+        root._early = [];
+        root._getPending = false;
         root._endSync();
         root._setIndex({});
     }
@@ -246,7 +251,7 @@ Singleton {
     // ── Sync ────────────────────────────────────────────────────────────
 
     function _get(since: string, stepsFrom): void {
-        if (!root._indexRead) {
+        if (!root.loaded) {
             root._getPending = true;
             return;
         }
@@ -300,9 +305,10 @@ Singleton {
         // Days the retention would drop at once are not written at all.
         const cut = Logic.cutoff(root._today(), root.retentionDays);
         const days = (Array.isArray(m.days) ? m.days : []).filter(d => cut === "" || !(d?.date < cut));
-        const r = Logic.applyDays(root._index, days);
+        const r = Logic.applyDays(root._data.index, days);
         for (const s of r.skipped)
             console.warn(`[Vitals] skipped day ${s.date}: ${s.why}`);
+        root._drop(req, r);
         for (const d of r.write) {
             req.write.push([`days/${d.date}.json`, JSON.stringify(d)]);
             // Kept in memory as well: a read of the file could land before the write.
@@ -310,7 +316,7 @@ Singleton {
         }
         if (days.length > 0 && Logic.isDate(days[days.length - 1]?.date))
             root._lastPage = days[days.length - 1].date;
-        if (r.index !== root._index)
+        if (r.index !== root._data.index)
             root._setIndex(r.index);
 
         let done = !answer;
@@ -318,6 +324,7 @@ Singleton {
             answerTimeout.restart();
             root._progress = Logic.progress(root._answerSince || root._meta?.oldest || "", root._lastPage, root._meta?.newest ?? "");
             const next = Logic.nextGet(m, root.stepsFrom);
+            root._resume = next?.since ?? "";
             if (next !== null) {
                 // An answer this PC did not ask for (a reconnect raced it) is followed too.
                 if (IiLinkService.sendVitals(next))
@@ -335,7 +342,7 @@ Singleton {
             root._lastSync = Date.now();
             root._prune(req, root.retentionDays);
         }
-        req.write.push(["index.json", JSON.stringify({ v: 1, days: root._index })]);
+        req.write.push(["index.json", JSON.stringify({ v: 1, days: root._data.index })]);
         req.write.push(["sync.json", root._syncText()]);
         root._store(req);
         if (done)
@@ -346,10 +353,19 @@ Singleton {
     /// file removals to `req`; returns how many days went.
     function _prune(req: var, retention: int): int {
         const cut = Logic.cutoff(root._today(), retention);
-        const p = Logic.prune(root._index, cut);
+        const p = Logic.prune(root._data.index, cut);
         if (cut !== "")
             req.pruneBefore = cut;
-        req.delete = (req.delete ?? []).concat(p.routes.map(id => `routes/${id}.json`));
+        root._drop(req, p);
+        if (p.index !== root._data.index)
+            root._setIndex(p.index);
+        return p.dates.length;
+    }
+
+    /// Forgets the day files and routes of days `p` ({dates, routes}) took out of the
+    /// index and adds their removals to `req`.
+    function _drop(req: var, p: var): void {
+        req.delete = (req.delete ?? []).concat(p.dates.map(date => `days/${date}.json`), p.routes.map(id => `routes/${id}.json`));
         for (const date of p.dates)
             delete root._dayCache[date];
         root._dayOrder = root._dayOrder.filter(x => root._dayCache[x] !== undefined);
@@ -361,20 +377,14 @@ Singleton {
             }
             root._routes = routes;
         }
-        if (p.index !== root._index)
-            root._setIndex(p.index);
-        return p.dates.length;
     }
 
     function _setIndex(next: var): void {
-        root._index = next;
-        root._dates = Logic.sortedDates(next);
-        root._present = Logic.present(next);
-        root._dataVersion++;
+        root._data = { index: next, dates: Logic.sortedDates(next), present: Logic.present(next), version: root._data.version + 1 };
     }
 
     function _syncText(): string {
-        return JSON.stringify({ lastSync: root._lastSync, lastPage: root._lastPage, routes: root._routes });
+        return JSON.stringify({ lastSync: root._lastSync, lastPage: root._lastPage, resume: root._resume, routes: root._routes });
     }
 
     // ── Routes ──────────────────────────────────────────────────────────
@@ -387,7 +397,7 @@ Singleton {
     function _wantRoutes(): void {
         if (root._meta?.routes !== true)
             return;
-        const missing = Logic.missingRoutes(root._index, root._dates, root._routes);
+        const missing = Logic.missingRoutes(root._data.index, root._data.dates, root._routes);
         root._routeQueue = root._routeQueue.concat(missing.filter(id => !root._routeQueue.includes(id)));
         root._askRoute();
     }
@@ -452,24 +462,34 @@ Singleton {
         onLoaded: {
             try {
                 const parsed = JSON.parse(indexFile.text());
-                if (parsed?.v === 1 && parsed.days && typeof parsed.days === "object")
-                    root._setIndex(parsed.days);
-                else
+                if (parsed?.v === 1 && parsed.days && typeof parsed.days === "object") {
+                    const p = Logic.purgeEmpty(parsed.days);
+                    root._setIndex(p.index);
+                    if (p.dates.length > 0) {
+                        const req = { write: [["index.json", JSON.stringify({ v: 1, days: p.index })]] };
+                        root._drop(req, p);
+                        root._store(req);
+                    }
+                } else
                     console.warn("[Vitals] index.json has an unknown shape, starting empty");
             } catch (e) {
                 console.warn("[Vitals] index.json is unreadable, starting empty");
             }
-            root._indexReady();
+            root._indexRead = true;
+            root._filesRead();
         }
         onLoadFailed: error => {
             if (error !== FileViewError.FileNotFound)
                 console.warn("[Vitals] could not read index.json:", error);
-            root._indexReady();
+            root._indexRead = true;
+            root._filesRead();
         }
     }
 
-    function _indexReady(): void {
-        root._indexRead = true;
+    // Messages wait for all three files: one landing later would overwrite what they set.
+    function _filesRead(): void {
+        if (!root.loaded)
+            return;
         const early = root._early;
         root._early = [];
         for (const m of early)
@@ -489,14 +509,19 @@ Singleton {
                 const s = JSON.parse(syncFile.text());
                 root._lastSync = Number(s?.lastSync) || 0;
                 root._lastPage = Logic.isDate(s?.lastPage) ? s.lastPage : "";
+                root._resume = Logic.isDate(s?.resume) ? s.resume : "";
                 if (s?.routes && typeof s.routes === "object")
                     root._routes = s.routes;
             } catch (e) {
                 console.warn("[Vitals] sync.json is unreadable");
             }
             root._syncRead = true;
+            root._filesRead();
         }
-        onLoadFailed: root._syncRead = true
+        onLoadFailed: {
+            root._syncRead = true;
+            root._filesRead();
+        }
     }
 
     FileView {
@@ -512,8 +537,12 @@ Singleton {
                 console.warn("[Vitals] meta.json is unreadable");
             }
             root._metaRead = true;
+            root._filesRead();
         }
-        onLoadFailed: root._metaRead = true
+        onLoadFailed: {
+            root._metaRead = true;
+            root._filesRead();
+        }
     }
 
     // ── Lazy reads: one FileView, one file at a time ────────────────────
@@ -566,7 +595,7 @@ Singleton {
                 parsed = JSON.parse(text);
             } catch (e) {}
             if (job.kind === "day") {
-                const want = root._index[job.key];
+                const want = root._data.index[job.key];
                 if (Logic.dayError(parsed) !== "" || parsed.date !== job.key)
                     console.warn(`[Vitals] day file ${job.key} is unreadable`);
                 // A file older than the index is a write still queued; the new Day is cached.

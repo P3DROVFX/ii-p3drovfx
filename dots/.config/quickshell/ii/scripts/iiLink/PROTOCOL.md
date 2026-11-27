@@ -227,7 +227,10 @@ that day's local midnight (0–1439).
 
 - `day`: `{date, tz: "+01:00" (offset at noon), hash, totals?, samples?, sessions?, measurements?, scores?, source?}`.
   `hash` is the first 16 hex of the SHA-256 of the canonical JSON of the day without `hash`.
-  Only keys with data appear, and an empty kind is left out.
+  Only keys with data appear, and an empty kind is left out. Only days with data are sent,
+  except today and a day the PC was sent before whose data is now gone: those come with no
+  kinds, and the PC deletes its copy. `meta.oldest` may be missing until the phone has read
+  everything once.
 
   | Kind | Entry per key | Filed under |
   | --- | --- | --- |
@@ -263,7 +266,8 @@ The shell keeps the data in `~/.local/state/quickshell/user/vitals/` (0700, file
 replaced atomically by `scripts/vitals/vitals_store.py`): `meta.json` (last meta +
 `receivedAt`), `days/<date>.json` (each day as received, rewritten only when its `hash`
 changed), `index.json` (`{"v":1,"days":{date: summary}}`), `routes/<id>.json` (`{id, points}`)
-and `sync.json` (`{lastSync, lastPage, routes: {id: 1 stored | 0 none}}`). A day that does
+and `sync.json` (`{lastSync, lastPage, resume, routes: {id: 1 stored | 0 none}}`; `resume` is
+the `next` of an answer cut short, asked from on the next connect). A day that does
 not match the shapes above is skipped whole, with the key at fault logged and no value.
 After each sync, days older than `vitals.retentionDays` (0 = forever; today counts as one)
 are pruned with their routes. `summary`: `{hash, t: {totals key: day}, s: {samples key: [min,
