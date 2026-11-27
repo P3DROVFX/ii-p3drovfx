@@ -646,16 +646,19 @@ Item {
         }
     }
 
+    // All 17 dialogs are loaded lazily by URL on first open instead of inline
+    // Component declarations, so Qt does not compile unused dialog trees on boot.
     DialogHostLoader {
         owner: root
         shownPropertyString: "showAudioOutputDialog"
         dialogRadius: sidebarRightBackground.defaultRadius
         anchors.margins: root.controlCenter ? root.sidebarPadding : 0
-        dialog: VolumeDialog {
-            pageMode: root.controlCenter
-            pageTitle: Translation.tr("Audio output")
+        dialogUrl: Qt.resolvedUrl("../../common/quickToggleDialogs/volumeMixer/VolumeDialog.qml")
+        dialogProperties: ({
+            pageMode: root.controlCenter,
+            pageTitle: Translation.tr("Audio output"),
             isSink: true
-        }
+        })
     }
 
     DialogHostLoader {
@@ -663,11 +666,12 @@ Item {
         shownPropertyString: "showAudioInputDialog"
         dialogRadius: sidebarRightBackground.defaultRadius
         anchors.margins: root.controlCenter ? root.sidebarPadding : 0
-        dialog: VolumeDialog {
-            pageMode: root.controlCenter
-            pageTitle: Translation.tr("Audio input")
+        dialogUrl: Qt.resolvedUrl("../../common/quickToggleDialogs/volumeMixer/VolumeDialog.qml")
+        dialogProperties: ({
+            pageMode: root.controlCenter,
+            pageTitle: Translation.tr("Audio input"),
             isSink: false
-        }
+        })
     }
 
     DialogHostLoader {
@@ -675,9 +679,8 @@ Item {
         shownPropertyString: "showBluetoothDialog"
         dialogRadius: sidebarRightBackground.defaultRadius
         anchors.margins: root.controlCenter ? root.sidebarPadding : 0
-        dialog: BluetoothDialog {
-            pageMode: root.controlCenter
-        }
+        dialogUrl: Qt.resolvedUrl("../../common/quickToggleDialogs/bluetoothDevices/BluetoothDialog.qml")
+        dialogProperties: ({ pageMode: root.controlCenter })
     }
 
     DialogHostLoader {
@@ -685,9 +688,8 @@ Item {
         shownPropertyString: "showNightLightDialog"
         dialogRadius: sidebarRightBackground.defaultRadius
         anchors.margins: root.controlCenter ? root.sidebarPadding : 0
-        dialog: NightLightDialog {
-            pageMode: root.controlCenter
-        }
+        dialogUrl: Qt.resolvedUrl("../../common/quickToggleDialogs/nightLight/NightLightDialog.qml")
+        dialogProperties: ({ pageMode: root.controlCenter })
     }
 
     DialogHostLoader {
@@ -695,9 +697,8 @@ Item {
         shownPropertyString: "showWifiDialog"
         dialogRadius: sidebarRightBackground.defaultRadius
         anchors.margins: root.controlCenter ? root.sidebarPadding : 0
-        dialog: WifiDialog {
-            pageMode: root.controlCenter
-        }
+        dialogUrl: Qt.resolvedUrl("../../common/quickToggleDialogs/wifiNetworks/WifiDialog.qml")
+        dialogProperties: ({ pageMode: root.controlCenter })
     }
 
     DialogHostLoader {
@@ -705,9 +706,8 @@ Item {
         shownPropertyString: "showDarkModeDialog"
         dialogRadius: sidebarRightBackground.defaultRadius
         anchors.margins: root.controlCenter ? root.sidebarPadding : 0
-        dialog: DarkModeDialog {
-            pageMode: root.controlCenter
-        }
+        dialogUrl: Qt.resolvedUrl("../../common/quickToggleDialogs/darkMode/DarkModeDialog.qml")
+        dialogProperties: ({ pageMode: root.controlCenter })
     }
 
     DialogHostLoader {
@@ -715,9 +715,8 @@ Item {
         shownPropertyString: "showLocalSendDialog"
         dialogRadius: sidebarRightBackground.defaultRadius
         anchors.margins: root.controlCenter ? root.sidebarPadding : 0
-        dialog: LocalSendDialog {
-            pageMode: root.controlCenter
-        }
+        dialogUrl: Qt.resolvedUrl("../../common/quickToggleDialogs/localSend/LocalSendDialog.qml")
+        dialogProperties: ({ pageMode: root.controlCenter })
     }
 
     DialogHostLoader {
@@ -725,9 +724,8 @@ Item {
         shownPropertyString: "showVpnDialog"
         dialogRadius: sidebarRightBackground.defaultRadius
         anchors.margins: root.controlCenter ? root.sidebarPadding : 0
-        dialog: VpnDialog {
-            pageMode: root.controlCenter
-        }
+        dialogUrl: Qt.resolvedUrl("../../common/quickToggleDialogs/vpn/VpnDialog.qml")
+        dialogProperties: ({ pageMode: root.controlCenter })
     }
 
     DialogHostLoader {
@@ -735,9 +733,8 @@ Item {
         shownPropertyString: "showTailscaleDialog"
         dialogRadius: sidebarRightBackground.defaultRadius
         anchors.margins: root.controlCenter ? root.sidebarPadding : 0
-        dialog: TailscaleDialog {
-            pageMode: root.controlCenter
-        }
+        dialogUrl: Qt.resolvedUrl("../../common/quickToggleDialogs/tailscale/TailscaleDialog.qml")
+        dialogProperties: ({ pageMode: root.controlCenter })
     }
 
     DialogHostLoader {
@@ -745,9 +742,8 @@ Item {
         shownPropertyString: "showKdeConnectDialog"
         dialogRadius: sidebarRightBackground.defaultRadius
         anchors.margins: root.controlCenter ? root.sidebarPadding : 0
-        dialog: KdeConnectDialog {
-            pageMode: root.controlCenter
-        }
+        dialogUrl: Qt.resolvedUrl("../../common/quickToggleDialogs/kdeConnect/KdeConnectDialog.qml")
+        dialogProperties: ({ pageMode: root.controlCenter })
     }
 
     DialogHostLoader {
@@ -755,30 +751,35 @@ Item {
         shownPropertyString: "showDnsOverTlsDialog"
         dialogRadius: sidebarRightBackground.defaultRadius
         anchors.margins: root.controlCenter ? root.sidebarPadding : 0
-        dialog: DnsOverTlsDialog {
-            pageMode: root.controlCenter
-        }
+        dialogUrl: Qt.resolvedUrl("../../common/quickToggleDialogs/dnsOverTls/DnsOverTlsDialog.qml")
+        dialogProperties: ({ pageMode: root.controlCenter })
     }
 
-    ToggleDialog {
+    DialogHostLoader {
+        owner: root
         shownPropertyString: "showIdleInhibitorDialog"
-        dialog: IdleInhibitorDialog {
-            pageMode: root.controlCenter
-        }
+        dialogRadius: sidebarRightBackground.defaultRadius
+        anchors.margins: root.controlCenter ? root.sidebarPadding : 0
+        dialogUrl: Qt.resolvedUrl("../../common/quickToggleDialogs/idleInhibitor/IdleInhibitorDialog.qml")
+        dialogProperties: ({ pageMode: root.controlCenter })
     }
 
-    ToggleDialog {
+    DialogHostLoader {
+        owner: root
         shownPropertyString: "showScreenShaderDialog"
-        dialog: ScreenShaderDialog {
-            pageMode: root.controlCenter
-        }
+        dialogRadius: sidebarRightBackground.defaultRadius
+        anchors.margins: root.controlCenter ? root.sidebarPadding : 0
+        dialogUrl: Qt.resolvedUrl("../../common/quickToggleDialogs/screenShader/ScreenShaderDialog.qml")
+        dialogProperties: ({ pageMode: root.controlCenter })
     }
 
-    ToggleDialog {
+    DialogHostLoader {
+        owner: root
         shownPropertyString: "showModesDialog"
-        dialog: ModesDialog {
-            pageMode: root.controlCenter
-        }
+        dialogRadius: sidebarRightBackground.defaultRadius
+        anchors.margins: root.controlCenter ? root.sidebarPadding : 0
+        dialogUrl: Qt.resolvedUrl("modes/ModesDialog.qml")
+        dialogProperties: ({ pageMode: root.controlCenter })
     }
 
     DialogHostLoader {
@@ -786,9 +787,8 @@ Item {
         shownPropertyString: "showEasyEffectsDialog"
         dialogRadius: sidebarRightBackground.defaultRadius
         anchors.margins: root.controlCenter ? root.sidebarPadding : 0
-        dialog: EasyEffectsDialog {
-            pageMode: root.controlCenter
-        }
+        dialogUrl: Qt.resolvedUrl("../../common/quickToggleDialogs/easyEffects/EasyEffectsDialog.qml")
+        dialogProperties: ({ pageMode: root.controlCenter })
     }
 
     DialogHostLoader {
@@ -796,9 +796,8 @@ Item {
         shownPropertyString: "showSmartDevicesDialog"
         dialogRadius: sidebarRightBackground.defaultRadius
         anchors.margins: root.controlCenter ? root.sidebarPadding : 0
-        dialog: SmartDevicesDialog {
-            pageMode: root.controlCenter
-        }
+        dialogUrl: Qt.resolvedUrl("../../common/quickToggleDialogs/smartDevices/SmartDevicesDialog.qml")
+        dialogProperties: ({ pageMode: root.controlCenter })
     }
 
     // The tray tile (trayWidget) asks for this: the island shows the same dialog as a
@@ -809,10 +808,9 @@ Item {
         shownPropertyString: "showTrayDialog"
         dialogRadius: sidebarRightBackground.defaultRadius
         anchors.margins: root.controlCenter ? root.sidebarPadding : 0
-        dialog: TabletTrayDialog {
-            pageMode: root.controlCenter
-            onItemActivated: root.showTrayDialog = false
-        }
+        dialogUrl: Qt.resolvedUrl("../../tablet/sidebarDashboard/TabletTrayDialog.qml")
+        dialogProperties: ({ pageMode: root.controlCenter })
+        onItemActivated: root.showTrayDialog = false
     }
 
     // The picker is only ever opened by the pomodoro tab: it is built on request and
@@ -914,39 +912,11 @@ Item {
                 readonly property bool shouldPlayBanner: {
                     return GlobalStates.dashboardPanelOpen && wallpaperArea.isBannerAnimated;
                 }
-
-                // Cache a cropped banner at the physical resolution that the
-                // scene graph needs. A static metadata load establishes the
-                // source aspect ratio before the QMovie is created.
-                readonly property size animatedDecodeBox: {
-                    const target = bannerImage.decodeBox;
-                    const naturalWidth = bannerAnimatedMetadata.implicitWidth;
-                    const naturalHeight = bannerAnimatedMetadata.implicitHeight;
-                    if (target.width <= 0 || target.height <= 0 || naturalWidth <= 0 || naturalHeight <= 0)
-                        return Qt.size(0, 0);
-
-                    const sourceAspect = naturalWidth / naturalHeight;
-                    const targetAspect = target.width / target.height;
-                    if (sourceAspect >= targetAspect)
-                        return Qt.size(Math.ceil(target.height * sourceAspect), target.height);
-                    return Qt.size(target.width, Math.ceil(target.width / sourceAspect));
-                }
                 
                 Rectangle {
                     id: imageMask
                     anchors.fill: parent
                     radius: 15
-                    visible: false
-                }
-
-                // Read the first GIF frame solely to obtain its native aspect
-                // ratio. AnimatedImage must never be created with a 0×0
-                // sourceSize, as QMovie cannot produce that first frame.
-                Image {
-                    id: bannerAnimatedMetadata
-                    source: wallpaperArea.isBannerAnimated ? wallpaperArea.cleanBannerSource : ""
-                    asynchronous: true
-                    cache: false
                     visible: false
                 }
 
@@ -978,54 +948,76 @@ Item {
                     cache: false
                     asynchronous: true
                     visible: !wallpaperArea.isBannerAnimated
-                    layer.enabled: true
+                    layer.enabled: visible && status === Image.Ready
                     layer.effect: OpacityMask {
                         maskSource: imageMask
                     }
                 }
 
-                // Animated GIF Banner (only active when isBannerAnimated is true, paused when sidebar is closed)
-                AnimatedImage {
-                    id: bannerAnimatedImage
+                // Animated GIF Banner (only built when banner is actually animated)
+                Loader {
+                    id: bannerAnimatedLoader
                     anchors.fill: parent
-                    source: (wallpaperArea.isBannerAnimated && wallpaperArea.animatedDecodeBox.width > 0
-                             && bannerAnimatedImage.keepMovie)
-                        ? wallpaperArea.cleanBannerSource
-                        : ""
-                    sourceSize: wallpaperArea.animatedDecodeBox
-                    fillMode: Image.PreserveAspectCrop
-                    playing: wallpaperArea.shouldPlayBanner
-                    // Never toggle `cache` on a live movie: turning it off runs
-                    // QQuickAnimatedImage::clearCache() (qDeleteAll of the frame
-                    // pixmaps) mid-playback, and from then on every frame deletes
-                    // and recreates its pixmap through the global pixmap cache.
-                    // Under Qt 6.12 that path segfaults (memcpy in QtGui) when the
-                    // dashboard closes for the overview/lock screen. Frames are
-                    // released instead by unloading the movie once it is closed.
-                    cache: true
-                    asynchronous: true
-                    property bool keepMovie: wallpaperArea.shouldPlayBanner
-                    Connections {
-                        target: wallpaperArea
-                        function onShouldPlayBannerChanged() {
-                            if (wallpaperArea.shouldPlayBanner) {
-                                bannerMovieRelease.stop();
-                                bannerAnimatedImage.keepMovie = true;
-                            } else {
-                                bannerMovieRelease.restart();
+                    active: wallpaperArea.isBannerAnimated
+                    sourceComponent: Item {
+                        anchors.fill: parent
+
+                        readonly property size animatedDecodeBox: {
+                            const target = bannerImage.decodeBox;
+                            const naturalWidth = bannerAnimatedMetadata.implicitWidth;
+                            const naturalHeight = bannerAnimatedMetadata.implicitHeight;
+                            if (target.width <= 0 || target.height <= 0 || naturalWidth <= 0 || naturalHeight <= 0)
+                                return Qt.size(0, 0);
+
+                            const sourceAspect = naturalWidth / naturalHeight;
+                            const targetAspect = target.width / target.height;
+                            if (sourceAspect >= targetAspect)
+                                return Qt.size(Math.ceil(target.height * sourceAspect), target.height);
+                            return Qt.size(target.width, Math.ceil(target.width / sourceAspect));
+                        }
+
+                        Image {
+                            id: bannerAnimatedMetadata
+                            source: wallpaperArea.cleanBannerSource
+                            asynchronous: true
+                            cache: false
+                            visible: false
+                        }
+
+                        AnimatedImage {
+                            id: bannerAnimatedImage
+                            anchors.fill: parent
+                            source: (animatedDecodeBox.width > 0 && bannerAnimatedImage.keepMovie)
+                                ? wallpaperArea.cleanBannerSource
+                                : ""
+                            sourceSize: animatedDecodeBox
+                            fillMode: Image.PreserveAspectCrop
+                            playing: wallpaperArea.shouldPlayBanner
+                            cache: true
+                            asynchronous: true
+                            property bool keepMovie: wallpaperArea.shouldPlayBanner
+                            Connections {
+                                target: wallpaperArea
+                                function onShouldPlayBannerChanged() {
+                                    if (wallpaperArea.shouldPlayBanner) {
+                                        bannerMovieRelease.stop();
+                                        bannerAnimatedImage.keepMovie = true;
+                                    } else {
+                                        bannerMovieRelease.restart();
+                                    }
+                                }
+                            }
+                            Timer {
+                                id: bannerMovieRelease
+                                interval: 2000
+                                onTriggered: bannerAnimatedImage.keepMovie = false
+                            }
+                            visible: status === Image.Ready
+                            layer.enabled: true
+                            layer.effect: OpacityMask {
+                                maskSource: imageMask
                             }
                         }
-                    }
-                    // Keep the paused last frame through the close animation.
-                    Timer {
-                        id: bannerMovieRelease
-                        interval: 2000
-                        onTriggered: bannerAnimatedImage.keepMovie = false
-                    }
-                    visible: wallpaperArea.isBannerAnimated && status === Image.Ready
-                    layer.enabled: true
-                    layer.effect: OpacityMask {
-                        maskSource: imageMask
                     }
                 }
 

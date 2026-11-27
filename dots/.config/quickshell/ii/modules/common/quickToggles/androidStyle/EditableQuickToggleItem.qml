@@ -6,274 +6,281 @@ import "QuickToggleResize.js" as Resize
 import "QuickToggleCatalog.js" as QuickToggleCatalog
 
 // Shared editing surface for every Android quick-toggle delegate. The visual
-// widget stays owned by its base component; this item only handles gestures,
-// draft mutations, and edit affordances.
+// widget stays owned by its base component; all edit gestures, Behaviors, and
+// affordances are loaded lazily only while editMode is active.
 Item {
     id: root
 
     required property var target
     required property var visualItem
 
-    readonly property var controller: target && target.panel ? target.panel.editController : null
     readonly property bool editMode: target ? target.editMode : false
     readonly property bool isUnused: target ? target.isUnused : false
-    readonly property bool pageFocused: root.isUnused || !target?.panel
-        || target.pageIndex === target.panel.currentPage
-    readonly property bool isSlider: target && target.buttonData ? ["volumeSlider", "micSlider", "brightnessSlider", "gammaSlider"].includes(target.buttonData.type) : false
-    readonly property bool canResize: target && target.pageIndex >= 0 && !root.isUnused
-        && QuickToggleCatalog.isResizable(target.buttonData?.type ?? "", target.gridColumns)
 
-    property real pressX: 0
-    property real pressY: 0
-    property real pressPointerPanelX: 0
-    property real pressPointerPanelY: 0
-    property real pressItemPanelX: 0
-    property real pressItemPanelY: 0
-    property int resizeStartW: 1
-    property int resizeStartH: 1
-    property real resizeStartReferenceX: 0
-    property real resizeStartReferenceY: 0
-    property bool resizePressed: false
-    readonly property bool resizing: resizePressed && root.editMode && root.controller
-        && root.controller.active && root.controller.mode === "resize"
-        && root.controller.draggedId === root.target.buttonData.id
-    property real resizeStartWidth: 0
-    property real resizeStartHeight: 0
-    property real previewWidth: 0
-    property real previewHeight: 0
-    property real resizeOriginX: 0
-    property real resizeOriginY: 0
-    property real directionX: 0
-    property real directionY: 1
-    readonly property var resizeBounds: Resize.bounds(root.target.buttonData.type, root.target.gridColumns)
-    readonly property real minimumHeight: root.isSlider ? root.target.compactHeight : root.target.baseCellHeight
-
-    // Direction may reverse while details are half dissolved. Ease that vector
-    // only, leaving the surface and pointer geometry completely synchronous.
-    Behavior on directionX { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root) }
-    Behavior on directionY { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root) }
-
-    property alias containsMouse: editInteraction.containsMouse
+    // Lightweight facade properties read by tile bases when editMode is off.
+    readonly property bool resizing: editLoader.item ? editLoader.item.resizing : false
+    readonly property real resizeOriginX: editLoader.item ? editLoader.item.resizeOriginX : 0
+    readonly property real resizeOriginY: editLoader.item ? editLoader.item.resizeOriginY : 0
+    readonly property real previewWidth: editLoader.item ? editLoader.item.previewWidth : 0
+    readonly property real previewHeight: editLoader.item ? editLoader.item.previewHeight : 0
+    readonly property real directionX: editLoader.item ? editLoader.item.directionX : 0
+    readonly property real directionY: editLoader.item ? editLoader.item.directionY : 1
+    readonly property bool containsMouse: editLoader.item ? editLoader.item.containsMouse : false
 
     anchors.fill: root.visualItem
     visible: root.editMode
     z: target && target.isDragging ? 100 : 10
 
-    function beginResize() {
-        if (!root.controller || !root.canResize)
-            return false;
-        if (!root.controller.beginResize(root.target.buttonData.id, root.target.pageIndex))
-            return false;
-        root.resizeOriginX = root.target.x;
-        root.resizeOriginY = root.target.y;
-        root.resizeStartWidth = root.visualItem.width + (root.isSlider ? root.target.horizontalMargin * 2 : 0);
-        root.resizeStartHeight = root.visualItem.height;
-        root.previewWidth = root.resizeStartWidth;
-        root.previewHeight = root.resizeStartHeight;
-        var size = root.target.catalogSize;
-        root.resizeStartW = size[0];
-        root.resizeStartH = size[1];
-        root.resizePressed = true;
-        return true;
-    }
-
-    function resizePointerInStableReference(sourceItem, pointerX, pointerY) {
-        var reference = root.target.panel || root.target.gridRef || root.target.parent;
-        if (!reference)
-            return Qt.point(pointerX, pointerY);
-        return reference.mapFromItem(sourceItem, pointerX, pointerY);
-    }
-
-    function previewResize(deltaX, deltaY) {
-        if (!root.resizing || !root.controller)
-            return;
-
-        var geometry = Resize.pixels(root.resizeStartWidth, root.resizeStartHeight,
-            deltaX, deltaY, root.target.baseCellWidth, root.target.baseCellHeight,
-            root.target.cellSpacing, root.resizeBounds, root.minimumHeight);
-        var dx = geometry.width - root.previewWidth;
-        var dy = geometry.height - root.previewHeight;
-        var distance = Math.sqrt(dx * dx + dy * dy);
-        if (distance > 0.25) {
-            root.directionX = dx / distance;
-            root.directionY = dy / distance;
-        }
-        root.previewWidth = geometry.width;
-        root.previewHeight = geometry.height;
-        root.controller.resizePreviewBottom = root.resizeOriginY + geometry.height;
-        var spanW = Resize.spanFromPixelWidth(geometry.width, root.target.baseCellWidth,
-            root.target.baseCellHeight, root.target.cellSpacing);
-        var spanH = Resize.spanFromPixelHeight(geometry.height, root.target.baseCellHeight,
-            root.target.cellSpacing);
-        var size = Resize.candidate(root.target.buttonData.type,
-            spanW, spanH,
-            root.target.gridColumns, [root.controller.candidateSizeW, root.controller.candidateSizeH]);
-        root.controller.previewResize(size[0], size[1]);
-    }
-
-    function finishResize() {
-        if (!root.resizing)
-            return;
-        if (root.controller)
-            root.controller.commitResize();
-        root.resizePressed = false;
-    }
-
-    function cancelResize() {
-        if (!root.resizing)
-            return;
-        if (root.controller)
-            root.controller.cancelResize();
-        root.resizePressed = false;
-    }
-
-    Connections {
-        target: root.controller
-        function onActiveChanged() {
-            if (!root.controller.active)
-                root.resizePressed = false;
-        }
-    }
-
-    MouseArea {
-        id: editInteraction
-        anchors.fill: parent
-        visible: root.editMode
-        cursorShape: root.target && root.target.isDragging ? Qt.ClosedHandCursor
-                    : (root.isUnused ? Qt.PointingHandCursor : Qt.OpenHandCursor)
-        hoverEnabled: true
-        acceptedButtons: Qt.LeftButton
-
-        onPressed: event => {
-            if (!root.isUnused && !root.controller)
-                return;
-            root.pressX = event.x;
-            root.pressY = event.y;
-            if (root.target.panel) {
-                var pointer = root.target.panel.mapFromItem(editInteraction, event.x, event.y);
-                var origin = root.target.panel.mapFromItem(root.target, 0, 0);
-                root.pressPointerPanelX = pointer.x;
-                root.pressPointerPanelY = pointer.y;
-                root.pressItemPanelX = origin.x;
-                root.pressItemPanelY = origin.y;
-            }
-            root.target.dragOffsetX = 0;
-            root.target.dragOffsetY = 0;
-            root.target.isDragging = false;
-        }
-
-        onPositionChanged: event => {
-            if (!pressed || root.isUnused)
-                return;
-            var dx = event.x - root.pressX;
-            var dy = event.y - root.pressY;
-            var panelPos = null;
-            if (root.target.panel) {
-                panelPos = root.target.panel.mapFromItem(editInteraction, event.x, event.y);
-                dx = panelPos.x - root.pressPointerPanelX;
-                dy = panelPos.y - root.pressPointerPanelY;
-            }
-            if (!root.target.isDragging && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
-                if (!root.controller.beginReorder(root.target.buttonData.id, root.target.pageIndex))
-                    return;
-                root.target.isDragging = true;
-            }
-
-            if (!root.target.isDragging)
-                return;
-
-            // Preview packing may move the delegate root. Compensate that move
-            // so the visual remains under the grabbed pointer without
-            // reparenting it out of the stable delegate.
-            if (root.target.panel) {
-                var currentOrigin = root.target.panel.mapFromItem(root.target, 0, 0);
-                root.target.dragOffsetX = root.pressItemPanelX + dx - currentOrigin.x;
-                root.target.dragOffsetY = root.pressItemPanelY + dy - currentOrigin.y;
-            } else {
-                root.target.dragOffsetX = dx;
-                root.target.dragOffsetY = dy;
-            }
-            if (!root.isUnused && root.controller
-                    && root.controller.targetPage === root.target.pageIndex) {
-                var gridPos;
-                if (root.target.gridRef && root.target.panel) {
-                    gridPos = root.target.gridRef.mapFromItem(
-                        root.target.panel,
-                        root.pressItemPanelX + dx + root.target.width / 2,
-                        root.pressItemPanelY + dy + root.target.height / 2
-                    );
-                } else {
-                    gridPos = root.target.parent.mapFromItem(editInteraction, event.x, event.y);
-                }
-                root.controller.previewReorderAt(
-                    root.target.pageIndex,
-                    gridPos.x,
-                    gridPos.y,
-                    root.target.baseCellWidth,
-                    root.target.baseCellHeight,
-                    root.target.cellSpacing,
-                    root.target.panel ? root.target.panel.compactRowHeight : 0,
-                    root.target.panel ? root.target.panel.compactToggleTypes : null
-                );
-            }
-            if (root.target.panel && root.target.panel.handleDragScrollRequest) {
-                if (!panelPos)
-                    panelPos = root.target.panel.mapFromItem(editInteraction, event.x, event.y);
-                root.target.panel.handleDragScrollRequest(panelPos.x, root.target);
-            }
-        }
-
-        onReleased: event => {
-            if (root.target.isDragging) {
-                if (root.controller) {
-                    root.controller.commitReorder();
-                }
-                if (root.target.panel && root.target.panel.cancelDragScroll)
-                    root.target.panel.cancelDragScroll();
-                root.target.isDragging = false;
-                root.target.dragOffsetX = 0;
-                root.target.dragOffsetY = 0;
-                return;
-            }
-
-            if (root.controller && root.controller.active)
-                root.controller.cancelReorder();
-            if (!root.controller)
-                return;
-            if (root.isUnused)
-                root.controller.addToggle(root.target.buttonData.type, root.target.pageIndex);
-            else
-                root.controller.removeToggle(root.target.buttonData.id);
-        }
-
-        onCanceled: {
-            if (root.controller && root.controller.active)
-                root.controller.cancel();
-            root.target.isDragging = false;
-            root.target.dragOffsetX = 0;
-            root.target.dragOffsetY = 0;
-            root.cancelResize();
-        }
-    }
-
-    readonly property real cornerRadius: root.visualItem
-        ? (root.visualItem.buttonRadius ?? root.visualItem.radius ?? Appearance.rounding.large)
-        : Appearance.rounding.large
-
-    // Border, resize grip and add badge only exist in edit mode; outside it every
-    // tile would carry them hidden.
     Loader {
+        id: editLoader
         anchors.fill: parent
         active: root.editMode
         sourceComponent: Item {
+            id: editSurface
+
+            readonly property var controller: root.target && root.target.panel ? root.target.panel.editController : null
+            readonly property bool pageFocused: root.isUnused || !root.target?.panel
+                || root.target.pageIndex === root.target.panel.currentPage
+            readonly property bool isSlider: root.target && root.target.buttonData
+                ? ["volumeSlider", "micSlider", "brightnessSlider", "gammaSlider"].includes(root.target.buttonData.type)
+                : false
+            readonly property bool canResize: root.target && root.target.pageIndex >= 0 && !root.isUnused
+                && QuickToggleCatalog.isResizable(root.target.buttonData?.type ?? "", root.target.gridColumns)
+
+            property real pressX: 0
+            property real pressY: 0
+            property real pressPointerPanelX: 0
+            property real pressPointerPanelY: 0
+            property real pressItemPanelX: 0
+            property real pressItemPanelY: 0
+            property int resizeStartW: 1
+            property int resizeStartH: 1
+            property real resizeStartReferenceX: 0
+            property real resizeStartReferenceY: 0
+            property bool resizePressed: false
+            readonly property bool resizing: resizePressed && root.editMode && editSurface.controller
+                && editSurface.controller.active && editSurface.controller.mode === "resize"
+                && editSurface.controller.draggedId === root.target.buttonData.id
+            property real resizeStartWidth: 0
+            property real resizeStartHeight: 0
+            property real previewWidth: 0
+            property real previewHeight: 0
+            property real resizeOriginX: 0
+            property real resizeOriginY: 0
+            property real directionX: 0
+            property real directionY: 1
+            readonly property var resizeBounds: Resize.bounds(root.target.buttonData.type, root.target.gridColumns)
+            readonly property real minimumHeight: editSurface.isSlider ? root.target.compactHeight : root.target.baseCellHeight
+
+            Behavior on directionX { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(editSurface) }
+            Behavior on directionY { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(editSurface) }
+
+            property alias containsMouse: editInteraction.containsMouse
+
+            function beginResize() {
+                if (!editSurface.controller || !editSurface.canResize)
+                    return false;
+                if (!editSurface.controller.beginResize(root.target.buttonData.id, root.target.pageIndex))
+                    return false;
+                editSurface.resizeOriginX = root.target.x;
+                editSurface.resizeOriginY = root.target.y;
+                editSurface.resizeStartWidth = root.visualItem.width + (editSurface.isSlider ? root.target.horizontalMargin * 2 : 0);
+                editSurface.resizeStartHeight = root.visualItem.height;
+                editSurface.previewWidth = editSurface.resizeStartWidth;
+                editSurface.previewHeight = editSurface.resizeStartHeight;
+                var size = root.target.catalogSize;
+                editSurface.resizeStartW = size[0];
+                editSurface.resizeStartH = size[1];
+                editSurface.resizePressed = true;
+                return true;
+            }
+
+            function resizePointerInStableReference(sourceItem, pointerX, pointerY) {
+                var reference = root.target.panel || root.target.gridRef || root.target.parent;
+                if (!reference)
+                    return Qt.point(pointerX, pointerY);
+                return reference.mapFromItem(sourceItem, pointerX, pointerY);
+            }
+
+            function previewResize(deltaX, deltaY) {
+                if (!editSurface.resizing || !editSurface.controller)
+                    return;
+
+                var geometry = Resize.pixels(editSurface.resizeStartWidth, editSurface.resizeStartHeight,
+                    deltaX, deltaY, root.target.baseCellWidth, root.target.baseCellHeight,
+                    root.target.cellSpacing, editSurface.resizeBounds, editSurface.minimumHeight);
+                var dx = geometry.width - editSurface.previewWidth;
+                var dy = geometry.height - editSurface.previewHeight;
+                var distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance > 0.25) {
+                    editSurface.directionX = dx / distance;
+                    editSurface.directionY = dy / distance;
+                }
+                editSurface.previewWidth = geometry.width;
+                editSurface.previewHeight = geometry.height;
+                editSurface.controller.resizePreviewBottom = editSurface.resizeOriginY + geometry.height;
+                var spanW = Resize.spanFromPixelWidth(geometry.width, root.target.baseCellWidth,
+                    root.target.baseCellHeight, root.target.cellSpacing);
+                var spanH = Resize.spanFromPixelHeight(geometry.height, root.target.baseCellHeight,
+                    root.target.cellSpacing);
+                var size = Resize.candidate(root.target.buttonData.type,
+                    spanW, spanH,
+                    root.target.gridColumns, [editSurface.controller.candidateSizeW, editSurface.controller.candidateSizeH]);
+                editSurface.controller.previewResize(size[0], size[1]);
+            }
+
+            function finishResize() {
+                if (!editSurface.resizing)
+                    return;
+                if (editSurface.controller)
+                    editSurface.controller.commitResize();
+                editSurface.resizePressed = false;
+            }
+
+            function cancelResize() {
+                if (!editSurface.resizing)
+                    return;
+                if (editSurface.controller)
+                    editSurface.controller.cancelResize();
+                editSurface.resizePressed = false;
+            }
+
+            Connections {
+                target: editSurface.controller
+                function onActiveChanged() {
+                    if (!editSurface.controller.active)
+                        editSurface.resizePressed = false;
+                }
+            }
+
+            MouseArea {
+                id: editInteraction
+                anchors.fill: parent
+                cursorShape: root.target && root.target.isDragging ? Qt.ClosedHandCursor
+                            : (root.isUnused ? Qt.PointingHandCursor : Qt.OpenHandCursor)
+                hoverEnabled: true
+                acceptedButtons: Qt.LeftButton
+
+                onPressed: event => {
+                    if (!root.isUnused && !editSurface.controller)
+                        return;
+                    editSurface.pressX = event.x;
+                    editSurface.pressY = event.y;
+                    if (root.target.panel) {
+                        var pointer = root.target.panel.mapFromItem(editInteraction, event.x, event.y);
+                        var origin = root.target.panel.mapFromItem(root.target, 0, 0);
+                        editSurface.pressPointerPanelX = pointer.x;
+                        editSurface.pressPointerPanelY = pointer.y;
+                        editSurface.pressItemPanelX = origin.x;
+                        editSurface.pressItemPanelY = origin.y;
+                    }
+                    root.target.dragOffsetX = 0;
+                    root.target.dragOffsetY = 0;
+                    root.target.isDragging = false;
+                }
+
+                onPositionChanged: event => {
+                    if (!pressed || root.isUnused)
+                        return;
+                    var dx = event.x - editSurface.pressX;
+                    var dy = event.y - editSurface.pressY;
+                    var panelPos = null;
+                    if (root.target.panel) {
+                        panelPos = root.target.panel.mapFromItem(editInteraction, event.x, event.y);
+                        dx = panelPos.x - editSurface.pressPointerPanelX;
+                        dy = panelPos.y - editSurface.pressPointerPanelY;
+                    }
+                    if (!root.target.isDragging && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
+                        if (!editSurface.controller.beginReorder(root.target.buttonData.id, root.target.pageIndex))
+                            return;
+                        root.target.isDragging = true;
+                    }
+
+                    if (!root.target.isDragging)
+                        return;
+
+                    if (root.target.panel) {
+                        var currentOrigin = root.target.panel.mapFromItem(root.target, 0, 0);
+                        root.target.dragOffsetX = editSurface.pressItemPanelX + dx - currentOrigin.x;
+                        root.target.dragOffsetY = editSurface.pressItemPanelY + dy - currentOrigin.y;
+                    } else {
+                        root.target.dragOffsetX = dx;
+                        root.target.dragOffsetY = dy;
+                    }
+                    if (!root.isUnused && editSurface.controller
+                            && editSurface.controller.targetPage === root.target.pageIndex) {
+                        var gridPos;
+                        if (root.target.gridRef && root.target.panel) {
+                            gridPos = root.target.gridRef.mapFromItem(
+                                root.target.panel,
+                                editSurface.pressItemPanelX + dx + root.target.width / 2,
+                                editSurface.pressItemPanelY + dy + root.target.height / 2
+                            );
+                        } else {
+                            gridPos = root.target.parent.mapFromItem(editInteraction, event.x, event.y);
+                        }
+                        editSurface.controller.previewReorderAt(
+                            root.target.pageIndex,
+                            gridPos.x,
+                            gridPos.y,
+                            root.target.baseCellWidth,
+                            root.target.baseCellHeight,
+                            root.target.cellSpacing,
+                            root.target.panel ? root.target.panel.compactRowHeight : 0,
+                            root.target.panel ? root.target.panel.compactToggleTypes : null
+                        );
+                    }
+                    if (root.target.panel && root.target.panel.handleDragScrollRequest) {
+                        if (!panelPos)
+                            panelPos = root.target.panel.mapFromItem(editInteraction, event.x, event.y);
+                        root.target.panel.handleDragScrollRequest(panelPos.x, root.target);
+                    }
+                }
+
+                onReleased: event => {
+                    if (root.target.isDragging) {
+                        if (editSurface.controller)
+                            editSurface.controller.commitReorder();
+                        if (root.target.panel && root.target.panel.cancelDragScroll)
+                            root.target.panel.cancelDragScroll();
+                        root.target.isDragging = false;
+                        root.target.dragOffsetX = 0;
+                        root.target.dragOffsetY = 0;
+                        return;
+                    }
+
+                    if (editSurface.controller && editSurface.controller.active)
+                        editSurface.controller.cancelReorder();
+                    if (!editSurface.controller)
+                        return;
+                    if (root.isUnused)
+                        editSurface.controller.addToggle(root.target.buttonData.type, root.target.pageIndex);
+                    else
+                        editSurface.controller.removeToggle(root.target.buttonData.id);
+                }
+
+                onCanceled: {
+                    if (editSurface.controller && editSurface.controller.active)
+                        editSurface.controller.cancel();
+                    root.target.isDragging = false;
+                    root.target.dragOffsetX = 0;
+                    root.target.dragOffsetY = 0;
+                    editSurface.cancelResize();
+                }
+            }
+
+            readonly property real cornerRadius: root.visualItem
+                ? (root.visualItem.buttonRadius ?? root.visualItem.radius ?? Appearance.rounding.large)
+                : Appearance.rounding.large
+
             Rectangle {
                 id: editBorder
                 anchors.fill: parent
-                radius: root.cornerRadius
+                radius: editSurface.cornerRadius
                 color: "transparent"
                 border.width: 1
                 border.color: ColorUtils.transparentize(Appearance.colors.colOnLayer2, 0.75)
-                visible: root.editMode && root.pageFocused && !root.target.isDragging
+                visible: editSurface.pageFocused && !root.target.isDragging
                 z: 0
             }
 
@@ -284,10 +291,10 @@ Item {
                 anchors.bottom: parent.bottom
                 anchors.rightMargin: -thickness / 2
                 anchors.bottomMargin: -thickness / 2
-                visible: root.pageFocused && root.canResize && !root.target.isDragging
-                hitSize: Math.max(38, root.cornerRadius + thickness + 12)
+                visible: editSurface.pageFocused && editSurface.canResize && !root.target.isDragging
+                hitSize: Math.max(38, editSurface.cornerRadius + thickness + 12)
                 thickness: Math.max(3.5, Math.min(5, Math.round(root.target.baseCellHeight * 0.07)))
-                cornerRadius: root.cornerRadius
+                cornerRadius: editSurface.cornerRadius
                 pressed: resizeArea.pressed
                 hovered: resizeArea.containsMouse
 
@@ -303,25 +310,23 @@ Item {
                     preventStealing: true
                     acceptedButtons: Qt.LeftButton
                     onPressed: event => {
-                        // Capture the pointer before beginning a transaction can reflow
-                        // the grid; future events are mapped to this same panel space.
-                        var start = root.resizePointerInStableReference(resizeArea, event.x, event.y);
-                        if (!root.beginResize()) {
+                        var start = editSurface.resizePointerInStableReference(resizeArea, event.x, event.y);
+                        if (!editSurface.beginResize()) {
                             event.accepted = false;
                             return;
                         }
-                        root.resizeStartReferenceX = start.x;
-                        root.resizeStartReferenceY = start.y;
+                        editSurface.resizeStartReferenceX = start.x;
+                        editSurface.resizeStartReferenceY = start.y;
                     }
                     onPositionChanged: event => {
-                        if (!pressed || !root.resizing)
+                        if (!pressed || !editSurface.resizing)
                             return;
-                        var current = root.resizePointerInStableReference(resizeArea, event.x, event.y);
-                        root.previewResize(current.x - root.resizeStartReferenceX,
-                            current.y - root.resizeStartReferenceY);
+                        var current = editSurface.resizePointerInStableReference(resizeArea, event.x, event.y);
+                        editSurface.previewResize(current.x - editSurface.resizeStartReferenceX,
+                            current.y - editSurface.resizeStartReferenceY);
                     }
-                    onReleased: root.finishResize()
-                    onCanceled: root.cancelResize()
+                    onReleased: editSurface.finishResize()
+                    onCanceled: editSurface.cancelResize()
                 }
             }
 
@@ -345,19 +350,23 @@ Item {
                     color: Appearance.m3colors.m3onSuccess
                 }
             }
+
+            Component.onDestruction: {
+                if (editSurface.controller && editSurface.controller.active
+                        && editSurface.controller.draggedId === root.target.buttonData.id)
+                    editSurface.controller.cancel();
+            }
         }
     }
 
-    StyledToolTip {
-        parent: root.target
-        extraVisibleCondition: root.target.tooltipText !== ""
-                && (root.target.hovered || root.containsMouse)
-        text: root.target.tooltipText
-    }
-
-    Component.onDestruction: {
-        if (root.controller && root.controller.active
-                && root.controller.draggedId === root.target.buttonData.id)
-            root.controller.cancel();
+    // Only instantiate StyledToolTip when the tile is actually hovered and has text.
+    Loader {
+        active: Boolean(root.target) && root.target.tooltipText !== ""
+            && (root.target.hovered || root.containsMouse)
+        sourceComponent: StyledToolTip {
+            parent: root.target
+            extraVisibleCondition: true
+            text: root.target ? root.target.tooltipText : ""
+        }
     }
 }

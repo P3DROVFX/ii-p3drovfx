@@ -9,6 +9,8 @@ import qs.modules.common.widgets
 
 Rectangle {
     id: dayPopRect
+    property var taskList: []
+    property int taskMargin: 5
 
     width: 200
     height: Math.min(columnLayout.implicitHeight + 2 * taskMargin, 1000)

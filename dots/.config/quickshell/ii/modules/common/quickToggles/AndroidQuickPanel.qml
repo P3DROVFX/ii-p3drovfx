@@ -55,6 +55,8 @@ AbstractQuickPanel {
 
     // Current page index
     property int currentPage: 0
+    property int _lastPage: 0
+    property int _prevCurrentPage: 0
 
     property int entranceTrigger: -1
 
@@ -188,6 +190,8 @@ AbstractQuickPanel {
     }
 
     readonly property list<var> unusedToggles: {
+        if (!root.editMode)
+            return [];
         const types = availableToggleTypes.filter(type => root.isToggleVisible(type) && !allUsedTypes.includes(type));
         // A variant group is one entry: the design the user has cycled to, among the
         // group's designs still off the grid.
@@ -354,6 +358,8 @@ AbstractQuickPanel {
     }
 
     readonly property var traySections: {
+        if (!root.editMode)
+            return [];
         const sections = [];
         const order = QuickToggleCatalog.categoryOrder();
         for (let c = 0; c < order.length; c++) {
@@ -675,55 +681,71 @@ AbstractQuickPanel {
                             property bool isCurrent: root.currentPage === index
                             property list<var> pageToggles: root.positionedPages[index] || []
 
-                            Item {
-                                id: pageContentCanvas
-                                // Keep delegates and their mouse grabs alive during cross-page
-                                // reorder, but do not paint inactive pages outside the viewport.
-                                opacity: !root.editMode || pageContainer.isCurrent ? 1 : 0
+                            // Only keep the active page loaded at rest. Adjacent pages load
+                            // on demand during swipe/snap transitions, and all pages load in
+                            // editMode so cross-page drag/reorder works without interruption.
+                            readonly property bool pageLoaded: root.editMode
+                                || pageContainer.isCurrent
+                                || ((flickable.dragging || flickable.moving || snapAnimation.running)
+                                    && (Math.abs(pageContainer.index - root.currentPage) <= 1
+                                        || pageContainer.index === root._lastPage))
+
+                            Loader {
+                                id: pageContentLoader
+                                active: pageContainer.pageLoaded
+                                asynchronous: false
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                width: root.gridWidth
                                 anchors.top: parent.top
-                                implicitHeight: root.pageHeight(pageContainer.index)
-                                height: implicitHeight
-                                objectName: "pageContent_" + pageContainer.index
+                                width: root.gridWidth
+                                height: root.pageHeight(pageContainer.index)
 
-                                StableQuickToggleModel {
-                                    id: pageToggleModel
-                                    sourceValues: pageContainer.pageToggles
-                                }
+                                sourceComponent: Item {
+                                    id: pageContentCanvas
+                                    // Keep delegates and their mouse grabs alive during cross-page
+                                    // reorder, but do not paint inactive pages outside the viewport.
+                                    opacity: !root.editMode || pageContainer.isCurrent ? 1 : 0
+                                    anchors.fill: parent
+                                    implicitHeight: root.pageHeight(pageContainer.index)
+                                    objectName: "pageContent_" + pageContainer.index
 
-                                Repeater {
-                                    id: gridRepeater
-                                    model: pageToggleModel
-                                    delegate: AndroidToggleDelegateChooser {
+                                    StableQuickToggleModel {
+                                        id: pageToggleModel
+                                        sourceValues: pageContainer.pageToggles
+                                    }
 
-                                        editMode: root.editMode
-                                        baseCellWidth: root.baseCellWidth
-                                        baseCellHeight: root.baseCellHeight
-                                        spacing: root.spacing
-                                        isUnused: false
-                                        pageIndex: pageContainer.index
-                                        gridColumns: root.columns
-                                        panel: root
-                                        gridRef: pageContentCanvas
-                                        entranceTrigger: root.entranceTrigger
+                                    Repeater {
+                                        id: gridRepeater
+                                        model: pageToggleModel
+                                        delegate: AndroidToggleDelegateChooser {
 
-                                        onOpenAudioOutputDialog: root.openAudioOutputDialog()
-                                        onOpenAudioInputDialog: root.openAudioInputDialog()
-                                        onOpenBluetoothDialog: root.openBluetoothDialog()
-                                        onOpenNightLightDialog: root.openNightLightDialog()
-                                        onOpenWifiDialog: root.openWifiDialog()
-                                        onOpenDarkModeDialog: root.openDarkModeDialog()
-                                        onOpenLocalSendDialog: root.openLocalSendDialog()
-                                        onOpenVpnDialog: root.openVpnDialog()
-                                        onOpenTailscaleDialog: root.openTailscaleDialog()
-                                        onOpenKdeConnectDialog: root.openKdeConnectDialog()
-                                        onOpenDnsOverTlsDialog: root.openDnsOverTlsDialog()
-                                        onOpenIdleInhibitorDialog: root.openIdleInhibitorDialog()
-                                        onOpenScreenShaderDialog: root.openScreenShaderDialog()
-                                        onOpenModesDialog: root.openModesDialog()
-                                        onOpenEasyEffectsDialog: root.openEasyEffectsDialog()
-                                        onOpenSmartDevicesDialog: root.openSmartDevicesDialog()
+                                            editMode: root.editMode
+                                            baseCellWidth: root.baseCellWidth
+                                            baseCellHeight: root.baseCellHeight
+                                            spacing: root.spacing
+                                            isUnused: false
+                                            pageIndex: pageContainer.index
+                                            gridColumns: root.columns
+                                            panel: root
+                                            gridRef: pageContentCanvas
+                                            entranceTrigger: root.entranceTrigger
+
+                                            onOpenAudioOutputDialog: root.openAudioOutputDialog()
+                                            onOpenAudioInputDialog: root.openAudioInputDialog()
+                                            onOpenBluetoothDialog: root.openBluetoothDialog()
+                                            onOpenNightLightDialog: root.openNightLightDialog()
+                                            onOpenWifiDialog: root.openWifiDialog()
+                                            onOpenDarkModeDialog: root.openDarkModeDialog()
+                                            onOpenLocalSendDialog: root.openLocalSendDialog()
+                                            onOpenVpnDialog: root.openVpnDialog()
+                                            onOpenTailscaleDialog: root.openTailscaleDialog()
+                                            onOpenKdeConnectDialog: root.openKdeConnectDialog()
+                                            onOpenDnsOverTlsDialog: root.openDnsOverTlsDialog()
+                                            onOpenIdleInhibitorDialog: root.openIdleInhibitorDialog()
+                                            onOpenScreenShaderDialog: root.openScreenShaderDialog()
+                                            onOpenModesDialog: root.openModesDialog()
+                                            onOpenEasyEffectsDialog: root.openEasyEffectsDialog()
+                                            onOpenSmartDevicesDialog: root.openSmartDevicesDialog()
+                                        }
                                     }
                                 }
                             }
@@ -1192,6 +1214,8 @@ AbstractQuickPanel {
 
     // Keep flickable in sync with currentPage
     onCurrentPageChanged: {
+        root._lastPage = root._prevCurrentPage;
+        root._prevCurrentPage = root.currentPage;
         if (!flickable.moving) {
             snapAnimation.stop();
             snapAnimation.to = currentPage * flickable.width;

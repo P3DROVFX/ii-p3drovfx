@@ -121,8 +121,12 @@ Item {
             radius: root.sharp ? Appearance.rounding.unsharpen : width / 2
             color: ColorUtils.transparentize(spot.ink, spotArea.pressed ? 0.7 : 0.82)
             opacity: spot.hovered ? 1 : 0
-            Behavior on opacity { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this) }
-            Behavior on color { animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this) }
+            Behavior on opacity {
+                NumberAnimation { duration: Appearance.animation.elementMoveFast.duration }
+            }
+            Behavior on color {
+                ColorAnimation { duration: Appearance.animation.elementMoveFast.duration }
+            }
         }
         HoverHandler {
             id: spotHover
@@ -137,9 +141,13 @@ Item {
             cursorShape: Qt.PointingHandCursor
             onClicked: root.tile.mainAction()
         }
-        StyledToolTip {
-            extraVisibleCondition: root.tile.hasMenu
-            text: root.isOn ? Translation.tr("Turn off") : Translation.tr("Turn on")
+        Loader {
+            active: root.tile.hasMenu && spot.hovered
+            sourceComponent: StyledToolTip {
+                parent: spot
+                extraVisibleCondition: true
+                text: root.isOn ? Translation.tr("Turn off") : Translation.tr("Turn on")
+            }
         }
     }
 
@@ -272,45 +280,50 @@ Item {
             readonly property real level: Math.max(0, Math.min(1, root.heroLevel))
 
             // Progress: a scalloped shape far bigger than the tile, cut by the tile's
-            // outline, whose right edge stands at the level. It turns a quarter over
-            // the whole range, so the scallops along the edge move with the value.
-            // Tinted with the ink, so the text reads the same over it and beside it.
-            Rectangle {
-                id: typeMask
+            // outline, whose right edge stands at the level. Lazy-loaded so 2x1 toggles
+            // without a level (Wi-Fi, Bluetooth, NightLight, DarkMode, etc.) do not
+            // allocate an offscreen FBO mask or a huge MaterialShape Canvas.
+            Loader {
                 anchors.fill: parent
-                radius: root.button.buttonRadius
-                visible: false
-                layer.enabled: true
-            }
-            // A full level is the whole tile anyway: the shape fades out instead of
-            // drawing an edge that no longer marks anything.
-            Item {
-                anchors.fill: parent
-                opacity: typeItem.level >= 0.995 ? 0 : 1
-                Behavior on opacity { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this) }
-                visible: typeItem.hasLevel && opacity > 0
-                layer.enabled: visible
-                layer.effect: MultiEffect {
-                    maskEnabled: true
-                    maskSource: typeMask
-                    maskThresholdMin: 0.5
-                    maskSpreadAtMin: 1
-                }
-                MaterialShape {
-                    readonly property real size: Math.round(Math.max(typeItem.width * 1.25, typeItem.height * 4))
-                    property real shownLevel: typeItem.level
-                    Behavior on shownLevel {
-                        enabled: !Appearance.reducedMotion
-                        animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                active: typeItem.hasLevel
+                sourceComponent: Item {
+                    anchors.fill: parent
+                    Rectangle {
+                        id: typeMask
+                        anchors.fill: parent
+                        radius: root.button.buttonRadius
+                        visible: false
+                        layer.enabled: true
                     }
-                    width: size
-                    height: size
-                    x: typeItem.width * shownLevel - size
-                    y: (typeItem.height - size) / 2
-                    rotation: shownLevel * 90
-                    shapeString: "Cookie12Sided"
-                    color: ColorUtils.transparentize(typeItem.ink, root.isOn ? 0.84 : 0.9)
-                    Behavior on color { animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this) }
+                    Item {
+                        anchors.fill: parent
+                        opacity: typeItem.level >= 0.995 ? 0 : 1
+                        Behavior on opacity { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this) }
+                        visible: opacity > 0
+                        layer.enabled: visible
+                        layer.effect: MultiEffect {
+                            maskEnabled: true
+                            maskSource: typeMask
+                            maskThresholdMin: 0.5
+                            maskSpreadAtMin: 1
+                        }
+                        MaterialShape {
+                            readonly property real size: Math.round(Math.max(typeItem.width * 1.25, typeItem.height * 4))
+                            property real shownLevel: typeItem.level
+                            Behavior on shownLevel {
+                                enabled: !Appearance.reducedMotion
+                                animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                            }
+                            width: size
+                            height: size
+                            x: typeItem.width * shownLevel - size
+                            y: (typeItem.height - size) / 2
+                            rotation: shownLevel * 90
+                            shapeString: "Cookie12Sided"
+                            color: ColorUtils.transparentize(typeItem.ink, root.isOn ? 0.84 : 0.9)
+                            Behavior on color { animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this) }
+                        }
+                    }
                 }
             }
 

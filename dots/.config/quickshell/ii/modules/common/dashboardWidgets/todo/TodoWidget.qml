@@ -375,11 +375,15 @@ Item {
     }
 
     // ── Compact View (2x2) ────────────────────────────────────────────────
-    Item {
-        id: compactView
+    Loader {
+        id: compactViewLoader
         anchors.fill: parent
         anchors.margins: 4
-        visible: root.isCompact && !root.viewOpen
+        active: root.isCompact && !root.viewOpen
+        visible: active
+        sourceComponent: Item {
+            id: compactView
+            anchors.fill: parent
 
         ColumnLayout {
             anchors.fill: parent
@@ -541,13 +545,18 @@ Item {
                 }
             }
         }
+        }
     }
 
     // ── Wide View (4x2) ───────────────────────────────────────────────────
-    Item {
-        id: wideView
+    Loader {
+        id: wideViewLoader
         anchors.fill: parent
-        visible: root.isWide && !root.viewOpen
+        active: root.isWide && !root.viewOpen
+        visible: active
+        sourceComponent: Item {
+            id: wideView
+            anchors.fill: parent
 
         ColumnLayout {
             anchors.fill: parent
@@ -814,6 +823,7 @@ Item {
                     }
                 }
             }
+        }
         }
     }
 

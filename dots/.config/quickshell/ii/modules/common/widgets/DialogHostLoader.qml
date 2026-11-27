@@ -21,13 +21,26 @@ Loader {
     property real dialogWidth: -1
     property bool closing: false
     property alias dialog: root.sourceComponent
+    property url dialogUrl: ""
+    property var dialogProperties: ({})
 
     readonly property bool shown: root.owner ? Boolean(root.owner[root.shownPropertyString]) : false
 
     signal dialogClosed()
+    signal itemActivated()
 
     anchors.fill: parent
     active: shown || closing
+
+    function syncUrlSource() {
+        if (root.dialogUrl.toString() === "")
+            return;
+        if (root.active) {
+            root.setSource(root.dialogUrl, root.dialogProperties || ({}));
+        } else {
+            root.setSource("");
+        }
+    }
 
     function activateDialog() {
         if (!root.item)
@@ -55,12 +68,18 @@ Loader {
     }
 
     onActiveChanged: {
+        root.syncUrlSource();
         if (active) {
             if (root.shown)
                 root.activateDialog();
         } else {
             root.restoreFocus();
         }
+    }
+
+    Component.onCompleted: {
+        if (root.active)
+            root.syncUrlSource();
     }
 
     onLoaded: root.activateDialog()
@@ -70,6 +89,7 @@ Loader {
         property: "radius"
         value: root.dialogRadius
         when: root.dialogRadius >= 0 && root.item && root.item.hasOwnProperty("radius")
+        restoreMode: Binding.RestoreNone
     }
 
     Binding {
@@ -77,6 +97,7 @@ Loader {
         property: "preferredDialogWidth"
         value: root.dialogWidth
         when: root.dialogWidth >= 0 && root.item && root.item.hasOwnProperty("preferredDialogWidth")
+        restoreMode: Binding.RestoreNone
     }
 
     Connections {
@@ -101,6 +122,10 @@ Loader {
             root.closing = false;
             root.restoreFocus();
             root.dialogClosed();
+        }
+
+        function onItemActivated() {
+            root.itemActivated();
         }
     }
 }
