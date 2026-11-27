@@ -90,10 +90,12 @@ Item {
     function secondaryActivateSelected(): bool {
         if (!root.selectedMessage)
             return false;
-        EmailService.composeDraftTo = String(root.selectedMessage.from ?? "");
-        EmailService.composeDraftSubject = Translation.tr("Re: %1").arg(String(root.selectedMessage.subject ?? ""));
+        const replyTo = String(root.selectedMessage.from ?? "");
+        const replySubject = Translation.tr("Re: %1").arg(String(root.selectedMessage.subject ?? ""));
+        EmailService.composeDraftTo = replyTo;
+        EmailService.composeDraftSubject = replySubject;
         GlobalStates.closeSearchSurfaces();
-        Qt.callLater(() => GlobalStates.openCheatsheet("email"));
+        Qt.callLater(() => GlobalStates.openEmailApp("compose", replyTo, replySubject));
         return true;
     }
 
@@ -107,7 +109,7 @@ Item {
 
     function openAccounts(): bool {
         GlobalStates.closeSearchSurfaces();
-        Qt.callLater(() => GlobalStates.openCheatsheet("email"));
+        Qt.callLater(() => GlobalStates.openEmailApp("settings"));
         return true;
     }
 

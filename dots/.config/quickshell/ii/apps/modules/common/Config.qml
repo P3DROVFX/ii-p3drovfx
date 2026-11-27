@@ -23,7 +23,7 @@ Singleton {
     // stays out of the app's heap.
     readonly property var sections: [
         "appearance", "interactions", "language", "time", "apps", "userProfile",
-        "bar.sizes", "bar.verbose", "dock.height", "search.appearance", "background.widgets.gridStep"
+        "bar.sizes", "bar.verbose", "bar.tooltips", "dock.height", "search.appearance", "background.widgets.gridStep"
     ]
 
     property var options: ({})

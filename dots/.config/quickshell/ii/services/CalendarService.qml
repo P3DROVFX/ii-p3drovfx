@@ -633,6 +633,9 @@ Singleton {
             root.lastCalendarSyncStatus = Translation.tr("Google Calendar reconnected successfully.");
             root.requestWritableCalendarSyncs();
         }
+        function importIcs(path: string, autoDelete: bool): void {
+            root.importFromIcs(path, autoDelete);
+        }
     }
 
     function startGoogleReauth() {

@@ -26,7 +26,8 @@ Singleton {
             easyEffects: ["easyeffects", "easy effects", "equalizer", "equalizador", "eq", "audio preset", "preset", "sound effects", "efeitos"],
             mediaControls: ["media controls", "player"], barToggle: ["bar", "barra"],
             hubMode: ["hub mode", "dock", "display", "relogio", "clock", "ambient"],
-            liveDraw: ["draw", "desenhar", "desenho", "sketch", "pen", "caneta", "stylus", "annotate", "anotar"]
+            liveDraw: ["draw", "desenhar", "desenho", "sketch", "pen", "caneta", "stylus", "annotate", "anotar"],
+            email: ["email", "e-mail", "gmail", "mail", "inbox", "correio"]
         };
         return base.concat(extras[action.id] ?? []);
     }
@@ -34,11 +35,12 @@ Singleton {
     readonly property var extraActions: [
         { id: "notes", name: "Notes", icon: "note_stack", category: "shell", searchable: true, enabled: () => true },
         { id: "clock", name: "Clock", icon: "alarm", category: "shell", searchable: true, enabled: () => Config.options.clockApp?.enable ?? true },
-        { id: "easyEffects", name: "EasyEffects", icon: "graphic_eq", category: "shell", searchable: true, enabled: () => Config.options.easyEffects?.appEnable ?? true }
+        { id: "easyEffects", name: "EasyEffects", icon: "graphic_eq", category: "shell", searchable: true, enabled: () => Config.options.easyEffects?.appEnable ?? true },
+        { id: "email", name: "Email", icon: "mail", category: "shell", searchable: true, enabled: () => Config.options.emailApp?.enable ?? true }
     ]
 
     /// The shell's own windowed apps. Search lists them as apps rather than as actions.
-    readonly property var appIds: ["notes", "clock", "easyEffects", "usage", "modes"]
+    readonly property var appIds: ["notes", "clock", "easyEffects", "usage", "modes", "email"]
 
     readonly property var actions: TouchGestureActionRegistry.actions.concat(root.extraActions).map(action => Object.assign({}, action, {
         keywords: action.keywords ?? root.keywordsFor(action),
@@ -64,6 +66,10 @@ Singleton {
         }
         if (actionId === "easyEffects") {
             GlobalStates.openEasyEffectsApp("");
+            return;
+        }
+        if (actionId === "email") {
+            GlobalStates.openEmailApp("");
             return;
         }
         // Opening from search must not close an app that is already open behind it; the

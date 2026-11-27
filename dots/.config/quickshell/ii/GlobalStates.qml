@@ -168,6 +168,34 @@ Singleton {
         root.healthAppOpen = true;
     }
 
+    /// Standalone Email app (apps/email.qml). Runs in its own qs -p process so closing it
+    /// returns 100% of its memory to the OS; reuses the running instance via IPC when open.
+    function openEmailApp(tab = "", composeTo = "", composeSubject = ""): void {
+        if (!(Config.options?.emailApp?.enable ?? true))
+            return;
+        const entry = Quickshell.shellPath("apps/email.qml");
+        const cleanTab = String(tab ?? "").trim();
+        const cleanTo = String(composeTo ?? "").trim();
+        const cleanSubject = String(composeSubject ?? "").trim();
+        const floating = Config.options?.emailApp?.openFloating ?? true;
+        const launchScript = floating
+            ? "hyprctl dispatch \"hl.dsp.exec_cmd(\\\"[float; center] env II_EMAIL_INITIAL_TAB=$TAB qs -p $ENTRY\\\")\" 2>/dev/null | grep -qi '^ok' || hyprctl dispatch exec \"[float; center] env II_EMAIL_INITIAL_TAB=$TAB qs -p $ENTRY\" 2>/dev/null | grep -qi '^ok' || II_EMAIL_INITIAL_TAB=\"$TAB\" setsid -f qs -p \"$ENTRY\" >/dev/null 2>&1 </dev/null"
+            : "II_EMAIL_INITIAL_TAB=\"$TAB\" setsid -f qs -p \"$ENTRY\" >/dev/null 2>&1 </dev/null";
+        if (cleanTo.length > 0 || cleanSubject.length > 0) {
+            Quickshell.execDetached([
+                "bash", "-c",
+                "ENTRY=\"$1\"; TAB=compose; qs -p \"$ENTRY\" ipc call email compose \"$2\" \"$3\" >/dev/null 2>&1 || { " + launchScript + "; }",
+                "--", entry, cleanTo, cleanSubject
+            ]);
+            return;
+        }
+        Quickshell.execDetached([
+            "bash", "-c",
+            "ENTRY=\"$1\"; TAB=\"$2\"; qs -p \"$ENTRY\" ipc call email open \"$TAB\" >/dev/null 2>&1 || { " + launchScript + "; }",
+            "--", entry, cleanTab
+        ]);
+    }
+
     property bool mediaControlsOpen: false
     property bool mediaControlsPinned: false
     // Names of screens showing the Always On Display (the OLED saver). Read by the desktop
@@ -2164,6 +2192,10 @@ Singleton {
 
     function openCheatsheet(tabId) {
         const requestedTab = String(tabId ?? "").trim();
+        if (requestedTab === "email") {
+            root.openEmailApp("");
+            return;
+        }
         if (PanelFamily.nativeAppWindows) {
             root.openTabletApp(requestedTab.length > 0 ? requestedTab : "keybinds");
             return;
@@ -2241,6 +2273,32 @@ Singleton {
         function close(): void {
             root.closeCheatsheet();
         }
+    }
+
+    IpcHandler {
+        target: "email"
+
+        function open(): void {
+            root.openEmailApp("");
+        }
+
+        function openTab(tab: string): void {
+            root.openEmailApp(tab);
+        }
+
+        function compose(to: string, subject: string): void {
+            root.openEmailApp("compose", to, subject);
+        }
+
+        function quit(): void {
+            Quickshell.execDetached(["qs", "-p", Quickshell.shellPath("apps/email.qml"), "ipc", "call", "email", "quit"]);
+        }
+    }
+
+    GlobalShortcut {
+        name: "emailOpen"
+        description: "Opens the standalone Email app"
+        onPressed: root.openEmailApp("")
     }
 
     IpcHandler {

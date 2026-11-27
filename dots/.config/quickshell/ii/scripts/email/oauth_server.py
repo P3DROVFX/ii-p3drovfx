@@ -141,12 +141,17 @@ while not result["done"]:
 
 if result["done"]:
     print("📡 Notifying Quickshell via IPC...", flush=True)
-    ipc = subprocess.run(
+    targets = [
+        ["qs", "-p", os.path.expanduser("~/.config/quickshell/ii/apps/email.qml"), "ipc", "call", "gmail", "onAuthComplete", result["refresh"], result["email"], result["picture"]],
         ["qs", "-c", os.path.expanduser("~/.config/quickshell/ii"), "ipc", "call", "gmail", "onAuthComplete", result["refresh"], result["email"], result["picture"]],
-        capture_output=True, text=True
-    )
-    if ipc.returncode == 0:
+    ]
+    any_ok = False
+    for cmd in targets:
+        ipc = subprocess.run(cmd, capture_output=True, text=True)
+        if ipc.returncode == 0:
+            any_ok = True
+    if any_ok:
         print("✅ IPC sent successfully", flush=True)
     else:
-        print(f"⚠️  IPC failed (Quickshell not running?): {ipc.stderr}", flush=True)
+        print("⚠️  IPC failed (Quickshell not running?)", flush=True)
         print("   Save the refresh_token above manually to continue testing", flush=True)

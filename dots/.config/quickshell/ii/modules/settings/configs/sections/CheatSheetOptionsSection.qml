@@ -58,19 +58,6 @@ ColumnLayout {
             }
 
             ConfigSwitch {
-                buttonIcon: "mail"
-                text: Translation.tr("Enable Gmail")
-                checked: Config.options.cheatsheet.enableGmail
-                onCheckedChanged: {
-                    Config.options.cheatsheet.enableGmail = checked;
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("View and manage unread Gmail messages directly in the Cheatsheet.")
-                }
-            }
-
-            ConfigSwitch {
                 buttonIcon: "sports_soccer"
                 text: Translation.tr("Enable Football")
                 checked: Config.options.cheatsheet.enableFootball

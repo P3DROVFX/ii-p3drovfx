@@ -67,13 +67,6 @@ Scope {
                 "name": Translation.tr("Football")
             });
         }
-        if (Config.options.cheatsheet.enableGmail) {
-            list.push({
-                "id": "email",
-                "icon": "mail",
-                "name": Translation.tr("Email")
-            });
-        }
         if (Config.options.cheatsheet.enableTypingTest) {
             list.push({
                 "id": "typingTest",
@@ -840,8 +833,6 @@ Scope {
                                             return "commands/CheatsheetCommands.qml";
                                         case "dashboard":
                                             return "CheatsheetWorkspaces.qml";
-                                        case "mail":
-                                            return "CheatsheetEmail.qml";
                                         case "sports_soccer":
                                             return "CheatsheetFootball.qml";
                                         case "speed":

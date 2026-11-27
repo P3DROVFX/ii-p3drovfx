@@ -126,7 +126,7 @@ AbstractBackgroundWidget {
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                                GlobalStates.cheatsheetOpen = true;
+                                GlobalStates.openEmailApp("compose");
                             }
                         }
                     }
@@ -151,7 +151,7 @@ AbstractBackgroundWidget {
 
                         StyledText {
                             Layout.alignment: Qt.AlignHCenter
-                            text: !EmailService.authenticated ? Translation.tr("Log in via Cheatsheet") : (EmailService.loading ? Translation.tr("Syncing...") : Translation.tr("No messages"))
+                            text: !EmailService.authenticated ? Translation.tr("Log in via Email app") : (EmailService.loading ? Translation.tr("Syncing...") : Translation.tr("No messages"))
                             font.pixelSize: Appearance.font.pixelSize.small
                             color: root.subtextColorOnBg
                             horizontalAlignment: Text.AlignHCenter
@@ -237,7 +237,7 @@ AbstractBackgroundWidget {
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                                GlobalStates.cheatsheetOpen = true;
+                                GlobalStates.openEmailApp("inbox");
                             }
                         }
                     }

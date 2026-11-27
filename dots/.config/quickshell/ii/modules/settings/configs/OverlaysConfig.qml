@@ -49,9 +49,9 @@ Item {
             Layout.leftMargin: 4
             spacing: 0
 
-            readonly property int loaded: [shelf.notes, shelf.clock, shelf.easyEffects, shelf.liveDraw, shelf.usage, shelf.modes]
+            readonly property int loaded: [shelf.notes, shelf.clock, shelf.easyEffects, shelf.liveDraw, shelf.usage, shelf.modes, shelf.email]
                 .filter(card => card.visible && card.checked).length
-            readonly property int total: overlaysConfigRoot.modesAvailable ? 6 : 5
+            readonly property int total: overlaysConfigRoot.modesAvailable ? 7 : 6
 
             StyledText {
                 text: Translation.tr("Apps")
@@ -74,7 +74,7 @@ Item {
             id: shelf
             Layout.fillWidth: true
             spacing: 12
-            readonly property int count: overlaysConfigRoot.modesAvailable ? 6 : 5
+            readonly property int count: overlaysConfigRoot.modesAvailable ? 7 : 6
             readonly property int maxCols: Math.max(1, Math.floor((width + spacing) / (290 + spacing)))
             columns: Math.min(maxCols, 3)
             readonly property real cardWidth: (width - spacing * (columns - 1)) / columns
@@ -86,6 +86,7 @@ Item {
             property alias liveDraw: drawCard
             property alias usage: usageCard
             property alias modes: modesCard
+            property alias email: emailCard
 
             AppCard {
                 id: notesCard
@@ -238,6 +239,67 @@ Item {
                     onClicked: Config.options.modes.enable = !Config.options.modes.enable
                     StyledToolTip {
                         text: Translation.tr("Off: conditions are ignored everywhere. Modes and routines still work when you start them yourself")
+                    }
+                }
+            }
+
+            AppCard {
+                id: emailCard
+                width: shelf.cardWidth
+                height: shelf.cardHeight
+                accent: "primary"
+                symbol: "mail"
+                shape: MaterialShape.Shape.Flower
+                title: Translation.tr("Email")
+                summary: EmailService.authenticated
+                    ? Translation.tr("Standalone Gmail client (%1). Runs in its own process and frees all RAM on close.").arg(EmailService.userEmail)
+                    : Translation.tr("Standalone Gmail client. Runs in its own process and frees all RAM on close.")
+                keys: {
+                    const bind = HyprlandBinds.effective.find(row => row.kind === "bind"
+                        && String(row.action ?? "").includes("quickshell:emailOpen"));
+                    if (!bind)
+                        return [];
+                    const mods = Array.from(bind.mods ?? []).map(m => m.charAt(0) + m.slice(1).toLowerCase());
+                    return mods.concat([String(bind.key ?? "").toUpperCase()]).filter(Boolean);
+                }
+                checked: Config.options.emailApp?.enable ?? true
+                onToggled: value => {
+                    if (Config.ready && Config.options.emailApp)
+                        Config.options.emailApp.enable = value;
+                }
+                onOpenRequested: GlobalStates.openEmailApp("")
+
+                ColorsChip {
+                    readonly property bool isFloating: Config.options.emailApp?.openFloating ?? true
+                    symbol: isFloating ? "picture_in_picture_alt" : "grid_view"
+                    label: isFloating ? Translation.tr("Floating") : Translation.tr("Tiling")
+                    chosen: isFloating
+                    colContent: emailCard.colOnPlate
+                    colChosen: emailCard.colStrong
+                    colOnChosen: emailCard.colOnStrong
+                    onClicked: {
+                        if (Config.ready && Config.options.emailApp)
+                            Config.options.emailApp.openFloating = !isFloating;
+                    }
+                    StyledToolTip {
+                        text: Translation.tr("Toggle whether Email opens as a centered floating window (Cheatsheet size) or tiled.")
+                    }
+                }
+
+                ColorsChip {
+                    readonly property bool hasShortcut: emailCard.keys.length > 0
+                    symbol: "keyboard"
+                    label: hasShortcut ? Translation.tr("Shortcut") : Translation.tr("Set shortcut")
+                    chosen: hasShortcut
+                    colContent: emailCard.colOnPlate
+                    colChosen: emailCard.colStrong
+                    colOnChosen: emailCard.colOnStrong
+                    onClicked: {
+                        HyprlandGui.openTab("shortcuts");
+                        GlobalStates.openSettingsPage("hyprland");
+                    }
+                    StyledToolTip {
+                        text: Translation.tr("Open Hyprland Shortcuts to enable or edit the Email keybind.")
                     }
                 }
             }

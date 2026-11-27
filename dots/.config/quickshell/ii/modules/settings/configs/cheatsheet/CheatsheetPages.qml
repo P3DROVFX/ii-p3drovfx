@@ -32,13 +32,6 @@ Item {
             summary: Translation.tr("Weekly and monthly calendar with events, alarms and sports")
         },
         {
-            key: "enableGmail",
-            symbol: "mail",
-            shape: MaterialShape.Shape.Flower,
-            name: Translation.tr("Email"),
-            summary: Translation.tr("Unread Gmail messages, right in the cheatsheet")
-        },
-        {
             key: "enableFootball",
             symbol: "sports_soccer",
             shape: MaterialShape.Shape.Sunny,
@@ -93,7 +86,6 @@ Item {
 
     readonly property var enabledMap: ({
         "enableTimetable": Config.options.cheatsheet.enableTimetable,
-        "enableGmail": Config.options.cheatsheet.enableGmail,
         "enableFootball": Config.options.cheatsheet.enableFootball,
         "enablePeriodicTable": Config.options.cheatsheet.enablePeriodicTable,
         "enableAminoAcids": Config.options.cheatsheet.enableAminoAcids,
@@ -105,9 +97,9 @@ Item {
     // In the order of the cheatsheet's own tab bar.
     readonly property var pages: {
         const entry = page => ({ key: page.key, symbol: page.symbol, name: page.name, enabled: root.enabledMap[page.key] === true });
-        const [timetable, email, football] = root.featured;
+        const [timetable, football] = root.featured;
         return [entry(timetable), { key: "", symbol: "keyboard", name: Translation.tr("Keybinds"), enabled: true }]
-            .concat(root.compact.slice(0, 4).map(entry), [entry(football), entry(email)], root.compact.slice(4).map(entry));
+            .concat(root.compact.slice(0, 4).map(entry), [entry(football)], root.compact.slice(4).map(entry));
     }
 
     // Three feature tiles: three across when they fit, else a column (never 2 + 1).

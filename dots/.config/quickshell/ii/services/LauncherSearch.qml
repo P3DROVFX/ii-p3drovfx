@@ -1529,7 +1529,6 @@ Singleton {
             return [];
         const tabs = [
             { id: "keybinds", label: Translation.tr("Keybinds"), icon: "keyboard", keywords: ["keybinds", "atalhos", "shortcuts", "binds"], enabled: true },
-            { id: "email", label: Translation.tr("Email"), icon: "mail", keywords: ["gmail", "email", "inbox", "mail"], enabled: Config.options.cheatsheet.enableGmail },
             { id: "commands", label: Translation.tr("Commands"), icon: "terminal", keywords: ["commands", "comandos", "cmd"], enabled: Config.options.cheatsheet.enableCommands },
             { id: "timetable", label: Translation.tr("Timetable"), icon: "calendar_month", keywords: ["timetable", "horário", "aula", "agenda escolar"], enabled: Config.options.cheatsheet.enableTimetable },
             { id: "elements", label: Translation.tr("Elements"), icon: "experiment", keywords: ["periodic", "elements", "tabela periódica"], enabled: Config.options.cheatsheet.enablePeriodicTable },
