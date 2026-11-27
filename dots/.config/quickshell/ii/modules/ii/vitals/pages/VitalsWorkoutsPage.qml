@@ -224,8 +224,11 @@ VitalsPage {
         subtitle: Translation.tr("Workouts appear here once the watch or phone has recorded one.")
     }
 
-    ListView {
+    StyledListView {
         id: list
+        spacing: 0
+        animateAppearance: false
+        animatePopulate: false
         anchors.fill: parent
         anchors.margins: ClockStyle.gapTiny
         visible: root.days.length > 0

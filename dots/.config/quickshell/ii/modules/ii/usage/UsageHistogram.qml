@@ -192,9 +192,11 @@ Item {
                     Rectangle {
                         anchors.bottom: parent.bottom
                         width: parent.width
+                        // A short bar keeps its true height and rounds less: a fixed pill floor
+                        // drew every small value at the same height.
                         height: bucket.value > 0
-                            ? Math.max(bucket.radius * 2, track.height * Math.min(1, bucket.value / root.axisMax)) : 0
-                        radius: bucket.radius
+                            ? Math.max(4, track.height * Math.min(1, bucket.value / root.axisMax)) : 0
+                        radius: Math.min(bucket.radius, height / 2)
                         color: ColorUtils.applyAlpha(root.colContent,
                             Math.min(1, bucket.emphasis + (bucketMouse.containsMouse ? 0.2 : 0)))
 

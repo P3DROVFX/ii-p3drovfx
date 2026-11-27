@@ -53,6 +53,8 @@ VitalsPage {
     readonly property var heroValues: root.rows.map(r => root.valueOf(r, root.heroKey) ?? 0)
     readonly property var heroDays: root.rows.filter(r => root.valueOf(r, root.heroKey) !== undefined)
     readonly property real heroTotal: root.heroValues.reduce((a, b) => a + b, 0)
+    /// Amounts add up over a period; a score (energy) only averages.
+    readonly property bool heroSums: VitalsTypes.info(root.heroKey).kind === "totals"
     readonly property real heroGoal: Number(root.goals[root.heroKey]) || 0
     readonly property int goalDays: root.heroGoal > 0 ? root.heroValues.filter(v => v >= root.heroGoal).length : 0
     /// The chosen day's hourly values for the lead type (from its day file), or null.
@@ -228,13 +230,14 @@ VitalsPage {
                         }
                     }
 
-                    // The one number: the day's total, or a day's average over longer periods.
+                    // The one number: the period's total, so a week never reads more than its month;
+                    // a score has no total and shows its daily average.
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: ClockStyle.gapLarge
 
                         UsageFigure {
-                            readonly property real shown: root.isDay ? root.heroTotal : root.heroTotal / Math.max(1, root.heroDays.length)
+                            readonly property real shown: root.isDay || root.heroSums ? root.heroTotal : root.heroTotal / Math.max(1, root.heroDays.length)
                             visible: root.heroDays.length > 0
                             text: root.heroKey === "steps"
                                 ? root.digits(shown) + " " + VitalsTypes.info("steps").unit
@@ -258,7 +261,9 @@ VitalsPage {
                                         return "";
                                     if (root.isDay)
                                         return root.heroGoal > 0 ? Translation.tr("of %1").arg(VitalsTypes.format(root.heroKey, root.heroGoal)) : "";
-                                    return Translation.tr("a day on average · %1 in all").arg(VitalsTypes.format(root.heroKey, root.heroTotal));
+                                    if (!root.heroSums)
+                                        return Translation.tr("a day on average");
+                                    return Translation.tr("in all · %1 a day on average").arg(VitalsTypes.format(root.heroKey, root.heroTotal / Math.max(1, root.heroDays.length)));
                                 }
                                 elide: Text.ElideRight
                                 font.pixelSize: ClockStyle.textLarge

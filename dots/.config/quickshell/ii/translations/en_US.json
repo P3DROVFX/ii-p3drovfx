@@ -17052,5 +17052,7 @@
     "No vitals for %1": "No vitals for %1",
     "Vitals for %1": "Vitals for %1",
     "No such metric": "No such metric",
-    "%1 trend": "%1 trend"
+    "%1 trend": "%1 trend",
+    "a day on average": "a day on average",
+    "in all · %1 a day on average": "in all · %1 a day on average"
 }
