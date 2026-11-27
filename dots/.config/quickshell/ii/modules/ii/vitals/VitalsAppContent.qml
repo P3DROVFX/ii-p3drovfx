@@ -421,6 +421,7 @@ FocusScope {
                         sourceComponent: VitalsSettingsPage {
                             compact: root.compact
                             layoutWidth: root.pageLayoutWidth
+                            panels: sidePanel
                             now: root.now
                         }
 
@@ -469,6 +470,7 @@ FocusScope {
         VitalsEmptyPage {
             compact: root.compact
             layoutWidth: root.pageLayoutWidth
+            panels: sidePanel
             now: root.now
         }
     }

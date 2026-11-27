@@ -108,14 +108,31 @@ VitalsPage {
             valueBarHeight: 6
         }
 
-        ClockButton {
+        Flow {
             Layout.alignment: Qt.AlignHCenter
             Layout.topMargin: ClockStyle.gapSmall
-            visible: root.info.action.length > 0
-            variant: "filled"
-            symbol: root.info.actionSymbol
-            label: root.info.action
-            onClicked: root.act()
+            spacing: ClockStyle.gapSmall
+
+            ClockButton {
+                visible: root.info.action.length > 0
+                variant: "filled"
+                symbol: root.info.actionSymbol
+                label: root.info.action
+                onClicked: root.act()
+            }
+
+            ClockButton {
+                visible: VitalsService.state === "empty" || VitalsService.state === "noFeature" || VitalsService.state === "off"
+                variant: "tonal"
+                symbol: "menu_book"
+                label: Translation.tr("Watch & band sync guide")
+                onClicked: root.panels?.show(syncGuideSheet, {})
+            }
         }
+    }
+
+    Component {
+        id: syncGuideSheet
+        VitalsSyncGuideSheet {}
     }
 }

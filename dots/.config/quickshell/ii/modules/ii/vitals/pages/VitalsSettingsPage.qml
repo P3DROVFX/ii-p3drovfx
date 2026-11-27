@@ -310,7 +310,6 @@ VitalsPage {
 
                     ClockSettingsRow {
                         first: true
-                        last: true
                         visible: root.sources === null
                         symbol: "help"
                         title: Translation.tr("Not reported yet")
@@ -327,7 +326,6 @@ VitalsPage {
                         }
                     }
                     ClockSettingsRow {
-                        last: !devicesRow.visible
                         visible: root.sources !== null
                         symbol: "health_and_safety"
                         title: Translation.tr("Health Connect")
@@ -338,11 +336,24 @@ VitalsPage {
                     }
                     ClockSettingsRow {
                         id: devicesRow
-                        last: true
                         visible: root.sources !== null && (root.meta?.devices ?? []).length > 0
                         symbol: "devices_wearables"
                         title: Translation.tr("Devices")
                         description: (root.meta?.devices ?? []).map(d => String(d.name ?? "")).filter(n => n.length > 0).join(" · ")
+                    }
+                    ClockSettingsRow {
+                        last: true
+                        symbol: "menu_book"
+                        title: Translation.tr("Watch & band sync guide")
+                        description: Translation.tr("Health Connect setup, Health Sync fallback, and steps for Huawei, Xiaomi, Amazfit, Honor, OnePlus and Garmin")
+                        clickable: true
+                        onClicked: root.panels?.show(syncGuideSheet, {})
+                        ClockButton {
+                            variant: "tonal"
+                            symbol: "menu_book"
+                            label: Translation.tr("Open guide")
+                            onClicked: root.panels?.show(syncGuideSheet, {})
+                        }
                     }
                 }
 
@@ -426,5 +437,10 @@ VitalsPage {
                 }
             }
         }
+    }
+
+    Component {
+        id: syncGuideSheet
+        VitalsSyncGuideSheet {}
     }
 }
