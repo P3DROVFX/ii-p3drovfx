@@ -237,8 +237,11 @@ VitalsPage {
         color: root.wide ? ClockStyle.colPane : "transparent"
         clip: true
 
-        ListView {
+        StyledListView {
             id: ladderView
+            spacing: 0
+            animateAppearance: false
+            animatePopulate: false
             anchors.fill: parent
             anchors.margins: root.wide ? ClockStyle.gapSmall : 0
             clip: true
