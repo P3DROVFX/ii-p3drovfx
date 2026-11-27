@@ -180,6 +180,7 @@ Loader {
         "dnsOverTls": { file: "AndroidDnsOverTlsToggle.qml", menu: "openDnsOverTlsDialog" },
         "sportsWidget": { file: "sports/AndroidSportsToggle.qml" },
         "sportsCard": { file: "sports/AndroidSportsCardToggle.qml" },
+        "vitalsWidget": { file: "AndroidVitalsToggle.qml" },
         "photoWidget": { file: "AndroidPhotoWidgetToggle.qml" },
         "trayWidget": { file: "AndroidTrayToggle.qml" },
     })

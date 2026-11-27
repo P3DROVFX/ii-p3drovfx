@@ -2179,6 +2179,97 @@ Singleton {
             formats: ["gemini", "openai", "anthropic"],
             needsSearch: false
         }
+    ].concat(root.vitalsToolsOn ? root.vitalsDefinitions : [])
+
+    /// The vitals tools exist only while the user opted in: their answers are health data
+    /// that leaves the PC for the provider.
+    readonly property bool vitalsToolsOn: (Config.options?.iiTools?.vitals?.enable ?? false)
+        && (Config.options?.vitals?.assistant?.enable ?? false)
+
+    // ii Vitals: read-only aggregates of the phone's health data (VitalsLogic's digests:
+    // age instead of the birth date, no routes, nothing finer than an hour).
+    readonly property var vitalsDefinitions: [
+        {
+            id: "vitals_summary",
+            version: 1,
+            domain: "vitals",
+            title: Translation.tr("Read Vitals for a period"),
+            summary: Translation.tr("Reads totals, averages and extremes of your health data over a date range."),
+            icon: "ecg_heart",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "personal",
+            requiredModelCapabilities: ["tools"],
+            defaultApproval: "allow",
+            timeoutMs: 5000,
+            maxResultTokens: 1500,
+            idempotent: true,
+            description: "The user's health data from their phone (ii Vitals) over a date range, aggregated: per totals key (steps, distanceM, activeKcal, …) the total, per-day mean, days and best day; per sampled key (heartRate, spo2Pct, …) the mean, min and max; nights slept (average, shortest, longest minutes, average score); workout sessions and minutes; scores (energy); first and last measurements (body, bloodPressure, …). Also the profile (age, sex, height), the phone's goals and every kind of data present. Defaults to the last 7 days.",
+            parameters: {
+                type: "object",
+                properties: {
+                    from: { type: "string", description: "First day, YYYY-MM-DD (default: 6 days before 'to')" },
+                    to: { type: "string", description: "Last day, YYYY-MM-DD (default: today)" }
+                },
+                required: []
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "vitals_day",
+            version: 1,
+            domain: "vitals",
+            title: Translation.tr("Read Vitals for a day"),
+            summary: Translation.tr("Reads one day of your health data: totals, steps and heart rate by hour, sleep stages and workouts."),
+            icon: "ecg_heart",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "personal",
+            requiredModelCapabilities: ["tools"],
+            defaultApproval: "allow",
+            timeoutMs: 8000,
+            maxResultTokens: 1500,
+            idempotent: true,
+            description: "One day of the user's health data (ii Vitals): day totals, sample min/avg/max, steps per hour and mean heart rate per hour (24 entries from midnight, null = no data), the night that ended that morning (start, end, minutes, score, minutes per stage), workouts (type, start, minutes, kcal, distance, heart rate), measurements and scores. Times are local HH:MM.",
+            parameters: {
+                type: "object",
+                properties: {
+                    date: { type: "string", description: "The day, YYYY-MM-DD (default: today)" }
+                },
+                required: []
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "vitals_trend",
+            version: 1,
+            domain: "vitals",
+            title: Translation.tr("Read a Vitals trend"),
+            summary: Translation.tr("Reads one metric day by day over a date range."),
+            icon: "monitoring",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "personal",
+            requiredModelCapabilities: ["tools"],
+            defaultApproval: "allow",
+            timeoutMs: 5000,
+            maxResultTokens: 1200,
+            idempotent: true,
+            description: "One metric of the user's health data (ii Vitals) per day over a range, with its mean, min and max; past 62 days as weekly means. key: a totals key (steps, distanceM, activeKcal, …) for the day total, a sampled key (heartRate, restingHeartRate, …) for the day's mean, a score (energy), 'sleep' for minutes slept, 'exercise' for workout minutes, or '<measurement>.<field>' (body.weightKg, bloodPressure.systolic). vitals_summary lists the kinds present. Defaults to the last 30 days.",
+            parameters: {
+                type: "object",
+                properties: {
+                    key: { type: "string", description: "The metric, e.g. steps, heartRate, sleep, body.weightKg" },
+                    from: { type: "string", description: "First day, YYYY-MM-DD (default: 29 days before 'to')" },
+                    to: { type: "string", description: "Last day, YYYY-MM-DD (default: today)" }
+                },
+                required: ["key"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        }
     ]
 
     /**

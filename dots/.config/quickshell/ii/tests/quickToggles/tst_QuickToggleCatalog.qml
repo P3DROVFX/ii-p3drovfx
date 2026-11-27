@@ -136,7 +136,7 @@ TestCase {
             "bluetoothEarbudsStemWidget", "laptopBatteryWidget",
             "systemResourcesWidget", "cpuResourceWidget", "ramResourceWidget",
             "diskResourceWidget", "gpuResourceWidget",
-            "sportsWidget", "sportsCard", "photoWidget", "trayWidget", "notificationListWidget",
+            "sportsWidget", "sportsCard", "photoWidget", "vitalsWidget", "trayWidget", "notificationListWidget",
             "fullCalendarWidget", "calendarMinimalWidget", "calendarMonthGridWidget",
             "calendarUpcomingWidget", "calendarMonthAgendaWidget",
             "fullTasksWidget", "fullTimerWidget", "fullCountdownWidget", "fullPomodoroWidget",

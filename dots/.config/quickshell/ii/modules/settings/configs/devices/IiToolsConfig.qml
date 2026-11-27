@@ -524,6 +524,19 @@ fi`]
                         checked: Config.options.iiTools.usage.enable
                         onToggled: value => Config.options.iiTools.usage.enable = value
                     }
+
+                    ColorsFeatureTile {
+                        // Last of ten: alone on its row at three columns, so it takes the row.
+                        width: syncFlow.children.length % syncTilesBox.columns === 1 ? syncTilesBox.width : syncTilesBox.tileWidth
+                        height: 152
+                        symbol: "ecg_heart"
+                        shapeOn: MaterialShape.Shape.Puffy
+                        shapeOff: MaterialShape.Shape.Circle
+                        title: Translation.tr("Vitals")
+                        summary: Translation.tr("Steps, sleep, heart rate and workouts from the phone in ii Vitals")
+                        checked: Config.options.iiTools.vitals.enable
+                        onToggled: value => Config.options.iiTools.vitals.enable = value
+                    }
                 }
             }
 

@@ -1344,6 +1344,15 @@ Singleton {
             "configPage": "widgets/DesktopWellbeingWidgetsConfig.qml"
         },
         {
+            "widgetId": "wellbeing_vitals",
+            "name": Translation.tr("Vitals"),
+            "category": "Wellbeing",
+            "qmlPath": Qt.resolvedUrl("wellbeing/VitalsWidget.qml"),
+            "icon": "ecg_heart",
+            "description": Translation.tr("2x1 today's steps against your goal, last night's sleep and its score, and your latest heart rate, from ii Vitals."),
+            "configPage": "widgets/DesktopWellbeingWidgetsConfig.qml"
+        },
+        {
             "widgetId": "wellbeing_break",
             "name": Translation.tr("Take a Break"),
             "category": "Wellbeing",

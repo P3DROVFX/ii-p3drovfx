@@ -406,6 +406,10 @@ Singleton {
                 /// The recommended pacman hook offer was answered.
                 property bool qtHookAsked: false
             }
+            property JsonObject vitalsApp: JsonObject {
+                property string page: "today"
+                property bool railExpanded: true
+            }
             property JsonObject notes: JsonObject {
                 property real width: 1500
                 property real height: 940

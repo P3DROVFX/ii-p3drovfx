@@ -45,6 +45,9 @@ Item {
         const hasPhone = IiLinkService.usageEnabled && night.phoneLastActive > 0;
         const pcTime = hasPc ? Qt.formatTime(new Date(night.lastActive), "HH:mm") : "";
         const phoneTime = hasPhone ? Qt.formatTime(new Date(night.phoneLastActive), "HH:mm") : "";
+        if (night.source === "watch")
+            return hasPhone ? Translation.tr("Asleep %1 · Phone %2").arg(pcTime).arg(phoneTime)
+                : Translation.tr("asleep at %1").arg(pcTime);
         if (hasPc && hasPhone)
             return Translation.tr("PC %1 · Phone %2").arg(pcTime).arg(phoneTime);
         if (hasPhone)
@@ -369,9 +372,14 @@ Item {
                     color: ClockStyle.colSubtext
                 }
 
+                // Where the nights came from; PC-tracked ones need no note.
                 StyledText {
-                    visible: root.nights.some(n => n.estimated)
-                    text: Translation.tr("Faded bars are estimated from Usage")
+                    readonly property bool fromWatch: root.nights.some(n => n.source === "watch")
+                    readonly property bool fromUsage: root.nights.some(n => n.estimated)
+                    visible: fromWatch || fromUsage
+                    text: fromWatch && fromUsage ? Translation.tr("Watch nights show when you fell asleep · faded bars are estimated from Usage")
+                        : fromWatch ? Translation.tr("Watch nights show when you fell asleep")
+                        : Translation.tr("Faded bars are estimated from Usage")
                     font.pixelSize: ClockStyle.textSmall
                     color: ClockStyle.colSubtext
                 }

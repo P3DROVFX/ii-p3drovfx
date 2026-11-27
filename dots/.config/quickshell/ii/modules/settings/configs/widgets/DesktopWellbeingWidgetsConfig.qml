@@ -28,10 +28,10 @@ ContentPage {
         onBack: root.goBack()
     }
 
-    // [ Day ][ Limits         ][ Ring  ]
-    // [     ][ Bedtime        ][ Break ]
+    // [ Day ][ Limits         ][ Ring  ][ Break ]
+    // [     ][ Bedtime        ][ Vitals         ]
     WidgetPreviewStage {
-        columns: 4
+        columns: 5
         rows: 2
 
         WidgetPreviewSlot {
@@ -60,6 +60,14 @@ ContentPage {
             }
         }
         WidgetPreviewSlot {
+            column: 4
+            BreakWidget {
+                anchors.centerIn: parent
+                isPreview: true
+                scale: parent.width / Math.max(1, implicitWidth)
+            }
+        }
+        WidgetPreviewSlot {
             column: 1
             row: 1
             columnSpan: 2
@@ -72,7 +80,8 @@ ContentPage {
         WidgetPreviewSlot {
             column: 3
             row: 1
-            BreakWidget {
+            columnSpan: 2
+            VitalsWidget {
                 anchors.centerIn: parent
                 isPreview: true
                 scale: parent.width / Math.max(1, implicitWidth)
@@ -126,6 +135,7 @@ ContentPage {
     SizeSection { title: Translation.tr("Screen Time (1x1)"); icon: "donut_large"; widgetId: "wellbeing_screen_ring" }
     SizeSection { title: Translation.tr("Daily Limits (2x1)"); icon: "hourglass_top"; widgetId: "wellbeing_limits" }
     SizeSection { title: Translation.tr("Bedtime (2x1)"); icon: "bedtime"; widgetId: "wellbeing_bedtime" }
+    SizeSection { title: Translation.tr("Vitals (2x1)"); icon: "ecg_heart"; widgetId: "wellbeing_vitals" }
     SizeSection {
         title: Translation.tr("Take a Break (1x1)")
         icon: "self_improvement"

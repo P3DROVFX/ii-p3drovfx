@@ -206,6 +206,77 @@ Needs `usage` in the shell's `caps` (`iiTools.usage.enable`, off by default) and
 
 The shell stores each day in `<state>/phone_usage/<date>.json`, keeps 60 days, and reads days on demand. Launcher icons for phone apps use the existing `launcherIcons` capability (`get` `launcherIcons`).
 
+## Vitals (health data)
+
+The phone's health data for ii Vitals, read-only from Samsung Health's Data SDK and Health
+Connect (one source per type and day, Samsung first). Needs `vitals` in the shell's `caps`
+(`iiTools.vitals.enable`, off by default) and in the phone's (its *Share with the PC* switch,
+off by default, with at least one source readable). Nothing flows otherwise.
+
+| Direction | Message | |
+| --- | --- | --- |
+| shell → phone | `{"t":"get","what":"vitals","since":"YYYY-MM-DD"\|"","stepsFrom":"auto"\|"health"\|"phone"}` | `since` inclusive, `""` = from the oldest day. On connect and on *Sync now* with the newest day the PC keeps − 7 days (`""` when it has none); with `since:""` when `stepsFrom` changes (steps change on every day; also on the next connect when the last `meta.stepsFrom` is not the PC's) or after the PC's copy was deleted; again with the page's `next` while `more` is true. The phone keeps the latest `stepsFrom` per connection for its pushes. |
+| phone → shell | `{"t":"vitals","meta":meta,"days":[day,…],"more":bool,"next":"YYYY-MM-DD"}` | Answer page, days ascending from `since`, at least one day, each message ≤ 900 000 bytes of UTF-8 JSON. `meta` is on the first page of every answer. |
+| phone → shell | `{"t":"vitals","days":[day,…],"meta"?:meta}` | Push (no `more`): only days whose `hash` changed since sent on this connection (checked every 10 min while linked, and as soon as a source becomes readable); `meta` only when it changed. |
+| phone → shell | `{"t":"vitals","error":"disabled"\|"permission"\|"unavailable","meta"?:meta}` | Instead of an answer when nothing can be read. |
+| shell → phone | `{"t":"get","what":"vitalsRoute","id":"<exercise id>"}` | Only for sessions with `"route":true` the PC lacks, one at a time: after a sync, or when a workout sheet opens. Never while the phone's `meta.routes` is false. |
+| phone → shell | `{"t":"vitalsRoute","id","points":[[epochMs,lat,lon,altM\|null],…]}` | Or `"points":null,"error":"off"\|"none"` (routes switched off on the phone, or the session has none). |
+
+Days are local calendar days in the phone's zone; times are epoch ms; `minute` counts from
+that day's local midnight (0–1439).
+
+- `day`: `{date, tz: "+01:00" (offset at noon), hash, totals?, samples?, sessions?, measurements?, scores?, source?}`.
+  `hash` is the first 16 hex of the SHA-256 of the canonical JSON of the day without `hash`.
+  Only keys with data appear, and an empty kind is left out. Only days with data are sent,
+  except today and a day the PC was sent before whose data is now gone: those come with no
+  kinds, and the PC deletes its copy. `meta.oldest` may be missing until the phone has read
+  everything once.
+
+  | Kind | Entry per key | Filed under |
+  | --- | --- | --- |
+  | `totals` | `{day, hourly?: [24]}` | the day |
+  | `samples` | `{min, max, avg, count, last: [epochMs, value], binMin: 1\|5, bins: [[minute, mean], …]}` (bins with data only; 1-min for heart rate when the source has it) | the reading's day |
+  | `sessions` | `[{start, end, …}]`; `sleep`: `{start, end, score?, efficiency?, stages: [[offsetMin, durMin, "deep"\|"light"\|"rem"\|"awake"\|"asleep"], …]}`; `exercise`: `{id, type, title?, start, end, kcal?, distanceM?, steps?, hrAvg?, hrMax?, hrMin?, elevationM?, speedAvgMps?, route}` | sleep: the day it ends; others: the day they start |
+  | `measurements` | `[{time, …fields}]` | the measurement's day |
+  | `scores` | a number (0–100) | the day |
+
+  `source`: `{key: "samsung"|"healthConnect"|"phone"}`. Exercise `id` is the first 16 hex
+  of the SHA-256 of `"<source>:<record uid>"`; `type` is Health Connect's `EXERCISE_TYPE_*`
+  name in lower snake case (`walking`, `strength_training`, …), `other` when unknown.
+
+- Keys (shown only when present; a key not listed still flows and lands on More by its kind):
+
+  | Kind | Keys |
+  | --- | --- |
+  | `totals` | `steps`, `distanceM`, `floors`, `elevationM`, `activeKcal`, `totalKcal`, `activeMin`, `wheelchairPushes`, `hydrationMl`, `intakeKcal`, `intakeProteinG`, `intakeFatG`, `intakeCarbsG`, `intakeSugarG`, `intakeFiberG`, `intakeSodiumMg`, `intakeCaffeineMg` |
+  | `samples` | `heartRate`, `restingHeartRate`, `hrvRmssdMs`, `spo2Pct`, `respiratoryRate`, `skinTempC` (absolute; `skinTempDeltaC` for a Health Connect record without baseline), `speedMps`, `powerW`, `stepsCadence`, `cyclingCadenceRpm` |
+  | `sessions` | `sleep`, `exercise`, `mindfulness` (`{start, end, type?}`), `menstruationPeriod` |
+  | `measurements` | `body` (`weightKg?, bodyFatPct?, skeletalMuscleKg?, leanMassKg?, boneMassKg?, bodyWaterKg?, bmrKcal?, bmi?`), `height` (`m`), `bloodPressure` (`systolic, diastolic, pulse?, position?, site?`, mmHg), `bloodGlucose` (`mmolL, meal?, relation?, specimen?`), `bodyTemp` (`c, site?`), `basalBodyTemp` (`c`), `vo2Max` (`mlKgMin`), `menstruationFlow`, `ovulationTest`, `cervicalMucus`, `intermenstrualBleeding`, `sexualActivity` |
+  | `scores` | `energy` |
+
+- `meta`: `{sources: {samsung: "on"|"devModeOff"|"noPermission"|"notInstalled"|"notBuiltIn"|"error", healthConnect: "granted"|"partial"|"denied"|"unavailable"}, devices?: [{name, kind: "watch"|"phone"|"ring"|"other"}], goals?: {steps, activeMin, activeKcal, sleep: {bed: "HH:MM", wake: "HH:MM", durationMin}, waterMl, intakeKcal}, oldest?, newest?, profile?: {birthDate?, sex?, heightCm?, weightKg?}, stepsFrom?, routes?: bool, app?}`.
+  Only `sources` is required. Profile values never go to logs.
+
+`stepsFrom`: `auto` = Samsung when it reads steps, else Health Connect's top-priority app;
+`health` = Health Connect's top-priority app even with Samsung on; `phone` = the phone's own
+counter. Health Connect's priority list has no API: its "top-priority app" is the origin,
+other than the phone's counter, with the most step records over the last 30 days.
+
+The shell keeps the data in `~/.local/state/quickshell/user/vitals/` (0700, files 0600, each
+replaced atomically by `scripts/vitals/vitals_store.py`): `meta.json` (last meta +
+`receivedAt`), `days/<date>.json` (each day as received, rewritten only when its `hash`
+changed), `index.json` (`{"v":2,"days":{date: summary}}`; an older `v` is re-summarized from the day files on load), `routes/<id>.json` (`{id, points}`)
+and `sync.json` (`{lastSync, lastPage, resume, routes: {id: 1 stored | 0 none}}`; `resume` is
+the `next` of an answer cut short, asked from on the next connect). A day that does
+not match the shapes above is skipped whole, with the key at fault logged and no value.
+After each sync, days older than `vitals.retentionDays` (0 = forever; today counts as one)
+are pruned with their routes. `summary`: `{hash, t: {totals key: day}, s: {samples key: [min,
+avg, max]}, last: {samples key: last}, n: {sessions key: count}, exMin, m: {measurements key:
+last entry}, sc: {scores}, sleep?: {start, end, min, score?, pieces} (the night ending that
+day: its longest session plus every session of that day chained to it by gaps of at most 3 h,
+as Samsung splits a night at each wake-up; `min` sums the sessions, `score` is the longest
+one's, `pieces` their `[start, end]`), rt?: [exercise ids with a route]}`.
+
 ## Do Not Disturb and the PC's live activity
 
 | Direction | Message | |

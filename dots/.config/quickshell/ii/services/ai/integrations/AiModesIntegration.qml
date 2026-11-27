@@ -81,7 +81,10 @@ QtObject {
         notification: "app: app name; text: body substring; routines with kind 'once' only",
         alarm: "routines with kind 'once' only",
         pomodoroLap: "lap: 'focusEnd' | 'breakEnd' | 'any'; routines with kind 'once' only",
-        shortcut: "name: the shortcut name to bind; routines with kind 'once' only"
+        shortcut: "name: the shortcut name to bind; routines with kind 'once' only",
+        vitalsSleep: "metric: 'duration' | 'score'; below,above: minutes for duration, 0-100 for score (the night that ended today)",
+        vitalsEnergy: "below,above: 0-100 (today's energy score; false until the phone has it)",
+        vitalsStepGoal: "no parameters; true from the moment today's steps reach the phone's step goal until midnight"
     })
 
     /** Value shapes per action type; same honesty rule as `triggerDocs`. */

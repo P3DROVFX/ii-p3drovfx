@@ -170,6 +170,9 @@ var TOGGLE_TYPES = {
     // given. Each tile keeps its own image, in the pages of the layout it lives in.
     photoWidget: { kind: "widget", defaultSize: [2, 2], maxHeight: 8, families: ["island", "ii"] },
 
+    // ii Vitals: today's steps and last night's sleep, one line each, so one size.
+    vitalsWidget: { kind: "widget", defaultSize: [2, 1], allowedSizes: [[2, 1]], families: ["island", "ii"] },
+
     // The tablet shade's tray pill as a grid tile: a 1-row tile whatever the
     // width, since the pill is one line of text and every metric derives from the
     // row height. A click asks the host for the tray surface - a page on the

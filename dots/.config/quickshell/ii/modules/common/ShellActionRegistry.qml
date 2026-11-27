@@ -14,6 +14,8 @@ Singleton {
         const extras = {
             usage: ["app usage", "usage", "uso", "stats", "statistics", "screen time", "tempo de tela", "daily limits",
                 "app limits", "limites", "battery usage", "battery history", "bateria", "energy", "digital wellbeing"],
+            vitals: ["ii vitals", "vitals", "health", "saude", "saúde", "steps", "passos", "sleep", "sono", "heart rate",
+                "frequencia cardiaca", "frequência cardíaca", "workouts", "treinos", "samsung health", "health connect"],
             modes: ["modes and routines", "modes & routines", "modes", "modos", "routines", "rotinas", "automation",
                 "automacao", "automação", "focus mode", "work mode", "do not disturb"],
             colorPicker: ["color picker", "cor", "hex"], wallpaperSelector: ["wallpaper", "papel de parede"],
@@ -34,11 +36,12 @@ Singleton {
     readonly property var extraActions: [
         { id: "notes", name: "Notes", icon: "note_stack", category: "shell", searchable: true, enabled: () => true },
         { id: "clock", name: "Clock", icon: "alarm", category: "shell", searchable: true, enabled: () => Config.options.clockApp?.enable ?? true },
-        { id: "easyEffects", name: "EasyEffects", icon: "graphic_eq", category: "shell", searchable: true, enabled: () => Config.options.easyEffects?.appEnable ?? true }
+        { id: "easyEffects", name: "EasyEffects", icon: "graphic_eq", category: "shell", searchable: true, enabled: () => Config.options.easyEffects?.appEnable ?? true },
+        { id: "vitals", name: "Vitals", icon: "ecg_heart", category: "shell", searchable: true, enabled: () => true }
     ]
 
     /// The shell's own windowed apps. Search lists them as apps rather than as actions.
-    readonly property var appIds: ["notes", "clock", "easyEffects", "usage", "modes"]
+    readonly property var appIds: ["notes", "clock", "easyEffects", "usage", "modes", "vitals"]
 
     readonly property var actions: TouchGestureActionRegistry.actions.concat(root.extraActions).map(action => Object.assign({}, action, {
         keywords: action.keywords ?? root.keywordsFor(action),
@@ -64,6 +67,10 @@ Singleton {
         }
         if (actionId === "easyEffects") {
             GlobalStates.openEasyEffectsApp("");
+            return;
+        }
+        if (actionId === "vitals") {
+            GlobalStates.openVitalsApp("");
             return;
         }
         // Opening from search must not close an app that is already open behind it; the

@@ -168,6 +168,16 @@ Singleton {
         root.healthAppOpen = true;
     }
 
+    /// The ii Vitals window (Super+H), built on demand like the clock app.
+    property bool vitalsAppOpen: false
+    /// A page the vitals app should land on when it opens, consumed on arrival.
+    property string vitalsAppPendingPage: ""
+
+    function openVitalsApp(page = ""): void {
+        root.vitalsAppPendingPage = String(page ?? "");
+        root.vitalsAppOpen = true;
+    }
+
     property bool mediaControlsOpen: false
     property bool mediaControlsPinned: false
     // Names of screens showing the Always On Display (the OLED saver). Read by the desktop

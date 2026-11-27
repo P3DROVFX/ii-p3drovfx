@@ -1738,6 +1738,8 @@ Singleton {
     readonly property AiModesIntegration modesIntegration: AiModesIntegration {}
     /** System Health: read-only findings, logs and stack traces, and proposed fixes. */
     readonly property AiHealthIntegration healthIntegration: AiHealthIntegration {}
+    /** ii Vitals: read-only aggregates of the phone's health data, when opted in. */
+    readonly property AiVitalsIntegration vitalsIntegration: AiVitalsIntegration {}
     /** Local retrieval over folders the user indexed for search. */
     readonly property AiRagIntegration ragIntegration: AiRagIntegration {}
     /** Typed previews and reversible writes to existing local system services. */
@@ -1766,6 +1768,14 @@ Singleton {
 
     Connections {
         target: root.healthIntegration
+        function onResultReady(key, outcome) {
+            if (root.broker.isPending(String(key)))
+                root.broker.settle(String(key), outcome);
+        }
+    }
+
+    Connections {
+        target: root.vitalsIntegration
         function onResultReady(key, outcome) {
             if (root.broker.isPending(String(key)))
                 root.broker.settle(String(key), outcome);
@@ -1937,6 +1947,9 @@ Singleton {
             "health_journal_search": call => root.healthIntegration.journalSearch(call.key, call.args),
             "health_package": call => root.healthIntegration.packageOf(call.key, call.args),
             "health_propose_fix": call => root.healthIntegration.proposeFix(call.args),
+            "vitals_summary": call => root.vitalsIntegration.summary(call.args),
+            "vitals_day": call => root.vitalsIntegration.day(call.key, call.args),
+            "vitals_trend": call => root.vitalsIntegration.trend(call.args),
             "audio_set": call => root.toolSystemControl(call),
             "brightness_set": call => root.toolSystemControl(call),
             "dnd_set": call => root.toolSystemControl(call),
