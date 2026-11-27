@@ -122,6 +122,7 @@ Singleton {
     readonly property bool drawEnabled: root.opts?.draw?.enable ?? true
     readonly property bool presentEnabled: root.opts?.present?.enable ?? true
     readonly property bool usageEnabled: root.opts?.usage?.enable ?? true
+    readonly property bool vitalsEnabled: root.opts?.vitals?.enable ?? false
     // Touch frames go straight to the helper's input thread; it only needs telling.
     onTouchpadEnabledChanged: root.send({ op: "config", touchpad: root.touchpadEnabled })
     onPresentEnabledChanged: {
@@ -754,6 +755,7 @@ Singleton {
         .concat(root.cameraEnabled ? ["camera"] : [])
         .concat(root.micEnabled ? ["mic"] : [])
         .concat(root.usageEnabled ? ["usage"] : [])
+        .concat(root.vitalsEnabled ? ["vitals"] : [])
         .concat(["mirrorRadio", "quiet", "have", "fileLane"])
 
     /// True while at least one wireless scrcpy session is active on the shell.
@@ -2337,6 +2339,32 @@ Singleton {
                 root.phoneUsageUpdated(dates, sessions);
             Qt.callLater(root._flushPhoneUsageQueue);
         }
+    }
+
+    // ── Vitals (health data) ────────────────────────────────────────────
+    // VitalsService keeps the store and decides what to ask; this only finds the phone
+    // and carries the messages. Referencing the service here is what creates it.
+
+    readonly property string vitalsDev: {
+        if (!root.vitalsEnabled)
+            return "";
+        for (const id of Object.keys(root.connections)) {
+            if ((root.phoneCaps[id] ?? []).includes("vitals"))
+                return id;
+        }
+        return "";
+    }
+    onVitalsDevChanged: {
+        if (root.vitalsDev !== "")
+            VitalsService.connected();
+    }
+
+    /// Sends a `get` for vitals to the phone that shares them; false when none does.
+    function sendVitals(message): bool {
+        if (root.vitalsDev === "")
+            return false;
+        root.sendTo(root.vitalsDev, message);
+        return true;
     }
 
     // ── Do Not Disturb, both ways ───────────────────────────────────────
@@ -5196,6 +5224,11 @@ Singleton {
         case "phoneUsage":
             if (root.usageEnabled)
                 root._savePhoneUsage(dev, m);
+            return;
+        case "vitals":
+        case "vitalsRoute":
+            if (dev === root.vitalsDev)
+                VitalsService.handleMessage(m);
             return;
         case "caps": {
             // Before the caps: assigning them wakes the senders that read it.

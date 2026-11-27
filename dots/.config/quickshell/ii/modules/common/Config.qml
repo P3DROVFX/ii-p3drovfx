@@ -3122,6 +3122,11 @@ Singleton {
                 property JsonObject usage: JsonObject {
                     property bool enable: true
                 }
+                // The phone's health data (Samsung Health, Health Connect) for ii Vitals.
+                // Nothing flows until the app's own "Share with the PC" is on as well.
+                property JsonObject vitals: JsonObject {
+                    property bool enable: false
+                }
             }
 
             property JsonObject localsend: JsonObject {
@@ -7381,6 +7386,26 @@ Singleton {
                     property bool enable: true
                     // A terminal on the rebuild script when a Qt update is why.
                     property bool openTerminal: true
+                }
+            }
+
+            /**
+             * ii Vitals: the phone's health data, synced over the ii link while
+             * `iiTools.vitals.enable` is on and kept in ~/.local/state/quickshell/user/vitals.
+             */
+            property JsonObject vitals: JsonObject {
+                // Where steps come from: "auto" (Samsung, else Health Connect's top app),
+                // "health" (Health Connect's top app) or "phone" (the phone's own counter).
+                property string stepsFrom: "auto"
+                // Days the PC keeps: 0 (forever), 365 or 90.
+                property int retentionDays: 0
+                property JsonObject bedtime: JsonObject {
+                    // Clock's Bedtime draws the watch's nights before its usage estimate.
+                    property bool enable: true
+                }
+                property JsonObject assistant: JsonObject {
+                    // Read-only vitals tools for the assistant; their answers leave the PC.
+                    property bool enable: false
                 }
             }
 
