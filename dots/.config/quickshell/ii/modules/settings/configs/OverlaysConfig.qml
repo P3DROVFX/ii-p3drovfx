@@ -30,6 +30,36 @@ Item {
 
     // Super + Y is bound in the Hyprland config, which the shell's update never touches
     property bool modesKeybindFound: true
+    property bool galleryIsDefaultViewer: false
+    property bool galleryDefaultBusy: false
+    readonly property string galleryDefaultScript: `${FileUtils.trimFileProtocol(Directories.scriptPath)}/gallery/set_default_viewer.sh`
+
+    function toggleGalleryDefaultViewer() {
+        if (galleryDefaultProc.running)
+            return;
+        overlaysConfigRoot.galleryDefaultBusy = true;
+        galleryDefaultProc.command = ["bash", overlaysConfigRoot.galleryDefaultScript,
+            overlaysConfigRoot.galleryIsDefaultViewer ? "disable" : "enable"];
+        galleryDefaultProc.running = true;
+    }
+
+    Process {
+        id: galleryDefaultProc
+        running: true
+        command: ["bash", overlaysConfigRoot.galleryDefaultScript, "status"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                overlaysConfigRoot.galleryDefaultBusy = false;
+                try {
+                    const res = JSON.parse(this.text || "{}");
+                    if (typeof res.isDefault === "boolean")
+                        overlaysConfigRoot.galleryIsDefaultViewer = res.isDefault;
+                } catch (e) {}
+            }
+        }
+        onExited: overlaysConfigRoot.galleryDefaultBusy = false
+    }
+
     Process {
         running: overlaysConfigRoot.modesAvailable
         command: ["grep", "-rqsF", "quickshell:modesToggle", `${FileUtils.trimFileProtocol(Directories.config)}/hypr`]
@@ -420,6 +450,25 @@ Item {
                     }
                     StyledToolTip {
                         text: Translation.tr("Open Hyprland Shortcuts to enable or edit the Gallery keybind.")
+                    }
+                }
+
+                ColorsChip {
+                    symbol: overlaysConfigRoot.galleryIsDefaultViewer ? "verified" : "photo_library"
+                    label: overlaysConfigRoot.galleryDefaultBusy
+                        ? Translation.tr("Updating…")
+                        : (overlaysConfigRoot.galleryIsDefaultViewer
+                            ? Translation.tr("Default viewer")
+                            : Translation.tr("Set as default"))
+                    chosen: overlaysConfigRoot.galleryIsDefaultViewer
+                    colContent: galleryCard.colOnPlate
+                    colChosen: galleryCard.colStrong
+                    colOnChosen: galleryCard.colOnStrong
+                    onClicked: overlaysConfigRoot.toggleGalleryDefaultViewer()
+                    StyledToolTip {
+                        text: overlaysConfigRoot.galleryIsDefaultViewer
+                            ? Translation.tr("Gallery is your default Linux photo viewer. Click to restore your previous viewer.")
+                            : Translation.tr("One-click setup to make Gallery your default Linux photo viewer in file managers.")
                     }
                 }
             }

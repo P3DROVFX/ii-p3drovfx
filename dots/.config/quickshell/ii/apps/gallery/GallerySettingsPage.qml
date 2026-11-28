@@ -184,6 +184,135 @@ Flickable {
             }
         }
 
+        // Expressive 1-click Default Linux Photo Viewer card
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: defaultCardRow.implicitHeight + 36
+            radius: Appearance.rounding.verylarge
+            color: store.isDefaultViewer
+                ? Appearance.m3colors.m3tertiaryContainer
+                : Appearance.colors.colPrimaryContainer
+
+            Behavior on color { ColorAnimation { duration: 220 } }
+
+            RowLayout {
+                id: defaultCardRow
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.margins: 22
+                spacing: 18
+
+                MaterialShape {
+                    implicitWidth: 56
+                    implicitHeight: 56
+                    shape: store.isDefaultViewer ? MaterialShape.Shape.SoftBurst : MaterialShape.Shape.Cookie9Sided
+                    color: store.isDefaultViewer
+                        ? Appearance.m3colors.m3tertiary
+                        : Appearance.colors.colPrimary
+
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: store.isDefaultViewer ? "verified" : "photo_library"
+                        fill: 1
+                        iconSize: 26
+                        color: store.isDefaultViewer
+                            ? Appearance.m3colors.m3onTertiary
+                            : Appearance.colors.colOnPrimary
+                    }
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 4
+
+                    RowLayout {
+                        spacing: 8
+                        StyledText {
+                            text: Translation.tr("Default Linux photo viewer")
+                            font.family: Appearance.font.family.main
+                            font.pixelSize: 18
+                            font.variableAxes: ({ "wght": 660, "wdth": 106, "ROND": 100 })
+                            color: store.isDefaultViewer
+                                ? Appearance.m3colors.m3onTertiaryContainer
+                                : Appearance.colors.colOnPrimaryContainer
+                        }
+                        Rectangle {
+                            visible: store.isDefaultViewer
+                            implicitWidth: activePillText.implicitWidth + 16
+                            implicitHeight: 22
+                            radius: 11
+                            color: Appearance.m3colors.m3tertiary
+                            StyledText {
+                                id: activePillText
+                                anchors.centerIn: parent
+                                text: Translation.tr("Active")
+                                font.family: Appearance.font.family.main
+                                font.pixelSize: 11
+                                font.variableAxes: ({ "wght": 700, "wdth": 100, "ROND": 100 })
+                                color: Appearance.m3colors.m3onTertiary
+                            }
+                        }
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: store.isDefaultViewer
+                            ? Translation.tr("Images opened from your file manager open directly in Gallery. You can restore your previous viewer anytime with one click.")
+                            : Translation.tr("Register Gallery as your system default photo viewer (PNG, JPEG, WebP, GIF, AVIF, HEIC) so file managers open images directly here.")
+                        font.family: Appearance.font.family.main
+                        font.pixelSize: 13
+                        color: store.isDefaultViewer
+                            ? Appearance.m3colors.m3onTertiaryContainer
+                            : Appearance.colors.colOnPrimaryContainer
+                        opacity: 0.85
+                        wrapMode: Text.Wrap
+                    }
+                }
+
+                RippleButton {
+                    enabled: !store.defaultViewerBusy
+                    implicitHeight: 44
+                    leftPadding: 20
+                    rightPadding: 20
+                    buttonRadius: hovered ? 14 : 22
+                    colBackground: store.isDefaultViewer
+                        ? Appearance.m3colors.m3surfaceContainerLowest
+                        : Appearance.colors.colPrimary
+                    colBackgroundHover: store.isDefaultViewer
+                        ? Appearance.colors.colLayer2Hover
+                        : Appearance.colors.colPrimaryHover
+                    Behavior on buttonRadius { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
+                    onClicked: store.setDefaultViewer(!store.isDefaultViewer)
+
+                    contentItem: RowLayout {
+                        anchors.centerIn: parent
+                        spacing: 8
+                        MaterialSymbol {
+                            text: store.defaultViewerBusy
+                                ? "hourglass_top"
+                                : (store.isDefaultViewer ? "link_off" : "check_circle")
+                            iconSize: 18
+                            color: store.isDefaultViewer
+                                ? Appearance.colors.colOnSurface
+                                : Appearance.colors.colOnPrimary
+                        }
+                        StyledText {
+                            text: store.defaultViewerBusy
+                                ? Translation.tr("Updating…")
+                                : (store.isDefaultViewer ? Translation.tr("Remove as default") : Translation.tr("Set as default"))
+                            font.family: Appearance.font.family.main
+                            font.pixelSize: 14
+                            font.weight: Font.DemiBold
+                            color: store.isDefaultViewer
+                                ? Appearance.colors.colOnSurface
+                                : Appearance.colors.colOnPrimary
+                        }
+                    }
+                }
+            }
+        }
+
         // Responsive 2-column layout (stacks on narrow windows)
         GridLayout {
             Layout.fillWidth: true

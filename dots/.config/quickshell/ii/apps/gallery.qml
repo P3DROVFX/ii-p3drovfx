@@ -142,30 +142,8 @@ ApplicationWindow {
 
         function openPath(path: string): void {
             const target = String(path ?? "").trim();
-            if (target.length > 0) {
-                const hit = galleryStore.items.find(it => it.path === target);
-                if (hit) {
-                    galleryStore.openLocalViewer(hit.path, galleryStore.items);
-                } else {
-                    galleryStore.openLocalViewer(target, [{
-                        id: target,
-                        path: target,
-                        file: target.split("/").pop(),
-                        title: target.split("/").pop(),
-                        ext: target.split(".").pop().toUpperCase(),
-                        type: /\.(mp4|mkv|webm|mov|avi|m4v|3gp)$/i.test(target) ? "video" : "photo",
-                        root: "",
-                        folder: target.split("/").slice(0, -1).join("/"),
-                        isSub: false,
-                        mtime: Date.now(),
-                        size: 0,
-                        w: 0,
-                        h: 0,
-                        dur: 0,
-                        thumb: ""
-                    }]);
-                }
-            }
+            if (target.length > 0)
+                galleryStore.openExternalPath(target);
             root.raise();
             root.requestActivate();
         }
@@ -177,6 +155,12 @@ ApplicationWindow {
         function quit(): void {
             Qt.quit();
         }
+    }
+
+    Component.onCompleted: {
+        const initPath = String(Quickshell.env("II_GALLERY_INITIAL_PATH") ?? "").trim();
+        if (initPath.length > 0)
+            Qt.callLater(() => galleryStore.openExternalPath(initPath));
     }
 
     // Global keyboard shortcut `/` for search, `Esc` for side sheet
@@ -428,6 +412,150 @@ ApplicationWindow {
                 open: galleryStore.viewerOpen
                 isFullscreen: root.isFullscreenState
                 onToggleFullscreenRequested: root.toggleFullscreenState()
+            }
+        }
+
+        // First-run popup suggesting setting Gallery as the default Linux photo viewer
+        Loader {
+            id: defaultViewerPopupLoader
+            anchors.fill: parent
+            z: 55
+            active: galleryStore.defaultViewerChecked
+                && !galleryStore.defaultPromptDismissed
+                && !galleryStore.isDefaultViewer
+                && !galleryStore.viewerOpen
+            visible: active
+
+            sourceComponent: Item {
+                anchors.fill: parent
+
+                Rectangle {
+                    anchors.fill: parent
+                    color: Qt.rgba(0, 0, 0, 0.42)
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: galleryStore.dismissDefaultPrompt()
+                    }
+                }
+
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: Math.min(430, parent.width - 48)
+                    implicitHeight: promptCol.implicitHeight + 48
+                    radius: Appearance.rounding.verylarge
+                    color: Appearance.m3colors.m3surfaceContainerHigh
+
+                    MouseArea { anchors.fill: parent }
+
+                    ColumnLayout {
+                        id: promptCol
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.margins: 24
+                        spacing: 16
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 14
+
+                            MaterialShape {
+                                implicitWidth: 52
+                                implicitHeight: 52
+                                shape: MaterialShape.Shape.Cookie9Sided
+                                color: Appearance.colors.colPrimaryContainer
+
+                                MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    text: "photo_library"
+                                    fill: 1
+                                    iconSize: 26
+                                    color: Appearance.colors.colOnPrimaryContainer
+                                }
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 2
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: Translation.tr("Use Gallery as your default photo viewer?")
+                                    font.family: Appearance.font.family.main
+                                    font.pixelSize: 18
+                                    font.variableAxes: ({ "wght": 660, "wdth": 106, "ROND": 100 })
+                                    color: Appearance.colors.colOnSurface
+                                    wrapMode: Text.Wrap
+                                }
+                            }
+                        }
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("You can set Gallery as the default Linux photo viewer in Settings so images opened from your file manager open directly here — and remove it anytime with one click.")
+                            font.family: Appearance.font.family.main
+                            font.pixelSize: 13
+                            color: Appearance.colors.colOnSurfaceVariant
+                            wrapMode: Text.Wrap
+                            lineHeight: 1.35
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Layout.topMargin: 4
+                            spacing: 10
+
+                            Item { Layout.fillWidth: true }
+
+                            RippleButton {
+                                implicitHeight: 40
+                                leftPadding: 18
+                                rightPadding: 18
+                                buttonRadius: 20
+                                colBackground: "transparent"
+                                colBackgroundHover: Appearance.colors.colLayer2Hover
+                                onClicked: galleryStore.dismissDefaultPrompt()
+                                contentItem: StyledText {
+                                    anchors.centerIn: parent
+                                    text: Translation.tr("Dismiss")
+                                    font.family: Appearance.font.family.main
+                                    font.pixelSize: 14
+                                    font.weight: Font.DemiBold
+                                    color: Appearance.colors.colOnSurfaceVariant
+                                }
+                            }
+
+                            RippleButton {
+                                implicitHeight: 40
+                                leftPadding: 20
+                                rightPadding: 20
+                                buttonRadius: 20
+                                colBackground: Appearance.colors.colPrimary
+                                colBackgroundHover: Appearance.colors.colPrimaryHover
+                                onClicked: {
+                                    galleryStore.dismissDefaultPrompt();
+                                    galleryStore.addSheetOpen = false;
+                                    galleryStore.activeTab = "settings";
+                                }
+                                contentItem: RowLayout {
+                                    anchors.centerIn: parent
+                                    spacing: 6
+                                    MaterialSymbol {
+                                        text: "tune"
+                                        iconSize: 18
+                                        color: Appearance.colors.colOnPrimary
+                                    }
+                                    StyledText {
+                                        text: Translation.tr("Open settings")
+                                        font.family: Appearance.font.family.main
+                                        font.pixelSize: 14
+                                        font.weight: Font.DemiBold
+                                        color: Appearance.colors.colOnPrimary
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 

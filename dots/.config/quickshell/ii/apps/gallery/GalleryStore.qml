@@ -30,11 +30,18 @@ QtObject {
         { name: "Videos", path: "~/Videos", on: false, base: true }
     ]
     property var favs: []                  // array of file paths
+    property bool defaultPromptDismissed: false
+
+    // ── System default photo viewer state (XDG MIME) ────────────────────
+    property bool isDefaultViewer: false
+    property bool defaultViewerChecked: false
+    property bool defaultViewerBusy: false
 
     readonly property int gridColumns: gridSize === "P" ? 7 : (gridSize === "G" ? 3 : 5)
     readonly property string stateFilePath: `${Directories.appsState}/gallery.json`
     readonly property string scanScriptPath: `${Directories.scriptPath}/gallery/scan_gallery.py`
     readonly property string helperBinPath: `${Directories.scriptPath}/gallery/gallery_helper`
+    readonly property string defaultViewerScriptPath: `${Directories.scriptPath}/gallery/set_default_viewer.sh`
 
     // ── Library data ────────────────────────────────────────────────────
     property var items: []
@@ -627,6 +634,66 @@ QtObject {
         store.viewerOrigin = null;
     }
 
+    function openExternalPath(path): void {
+        const target = String(path ?? "").trim();
+        if (!target)
+            return;
+        const hit = (store.items ?? []).find(it => it.path === target);
+        if (hit) {
+            const folderSiblings = store.items.filter(it => it.folder === hit.folder);
+            store.openLocalViewer(hit.path, folderSiblings.length > 0 ? folderSiblings : store.items, null);
+            return;
+        }
+        const fname = target.split("/").pop() || target;
+        const dot = fname.lastIndexOf(".");
+        const ext = dot > 0 ? fname.slice(dot + 1).toUpperCase() : "";
+        const stem = dot > 0 ? fname.slice(0, dot) : fname;
+        const title = stem.replace(/[_-]+/g, " ").trim() || fname;
+        const isVid = /\.(mp4|mkv|webm|mov|avi|m4v|3gp|ogv|ts|flv|wmv)$/i.test(fname);
+        store.openLocalViewer(target, [{
+            id: target,
+            path: target,
+            file: fname,
+            title: title,
+            ext: ext,
+            type: isVid ? "video" : "photo",
+            root: "",
+            folder: target.split("/").slice(0, -1).join("/"),
+            isSub: false,
+            mtime: Date.now(),
+            size: 0,
+            w: 0,
+            h: 0,
+            dur: 0,
+            thumb: ""
+        }], null);
+    }
+
+    function checkDefaultViewer(): void {
+        if (defaultViewerProc.running)
+            return;
+        defaultViewerProc.actionMode = "status";
+        defaultViewerProc.command = ["bash", store.defaultViewerScriptPath, "status"];
+        defaultViewerProc.running = true;
+    }
+
+    function setDefaultViewer(enable): void {
+        if (defaultViewerProc.running)
+            return;
+        store.defaultViewerBusy = true;
+        const mode = enable ? "enable" : "disable";
+        defaultViewerProc.actionMode = mode;
+        defaultViewerProc.command = ["bash", store.defaultViewerScriptPath, mode];
+        defaultViewerProc.running = true;
+    }
+
+    function dismissDefaultPrompt(): void {
+        if (store.defaultPromptDismissed)
+            return;
+        store.defaultPromptDismissed = true;
+        store.savePrefs();
+    }
+
     // ── Shell actions (Wallpaper, Avatar, Clipboard, Trash) ─────────────
     function setWallpaper(path, lockscreen): void {
         const p = String(path ?? "").trim();
@@ -769,6 +836,8 @@ QtObject {
             }
             if (Array.isArray(parsed.favs))
                 store.favs = parsed.favs;
+            if (typeof parsed.defaultPromptDismissed === "boolean")
+                store.defaultPromptDismissed = parsed.defaultPromptDismissed;
         } catch (e) {
             // First run or unreadable file: keep defaults
         }
@@ -785,7 +854,8 @@ QtObject {
             videoVolume: store.videoVolume,
             includeSub: store.includeSub,
             folders: store.folders,
-            favs: store.favs
+            favs: store.favs,
+            defaultPromptDismissed: store.defaultPromptDismissed
         }, null, 2);
         Quickshell.execDetached([
             "sh", "-c",
@@ -978,7 +1048,37 @@ QtObject {
         }
     }
 
+    property Process _defaultViewerProc: Process {
+        id: defaultViewerProc
+        property string actionMode: "status"
+        stdout: StdioCollector {
+            onStreamFinished: {
+                store.defaultViewerBusy = false;
+                store.defaultViewerChecked = true;
+                try {
+                    const res = JSON.parse(this.text || "{}");
+                    if (typeof res.isDefault === "boolean")
+                        store.isDefaultViewer = res.isDefault;
+                    if (defaultViewerProc.actionMode === "enable" && res.ok) {
+                        store.defaultPromptDismissed = true;
+                        store.savePrefs();
+                        store.showSnack(Translation.tr("Gallery set as default photo viewer"), "", null);
+                    } else if (defaultViewerProc.actionMode === "disable" && res.ok) {
+                        store.showSnack(Translation.tr("Gallery removed as default photo viewer"), "", null);
+                    }
+                } catch (e) {}
+            }
+        }
+        onExited: code => {
+            store.defaultViewerBusy = false;
+            store.defaultViewerChecked = true;
+            if (code !== 0 && defaultViewerProc.actionMode !== "status")
+                store.showSnack(Translation.tr("Could not update default photo viewer"), "", null);
+        }
+    }
+
     Component.onCompleted: {
+        store.checkDefaultViewer();
         // Fallback in case FileView neither emits onLoaded nor onLoadFailed synchronously
         if (!store._prefsLoaded) {
             const raw = prefsFile.text();
