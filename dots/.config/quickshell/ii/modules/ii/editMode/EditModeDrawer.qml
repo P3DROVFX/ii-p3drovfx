@@ -499,6 +499,10 @@ Item {
         const onDesktop = new Set();
         for (const item of desktopItems) {
             onDesktop.add(item.id);
+            if (item.shellAction) {
+                onDesktop.add("shell:" + item.shellAction);
+                onDesktop.add("shell:" + String(item.shellAction).toLowerCase());
+            }
             if (item.fileName) {
                 onDesktop.add(item.fileName);
                 onDesktop.add(item.fileName.replace(/\.desktop$/, ""));
@@ -509,13 +513,22 @@ Item {
                 onDesktop.add(fn.replace(/\.desktop$/, ""));
             }
         }
-        const mapped = all.map(entry => ({
+        const shellMapped = ShellActionRegistry.actions
+            .filter(a => a && a.app && a.searchable && a.enabled())
+            .map(a => ({
+                "id": "shell:" + a.id,
+                "name": Translation.tr(a.name),
+                "genericName": Translation.tr("Shell app"),
+                "comment": "",
+                "onScreen": onDesktop.has("shell:" + a.id) || onDesktop.has("shell:" + String(a.id).toLowerCase()) || onDesktop.has("ii-" + a.id)
+            }));
+        const mapped = shellMapped.concat(all.map(entry => ({
             "id": entry.id,
             "name": entry.name ?? entry.id,
             "genericName": entry.genericName ?? "",
             "comment": entry.comment ?? "",
             "onScreen": onDesktop.has(entry.id) || onDesktop.has(entry.id + ".desktop")
-        }));
+        })));
         if (!q)
             return mapped;
         return mapped.filter(item => item.name.toLowerCase().includes(q)
@@ -532,8 +545,10 @@ Item {
         if (!appId)
             return;
         const items = DesktopShortcuts.itemsFor(root.screenName);
+        const shellId = appId.startsWith("shell:") ? appId.slice(6).toLowerCase() : "";
         const match = items.find(item => item.type === "app" && (
             item.id === appId || item.id === "desktop:" + appId
+            || (shellId.length > 0 && (String(item.shellAction ?? "").toLowerCase() === shellId || item.fileName === "ii-" + shellId + ".desktop"))
             || (item.fileName && (item.fileName === appId || item.fileName === appId + ".desktop"))
             || (item.path && (item.path.endsWith("/" + appId) || item.path.endsWith("/" + appId + ".desktop")))
         ));

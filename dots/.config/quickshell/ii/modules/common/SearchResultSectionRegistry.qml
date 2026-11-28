@@ -47,6 +47,13 @@ Singleton {
             icon: "stars"
         },
         {
+            // Shell's own apps (Gallery, Clock, Notes, Calendar, Email, EasyEffects...)
+            // sit above general desktop applications by default.
+            id: "shellApps",
+            title: qsTr("Shell apps"),
+            icon: "deployed_code"
+        },
+        {
             id: "apps",
             title: qsTr("Applications"),
             icon: "apps"

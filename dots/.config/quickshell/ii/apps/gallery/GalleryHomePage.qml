@@ -81,13 +81,36 @@ Item {
         MaterialShape.Shape.SoftBurst
     ]
 
-    // ── Hero MaterialShape rotating photo showcase (favorites or random photos) ─
+    // ── Hero stacked photo showcase (favorites first, padded with distinct library photos) ─
     readonly property var showcasePool: {
         const allPhotos = (store.timelineAllItems ?? []).filter(it => it.type === "photo");
         if (allPhotos.length === 0)
             return [];
         const favPhotos = allPhotos.filter(it => store.isFav(it.path));
-        return favPhotos.length > 0 ? favPhotos : allPhotos;
+        if (favPhotos.length >= 3)
+            return favPhotos;
+        const seen = {};
+        const merged = [];
+        for (const it of favPhotos) {
+            seen[it.path] = true;
+            merged.push(it);
+        }
+        for (const it of allPhotos) {
+            if (!seen[it.path]) {
+                seen[it.path] = true;
+                merged.push(it);
+            }
+        }
+        return merged;
+    }
+
+    function showcaseItemAt(offset): var {
+        const pool = root.showcasePool;
+        if (!pool || pool.length === 0)
+            return null;
+        if (offset >= pool.length)
+            return null;
+        return pool[(root.showcaseIdx + offset) % pool.length];
     }
 
     property int showcaseIdx: 0
@@ -119,6 +142,49 @@ Item {
                 next = (next + 1) % len;
             root.showcaseIdx = next;
             root.showcaseShapeIdx = (root.showcaseShapeIdx + 1) % root.showcaseShapes.length;
+        }
+    }
+
+    // Inline helper: single smooth anti-aliased MaterialShape photo card (no border/shadow/interaction)
+    component HeroShapeCard: Item {
+        id: hsc
+        required property var itemObj
+        required property int shapeType
+
+        visible: itemObj !== null
+
+        MaterialShape {
+            id: maskShape
+            anchors.fill: parent
+            visible: false
+            layer.enabled: true
+            layer.smooth: true
+            shape: hsc.shapeType
+            color: "#ffffff"
+        }
+
+        Image {
+            id: cardImg
+            anchors.fill: parent
+            source: (root.visible && !store.viewerOpen && hsc.itemObj) ? store.thumbUrlFor(hsc.itemObj) : ""
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+            cache: true
+            autoTransform: true
+            smooth: true
+            mipmap: true
+            visible: false
+        }
+
+        MultiEffect {
+            anchors.fill: parent
+            source: cardImg
+            maskEnabled: true
+            maskSource: maskShape
+            maskThresholdMin: 0.5
+            maskSpreadAtMin: 0.5
+            opacity: cardImg.status === Image.Ready ? 1.0 : 0.0
+            Behavior on opacity { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
         }
     }
 
@@ -237,69 +303,59 @@ Item {
             width: timelineList.width - timelineList.leftMargin - timelineList.rightMargin
             height: Math.max(headerLeftCol.implicitHeight + 52, 268)
 
-            // Right: Large cropped MaterialShape photo showcase (image shape only, no background blob)
+            // Right: Decorative 3-shape lateral cascade on a single horizontal line
+            // (all 100% opaque; right-to-left overlap leaves 100%, 65%, and 40% exposed)
             Item {
                 id: showcaseContainer
                 visible: root.showcaseItem !== null && root.width >= 780
+                enabled: false
                 anchors.right: parent.right
-                anchors.rightMargin: -32   // bleed flush to the right edge of pageContainer
-                anchors.top: parent.top
-                width: Math.min(480, parent.width * 0.44)
+                anchors.rightMargin: 4
+                anchors.verticalCenter: parent.verticalCenter
+                width: Math.min(430, parent.width * 0.44)
                 height: parent.height
-                clip: true
 
-                // Main large cropped MaterialShape with masked rotating photo
                 Item {
-                    id: heroMaskHost
+                    id: heroCascadeHost
                     anchors.right: parent.right
-                    anchors.rightMargin: -48
-                    anchors.top: parent.top
-                    anchors.topMargin: -76
-                    width: 440
-                    height: 440
+                    anchors.verticalCenter: parent.verticalCenter
+                    readonly property real cardSize: Math.min(204, Math.max(148, Math.floor(parent.width / 2.05)))
+                    readonly property real midX: Math.round(cardSize * 0.40)
+                    readonly property real rightX: midX + Math.round(cardSize * 0.65)
+                    width: rightX + cardSize
+                    height: cardSize
 
-                    // Mask shape (hidden, rendered into MultiEffect)
-                    MaterialShape {
-                        id: heroShapeMask
-                        anchors.fill: parent
-                        visible: false
-                        layer.enabled: true
-                        shape: root.showcaseShapes[root.showcaseShapeIdx]
-                        color: "#ffffff"
+                    // 3rd (leftmost, bottom layer — 40% exposed horizontally)
+                    HeroShapeCard {
+                        x: 0
+                        y: 0
+                        width: heroCascadeHost.cardSize
+                        height: heroCascadeHost.cardSize
+                        z: 1
+                        itemObj: root.showcaseItemAt(2)
+                        shapeType: MaterialShape.Shape.Clover4Leaf
                     }
 
-                    // Photo masked by heroShapeMask (single masked item in the whole app; unloads when hidden)
-                    Image {
-                        id: heroPhoto
-                        anchors.fill: parent
-                        source: (root.visible && !store.viewerOpen && root.showcaseItem) ? ("file://" + root.showcaseItem.path) : ""
-                        fillMode: Image.PreserveAspectCrop
-                        asynchronous: true
-                        cache: false
-                        autoTransform: true
-                        sourceSize: Qt.size(440, 440)
-                        visible: false
+                    // 2nd (middle layer — 65% exposed horizontally)
+                    HeroShapeCard {
+                        x: heroCascadeHost.midX
+                        y: 0
+                        width: heroCascadeHost.cardSize
+                        height: heroCascadeHost.cardSize
+                        z: 2
+                        itemObj: root.showcaseItemAt(1)
+                        shapeType: MaterialShape.Shape.SoftBurst
                     }
 
-                    MultiEffect {
-                        anchors.fill: parent
-                        source: heroPhoto
-                        maskEnabled: true
-                        maskSource: heroShapeMask
-                        maskThresholdMin: 0.5
-                        maskSpreadAtMin: 0.5
-                        opacity: heroPhoto.status === Image.Ready ? 1.0 : 0.0
-                        Behavior on opacity { NumberAnimation { duration: 650; easing.type: Easing.OutCubic } }
-                    }
-
-                    // Subtle hover & click to open showcase photo in viewer
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (root.showcaseItem)
-                                store.openLocalViewer(root.showcaseItem.path, store.homeItems);
-                        }
+                    // 1st (rightmost, top layer — 100% exposed)
+                    HeroShapeCard {
+                        x: heroCascadeHost.rightX
+                        y: 0
+                        width: heroCascadeHost.cardSize
+                        height: heroCascadeHost.cardSize
+                        z: 3
+                        itemObj: root.showcaseItemAt(0)
+                        shapeType: MaterialShape.Shape.Cookie9Sided
                     }
                 }
             }

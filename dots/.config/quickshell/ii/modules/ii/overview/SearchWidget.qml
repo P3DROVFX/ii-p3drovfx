@@ -1056,7 +1056,7 @@ Item {
     property string resultCategoryId: "all"
     readonly property var resultCategoryDefinitions: [
         { id: "all", label: Translation.tr("All"), icon: "category", sections: [] },
-        { id: "apps", label: Translation.tr("Apps"), icon: "apps", sections: ["apps", "phoneApps"] },
+        { id: "apps", label: Translation.tr("Apps"), icon: "apps", sections: ["shellApps", "apps", "phoneApps"] },
         { id: "controls", label: Translation.tr("Controls"), icon: "tune", sections: ["controls"] },
         { id: "tools", label: Translation.tr("Tools"), icon: "widgets", sections: ["tools", "actions"] },
         { id: "content", label: Translation.tr("Content"), icon: "article", sections: ["quicklinks", "textSnippets", "files", "siteTabs", "siteFavorites", "siteSuggestions"] },
@@ -1152,9 +1152,10 @@ Item {
             return "phoneApps";
         if (key.startsWith("app:"))
             return "apps";
-        // The shell's own windows (Clock, Modes & Routines…) are apps to whoever searches for them.
+        // The shell's own windows (Gallery, Clock, Modes & Routines…) form their own
+        // high-priority section above general desktop applications.
         if (key.startsWith("shell:") && ShellActionRegistry.appIds.includes(key.slice(6)))
-            return "apps";
+            return "shellApps";
         if (key.startsWith("site:")) {
             if (item?.siteSource === "open")
                 return "siteTabs";
@@ -1238,7 +1239,7 @@ Item {
                 continue;
             if (!root.categoryAcceptsSection(sectionId))
                 continue;
-            if (sectionId === "apps")
+            if (sectionId === "apps" || sectionId === "shellApps")
                 hasApplications = true;
             unique.push(item);
             sectionIds.push(sectionId);

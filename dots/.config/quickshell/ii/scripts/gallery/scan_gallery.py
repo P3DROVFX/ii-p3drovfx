@@ -10,6 +10,7 @@ Commands:
 """
 
 import argparse
+import concurrent.futures
 import hashlib
 import json
 import os
@@ -18,6 +19,12 @@ import struct
 import subprocess
 import sys
 from pathlib import Path
+
+try:
+    from PIL import Image, ImageOps
+    HAS_PIL = True
+except Exception:
+    HAS_PIL = False
 
 IMAGE_EXTS = {
     ".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".avif", ".heic", ".heif", ".jfif"
@@ -105,9 +112,13 @@ def quick_image_size(path: str, ext: str):
     return 0, 0
 
 
-def video_thumb_path(path: str, mtime: float, cache_dir: str) -> str:
-    key = hashlib.sha1(f"{path}:{int(mtime)}".encode("utf-8", "ignore")).hexdigest()
+def media_thumb_path(path: str, mtime: float, cache_dir: str) -> str:
+    key = hashlib.sha1(f"v2:{path}:{int(mtime)}".encode("utf-8", "ignore")).hexdigest()
     return os.path.join(cache_dir, f"{key}.jpg")
+
+
+def video_thumb_path(path: str, mtime: float, cache_dir: str) -> str:
+    return media_thumb_path(path, mtime, cache_dir)
 
 
 def cmd_scan(args):
@@ -197,11 +208,20 @@ def cmd_scan(args):
                         seen_paths.add(full_path)
 
                         mtime_ms = int(st.st_mtime * 1000)
-                        thumb = ""
+                        tp = media_thumb_path(full_path, st.st_mtime, cache_dir)
+                        thumb = tp if os.path.isfile(tp) else ""
+                        dur = 0
+                        w = 0
+                        h = 0
                         if is_vid:
-                            tp = video_thumb_path(full_path, st.st_mtime, cache_dir)
-                            if os.path.isfile(tp):
-                                thumb = tp
+                            meta_path = tp + ".meta"
+                            if os.path.isfile(meta_path):
+                                try:
+                                    parts = open(meta_path, "r", encoding="utf-8").read().strip().split(",")
+                                    if len(parts) >= 3:
+                                        dur, w, h = int(parts[0]), int(parts[1]), int(parts[2])
+                                except Exception:
+                                    pass
 
                         stem = name[:dot]
                         title = stem.replace("_", " ").replace("-", " ").strip() or name
@@ -218,9 +238,9 @@ def cmd_scan(args):
                             "isSub": is_sub,
                             "mtime": mtime_ms,
                             "size": int(st.st_size),
-                            "w": 0,
-                            "h": 0,
-                            "dur": 0,
+                            "w": w,
+                            "h": h,
+                            "dur": dur,
                             "thumb": thumb,
                         })
                         folder_stats[root_name]["count"] += 1
@@ -302,6 +322,13 @@ def cmd_thumb(args):
                 except OSError:
                     pass
 
+    if dur > 0 or w > 0 or h > 0:
+        try:
+            with open(out_path + ".meta", "w", encoding="utf-8") as mf:
+                mf.write(f"{dur},{w},{h}\n")
+        except OSError:
+            pass
+
     print(json.dumps({
         "ok": os.path.isfile(out_path),
         "path": path,
@@ -310,6 +337,67 @@ def cmd_thumb(args):
         "w": w,
         "h": h,
     }, ensure_ascii=False))
+    return 0
+
+
+def _make_photo_thumb(path: str, cache_dir: str, size: int = 480):
+    try:
+        st = os.stat(path)
+        out_path = media_thumb_path(path, st.st_mtime, cache_dir)
+        if os.path.isfile(out_path):
+            return path, out_path
+        if not HAS_PIL:
+            return path, ""
+        tmp_path = f"{out_path}.{os.getpid()}.tmp.jpg"
+        with Image.open(path) as im:
+            try:
+                im.draft("RGB", (size * 2, size * 2))
+            except Exception:
+                pass
+            try:
+                im = ImageOps.exif_transpose(im)
+            except Exception:
+                pass
+            if im.mode not in ("RGB", "L"):
+                im = im.convert("RGB")
+            im.thumbnail((size, size), Image.Resampling.LANCZOS)
+            if im.mode != "RGB":
+                im = im.convert("RGB")
+            im.save(tmp_path, "JPEG", quality=90, subsampling=0, optimize=False)
+        if os.path.isfile(tmp_path) and os.path.getsize(tmp_path) > 0:
+            os.replace(tmp_path, out_path)
+            return path, out_path
+        if os.path.isfile(tmp_path):
+            os.remove(tmp_path)
+    except Exception:
+        pass
+    return path, ""
+
+
+def cmd_thumbs_batch(args):
+    try:
+        paths = [expand_path(p) for p in json.loads(args.paths_json) if p]
+    except Exception as e:
+        print(json.dumps({"ok": False, "error": str(e), "thumbs": {}}))
+        return 1
+    cache_dir = args.out_dir or os.path.join(
+        os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"),
+        "quickshell", "gallery_thumbs"
+    )
+    os.makedirs(cache_dir, exist_ok=True)
+    size = max(128, min(512, int(args.size or 256)))
+    results = {}
+    workers = min(8, max(2, (os.cpu_count() or 4)))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
+        futs = [ex.submit(_make_photo_thumb, p, cache_dir, size) for p in paths]
+        for fut in concurrent.futures.as_completed(futs):
+            try:
+                p, tp = fut.result()
+                if tp:
+                    results[p] = tp
+            except Exception:
+                pass
+    print(json.dumps({"ok": True, "thumbs": results}, ensure_ascii=False))
     return 0
 
 
@@ -411,6 +499,11 @@ def main():
     p_thumb.add_argument("--path", required=True)
     p_thumb.add_argument("--out-dir", default="")
 
+    p_thumbs_b = sub.add_parser("thumbs-batch")
+    p_thumbs_b.add_argument("--paths-json", required=True)
+    p_thumbs_b.add_argument("--out-dir", default="")
+    p_thumbs_b.add_argument("--size", type=int, default=480)
+
     p_trash = sub.add_parser("trash")
     p_trash.add_argument("--path", required=True)
 
@@ -429,6 +522,8 @@ def main():
         return cmd_scan(args)
     if args.cmd == "thumb":
         return cmd_thumb(args)
+    if args.cmd == "thumbs-batch":
+        return cmd_thumbs_batch(args)
     if args.cmd == "trash":
         return cmd_trash(args)
     if args.cmd == "trash-batch":

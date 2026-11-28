@@ -12,10 +12,36 @@ Singleton {
     // ── Desktop entry cache ───────────────────────────────────────────────
     property var _desktopEntryCache: ({})
 
+    function shellActionForAppId(appId) {
+        const raw = String(appId ?? "").trim()
+        if (!raw) return null
+        const low = raw.toLowerCase()
+        if (low.startsWith("shell:")) {
+            const aid = low.slice(6)
+            return ShellActionRegistry.actions.find(a => String(a.id).toLowerCase() === aid) ?? null
+        }
+        // Recover legacy pins where SearchResultActions fell back to the icon name (e.g. "photo_library")
+        return ShellActionRegistry.actions.find(a => a.app && String(a.icon).toLowerCase() === low) ?? null
+    }
+
     function getCachedDesktopEntry(appId) {
         if (!appId) return null
         if (_desktopEntryCache.hasOwnProperty(appId))
             return _desktopEntryCache[appId]
+        const shellAction = root.shellActionForAppId(appId)
+        if (shellAction) {
+            const synthetic = {
+                id: "shell:" + shellAction.id,
+                name: Translation.tr(shellAction.name),
+                icon: "material:" + shellAction.icon,
+                materialIcon: shellAction.icon,
+                isShellApp: true,
+                shellActionId: shellAction.id,
+                execute: () => ShellActionRegistry.trigger(shellAction.id)
+            }
+            _desktopEntryCache[appId] = synthetic
+            return synthetic
+        }
         const entry = DesktopEntries.heuristicLookup(appId)
         _desktopEntryCache[appId] = entry ?? null
         return _desktopEntryCache[appId]
@@ -289,6 +315,33 @@ Singleton {
         }
     }
 
+    function canonicalAppId(appId) {
+        const shellAct = root.shellActionForAppId(appId)
+        if (shellAct)
+            return "shell:" + String(shellAct.id).toLowerCase()
+        return normalizeAppId(appId)
+    }
+
+    function shellAppIdForToplevel(toplevel) {
+        if (!toplevel) return ""
+        const aid = normalizeAppId(toplevel.appId)
+        if (aid !== "org.quickshell" && aid !== "quickshell")
+            return ""
+        const title = String(toplevel.title ?? "").trim().toLowerCase()
+        if (!title) return ""
+        for (const action of ShellActionRegistry.actions) {
+            if (!action.app) continue
+            const candidates = [
+                String(action.id ?? "").toLowerCase(),
+                String(action.name ?? "").toLowerCase(),
+                Translation.tr(action.name ?? "").toLowerCase()
+            ]
+            if (candidates.some(c => c.length > 0 && (title === c || title.startsWith(c + " ") || title.endsWith(" " + c))))
+                return "shell:" + action.id
+        }
+        return ""
+    }
+
     // ── App model ─────────────────────────────────────────────────────────
     // Merges pinned apps (from config) with running toplevels (from the compositor).
     // Pinned apps without open windows are included; running apps not in the pinned
@@ -309,18 +362,20 @@ Singleton {
 
         for (const toplevel of ToplevelManager.toplevels.values) {
             if (!toplevel?.appId) continue
-            if (ignoredRegexes.some(re => re.test(toplevel.appId))) continue
+            const shellId = root.shellAppIdForToplevel(toplevel)
+            if (!shellId && ignoredRegexes.some(re => re.test(toplevel.appId))) continue
 
-            const normToplevel = normalizeAppId(toplevel.appId)
+            const effectiveId = shellId || toplevel.appId
+            const normToplevel = root.canonicalAppId(effectiveId)
             let matchedKey = null
             for (const key of pinnedMap.keys()) {
-                if (normalizeAppId(key) === normToplevel) { matchedKey = key; break }
+                if (root.canonicalAppId(key) === normToplevel) { matchedKey = key; break }
             }
 
             if (matchedKey !== null) {
                 pinnedMap.get(matchedKey).toplevels.push(toplevel)
             } else {
-                const id = toplevel.appId
+                const id = effectiveId
                 if (!unpinnedMap.has(id))
                     unpinnedMap.set(id, { pinned: false, toplevels: [] })
                 unpinnedMap.get(id).toplevels.push(toplevel)

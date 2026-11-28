@@ -34,11 +34,13 @@ QtObject {
     readonly property int gridColumns: gridSize === "P" ? 7 : (gridSize === "G" ? 3 : 5)
     readonly property string stateFilePath: `${Directories.appsState}/gallery.json`
     readonly property string scanScriptPath: `${Directories.scriptPath}/gallery/scan_gallery.py`
+    readonly property string helperBinPath: `${Directories.scriptPath}/gallery/gallery_helper`
 
     // ── Library data ────────────────────────────────────────────────────
     property var items: []
     property var folderCounts: ({})
     property var videoMeta: ({})           // path -> { thumb, dur, w, h }
+    property var photoThumbs: ({})         // path -> cached 256px jpg path
     property int videoMetaRev: 0
     property bool scanning: false
     property bool loadedOnce: false
@@ -444,8 +446,14 @@ QtObject {
     function thumbUrlFor(it): string {
         if (!it)
             return "";
-        if (it.type === "photo")
+        if (it.type === "photo") {
+            const cached = store.photoThumbs[it.path];
+            if (cached)
+                return "file://" + cached;
+            if (it.thumb)
+                return "file://" + it.thumb;
             return "file://" + it.path;
+        }
         // Video thumbnail from cache or lazy meta map
         const meta = store.videoMeta[it.path];
         if (meta && meta.thumb)
@@ -659,6 +667,35 @@ QtObject {
         trashProc.running = true;
     }
 
+    // ── Photo thumbnail warm-up queue (batched Pillow worker) ───────────
+    property var _photoThumbPending: []
+
+    function _startPhotoThumbWarmup(): void {
+        const missing = [];
+        for (const it of (store.items ?? [])) {
+            if (it && it.type === "photo" && !it.thumb && !store.photoThumbs[it.path])
+                missing.push(it.path);
+        }
+        store._photoThumbPending = missing;
+        store._pumpPhotoThumbBatch();
+    }
+
+    function _pumpPhotoThumbBatch(): void {
+        if (photoThumbProc.running || store._photoThumbPending.length === 0)
+            return;
+        const batch = store._photoThumbPending.slice(0, 80);
+        store._photoThumbPending = store._photoThumbPending.slice(80);
+        photoThumbProc.command = [
+            "sh", "-c",
+            'bin="$1"; py="$2"; shift 2; [ -x "$bin" ] && exec "$bin" "$@" || exec python3 "$py" "$@"',
+            "sh", store.helperBinPath, store.scanScriptPath,
+            "thumbs-batch",
+            "--paths-json", JSON.stringify(batch),
+            "--size", "480"
+        ];
+        photoThumbProc.running = true;
+    }
+
     // ── Video thumbnail lazy queue (1 process at a time) ────────────────
     property var _thumbQueue: []
     property var _thumbQueuedSet: ({})
@@ -692,7 +729,10 @@ QtObject {
         store._rescanPending = false;
         store.scanning = true;
         scanProc.command = [
-            "python3", store.scanScriptPath, "scan",
+            "sh", "-c",
+            'bin="$1"; py="$2"; shift 2; [ -x "$bin" ] && exec "$bin" "$@" || exec python3 "$py" "$@"',
+            "sh", store.helperBinPath, store.scanScriptPath,
+            "scan",
             "--folders-json", JSON.stringify(store.folders),
             "--show-videos", store.showVideos ? "1" : "0"
         ];
@@ -837,6 +877,7 @@ QtObject {
                         store.items = data.items;
                     if (data.folderCounts && typeof data.folderCounts === "object")
                         store.folderCounts = data.folderCounts;
+                    Qt.callLater(store._startPhotoThumbWarmup);
                 } catch (e) {
                     console.warn("[Gallery] Failed to parse scan output:", e);
                 }
@@ -849,6 +890,33 @@ QtObject {
                 store.scanning = false;
                 store.loadedOnce = true;
             }
+        }
+    }
+
+    property Process _photoThumbProc: Process {
+        id: photoThumbProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    const data = JSON.parse(this.text || "{}");
+                    const map = data.thumbs;
+                    if (map && typeof map === "object") {
+                        const keys = Object.keys(map);
+                        if (keys.length > 0) {
+                            const next = Object.assign({}, store.photoThumbs);
+                            for (const k of keys)
+                                next[k] = map[k];
+                            store.photoThumbs = next;
+                        }
+                    }
+                } catch (e) {}
+                if (store._photoThumbPending.length > 0)
+                    Qt.callLater(store._pumpPhotoThumbBatch);
+            }
+        }
+        onExited: code => {
+            if (code !== 0 && store._photoThumbPending.length > 0)
+                Qt.callLater(store._pumpPhotoThumbBatch);
         }
     }
 

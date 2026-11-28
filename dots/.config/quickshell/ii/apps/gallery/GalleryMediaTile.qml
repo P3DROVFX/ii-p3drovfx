@@ -34,12 +34,12 @@ Item {
     }
 
     Component.onCompleted: {
-        if (root.isVideo && root.itemData && !root.thumbUrl && store)
+        if (root.isVideo && root.itemData && (!root.thumbUrl || root.videoDuration <= 0) && store)
             store.requestVideoThumb(root.itemData.path);
     }
 
     onItemDataChanged: {
-        if (root.isVideo && root.itemData && !root.thumbUrl && store)
+        if (root.isVideo && root.itemData && (!root.thumbUrl || root.videoDuration <= 0) && store)
             store.requestVideoThumb(root.itemData.path);
     }
 
@@ -63,11 +63,13 @@ Item {
             source: root.thumbUrl
             fillMode: Image.PreserveAspectCrop
             asynchronous: true
-            cache: false
+            cache: true
             autoTransform: true
-            sourceSize: Qt.size(160, 160)
+            smooth: true
+            mipmap: true
+            sourceSize: Qt.size(440, 440)
             opacity: status === Image.Ready ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: 160 } }
+            Behavior on opacity { NumberAnimation { duration: 90 } }
         }
 
         // Placeholder icon while loading or if video thumbnail is pending
@@ -80,10 +82,10 @@ Item {
             opacity: 0.45
         }
 
-        // Video duration pill badge (bottom-left)
+        // Video duration pill badge (bottom-right)
         Rectangle {
             visible: root.isVideo
-            anchors.left: parent.left
+            anchors.right: parent.right
             anchors.bottom: parent.bottom
             anchors.margins: 8
             implicitWidth: badgeRow.implicitWidth + 14
@@ -104,6 +106,7 @@ Item {
                 }
                 StyledText {
                     text: root.videoDuration > 0 ? store.formatTime(root.videoDuration) : "VID"
+                    font.family: Appearance.font.family.main
                     font.pixelSize: 12
                     font.variableAxes: ({ "wght": 700, "wdth": 92, "ROND": 100 })
                     color: Appearance.colors.colOnSecondaryContainer

@@ -1122,7 +1122,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 34
+    readonly property int currentConfigVersion: 35
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -1911,6 +1911,23 @@ Singleton {
                     "id": "phoneApps"
                 });
                 console.log("[Config] Added Phone apps search result group");
+            }
+        }
+
+        // v34 -> v35: Shell apps (Gallery, Clock, Notes, Calendar, Email, etc.) split
+        // out of Applications into their own section with higher default priority.
+        if (from < 35) {
+            const sectionOrder = raw.search?.sectionOrder;
+            if (Array.isArray(sectionOrder) && sectionOrder.length > 0
+                    && !sectionOrder.some(entry => String(entry?.id ?? entry) === "shellApps")) {
+                const ids = sectionOrder.map(entry => String(entry?.id ?? entry));
+                const appsIndex = ids.indexOf("apps");
+                const bestIndex = ids.indexOf("best");
+                const insertAt = appsIndex >= 0 ? appsIndex : (bestIndex >= 0 ? bestIndex + 1 : 0);
+                sectionOrder.splice(insertAt, 0, {
+                    "id": "shellApps"
+                });
+                console.log("[Config] Added Shell apps search result group above Applications");
             }
         }
 
@@ -7844,6 +7861,9 @@ Singleton {
                     },
                     {
                         "id": "best"
+                    },
+                    {
+                        "id": "shellApps"
                     },
                     {
                         "id": "apps"

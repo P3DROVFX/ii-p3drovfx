@@ -164,6 +164,33 @@ def resolve_path(path: Path):
     return item
 
 
+SHELL_APPS = {
+    "gallery": {"name": "Gallery", "icon": "material:photo_library", "exec": "qs -c ii ipc call gallery open"},
+    "clock": {"name": "Clock", "icon": "material:alarm", "exec": "qs -c ii ipc call clock open"},
+    "notes": {"name": "Notes", "icon": "material:note_stack", "exec": "qs -c ii ipc call notes open"},
+    "easyeffects": {"name": "EasyEffects", "icon": "material:graphic_eq", "exec": "qs -c ii ipc call easyEffects open"},
+    "email": {"name": "Email", "icon": "material:mail", "exec": "qs -c ii ipc call email open"},
+    "calendar": {"name": "Calendar", "icon": "material:calendar_month", "exec": "qs -c ii ipc call calendar open"},
+    "usage": {"name": "App Usage", "icon": "material:bar_chart", "exec": "qs -c ii ipc call usage open"},
+    "modes": {"name": "Modes & Routines", "icon": "material:auto_mode", "exec": "qs -c ii ipc call modes open"},
+}
+
+
+def _read_desktop_kv(path: Path):
+    meta = {}
+    try:
+        for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or line.startswith("["):
+                continue
+            if "=" in line:
+                k, v = line.split("=", 1)
+                meta.setdefault(k.strip(), v.strip())
+    except OSError:
+        pass
+    return meta
+
+
 def describe_path(path: Path):
     if path.is_dir():
         return {
@@ -180,9 +207,14 @@ def describe_path(path: Path):
         raise ValueError("Not a local file or directory: " + str(path))
     if path.suffix == ".desktop":
         entry = GioUnix.DesktopAppInfo.new_from_filename(str(path))
-        display_name = (entry.get_display_name() if entry else None) or (entry.get_name() if entry else None) or path.stem
-        icon = icon_string(entry.get_icon() if entry else None, "application-x-executable")
-        return {
+        kv = _read_desktop_kv(path)
+        display_name = (entry.get_display_name() if entry else None) or (entry.get_name() if entry else None) or kv.get("Name") or path.stem
+        raw_icon = kv.get("Icon", "")
+        if raw_icon.startswith("material:"):
+            icon = raw_icon
+        else:
+            icon = icon_string(entry.get_icon() if entry else None, "application-x-executable")
+        item = {
             "id": "desktop:" + str(path),
             "type": "app",
             "path": str(path),
@@ -191,6 +223,10 @@ def describe_path(path: Path):
             "icon": icon,
             "modified": int(path.stat().st_mtime * 1000) if path.exists() else 0
         }
+        shell_action = kv.get("X-II-Shell-Action", "").strip()
+        if shell_action:
+            item["shellAction"] = shell_action
+        return item
     content_type = Gio.content_type_guess(str(path), None)[0]
     icon = appimage_icon(path) if content_type == "application/vnd.appimage" else None
     item = {
@@ -452,6 +488,36 @@ def cmd_create_app(desktop_dir: str, app_id_or_path: str):
         return {"success": True, "item": resolve_path(target)}
 
     app_id = app_id_or_path.strip()
+
+    # Shell built-in apps (e.g. "shell:gallery", "shell:clock")
+    if app_id.lower().startswith("shell:"):
+        shell_id = app_id[6:].strip()
+        info = SHELL_APPS.get(shell_id.lower()) or {
+            "name": shell_id.replace("-", " ").title(),
+            "icon": "material:apps",
+            "exec": f"qs -c ii ipc call {shell_id} open"
+        }
+        base_name = f"ii-{shell_id}"
+        target = p / f"{base_name}.desktop"
+        counter = 2
+        while target.exists():
+            target = p / f"{base_name} ({counter}).desktop"
+            counter += 1
+        content = f"""[Desktop Entry]
+Type=Application
+Name={info['name']}
+Exec={info['exec']}
+Icon={info['icon']}
+Terminal=false
+X-II-Shell-Action={shell_id}
+"""
+        target.write_text(content, encoding="utf-8")
+        try:
+            target.chmod(0o755)
+        except Exception:
+            pass
+        return {"success": True, "item": resolve_path(target)}
+
     app_id_with_ext = app_id if app_id.endswith(".desktop") else (app_id + ".desktop")
 
     found_file = None

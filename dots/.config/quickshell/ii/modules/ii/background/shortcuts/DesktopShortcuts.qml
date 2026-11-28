@@ -255,10 +255,19 @@ Singleton {
         const value = String(icon ?? "").trim();
         return value.startsWith("/") || value.startsWith("file://") || value.startsWith("~/");
     }
+    function isMaterialIcon(icon) {
+        return String(icon ?? "").trim().startsWith("material:");
+    }
+    function materialIconName(icon) {
+        const value = String(icon ?? "").trim();
+        return value.startsWith("material:") ? value.slice(9) : "";
+    }
     // What an `icon` draws as, on the tile, the plate and the rows alike. A
     // name that finds nothing takes the caller's `fallback`.
     function iconSource(icon, fallback) {
         const value = String(icon ?? "").trim();
+        if (root.isMaterialIcon(value))
+            return "";
         if (root.isIconPath(value)) {
             if (value.startsWith("file://"))
                 return value;
@@ -1551,6 +1560,20 @@ Singleton {
     }
 
     function launch(entry) {
+        // Shell built-in apps (Gallery, Clock, Notes, etc.) trigger directly through ShellActionRegistry.
+        const shellAct = String(entry?.shellAction ?? "");
+        if (shellAct.length > 0) {
+            ShellActionRegistry.trigger(shellAct, Hyprland.focusedMonitor?.name ?? "");
+            root.launched(entry.id);
+            Qt.callLater(() => root.countLaunch(entry.id));
+            return;
+        }
+        if (String(entry?.id ?? "").startsWith("shell:")) {
+            ShellActionRegistry.trigger(String(entry.id).slice(6), Hyprland.focusedMonitor?.name ?? "");
+            root.launched(entry.id);
+            Qt.callLater(() => root.countLaunch(entry.id));
+            return;
+        }
         // Folders and plain files go to the default handler; only .desktop
         // paths are launchable through gio directly. An AppImage has no
         // handler (xdg-open drops it silently), so one marked executable runs

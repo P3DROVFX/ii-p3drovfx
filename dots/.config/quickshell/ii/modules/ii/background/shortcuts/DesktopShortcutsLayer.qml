@@ -2057,10 +2057,11 @@ Item {
                         // A file with a thumbnail (a photo, a PDF's first
                         // page, a video frame) shows it, as a file manager
                         // does; the type icon holds until the picture loads.
+                        readonly property bool isMaterialApp: DesktopShortcuts.isMaterialIcon(tile.entry.icon)
                         readonly property string thumbnail: tile.entry.type === "file" && !tile.entry.customIcon
                             ? (DesktopShortcuts.fileThumbnails[tile.entry.path] ?? "") : ""
                         readonly property bool thumbnailShown: thumbnailImage.status === Image.Ready
-                        source: glyphIcon.thumbnailShown ? ""
+                        source: (glyphIcon.thumbnailShown || glyphIcon.isMaterialApp) ? ""
                             : DesktopShortcuts.iconSource(tile.entry.icon, tile.entry.type === "file" ? "text-x-generic" : "folder")
                         // An icon theme recoloured in place (folders that
                         // follow the wallpaper) keeps every icon's name, so
@@ -2071,6 +2072,48 @@ Item {
                         backer.cache: false
                         backer.sourceSize: Qt.size(glyphIcon.actualSize + TaskbarApps.iconThemeRevision,
                             glyphIcon.actualSize + TaskbarApps.iconThemeRevision)
+
+                        // Shell app Material badge (Gallery, Clock, Notes, etc.) matching ii-icon-pack shape
+                        Item {
+                            anchors.fill: parent
+                            visible: glyphIcon.isMaterialApp
+
+                            readonly property string packShape: {
+                                if (Config.options.dock.enableShapeMask)
+                                    return Config.options.dock.shapeMask;
+                                const theme = String(Config.options?.appearance?.icons?.iconTheme ?? "");
+                                const usesIiPack = theme === "ii-icon-pack" || theme === "DynamicTheme" || IiIconPack.installed;
+                                const raw = usesIiPack ? String(Config.options?.appearance?.icons?.iiPack?.shape ?? "").trim().toLowerCase() : "";
+                                if (!raw)
+                                    return "Circle";
+                                const entry = (IiIconPack.shapes ?? []).find(s => String(s?.key ?? "").toLowerCase() === raw);
+                                if (entry && entry.materialShape)
+                                    return String(entry.materialShape);
+                                const map = {
+                                    "circle": "Circle", "squircle": "Square", "square": "Square",
+                                    "teardrop": "Arch", "arch": "Arch", "slanted": "Slanted",
+                                    "cookie4": "Cookie4Sided", "cookie6": "Cookie6Sided", "cookie7": "Cookie7Sided",
+                                    "cookie9": "Cookie9Sided", "cookie12": "Cookie12Sided",
+                                    "clover4": "Clover4Leaf", "clover8": "Clover8Leaf",
+                                    "sunny": "Sunny", "verysunny": "VerySunny", "flower": "Flower",
+                                    "gem": "Gem", "pentagon": "Pentagon", "diamond": "Diamond",
+                                    "puffy": "Puffy", "burst": "Burst", "softburst": "SoftBurst", "heart": "Heart"
+                                };
+                                return map[raw] ?? "Circle";
+                            }
+
+                            MaterialShape {
+                                anchors.fill: parent
+                                shapeString: parent.packShape
+                                color: Appearance.colors.colPrimaryContainer
+                            }
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                text: DesktopShortcuts.materialIconName(tile.entry.icon)
+                                iconSize: Math.round(Math.min(parent.width, parent.height) * 0.54)
+                                color: Appearance.colors.colOnPrimaryContainer
+                            }
+                        }
                         Image {
                             id: thumbnailImage
                             anchors.fill: parent

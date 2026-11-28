@@ -26,6 +26,7 @@ FocusScope {
 
     required property var store
     required property var phoneBridge
+    property bool open: true
     signal toggleFullscreenRequested()
     property bool isFullscreen: false
 
@@ -94,15 +95,18 @@ FocusScope {
         || root.infoOpen
         || root.confirmDeleteOpen
 
-    // Panels, hero expand transition & priority loading
+    // Panels, hero expand/collapse transition & priority loading
     property bool infoOpen: false
     property bool confirmDeleteOpen: false
     property string pendingPhoneAction: ""
     property bool filmstripReady: false
     property real openProgress: 0.0
     property real chromeReveal: 0.0
+    property bool closing: false
+    property int _openedIndex: -1
     readonly property var originRect: store.viewerOrigin ?? null
-    readonly property bool heroAnimating: originRect !== null && openProgress < 0.999
+    readonly property bool useOriginFlip: originRect !== null && (!closing || store.viewerIndex === _openedIndex)
+    readonly property bool heroAnimating: (useOriginFlip && openProgress < 0.999) || closing
 
     function bumpPointerActivity(): void {
         root.pointerActive = true;
@@ -238,10 +242,59 @@ FocusScope {
         }
     }
 
-    onCurrentItemChanged: root._loadCurrent()
+    onCurrentItemChanged: {
+        if (root.open)
+            root._loadCurrent();
+    }
+
+    function requestClose(): void {
+        if (!root.open || root.closing)
+            return;
+        root.closing = true;
+        openAnim.stop();
+        filmstripDelayTimer.stop();
+        hideChromeTimer.stop();
+        player.pause();
+        root.infoOpen = false;
+        root.confirmDeleteOpen = false;
+        root.resetTransform();
+        closeAnim.restart();
+    }
+
+    onOpenChanged: {
+        if (root.open) {
+            closeAnim.stop();
+            root.closing = false;
+            root._openedIndex = store.viewerIndex;
+            root.infoOpen = false;
+            root.confirmDeleteOpen = false;
+            root.filmstripReady = false;
+            root.openProgress = 0.0;
+            root.chromeReveal = 0.0;
+            root.forceActiveFocus();
+            root._loadCurrent();
+            openAnim.restart();
+            filmstripDelayTimer.restart();
+        } else {
+            openAnim.stop();
+            closeAnim.stop();
+            root.closing = false;
+            root._openedIndex = -1;
+            filmstripDelayTimer.stop();
+            hideChromeTimer.stop();
+            player.stop();
+            player.source = "";
+            // Do NOT assign `mainImg.source = ""` imperatively here: that would break its
+            // declarative `root.open ? ... : ""` binding permanently on subsequent opens!
+            root.filmstripReady = false;
+            root.infoOpen = false;
+            root.confirmDeleteOpen = false;
+            root.resetTransform();
+        }
+    }
 
     onLocalResolvedPathChanged: {
-        if (!root.localResolvedPath)
+        if (!root.open || !root.localResolvedPath)
             return;
         if (root.isPhone && root.isVideo && String(player.source) === "") {
             root._startVideo(root.localResolvedPath);
@@ -254,10 +307,12 @@ FocusScope {
     }
 
     Component.onCompleted: {
-        root.forceActiveFocus();
-        root._loadCurrent();
-        openAnim.start();
-        filmstripDelayTimer.restart();
+        if (root.open) {
+            root.forceActiveFocus();
+            root._loadCurrent();
+            openAnim.restart();
+            filmstripDelayTimer.restart();
+        }
     }
 
     Component.onDestruction: {
@@ -273,19 +328,43 @@ FocusScope {
             property: "openProgress"
             from: 0.0
             to: 1.0
-            duration: 280
-            easing.type: Easing.OutCubic
+            duration: 300
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: [0.05, 0.7, 0.1, 1.0, 1.0, 1.0]
         }
         SequentialAnimation {
-            PauseAnimation { duration: 75 }
+            PauseAnimation { duration: 60 }
             NumberAnimation {
                 target: root
                 property: "chromeReveal"
                 from: 0.0
                 to: 1.0
-                duration: 240
+                duration: 220
                 easing.type: Easing.OutCubic
             }
+        }
+    }
+
+    ParallelAnimation {
+        id: closeAnim
+        NumberAnimation {
+            target: root
+            property: "chromeReveal"
+            to: 0.0
+            duration: 120
+            easing.type: Easing.InCubic
+        }
+        NumberAnimation {
+            target: root
+            property: "openProgress"
+            to: 0.0
+            duration: 240
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: [0.3, 0.0, 0.8, 0.15, 1.0, 1.0]
+        }
+        onFinished: {
+            if (root.closing)
+                store.closeViewer();
         }
     }
 
@@ -322,7 +401,7 @@ FocusScope {
             else if (root.infoOpen)
                 root.infoOpen = false;
             else
-                store.closeViewer();
+                root.requestClose();
             event.accepted = true;
             return;
         }
@@ -460,7 +539,7 @@ FocusScope {
                 anchors.right: parent.right
                 anchors.top: (root.cinemaFullscreen || root.immersiveZoom) ? parent.top : topBar.bottom
                 anchors.bottom: (root.cinemaFullscreen || root.immersiveZoom) ? parent.bottom : bottomDock.top
-                clip: true
+                clip: !root.heroAnimating
 
                 // ── Image display (fitted rounded ClippingRectangle + working zoom/pan/rotate) ─
                 Item {
@@ -472,11 +551,17 @@ FocusScope {
                     anchors.bottomMargin: root.immersiveZoom ? 0 : 8
                     visible: !root.isVideo
 
-                    // Reference unzoomed box size so fittedW/fittedH stay stable when entering immersiveZoom
+                    // Reference unzoomed box size so fittedW/fittedH stay stable when entering immersiveZoom.
+                    // Fall back to thumbUnderlay's synchronous dimensions on frame 0 so non-16:9 images
+                    // (e.g. 9:16 portrait) animate straight to their exact aspect ratio without stretching!
                     readonly property real baseBoxW: Math.max(1, stage.width - 168)
                     readonly property real baseBoxH: Math.max(1, root.height - 68 - 84 - 16)
-                    readonly property real natW: mainImg.implicitWidth > 0 ? mainImg.implicitWidth : Number(root.currentItem?.w || 0)
-                    readonly property real natH: mainImg.implicitHeight > 0 ? mainImg.implicitHeight : Number(root.currentItem?.h || 0)
+                    readonly property real natW: mainImg.implicitWidth > 0
+                        ? mainImg.implicitWidth
+                        : (thumbUnderlay.implicitWidth > 0 ? thumbUnderlay.implicitWidth : Number(root.currentItem?.w || 0))
+                    readonly property real natH: mainImg.implicitHeight > 0
+                        ? mainImg.implicitHeight
+                        : (thumbUnderlay.implicitHeight > 0 ? thumbUnderlay.implicitHeight : Number(root.currentItem?.h || 0))
                     readonly property bool swapped: (root.rotationDeg % 180) !== 0
                     readonly property real effW: swapped ? natH : natW
                     readonly property real effH: swapped ? natW : natH
@@ -503,31 +588,59 @@ FocusScope {
                         }
                     }
 
-                    // Crisp Nomacs-style full-resolution image at 100% AND when zoomed:
-                    // mipmap is ALWAYS false (no blurry trilinear downsampling at 100%,
-                    // and zero texture reload when zooming!).
+                    // Seamless Google Photos-style single-element FLIP expand + crisp full-res image:
+                    // At p=0 the ClippingRectangle matches the clicked tile's exact rect & crop;
+                    // as p->1 it expands into the exact aspect-matched target rect (fittedW x fittedH),
+                    // so PreserveAspectCrop transitions smoothly into the full uncropped photo with ZERO pop!
                     Item {
                         id: imgTransformHost
-                        x: (imgStage.width - width) / 2 + root.panX
-                        y: (imgStage.height - height) / 2 + root.panY
-                        width: Math.max(1, Math.round(imgStage.fittedW * root.zoom))
-                        height: Math.max(1, Math.round(imgStage.fittedH * root.zoom))
+                        readonly property bool flipActive: root.heroAnimating && root.useOriginFlip && !root.immersiveZoom
+                        readonly property real p: root.openProgress
+                        readonly property real targetW: Math.max(1, Math.round(imgStage.fittedW * root.zoom))
+                        readonly property real targetH: Math.max(1, Math.round(imgStage.fittedH * root.zoom))
+                        readonly property real targetX: (imgStage.width - targetW) / 2 + root.panX
+                        readonly property real targetY: (imgStage.height - targetH) / 2 + root.panY
+                        readonly property real startX: root.originRect ? (Number(root.originRect.x) - 84) : targetX
+                        readonly property real startY: root.originRect ? (Number(root.originRect.y) - 76) : targetY
+                        readonly property real startW: root.originRect ? Math.max(1, Number(root.originRect.w)) : targetW
+                        readonly property real startH: root.originRect ? Math.max(1, Number(root.originRect.h)) : targetH
+
+                        x: flipActive ? (startX + (targetX - startX) * p) : targetX
+                        y: flipActive ? (startY + (targetY - startY) * p) : targetY
+                        width: flipActive ? Math.max(1, startW + (targetW - startW) * p) : targetW
+                        height: flipActive ? Math.max(1, startH + (targetH - startH) * p) : targetH
                         rotation: root.rotationDeg
-                        opacity: root.heroAnimating ? (mainImg.status === Image.Ready ? Math.max(0, (root.openProgress - 0.55) / 0.45) : 0.0) : 1.0
-                        scale: root.originRect === null ? (0.94 + 0.06 * root.openProgress) : 1.0
+                        scale: !root.useOriginFlip ? (0.92 + 0.08 * root.openProgress) : 1.0
+                        opacity: !root.useOriginFlip ? root.openProgress : 1.0
 
                         Behavior on rotation { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
 
                         ClippingRectangle {
                             anchors.fill: parent
-                            radius: root.zoom > 1.01 ? 0 : Appearance.rounding.large
+                            radius: root.zoom > 1.01
+                                ? 0
+                                : (imgTransformHost.flipActive
+                                    ? (Appearance.rounding.small + (Appearance.rounding.large - Appearance.rounding.small) * imgTransformHost.p)
+                                    : Appearance.rounding.large)
                             color: "transparent"
+
+                            // Instant cached thumbnail underlay ONLY while mainImg decodes its first frame
+                            Image {
+                                id: thumbUnderlay
+                                anchors.fill: parent
+                                visible: mainImg.status !== Image.Ready && source.toString().length > 0
+                                source: (root.open && root.originRect && root.originRect.thumb) ? String(root.originRect.thumb) : ""
+                                fillMode: Image.PreserveAspectCrop
+                                asynchronous: false
+                                cache: true
+                                autoTransform: true
+                            }
 
                             Image {
                                 id: mainImg
                                 anchors.fill: parent
-                                source: (!root.isVideo && root.localResolvedPath) ? ("file://" + root.localResolvedPath) : ""
-                                fillMode: Image.PreserveAspectFit
+                                source: (root.open && !root.isVideo && root.localResolvedPath) ? ("file://" + root.localResolvedPath) : ""
+                                fillMode: imgTransformHost.flipActive ? Image.PreserveAspectCrop : Image.PreserveAspectFit
                                 asynchronous: true
                                 cache: false
                                 autoTransform: true
@@ -623,13 +736,38 @@ FocusScope {
                     readonly property real fittedH: root.cinemaFullscreen ? height : Math.max(1, Math.round(vidH * vScale))
 
                     ClippingRectangle {
-                        anchors.centerIn: parent
-                        width: vidStage.fittedW
-                        height: vidStage.fittedH
-                        radius: root.cinemaFullscreen ? 0 : Appearance.rounding.large
+                        id: vidBox
+                        readonly property bool flipActive: root.heroAnimating && root.useOriginFlip && !root.cinemaFullscreen
+                        readonly property real p: root.openProgress
+                        readonly property real targetX: (vidStage.width - vidStage.fittedW) / 2
+                        readonly property real targetY: (vidStage.height - vidStage.fittedH) / 2
+                        readonly property real startX: root.originRect ? (Number(root.originRect.x) - 84) : targetX
+                        readonly property real startY: root.originRect ? (Number(root.originRect.y) - 76) : targetY
+                        readonly property real startW: root.originRect ? Math.max(1, Number(root.originRect.w)) : vidStage.fittedW
+                        readonly property real startH: root.originRect ? Math.max(1, Number(root.originRect.h)) : vidStage.fittedH
+
+                        x: flipActive ? (startX + (targetX - startX) * p) : targetX
+                        y: flipActive ? (startY + (targetY - startY) * p) : targetY
+                        width: flipActive ? Math.max(1, startW + (vidStage.fittedW - startW) * p) : vidStage.fittedW
+                        height: flipActive ? Math.max(1, startH + (vidStage.fittedH - startH) * p) : vidStage.fittedH
+                        radius: root.cinemaFullscreen
+                            ? 0
+                            : (flipActive
+                                ? (Appearance.rounding.small + (Appearance.rounding.large - Appearance.rounding.small) * p)
+                                : Appearance.rounding.large)
                         color: "#000000"
-                        opacity: root.heroAnimating ? Math.max(0, (root.openProgress - 0.55) / 0.45) : 1.0
-                        scale: root.originRect === null ? (0.94 + 0.06 * root.openProgress) : 1.0
+                        scale: !root.useOriginFlip ? (0.92 + 0.08 * root.openProgress) : 1.0
+                        opacity: !root.useOriginFlip ? root.openProgress : 1.0
+
+                        // Video thumbnail poster underlay until first decoded frame arrives
+                        Image {
+                            anchors.fill: parent
+                            visible: root.open && root.isVideo && player.position === 0 && source.toString().length > 0
+                            source: (root.originRect && root.originRect.thumb) ? String(root.originRect.thumb) : ""
+                            fillMode: vidBox.flipActive ? Image.PreserveAspectCrop : Image.PreserveAspectFit
+                            asynchronous: false
+                            cache: true
+                        }
 
                         VideoOutput {
                             id: videoOutput
@@ -886,7 +1024,7 @@ FocusScope {
                         iconName: "arrow_back"
                         iconPixelSize: 22
                         tipText: Translation.tr("Back (Esc)")
-                        onClicked: store.closeViewer()
+                        onClicked: root.requestClose()
                     }
 
                     ColumnLayout {
@@ -1683,38 +1821,6 @@ FocusScope {
                     }
                 }
             }
-        }
-    }
-
-    // ── Hero Expand Overlay (tile preview expands smoothly into full stage) ─
-    ClippingRectangle {
-        id: heroExpandOverlay
-        visible: root.heroAnimating && root.originRect !== null
-        z: 20
-        readonly property real p: root.openProgress
-        readonly property real startX: root.originRect ? Number(root.originRect.x) : 0
-        readonly property real startY: root.originRect ? Number(root.originRect.y) : 0
-        readonly property real startW: root.originRect ? Number(root.originRect.w) : 160
-        readonly property real startH: root.originRect ? Number(root.originRect.h) : 160
-        readonly property real targetW: root.isVideo ? vidStage.fittedW : imgStage.fittedW
-        readonly property real targetH: root.isVideo ? vidStage.fittedH : imgStage.fittedH
-        readonly property real targetX: (root.width - targetW) / 2
-        readonly property real targetY: 68 + ((root.height - 68 - (root.isVideo ? 154 : 84)) - targetH) / 2
-
-        x: startX + (targetX - startX) * p
-        y: startY + (targetY - startY) * p
-        width: Math.max(1, startW + (targetW - startW) * p)
-        height: Math.max(1, startH + (targetH - startH) * p)
-        radius: Appearance.rounding.small + (Appearance.rounding.large - Appearance.rounding.small) * p
-        color: Appearance.colors.colLayer2
-        opacity: p < 0.72 ? 1.0 : Math.max(0, (1.0 - p) / 0.28)
-
-        Image {
-            anchors.fill: parent
-            source: (root.originRect && root.originRect.thumb) ? String(root.originRect.thumb) : ""
-            fillMode: Image.PreserveAspectCrop
-            asynchronous: false
-            cache: false
         }
     }
 }

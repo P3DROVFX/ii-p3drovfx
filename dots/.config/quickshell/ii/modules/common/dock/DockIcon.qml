@@ -28,8 +28,54 @@ Item {
     property real renderScale: 1
     property real iconOpacity: isRunning ? 1.0 : (Config.options.dock.dimInactiveIcons ? 0.55 : 1.0)
 
+    readonly property bool isShellApp: root.desktopEntry?.isShellApp === true
+    readonly property string shellMaterialIcon: String(root.desktopEntry?.materialIcon ?? "")
+
+    // Match the active ii-icon-pack plate shape when ii-icon-pack is in use;
+    // otherwise respect dock.shapeMask (when enabled) or fall back to Circle.
+    readonly property string resolvedShellShape: {
+        if (Config.options.dock.enableShapeMask)
+            return Config.options.dock.shapeMask;
+        const theme = String(Config.options?.appearance?.icons?.iconTheme ?? "");
+        const usesIiPack = theme === "ii-icon-pack" || theme === "DynamicTheme" || IiIconPack.installed;
+        const raw = usesIiPack ? String(Config.options?.appearance?.icons?.iiPack?.shape ?? "").trim().toLowerCase() : "";
+        if (!raw)
+            return "Circle";
+        const entry = (IiIconPack.shapes ?? []).find(s => String(s?.key ?? "").toLowerCase() === raw);
+        if (entry && entry.materialShape)
+            return String(entry.materialShape);
+        const map = {
+            "circle": "Circle",
+            "squircle": "Square",
+            "square": "Square",
+            "teardrop": "Arch",
+            "arch": "Arch",
+            "slanted": "Slanted",
+            "cookie4": "Cookie4Sided",
+            "cookie6": "Cookie6Sided",
+            "cookie7": "Cookie7Sided",
+            "cookie9": "Cookie9Sided",
+            "cookie12": "Cookie12Sided",
+            "clover4": "Clover4Leaf",
+            "clover8": "Clover8Leaf",
+            "sunny": "Sunny",
+            "verysunny": "VerySunny",
+            "flower": "Flower",
+            "gem": "Gem",
+            "pentagon": "Pentagon",
+            "diamond": "Diamond",
+            "puffy": "Puffy",
+            "burst": "Burst",
+            "softburst": "SoftBurst",
+            "heart": "Heart"
+        };
+        return map[raw] ?? "Circle";
+    }
+
     readonly property string iconPath: {
         const _ = TaskbarApps.iconThemeRevision;
+        if (root.isShellApp)
+            return "";
 
         if (root.desktopEntry && root.desktopEntry.icon) {
             let path = Quickshell.iconPath(root.desktopEntry.icon, true).toString();
@@ -71,18 +117,31 @@ Item {
     Loader {
         id: adaptiveBackgroundLoader
         anchors.fill: parent
-        active: Config.options.dock.enableShapeMask
+        active: Config.options.dock.enableShapeMask || root.isShellApp
         sourceComponent: MaterialShape {
             anchors.fill: parent
-            shapeString: Config.options.dock.shapeMask
-            visible: !root.isThemedIcon
+            shapeString: root.isShellApp ? root.resolvedShellShape : Config.options.dock.shapeMask
+            visible: root.isShellApp || !root.isThemedIcon
             color: Appearance.colors.colPrimaryContainer
+            opacity: root.iconOpacity
         }
+    }
+
+    MaterialSymbol {
+        visible: root.isShellApp && root.shellMaterialIcon.length > 0
+        anchors.centerIn: parent
+        text: root.shellMaterialIcon
+        iconSize: Math.round(Math.min(root.width, root.height) * 0.54)
+        color: Config.options.dock.monochromeIcons
+            ? Appearance.colors.colPrimary
+            : Appearance.colors.colOnPrimaryContainer
+        opacity: root.iconOpacity
     }
 
     Item {
         id: iconContent
         anchors.fill: parent
+        visible: !root.isShellApp
         readonly property real adaptiveMargin: Config.options.dock.enableShapeMask && !root.isThemedIcon
             ? root.width * 0.18 : 0
         anchors.margins: adaptiveMargin
@@ -123,7 +182,7 @@ Item {
     }
 
     Loader {
-        active: Config.options.dock.monochromeIcons
+        active: Config.options.dock.monochromeIcons && !root.isShellApp
         anchors.fill: iconContent
         sourceComponent: MultiEffect {
             anchors.fill: parent

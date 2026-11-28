@@ -98,6 +98,17 @@ ApplicationWindow {
         }
     }
 
+    // Pre-warm the lightweight viewer shell asynchronously shortly after startup
+    // so the very first click on any photo opens in <16ms (0ms compile stall).
+    // Video playback (QtMultimedia) stays lazily loaded inside GalleryViewer only for videos.
+    property bool viewerWarmed: false
+    Timer {
+        interval: 260
+        running: true
+        repeat: false
+        onTriggered: root.viewerWarmed = true
+    }
+
     // Reclaim destroyed Loader subtrees, Image textures, and MediaPlayer buffers promptly
     Timer {
         id: gcTimer
@@ -188,16 +199,6 @@ ApplicationWindow {
 
     Item {
         anchors.fill: parent
-
-        // Subtle outer border matching standalone shell apps
-        Rectangle {
-            anchors.fill: parent
-            color: "transparent"
-            radius: Appearance.rounding.windowRounding
-            border.width: 1
-            border.color: Appearance.colors.colOutlineVariant
-            z: 50
-        }
 
         ColumnLayout {
             anchors.fill: parent
@@ -411,16 +412,20 @@ ApplicationWindow {
             }
         }
 
-        // Fullscreen Media Viewer overlay (lazy-loaded only while open -> 0 RAM when closed!)
+        // Fullscreen Media Viewer overlay (shell pre-warmed async for instant 1st open;
+        // image/video/filmstrip resources clear immediately on close so idle RAM stays minimal)
         Loader {
             id: viewerLoader
             anchors.fill: parent
             z: 40
-            active: galleryStore.viewerOpen
-            visible: active
+            asynchronous: !galleryStore.viewerOpen
+            active: root.viewerWarmed || galleryStore.viewerOpen
+            visible: galleryStore.viewerOpen
+            enabled: galleryStore.viewerOpen
             sourceComponent: GalleryViewer {
                 store: galleryStore
                 phoneBridge: phoneGalleryBridge
+                open: galleryStore.viewerOpen
                 isFullscreen: root.isFullscreenState
                 onToggleFullscreenRequested: root.toggleFullscreenState()
             }

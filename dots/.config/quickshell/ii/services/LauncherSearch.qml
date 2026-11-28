@@ -3878,6 +3878,7 @@ Singleton {
                     continue;
                 result.push(resultComp.createObject(null, {
                     key: "shell:" + action.id,
+                    id: "shell:" + action.id,
                     name: Translation.tr(action.name),
                     type: action.app ? Translation.tr("App") : Translation.tr("Shell"),
                     comment: action.app ? Translation.tr("Shell app") : Translation.tr(action.category),
