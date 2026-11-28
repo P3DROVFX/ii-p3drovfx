@@ -28,7 +28,8 @@ Singleton {
             hubMode: ["hub mode", "dock", "display", "relogio", "clock", "ambient"],
             liveDraw: ["draw", "desenhar", "desenho", "sketch", "pen", "caneta", "stylus", "annotate", "anotar"],
             email: ["email", "e-mail", "gmail", "mail", "inbox", "correio"],
-            calendar: ["calendar", "calendario", "calendário", "timetable", "agenda", "schedule", "events", "eventos", "horario", "horário"]
+            calendar: ["calendar", "calendario", "calendário", "timetable", "agenda", "schedule", "events", "eventos", "horario", "horário"],
+            gallery: ["gallery", "galeria", "photos", "fotos", "images", "imagens", "videos", "vídeos", "albums", "álbuns", "media", "midia", "mídia"]
         };
         return base.concat(extras[action.id] ?? []);
     }
@@ -38,11 +39,12 @@ Singleton {
         { id: "clock", name: "Clock", icon: "alarm", category: "shell", searchable: true, enabled: () => Config.options.clockApp?.enable ?? true },
         { id: "easyEffects", name: "EasyEffects", icon: "graphic_eq", category: "shell", searchable: true, enabled: () => Config.options.easyEffects?.appEnable ?? true },
         { id: "email", name: "Email", icon: "mail", category: "shell", searchable: true, enabled: () => Config.options.emailApp?.enable ?? true },
-        { id: "calendar", name: "Calendar", icon: "calendar_month", category: "shell", searchable: true, enabled: () => Config.options.calendarApp?.enable ?? true }
+        { id: "calendar", name: "Calendar", icon: "calendar_month", category: "shell", searchable: true, enabled: () => Config.options.calendarApp?.enable ?? true },
+        { id: "gallery", name: "Gallery", icon: "photo_library", category: "shell", searchable: true, enabled: () => Config.options.galleryApp?.enable ?? true }
     ]
 
     /// The shell's own windowed apps. Search lists them as apps rather than as actions.
-    readonly property var appIds: ["notes", "clock", "easyEffects", "usage", "modes", "email", "calendar"]
+    readonly property var appIds: ["notes", "clock", "easyEffects", "usage", "modes", "email", "calendar", "gallery"]
 
     readonly property var actions: TouchGestureActionRegistry.actions.concat(root.extraActions).map(action => Object.assign({}, action, {
         keywords: action.keywords ?? root.keywordsFor(action),
@@ -76,6 +78,10 @@ Singleton {
         }
         if (actionId === "calendar") {
             GlobalStates.openCalendarApp("");
+            return;
+        }
+        if (actionId === "gallery") {
+            GlobalStates.openGalleryApp("");
             return;
         }
         // Opening from search must not close an app that is already open behind it; the

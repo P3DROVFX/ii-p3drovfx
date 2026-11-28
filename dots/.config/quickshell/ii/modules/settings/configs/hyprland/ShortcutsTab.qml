@@ -290,6 +290,46 @@ ContentPage {
                 }
             }
         }
+
+        HyprToggle {
+            readonly property string galleryBindId: HyprlandBinds.bindId(["SUPER", "ALT"], "G")
+            readonly property var galleryBindRow: HyprlandBinds.effective.find(row => row.kind === "bind"
+                && String(row.action ?? "").includes("quickshell:galleryOpen")) ?? null
+            readonly property string activeKeyLabel: {
+                if (!galleryBindRow)
+                    return "Super + Alt + G";
+                const mods = Array.from(galleryBindRow.mods ?? []).map(m => m.charAt(0) + m.slice(1).toLowerCase());
+                return mods.concat([String(galleryBindRow.key ?? "").toUpperCase()]).filter(Boolean).join(" + ");
+            }
+
+            buttonIcon: "photo_library"
+            text: Translation.tr("Open Gallery shortcut")
+            alwaysExplain: true
+            badgeText: galleryBindRow ? activeKeyLabel : ""
+            textOn: Translation.tr("Bound to %1 in custom/keybinds.lua. Click Apply in the corner to save.").arg(activeKeyLabel)
+            textOff: Translation.tr("One-click bind for Super + Alt + G to open the standalone Gallery app.")
+            switchOn: galleryBindRow !== null
+            onRequested: wanted => {
+                if (wanted) {
+                    HyprlandBinds.saveBind(
+                        galleryBindId,
+                        "SUPER + ALT + G",
+                        HyprlandBinds.buildAction("global", "quickshell:galleryOpen"),
+                        { description: "Shell: Open Gallery" }
+                    );
+                } else {
+                    const existing = galleryBindRow;
+                    if (!existing)
+                        return;
+                    const id = existing.id || HyprlandBinds.bindId(existing.mods ?? [], existing.key ?? "");
+                    if (HyprlandBinds.managedBind(id)) {
+                        HyprlandBinds.removeBind(id);
+                    } else {
+                        HyprlandBinds.releaseOnly(id, HyprlandBinds.comboSource(existing.mods ?? [], existing.key ?? ""));
+                    }
+                }
+            }
+        }
     }
 
     ContentSection {

@@ -223,6 +223,33 @@ Singleton {
         ]);
     }
 
+    /// Standalone Gallery app (apps/gallery.qml). Runs in its own qs -p process so closing it
+    /// returns 100% of its memory to the OS; reuses the running instance via IPC when open.
+    function openGalleryApp(tab = "", path = ""): void {
+        if (!(Config.options?.galleryApp?.enable ?? true))
+            return;
+        const entry = Quickshell.shellPath("apps/gallery.qml");
+        const cleanTab = String(tab ?? "").trim();
+        const cleanPath = String(path ?? "").trim();
+        const floating = Config.options?.galleryApp?.openFloating ?? true;
+        const launchScript = floating
+            ? "hyprctl dispatch \"hl.dsp.exec_cmd(\\\"[float; center; size 1240 780] env II_GALLERY_INITIAL_TAB=$TAB qs -p $ENTRY\\\")\" 2>/dev/null | grep -qi '^ok' || hyprctl dispatch exec \"[float; center; size 1240 780] env II_GALLERY_INITIAL_TAB=$TAB qs -p $ENTRY\" 2>/dev/null | grep -qi '^ok' || II_GALLERY_INITIAL_TAB=\"$TAB\" setsid -f qs -p \"$ENTRY\" >/dev/null 2>&1 </dev/null"
+            : "II_GALLERY_INITIAL_TAB=\"$TAB\" setsid -f qs -p \"$ENTRY\" >/dev/null 2>&1 </dev/null";
+        if (cleanPath.length > 0) {
+            Quickshell.execDetached([
+                "bash", "-c",
+                "ENTRY=\"$1\"; TAB=\"$2\"; FILE=\"$3\"; qs -p \"$ENTRY\" ipc call gallery openPath \"$FILE\" >/dev/null 2>&1 || { " + launchScript + "; }",
+                "--", entry, cleanTab, cleanPath
+            ]);
+            return;
+        }
+        Quickshell.execDetached([
+            "bash", "-c",
+            "ENTRY=\"$1\"; TAB=\"$2\"; qs -p \"$ENTRY\" ipc call gallery open \"$TAB\" >/dev/null 2>&1 || { " + launchScript + "; }",
+            "--", entry, cleanTab
+        ]);
+    }
+
     property bool mediaControlsOpen: false
     property bool mediaControlsPinned: false
     // Names of screens showing the Always On Display (the OLED saver). Read by the desktop
@@ -2345,6 +2372,50 @@ Singleton {
         name: "calendarOpen"
         description: "Opens the standalone Calendar app"
         onPressed: root.openCalendarApp("")
+    }
+
+    IpcHandler {
+        target: "gallery"
+
+        function open(): void {
+            root.openGalleryApp("");
+        }
+
+        function openTab(tab: string): void {
+            root.openGalleryApp(tab);
+        }
+
+        function openPath(path: string): void {
+            root.openGalleryApp("", path);
+        }
+
+        function quit(): void {
+            Quickshell.execDetached(["qs", "-p", Quickshell.shellPath("apps/gallery.qml"), "ipc", "call", "gallery", "quit"]);
+        }
+
+        function setAvatar(path: string): void {
+            const src = String(path ?? "").trim();
+            if (!src || !Config.ready || !Config.options?.userProfile)
+                return;
+            const extMatch = /\.([a-zA-Z0-9]+)$/.exec(src);
+            const ext = extMatch ? extMatch[1].toLowerCase() : "png";
+            const dest = `${Directories.shellConfig}/profile.${ext}`;
+            const pngDest = `${Directories.shellConfig}/profile.png`;
+            Quickshell.execDetached([
+                "sh", "-c",
+                'mkdir -p "$1" && cp -f -- "$2" "$3" && cp -f -- "$2" "$4" && cp -f -- "$2" "$HOME/.face" 2>/dev/null || true',
+                "sh", Directories.shellConfig, src, dest, pngDest
+            ]);
+            Config.options.userProfile.imageStyle = "custom";
+            Config.options.userProfile.imagePath = "";
+            Config.options.userProfile.imagePath = dest;
+        }
+    }
+
+    GlobalShortcut {
+        name: "galleryOpen"
+        description: "Opens the standalone Gallery app"
+        onPressed: root.openGalleryApp("")
     }
 
     IpcHandler {

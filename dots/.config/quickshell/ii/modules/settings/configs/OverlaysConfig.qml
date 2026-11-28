@@ -364,6 +364,65 @@ Item {
                     }
                 }
             }
+
+            AppCard {
+                id: galleryCard
+                width: shelf.cardWidth
+                height: shelf.cardHeight
+                accent: "tertiary"
+                symbol: "photo_library"
+                shape: MaterialShape.Shape.Cookie9Sided
+                title: Translation.tr("Gallery")
+                summary: Translation.tr("Standalone photo & video gallery with Albums and ii tools Phone Gallery. Runs in its own process and frees all RAM on close.")
+                keys: {
+                    const bind = HyprlandBinds.effective.find(row => row.kind === "bind"
+                        && String(row.action ?? "").includes("quickshell:galleryOpen"));
+                    if (!bind)
+                        return [];
+                    const mods = Array.from(bind.mods ?? []).map(m => m.charAt(0) + m.slice(1).toLowerCase());
+                    return mods.concat([String(bind.key ?? "").toUpperCase()]).filter(Boolean);
+                }
+                checked: Config.options.galleryApp?.enable ?? true
+                onToggled: value => {
+                    if (Config.ready && Config.options.galleryApp)
+                        Config.options.galleryApp.enable = value;
+                }
+                onOpenRequested: GlobalStates.openGalleryApp("")
+
+                ColorsChip {
+                    readonly property bool isFloating: Config.options.galleryApp?.openFloating ?? true
+                    symbol: isFloating ? "picture_in_picture_alt" : "grid_view"
+                    label: isFloating ? Translation.tr("Floating") : Translation.tr("Tiling")
+                    chosen: isFloating
+                    colContent: galleryCard.colOnPlate
+                    colChosen: galleryCard.colStrong
+                    colOnChosen: galleryCard.colOnStrong
+                    onClicked: {
+                        if (Config.ready && Config.options.galleryApp)
+                            Config.options.galleryApp.openFloating = !isFloating;
+                    }
+                    StyledToolTip {
+                        text: Translation.tr("Toggle whether Gallery opens as a centered floating window (1240×780) or tiled.")
+                    }
+                }
+
+                ColorsChip {
+                    readonly property bool hasShortcut: galleryCard.keys.length > 0
+                    symbol: "keyboard"
+                    label: hasShortcut ? Translation.tr("Shortcut") : Translation.tr("Set shortcut")
+                    chosen: hasShortcut
+                    colContent: galleryCard.colOnPlate
+                    colChosen: galleryCard.colStrong
+                    colOnChosen: galleryCard.colOnStrong
+                    onClicked: {
+                        HyprlandGui.openTab("shortcuts");
+                        GlobalStates.openSettingsPage("hyprland");
+                    }
+                    StyledToolTip {
+                        text: Translation.tr("Open Hyprland Shortcuts to enable or edit the Gallery keybind.")
+                    }
+                }
+            }
         }
 
         // ── on screen ──

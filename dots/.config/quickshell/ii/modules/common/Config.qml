@@ -7158,6 +7158,16 @@ Singleton {
             }
 
             /**
+             * Standalone Gallery app (apps/gallery.qml). Runs in its own qs -p process so closing
+             * it returns all memory to the OS. Preferences live in `${Directories.appsState}/gallery.json`.
+             */
+            property JsonObject galleryApp: JsonObject {
+                property bool enable: true
+                // Default: open as a centered floating window (1240x780).
+                property bool openFloating: true
+            }
+
+            /**
              * EasyEffects: the app, and how the quick switchers (island bubble, quick
              * toggle, bar widget, keybinds) behave. Edited from the app's settings page.
              */

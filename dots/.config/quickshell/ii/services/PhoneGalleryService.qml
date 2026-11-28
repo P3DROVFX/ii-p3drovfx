@@ -917,4 +917,105 @@ Singleton {
         }
         }
     }
+
+    // ── Standalone Gallery app IPC bridge ───────────────────────────────
+    // Lets apps/gallery.qml browse the phone gallery, download items, and send
+    // PC files to the phone without booting IiLinkService in the app process.
+    IpcHandler {
+        target: "phoneGallery"
+
+        function status(): string {
+            const dev = root.activeDev;
+            const peer = IiLinkService.peers.find(p => String(p.id) === dev) ?? null;
+            const deviceName = String(peer?.name ?? KdeConnectService.activeDeviceName ?? "");
+            const mount = dev !== "" ? (IiLinkService.filesMounts[dev] ?? null) : null;
+            return JSON.stringify({
+                cardVisible: root.cardVisible,
+                activeDev: dev,
+                deviceName: deviceName,
+                connected: root.connected,
+                hasGalleryCap: root.hasGalleryCap,
+                hasFilesCap: root.hasFilesCap,
+                setupState: root.setupState,
+                available: root.available,
+                album: root.album,
+                albums: root.albums,
+                items: root.items,
+                totalCount: root.totalCount,
+                more: root.more,
+                loading: root.loading,
+                loadedOnce: root.loadedOnce,
+                error: root.error,
+                thumbDir: root.thumbDir,
+                thumbRevision: root.thumbRevision,
+                thumbsOnDisk: Array.from(root._thumbsOnDisk),
+                fullPaths: root.fullPaths,
+                fullProgress: root.fullProgress,
+                fullErrors: root.fullErrors,
+                savedPaths: root.savedPaths,
+                videoMounting: root.videoMounting,
+                mountDir: mount ? String(mount.dir ?? "") : ""
+            });
+        }
+
+        function open(): string {
+            root.open();
+            return root.setupState;
+        }
+
+        function close(): void {
+            root.close();
+        }
+
+        function refresh(): string {
+            root.refresh();
+            return root.setupState;
+        }
+
+        function setAlbum(bucketId: string): void {
+            root.setAlbum(bucketId);
+        }
+
+        function loadMore(): void {
+            root.loadMore();
+        }
+
+        function wantThumbs(idsJson: string): void {
+            try {
+                const parsed = JSON.parse(idsJson || "[]");
+                if (Array.isArray(parsed))
+                    root.wantThumbs(parsed);
+            } catch (e) {}
+        }
+
+        function get(id: string): void {
+            root.get(id);
+        }
+
+        function save(id: string): string {
+            const sid = String(id ?? "");
+            const item = root.items.find(it => String(it.id) === sid) ?? null;
+            if (!item)
+                return "not_found";
+            root.saveItem(item);
+            return "ok";
+        }
+
+        function prepare(id: string): string {
+            const sid = String(id ?? "");
+            const item = root.items.find(it => String(it.id) === sid) ?? null;
+            if (!item)
+                return "not_found";
+            root.prepare(item);
+            return root.localPath(item) || "pending";
+        }
+
+        function sendToPhone(path: string): string {
+            const dev = root.activeDev || (Object.keys(IiLinkService.connections)[0] ?? "");
+            if (dev === "")
+                return "no_phone";
+            const ok = IiLinkService.sendFileToPhone(dev, path);
+            return ok ? "ok" : "failed";
+        }
+    }
 }
